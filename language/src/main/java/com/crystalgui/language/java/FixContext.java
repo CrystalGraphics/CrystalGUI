@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
 
@@ -117,8 +118,49 @@ final class FixContext {
      * because the compiler already said the useful thing.</p>
      */
     CodeAction intention(String id, String title, String description, ChangeSet edit) {
-        return new CodeAction(id, title, CodeActionKind.REFACTOR, edit, null, false, version)
-                .describedAs(description);
+        return intention(id, title, description, edit, CodeActionKind.REFACTOR, false);
+    }
+
+    /**
+     * An intention that recognises a <b>specific shape</b>, so when it matches it is the answer.
+     *
+     * <p>"Convert to enhanced for" fires only on a loop whose index is used for nothing but fetching;
+     * "Replace if chain with switch" only on a run of branches testing one value against literals. Against
+     * those, "Introduce variable" — which applies to very nearly any expression, including the {@code n == 1}
+     * in the chain's first branch — is a coincidence rather than an answer, and it was winning on insertion
+     * order alone.</p>
+     *
+     * <p>{@code preferred} is the existing key for exactly this and needs no new tier: it means "this is
+     * unambiguously THE answer", which is what matching a shape that tightly amounts to.</p>
+     */
+    CodeAction preferredIntention(String id, String title, String description, ChangeSet edit) {
+        return intention(id, title, description, edit, CodeActionKind.REFACTOR, true);
+    }
+
+    private CodeAction intention(String id, String title, String description, ChangeSet edit,
+                                 CodeActionKind kind, boolean preferred) {
+        return new CodeAction(id, title, kind, edit, null, Map.of(), preferred, version, description);
+    }
+
+    /**
+     * An intention that changes only <b>punctuation</b> — {@link CodeActionKind#LAYOUT}.
+     *
+     * <p>Separate from {@link #intention} because it must rank below one. Braces can be added to or removed
+     * from every {@code if} and every loop, so an offer to move one would otherwise beat a real conversion
+     * on nothing but which family was registered first.</p>
+     */
+    CodeAction layoutIntention(String id, String title, String description, ChangeSet edit) {
+        return intention(id, title, description, edit, CodeActionKind.LAYOUT, false);
+    }
+
+    /**
+     * An intention that <b>changes what the code does</b> — {@link CodeActionKind#ALTERING}.
+     *
+     * <p>Separate because it must rank below every meaning-preserving offer. A default is applied by
+     * somebody who has not read it carefully, and this is the only kind where that is not safe.</p>
+     */
+    CodeAction alteringIntention(String id, String title, String description, ChangeSet edit) {
+        return intention(id, title, description, edit, CodeActionKind.ALTERING, false);
     }
 
     // ── Building an edit ────────────────────────────────────────────────────────────────────────

@@ -215,7 +215,7 @@ final class IntentionCorrections {
                     : new Change(end, continuation, "\n" + indent + "} "));
             ChangeSet edit = context.changeSet(changes);
             if (edit == null) return;
-            out.add(context.intention(ADD_BRACES, "Add braces",
+            out.add(context.layoutIntention(ADD_BRACES, "Add braces",
                     "Wraps this single-statement body in a block, so a second statement can be added "
                             + "without changing what runs.", edit));
         }
@@ -277,7 +277,7 @@ final class IntentionCorrections {
                     : new Change(innerEnd, continuation, "\n" + indent));
             ChangeSet edit = context.changeSet(changes);
             if (edit == null) return;
-            out.add(context.intention(REMOVE_BRACES, "Remove braces",
+            out.add(context.layoutIntention(REMOVE_BRACES, "Remove braces",
                     "Unwraps a block holding one statement.", edit));
         }
 
@@ -463,7 +463,7 @@ final class IntentionCorrections {
                     comparison.getStartPosition() + comparison.getLength(),
                     Negation.of(comparison, context.source())));
             if (edit == null) return;
-            out.add(context.intention(NEGATE_COMPARISON, "Negate comparison",
+            out.add(context.alteringIntention(NEGATE_COMPARISON, "Negate comparison",
                     "Replaces this comparison with its opposite. This changes what the code does.", edit));
         }
 
