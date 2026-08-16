@@ -14,8 +14,18 @@ carrying the output of running scripts, plus the indicator that says which files
 | 9.5.5 | The running indicator | **done** — `RunDecorations`, 6 tests, and it is now *invalidated* so the row actually repaints. Editor-tab half **cut**, see 9.5.7 |
 | 9.5.6 | Stack-frame links | **done** — `ConsoleFilter` + `JavaStackFrameFilter`, 10 tests |
 | 9.5.7 | The running badge | **done** — `RunIndicators`, 6 tests. Editor tabs cut, see below |
+| 9.5.8 | The per-script filter | **done** — folded into 9.5.3's rail; the head's stand-in picker is gone |
+| 9.5.9 | `System.in` | **done** — `ScriptInput`, 7 tests, and an input row that appears only while something is waiting |
+| 9.5.10 | The rail as built | **done** — a lazily-built `SplitView`, elapsed time, the right stripe, and no spinner (and the argument for why) |
 
-Written before any of it existed; the states above are current. **M9.5 is complete.**
+Written before any of it existed; the states above are current. **M9.5 is complete** — every exit
+criterion below has been met and the last of them, stop-leaves-its-transcript, confirmed in the harness.
+
+Two items this plan listed as *deliberately phase two* both shipped inside it after all — the input line
+and clickable links — because the console stopped being a `ListView`. Neither was a scope decision that
+changed; both were waiting on plumbing (`ScriptHost` had no stdin route) or on an affordance a list could
+not carry (a hit test over a span of characters). The section below is kept as written, with that noted,
+rather than edited to look prescient.
 
 ### All of it lives in `language/`, not in `core/`
 
@@ -165,7 +175,7 @@ output; became fold-by-text-and-origin, which was correct; and now goes entirely
 not collapse and a text area has nowhere to put a `×N` badge without becoming a list again. The flood a
 bound is genuinely needed for is answered by the ring, which is where a bound belongs.
 
-### Deliberately phase two
+### Deliberately phase two — *both of these shipped; see the Status note*
 
 - **The input line.** The last line accepting `System.in` is real and wanted, and nothing routes stdin to
   a script today — `ScriptHost` does not wire it at all. So the console ships read-only, and the editable
