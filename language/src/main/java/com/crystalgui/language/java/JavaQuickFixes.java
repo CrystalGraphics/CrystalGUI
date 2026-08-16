@@ -86,7 +86,10 @@ final class JavaQuickFixes {
         List<CodeAction> actions = new ArrayList<>();
 
         for (IProblem problem : unit.getProblems()) {
-            if (!overlaps(problem, from, to)) continue;
+            // ASKED OF THE SAME PLACE THE UNDERLINE IS DRAWN. @see ProblemSpans -- these used to be two
+            // independent readings of one problem, and a mark moved on one side went unreachable on the
+            // other.
+            if (!ProblemSpans.reaches(unit, problem, from, to)) continue;
             for (Correction correction : BY_PROBLEM.getOrDefault(problem.getID(), List.of())) {
                 contribute(correction, context, problem, actions);
             }
@@ -148,13 +151,5 @@ final class JavaQuickFixes {
         List<Correction> all = new ArrayList<>();
         for (List<Correction> family : families) all.addAll(family);
         return all;
-    }
-
-    private static boolean overlaps(IProblem problem, int from, int to) {
-        int start = problem.getSourceStart();
-        // JDT's end is INCLUSIVE, as the diagnostic conversion already records.
-        int end = problem.getSourceEnd() + 1;
-        if (start < 0 || end < start) return false;
-        return from <= end && start <= to;
     }
 }
