@@ -479,19 +479,22 @@ public final class RunConsole {
             if (batch == null) batch = new ArrayList<>();
             Line line = polled;
             if (line.isRunStart()) {
-                if (!(all.isEmpty() && batch.isEmpty())) {
-                    batch.add(new Line("", line.level(), line.script(), null, 0, true, false));
-                }
-                // AND THE ORDINAL IS NUMBERED HERE TOO, for two reasons that agree. A clear is queued, so
-                // a count incremented when the run was announced would still be counting runs the clear
-                // was about to forget -- "Loud.java (run 5)" as the first line of a console somebody had
-                // just emptied. And `startRun` is called from the script's own thread while this map is
-                // reset from the frame, which is a plain HashMap being written from two threads.
+                // THE ORDINAL IS NUMBERED HERE, for two reasons that agree. A clear is queued, so a count
+                // incremented when the run was announced would still be counting runs the clear was about
+                // to forget -- "Loud.java (run 5)" as the first line of a console somebody had just
+                // emptied. And `startRun` is called from the script's own thread while this map is reset
+                // from the frame, which is a plain HashMap being written from two threads.
                 int ordinal = runs.merge(line.script(), 1, Integer::sum);
                 if (ordinal > 1) {
                     line = new Line(line.script() + " (run " + ordinal + ")",
                             line.level(), line.script(), null, 0, true, true);
                 }
+            }
+            Line previous = batch.isEmpty()
+                    ? (all.isEmpty() ? null : all.get(all.size() - 1))
+                    : batch.get(batch.size() - 1);
+            if (needsBreakBetween(previous, line)) {
+                batch.add(new Line("", line.level(), line.script(), null, 0, true, false));
             }
             batch.add(line);
         }
@@ -556,6 +559,29 @@ public final class RunConsole {
         // was being discarded, which is the case a reader most needs told.
         dropped += drop;
         return true;
+    }
+
+    /**
+     * Whether a blank line belongs between two lines of the transcript.
+     *
+     * <h4>A boundary is set apart on BOTH sides, or it is just another line</h4>
+     *
+     * <p>The rule reads as two, and they are the same one: <b>a break before every boundary</b>, so the
+     * line that closes a run is not jammed against the last thing the run printed; and <b>a break after
+     * an opening one</b>, so the header is not jammed against the first. Written as "before a divider"
+     * alone, the header ended up flush with the output it labels — and the closing line flush with the
+     * output above it, which is the one the eye most needs separated, since that output is what you were
+     * reading when the run ended.</p>
+     *
+     * <p>Never two in a row, and never one at the very top: a transcript that opens with a blank row has
+     * pushed its first line down for nothing. A script that prints its own blank line satisfies the rule
+     * as well as an inserted one does, which is why this asks about the TEXT rather than about who
+     * inserted it.</p>
+     */
+    private static boolean needsBreakBetween(@Nullable Line previous, Line next) {
+        if (previous == null) return false;
+        if (previous.text().isEmpty()) return false;
+        return next.isDivider() || previous.isRunStart();
     }
 
     private boolean passes(Line line) {

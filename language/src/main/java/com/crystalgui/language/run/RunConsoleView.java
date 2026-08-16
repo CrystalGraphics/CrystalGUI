@@ -99,6 +99,14 @@ public final class RunConsoleView {
     /** Set from whatever thread appended, read and cleared on the UI thread. */
     private volatile boolean pending;
 
+    /**
+     * The filter the document on screen was built from, so a change to it can be noticed.
+     *
+     * <p>{@code RunConsole.drain()} answers whether the document changed, not <em>why</em> — and a filter
+     * change is the one kind of change the view has to treat differently from output arriving. @see #drain
+     */
+    @Nullable private String shownFilter;
+
     public RunConsoleView() {
         editor.addClass(CONSOLE_CLASS);
         // READ-ONLY, WHICH IS NOT THE SAME AS UNSELECTABLE -- and is the whole reason a text area was the
@@ -269,6 +277,7 @@ public final class RunConsoleView {
             watch = null;
         }
         this.console = console;
+        shownFilter = console == null ? null : console.filter();
         if (console != null) {
             console.attach(editor.buffer());
             // ONLY A FLAG, and it must be: this fires from whatever thread printed, which may not touch
@@ -309,6 +318,25 @@ public final class RunConsoleView {
         }
         pending = false;
         boolean changed = showing.drain();
+        // READ AFTER THE DRAIN, which is where a filter change is actually applied.
+        //
+        // SWITCHING ROWS GOES TO THE TAIL. A filter rebuilds the document from a subset, so the new one
+        // is nearly always SHORTER -- and the editor's scroll offset is a number, not a position in the
+        // text, so it survives the rebuild pointing past the end. Clicking a rail row showed an empty
+        // grey area, and scrolling up a little revealed output that had been there all along, which
+        // reads as the panel having lost the transcript rather than as the view being parked below it.
+        //
+        // The tail rather than the top, because that is what a console row means: show me what this
+        // script has been saying. `scrollToEnd` re-arms the follow too, so a script still printing keeps
+        // pulling the view down after the switch -- and it is self-correcting if the layout has not
+        // settled this frame, since an armed lock retries on the next one.
+        String applied = showing.filter();
+        if (!java.util.Objects.equals(applied, shownFilter)) {
+            shownFilter = applied;
+            if (changed) editor.invalidateHighlights();
+            scrollToEnd();
+            return changed;
+        }
         if (changed) {
             // THE DOCUMENT WAS WRITTEN BEHIND THE EDITOR'S BACK, and a filter change rewrites all of it.
             // The editor's own early-out compares the visible OFFSET RANGE, which a wholesale rebuild can

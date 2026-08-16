@@ -200,9 +200,15 @@ public class ConsoleFilteringTest {
         console.setFilter("A.java");
         console.drain();
 
-        assertEquals(2, console.lineCount());
+        // A.java's heading, the break under it, and its one line. B.java's boundary and its break belong
+        // to B and go with it.
+        assertEquals(3, console.lineCount());
         assertTrue(console.lineAt(0).isDivider());
-        assertEquals("A.java", console.lineAt(1).script());
+        for (int row = 0; row < console.lineCount(); row++) {
+            assertEquals("another script's boundary survived the filter",
+                    "A.java", console.lineAt(row).script());
+        }
+        assertEquals("a one", console.lineAt(2).text());
     }
 
     /** The picker's row set: distinct, in first-seen order, and derived rather than kept. */

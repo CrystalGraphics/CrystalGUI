@@ -211,14 +211,15 @@ public class RunConsoleTest {
         console.endRun("Main.java", "Main.java finished in 2 sec");
         console.drain();
 
-        assertEquals(3, console.lineCount());
-        assertTrue("the closing line is a boundary, not output", console.lineAt(2).isDivider());
-        assertEquals("Main.java finished in 2 sec", console.lineAt(2).text());
-        assertEquals("the summary was filed under its own text", "Main.java", console.lineAt(2).script());
+        // heading, break, "working", break, footnote — the breaks are `needsBreakBetween`'s.
+        assertEquals(5, console.lineCount());
+        assertTrue("the closing line is a boundary, not output", console.lineAt(4).isDivider());
+        assertEquals("Main.java finished in 2 sec", console.lineAt(4).text());
+        assertEquals("the summary was filed under its own text", "Main.java", console.lineAt(4).script());
 
         console.setFilter("Main.java");
         console.drain();
-        assertEquals("filtering to the script dropped its own closing line", 3, console.lineCount());
+        assertEquals("filtering to the script dropped its own closing line", 5, console.lineCount());
     }
 
     /** A run with no ending to report writes nothing rather than an empty boundary. */
@@ -249,18 +250,61 @@ public class RunConsoleTest {
         console.startRun("Ask.java");
         console.drain();
 
-        // header, output, footer, BLANK, header
-        assertEquals(5, console.lineCount());
+        // A BOUNDARY IS SET APART ON BOTH SIDES:
+        //   0 Ask.java          the heading
+        //   1                   break, so it is not jammed against the output it labels
+        //   2 hello             the run's output
+        //   3                   break, so the footnote is not jammed against it
+        //   4 Ask.java finished in 1 sec
+        //   5                   break, before the next run begins
+        //   6 Ask.java (run 2)
+        assertEquals(7, console.lineCount());
         assertEquals("the first run should not be pushed down by a break above it",
                 "Ask.java", console.lineAt(0).text());
         assertTrue("the opening line is a heading, not a footnote", console.lineAt(0).isRunStart());
 
-        assertEquals("nothing separates the runs", "", console.lineAt(3).text());
+        assertEquals("the heading is jammed against the output it labels", "", console.lineAt(1).text());
+        assertEquals("hello", console.lineAt(2).text());
+        assertEquals("the closing line is jammed against the output above it",
+                "", console.lineAt(3).text());
+        assertFalse("the closing line must stay a footnote", console.lineAt(4).isRunStart());
+        assertTrue("and still a boundary", console.lineAt(4).isDivider());
+
+        assertEquals("nothing separates the runs", "", console.lineAt(5).text());
         assertEquals("the second run is not named as one", "Ask.java (run 2)",
-                console.lineAt(4).text());
-        assertTrue(console.lineAt(4).isRunStart());
-        assertFalse("the closing line must stay a footnote", console.lineAt(2).isRunStart());
-        assertTrue("and still a boundary", console.lineAt(2).isDivider());
+                console.lineAt(6).text());
+        assertTrue(console.lineAt(6).isRunStart());
+    }
+
+    /** Never two breaks in a row, and never one above the first line. */
+    @Test
+    public void breaksAreNotDoubledOrLeading() {
+        RunConsole console = attached(new TextBuffer());
+        console.startRun("Quiet.java");
+        // A run that printed nothing: heading, one break, footnote -- not two breaks between them.
+        console.endRun("Quiet.java", "Quiet.java finished in 1 sec");
+        console.drain();
+
+        assertEquals(3, console.lineCount());
+        assertEquals("Quiet.java", console.lineAt(0).text());
+        assertEquals("", console.lineAt(1).text());
+        assertEquals("Quiet.java finished in 1 sec", console.lineAt(2).text());
+    }
+
+    /** A blank line the script printed itself satisfies the rule — the gap is what matters, not who made it. */
+    @Test
+    public void aScriptsOwnBlankLineIsNotDoubled() {
+        RunConsole console = attached(new TextBuffer());
+        console.startRun("A.java");
+        console.append(out("A.java", "working"));
+        console.append(out("A.java", ""));
+        console.endRun("A.java", "A.java finished in 1 sec");
+        console.drain();
+
+        // heading, break, working, "", footnote -- the script's own blank does the separating.
+        assertEquals(5, console.lineCount());
+        assertEquals("", console.lineAt(3).text());
+        assertEquals("A.java finished in 1 sec", console.lineAt(4).text());
     }
 
     /**
