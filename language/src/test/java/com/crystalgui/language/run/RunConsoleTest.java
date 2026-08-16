@@ -294,7 +294,7 @@ public class RunConsoleTest {
         String row = buffer.line(0);
         assertTrue("the document row is not stamped: " + row, row.endsWith("hello"));
         assertTrue("the stamp is not a clock: " + row, row.startsWith("["));
-        assertEquals(ConsolePrefix.width(ConsolePrefix.Style.TIME) + "hello".length(), row.length());
+        assertEquals("[HH:mm:ss] ".length() + "hello".length(), row.length());
     }
 
     /** A boundary is never stamped — it is the console talking about itself, not output. */
