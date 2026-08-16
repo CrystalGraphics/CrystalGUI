@@ -91,6 +91,36 @@ public class ScriptInputTest {
     }
 
     /**
+     * <b>The echo is marked as typed, so the view can draw it apart from output.</b>
+     *
+     * <p>It is in the transcript because a terminal echoes — without it the exchange reads as the script
+     * having answered its own question — but it is the one line in a console that did not come from the
+     * program. It carries no origin either: nothing in the script printed it.</p>
+     */
+    @Test(timeout = 10_000)
+    public void anEchoedLineIsMarkedAsTypedAndHasNoOrigin() throws Exception {
+        RunConsole console = console();
+        InputStream routed = ScriptInput.routed(new ByteArrayInputStream(new byte[0]), console);
+        CountDownLatch done = new CountDownLatch(1);
+
+        inScript(() -> {
+            new Scanner(routed).nextLine();
+            done.countDown();
+        });
+
+        awaitAwaiting(console);
+        console.submitInput("what I typed");
+        assertTrue(done.await(5, TimeUnit.SECONDS));
+
+        console.drain();
+        RunConsole.Line echo = console.lineAt(0);
+        assertEquals("what I typed", echo.text());
+        assertTrue("the echo is indistinguishable from output", echo.isTyped());
+        assertNull("nothing in the script printed it", echo.origin());
+        assertFalse("it is output in the transcript, not a boundary", echo.isDivider());
+    }
+
+    /**
      * <b>The prompt is shown before the read blocks.</b>
      *
      * <p>{@code System.out.print("Name? ")} followed by a read is the canonical shape of asking a

@@ -12,6 +12,7 @@ import org.eclipse.jdt.core.dom.Assignment;
 import org.eclipse.jdt.core.dom.Block;
 import org.eclipse.jdt.core.dom.BodyDeclaration;
 import org.eclipse.jdt.core.dom.ExpressionStatement;
+import org.eclipse.jdt.core.dom.FieldAccess;
 import org.eclipse.jdt.core.dom.FieldDeclaration;
 import org.eclipse.jdt.core.dom.IVariableBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
@@ -57,13 +58,14 @@ final class ValueCorrections {
     static final String INITIALISE = "java.value.initialise";
     static final String CREATE_LOCAL = "java.value.createLocal";
     static final String CREATE_FIELD = "java.value.createField";
+    static final String INITIALISE_FIELD = "java.value.initialiseField";
 
     private ValueCorrections() {
     }
 
     static List<Correction> all() {
         return List.of(new AddReturnStatement(), new InitialiseVariable(),
-                new CreateLocalVariable(), new CreateField());
+                new CreateLocalVariable(), new CreateField(), new InitialiseBlankFinalField());
     }
 
     // ── A value for a type that is known ────────────────────────────────────────────────────────
@@ -306,5 +308,86 @@ final class ValueCorrections {
             if (walk instanceof AbstractTypeDeclaration) return false;
         }
         return false;
+    }
+
+    /**
+     * "Initialize field 'a'" — a blank {@code final} field no constructor assigns.
+     *
+     * <h3>Reported on the CONSTRUCTOR, and answered at the declaration</h3>
+     *
+     * <p>ECJ marks the constructor that failed to assign it, which is where the obligation was broken and
+     * not where it can be met once: a type with three constructors reports three problems and giving the
+     * field a value at its declaration answers all of them. The field is found from the problem's own
+     * arguments being useless here — it comes from the binding of what the message names — so it is
+     * located by walking the enclosing type for a {@code final} field with no initialiser instead.</p>
+     *
+     * <h3>Refused when any constructor already assigns it</h3>
+     *
+     * <p>A {@code final} field may be assigned exactly once. Initialising at the declaration while some
+     * other constructor assigns it turns "may not have been initialized" into "may already have been
+     * assigned" — a different error, in a place the caret never was, and only in the constructor that was
+     * previously correct.</p>
+     */
+    private static final class InitialiseBlankFinalField implements Correction {
+
+        @Override public String id() {
+            return INITIALISE_FIELD;
+        }
+
+        @Override public int[] problems() {
+            return new int[] {IProblem.UninitializedBlankFinalField};
+        }
+
+        @Override public void contribute(FixContext context, IProblem problem, List<CodeAction> out) {
+            MethodDeclaration constructor = context.enclosing(problem, MethodDeclaration.class);
+            if (constructor == null || !constructor.isConstructor()) return;
+            AbstractTypeDeclaration owner = enclosingType(constructor);
+            if (!(owner instanceof TypeDeclaration)) return;
+
+            for (Object each : ((TypeDeclaration) owner).bodyDeclarations()) {
+                if (!(each instanceof FieldDeclaration)) continue;
+                FieldDeclaration field = (FieldDeclaration) each;
+                if (!Modifier.isFinal(field.getModifiers())) continue;
+                if (field.fragments().size() != 1) continue;
+                VariableDeclarationFragment fragment =
+                        (VariableDeclarationFragment) field.fragments().get(0);
+                if (fragment.getInitializer() != null) continue;
+                if (assignedAnywhereIn(owner, fragment.getName().getIdentifier())) continue;
+
+                String value = TypeNames.defaultValue(
+                        fragment.resolveBinding() == null ? null : fragment.resolveBinding().getType());
+                if (value == null) continue;
+                if (!context.claim(INITIALISE_FIELD + "@" + fragment.getStartPosition())) continue;
+
+                ASTRewrite rewrite = context.rewrite();
+                rewrite.set(fragment, VariableDeclarationFragment.INITIALIZER_PROPERTY,
+                        rewrite.createStringPlaceholder(value, ASTNode.SIMPLE_NAME), null);
+                ChangeSet edit = context.changesFrom(rewrite);
+                if (edit == null) continue;
+                out.add(context.preferredFix(INITIALISE_FIELD,
+                        "Initialize field '" + fragment.getName().getIdentifier() + "'", edit));
+                return;
+            }
+        }
+
+        /** Whether any constructor or initialiser in this type assigns {@code name}. */
+        private static boolean assignedAnywhereIn(AbstractTypeDeclaration owner, String name) {
+            boolean[] found = {false};
+            owner.accept(new ASTVisitor() {
+                @Override public boolean visit(Assignment assignment) {
+                    if (assignment.getLeftHandSide() instanceof SimpleName
+                            && name.equals(((SimpleName) assignment.getLeftHandSide()).getIdentifier())) {
+                        found[0] = true;
+                    }
+                    if (assignment.getLeftHandSide() instanceof FieldAccess
+                            && name.equals(((FieldAccess) assignment.getLeftHandSide())
+                            .getName().getIdentifier())) {
+                        found[0] = true;
+                    }
+                    return !found[0];
+                }
+            });
+            return found[0];
+        }
     }
 }

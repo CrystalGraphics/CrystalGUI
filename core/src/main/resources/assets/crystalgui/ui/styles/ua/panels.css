@@ -918,6 +918,21 @@ runpanel .__run-console__ .__syntax__::highlight(run.start) {
     color: var(--run-boundary-fg, #3574F0);
 }
 
+/* WHAT THE READER TYPED. It is in the transcript because a terminal echoes -- without it the exchange
+ * reads as the script having answered its own question -- but it is the one line in a console that did
+ * not come from the program, and drawing it like output makes a conversation indistinguishable from a
+ * monologue. IntelliJ colours its own input echo green for exactly this.
+ *
+ * ITALIC AS WELL AS COLOURED, because colour alone is not a distinction everybody can see. `font-style`
+ * reaches the glyphs here for the same reason it does on `comment`: the editor draws its captures as
+ * styled spans, and the two faces are synthesised from the one family. (The engine's warning about
+ * weight and style painting nothing is about the PLAIN text path -- a `TextField`, or a `UIText` drawing
+ * an unspanned string -- not about this one.) */
+runpanel .__run-console__ .__syntax__::highlight(run.input) {
+    color: var(--run-input-fg, #6A9955);
+    font-style: italic;
+}
+
 /* The controls, as a vertical stripe on the console's TRAILING edge -- IntelliJ's console keeps them
  * there and the reason is space: a full-width bar spends 22px of height to hold four glyphs, on a panel
  * whose entire job is showing as many lines as it can. A stripe spends 24px of width instead, next to a

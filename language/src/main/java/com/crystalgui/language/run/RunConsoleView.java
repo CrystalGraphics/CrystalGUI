@@ -76,6 +76,14 @@ public final class RunConsoleView {
     public static final String RUN_START_CAPTURE = "run.start";
 
     /**
+     * The capture an echoed input line is painted with.
+     *
+     * <p>Scoped to the console like the two above, and for the same reason: no colour scheme has an
+     * opinion about a line the reader typed, because no editor has such a line.</p>
+     */
+    public static final String RUN_INPUT_CAPTURE = "run.input";
+
+    /**
      * On the console while the pointer is over a navigable span — what turns the cursor into a pointer.
      *
      * <p>A class rather than a {@code cursor} written from Java, for two reasons that agree. The house
@@ -587,6 +595,9 @@ public final class RunConsoleView {
             // is a remark about a run already read, and stays quiet. @see RunConsole.Line#isRunStart
             if (line.isRunStart()) return RUN_START_CAPTURE;
             if (line.isDivider()) return "comment";
+            // WHAT THE READER TYPED, drawn apart from what the program said -- otherwise a conversation
+            // is indistinguishable from a monologue. @see RunConsole.Line#isTyped
+            if (line.isTyped()) return RUN_INPUT_CAPTURE;
             switch (line.level()) {
                 case ERROR: return "diagnostic.error";
                 case WARN: return "diagnostic.warning";

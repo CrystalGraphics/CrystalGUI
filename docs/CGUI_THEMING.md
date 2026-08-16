@@ -436,6 +436,7 @@ editor scheme's.
 | `--run-action-hover-fg` | `var(--fg)` | base.css |
 | `--run-boundary-fg` | `var(--accent)` | base.css |
 | `--run-empty-fg` | `var(--fg-hint)` | base.css |
+| `--run-input-fg` | `var(--success)` | base.css |
 | `--run-link-fg` | `var(--link)` | base.css |
 | `--run-live-fg` | `var(--success-icon)` | base.css |
 | `--run-notice-fg` | `var(--fg-hint)` | base.css |
