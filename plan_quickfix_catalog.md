@@ -1187,6 +1187,28 @@ clean-up and an IntelliJ inspection; it is not something a compiler reports. So 
 **intention** — a `Correction` whose `problems()` is empty, asked once per request about the caret range
 — which makes it the second consumer of a hook that has had exactly one (`Organize imports`).
 
+### 21.0 Correction — the measurement was right and the conclusion was not
+
+Shipped on the reading above and immediately reported as *"no quick fixes anywhere"* on a file where the
+engine was answering correctly. No compiler emits this, which is true; **IntelliJ still reports it**, as a
+warning in the Problems panel directly beside "Class 'Inner' is never used". A refactor nobody can see is
+a refactor nobody applies.
+
+So the engine reports it itself — `LambdaCorrections.reportIn` walks the unit and the analyser publishes
+one finding per convertible site, at the **header** range the correction is offered on. The action becomes
+an ordinary `QUICK_FIX`, because kind is about what an action *answers*: with a message above it in the
+popup, it is the fix for that message. Routing is unchanged — our corrections key on `IProblem` ids and
+this is not ECJ's to give one to, so the caret-range hook still finds it.
+
+Drawn **faded rather than underlined** (`DiagnosticTag.UNNECESSARY`), which is the unused family's
+treatment and IntelliJ's own here: `new Comparator<String>()` is ceremony the lambda does without, and a
+yellow squiggle under every anonymous class in a file would be the loudest thing on screen for something
+nobody has to act on.
+
+Three editor gates had to give way with it, each the same rule written down somewhere else — the gutter
+bulb, the documentation popup's action strip, and the popup's inline slot. All three assumed *action ⟹
+diagnostic*, which held only while every action came from a problem.
+
 ### 21.1 What the references actually check
 
 Read for the decision list, not for code. **IntelliJ Community is Apache 2.0** and portable with notice;

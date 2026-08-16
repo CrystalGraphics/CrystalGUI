@@ -15,6 +15,7 @@ import org.eclipse.jdt.core.dom.Block;
 import org.eclipse.jdt.core.dom.CastExpression;
 import org.eclipse.jdt.core.dom.CatchClause;
 import org.eclipse.jdt.core.dom.ClassInstanceCreation;
+import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.dom.EnhancedForStatement;
 import org.eclipse.jdt.core.dom.Expression;
 import org.eclipse.jdt.core.dom.ExpressionStatement;
@@ -48,12 +49,18 @@ import java.util.Set;
 /**
  * "Replace with lambda" — an anonymous class that is really a function, written as one.
  *
- * <h3>An intention, because no compiler reports this</h3>
+ * <h3>No COMPILER reports this, so the engine reports it itself</h3>
  *
- * <p>Measured before it was designed: a convertible anonymous class produces <b>no diagnostic at all</b>,
- * not a warning and not an info. "Anonymous can be replaced with lambda" is a JDT <em>UI</em> clean-up and
- * an IntelliJ inspection, and neither is something ECJ emits. So this keys on no problem and is asked once
- * per request about the caret range — the second consumer of that hook after {@code Organize imports}.</p>
+ * <p>Measured before it was designed: a convertible anonymous class produces <b>no diagnostic at all</b>
+ * from ECJ, not a warning and not an info. "Anonymous can be replaced with lambda" is a JDT <em>UI</em>
+ * clean-up and an IntelliJ inspection, and neither is something a compiler emits.</p>
+ *
+ * <p>It shipped on that reading as an intention alone — no mark, no Problems row — and that was the wrong
+ * conclusion from a right measurement. <b>IntelliJ lists it as a warning</b>, directly beside "Class
+ * 'Inner' is never used", because a refactor nobody can see is a refactor nobody applies. So
+ * {@link #reportIn} walks the unit and the analyser reports one per site, and the action is an ordinary
+ * {@code QUICK_FIX} for it. The <em>routing</em> is still the caret-range hook, because our corrections
+ * key on {@code IProblem} ids and this problem is not ECJ's to give an id to.</p>
  *
  * <h3>What may not be converted</h3>
  *
@@ -103,10 +110,8 @@ final class LambdaCorrections {
             ClassInstanceCreation creation = creationAt(context);
             if (creation == null) return;
             AnonymousClassDeclaration anonymous = creation.getAnonymousClassDeclaration();
-            MethodDeclaration method = convertibleMethod(creation, anonymous, context.source());
+            MethodDeclaration method = convertible(creation, context.source());
             if (method == null) return;
-            if (!hasTargetType(creation)) return;
-            if (usesTheAnonymousInstance(method, anonymous)) return;
 
             // ── THREE RANGES, AND DELIBERATELY NOT ASTRewrite ────────────────────────────────────
             //
@@ -142,7 +147,11 @@ final class LambdaCorrections {
             edits.add(new Change(body.getStartPosition() + body.getLength(),
                     creation.getStartPosition() + creation.getLength(), ""));
 
-            out.add(context.action(FROM_ANONYMOUS, "Replace with lambda", CodeActionKind.REFACTOR,
+            // A QUICK_FIX RATHER THAN A REFACTOR, now that the analyser reports the site. The kind is
+            // about what an action ANSWERS, not about how large a change it makes: while nothing reported
+            // this, it was a refactor offered out of the blue; with a diagnostic above it in the popup it
+            // is the fix for that diagnostic, and the popup's inline slot is reserved for exactly that.
+            out.add(context.action(FROM_ANONYMOUS, "Replace with lambda", CodeActionKind.QUICK_FIX,
                     context.changeSet(edits)));
         }
     }
@@ -192,6 +201,55 @@ final class LambdaCorrections {
     }
 
     // ── Whether it may be converted ─────────────────────────────────────────────────────────────
+
+    /**
+     * The method that would become the lambda, or null when anything refuses — <b>every condition in one
+     * call</b>, because two things ask now.
+     *
+     * <p>The correction asks about the creation under the caret; {@link #reportIn} asks about every
+     * creation in the file so the analyser can report one. A second copy of this list is how the squiggle
+     * and the fix would come to disagree — a mark saying a conversion is available beside a popup that
+     * refuses to do it, which is worse than either alone.</p>
+     */
+    static MethodDeclaration convertible(ClassInstanceCreation creation, String source) {
+        AnonymousClassDeclaration anonymous = creation.getAnonymousClassDeclaration();
+        if (anonymous == null) return null;
+        MethodDeclaration method = convertibleMethod(creation, anonymous, source);
+        if (method == null) return null;
+        if (!hasTargetType(creation)) return null;
+        if (usesTheAnonymousInstance(method, anonymous)) return null;
+        return method;
+    }
+
+    /**
+     * Every convertible site in the unit, as {@code {headerStart, headerEnd, …}} pairs.
+     *
+     * <p><b>Reported as a problem, which is a change of mind and IntelliJ's own arrangement.</b> This
+     * shipped as an intention alone — no diagnostic, on the reasoning that nothing is <em>wrong</em> with
+     * an anonymous class. IntelliJ disagrees in practice: {@code Convert2Lambda} is an inspection, so it
+     * lists in the Problems panel beside "Class 'Inner' is never used" and marks the stripe, and that is
+     * how anyone finds it without already knowing.</p>
+     *
+     * <p>The range is the <b>header</b> — {@code new} to the opening brace — which is both what IntelliJ
+     * highlights and what the correction is offered on, so the mark and the caret agree about where this
+     * is.</p>
+     */
+    static List<int[]> reportIn(CompilationUnit unit, String source) {
+        List<int[]> found = new ArrayList<>();
+        unit.accept(new ASTVisitor() {
+            @Override public boolean visit(ClassInstanceCreation creation) {
+                AnonymousClassDeclaration anonymous = creation.getAnonymousClassDeclaration();
+                if (anonymous != null && convertible(creation, source) != null) {
+                    found.add(new int[] {creation.getStartPosition(), anonymous.getStartPosition()});
+                }
+                return true;
+            }
+        });
+        return found;
+    }
+
+    /** What the reported problem says, and the code it carries. */
+    static final String REPORT_CODE = "cgui.lambda.fromAnonymous";
 
     /** The single method to become the lambda, or null when any condition refuses. */
     private static MethodDeclaration convertibleMethod(ClassInstanceCreation creation,

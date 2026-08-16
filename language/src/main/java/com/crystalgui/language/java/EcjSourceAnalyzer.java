@@ -256,6 +256,44 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                         "java", Integer.toString(problem.getID()),
                         EcjProblemPolicy.tagsFor(problem.getID()), java.util.List.of()));
             }
+            found.addAll(inspections(resolved));
+            return found;
+        }
+
+        /**
+         * What this engine reports that <b>ECJ does not</b> — findings of our own, beside the compiler's.
+         *
+         * <h3>Why there is such a thing at all</h3>
+         *
+         * <p>A compiler reports what is wrong. An <em>inspection</em> reports what could be better, and
+         * every reference treats the two as one list: IntelliJ's Problems panel puts "Anonymous new
+         * Comparator&lt;Message&gt;() can be replaced with lambda" directly beside "Class 'Inner' is never
+         * used", both with a warning mark, even though one is a refactor by nature and the other a defect.
+         * Ours shipped as an intention with no diagnostic — correct, and findable only by putting the caret
+         * on the right nine characters.</p>
+         *
+         * <p>The codes are <b>not numeric</b>, which is how they stay apart from ECJ's: a problem id is
+         * rendered as its integer, so any non-numeric code is unambiguously ours and no id can ever collide
+         * with one. That also keeps the corrections' routing untouched — they key on {@code IProblem} ids
+         * and simply never see these.</p>
+         */
+        private List<Diagnostic> inspections(CompilationUnit resolved) {
+            List<Diagnostic> found = new ArrayList<>();
+            for (int[] span : LambdaCorrections.reportIn(resolved, source)) {
+                found.add(new Diagnostic(pointOf(resolved, span[0]), pointOf(resolved, span[1]),
+                        DiagnosticSeverity.WARNING,
+                        "Anonymous " + source.substring(span[0], span[1]).trim()
+                                + " can be replaced with lambda",
+                        "java", LambdaCorrections.REPORT_CODE,
+                        // FADED, NOT UNDERLINED — the same drawing the unused family gets, and IntelliJ's
+                        // own for this inspection. The tag is about how text is DRAWN rather than how bad
+                        // it is, and `new Comparator<String>()` is ceremony the lambda does without: it is
+                        // unnecessary in exactly the sense the tag names. A yellow squiggle under every
+                        // anonymous class in a file would also be the loudest thing on screen for
+                        // something nobody has to act on.
+                        java.util.Set.of(com.crystalgui.text.diagnostic.DiagnosticTag.UNNECESSARY),
+                        java.util.List.of()));
+            }
             return found;
         }
 
