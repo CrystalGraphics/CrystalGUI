@@ -2284,11 +2284,10 @@ public class UIElement implements SettingsScope, DataProvider {
             return;
         }
 
-        RectFill fill = resolveRoundedFill(d);
         // Opaque white is CORRECT here and must stay, despite being the literal that caused the
         // rounded-background bug: this builds a MASK, where white means "fully reveal". A mask with no
         // resolvable drawable should reveal the element's whole rounded shape, not hide it.
-        if (fill == null) fill = new ColorFill(0xFFFFFFFF);
+        RectFill fill = maskFill(d);
 
         CgUiRoundedRect mask = buildFillOnlyRoundedRect(radii, fill);
         if (borderWidthPx > 0f) {
@@ -2467,6 +2466,36 @@ public class UIElement implements SettingsScope, DataProvider {
             return sprite.hasBorder() ? new NineSliceFill(sprite) : new TextureFill(texture);
         }
         return null;
+    }
+
+    /**
+     * The fill a default mask is drawn with — <b>never one that reveals nothing.</b>
+     *
+     * <p>The rule was already stated at the call site ("a mask with no resolvable drawable should reveal
+     * the element's whole rounded shape, not hide it") and enforced only for a {@code null} fill, which
+     * {@link #resolveRoundedFill} returns for the shared {@link CgUiDrawable#EMPTY} instance alone. An
+     * <em>authored</em> transparent background does not go through that identity: {@code background:
+     * #00000000} parses to a fresh {@link CgUiQuad}, so it resolved to a real {@code ColorFill} with zero
+     * alpha and masked every child away.</p>
+     *
+     * <p>So {@code background: none} and {@code background: #00000000} — which the drawable parser itself
+     * documents as the same thing wearing different clothes — behaved <b>oppositely</b> the moment an
+     * element both clipped and had a corner radius: one revealed its subtree, the other erased it. The
+     * hole stayed latent only because every rounded clipper shipped so far paints an opaque surface;
+     * the first transparent one would have rendered blank with nothing to look at but an empty box.</p>
+     *
+     * <p>Package-private so the rule can be asserted directly. It cannot be observed any other way — the
+     * failure is invisible until something paints, and then it is total.</p>
+     *
+     * @return whether masking with this drawable would erase the subtree rather than clip it
+     */
+    static boolean revealsNothing(CgUiDrawable drawable) {
+        RectFill fill = resolveRoundedFill(drawable);
+        return fill == null || fill instanceof ColorFill(int colorArgb) && (colorArgb >>> 24) == 0;
+    }
+
+    private static RectFill maskFill(CgUiDrawable drawable) {
+        return revealsNothing(drawable) ? new ColorFill(0xFFFFFFFF) : resolveRoundedFill(drawable);
     }
 
     /** Builds a fill-only {@link CgUiRoundedRect} (no border) — used for the mask
