@@ -291,6 +291,19 @@ public final class RunConsoleView {
         scrollToTail();
     }
 
+    /**
+     * Whether new output will pull the view down with it.
+     *
+     * <p>Exposed because it is the only honest answer to a question the reader has constantly and the
+     * panel could not previously show: <em>if I leave this open, will I keep seeing the newest line?</em>
+     * The lock arms and disarms from scrolling rather than from any button, so without this the Scroll to
+     * End control is a verb with no state — and a reader who has scrolled up has no way to tell whether
+     * they have stopped following or the script has stopped printing.</p>
+     */
+    public boolean isFollowingTail() {
+        return follow.isFollowing();
+    }
+
     /** Whether the transcript wraps long lines. */
     public boolean isSoftWrap() {
         return editor.isSoftWrap();

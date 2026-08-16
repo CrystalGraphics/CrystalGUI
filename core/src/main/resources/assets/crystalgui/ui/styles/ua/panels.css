@@ -1019,9 +1019,13 @@ runpanel .__run-wrap__ {
 }
 
 /* A TOGGLE THAT IS ON, said with a class the widget writes rather than `:checked` -- the engine
- * re-evaluates a pseudo-class on its terms, and this state is one the button flips from its own handler.
- * That distinction has cost a round here before. */
-runpanel .__run-wrap__.__on__ {
+ * re-evaluates a pseudo-class on its terms, and both of these are states the panel PULLS once a frame
+ * from what it is a view of. That distinction has cost a round here before.
+ *
+ * Written against `.__run-action__` rather than one button at a time, because there are now two of them:
+ * soft wrap, and the tail-follow lock behind Scroll to End. IntelliJ's console draws both the same way,
+ * and a per-button rule is how the second one comes to look different from the first. */
+runpanel .__run-action__.__on__ {
     background: none;
     background-color: var(--run-action-hover-bg, #2E3033);
     color: var(--run-action-hover-fg, #DFE1E5);

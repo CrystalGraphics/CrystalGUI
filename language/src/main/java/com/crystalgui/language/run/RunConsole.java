@@ -298,6 +298,22 @@ public final class RunConsole {
     }
 
     /**
+     * Closes a run — the boundary that says the output above it is finished.
+     *
+     * <p>Two arguments rather than one, unlike {@link #startRun}: the opening divider's text <em>is</em>
+     * the script's name, so one string serves as both the label and the owner, while a closing line reads
+     * {@code Main.java finished in 1.2 sec} and still has to belong to {@code Main.java}. Attributing it
+     * to its own text would put the summary in a filter bucket of its own — visible under All output and
+     * missing from the one script whose run it describes.</p>
+     *
+     * @see RunSummary
+     */
+    public void endRun(String script, String summary) {
+        if (summary == null || summary.isEmpty()) return;
+        enqueue(new Line(summary, RunLevel.OUT, script == null ? "" : script, null, 0, true));
+    }
+
+    /**
      * Empties the transcript.
      *
      * <p>Queued rather than applied, so it cannot land between two lines of a burst and leave half of

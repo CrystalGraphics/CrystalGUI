@@ -114,9 +114,18 @@ public final class ScriptWorkbench implements Closeable {
         // already computes exactly this every frame, on the right thread, from the same source the Stop
         // COMMAND uses. Pull, not push: a per-frame reader cannot race the frame it reads in.
         sessions.onDidChange.connect(script -> {
-            if (script != null && sessions.stateOf(script) == RunState.RUNNING) {
+            if (script == null) return;
+            RunSessions.Session session = sessions.sessionOf(script);
+            if (session == null) return;
+            if (session.state() == RunState.RUNNING) {
                 console.startRun(script.name());
+                return;
             }
+            // AND THE CLOSING ONE. Null for a state that is not an ending -- a script that registered
+            // handlers is LIVE, not finished, and saying otherwise is the falsehood RunState exists to
+            // avoid. @see RunSummary
+            console.endRun(script.name(), RunSummary.of(script.name(), session.state(),
+                    session.elapsedNanos(System.nanoTime())));
         });
         return installed;
     }

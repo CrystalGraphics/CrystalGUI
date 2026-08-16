@@ -194,6 +194,43 @@ public class RunConsoleTest {
         }
     }
 
+    /**
+     * <b>A closing boundary belongs to the script it describes, not to its own text.</b>
+     *
+     * <p>{@code startRun} takes one string because the opening divider's text <em>is</em> the script's
+     * name, so the same value serves as label and owner. A closing line reads {@code Main.java finished
+     * in 1.2 sec} and still has to be filed under {@code Main.java} — attributing it to its own text
+     * would give the summary a filter bucket of its own, so it would show under All output and be missing
+     * from the one script whose run it is about.</p>
+     */
+    @Test
+    public void aClosingBoundaryIsFiledUnderItsScript() {
+        RunConsole console = attached(new TextBuffer());
+        console.startRun("Main.java");
+        console.append(out("Main.java", "working"));
+        console.endRun("Main.java", "Main.java finished in 2 sec");
+        console.drain();
+
+        assertEquals(3, console.lineCount());
+        assertTrue("the closing line is a boundary, not output", console.lineAt(2).isDivider());
+        assertEquals("Main.java finished in 2 sec", console.lineAt(2).text());
+        assertEquals("the summary was filed under its own text", "Main.java", console.lineAt(2).script());
+
+        console.setFilter("Main.java");
+        console.drain();
+        assertEquals("filtering to the script dropped its own closing line", 3, console.lineCount());
+    }
+
+    /** A run with no ending to report writes nothing rather than an empty boundary. */
+    @Test
+    public void anAbsentSummaryIsNotABlankLine() {
+        RunConsole console = attached(new TextBuffer());
+        console.endRun("Main.java", null);
+        console.endRun("Main.java", "");
+        console.drain();
+        assertEquals(0, console.lineCount());
+    }
+
     /** Clearing is queued, so it cannot land between two lines of a burst that preceded it. */
     @Test
     public void clearingEmptiesEverything() {
