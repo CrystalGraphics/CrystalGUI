@@ -309,96 +309,21 @@ final class VariableIntentions {
          *
          * <p>{@code getSize()} suggests {@code size}, a {@code String} suggests {@code string}. Neither is
          * clever and both beat {@code x}: the point of introducing a variable is usually to <em>name</em>
-         * something, and a name the reader will keep is worth one line of derivation.</p>
+         * something, and a name the reader will keep is worth one line of derivation. @see Names</p>
          */
         private static String freshName(Expression expression, ITypeBinding type, Statement at) {
             String base = null;
             if (expression instanceof MethodInvocation) {
-                base = strip(((MethodInvocation) expression).getName().getIdentifier());
+                base = Names.fromAccessor(((MethodInvocation) expression).getName().getIdentifier());
             } else if (expression instanceof ClassInstanceCreation) {
                 ITypeBinding created = ((ClassInstanceCreation) expression).getType().resolveBinding();
-                if (created != null) base = lower(created.getErasure().getName());
+                if (created != null) base = Names.lower(created.getErasure().getName());
             }
-            if (base == null || base.isEmpty()) {
-                base = type == null ? "value" : fromType(type.getErasure());
-            }
-            // A TYPE NAME IS NOT ALWAYS A LEGAL NAME. `int` lowercases to `int`, which is a keyword — the
-            // first run of this produced `int int = getSize() + 1;`, which does not parse. Every primitive
-            // hits it, and so does any type whose name happens to be one.
-            if (base.isEmpty() || KEYWORDS.contains(base) || !Character.isJavaIdentifierStart(base.charAt(0))) {
-                base = "value";
-            }
-            Set<String> taken = namesInScope(at);
-            String name = base;
-            for (int n = 1; taken.contains(name); n++) name = base + n;
-            return name;
-        }
-
-        private static String strip(String method) {
-            for (String prefix : new String[] {"get", "is", "to", "as"}) {
-                if (method.length() > prefix.length() && method.startsWith(prefix)
-                        && Character.isUpperCase(method.charAt(prefix.length()))) {
-                    return lower(method.substring(prefix.length()));
-                }
-            }
-            return method;
-        }
-
-        /**
-         * A name from a type — the conventional single letter for a primitive, the lowercased name else.
-         *
-         * <p>{@code i} for an {@code int} is what everybody writes and what IntelliJ generates; it also
-         * sidesteps the keyword problem for the eight types that have it.</p>
-         */
-        private static String fromType(ITypeBinding type) {
-            if (type.isPrimitive()) {
-                switch (type.getName()) {
-                    case "int":     return "i";
-                    case "long":    return "l";
-                    case "double":  return "d";
-                    case "float":   return "f";
-                    case "boolean": return "flag";
-                    case "char":    return "c";
-                    case "byte":    return "b";
-                    case "short":   return "s";
-                    default:        return "value";
-                }
-            }
-            return lower(type.getName());
-        }
-
-        private static String lower(String name) {
-            if (name.isEmpty()) return name;
-            String cleaned = name.replace("[]", "s");
-            return Character.toLowerCase(cleaned.charAt(0)) + cleaned.substring(1);
-        }
-
-        /**
-         * Every name already <b>declared</b> in the method around {@code at} — what a fresh one must avoid.
-         *
-         * <p>Declarations only, and that distinction is the whole method. Collecting every {@code SimpleName}
-         * instead sweeps up method names, type names and field references — so extracting {@code s.trim()}
-         * found {@code trim} already "taken" by the call it was named after, and produced {@code trim1} for
-         * a variable that was the only one of its name in the file.</p>
-         */
-        private static Set<String> namesInScope(Statement at) {
-            Set<String> taken = new LinkedHashSet<>();
             ASTNode scope = at;
             while (scope.getParent() != null && !(scope instanceof MethodDeclaration)) {
                 scope = scope.getParent();
             }
-            scope.accept(new ASTVisitor() {
-                @Override public boolean visit(VariableDeclarationFragment fragment) {
-                    taken.add(fragment.getName().getIdentifier());
-                    return true;
-                }
-
-                @Override public boolean visit(SingleVariableDeclaration declared) {
-                    taken.add(declared.getName().getIdentifier());
-                    return true;
-                }
-            });
-            return taken;
+            return Names.derive(base, type, Names.declaredIn(scope));
         }
     }
 
@@ -609,15 +534,6 @@ final class VariableIntentions {
     // ── Shared ──────────────────────────────────────────────────────────────────────────────────
 
     private static final int[] NONE = new int[0];
-
-    /** Reserved words a derived name must never be. @see IntroduceVariable#freshName */
-    private static final Set<String> KEYWORDS = Set.of(
-            "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class", "const",
-            "continue", "default", "do", "double", "else", "enum", "extends", "final", "finally", "float",
-            "for", "goto", "if", "implements", "import", "instanceof", "int", "interface", "long", "native",
-            "new", "package", "private", "protected", "public", "return", "short", "static", "strictfp",
-            "super", "switch", "synchronized", "this", "throw", "throws", "transient", "try", "void",
-            "volatile", "while", "true", "false", "null", "var", "record", "yield", "sealed", "permits");
 
     private static boolean hasCall(Expression expression) {
         boolean[] found = {false};

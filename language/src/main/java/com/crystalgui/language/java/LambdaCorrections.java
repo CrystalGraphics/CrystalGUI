@@ -1,6 +1,7 @@
 package com.crystalgui.language.java;
 
 import com.crystalgui.text.Change;
+import com.crystalgui.text.ChangeSet;
 import com.crystalgui.text.lang.CodeAction;
 import com.crystalgui.text.lang.CodeActionKind;
 
@@ -24,6 +25,7 @@ import org.eclipse.jdt.core.dom.IBinding;
 import org.eclipse.jdt.core.dom.IMethodBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
 import org.eclipse.jdt.core.dom.IVariableBinding;
+import org.eclipse.jdt.core.dom.LambdaExpression;
 import org.eclipse.jdt.core.dom.MethodDeclaration;
 import org.eclipse.jdt.core.dom.MethodInvocation;
 import org.eclipse.jdt.core.dom.Modifier;
@@ -42,6 +44,7 @@ import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
 import org.eclipse.jdt.core.dom.VariableDeclarationStatement;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -87,12 +90,13 @@ import java.util.Set;
 final class LambdaCorrections {
 
     static final String FROM_ANONYMOUS = "java.lambda.fromAnonymous";
+    static final String TO_ANONYMOUS = "java.lambda.toAnonymous";
 
     private LambdaCorrections() {
     }
 
     static List<Correction> all() {
-        return List.of(new ReplaceAnonymousWithLambda());
+        return List.of(new ReplaceAnonymousWithLambda(), new ToAnonymousClass());
     }
 
     private static final class ReplaceAnonymousWithLambda implements Correction {
@@ -530,5 +534,136 @@ final class LambdaCorrections {
             }
         }
         return candidates >= 2;
+    }
+
+    /**
+     * "Replace with anonymous class" — the inverse of everything above, and much the easier direction.
+     *
+     * <h3>Why the inverse is nearly free where the forward conversion was not</h3>
+     *
+     * <p>Going to a lambda has to <em>prove</em> a dozen things stay true — §21.1's refusal table — because
+     * a lambda shares its enclosing scope where an anonymous class opened a new one. Coming back opens a
+     * scope, which can only ever <b>add</b> what is legal: a shadowed name becomes shadowable again,
+     * {@code this} becomes the instance rather than the enclosing one. That last is the single thing to
+     * check, and it is checked: an unqualified {@code this} in a lambda body means the enclosing instance,
+     * and inside an anonymous class it would mean the anonymous one.</p>
+     *
+     * <p>The target type is the lambda's own — {@code resolveTypeBinding()} on a lambda gives the functional
+     * interface it was inferred as, so nothing has to be worked out from where it sits. A lambda with no
+     * inferred type at all is refused, which is the unresolvable-classpath case.</p>
+     */
+    private static final class ToAnonymousClass implements Correction {
+
+        @Override public String id() {
+            return TO_ANONYMOUS;
+        }
+
+        @Override public int[] problems() {
+            return new int[0];
+        }
+
+        @Override public void contribute(FixContext context, IProblem problem, List<CodeAction> out) {
+            LambdaExpression lambda = context.at(LambdaExpression.class,
+                    candidate -> context.touches(candidate.getStartPosition(),
+                            candidate.getStartPosition() + candidate.getLength()));
+            if (lambda == null) return;
+            ITypeBinding functional = lambda.resolveTypeBinding();
+            if (functional == null || functional.isRecovered()) return;
+            IMethodBinding method = functional.getFunctionalInterfaceMethod();
+            if (method == null) return;
+            // AN UNQUALIFIED `this` MEANS THE ENCLOSING INSTANCE IN A LAMBDA and would mean the anonymous
+            // one inside a class body. The forward conversion refuses on exactly this, from the other side.
+            if (usesBareThis(lambda)) return;
+
+            ImportPlan imports = context.importPlan();
+            String type = TypeNames.writtenName(functional, imports, lambda);
+            if (type == null) return;
+            String returns = TypeNames.writtenName(method.getReturnType(), imports, lambda);
+            boolean isVoid = "void".equals(method.getReturnType().getName());
+            if (returns == null && !isVoid) return;
+
+            String source = context.source();
+            List<String> parameters = new ArrayList<>();
+            ITypeBinding[] types = method.getParameterTypes();
+            List<?> declared = lambda.parameters();
+            if (declared.size() != types.length) return;
+            for (int i = 0; i < types.length; i++) {
+                String written = TypeNames.writtenName(types[i], imports, lambda);
+                if (written == null) return;
+                parameters.add(written + " " + nameOf(declared.get(i)));
+            }
+
+            String body = bodyOf(lambda, source, isVoid);
+            if (body == null) return;
+            String indent = indentAt(source, statementStartOf(lambda, source));
+            StringBuilder built = new StringBuilder("new ").append(type).append("() {\n")
+                    .append(indent).append("    @Override\n")
+                    .append(indent).append("    public ").append(isVoid ? "void" : returns)
+                    .append(' ').append(method.getName()).append('(')
+                    .append(String.join(", ", parameters)).append(") {\n");
+            for (String line : body.split("\n", -1)) {
+                built.append(indent).append("        ").append(line.trim()).append('\n');
+            }
+            built.append(indent).append("    }\n").append(indent).append('}');
+
+            List<Change> changes = new ArrayList<>();
+            changes.add(new Change(lambda.getStartPosition(),
+                    lambda.getStartPosition() + lambda.getLength(), built.toString()));
+            changes.addAll(imports.changes());
+            changes.sort(Comparator.comparingInt(Change::from));
+            ChangeSet edit = context.changeSet(changes);
+            if (edit == null) return;
+            out.add(context.intention(TO_ANONYMOUS, "Replace with anonymous class",
+                    "Writes the lambda out as the interface it implements.", edit));
+        }
+
+        /** The body's statements, without the braces — or the expression turned into one. */
+        private static String bodyOf(LambdaExpression lambda, String source, boolean isVoid) {
+            ASTNode body = lambda.getBody();
+            if (body == null) return null;
+            String text = source.substring(body.getStartPosition(),
+                    body.getStartPosition() + body.getLength());
+            if (body instanceof Block) {
+                String inner = text.trim();
+                if (!inner.startsWith("{") || !inner.endsWith("}")) return null;
+                return inner.substring(1, inner.length() - 1).trim();
+            }
+            return isVoid ? text + ";" : "return " + text + ";";
+        }
+
+        private static String nameOf(Object parameter) {
+            if (parameter instanceof VariableDeclarationFragment) {
+                return ((VariableDeclarationFragment) parameter).getName().getIdentifier();
+            }
+            return ((SingleVariableDeclaration) parameter).getName().getIdentifier();
+        }
+
+        private static boolean usesBareThis(LambdaExpression lambda) {
+            boolean[] found = {false};
+            lambda.getBody().accept(new ASTVisitor() {
+                @Override public boolean visit(ThisExpression each) {
+                    if (each.getQualifier() == null) found[0] = true;
+                    return !found[0];
+                }
+            });
+            return found[0];
+        }
+
+        private static int statementStartOf(LambdaExpression lambda, String source) {
+            for (ASTNode walk = lambda; walk != null; walk = walk.getParent()) {
+                if (walk instanceof Statement) return walk.getStartPosition();
+            }
+            return lambda.getStartPosition();
+        }
+
+        private static String indentAt(String source, int position) {
+            int lineStart = source.lastIndexOf('\n', Math.max(0, position - 1)) + 1;
+            int at = lineStart;
+            while (at < source.length() && at < position
+                    && (source.charAt(at) == ' ' || source.charAt(at) == '\t')) {
+                at++;
+            }
+            return source.substring(lineStart, at);
+        }
     }
 }
