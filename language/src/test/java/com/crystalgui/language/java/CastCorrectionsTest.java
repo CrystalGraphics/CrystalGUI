@@ -1,11 +1,15 @@
 package com.crystalgui.language.java;
 
 import com.crystalgui.text.diagnostic.Diagnostic;
+import com.crystalgui.text.lang.CodeAction;
 
 import org.eclipse.jdt.core.compiler.IProblem;
 import org.junit.Test;
 
+import java.util.List;
+
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 
 /**
  * "Cast expression to 'Dog'" — and the case that looks identical and must be refused.
@@ -204,17 +208,54 @@ public class CastCorrectionsTest extends FixFixture {
                 marked(source, IProblem.ParameterMismatch));
     }
 
+    /**
+     * <b>And the fix is reachable from there.</b> The router matches the caret against ECJ's own range, so
+     * moving the mark onto the argument moved it <em>off</em> the range that answers: the popup showed the
+     * message with nothing to do, at the one offset a user is guaranteed to be at.
+     *
+     * <p>Every other test in this file asks over {@code "take(a)"} — the whole call, which still covers
+     * ECJ's span — which is why all seventeen passed against it. Asking where the squiggle is is a
+     * different question from asking near it.</p>
+     */
+    @Test
+    public void theFixIsOfferedOverTheRangeItMarks() {
+        String source = ANIMALS
+                + "    void take(Dog d) { }\n"
+                + "    void go(Animal a) { take(a); }\n"
+                + "}\n";
+        int[] span = markedSpan(source, IProblem.ParameterMismatch);
+        assertNotNull("the fix must be offered where the underline is",
+                withId(actionsOver("Script", source, span[0], span[1]), CastCorrections.CAST_ARGUMENT));
+    }
+
     /** The text a problem's reported range actually covers. */
     private static String marked(String source, int problemId) {
+        int[] span = markedSpan(source, problemId);
+        return source.substring(span[0], span[1]);
+    }
+
+    /** A problem's reported range, in the source's own offsets. */
+    private static int[] markedSpan(String source, int problemId) {
         String code = Integer.toString(problemId);
         for (Diagnostic problem : diagnosticsOf(source)) {
             if (!code.equals(problem.code())) continue;
-            String[] lines = source.split("\n", -1);
-            String line = lines[problem.start().row()];
-            return line.substring(problem.start().column(),
-                    Math.min(problem.end().column(), line.length()));
+            return new int[] {offsetOf(source, problem.start().row(), problem.start().column()),
+                    offsetOf(source, problem.end().row(), problem.end().column())};
         }
         throw new AssertionError("problem " + problemId + " is not reported");
+    }
+
+    private static int offsetOf(String source, int row, int column) {
+        int at = 0;
+        for (int line = 0; line < row; line++) at = source.indexOf('\n', at) + 1;
+        return at + column;
+    }
+
+    private static CodeAction withId(List<CodeAction> actions, String id) {
+        for (CodeAction action : actions) {
+            if (id.equals(action.id())) return action;
+        }
+        return null;
     }
 
     // ── When a cast cannot answer ───────────────────────────────────────────────────────────────
