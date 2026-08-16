@@ -3,10 +3,13 @@ package com.crystalgui.language.run;
 import javax.annotation.Nullable;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Routes a running script's output to the console, and everybody else's straight through.
@@ -54,6 +57,29 @@ public final class ScriptOutput {
     @Nullable private static PrintStream originalErr;
 
     /**
+     * Every routing stream that exists, so a partial line can be flushed without knowing which holds it.
+     *
+     * <p>A partial line lives on a {@code (stream, thread)} pair — {@code System.out} and
+     * {@code System.err} each buffer their own — so "flush what this thread has not finished saying"
+     * cannot be answered from either one alone. Copy-on-write because it is walked from script threads
+     * and written only when a console is installed.</p>
+     */
+    private static final List<Routed> LIVE = new CopyOnWriteArrayList<>();
+
+    @Nullable private static Routed installedOut;
+    @Nullable private static Routed installedErr;
+
+    /**
+     * A line long enough to be a mistake is emitted anyway, rather than buffered forever.
+     *
+     * <p>The buffer only empties on a newline, so a script printing megabytes without one — a loop of
+     * bare {@code print}, a serialiser writing a whole document — would hold all of it in memory with the
+     * console showing nothing. 64KB is far past any line a person reads and far below anything that
+     * matters as a heap cost.</p>
+     */
+    private static final int MAX_PARTIAL_BYTES = 64 * 1024;
+
+    /**
      * Replaces {@code System.out} and {@code System.err} with routing versions.
      *
      * <p>A global side effect, so it is explicit and belongs to the application rather than to the model
@@ -71,10 +97,37 @@ public final class ScriptOutput {
             originalOut = System.out;
             originalErr = System.err;
         }
-        System.setOut(new PrintStream(routed(originalOut, RunLevel.OUT, target), true,
-                StandardCharsets.UTF_8));
-        System.setErr(new PrintStream(routed(originalErr, RunLevel.ERROR, target), true,
-                StandardCharsets.UTF_8));
+        // THE DISPLACED PAIR STOPS BEING LIVE. Re-installing wraps the ORIGINALS again (see above), so
+        // the previous two streams are unreachable from System.out -- leaving them in the flush list
+        // would flush a partial line into a console nobody can open as well as into this one.
+        LIVE.remove(installedOut);
+        LIVE.remove(installedErr);
+        installedOut = new Routed(originalOut, RunLevel.OUT, target);
+        installedErr = new Routed(originalErr, RunLevel.ERROR, target);
+        System.setOut(new PrintStream(installedOut, true, StandardCharsets.UTF_8));
+        System.setErr(new PrintStream(installedErr, true, StandardCharsets.UTF_8));
+    }
+
+    /**
+     * Emits whatever this thread has printed without finishing the line.
+     *
+     * <h4>Why a console needs this and a log file does not</h4>
+     *
+     * <p>A line is emitted on its newline, which is right while a script is running and wrong at the two
+     * moments it stops being able to write one. The first is a <b>prompt</b>:
+     * {@code System.out.print("Name? ")} followed by a read is the canonical shape of asking a question,
+     * and without this the input row appears under a transcript that never showed the question — so the
+     * script reads as hung rather than as waiting. The second is the <b>end of a run</b>: a script whose
+     * last statement is a bare {@code print} loses it entirely, and losing output is the one thing a
+     * console must not do.</p>
+     *
+     * <p>Called from {@link #exit} and from {@code ScriptInput} before it blocks, which are exactly those
+     * two moments. <b>Not</b> from {@code flush()} — {@code PrintStream} in autoflush mode flushes after
+     * every {@code print} as well as every {@code println}, so emitting there would break
+     * {@code print("a"); print("b"); println("c")} into three rows instead of one.</p>
+     */
+    public static void flushPartial() {
+        for (Routed routed : LIVE) routed.flushPending();
     }
 
     /** Marks this thread as running {@code script}, and answers what it was running before. */
@@ -93,6 +146,10 @@ public final class ScriptOutput {
      * script's output to the game log.</p>
      */
     public static void exit(@Nullable ScriptRef previous) {
+        // BEFORE THE MARKER MOVES, or the unfinished line is attributed to whatever the thread does
+        // next -- and when nothing is next, `Routed` reads a null marker and sends it to the real
+        // stdout instead, where the console can never show it. @see #flushPartial
+        flushPartial();
         if (previous == null) {
             CURRENT.remove();
         } else {
@@ -180,42 +237,59 @@ public final class ScriptOutput {
             this.passthrough = passthrough;
             this.level = level;
             this.target = target;
+            LIVE.add(this);
         }
 
         @Override
-        public void write(int b) throws java.io.IOException {
+        public void write(int b) throws IOException {
             ScriptRef script = CURRENT.get();
             if (script == null) {
                 passthrough.write(b);
                 return;
             }
-            accept(script, (byte) b);
+            accept(script, pending.get(), (byte) b);
         }
 
         @Override
-        public void write(byte[] bytes, int offset, int length) throws java.io.IOException {
+        public void write(byte[] bytes, int offset, int length) throws IOException {
             ScriptRef script = CURRENT.get();
             if (script == null) {
                 passthrough.write(bytes, offset, length);
                 return;
             }
-            for (int i = 0; i < length; i++) accept(script, bytes[offset + i]);
+            // HOISTED OUT OF THE LOOP. This resolved the ThreadLocal once per BYTE, on the hot path of
+            // every burst -- a `println` of a 200-character line was 200 lookups to produce one row.
+            ByteArrayOutputStream buffer = pending.get();
+            for (int i = 0; i < length; i++) accept(script, buffer, bytes[offset + i]);
         }
 
-        private void accept(ScriptRef script, byte b) {
+        private void accept(ScriptRef script, ByteArrayOutputStream buffer, byte b) {
             if (b == '\n') {
-                emit(script);
+                emit(script, buffer);
                 return;
             }
             // DROPPED, not buffered. A CR belongs to the line ending on Windows and would otherwise
             // survive into the row's text as an invisible trailing character -- which then makes two
             // otherwise identical rows differ, for a reason nobody can see.
             if (b == '\r') return;
-            pending.get().write(b);
+            buffer.write(b);
+            // @see ScriptOutput#MAX_PARTIAL_BYTES
+            if (buffer.size() >= MAX_PARTIAL_BYTES) emit(script, buffer);
         }
 
-        private void emit(ScriptRef script) {
+        /** This thread's unfinished line, if it has one. @see ScriptOutput#flushPartial */
+        void flushPending() {
+            ScriptRef script = CURRENT.get();
+            if (script == null) return;
             ByteArrayOutputStream buffer = pending.get();
+            // NOTHING BUFFERED IS NOT AN EMPTY LINE. Emitting unconditionally would put a blank row in
+            // the transcript at every prompt and at the end of every run that ended on a newline --
+            // which is most of them.
+            if (buffer.size() == 0) return;
+            emit(script, buffer);
+        }
+
+        private void emit(ScriptRef script, ByteArrayOutputStream buffer) {
             String text = new String(buffer.toByteArray(), StandardCharsets.UTF_8);
             buffer.reset();
             target.append(message(script, level, text));
@@ -229,7 +303,7 @@ public final class ScriptOutput {
          * {@code print("a"); print("b"); println("c")} into three rows instead of one.</p>
          */
         @Override
-        public void flush() throws java.io.IOException {
+        public void flush() throws IOException {
             if (CURRENT.get() == null) passthrough.flush();
         }
     }

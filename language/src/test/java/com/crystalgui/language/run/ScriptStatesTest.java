@@ -109,7 +109,7 @@ public class ScriptStatesTest {
     public void aStoppedScriptIsStoppedAndNotFailed() throws Throwable {
         // A LOOP WITH NO EXIT, which is exactly what the safepoints exist for. It ends only because
         // stop() interrupts it, so this also proves the kill flag still works with reporting in place.
-        host.runAsync(compile("while (true) { }"), Map.of(), failure -> { });
+        host.runAsync(compile("while (true) { }"), Map.of(), (ref, error) -> { });
 
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
         while (sessions.stateOf(FILE) != RunState.RUNNING && System.nanoTime() < deadline) {

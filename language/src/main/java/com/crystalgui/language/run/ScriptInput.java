@@ -70,12 +70,28 @@ public final class ScriptInput {
 
         private static final byte[] NOTHING = new byte[0];
 
+        /**
+         * The line last handed to <em>one</em> thread, still being read out a byte at a time.
+         *
+         * <p><b>Per thread, exactly as {@link ScriptOutput}'s buffer is</b>, and for a sharper reason:
+         * these were plain fields, so the remainder of a line one script had not finished reading was
+         * handed to whatever read next. A script that consumed one character and returned left the rest
+         * of its line — and its newline — sitting in the stream, and the <em>next</em> script's first
+         * {@code read()} answered it without ever showing the input row. That is a script silently
+         * receiving another script's input, which is worse than a hang because it looks like it worked.</p>
+         */
+        private static final class Line {
+            private byte[] bytes = NOTHING;
+            private int position;
+
+            boolean hasMore() {
+                return position < bytes.length;
+            }
+        }
+
         private final InputStream passthrough;
         private final RunConsole console;
-
-        /** The line last handed over, still being read out a byte at a time. */
-        private byte[] buffered = NOTHING;
-        private int position;
+        private final ThreadLocal<Line> reading = ThreadLocal.withInitial(Line::new);
 
         Routed(InputStream passthrough, RunConsole console) {
             this.passthrough = passthrough;
@@ -87,14 +103,19 @@ public final class ScriptInput {
         }
 
         /** @return false at end of input — the script was stopped while waiting */
-        private boolean ensureBuffered() {
-            if (position < buffered.length) return true;
-            String line = console.awaitInput(scriptName());
-            if (line == null) return false;
+        private boolean ensureBuffered(Line line) {
+            if (line.hasMore()) return true;
+            // THE PROMPT COMES OUT FIRST. `print("Name? ")` has no newline, so the transcript is still
+            // holding it -- and this thread is about to block, which means nothing will finish that line
+            // until an answer arrives. Without the flush the input row appears under a console that
+            // never asked anything, and the script reads as hung rather than as waiting.
+            ScriptOutput.flushPartial();
+            String typed = console.awaitInput(scriptName());
+            if (typed == null) return false;
             // THE NEWLINE IS PART OF THE LINE. A reader asked for a line and a line ends; without it
-            // `Scanner.nextLine()` blocks on for a terminator that is never coming.
-            buffered = (line + "\n").getBytes(StandardCharsets.UTF_8);
-            position = 0;
+            // `Scanner.nextLine()` blocks for a terminator that is never coming.
+            line.bytes = (typed + "\n").getBytes(StandardCharsets.UTF_8);
+            line.position = 0;
             return true;
         }
 
@@ -107,8 +128,9 @@ public final class ScriptInput {
         @Override
         public int read() throws IOException {
             if (!insideScript()) return passthrough.read();
-            if (!ensureBuffered()) return -1;
-            return buffered[position++] & 0xFF;
+            Line line = reading.get();
+            if (!ensureBuffered(line)) return -1;
+            return line.bytes[line.position++] & 0xFF;
         }
 
         @Override
@@ -119,31 +141,37 @@ public final class ScriptInput {
                 throw new IndexOutOfBoundsException();
             }
             if (length == 0) return 0;
-            if (!ensureBuffered()) return -1;
+            Line line = reading.get();
+            if (!ensureBuffered(line)) return -1;
 
             // A SHORT READ, deliberately. See the class note: filling the array would block past the end
             // of a line the user has already finished typing.
-            int count = Math.min(length, buffered.length - position);
-            System.arraycopy(buffered, position, destination, offset, count);
-            position += count;
+            int count = Math.min(length, line.bytes.length - line.position);
+            System.arraycopy(line.bytes, line.position, destination, offset, count);
+            line.position += count;
             return count;
         }
 
         @Override
         public int available() throws IOException {
             if (!insideScript()) return passthrough.available();
-            return buffered.length - position;
+            Line line = reading.get();
+            return line.bytes.length - line.position;
         }
 
         /**
          * <b>Never closes the passthrough.</b> It is the process's real {@code System.in}, which this
          * borrows rather than owns — a script calling {@code System.in.close()} would otherwise take the
          * game's standard input with it, permanently and for everyone.
+         *
+         * <p>Clears only the calling thread's remainder, for the same reason the buffer is per thread:
+         * one script closing the stream must not discard a line another is midway through reading.</p>
          */
         @Override
         public void close() {
-            buffered = NOTHING;
-            position = 0;
+            Line line = reading.get();
+            line.bytes = NOTHING;
+            line.position = 0;
         }
     }
 }

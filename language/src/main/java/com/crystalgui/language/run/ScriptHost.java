@@ -15,11 +15,13 @@ import java.io.Closeable;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiConsumer;
 
 /**
  * Compile always, run explicitly, re-run replaces — the execution service.
@@ -251,22 +253,30 @@ public final class ScriptHost implements Closeable {
      * Runs on a fresh daemon thread and returns it, so a caller can {@link #stop} a runaway script.
      *
      * <p>Daemon, because a script that will not die must never be the reason the game cannot exit.
-     * That is the backstop under the ssafepoints rather than a substitute for them: it makes shutdown
+     * That is the backstop under the safepoints rather than a substitute for them: it makes shutdown
      * safe, and it does nothing at all for a session that is still running.</p>
+     *
+     * @param onFailure told which run threw as well as what it threw. <b>The ref is carried rather than
+     *                  left to the caller to remember</b>: a failure arrives after the invocation has
+     *                  unwound, so a host reconstructing it from "the last thing I compiled" attributes
+     *                  the trace to whatever was compiled most recently — which is a <em>different</em>
+     *                  file the moment somebody presses Run on one that does not build while an older
+     *                  script is still alive. Null ref for a run with no source attached
      */
     public Thread runAsync(Compiled compiled, Map<String, Object> bindings,
-                           java.util.function.Consumer<Throwable> onFailure) throws Throwable {
+                           @Nullable BiConsumer<ScriptRef, Throwable> onFailure) throws Throwable {
         Running prepared = prepare(compiled, bindings);
         stop();
         running.set(prepared);
 
+        ScriptRef ref = compiled.ref();
         Thread thread = new Thread(() -> {
             try {
                 prepared.invoke();
             } catch (ScriptStoppedException stopped) {
                 // Asked for. Not a failure and not worth reporting as one.
             } catch (Throwable failed) {
-                if (onFailure != null) onFailure.accept(failed);
+                if (onFailure != null) onFailure.accept(ref, failed);
             } finally {
                 running.compareAndSet(prepared, null);
             }
@@ -311,7 +321,7 @@ public final class ScriptHost implements Closeable {
     private Running entryPointOf(Class<?> type, ScriptClassLoader loader, Map<String, Object> bindings,
                                  ScriptRef ref) throws Throwable {
         Method entry = methodOrNull(type, ENTRY_POINT);
-        if (entry != null && !java.lang.reflect.Modifier.isStatic(entry.getModifiers())) {
+        if (entry != null && !Modifier.isStatic(entry.getModifiers())) {
             Object instance = type.getDeclaredConstructor().newInstance();
             applyBindings(type, instance, bindings);
             return new Running(loader, entry, instance, null, ref, sessions);
@@ -322,7 +332,7 @@ public final class ScriptHost implements Closeable {
         }
 
         Method main = methodOrNull(type, "main", String[].class);
-        if (main != null && java.lang.reflect.Modifier.isStatic(main.getModifiers())) {
+        if (main != null && Modifier.isStatic(main.getModifiers())) {
             // BINDINGS ARE SKIPPED, not forced in. A file with a `main` was written as a program, not as
             // a script body, so it has no fields for them -- and setting statics that happen to share a
             // name would be reaching into somebody's class on a guess.

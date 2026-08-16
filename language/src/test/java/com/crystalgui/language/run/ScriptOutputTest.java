@@ -100,6 +100,57 @@ public class ScriptOutputTest {
     }
 
     /**
+     * <b>...but an unfinished line survives the end of the run.</b>
+     *
+     * <p>The other half of the rule above, and the two are easy to state as one and get wrong. Splitting
+     * only on the newline is right <em>while a script is running</em> and wrong at the moment it stops
+     * being able to write one: a script whose last statement is a bare {@code print} had its final output
+     * sitting in a buffer that nothing would ever empty. Losing output is the one thing a console must
+     * not do, and this loses it silently — there is no row, no warning, and no way to tell from the
+     * transcript that anything was said.</p>
+     */
+    @Test
+    public void anUnfinishedLineIsFlushedWhenTheRunEnds() {
+        RunConsole console = new RunConsole().attach(new TextBuffer());
+        PrintStream stream = routedTo(console, new ByteArrayOutputStream());
+
+        ScriptRef previous = ScriptOutput.enter(SCRIPT);
+        try {
+            stream.print("the last thing it said");
+            assertEquals("a partial line is not a row while the script is still going", 0,
+                    drained(console));
+        } finally {
+            ScriptOutput.exit(previous);
+        }
+
+        assertEquals("the final partial line was lost", 1, drained(console));
+        assertEquals("the last thing it said", lineText(console, 0));
+    }
+
+    /**
+     * <b>A line that never ends is still bounded.</b>
+     *
+     * <p>The buffer empties on a newline, so a script printing megabytes without one — a loop of bare
+     * {@code print}, a serialiser writing a whole document — would hold all of it with the console
+     * showing nothing at all. The cap turns "unbounded and invisible" into "very long and visible",
+     * which are different failures and only one of them is a leak.</p>
+     */
+    @Test
+    public void aLineThatNeverEndsIsCutRatherThanBufferedForever() {
+        RunConsole console = new RunConsole().attach(new TextBuffer());
+        PrintStream stream = routedTo(console, new ByteArrayOutputStream());
+
+        ScriptRef previous = ScriptOutput.enter(SCRIPT);
+        try {
+            // Comfortably past the 64KB cap, and not one newline in it.
+            for (int i = 0; i < 200; i++) stream.print("0123456789012345678901234567890123456789".repeat(25));
+            assertTrue("the cap never fired; the whole thing is still in memory", drained(console) > 0);
+        } finally {
+            ScriptOutput.exit(previous);
+        }
+    }
+
+    /**
      * A carriage return must not survive into the row.
      *
      * <p>It is invisible, and it would make two otherwise identical rows differ for a reason nobody
