@@ -46,15 +46,58 @@ public final class RunSessions {
     /** Fired with the script whose state changed, or null when the whole set was cleared. */
     public final Signal.Value<Resource> onDidChange = new Signal.Value<>();
 
-    /** One script's current state and how many handlers it left registered. */
-    public record Session(RunState state, int handlers) {
+    /**
+     * One script's current state, how many handlers it left registered, and when that run began.
+     *
+     * <h4>The timestamps are NOT part of what counts as a change</h4>
+     *
+     * <p>{@link #set} no-ops when nothing changed, and that is what keeps a per-tick script from emitting
+     * a signal on every invocation. Comparing whole records would defeat it outright — two readings taken
+     * a nanosecond apart are never equal — so the comparison is on {@code state} and {@code handlers}
+     * alone, and the clock rides along rather than participating.</p>
+     */
+    public record Session(RunState state, int handlers, long startedNanos, long endedNanos) {
 
         public boolean isActive() {
             return state.isActive();
         }
+
+        /** Whether this session is the same STATE as another — what decides if anything is announced. */
+        boolean sameStateAs(@Nullable Session other) {
+            return other != null && other.state == state && other.handlers == handlers;
+        }
+
+        /**
+         * How long this run has been going, or lasted.
+         *
+         * <p><b>No sentinel.</b> {@code System.nanoTime()} has an arbitrary origin and may be negative, so
+         * a "not finished yet" marker like {@code 0} or {@code Long.MIN_VALUE} is a real timestamp
+         * somewhere and the arithmetic silently produces a nonsense duration. {@code isActive()} already
+         * answers the question, so {@code endedNanos} is simply not read while it is true.</p>
+         */
+        public long elapsedNanos(long nowNanos) {
+            return Math.max(0L, (isActive() ? nowNanos : endedNanos) - startedNanos);
+        }
     }
 
     private final Map<Resource, Session> sessions = new LinkedHashMap<>();
+
+    /**
+     * The clock, injectable so a test can step it.
+     *
+     * <p>{@code nanoTime} rather than wall time: this measures a duration, and wall time can go backwards
+     * across an NTP correction — which would show a script that has been live for an hour as having
+     * started in the future.</p>
+     */
+    private final java.util.function.LongSupplier clock;
+
+    public RunSessions() {
+        this(System::nanoTime);
+    }
+
+    public RunSessions(java.util.function.LongSupplier clock) {
+        this.clock = clock == null ? System::nanoTime : clock;
+    }
 
     /** Records a state with no handler count — everything except {@link RunState#LIVE}. */
     public void set(Resource script, RunState state) {
@@ -70,10 +113,15 @@ public final class RunSessions {
      */
     public void set(Resource script, RunState state, int handlers) {
         if (script == null || state == null) return;
-        Session updated = new Session(state, Math.max(0, handlers));
         synchronized (this) {
             Session previous = sessions.get(script);
-            if (updated.equals(previous)) return;
+            long now = clock.getAsLong();
+            // THE CLOCK STARTS WHEN THE RUN DOES, not when the script was compiled -- and it SURVIVES a
+            // transition between two active states, so a one-shot that registers handlers and becomes
+            // LIVE keeps counting from when it began rather than restarting at the handover.
+            long started = previous != null && previous.isActive() ? previous.startedNanos() : now;
+            Session updated = new Session(state, Math.max(0, handlers), started, now);
+            if (updated.sameStateAs(previous)) return;
             sessions.put(script, updated);
         }
         onDidChange.emit(script);

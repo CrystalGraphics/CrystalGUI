@@ -237,9 +237,20 @@ public final class RunConsoleView {
      */
     public boolean drain() {
         RunConsole showing = console;
-        if (!pending || showing == null) return false;
+        // SAMPLED FIRST, EVERY FRAME, whether or not anything arrived -- this is where the reader's own
+        // position is read, and it has to happen before the document grows or the question can no longer
+        // be answered.
+        updateFollow();
+        if (!pending || showing == null) {
+            // AND THE LOCK IS ENFORCED EVEN ON AN IDLE FRAME. The layout can settle a frame or more after
+            // the text lands: the panel is opened by the Run command and the first drain happens before
+            // the editor has been measured at all, so the tail it was sent to was offset zero. Scrolling
+            // only when something arrives means that first burst is never corrected -- the console opens
+            // at the top and stays there, because by the next line the reader is "not at the tail".
+            if (follow.isFollowing()) scrollToTail();
+            return false;
+        }
         pending = false;
-        boolean wasAtTail = isAtTail();
         boolean changed = showing.drain();
         if (changed) {
             // THE DOCUMENT WAS WRITTEN BEHIND THE EDITOR'S BACK, and a filter change rewrites all of it.
@@ -249,31 +260,61 @@ public final class RunConsoleView {
             // painted a character short over the wrong word, and it never corrected itself.
             editor.invalidateHighlights();
         }
-        if (changed && wasAtTail) scrollToTail();
+        if (follow.isFollowing()) scrollToTail();
         return changed;
     }
 
     /**
-     * Whether the newest line is on screen — asked <b>before</b> the drain.
+     * The scroll lock — extracted, because it was wrong twice and neither version was testable here.
      *
-     * <p>A console that always jumps to the bottom cannot be read while anything is running, and one
-     * that never does is not a console. Both references resolve it the same way: follow while the tail is
-     * visible, and stop the moment the reader scrolls away. Asked first because afterwards the document
-     * is longer and the question can no longer be answered.</p>
+     * @see TailFollow
      */
-    private boolean isAtTail() {
-        float max = editor.getMaxScrollTop();
-        float top = editor.getScrollTop();
-        // A NON-FINITE OFFSET IS TREATED AS THE TOP, never propagated. TextEditor.getScrollTop() can be
-        // NaN, and NaN loses every comparison -- so following the tail would simply stop, with nothing to
-        // look at that says why.
-        if (!Float.isFinite(top) || !Float.isFinite(max)) return true;
-        return max <= 0f || top >= max - 1f;
+    private final TailFollow follow = new TailFollow();
+
+    /** Reads the reader's position into the lock. Must run before anything grows the document. */
+    private void updateFollow() {
+        follow.sample(editor.getScrollTop(), editor.getMaxScrollTop());
+    }
+
+    /**
+     * Jumps to the newest line — and thereby re-arms the tail follow.
+     *
+     * <p>Following stops the moment a reader scrolls away, which is what makes a console readable while
+     * something is writing to it. This is the way back: there is otherwise no gesture that says "I have
+     * finished reading, resume". IntelliJ's console has the same button for the same reason.</p>
+     */
+    public void scrollToEnd() {
+        // RE-ARMS, and that is most of what the button is for. Reaching the bottom by dragging re-arms it
+        // too -- `updateFollow` sees the position and latches -- but a reader who has scrolled far up a
+        // long transcript has no gesture that means "resume" without travelling the whole way back.
+        follow.rearm();
+        scrollToTail();
+    }
+
+    /** Whether the transcript wraps long lines. */
+    public boolean isSoftWrap() {
+        return editor.isSoftWrap();
+    }
+
+    public RunConsoleView setSoftWrap(boolean value) {
+        editor.setSoftWrap(value);
+        return this;
     }
 
     private void scrollToTail() {
         float max = editor.getMaxScrollTop();
-        if (!Float.isFinite(max)) return;
+        // An unmeasured viewport reports zero, and "scrolling to the tail" of a box that has not been laid
+        // out yet puts the view at the TOP -- which is the shape of the original bug. Refusing leaves the
+        // lock armed for a later frame that can actually answer.
+        if (!Float.isFinite(max) || max <= 0f) return;
+        // Recorded whether or not the set below is needed, because this is the value the lock compares
+        // against: skipping it while skipping the write would leave a stale mark and read the next frame
+        // as a reader gesture.
+        follow.applied(max);
+        float top = editor.getScrollTop();
+        // Only when it would move. This runs on every frame the lock is armed, and a setter called sixty
+        // times a second with the value it already holds is worth not paying for.
+        if (Float.isFinite(top) && top >= max - 0.5f) return;
         editor.setScrollImmediate(editor.getScrollLeft(), max);
     }
 

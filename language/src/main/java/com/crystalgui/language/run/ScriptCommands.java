@@ -3,6 +3,8 @@ package com.crystalgui.language.run;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandRegistry;
 
+import javax.annotation.Nullable;
+
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -42,11 +44,18 @@ public final class ScriptCommands {
      * @param onFailure told about an exception thrown out of a script — a notification, a log line, a
      *                  Problems row. Not handled here: what a failure should look like is the
      *                  application's decision and it differs per host
+     * @param onStarted run on the UI thread immediately before a script is launched, and only when one
+     *                  actually is. The hook a shell uses to bring its console forward, for the same
+     *                  reason {@code onFailure} exists: what should become visible when a script starts
+     *                  is the application's decision, and a command that opened a specific tool window
+     *                  itself would be a command that only works in one shell. Null for a host with no
+     *                  opinion — a test, a headless runner
      */
     public static void register(CommandRegistry registry, ScriptHost host,
                                 Supplier<ScriptHost.Compiled> script,
                                 Supplier<Map<String, Object>> bindings,
-                                Consumer<Throwable> onFailure) {
+                                Consumer<Throwable> onFailure,
+                                @Nullable Runnable onStarted) {
         // IntelliJ's own accelerators, because a Run button people have to find in a palette is a Run
         // button nobody uses. Shift+F10 and Mod+F2 also avoid Mod+R, which the harness already takes for
         // a stylesheet reload — a binding that silently loses to an existing one is worse than none.
@@ -55,6 +64,13 @@ public final class ScriptCommands {
                 .run(context -> {
                     ScriptHost.Compiled compiled = script.get();
                     if (compiled == null || !compiled.successful()) return;
+                    // AFTER the compile check, so a file that did not build does not summon an empty
+                    // console -- its errors belong to Problems, which is where both references send them.
+                    // Before `runAsync` rather than off the session signal, and that is the whole point:
+                    // a session change is emitted on the SCRIPT's thread, and opening a tool window from
+                    // there would build widgets off the UI thread. Here we are still inside the command,
+                    // on the thread that invoked it.
+                    if (onStarted != null) onStarted.run();
                     try {
                         // ASYNC, ALWAYS. Running on the UI thread would mean a script with a slow loop
                         // freezes the frame that is meant to offer the Stop button -- so the one

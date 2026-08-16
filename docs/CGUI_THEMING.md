@@ -437,6 +437,16 @@ editor scheme's.
 | `--run-link-fg` | `var(--link)` | base.css |
 | `--run-live-fg` | `var(--success-icon)` | base.css |
 | `--run-notice-fg` | `var(--fg-hint)` | base.css |
+| `--run-rail-bg` | `var(--surface-panel)` | base.css |
+| `--run-rail-border` | `var(--divider)` | base.css |
+| `--run-rail-failed` | `var(--error-icon)` | base.css |
+| `--run-rail-fg` | `var(--fg)` | base.css |
+| `--run-rail-hover-bg` | `var(--hover-bg)` | base.css |
+| `--run-rail-idle` | `var(--fg-disabled)` | base.css |
+| `--run-rail-selected-bg` | `var(--selection-bg)` | base.css |
+| `--run-rail-stopped` | `var(--warning-icon)` | base.css |
+| `--run-rail-time-fg` | `var(--fg-hint)` | base.css |
+| `--run-stripe-bg` | `var(--surface-panel)` | base.css |
 | `--scrollbar-corner` | `#00000000` | base.css |
 | `--scrollbar-tail` | `#00000000` | crystal-dark.css |
 | `--scrollbar-tail-hover` | `#8C8C8C33` | crystal-dark.css |

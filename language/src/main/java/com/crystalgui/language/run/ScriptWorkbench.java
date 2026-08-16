@@ -91,21 +91,51 @@ public final class ScriptWorkbench implements Closeable {
         ScriptCommands.register(registry, host,
                 () -> installed.compileActive(workbench),
                 ScriptBindings::values,
-                installed::report);
+                installed::report,
+                // RUNNING SOMETHING BRINGS THE CONSOLE UP, which is what both references do -- output
+                // nobody can see is the same as no output, and a first-time user pressing Run and getting
+                // no visible response concludes the button is broken rather than that a panel is shut.
+                //
+                // Only when it is CLOSED. `togglePanel` on an open one would hide it, so the second run in
+                // a row would take the console away at the exact moment it filled.
+                () -> {
+                    if (!workbench.isPanelOpen(RunPanels.RUN_TYPE)) {
+                        workbench.showPanel(RunPanels.RUN_TYPE);
+                    }
+                });
 
         panel.onClearRequested.connect(console::clear);
         panel.onStopRequested.connect(host::stop);
+        // RERUN GOES THROUGH THE COMMAND, not through the host directly -- the same reason ScriptCommands
+        // exists at all: a Run button wired straight to ScriptHost.run would be a second, subtly different
+        // way to start a script than the keybinding and the palette, and the second kind is where "the
+        // button works but the shortcut does not" comes from.
+        //
+        // It re-runs the ACTIVE EDITOR, which is what `script.run` means, so the rail's selection decides
+        // whether the button is offered rather than what it targets. Re-running a script that is not on
+        // screen would need a compile of a file nobody is looking at, and `compileActive` is explicit that
+        // "the current script" is a question about the application.
+        panel.onRerunRequested.connect(script -> registry.run(ScriptCommands.RUN));
 
-        // THE BOUNDARY AND THE STOP BUTTON'S ENABLEMENT, both driven off the state the host already
-        // reports rather than off the Run command. That matters for the second one: a script can also
-        // end without anybody pressing anything, and a Stop enabled by the command and disabled by
-        // nothing would stay live over a finished run -- a dead control that looks alive, which is what
-        // `ScriptCommands` gave `enabledWhen` to Stop to avoid in the menu.
+        // THE RUN BOUNDARY, driven off the state the host already reports rather than off the Run
+        // command -- a script can also end without anybody pressing anything.
+        //
+        // ⚠ THIS RUNS ON THE SCRIPT'S OWN THREAD. `RunSessions` is written by the thread whose run just
+        // changed state, so anything here is off the UI thread and may touch NOTHING the engine owns.
+        // `startRun` is safe because the transcript is a ConcurrentLinkedQueue drained during the frame;
+        // that is the whole reason it is a queue.
+        //
+        // The Stop button's enablement used to be pushed from here, and it crashed the application on the
+        // first press: `setEnabled` ends in `invalidateStyleMatch()`, which added to `StyleEngine`'s
+        // dirty-match HashSet while the UI thread was copying it -- `ArrayIndexOutOfBoundsException` out
+        // of `HashMap.keysToArray`, thrown in `advanceFrame` with nothing about the Run panel in the
+        // trace. It is gone rather than hopped through `JobScheduler` because `RunPanel.refreshActions`
+        // already computes exactly this every frame, on the right thread, from the same `RunSessions`.
+        // Pull, not push: a per-frame reader cannot race the frame it reads in.
         sessions.onDidChange.connect(script -> {
             if (script != null && sessions.stateOf(script) == RunState.RUNNING) {
                 console.startRun(script.name());
             }
-            panel.setStoppable(!sessions.active().isEmpty());
         });
         panel.setStoppable(false);
         return installed;

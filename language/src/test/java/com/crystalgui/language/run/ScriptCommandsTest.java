@@ -68,7 +68,7 @@ public class ScriptCommandsTest {
         ScriptHost.Compiled compiled = compile(sink + ".write(\"via the command\");\n");
 
         AtomicReference<Throwable> failure = new AtomicReference<>();
-        ScriptCommands.register(registry, host, () -> compiled, Map::of, failure::set);
+        ScriptCommands.register(registry, host, () -> compiled, Map::of, failure::set, null);
 
         assertTrue("the Run command is not registered", registry.contains(ScriptCommands.RUN));
         assertTrue("Run did not execute", registry.run(ScriptCommands.RUN));
@@ -87,7 +87,7 @@ public class ScriptCommandsTest {
         // offer Stop, or the one affordance that could rescue the situation is the one unreachable.
         String sink = ScriptHostTest.Sink.class.getCanonicalName();
         ScriptHost.Compiled spinner = compile("while (true) { " + sink + ".tick(); }\n");
-        ScriptCommands.register(registry, host, () -> spinner, Map::of, null);
+        ScriptCommands.register(registry, host, () -> spinner, Map::of, null, null);
 
         registry.run(ScriptCommands.RUN);
         long deadline = System.nanoTime() + 10_000_000_000L;
@@ -112,7 +112,7 @@ public class ScriptCommandsTest {
         assertFalse(broken.successful());
 
         AtomicReference<Throwable> failure = new AtomicReference<>();
-        ScriptCommands.register(registry, host, () -> broken, Map::of, failure::set);
+        ScriptCommands.register(registry, host, () -> broken, Map::of, failure::set, null);
 
         registry.run(ScriptCommands.RUN);
         assertNull("a failed compile was reported as a run failure", failure.get());
@@ -124,7 +124,7 @@ public class ScriptCommandsTest {
         ScriptHost.Compiled thrower =
                 compile("throw new IllegalStateException(\"boom\");\n");
         AtomicReference<Throwable> failure = new AtomicReference<>();
-        ScriptCommands.register(registry, host, () -> thrower, Map::of, failure::set);
+        ScriptCommands.register(registry, host, () -> thrower, Map::of, failure::set, null);
 
         registry.run(ScriptCommands.RUN);
         long deadline = System.nanoTime() + 10_000_000_000L;
@@ -135,7 +135,7 @@ public class ScriptCommandsTest {
 
     @Test
     public void unregisteringRemovesBoth() {
-        ScriptCommands.register(registry, host, () -> null, Map::of, null);
+        ScriptCommands.register(registry, host, () -> null, Map::of, null, null);
         assertTrue(registry.contains(ScriptCommands.RUN));
         assertTrue(registry.contains(ScriptCommands.STOP));
 
