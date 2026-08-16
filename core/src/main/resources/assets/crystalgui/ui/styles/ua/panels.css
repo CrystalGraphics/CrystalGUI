@@ -789,9 +789,15 @@ runpanel .__run-rail__ .__run-rail-glyph__.runstate-finished {
     overlay: icon("crystalgui:general/greenCheckmark");
 }
 
+/* THE SAME ARTWORK THE PROBLEMS PANEL USES, which is `statusError` and not `errorDialog`. They are two
+ * drawings of one idea and they do not read alike: `errorDialog` is a disc with a white exclamation
+ * PAINTED on it, while `statusError` is a single `currentColor` path with the exclamation CUT OUT of it,
+ * so the mark takes the colour of whatever is behind — dark on a dark row. Two error marks a few pixels
+ * apart in the same window, one with a white bang and one with a black one, read as two different
+ * severities rather than as one severity drawn twice. */
 runpanel .__run-rail__ .__run-rail-glyph__.runstate-failed {
-    overlay: icon("crystalgui:general/errorDialog");
-    color: var(--run-rail-failed, #C75450);
+    overlay: icon("crystalgui:general/statusError");
+    color: var(--run-rail-failed, #DB5C5C);
 }
 
 /* THE FILL IDIOM IN A ROW is `width: 0; flex-grow: 1` -- neither flex-grow alone nor width: 100% works,
