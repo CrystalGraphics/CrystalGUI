@@ -55,8 +55,18 @@ public final class TreeSitterLanguages {
         // extensions and its Language beside a factory that also knew them -- so adding XML meant getting
         // the same six facts right in two files. They live on Grammar now, and a seventh language is a row.
         for (Grammar grammar : Grammar.values()) {
+            // ANY SERVICES ALREADY REGISTERED ARE CARRIED OVER, which is what makes this and
+            // `JavaLanguage.register()` safe to call in either order. Building a bare Entry here
+            // discarded them, so registering the engine FIRST silently threw it away: the editor
+            // coloured perfectly, Problems stayed empty for Java, and every identifier took one colour
+            // -- which reads as the engine not being built rather than as an entry being replaced.
+            // JavaLanguage already reads-then-writes for the same reason and says order does not matter;
+            // this is the half that made that true.
+            String probeName = "any." + grammar.extensions().get(0);
+            LanguageRegistry.Entry current = LanguageRegistry.forFileName(probeName);
             LanguageRegistry.registerExtensions(
-                    new LanguageRegistry.Entry(grammar.language(), () -> grammar.newTokenizer(scheduler)),
+                    new LanguageRegistry.Entry(grammar.language(),
+                            () -> grammar.newTokenizer(scheduler), current.services()),
                     grammar.extensions().toArray(new String[0]));
         }
     }

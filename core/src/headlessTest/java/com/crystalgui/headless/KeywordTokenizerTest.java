@@ -172,6 +172,52 @@ public class KeywordTokenizerTest {
         assertEquals("keyword", found.get(0).name());
     }
 
+    /**
+     * The JavaScript tier, and the one thing it has to know that the C-family one does not.
+     *
+     * <h4>An unhandled quote character is not a missing colour</h4>
+     *
+     * <p>It is a lexer that walks <em>into</em> the literal and reads its contents as code. A template
+     * literal containing a {@code "} — {@code `he said "hi"`} — would open a string at that quote and run
+     * it to the end of the line, painting whatever followed. So the backtick is handled, and this asserts
+     * the containment rather than the colour: whatever else happens, the tokens after the literal must be
+     * the ones a reader expects.</p>
+     */
+    @Test
+    public void theJavaScriptTokenizerTreatsATemplateLiteralAsAString() {
+        KeywordTokenizer js = KeywordTokenizer.javascript();
+        String source = "var s = `he said \"hi\"`; return 1;";
+        List<SyntaxToken> found = js.tokenize(Rope.of(source), 0, source.length());
+
+        SyntaxToken template = null;
+        for (SyntaxToken token : found) {
+            if ("string".equals(token.name()) && source.charAt(token.start()) == '`') template = token;
+        }
+        assertNotNull("the template literal was not lexed as a string: " + found, template);
+        assertEquals("`he said \"hi\"`", source.substring(template.start(), template.end()));
+
+        // AND THE CODE AFTER IT IS STILL CODE -- the containment half. With the backtick unhandled, the
+        // inner quote opened a string that swallowed everything up to the newline, `return` included.
+        boolean returnIsAKeyword = false;
+        for (SyntaxToken token : found) {
+            if ("keyword".equals(token.name())
+                    && "return".equals(source.substring(token.start(), token.end()))) {
+                returnIsAKeyword = true;
+            }
+        }
+        assertTrue("the text after the template was swallowed: " + found, returnIsAKeyword);
+    }
+
+    /** {@code class} is coloured even on a band that refuses to run it. @see KeywordTokenizer#javascript */
+    @Test
+    public void theJavaScriptTokenizerColoursKeywordsTheEngineMayStillRefuse() {
+        KeywordTokenizer js = KeywordTokenizer.javascript();
+        String source = "class A {}";
+        List<SyntaxToken> found = js.tokenize(Rope.of(source), 0, source.length());
+        assertFalse(found.isEmpty());
+        assertEquals("keyword", found.get(0).name());
+    }
+
     // ── Names ───────────────────────────────────────────────────────────────────────────────────
 
     @Test
