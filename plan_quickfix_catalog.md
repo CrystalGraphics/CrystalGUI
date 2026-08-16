@@ -1235,7 +1235,20 @@ Conservative in the right direction — a cast that was not needed is ugly, a ca
 missing does not compile. The ugly one is then removable by `java.expression.removeCast`, which is the
 two composing rather than either guessing.
 
-### 21.3 The edit
+### 21.3 The one correction that is NOT written on `ASTRewrite`
+
+§4 makes the rewriter the substrate for everything, and this is where that stops paying. The body has to
+arrive **unchanged** except for a rename or two inside it, and `createMoveTarget` will not take nested
+edits: renaming `left` to `left1` produced **`1left`** at every use — the moved text and the nested edit
+disagreeing about whose coordinates an offset was in. Copying the subtree instead does work, and silently
+drops every comment in the body, which is a worse bug than the one it fixes.
+
+Written as text the whole conversion is **three ranges on the original document**, which is what
+`ChangeSet` wants anyway: the header up to the body's first character, the renames inside it, and
+whatever trails the body. The author's own indentation and comments survive because nothing regenerates
+them — which is strictly better output than the rewriter was producing, so this is not a compromise.
+
+### 21.4 The edit
 
 - Replace the whole `ClassInstanceCreation` with a `LambdaExpression`: the `new`, the type arguments and
   the class body all go, because the target type supplies every one of them.
@@ -1247,13 +1260,13 @@ two composing rather than either guessing.
 - Id `java.lambda.fromAnonymous`, title **"Replace with lambda"**, kind `REFACTOR` — which already exists
   and sorts below `QUICK_FIX`, so it never outranks a fix for something actually wrong.
 
-### 21.4 Where it is offered
+### 21.5 Where it is offered
 
 On the **header** — `new` to the opening brace — and not on the whole body. IntelliJ highlights exactly
 that span, and the reason is practical: an intention offered anywhere inside a forty-line anonymous class
 is in every popup that class contains, competing with the fixes for real problems on those lines.
 
-### 21.5 Staging
+### 21.6 Staging
 
 1. **The conversion, refusing on everything in 21.1 and on shadowing.** Complete and safe; the common
    case — a `return`, an assignment, a field initialiser — is covered.
@@ -1263,7 +1276,7 @@ is in every popup that class contains, competing with the fixes for real problem
 Each is independently shippable and each strictly grows what converts, so a stage that has to come back
 out costs offers rather than correctness.
 
-### 21.6 Verification
+### 21.7 Verification
 
 The corpus suits this one unusually well: `core/` and `language/` are full of anonymous listeners,
 comparators and `Runnable`s, so the pass exercises real inputs at scale — and its rule, *a file that
@@ -1271,7 +1284,7 @@ parsed still parses*, is precisely the property every refusal in 21.1 exists to 
 carries one site per condition **including the ones that must be refused**, because a conversion firing
 where it should not is the failure mode with no diagnostic to notice it.
 
-### 21.7 Deliberately not here
+### 21.8 Deliberately not here
 
 - **Lambda → anonymous**, the inverse. IntelliJ ships it; it is a separate intention and needs nothing
   from here twice.
