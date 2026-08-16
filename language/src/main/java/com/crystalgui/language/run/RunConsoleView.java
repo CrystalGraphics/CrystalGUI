@@ -12,7 +12,10 @@ import com.crystalgui.ui.event.MouseEvent;
 import javax.annotation.Nullable;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 /**
  * The console surface — a {@link TextEditor} configured to be read-only output.
@@ -106,6 +109,44 @@ public final class RunConsoleView {
      * change is the one kind of change the view has to treat differently from output arriving. @see #drain
      */
     @Nullable private String shownFilter;
+
+    /**
+     * Where each tab was left, and whether it was following — <b>per filter, not per console</b>.
+     *
+     * <p>There is one editor and one scroll offset behind every rail row, so switching rows used to hand
+     * the new tab whatever number the old one happened to be sitting at. Going to the tail every time was
+     * the first fix and it is not right either: leave a long transcript half way up to read something,
+     * glance at another script, come back, and you are at the bottom with no way to find your place. Each
+     * tab owns its own position, which is what IntelliJ gets for free by giving each run its own
+     * console.</p>
+     *
+     * <p>The <b>follow</b> flag rides along because it is part of where you were: a tab left at the tail
+     * should keep being pulled down by new output, and one left half way up should not.</p>
+     */
+    private final Map<String, Place> places = new HashMap<>();
+
+    /** One tab's place. */
+    private record Place(float top, boolean following) {
+    }
+
+    /**
+     * The key for <em>All output</em>, whose filter is null.
+     *
+     * <p>The empty string, because no script can be called that — a file name is never empty, so there is
+     * nothing for it to collide with. A control character would do as well and would have to survive
+     * every editor and diff between here and whoever reads it next.</p>
+     */
+    private static final String ALL_OUTPUT = "";
+
+    /**
+     * A place waiting to be applied, and why it is not simply written once.
+     *
+     * <p>A filter change rebuilds the document, and the editor cannot report a maximum scroll for a
+     * document it has not laid out yet — so the write in the same frame is against a stale measurement
+     * and can be clamped to the wrong number. Keeping the request until the offset it asked for is the
+     * offset the editor holds is what makes it land, and it costs one comparison per frame afterwards.</p>
+     */
+    @Nullable private Place restoring;
 
     public RunConsoleView() {
         editor.addClass(CONSOLE_CLASS);
@@ -307,6 +348,11 @@ public final class RunConsoleView {
         // position is read, and it has to happen before the document grows or the question can no longer
         // be answered.
         updateFollow();
+        // A RESTORE OUTLIVES THE FRAME THAT ASKED FOR IT. @see #restoring
+        if (restoring != null) {
+            applyRestore();
+            return false;
+        }
         if (!pending || showing == null) {
             // AND THE LOCK IS ENFORCED EVEN ON AN IDLE FRAME. The layout can settle a frame or more after
             // the text lands: the panel is opened by the Run command and the first drain happens before
@@ -317,24 +363,37 @@ public final class RunConsoleView {
             return false;
         }
         pending = false;
+        // WHERE THIS TAB WAS, read BEFORE the drain -- once the filter has been applied the offset on
+        // screen belongs to a document that is already gone.
+        String leaving = showing.filter();
+        float leavingTop = editor.getScrollTop();
+        boolean leavingFollow = follow.isFollowing();
+
         boolean changed = showing.drain();
+
         // READ AFTER THE DRAIN, which is where a filter change is actually applied.
         //
-        // SWITCHING ROWS GOES TO THE TAIL. A filter rebuilds the document from a subset, so the new one
-        // is nearly always SHORTER -- and the editor's scroll offset is a number, not a position in the
-        // text, so it survives the rebuild pointing past the end. Clicking a rail row showed an empty
-        // grey area, and scrolling up a little revealed output that had been there all along, which
-        // reads as the panel having lost the transcript rather than as the view being parked below it.
-        //
-        // The tail rather than the top, because that is what a console row means: show me what this
-        // script has been saying. `scrollToEnd` re-arms the follow too, so a script still printing keeps
-        // pulling the view down after the switch -- and it is self-correcting if the layout has not
-        // settled this frame, since an armed lock retries on the next one.
+        // EACH TAB OWNS ITS OWN PLACE. There is one editor and one scroll offset behind every rail row,
+        // so switching rows handed the new tab whatever number the old one was sitting at -- and since a
+        // filtered document is nearly always SHORTER, that number was usually past its end and the
+        // console showed an empty band. Going to the tail every time was the first fix and is not right
+        // either: leave a long transcript half way up, glance at another script, come back, and your
+        // place is gone. A tab nobody has visited has no place to return to, and for a console the
+        // sensible first sight is the newest output. @see #places
         String applied = showing.filter();
-        if (!java.util.Objects.equals(applied, shownFilter)) {
+        if (!Objects.equals(applied, shownFilter)) {
             shownFilter = applied;
             if (changed) editor.invalidateHighlights();
-            scrollToEnd();
+            if (Float.isFinite(leavingTop)) {
+                places.put(key(leaving), new Place(leavingTop, leavingFollow));
+            }
+            Place remembered = places.get(key(applied));
+            if (remembered == null) {
+                scrollToEnd();
+            } else {
+                restoring = remembered;
+                applyRestore();
+            }
             return changed;
         }
         if (changed) {
@@ -355,6 +414,40 @@ public final class RunConsoleView {
      * @see TailFollow
      */
     private final TailFollow follow = new TailFollow();
+
+    private static String key(@Nullable String filter) {
+        return filter == null ? ALL_OUTPUT : filter;
+    }
+
+    /**
+     * Puts a tab back where it was, retrying until the offset it asked for is the offset it got.
+     *
+     * <p>The editor cannot report a maximum scroll for a document it has not laid out, so the write in
+     * the frame that switched tabs is against a stale measurement and can be clamped to the wrong number.
+     * One comparison per frame until it lands is cheaper than a wrong position that never corrects.</p>
+     *
+     * <p>Clamped to the maximum rather than refused past it: a tab whose transcript has since been
+     * evicted or filtered down cannot go back to a place that no longer exists, and the end of what is
+     * left is the honest substitute for it.</p>
+     */
+    private void applyRestore() {
+        Place place = restoring;
+        if (place == null) return;
+        float max = editor.getMaxScrollTop();
+        if (!Float.isFinite(max)) return;
+
+        float target = Math.max(0f, Math.min(place.top(), max));
+        editor.setScrollImmediate(editor.getScrollLeft(), target);
+        // THE LOCK GOES BACK TOO. A tab left at the tail should keep being pulled down by new output and
+        // one left half way up should not -- restoring the position without the lock would drag the
+        // reader to the bottom of the very transcript they had scrolled up in, on its next line.
+        follow.applied(target);
+        if (place.following()) follow.rearm();
+        else follow.release();
+
+        float now = editor.getScrollTop();
+        if (Float.isFinite(now) && Math.abs(now - target) <= 0.5f) restoring = null;
+    }
 
     /** Reads the reader's position into the lock. Must run before anything grows the document. */
     private void updateFollow() {
@@ -410,9 +503,16 @@ public final class RunConsoleView {
         // as a reader gesture.
         follow.applied(max);
         float top = editor.getScrollTop();
-        // Only when it would move. This runs on every frame the lock is armed, and a setter called sixty
-        // times a second with the value it already holds is worth not paying for.
-        if (Float.isFinite(top) && top >= max - 0.5f) return;
+        // Only when it would move -- this runs on every frame the lock is armed, and a setter called
+        // sixty times a second with the value it already holds is worth not paying for.
+        //
+        // BUT "AT THE TAIL" IS AN EQUALITY, NOT A FLOOR. This read `top >= max - 0.5f`, which is true of
+        // every offset PAST the end as well as of the end itself -- and switching to a shorter transcript
+        // leaves exactly that: the offset survives the rebuild, the new maximum is smaller, and the view
+        // is parked below the last line. The one frame that could have corrected it concluded it was
+        // already there and wrote nothing, so the console showed an empty band until something else
+        // scrolled. The scroll bug that outlived two attempts at this method was this comparison.
+        if (Float.isFinite(top) && Math.abs(top - max) <= 0.5f) return;
         editor.setScrollImmediate(editor.getScrollLeft(), max);
     }
 
