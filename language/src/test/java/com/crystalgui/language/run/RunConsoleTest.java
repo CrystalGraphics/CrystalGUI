@@ -127,6 +127,53 @@ public class RunConsoleTest {
         assertTrue("the newest line survives", buffer.toString().endsWith("a line of some length 499\n"));
     }
 
+    /**
+     * <b>And the bound holds while nothing is draining</b> — which is the state a closed panel is in.
+     *
+     * <p>The ring above only trims inside {@code drain}, and {@code drain} is called once a frame <em>by
+     * the panel</em>. A closed panel is a detached one, so its ticker unregisters and nothing drains at
+     * all — and every line a chatty script printed piled up in the queue instead, for as long as the
+     * console stayed shut. "The transcript is bounded" was true of everything the reader could see and
+     * false of everything else, which is why no test and no eviction notice ever showed it.</p>
+     *
+     * <p>Note there is no {@code drain} in the loop. That absence <em>is</em> the test.</p>
+     */
+    @Test
+    public void theQueueIsBoundedEvenWhenNothingDrainsIt() {
+        TextBuffer buffer = new TextBuffer();
+        RunConsole console = attached(buffer).setBudgetKb(1);
+
+        for (int i = 0; i < 5000; i++) {
+            console.append(out("Main.java", "a line of some length " + i));
+        }
+
+        console.drain();
+        assertTrue("nothing was dropped, so the queue grew to hold all 5000",
+                console.dropped() > 0);
+        assertTrue("the transcript outgrew its budget while the panel was shut",
+                buffer.length() <= 4 * 1024);
+        assertTrue("the newest line must always survive",
+                buffer.toString().endsWith("a line of some length 4999\n"));
+    }
+
+    /**
+     * <b>A drop that happened in the queue is still reported.</b>
+     *
+     * <p>The count is the whole reason eviction is acceptable: a transcript that quietly begins in the
+     * middle reads as the console having missed something. Lines dropped before they were ever shown are
+     * no different — arguably they matter more, because the reader was not there to see them go.</p>
+     */
+    @Test
+    public void linesDroppedFromTheQueueAreCounted() {
+        RunConsole console = attached(new TextBuffer()).setBudgetKb(1);
+        for (int i = 0; i < 2000; i++) console.append(out("Main.java", "line " + i));
+
+        assertEquals("nothing has been drained, so nothing is in the document yet", 0,
+                console.lineCount());
+        console.drain();
+        assertTrue("the queue dropped lines and said nothing about it", console.dropped() > 0);
+    }
+
     /** The level map stays aligned to the document after a trim, or every colour lands on the wrong line. */
     @Test
     public void theLevelMapStaysAlignedAfterTrimming() {
