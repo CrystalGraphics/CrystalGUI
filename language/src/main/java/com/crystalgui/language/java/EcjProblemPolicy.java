@@ -82,6 +82,23 @@ final class EcjProblemPolicy {
         options.put("org.eclipse.jdt.core.compiler.problem.redundantSuperinterface", "warning");
         options.put("org.eclipse.jdt.core.compiler.problem.unusedTypeParameter", "warning");
 
+        // ONE OPTION, TWO PROBLEMS: UnnecessaryCast and UnnecessaryInstanceof both hang off
+        // `unnecessaryTypeCheck`, so they are enabled together whether or not that was intended.
+        //
+        // MEASURED BEFORE ENABLING, because the obvious objection to a cast fix is that a cast can be
+        // load-bearing for OVERLOAD RESOLUTION -- `take((Object) s)` picks take(Object) over take(String),
+        // and removing it silently calls a different method. ECJ does not report that cast: with both
+        // overloads present the warning disappears entirely. So a cast this engine offers to remove can
+        // never be one that decides which method runs.
+        options.put("org.eclipse.jdt.core.compiler.problem.unnecessaryTypeCheck", "warning");
+
+        // A null check the flow analysis proves cannot fail. ALSO MEASURED, and it is far narrower than
+        // it sounds: a defensive `if (s != null)` on a parameter is NOT reported, because ECJ knows
+        // nothing about what a caller passes. What fires is a local it has actually tracked -- one just
+        // assigned `new Object()`, or one that is definitely null -- which is a real mistake rather than
+        // a habit. IntelliJ reports the same set.
+        options.put("org.eclipse.jdt.core.compiler.problem.redundantNullCheck", "warning");
+
         // NOT unusedExceptionParameter. It fires on every `catch (Exception e)` that ignores `e`, which
         // in a script is most of them, and IntelliJ's own unused-declaration inspection excludes catch
         // parameters by default for the same reason. The rename-to-`ignored` correction the catalogue
