@@ -381,6 +381,78 @@ public class LoopAndSwitchTest extends FixFixture {
     }
 
     /**
+     * <b>A branch that returns keeps its block, on one line.</b> The braces are not optional —
+     * {@code case "a" -> return "first";} does not parse — but their layout is, and three lines per branch
+     * defeats the reason to convert: the arrow form earns its keep by reading as a table.
+     */
+    @Test
+    public void aReturningBranchGetsAOneLineBlock() {
+        Assume.assumeTrue("this band cannot parse arrow labels", newestLevel() >= 14);
+        String source = ""
+                + "public class Script {\n"
+                + "    String go(String s) {\n"
+                + "        switch (s) {\n"
+                + "            case \"a\":\n"
+                + "                return \"first\";\n"
+                + "            case \"b\":\n"
+                + "                return \"second\";\n"
+                + "        }\n"
+                + "        return \"none\";\n"
+                + "    }\n"
+                + "}\n";
+        CodeAction offered = withId(actionsAtLevel(source, "switch (s)", newestLevel()),
+                SwitchIntentions.TO_ARROW);
+        assertNotNull("nothing offered", offered);
+        assertEquals(""
+                        + "public class Script {\n"
+                        + "    String go(String s) {\n"
+                        + "        switch (s) {\n"
+                        + "            case \"a\" -> { return \"first\"; }\n"
+                        + "            case \"b\" -> { return \"second\"; }\n"
+                        + "        }\n"
+                        + "        return \"none\";\n"
+                        + "    }\n"
+                        + "}\n",
+                applied(source, offered));
+    }
+
+    /** More than one statement opens the block up, because a table of one row is not a table. */
+    @Test
+    public void aMultiStatementBranchOpensItsBlock() {
+        Assume.assumeTrue("this band cannot parse arrow labels", newestLevel() >= 14);
+        String source = ""
+                + "public class Script {\n"
+                + "    void go(int n) {\n"
+                + "        switch (n) {\n"
+                + "            case 1:\n"
+                + "                System.out.println(1);\n"
+                + "                System.out.println(2);\n"
+                + "                break;\n"
+                + "            default:\n"
+                + "                System.out.println(0);\n"
+                + "                break;\n"
+                + "        }\n"
+                + "    }\n"
+                + "}\n";
+        CodeAction offered = withId(actionsAtLevel(source, "switch (n)", newestLevel()),
+                SwitchIntentions.TO_ARROW);
+        assertNotNull("nothing offered", offered);
+        assertEquals(""
+                        + "public class Script {\n"
+                        + "    void go(int n) {\n"
+                        + "        switch (n) {\n"
+                        + "            case 1 -> {\n"
+                        + "                System.out.println(1);\n"
+                        + "                System.out.println(2);\n"
+                        + "            }\n"
+                        + "            default -> System.out.println(0);\n"
+                        + "        }\n"
+                        + "    }\n"
+                        + "}\n",
+                applied(source, offered));
+    }
+
+    /**
      * <b>A group that genuinely falls through is refused</b>, and that is the point rather than a
      * limitation: it has no arrow form, and it is the defect the arrow form exists to prevent — so guessing
      * at it would be guessing at code that may well be a bug.
