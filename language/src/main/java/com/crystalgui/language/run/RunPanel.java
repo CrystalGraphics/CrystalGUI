@@ -467,7 +467,9 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
      */
     private void refreshRail() {
         RunSessions listing = sessions;
-        boolean wanted = listing != null && !listing.scripts().isEmpty();
+        // ASKED WITHOUT A COPY. `scripts()` snapshots the key set under the lock, and this is a question
+        // about emptiness asked once a frame forever. @see RunSessions#isEmpty
+        boolean wanted = listing != null && !listing.isEmpty();
         if (wanted != railShown) {
             railShown = wanted;
             // THE SAME MOMENT, and deliberately one flag rather than two: "something has run" is the only
@@ -485,11 +487,22 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
         // EVERY FRAME while it is up, because the elapsed time is the liveness signal -- see RunRail for
         // why that stands in for a spinner rather than beside one.
         if (railShown) rail.tick();
-        if (listing != null) followNewRuns(listing);
+        // ONLY WHEN SOMETHING MOVED. `active()` copies under the lock, and the question this answers --
+        // has a script started since last frame -- can only change when the version does.
+        if (listing != null) {
+            int now = listing.version();
+            if (now != knownRunVersion) {
+                knownRunVersion = now;
+                followNewRuns(listing);
+            }
+        }
     }
 
     /** Which scripts were active last frame, so a newly started one can be told apart from a busy one. */
     private final Set<Resource> activeLastFrame = new HashSet<>();
+
+    /** The session version {@link #activeLastFrame} reflects. @see RunSessions#version */
+    private int knownRunVersion = Integer.MIN_VALUE;
 
     /**
      * Moves the rail to a script that has just started.
@@ -635,8 +648,10 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
         // STOP NAMES WHAT IS RUNNING, not what is selected. The two differ constantly -- reading one
         // script's output while another is still going is the normal case, and a Stop offering to stop
         // the thing you are merely looking at would be a button that lies about its own effect.
+        // ONE LOOKUP, NO LIST. This was `active().stream().findFirst()`, which builds a copy of the map's
+        // active keys and a stream over it to look at one element -- once a frame, forever.
         RunSessions running = sessions;
-        stopping = running == null ? null : running.active().stream().findFirst().orElse(null);
+        stopping = running == null ? null : running.firstActive();
         String wantStop = describeAction("Stop", stopping, ScriptCommands.STOP);
         if (!wantStop.equals(stopText)) {
             stopText = wantStop;

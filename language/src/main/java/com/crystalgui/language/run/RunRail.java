@@ -64,12 +64,21 @@ public final class RunRail extends UIElement {
      * <p>Nullable rather than a wrapper type, because the alternative is a record whose only job is to
      * hold "or nothing" — and every consumer would then unwrap it to ask the same question.</p>
      */
-    private final ObservableList<Resource> rows = new ObservableList<>();
+    private final ObservableList<Resource> items = new ObservableList<>();
 
-    private final ListView<Resource> list = new ListView<>(rows);
+    private final ListView<Resource> list = new ListView<>(items);
 
-    /** What {@link #sync} last built, so a frame that changed nothing rebuilds nothing. */
+    /** What {@link #tick} last built, so a frame that changed nothing rebuilds nothing. */
     private List<Resource> known = List.of();
+
+    /**
+     * The session version {@link #known} was built from — the cheap half of the same guard.
+     *
+     * <p>{@link Integer#MIN_VALUE} rather than 0, so a rail bound to a brand-new {@code RunSessions}
+     * still builds once: a real version of 0 means "nothing has changed yet", which is exactly the state
+     * a fresh one is in, and seeding this to 0 would agree with it and never fill the list.</p>
+     */
+    private int knownVersion = Integer.MIN_VALUE;
 
     @Nullable private RunSessions sessions;
 
@@ -80,7 +89,7 @@ public final class RunRail extends UIElement {
         list.onSelectionChanged.connect(indices -> {
             if (indices.isEmpty()) return;
             int index = indices.iterator().next();
-            onScriptChosen.emit(index <= 0 ? null : rows.get(index));
+            onScriptChosen.emit(index <= 0 ? null : items.get(index));
         });
         addInternalChild(list);
     }
@@ -88,6 +97,7 @@ public final class RunRail extends UIElement {
     public RunRail bindTo(@Nullable RunSessions sessions) {
         this.sessions = sessions;
         known = List.of();
+        knownVersion = Integer.MIN_VALUE;
         return this;
     }
 
@@ -108,14 +118,24 @@ public final class RunRail extends UIElement {
         RunSessions showing = sessions;
         if (showing == null) return;
 
-        List<Resource> scripts = showing.scripts();
-        if (!scripts.equals(known)) {
-            known = scripts;
-            rows.clear();
-            // THE NULL IS THE "All output" ROW. @see #rows
-            rows.add(null);
-            for (Resource script : scripts) rows.add(script);
-            if (list.getSelectedIndices().isEmpty()) list.select(0);
+        // ASKED AS AN INT FIRST. `scripts()` copies the key set under the lock, and this ran every frame
+        // to compare it against a list that changes a handful of times in a session -- so the common
+        // frame allocated a list and walked it to conclude nothing had happened. @see RunSessions#version
+        int now = showing.version();
+        if (now != knownVersion) {
+            knownVersion = now;
+            List<Resource> scripts = showing.scripts();
+            // STILL COMPARED. The version moves on every state transition, most of which leave the row
+            // SET alone -- a script going LIVE is not a new row, and rebuilding for it would recycle
+            // every row twenty times a second, which is the thing this method exists to avoid.
+            if (!scripts.equals(known)) {
+                known = scripts;
+                items.clear();
+                // THE NULL IS THE "All output" ROW. @see #items
+                items.add(null);
+                for (Resource script : scripts) items.add(script);
+                if (list.getSelectedIndices().isEmpty()) list.select(0);
+            }
         }
         // IN PLACE, never through the list: refreshing would rebind every row and take the press out from
         // under anything being clicked. @see ListView#refresh
@@ -140,7 +160,7 @@ public final class RunRail extends UIElement {
      */
     public void showing(@Nullable Resource script) {
         int index = script == null ? 0 : known.indexOf(script) + 1;
-        if (index >= 0 && index < rows.size()) list.select(index);
+        if (index >= 0 && index < items.size()) list.select(index);
     }
 
     /**
@@ -150,18 +170,16 @@ public final class RunRail extends UIElement {
      * <p>Shared by {@code bind} and the per-frame pass so the two cannot disagree — which is exactly what
      * happened when only the clock was written here and the mark was left to {@code bind}.</p>
      */
-    private void writeRow(int index, UIElement row) {
+    private void writeRow(int index, UIElement element) {
         RunSessions showing = sessions;
-        if (showing == null || index <= 0 || index - 1 >= known.size()) return;
+        Row row = rows(element);
+        if (showing == null || row == null || index <= 0 || index - 1 >= known.size()) return;
         RunSessions.Session session = showing.sessionOf(known.get(index - 1));
 
-        if (row.querySelector("." + ROW_TIME_CLASS) instanceof UIText time) {
-            time.setText(session == null ? ""
-                    : RunElapsed.format(session.elapsedNanos(System.nanoTime())));
-        }
-        UIElement glyph = row.querySelector("." + ROW_GLYPH_CLASS);
-        if (glyph != null) swapState(glyph, session == null ? null : session.state());
-        describeInto(row, session);
+        row.time.setText(session == null ? ""
+                : RunElapsed.format(session.elapsedNanos(System.nanoTime())));
+        swapState(row.glyph, session == null ? null : session.state());
+        row.describe(describe(session));
     }
 
     /**
@@ -179,11 +197,6 @@ public final class RunRail extends UIElement {
         }
     }
 
-    private void describeInto(UIElement row, @Nullable RunSessions.Session session) {
-        Tooltip tooltip = tooltips.get(row);
-        if (tooltip != null) tooltip.setText(describe(session));
-    }
-
     /**
      * The All row's own words.
      *
@@ -193,10 +206,7 @@ public final class RunRail extends UIElement {
      * genuinely does mean "a script this workspace has never run" and both callers need that to stay
      * true.</p>
      */
-    private void describeAllRow(UIElement row) {
-        Tooltip tooltip = tooltips.get(row);
-        if (tooltip != null) tooltip.setText("Output from every script");
-    }
+    private static final String ALL_TOOLTIP = "Output from every script";
 
     private static String describe(@Nullable RunSessions.Session session) {
         if (session == null) return "Never run";
@@ -209,56 +219,81 @@ public final class RunRail extends UIElement {
     }
 
     /**
-     * One tooltip per pooled template, retained.
+     * A row's parts, held rather than looked up.
      *
-     * <p>{@code Tooltip.attach} <b>adds</b> a listener pair rather than replacing one, so calling it from
-     * {@code bind} — which runs for every visible row on every scroll step — leaves the previous tooltip
-     * attached and showing, and the text then never appears to update however correct the lookup is.</p>
+     * <p><b>Built in {@code createTemplate}, which is the pattern the tree rows already use</b> — and
+     * here it is a per-frame cost rather than a correctness one. {@link #writeRow} runs for every
+     * realised row on every frame, and it used to reach each part with a {@code querySelector}: two
+     * selector walks per row, sixty times a second, to find children this class created itself and could
+     * simply have kept.</p>
+     *
+     * <p>The tooltip is retained for a different and older reason: {@code Tooltip.attach} <b>adds</b> a
+     * listener pair rather than replacing one, so attaching from {@code bind} — which runs for every
+     * visible row on every scroll step — leaves the previous tooltip attached and showing, and the text
+     * then never appears to update however correct the lookup is.</p>
      */
-    private final Map<UIElement, Tooltip> tooltips = new HashMap<>();
+    private static final class Row {
+        private final UIElement glyph = new UIElement();
+        private final UIText name = new UIText("");
+        private final UIText time = new UIText("");
+        @Nullable private Tooltip tooltip;
+
+        /** What the tooltip currently says, so an unchanged one is not rebuilt sixty times a second. */
+        private String described = "";
+
+        void describe(String text) {
+            if (tooltip == null || text.equals(described)) return;
+            described = text;
+            tooltip.setText(text);
+        }
+    }
+
+    private final Map<UIElement, Row> rows = new HashMap<>();
+
+    @Nullable
+    private Row rows(UIElement element) {
+        return rows.get(element);
+    }
 
     /** One row: a state glyph, the file's name, and how long it has been going. */
     private final class Rows implements ListRenderer<Resource> {
 
         @Override
         public UIElement createTemplate() {
-            UIElement row = new UIElement();
-            UIElement glyph = new UIElement();
-            glyph.addClass(ROW_GLYPH_CLASS);
-            glyph.setHitTest(false);
+            UIElement element = new UIElement();
+            Row row = new Row();
+            row.glyph.addClass(ROW_GLYPH_CLASS);
+            row.glyph.setHitTest(false);
+            row.name.addClass(ROW_NAME_CLASS);
+            row.name.setHitTest(false);
+            row.time.addClass(ROW_TIME_CLASS);
+            row.time.setHitTest(false);
 
-            UIText name = new UIText("");
-            name.addClass(ROW_NAME_CLASS);
-            name.setHitTest(false);
-
-            UIText time = new UIText("");
-            time.addClass(ROW_TIME_CLASS);
-            time.setHitTest(false);
-
-            row.addChild(glyph);
-            row.addChild(name);
-            row.addChild(time);
-            tooltips.put(row, Tooltip.attach(row, ""));
-            return row;
+            element.addChild(row.glyph);
+            element.addChild(row.name);
+            element.addChild(row.time);
+            row.tooltip = Tooltip.attach(element, "");
+            rows.put(element, row);
+            return element;
         }
 
         @Override
         public void bind(@Nullable Resource item, int index, UIElement template) {
-            if (!(template.querySelector("." + ROW_NAME_CLASS) instanceof UIText name)) return;
+            Row row = rows(template);
+            if (row == null) return;
 
             if (item == null) {
-                name.setText(ALL_LABEL);
-                if (template.querySelector("." + ROW_TIME_CLASS) instanceof UIText time) time.setText("");
-                UIElement glyph = template.querySelector("." + ROW_GLYPH_CLASS);
-                if (glyph != null) swapState(glyph, null);
-                describeAllRow(template);
+                row.name.setText(ALL_LABEL);
+                row.time.setText("");
+                swapState(row.glyph, null);
+                row.describe(ALL_TOOLTIP);
                 return;
             }
 
             // THE NAME IS THE ONLY THING BIND OWNS. Everything else about a row changes without the row
             // set changing, so it is written by writeRow -- from here for the first fill, and from the
             // per-frame pass thereafter.
-            name.setText(item.name());
+            row.name.setText(item.name());
             writeRow(index, template);
         }
     }
