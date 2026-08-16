@@ -324,6 +324,27 @@ public final class RunConsole {
         onDidChange.emit();
     }
 
+    /**
+     * Drops everything one script ever printed — <b>a clear for one owner instead of all of them</b>.
+     *
+     * <p>The transcript is bounded but it is not selective: a script somebody ran once, hours ago, keeps
+     * its share of the ring until the ring evicts it, and under <em>All output</em> its lines sit between
+     * the ones being read. Clearing takes everything, which is a blunt answer when only one run is in the
+     * way.</p>
+     *
+     * <p>Queued and applied in {@link #drain} like the clear and the filter, for the same reason: the
+     * document may only be touched on the thread that draws it, and a menu row should not have to know
+     * that.</p>
+     */
+    public void forget(String script) {
+        if (script == null || script.isEmpty()) return;
+        forgetting.add(script);
+        onDidChange.emit();
+    }
+
+    /** Scripts whose lines are to be dropped, applied in {@link #drain}. @see #forget */
+    private final ConcurrentLinkedQueue<String> forgetting = new ConcurrentLinkedQueue<>();
+
     // ── The consuming side: the UI thread only ───────────────────────────────────────────────────
 
     /**
@@ -369,6 +390,26 @@ public final class RunConsole {
                 dropped = 0;
                 changed = true;
             }
+        }
+
+        // ONE OWNER'S LINES, DROPPED. Before the filter rebuild below rather than after, so a forget and
+        // a filter change arriving in the same frame cost one rebuild rather than two.
+        if (!forgetting.isEmpty()) {
+            for (String polled = forgetting.poll(); polled != null; polled = forgetting.poll()) {
+                final String name = polled;
+                all.removeIf(line -> name.equals(line.script()));
+                scriptsSeen.remove(name);
+                // AND THE FILTER GOES WITH IT. A console narrowed to a script that no longer exists shows
+                // an empty document with no row selected to explain why -- which reads as the transcript
+                // having been cleared rather than as the filter outliving its subject.
+                if (name.equals(filter)) filter = null;
+            }
+            // RE-MEASURED, not adjusted. The running total is what the ring trims against, and a total
+            // left describing lines that are gone would evict from a transcript that had just shrunk.
+            allChars = 0;
+            for (Line line : all) allChars += charsOf(line);
+            rebuild(target);
+            changed = true;
         }
 
         // A FILTER CHANGE IS A REBUILD, and it happens HERE rather than in the setter for the reason the

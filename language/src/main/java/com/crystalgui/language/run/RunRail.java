@@ -157,6 +157,26 @@ public final class RunRail extends UIElement {
     }
 
     /**
+     * The script a context menu was opened over, or null for the All row and for no menu.
+     *
+     * <p><b>Not the selection.</b> A right-click names the row it is about and leaves the selection where
+     * it was — the same rule {@code ListView.setContextRow} states for Copy, and the same one the file
+     * tree follows. Removing the row you are <em>reading</em> because you right-clicked a different one
+     * would be the worst possible reading of the gesture.</p>
+     */
+    @Nullable
+    public Resource contextScript() {
+        return contextIndex <= 0 || contextIndex >= items.size() ? null : items.get(contextIndex);
+    }
+
+    /** Told by whoever built the menu which row it was opened over. @see #contextScript */
+    public void setContextIndex(int index) {
+        this.contextIndex = index;
+    }
+
+    private int contextIndex = -1;
+
+    /**
      * The script the rail is showing, or null for the All row — <b>and for nothing selected</b>.
      *
      * <p>The two collapse deliberately: both mean "not narrowed to a script", and both restore to the
