@@ -153,6 +153,74 @@ public class RunSessionsTest {
         assertTrue(sessions.scripts().isEmpty());
     }
 
+    /**
+     * <b>Newest first — the rail is read downward and the run you care about is the one that just
+     * happened.</b>
+     *
+     * <p>Insertion order put it at the bottom, under everything already finished, and grew in the wrong
+     * direction all session.</p>
+     */
+    @Test
+    public void theNewestRunIsListedFirst() {
+        java.util.concurrent.atomic.AtomicLong clock = new java.util.concurrent.atomic.AtomicLong(1_000L);
+        RunSessions sessions = new RunSessions(clock::get);
+
+        sessions.set(script("first.java"), RunState.FINISHED);
+        clock.set(2_000L);
+        sessions.set(script("second.java"), RunState.FINISHED);
+        clock.set(3_000L);
+        sessions.set(script("third.java"), RunState.LIVE, 1);
+
+        assertEquals(java.util.List.of(script("third.java"), script("second.java"), script("first.java")),
+                sessions.scripts());
+    }
+
+    /**
+     * <b>And a re-run moves to the top, which reversing insertion order would not do.</b>
+     *
+     * <p>The case that decides the implementation. A script first run an hour ago and re-run just now is
+     * the newest thing in the list, and its position in the map has not changed — only its clock has, and
+     * only because a run beginning from a state that was not already active resets it.</p>
+     */
+    @Test
+    public void aReRunMovesToTheTop() {
+        java.util.concurrent.atomic.AtomicLong clock = new java.util.concurrent.atomic.AtomicLong(1_000L);
+        RunSessions sessions = new RunSessions(clock::get);
+
+        sessions.set(script("old.java"), RunState.FINISHED);
+        clock.set(2_000L);
+        sessions.set(script("new.java"), RunState.FINISHED);
+        assertEquals("the newer one starts on top",
+                script("new.java"), sessions.scripts().get(0));
+
+        clock.set(3_000L);
+        sessions.set(script("old.java"), RunState.RUNNING);
+        assertEquals("re-running the older script did not bring it to the top",
+                script("old.java"), sessions.scripts().get(0));
+    }
+
+    /**
+     * <b>The clock is compared by subtraction, so a negative origin sorts correctly.</b>
+     *
+     * <p>{@code System.nanoTime()} has an arbitrary origin and may be negative — this class already
+     * refuses a sentinel timestamp for that reason, and an ordinary {@code <} between two readings is
+     * wrong across the point where it wraps.</p>
+     */
+    @Test
+    public void orderingSurvivesANegativeClock() {
+        java.util.concurrent.atomic.AtomicLong clock =
+                new java.util.concurrent.atomic.AtomicLong(Long.MAX_VALUE - 1_000L);
+        RunSessions sessions = new RunSessions(clock::get);
+
+        sessions.set(script("before.java"), RunState.FINISHED);
+        // Straight over the wrap, which is a real thing nanoTime does.
+        clock.set(Long.MIN_VALUE + 1_000L);
+        sessions.set(script("after.java"), RunState.FINISHED);
+
+        assertEquals("the run after the wrap was sorted as though it were older",
+                script("after.java"), sessions.scripts().get(0));
+    }
+
     /** A script this workspace has never run has no state at all — not a default one. */
     @Test
     public void anUnknownScriptHasNoState() {
