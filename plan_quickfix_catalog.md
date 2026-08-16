@@ -1174,3 +1174,107 @@ gate the plan called for was unnecessary — the assumption was minutes — and 
 Steps 0–2 are the infrastructure this review says to build *first*, and together they are two days.
 After them the plan is what it was meant to be: a hundred entries, each a `Correction` in a family file,
 a triple in a test file, and a method in a fixture file — with one substrate under all of them.
+
+---
+
+## 21. Anonymous class → lambda, planned in full
+
+The first entry in this document that is **not keyed on a problem**, and that is measured rather than
+assumed: probed against a real parse, a convertible anonymous class produces **no diagnostic at all** —
+not a warning, not an info. Four shapes were tried (convertible, extra field, uses `this`, non-functional
+interface) and every one reported nothing. "Anonymous can be replaced with lambda" is a JDT *UI*
+clean-up and an IntelliJ inspection; it is not something a compiler reports. So this is an
+**intention** — a `Correction` whose `problems()` is empty, asked once per request about the caret range
+— which makes it the second consumer of a hook that has had exactly one (`Organize imports`).
+
+### 21.1 What the references actually check
+
+Read for the decision list, not for code. **IntelliJ Community is Apache 2.0** and portable with notice;
+**Eclipse JDT is EPL-2.0 and is mapping only**. The two agree closely enough that their overlap is the
+specification.
+
+| Refusal | IntelliJ | Eclipse | Ours |
+|---|---|---|---|
+| Not a functional interface | ✅ | ✅ | ✅ |
+| Abstract method is **generic** (`<T> T make(…)`) | via inference failure | ✅ stated | ✅ **measured fatal** |
+| Any other member — field, initialiser, second method, nested type | ✅ | ✅ | ✅ |
+| Unqualified `this` / `super` in the body | ✅ | ✅ | ✅ — qualified `Outer.this` is fine, **measured OK** |
+| A recursive call to the method itself | ✅ | — | ✅ |
+| The method carries a **Javadoc** comment | ✅ | — | ✅ |
+| Runtime- or class-retained annotations on the method | ✅ | — | ✅ |
+| `synchronized` / `strictfp` on the method | ✅ | — | ✅ |
+| Annotations on the **base class type** (`new @Foo Runnable(){}`) | ✅ | — | ✅ |
+| Target type cannot be inferred | ✅ | — | ✅ |
+
+Two more that neither list spells out and that one parse settles:
+
+- **Shadowing is fatal, and not only for parameters.** A lambda's parameters *and its body's locals*
+  share the enclosing scope, where an anonymous class opened a new one. Both measured: *"Lambda
+  expression's parameter `left` cannot redeclare another local variable defined in an enclosing scope"*,
+  and the identical message for a body local `tally`. The anonymous form compiles in both cases, so this
+  is a defect the conversion would introduce rather than one it would reveal.
+- **Ambiguity is fatal, and only for same-arity overloads.** `take(Comparator)` beside `take(Runnable)`
+  is decided by arity and converts cleanly; two interfaces of the *same* shape give *"The method
+  take(Script.F1) is ambiguous"*. The anonymous form named its type; the lambda does not.
+
+### 21.2 The two repairs, rather than two more refusals
+
+Where the fix earns its keep, and what IntelliJ does rather than what is easiest.
+
+**Shadowing → rename.** Every clashing name is renamed before the body moves, `name` → `name1` and
+upward until free. One mechanism covers parameters and body locals alike: resolve the declaration to its
+`IVariableBinding`, walk the body for every `SimpleName` resolving to that binding, rewrite them
+together. The set to avoid is the locals and parameters **in scope at the `new` expression** — fields
+are not in it, because a lambda may legally shadow a field.
+
+**Ambiguity → cast.** `take((Comparator<String>) (a, b) -> 0)`, measured to resolve where the bare lambda
+does not. IntelliJ writes the cast and then removes it when `RedundantCastUtil` says it was not needed;
+we cannot re-resolve inside a code-action request, so the cast is written when the `new` sits in an
+**argument whose invoked method has more than one candidate of that name and arity**, and not otherwise.
+Conservative in the right direction — a cast that was not needed is ugly, a cast that was needed and
+missing does not compile. The ugly one is then removable by `java.expression.removeCast`, which is the
+two composing rather than either guessing.
+
+### 21.3 The edit
+
+- Replace the whole `ClassInstanceCreation` with a `LambdaExpression`: the `new`, the type arguments and
+  the class body all go, because the target type supplies every one of them.
+- **Parameter types omitted**, always inferred. Parameter *names* kept, renamed if they clash.
+- `@Override` dropped — source-retained, inherited, and not expressible on a lambda.
+- **A single-statement body collapses to expression form.** `{ return expr; }` becomes `expr`; a void
+  body of one expression statement becomes that expression. Anything longer keeps its block, which is why
+  the screenshot that prompted this keeps its braces.
+- Id `java.lambda.fromAnonymous`, title **"Replace with lambda"**, kind `REFACTOR` — which already exists
+  and sorts below `QUICK_FIX`, so it never outranks a fix for something actually wrong.
+
+### 21.4 Where it is offered
+
+On the **header** — `new` to the opening brace — and not on the whole body. IntelliJ highlights exactly
+that span, and the reason is practical: an intention offered anywhere inside a forty-line anonymous class
+is in every popup that class contains, competing with the fixes for real problems on those lines.
+
+### 21.5 Staging
+
+1. **The conversion, refusing on everything in 21.1 and on shadowing.** Complete and safe; the common
+   case — a `return`, an assignment, a field initialiser — is covered.
+2. **The rename**, which turns the shadowing refusal into a conversion.
+3. **The cast**, which turns the ambiguity refusal into a conversion.
+
+Each is independently shippable and each strictly grows what converts, so a stage that has to come back
+out costs offers rather than correctness.
+
+### 21.6 Verification
+
+The corpus suits this one unusually well: `core/` and `language/` are full of anonymous listeners,
+comparators and `Runnable`s, so the pass exercises real inputs at scale — and its rule, *a file that
+parsed still parses*, is precisely the property every refusal in 21.1 exists to protect. The fixture
+carries one site per condition **including the ones that must be refused**, because a conversion firing
+where it should not is the failure mode with no diagnostic to notice it.
+
+### 21.7 Deliberately not here
+
+- **Lambda → anonymous**, the inverse. IntelliJ ships it; it is a separate intention and needs nothing
+  from here twice.
+- **Lambda → method reference** (`(a, b) -> a.compareTo(b)` → `String::compareTo`). A second inspection
+  in IntelliJ and a genuinely harder analysis: it has to prove every parameter is passed through
+  untouched and in order.
