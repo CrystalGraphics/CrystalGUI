@@ -257,8 +257,10 @@ public final class DocumentationPopup extends Popover {
         // ON THE MOUSE-DOWN rather than a press pair, because this popup is light-dismissable: a press
         // outside an AUTO popover closes it, and the row would be gone before any mouse-up arrived.
         primaryAction.onMouseDown.attachListener((element, event) -> {
-            CodeAction primary = primaryOf(actions);
-            if (primary != null) onActionChosen.emit(primary);
+            // WHAT THE SLOT IS SHOWING, not a second run of the rule that chose it. Re-deciding here was
+            // harmless only while the rule depended on the action list alone; it now depends on whether
+            // there is a problem too, which this listener cannot see.
+            if (primaryShown != null) onActionChosen.emit(primaryShown);
             event.stopPropagation();
         }, false, true);
         moreActions.onMouseDown.attachListener((element, event) -> {
@@ -306,19 +308,27 @@ public final class DocumentationPopup extends Popover {
         if (available != null) actions.addAll(available);
 
         boolean any = problems != null && !problems.isEmpty();
+        boolean anyAction = !actions.isEmpty();
+        // THE ROW IS FOR EITHER, and it used to be for a problem alone. An INTENTION has no diagnostic
+        // behind it -- "Replace with lambda" fires on code where nothing is wrong -- so the early return
+        // here took the action strip with the message it did not have, and the popup for a convertible
+        // anonymous class offered nothing while the gutter bulb beside it said there was something.
         problemShown = any;
-        problemRow.setDisplayed(any);
-        if (!any) return;
+        problemRow.setDisplayed(any || anyAction);
+        problemMessage.setDisplayed(any);
+        if (!any && !anyAction) return;
 
-        StringBuilder message = new StringBuilder();
-        for (com.crystalgui.text.diagnostic.Diagnostic problem : problems) {
-            if (message.length() > 0) message.append(" · ");
-            message.append(problem.message());
+        if (any) {
+            StringBuilder message = new StringBuilder();
+            for (com.crystalgui.text.diagnostic.Diagnostic problem : problems) {
+                if (message.length() > 0) message.append(" · ");
+                message.append(problem.message());
+            }
+            problemMessage.invalidateMeasurement();
+            problemMessage.setText(message.toString());
         }
-        problemMessage.invalidateMeasurement();
-        problemMessage.setText(message.toString());
 
-        CodeAction primary = primaryOf(actions);
+        CodeAction primary = primaryOf(actions, any);
         primaryShown = primary;
         boolean hasPrimary = primary != null;
         primaryAction.setDisplayed(hasPrimary);
@@ -332,7 +342,6 @@ public final class DocumentationPopup extends Popover {
         // primary: IntelliJ shows it beside a single fix too, because the menu is also how you reach the
         // things that are never inline. It hides only when the list is genuinely empty, which is a problem
         // nobody can do anything about rather than one whose menu happens to be short.
-        boolean anyAction = !actions.isEmpty();
         moreActions.setDisplayed(anyAction);
         moreShortcut.setDisplayed(anyAction);
         problemActions.setDisplayed(anyAction);
@@ -355,17 +364,29 @@ public final class DocumentationPopup extends Popover {
      * "first" is "best", and a preferred fix is still the one that gets the slot when there is one.
      * IntelliJ's hover popup behaves this way: the top fix inline, the rest behind the menu.</p>
      *
-     * <p><b>Only a {@link CodeActionKind#QUICK_FIX} may take the slot.</b> That is what keeps a whole-file
-     * tidy out of it — "Organize imports", "Remove unused imports" and "Copy problem message" are all
-     * things to choose rather than to default to, which each of them already argues for itself, and one
-     * keystroke from a hover is exactly defaulting to it.</p>
+     * <p><b>Only a {@link CodeActionKind#QUICK_FIX} may take the slot WHILE THERE IS A PROBLEM.</b> That is
+     * what keeps a whole-file tidy out of it — "Organize imports", "Remove unused imports" and "Copy
+     * problem message" are all things to choose rather than to default to, and one keystroke from a hover
+     * is exactly defaulting to it. The rule is really "the inline action must answer the message above
+     * it", and a tidy does not answer anything.</p>
+     *
+     * <p><b>With no problem there is no message for it to answer, and the rule inverts.</b> An intention
+     * is the only reason the popup opened an action strip at all — "Replace with lambda" on a convertible
+     * anonymous class — so requiring a QUICK_FIX there leaves a popup showing a bare "More actions…" and
+     * the one thing on offer a keystroke further away than it needs to be. That is the same shape as the
+     * {@code preferred} mistake this method already records, one gate along. IntelliJ shows exactly this
+     * inline, with Alt+Shift+Enter beside it.</p>
+     *
+     * <p>The list arrives sorted by {@code CodeAction.ORDER}, which ranks {@code QUICK_FIX} above
+     * {@code REFACTOR} above {@code SOURCE} — so "first" is still "best" and the no-problem case needs no
+     * ordering of its own.</p>
      */
     @Nullable
-    private static CodeAction primaryOf(List<CodeAction> actions) {
+    private static CodeAction primaryOf(List<CodeAction> actions, boolean hasProblem) {
         for (CodeAction action : actions) {
             if (action.kind() == com.crystalgui.text.lang.CodeActionKind.QUICK_FIX) return action;
         }
-        return null;
+        return hasProblem || actions.isEmpty() ? null : actions.get(0);
     }
 
     /** What the problem section is currently offering — the observable a test asserts on. */
