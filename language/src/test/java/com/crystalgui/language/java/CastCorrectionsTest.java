@@ -1,7 +1,11 @@
 package com.crystalgui.language.java;
 
+import com.crystalgui.text.diagnostic.Diagnostic;
+
 import org.eclipse.jdt.core.compiler.IProblem;
 import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
 
 /**
  * "Cast expression to 'Dog'" — and the case that looks identical and must be refused.
@@ -119,18 +123,145 @@ public class CastCorrectionsTest extends FixFixture {
                 "a cast between these two is a different error, not a fix");
     }
 
-    /**
-     * <b>And the argument shape is not this correction's.</b> {@code take(a)} reports
-     * {@code ParameterMismatch} on the method NAME, not {@code TypeMismatch} on the argument — so nothing
-     * here fires, which is the honest answer until the row that redoes overload resolution is written.
-     */
+    // ── The argument shape ──────────────────────────────────────────────────────────────────────
+
+    /** The reported case: a call whose argument needs narrowing. */
     @Test
-    public void anArgumentIsLeftAlone() {
-        assertNoFix(ANIMALS
+    public void anArgumentGetsTheCast() {
+        assertFix(ANIMALS
                         + "    void take(Dog d) { }\n"
                         + "    void go(Animal a) { take(a); }\n"
                         + "}\n",
-                "take(a)", CastCorrections.ADD_CAST,
-                "an argument mismatch is a different problem and a different fix");
+                "take(a)", CastCorrections.CAST_ARGUMENT, ANIMALS
+                        + "    void take(Dog d) { }\n"
+                        + "    void go(Animal a) { take((Dog) a); }\n"
+                        + "}\n");
+    }
+
+    @Test
+    public void theArgumentProblemIsAThirdIdAndItsOwnCorrection() {
+        assertResolves(ANIMALS
+                        + "    void take(Dog d) { }\n"
+                        + "    void go(Animal a) { take(a); }\n"
+                        + "}\n",
+                "take(a)", CastCorrections.CAST_ARGUMENT, IProblem.ParameterMismatch);
+    }
+
+    /** Only the argument that is wrong, wherever it sits in the list. */
+    @Test
+    public void theSecondArgumentIsTheOneCast() {
+        assertFix(ANIMALS
+                        + "    void take(int n, Dog d) { }\n"
+                        + "    void go(Animal a) { take(1, a); }\n"
+                        + "}\n",
+                "take(1, a)", CastCorrections.CAST_ARGUMENT, ANIMALS
+                        + "    void take(int n, Dog d) { }\n"
+                        + "    void go(Animal a) { take(1, (Dog) a); }\n"
+                        + "}\n");
+    }
+
+    /**
+     * <b>Two same-arity overloads get nothing.</b> There is no way to know which was meant — ECJ names one
+     * in its message, but that is its guess rendered for a person rather than an answer that can be read.
+     * A cast to the wrong one compiles and calls the wrong method, which is worse than offering nothing.
+     */
+    @Test
+    public void anOverloadedCallIsRefused() {
+        assertNoFix(ANIMALS
+                        + "    void take(Dog d) { }\n"
+                        + "    void take(String s) { }\n"
+                        + "    void go(Animal a) { take(a); }\n"
+                        + "}\n",
+                "take(a)", CastCorrections.CAST_ARGUMENT,
+                "which overload was meant is not knowable from the problem");
+    }
+
+    /** And the same guard: an unrelated argument type is a different error, not a cast. */
+    @Test
+    public void anUnrelatedArgumentIsRefused() {
+        assertNoFix(""
+                        + "public class Script {\n"
+                        + "    void take(Integer n) { }\n"
+                        + "    void go(String s) { take(s); }\n"
+                        + "}\n",
+                "take(s)", CastCorrections.CAST_ARGUMENT,
+                "a cast between these two is IllegalCast, not help");
+    }
+    // ── Where the mark goes ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * <b>The argument is underlined, not the method.</b> ECJ marks the method name, which reads as "this
+     * method is the problem" and points the eye away from the only thing anyone can change. The same walk
+     * that finds the argument to cast finds the one to mark, so the two can never disagree.
+     */
+    @Test
+    public void theMarkIsOnTheArgumentRatherThanTheMethod() {
+        String source = ANIMALS
+                + "    void take(Dog d) { }\n"
+                + "    void go(Animal a) { take(a); }\n"
+                + "}\n";
+        assertEquals("the underline covers the argument alone", "a",
+                marked(source, IProblem.ParameterMismatch));
+    }
+
+    /** The text a problem's reported range actually covers. */
+    private static String marked(String source, int problemId) {
+        String code = Integer.toString(problemId);
+        for (Diagnostic problem : diagnosticsOf(source)) {
+            if (!code.equals(problem.code())) continue;
+            String[] lines = source.split("\n", -1);
+            String line = lines[problem.start().row()];
+            return line.substring(problem.start().column(),
+                    Math.min(problem.end().column(), line.length()));
+        }
+        throw new AssertionError("problem " + problemId + " is not reported");
+    }
+
+    // ── When a cast cannot answer ───────────────────────────────────────────────────────────────
+
+    /**
+     * <b>The declaration is what is wrong when a cast is impossible.</b> {@code Integer n = s} reports the
+     * same {@code TypeMismatch} a downcast does and a cast there is {@code IllegalCast} — so the cast
+     * correctly refuses, and this is the repair that does exist.
+     */
+    @Test
+    public void anImpossibleCastOffersTheTypeChangeInstead() {
+        assertFix(""
+                        + "public class Script {\n"
+                        + "    void go(String s) { Integer n = s; System.out.println(n); }\n"
+                        + "}\n",
+                "= s", CastCorrections.CHANGE_TYPE, ""
+                        + "public class Script {\n"
+                        + "    void go(String s) { String n = s; System.out.println(n); }\n"
+                        + "}\n");
+    }
+
+    /**
+     * <b>And not where a cast would do.</b> A downcast that is genuinely right does not want its variable
+     * widened back to the type it already had, and two answers to one question is what the popup's single
+     * inline slot cannot show.
+     */
+    @Test
+    public void aCastableMismatchIsNotOfferedATypeChange() {
+        assertNoFix(ANIMALS
+                        + "    void go(Animal a) { Dog d = a; System.out.println(d); }\n"
+                        + "}\n",
+                "= a", CastCorrections.CHANGE_TYPE,
+                "the cast is the answer here, and it is already offered");
+    }
+
+    /**
+     * <b>A shared declaration is left alone.</b> {@code int a = 1, b = x;} has one type node for both
+     * fragments, so re-typing it for {@code b} silently re-types {@code a} — a fix editing a declaration
+     * the caret was never on.
+     */
+    @Test
+    public void aMultiFragmentDeclarationIsRefused() {
+        assertNoFix(""
+                        + "public class Script {\n"
+                        + "    void go(String s) { Integer a = 1, b = s; System.out.println(a + b); }\n"
+                        + "}\n",
+                "= s", CastCorrections.CHANGE_TYPE,
+                "one type node serves both fragments");
     }
 }

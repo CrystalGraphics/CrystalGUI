@@ -315,6 +315,15 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
          */
         private static int[] markedSpan(CompilationUnit unit, IProblem problem) {
             int[] reported = {problem.getSourceStart(), problem.getSourceEnd() + 1};
+            if (problem.getID() == IProblem.ParameterMismatch) {
+                // ECJ MARKS THE METHOD NAME, and the method is not what is wrong — one of its arguments is.
+                // `take(a)` underlined `take`, which reads as "this method is the problem" and points the
+                // eye away from the only thing anyone can change. IntelliJ marks the argument, and so does
+                // the fix that answers it: the same call finds both, so the underline and the cast can
+                // never disagree about which argument they mean.
+                int[] argument = CastCorrections.mismatchedArgumentSpan(unit, reported);
+                return argument == null ? reported : argument;
+            }
             if (problem.getID() != IProblem.UnusedPrivateMethod
                     && problem.getID() != IProblem.UnusedPrivateConstructor) {
                 return reported;
