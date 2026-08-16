@@ -1,5 +1,8 @@
 package com.crystalgui.language.run;
 
+import com.crystalgui.core.async.JobKey;
+import com.crystalgui.core.async.JobLane;
+import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.notify.Notifications;
@@ -17,6 +20,7 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.nio.file.Path;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Scripting, attached to a workbench — the engine, the commands, the console, and the indicator.
@@ -92,7 +96,15 @@ public final class ScriptWorkbench implements Closeable {
                 () -> showConsole(workbench));
 
         panel.onClearRequested.connect(console::clear);
-        panel.onStopRequested.connect(host::stop);
+        // THE SUBJECT IS ACCEPTED AND NOT YET USED, which is honest rather than lazy: `ScriptHost` holds
+        // exactly one live run, so "stop that one" and "stop whatever is running" are the same request
+        // and pretending otherwise would be a second code path nothing exercises. The signal carries it
+        // so the day a second run can be live, this line is the only one that has to change.
+        panel.onStopRequested.connect(script -> host.stop());
+        // A SCRIPT THAT STOPS TO ASK A QUESTION MUST BE ABLE TO ASK IT. The input row IS the prompt --
+        // §9.5.9's own argument for having no label and no empty state -- and a prompt behind a closed
+        // panel is not one: the script simply stops, with nothing anywhere saying why.
+        console.onDidChange.connect(() -> installed.inputWanted(workbench));
         // RERUN NAMES ITS SUBJECT, and still goes through the command -- the same reason ScriptCommands
         // exists at all: a Run button wired straight to ScriptHost.run would be a second, subtly
         // different way to start a script than the keybinding and the palette.
@@ -144,6 +156,40 @@ public final class ScriptWorkbench implements Closeable {
 
     public RunPanel panel() {
         return panel;
+    }
+
+    /**
+     * Whether a prompt has already brought the panel up for the wait currently in progress.
+     *
+     * <p>{@code onDidChange} fires on every line a script prints, so this listener is on the hot path of
+     * every burst; the flag is what keeps a waiting script from asking for the panel sixty times a
+     * second. Cleared when the wait ends, so the <em>next</em> read asks again — a reader who closed the
+     * console between two questions has closed it once, not forever.</p>
+     */
+    private final AtomicBoolean promptShown = new AtomicBoolean();
+
+    private final JobKey promptKey = JobKey.of(ScriptWorkbench.class, "run-input-prompt");
+
+    /**
+     * Brings the console up when something blocks reading {@code System.in}.
+     *
+     * <p><b>⚠ Called on the script's own thread</b>, like everything else {@code RunConsole} announces —
+     * so it may touch nothing the engine owns, and opening a tool window builds widgets. The hop is
+     * {@link JobScheduler}, whose {@code onDone} is documented to run on the UI thread during
+     * {@code drain()}; {@code RunIndicators} is the reference for the same problem. Pulling per frame is
+     * the other safe shape and is unavailable here for the reason the bug exists: a closed panel is a
+     * detached one, so nothing inside it is running to do the pulling.</p>
+     */
+    private void inputWanted(Workbench workbench) {
+        if (!console.isAwaitingInput()) {
+            promptShown.set(false);
+            return;
+        }
+        if (!promptShown.compareAndSet(false, true)) return;
+        JobScheduler.shared()
+                .<Boolean>job(promptKey, JobLane.LATENCY, context -> Boolean.TRUE)
+                .onDone(ignored -> showConsole(workbench))
+                .submit();
     }
 
     /**

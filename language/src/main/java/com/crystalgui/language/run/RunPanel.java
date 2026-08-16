@@ -17,6 +17,9 @@ import com.crystalgui.ui.input.keymap.Keymap;
 
 import javax.annotation.Nullable;
 
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -63,7 +66,18 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
      * the same way.</p>
      */
     public final Signal.Action onClearRequested = new Signal.Action();
-    public final Signal.Action onStopRequested = new Signal.Action();
+
+    /**
+     * Asked to stop a script — the one the button was offering, or null for "whatever is running".
+     *
+     * <p><b>Carries a subject even though nothing needs one yet</b>, and that is the point. {@code
+     * ScriptHost} holds exactly one live run, so today the answer is never ambiguous — but
+     * {@link RunSessions} is a map, the rail lists several rows, and {@link RunState#LIVE} exists
+     * precisely so that more than one script can be alive at once. The day that lands, a payload-free
+     * signal does not fail: it stops the wrong script, silently, and every call site already written
+     * keeps compiling. One signature now is the cheapest this ever gets.</p>
+     */
+    public final Signal.Value<Resource> onStopRequested = new Signal.Value<>();
 
     /**
      * Asked to run one script again.
@@ -173,6 +187,15 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
 
     /** The rail's current row, or null for "All output" — what Rerun acts on. @see #refreshActions */
     @Nullable private Resource selected;
+
+    /**
+     * The script Stop is currently offering to stop — what its tooltip names and what its press carries.
+     *
+     * <p>Not {@link #selected}. Stop is a question about what is <em>running</em> and Rerun a question
+     * about what is <em>selected</em>, and the two differ constantly: reading one script's output while
+     * another is still going is the normal case.</p>
+     */
+    @Nullable private Resource stopping;
     @Nullable private Connection watch;
     private long noticed = -1;
     private boolean ticking;
@@ -251,7 +274,10 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
         // and state in Java, appearance in CSS.
         stop.addClass(ACTION_CLASS);
         stop.addClass(STOP_CLASS);
-        stop.onPressed.connect(onStopRequested::emit);
+        // THE SCRIPT THE BUTTON WAS OFFERING TO STOP -- the same one its tooltip names, kept current by
+        // refreshActions. Emitting whatever is selected instead would stop the script you are READING
+        // rather than the one that is running, and those differ constantly.
+        stop.onPressed.connect(() -> onStopRequested.emit(stopping));
 
         clear.addClass(ACTION_CLASS);
         clear.addClass(CLEAR_CLASS);
@@ -362,6 +388,44 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
         // EVERY FRAME while it is up, because the elapsed time is the liveness signal -- see RunRail for
         // why that stands in for a spinner rather than beside one.
         if (railShown) rail.tick();
+        if (listing != null) followNewRuns(listing);
+    }
+
+    /** Which scripts were active last frame, so a newly started one can be told apart from a busy one. */
+    private final Set<Resource> activeLastFrame = new HashSet<>();
+
+    /**
+     * Moves the rail to a script that has just started.
+     *
+     * <h4>The filter is a view, and a run is the strongest statement about what you want to see</h4>
+     *
+     * <p>With {@code B.java} selected, running {@code A.java} showed nothing at all: the transcript is
+     * filtered to B, so A's output arrived somewhere off screen and the console sat there looking dead
+     * while the script was working perfectly. IntelliJ switches to the new run's tab for exactly this.</p>
+     *
+     * <p><b>All output is left alone</b>, deliberately. It is already showing the new run, so moving the
+     * selection would narrow a view the reader had deliberately widened — the opposite of the fix.</p>
+     *
+     * <p><b>Pulled, never pushed.</b> {@code RunSessions} announces from the thread whose run just
+     * changed state, and selecting a row rebuilds list elements; doing it from there would build widgets
+     * off the UI thread, which is the crash this panel has already paid for once.</p>
+     */
+    private void followNewRuns(RunSessions listing) {
+        List<Resource> active = listing.active();
+        // AFTER rail.tick(), which is what puts a first-time script into the rail's own row list -- ask
+        // to select it before that and there is no row to select.
+        if (selected != null) {
+            for (Resource script : active) {
+                if (activeLastFrame.contains(script) || script.equals(selected)) continue;
+                // THE RAIL ANNOUNCES IT BACK, which is what updates `selected` and the filter. One path
+                // in and one path out, so a run-driven change and a click are indistinguishable
+                // downstream. @see RunRail#showing
+                rail.showing(script);
+                break;
+            }
+        }
+        activeLastFrame.clear();
+        activeLastFrame.addAll(active);
     }
 
     /**
@@ -463,7 +527,7 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
         // script's output while another is still going is the normal case, and a Stop offering to stop
         // the thing you are merely looking at would be a button that lies about its own effect.
         RunSessions running = sessions;
-        Resource stopping = running == null ? null : running.active().stream().findFirst().orElse(null);
+        stopping = running == null ? null : running.active().stream().findFirst().orElse(null);
         String wantStop = describeAction("Stop", stopping, ScriptCommands.STOP);
         if (!wantStop.equals(stopText)) {
             stopText = wantStop;

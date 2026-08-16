@@ -125,7 +125,15 @@ public final class RunRail extends UIElement {
         }
     }
 
-    /** Selects the row for {@code script}, or the All row for null — without announcing it back. */
+    /**
+     * Selects the row for {@code script}, or the All row for null.
+     *
+     * <p><b>This announces</b> — {@code onScriptChosen} fires exactly as it would for a click, because
+     * the selection genuinely changed and everything downstream of a selection has to hear about it.
+     * The javadoc here used to claim the opposite, which was never true of the implementation and was
+     * the sort of comment that gets believed: a caller reading it would have written a second path to
+     * apply the filter by hand, and then two of them would run.</p>
+     */
     public void showing(@Nullable Resource script) {
         int index = script == null ? 0 : known.indexOf(script) + 1;
         if (index >= 0 && index < rows.size()) list.select(index);
