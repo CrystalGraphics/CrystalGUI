@@ -1,13 +1,17 @@
 package com.crystalgui.language.java;
 
+import com.crystalgui.language.engine.bridge.SourceAnalyzer;
 import com.crystalgui.text.lang.CodeAction;
 
+import org.junit.Assume;
 import org.junit.Test;
 
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 
 /**
  * Batch G — the last three: enhanced for, if-chain to switch, and the lambda inverse.
@@ -288,6 +292,130 @@ public class LoopAndSwitchTest extends FixFixture {
                         + "}\n",
                 "if (n == 1)", SwitchIntentions.TO_SWITCH,
                 "a switch here is longer than the chain it replaces");
+    }
+
+    // ── Colon switch to arrow switch ────────────────────────────────────────────────────────────
+
+    private static final String COLON_SWITCH = ""
+            + "public class Script {\n"
+            + "    void go(int n) {\n"
+            + "        switch (n) {\n"
+            + "            case 1:\n"
+            + "                System.out.println(1);\n"
+            + "                break;\n"
+            + "            case 2:\n"
+            + "                System.out.println(2);\n"
+            + "                break;\n"
+            + "            default:\n"
+            + "                System.out.println(0);\n"
+            + "                break;\n"
+            + "        }\n"
+            + "    }\n"
+            + "}\n";
+
+    /**
+     * <b>The gate is the feature.</b> Arrow labels are Java 14; writing one into a file compiled at 8 turns
+     * working code into a syntax error, which is worse than offering nothing because the offer looked like
+     * an improvement. The engine already runs in bands and the level is part of the analysis request, so
+     * this is a fact rather than a guess.
+     */
+    @Test
+    public void anArrowSwitchIsNotOfferedBelowJava14() {
+        assertNull("an arrow label does not parse at 8",
+                withId(actionsAtLevel(COLON_SWITCH, "switch (n)", 8), SwitchIntentions.TO_ARROW));
+    }
+
+    @Test
+    public void aColonSwitchBecomesAnArrowSwitch() {
+        Assume.assumeTrue("this band cannot parse arrow labels", newestLevel() >= 14);
+        CodeAction offered = withId(actionsAtLevel(COLON_SWITCH, "switch (n)", newestLevel()),
+                SwitchIntentions.TO_ARROW);
+        assertNotNull("nothing offered to convert the switch", offered);
+        assertEquals(""
+                        + "public class Script {\n"
+                        + "    void go(int n) {\n"
+                        + "        switch (n) {\n"
+                        + "            case 1 -> System.out.println(1);\n"
+                        + "            case 2 -> System.out.println(2);\n"
+                        + "            default -> System.out.println(0);\n"
+                        + "        }\n"
+                        + "    }\n"
+                        + "}\n",
+                applied(COLON_SWITCH, offered));
+    }
+
+    /**
+     * <b>Stacked labels are the one legal fall-through</b>, and the arrow form has a spelling for it —
+     * {@code case 1, 2 ->}. Handled rather than refused, because it is common and unambiguous.
+     */
+    @Test
+    public void stackedLabelsBecomeOneArrowLabel() {
+        Assume.assumeTrue("this band cannot parse arrow labels", newestLevel() >= 14);
+        String source = ""
+                + "public class Script {\n"
+                + "    void go(int n) {\n"
+                + "        switch (n) {\n"
+                + "            case 1:\n"
+                + "            case 2:\n"
+                + "                System.out.println(12);\n"
+                + "                break;\n"
+                + "            default:\n"
+                + "                System.out.println(0);\n"
+                + "                break;\n"
+                + "        }\n"
+                + "    }\n"
+                + "}\n";
+        CodeAction offered = withId(actionsAtLevel(source, "switch (n)", newestLevel()),
+                SwitchIntentions.TO_ARROW);
+        assertNotNull("nothing offered", offered);
+        assertEquals(""
+                        + "public class Script {\n"
+                        + "    void go(int n) {\n"
+                        + "        switch (n) {\n"
+                        + "            case 1, 2 -> System.out.println(12);\n"
+                        + "            default -> System.out.println(0);\n"
+                        + "        }\n"
+                        + "    }\n"
+                        + "}\n",
+                applied(source, offered));
+    }
+
+    /**
+     * <b>A group that genuinely falls through is refused</b>, and that is the point rather than a
+     * limitation: it has no arrow form, and it is the defect the arrow form exists to prevent — so guessing
+     * at it would be guessing at code that may well be a bug.
+     */
+    @Test
+    public void aFallingThroughGroupIsRefused() {
+        Assume.assumeTrue("this band cannot parse arrow labels", newestLevel() >= 14);
+        String source = ""
+                + "public class Script {\n"
+                + "    void go(int n) {\n"
+                + "        switch (n) {\n"
+                + "            case 1:\n"
+                + "                System.out.println(1);\n"
+                + "            case 2:\n"
+                + "                System.out.println(2);\n"
+                + "                break;\n"
+                + "        }\n"
+                + "    }\n"
+                + "}\n";
+        assertNull("this switch relies on falling through",
+                withId(actionsAtLevel(source, "switch (n)", newestLevel()), SwitchIntentions.TO_ARROW));
+    }
+
+    private static List<CodeAction> actionsAtLevel(String source, String needle, int level) {
+        int at = source.indexOf(needle);
+        try (SourceAnalyzer.Analysis analysis = analyse("Script", source, level)) {
+            return analysis.codeActionsIn(at, at + needle.length(), HOST);
+        }
+    }
+
+    private static CodeAction withId(List<CodeAction> actions, String id) {
+        for (CodeAction action : actions) {
+            if (id.equals(action.id())) return action;
+        }
+        return null;
     }
 
     // ── Lambda to anonymous class ───────────────────────────────────────────────────────────────

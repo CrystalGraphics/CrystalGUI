@@ -121,6 +121,47 @@ public class QuickFixLoops {
         }
     }
 
+    // ── Colon switch to arrow switch ────────────────────────────────────────────────────────────
+
+    /*
+     * OFFERED ONLY WHERE THE BAND CAN PARSE IT. Arrow labels are Java 14, and writing one into a file
+     * compiled at 8 turns working code into a syntax error -- worse than offering nothing, because the
+     * offer looked like an improvement. The level is part of the analysis request, so this is a fact
+     * rather than a guess. No `// FIX:` claim here for that reason: the fixture harness analyses at the
+     * floor band, where the correct answer is to offer nothing.
+     *
+     * It is also not cosmetic. The colon form falls through unless every branch says otherwise and the
+     * arrow form cannot, so the conversion removes a class of defect rather than restyling one.
+     */
+    void colonSwitch(int n) {
+        switch (n) {
+            case 1:
+                System.out.println(1);
+                break;
+            case 2:
+                System.out.println(2);
+                break;
+            default:
+                System.out.println(0);
+                break;
+        }
+    }
+
+    /**
+     * NOT OFFERED AT ANY LEVEL. This switch relies on falling through, which has no arrow form -- and is
+     * the defect the arrow form exists to prevent, so guessing at it would be guessing at code that may
+     * well be a bug.
+     */
+    void fallsThrough(int n) {
+        switch (n) {
+            case 1:
+                System.out.println(1);
+            case 2:
+                System.out.println(2);
+                break;
+        }
+    }
+
     // ── Lambda to anonymous class ───────────────────────────────────────────────────────────────
 
     void toAnonymous() {

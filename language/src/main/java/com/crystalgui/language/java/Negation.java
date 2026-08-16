@@ -1,5 +1,6 @@
 package com.crystalgui.language.java;
 
+import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.BooleanLiteral;
 import org.eclipse.jdt.core.dom.Expression;
 import org.eclipse.jdt.core.dom.InfixExpression;
@@ -93,9 +94,14 @@ final class Negation {
         return atomic ? text : "(" + text + ")";
     }
 
-    /** What this node's own characters are — never a regenerated form. */
-    static String textOf(Expression expression, String source) {
-        int start = expression.getStartPosition();
-        return source.substring(start, start + expression.getLength());
+    /**
+     * What this node's own characters are — never a regenerated form.
+     *
+     * <p>Takes any {@code ASTNode} rather than an {@code Expression}: it reads a range, and every intention
+     * that carries a body across untouched wants it for statements too. Widened at the third caller.</p>
+     */
+    static String textOf(ASTNode node, String source) {
+        int start = node.getStartPosition();
+        return source.substring(start, start + node.getLength());
     }
 }

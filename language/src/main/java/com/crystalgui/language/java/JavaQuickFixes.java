@@ -86,10 +86,10 @@ final class JavaQuickFixes {
      * <p>In the unit's own coordinates. The caller stamps the answer with the analysis version and the
      * apply path refuses it if the buffer has moved, so these offsets are either exactly right or unused.</p>
      */
-    static List<CodeAction> in(CompilationUnit unit, String source, long version, int from, int to,
-                              CodeActionContext host) {
+    static List<CodeAction> in(CompilationUnit unit, String source, long version, int releaseLevel,
+                              int from, int to, CodeActionContext host) {
         if (unit == null || source == null) return List.of();
-        FixContext context = new FixContext(unit, source, version, host, from, to);
+        FixContext context = new FixContext(unit, source, version, releaseLevel, host, from, to);
         List<CodeAction> actions = new ArrayList<>();
 
         for (IProblem problem : unit.getProblems()) {
