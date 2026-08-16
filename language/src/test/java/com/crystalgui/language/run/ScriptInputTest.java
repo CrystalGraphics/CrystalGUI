@@ -5,10 +5,12 @@ import com.crystalgui.fs.Resource;
 import com.crystalgui.text.TextBuffer;
 import org.junit.Test;
 
+import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.BufferedReader;
+import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Scanner;
 import java.util.concurrent.CountDownLatch;
@@ -86,6 +88,85 @@ public class ScriptInputTest {
         assertTrue("the reader never woke", done.await(5, TimeUnit.SECONDS));
         assertEquals("typed by the user", got.get());
         assertFalse("and the wait is over", console.isAwaitingInput());
+    }
+
+    /**
+     * <b>The prompt is shown before the read blocks.</b>
+     *
+     * <p>{@code System.out.print("Name? ")} followed by a read is the canonical shape of asking a
+     * question, and it has no newline — so the transcript was still holding it when the thread parked.
+     * The input row then appeared under a console that had asked nothing, which reads as the script
+     * having hung rather than as it waiting for you. Nothing was lost, which is why it survived: the
+     * prompt did eventually appear, after the answer.</p>
+     */
+    @Test(timeout = 10_000)
+    public void aPromptWithNoNewlineIsShownBeforeTheReadBlocks() throws Exception {
+        RunConsole console = console();
+        PrintStream out = new PrintStream(
+                ScriptOutput.routed(new ByteArrayOutputStream(), RunLevel.OUT, console), true,
+                StandardCharsets.UTF_8);
+        InputStream routed = ScriptInput.routed(new ByteArrayInputStream(new byte[0]), console);
+        CountDownLatch done = new CountDownLatch(1);
+
+        inScript(() -> {
+            out.print("Name? ");
+            new Scanner(routed).nextLine();
+            done.countDown();
+        });
+
+        awaitAwaiting(console);
+        console.drain();
+        assertEquals("the question was still in the buffer when the script stopped to hear the answer",
+                1, console.lineCount());
+        assertEquals("Name? ", console.lineAt(0).text());
+
+        console.submitInput("answered");
+        assertTrue(done.await(5, TimeUnit.SECONDS));
+    }
+
+    /**
+     * <b>One script's leftover line is not handed to the next.</b>
+     *
+     * <p>The buffer used to be a plain field on the stream rather than a per-thread one, so a reader that
+     * consumed part of a line and stopped left the rest — and its newline — in the stream. The next
+     * script's first {@code read()} then answered out of it, without the input row ever appearing.
+     * That is a script silently receiving input meant for another, which is worse than a hang: a hang is
+     * obvious and this looks like it worked.</p>
+     */
+    @Test(timeout = 15_000)
+    public void aPartlyReadLineDoesNotLeakToAnotherThread() throws Exception {
+        RunConsole console = console();
+        InputStream routed = ScriptInput.routed(new ByteArrayInputStream(new byte[0]), console);
+
+        // The first reader takes ONE byte of "abc" and leaves "bc\n" behind.
+        AtomicReference<Integer> first = new AtomicReference<>();
+        CountDownLatch tookOne = new CountDownLatch(1);
+        inScript(() -> {
+            try {
+                first.set(routed.read());
+            } catch (Exception failed) {
+                throw new IllegalStateException(failed);
+            }
+            tookOne.countDown();
+        });
+        awaitAwaiting(console);
+        console.submitInput("abc");
+        assertTrue(tookOne.await(5, TimeUnit.SECONDS));
+        assertEquals(Integer.valueOf('a'), first.get());
+
+        // A DIFFERENT THREAD, and it must ask for its own line rather than being given "bc".
+        AtomicReference<String> second = new AtomicReference<>();
+        CountDownLatch done = new CountDownLatch(1);
+        inScript(() -> {
+            second.set(new Scanner(routed).nextLine());
+            done.countDown();
+        });
+
+        awaitAwaiting(console);
+        assertTrue("the second reader took the first one's leftovers instead of asking",
+                console.submitInput("its own line"));
+        assertTrue(done.await(5, TimeUnit.SECONDS));
+        assertEquals("its own line", second.get());
     }
 
     /**

@@ -205,7 +205,7 @@ public class ScriptHostTest {
                 "while (true) { " + sink + ".tick(); }\n"));
 
         AtomicReference<Throwable> failure = new AtomicReference<>();
-        Thread thread = host.runAsync(spinner, Map.of(), failure::set);
+        Thread thread = host.runAsync(spinner, Map.of(), (ref, error) -> failure.set(error));
 
         // Let it genuinely get going, so the stop lands mid-loop rather than before the first iteration.
         long deadline = System.nanoTime() + 5_000_000_000L;
@@ -228,7 +228,7 @@ public class ScriptHostTest {
         ScriptHost.Compiled sleeper = compileOrFail(wrap("Thread.sleep(60000);\n"));
 
         AtomicReference<Throwable> failure = new AtomicReference<>();
-        Thread thread = host.runAsync(sleeper, Map.of(), failure::set);
+        Thread thread = host.runAsync(sleeper, Map.of(), (ref, error) -> failure.set(error));
         Thread.sleep(200);
 
         assertTrue(host.stop());
@@ -346,7 +346,7 @@ public class ScriptHostTest {
         assertTrue(cached.fromCache());
 
         AtomicBoolean failed = new AtomicBoolean();
-        Thread thread = host.runAsync(cached, Map.of(), t -> failed.set(true));
+        Thread thread = host.runAsync(cached, Map.of(), (ref, error) -> failed.set(true));
         long deadline = System.nanoTime() + 5_000_000_000L;
         while (Sink.LOOPS.get() < 100 && System.nanoTime() < deadline) Thread.sleep(1);
 
