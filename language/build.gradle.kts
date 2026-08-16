@@ -578,6 +578,16 @@ tasks.test {
     // rather than a check -- it asserts nothing and its output is only useful to a person deciding what to
     // build next -- so unlike the corpus it stays off by default. See CoverageProbeTest.
     systemProperty("cgui.test.coverage", project.hasProperty("coverage").toString())
+    // AND THE CLASSPATH THOSE SOURCES ACTUALLY COMPILE AGAINST. The probe's second run exists to separate
+    // a real gap from an unresolvable-classpath artefact, and it can only do that if the classpath it uses
+    // is the real one -- with only the two modules' own classes, JOML, Taffy, log4j and Gson are all
+    // missing, so half the file still fails to resolve and the "resolved" run is measuring the same
+    // artefacts as the empty one. See CoverageProbeTest.
+    // Resolved ONLY under -Pcoverage: asking for a runtime classpath is configuration-time work, and every
+    // ordinary build would pay it to hand a property to a test that immediately skips.
+    if (project.hasProperty("coverage")) {
+        systemProperty("cgui.test.repoClasspath", sourceSets["main"].runtimeClasspath.asPath)
+    }
 
     // THE BAND JARS REACH THE TESTS AS PATHS, NOT AS A DEPENDENCY. Putting them on testRuntimeClasspath
     // would let a test resolve an engine class through the ordinary loader, which is exactly what the
