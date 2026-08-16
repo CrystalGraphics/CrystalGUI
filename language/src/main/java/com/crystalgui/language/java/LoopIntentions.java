@@ -100,7 +100,7 @@ final class LoopIntentions {
 
             ChangeSet edit = context.changeSet(changes);
             if (edit == null) return;
-            out.add(context.intention(ENHANCED_FOR, "Convert to enhanced for",
+            out.add(context.preferredIntention(ENHANCED_FOR, "Convert to enhanced for",
                     "Replaces the index with the element it was only ever used to fetch.", edit));
         }
 

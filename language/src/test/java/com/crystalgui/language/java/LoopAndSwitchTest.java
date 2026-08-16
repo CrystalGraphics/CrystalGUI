@@ -1,6 +1,13 @@
 package com.crystalgui.language.java;
 
+import com.crystalgui.text.lang.CodeAction;
+
 import org.junit.Test;
+
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 
 /**
  * Batch G — the last three: enhanced for, if-chain to switch, and the lambda inverse.
@@ -105,6 +112,49 @@ public class LoopAndSwitchTest extends FixFixture {
                         + "}\n",
                 "for (int i", LoopIntentions.ENHANCED_FOR,
                 "names() is evaluated once instead of every iteration");
+    }
+
+    /**
+     * <b>A real conversion outranks moving a brace.</b> Both apply to the same braced loop, and they used
+     * to compete on <em>insertion order</em> — which family happened to be registered first in
+     * {@code JavaQuickFixes} — so the popup offered "Remove braces" as the thing to press. Braces can be
+     * added to or removed from every {@code if} and every loop in a file, which is exactly why they cannot
+     * be allowed to win a tie.
+     */
+    @Test
+    public void theConversionOutranksRemovingBracesOnALoop() {
+        assertEquals("Convert to enhanced for", firstTitleIn(""
+                + "public class Script {\n"
+                + "    void go(String[] names) {\n"
+                + "        for (int i = 0; i < names.length; i++) {\n"
+                + "            System.out.println(names[i]);\n"
+                + "        }\n"
+                + "    }\n"
+                + "}\n", "for (int i"));
+    }
+
+    /** And the same on a chain, which is where it was reported the second time. */
+    @Test
+    public void theConversionOutranksRemovingBracesOnAChain() {
+        assertEquals("Replace if chain with switch", firstTitleIn(""
+                + "public class Script {\n"
+                + "    void go(int n) {\n"
+                + "        if (n == 1) {\n"
+                + "            System.out.println(1);\n"
+                + "        } else if (n == 2) {\n"
+                + "            System.out.println(2);\n"
+                + "        } else if (n == 3) {\n"
+                + "            System.out.println(3);\n"
+                + "        }\n"
+                + "    }\n"
+                + "}\n", "if (n == 1)"));
+    }
+
+    /** The title of whatever the popup would put in its inline slot. */
+    private static String firstTitleIn(String source, String needle) {
+        List<CodeAction> offered = actionsIn(source, needle);
+        assertFalse("nothing was offered at all", offered.isEmpty());
+        return offered.get(0).title();
     }
 
     // ── If chain to switch ──────────────────────────────────────────────────────────────────────

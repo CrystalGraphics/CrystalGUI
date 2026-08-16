@@ -95,7 +95,7 @@ final class SwitchIntentions {
             ChangeSet edit = context.changeSet(new Change(chain.getStartPosition(),
                     chain.getStartPosition() + chain.getLength(), built.toString()));
             if (edit == null) return;
-            out.add(context.intention(TO_SWITCH, "Replace if chain with switch",
+            out.add(context.preferredIntention(TO_SWITCH, "Replace if chain with switch",
                     "Rewrites the chain as a switch on the value every branch tests.", edit));
         }
 

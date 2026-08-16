@@ -613,7 +613,7 @@ final class LambdaCorrections {
             changes.sort(Comparator.comparingInt(Change::from));
             ChangeSet edit = context.changeSet(changes);
             if (edit == null) return;
-            out.add(context.intention(TO_ANONYMOUS, "Replace with anonymous class",
+            out.add(context.preferredIntention(TO_ANONYMOUS, "Replace with anonymous class",
                     "Writes the lambda out as the interface it implements.", edit));
         }
 
