@@ -38,6 +38,13 @@ final class TypeNames {
      */
     static String writtenName(ITypeBinding type, ImportPlan imports, ASTNode at) {
         if (type == null) return null;
+        // A RECOVERED BINDING IS A NAME THE COMPILER COULD NOT RESOLVE, and it still answers
+        // getQualifiedName() — so writing it produces a declaration against a type that does not exist.
+        // ImplementCorrections met this first (five files, six to sixteen new errors each) and guarded its
+        // own signatures; the corpus then found the identical fault in "Introduce variable", which is when
+        // it became clear the rule belongs to the one thing that writes type names rather than to each
+        // caller that happens to remember.
+        if (type.isRecovered()) return null;
         if (type.isPrimitive()) return type.getName();
         if (type.isArray()) {
             String component = writtenName(type.getComponentType(), imports, at);
