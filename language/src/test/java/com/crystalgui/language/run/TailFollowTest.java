@@ -123,6 +123,34 @@ public class TailFollowTest {
         assertTrue("an infinite offset disarmed the lock", follow.isFollowing());
     }
 
+    /**
+     * <b>A restored place brings its lock with it.</b>
+     *
+     * <p>Scrolling away is the only thing that used to release the lock, which was enough until a tab
+     * could be <em>put back</em> half way up its own transcript. Restoring the position and leaving the
+     * lock armed drags the reader to the bottom on the run's next line — of the very transcript they had
+     * scrolled up in — and it happens one frame after the switch, so it reads as the console refusing to
+     * stay where it was put.</p>
+     */
+    @Test
+    public void aReleasedLockStaysReleasedWhileOutputArrives() {
+        TailFollow follow = new TailFollow();
+        float[] view = {0f};
+        frame(follow, view, 1000f);
+        assertTrue(follow.isFollowing());
+
+        // Put back half way up, as a tab restore does.
+        follow.release();
+        view[0] = 400f;
+        follow.applied(400f);
+
+        for (float max = 1000f; max <= 2000f; max += 137f) {
+            frame(follow, view, max);
+        }
+        assertFalse("the lock re-armed itself while the reader was half way up", follow.isFollowing());
+        assertEquals("and the view was dragged to the tail anyway", 400f, view[0], 0.5f);
+    }
+
     /** <b>Scroll to End re-arms from anywhere</b> — the gesture a reader far up the transcript lacks. */
     @Test
     public void theButtonReArmsFromAnywhere() {

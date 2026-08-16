@@ -97,6 +97,19 @@ final class TailFollow {
      * whole way back. The baseline is cleared so the next frame cannot read the position being left as a
      * reader gesture.</p>
      */
+    /**
+     * Stops following, deliberately — the counterpart to {@link #rearm()}.
+     *
+     * <p>Scrolling away releases the lock on its own, and that is the only way it happened until a tab
+     * could <b>restore</b> a position: putting a reader back where they were half way up a transcript has
+     * to leave the lock where it was too, or the next line of output drags them to the bottom of the very
+     * transcript they had scrolled up in.</p>
+     */
+    void release() {
+        following = false;
+        appliedTop = Float.NaN;
+    }
+
     void rearm() {
         following = true;
         appliedTop = Float.NaN;
