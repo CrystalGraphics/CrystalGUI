@@ -8,6 +8,7 @@ import com.crystalgui.text.lang.CodeAction;
 import org.junit.Assume;
 import org.junit.Test;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -136,8 +137,24 @@ public class CoverageProbeTest extends FixFixture {
         return at + column;
     }
 
-    /** The repository's own compiled classes, so most of a corpus file actually resolves. */
+    /**
+     * The classpath these sources are actually compiled against — <b>including their dependencies</b>.
+     *
+     * <p>The second run exists to separate a real gap from an unresolvable-classpath artefact, and it can
+     * only do that if the classpath is the real one. It began as the two modules' own {@code build/classes}
+     * directories, which was not enough by a wide margin: JOML, Taffy, log4j and Gson were all absent, so
+     * <b>the "resolved" run was measuring most of the same artefacts as the empty one</b> — 396 occurrences
+     * of "the type org.apache.logging.log4j.Logger cannot be resolved" across 251 files, and every abstract
+     * method over a Gson type reading as unanswered when the fix was correctly refusing to write a stub
+     * against a type nobody could see.</p>
+     *
+     * <p>An instrument whose two readings differ only in degree cannot tell you which of them to believe.</p>
+     */
     private static List<String> repositoryClasspath() {
+        String supplied = System.getProperty("cgui.test.repoClasspath");
+        if (supplied != null && !supplied.isEmpty()) {
+            return List.of(supplied.split(File.pathSeparator));
+        }
         String root = System.getProperty("cgui.test.repoRoot");
         if (root == null) return List.of();
         List<String> entries = new ArrayList<>();
