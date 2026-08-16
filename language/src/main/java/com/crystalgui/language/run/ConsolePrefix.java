@@ -25,14 +25,21 @@ import java.time.ZoneId;
  * <p>So it is a setting, and {@link Style#NONE} is a real option rather than a courtesy. Somebody
  * reading a script's own formatted output wants the bytes.</p>
  *
- * <h3>Padded, never truncated</h3>
+ * <h3>Nothing is padded, and a line with no origin is not indented past one</h3>
  *
- * <p>A jittering message column is worse than a wide one — the eye follows the left edge of the text, and
- * a prefix that changes width moves it on every line. Every logging framework pads for the same reason.
- * But none of them can truncate <em>here</em>: shortening {@code VeryLongScript.java:1204} means dropping
- * either the file or the line, and both halves are the answer to "where did this come from". A name too
- * long for the column pushes its own line out and leaves every other line aligned, which is the failure
- * that costs least — and it needs no ellipsis glyph, which this codebase has been bitten by twice.</p>
+ * <p>The first version reserved a fixed column for the origin, on the usual logging-framework argument
+ * that the eye follows the left edge of the text and a prefix that changes width moves it. That is true
+ * and it was the wrong trade here. <b>Almost every line has an origin</b> — the stack walk finds one for
+ * anything a script printed itself — so the column was near-constant anyway, and the padding bought
+ * alignment that was already there. What it cost was the rare line <em>without</em> one: a callback the
+ * engine invoked, indented sixteen columns to line up with a field it does not have, which reads as an
+ * empty cell rather than as an absent one.</p>
+ *
+ * <p>So a stamp is its parts and a single space between them. A four-digit line number moves the message
+ * by one column and nothing else does. Nothing is ever truncated either: shortening
+ * {@code VeryLongScript.java:1204} means dropping either the file or the line, and both halves are the
+ * answer to "where did this come from" — it would also want an ellipsis, which this codebase has been
+ * bitten by assuming a font has.</p>
  */
 public final class ConsolePrefix {
 
@@ -49,30 +56,22 @@ public final class ConsolePrefix {
         FULL
     }
 
-    /** {@code [22:59:20] } — eleven columns, fixed. */
-    private static final int TIME_WIDTH = 11;
-
-    /**
-     * Columns reserved for {@code Ask.java:24}, including the gap after it.
-     *
-     * <p>Wide enough for the ordinary case — a file name of ten or so characters and a line number of
-     * up to four — and deliberately not wider. Every column here is one the message does not get.</p>
-     */
-    private static final int ORIGIN_WIDTH = 16;
-
     /** The prefix for one line, or {@code ""} when nothing is stamped. */
     public static String of(Style style, long epochMillis, @Nullable String origin) {
         if (style == null || style == Style.NONE) return "";
-        StringBuilder out = new StringBuilder(TIME_WIDTH + ORIGIN_WIDTH);
+        StringBuilder out = new StringBuilder(28);
         appendTime(out, epochMillis);
-        if (style == Style.FULL) appendOrigin(out, origin);
+        // BRACKETED, LIKE THE CLOCK BESIDE IT. Both are the console's own words about a line rather than
+        // the line itself, and they should read as one prefix rather than as a stamp followed by a stray
+        // filename -- which is how `[23:20:30] Main.java:465 hello` reads, as though the script had
+        // printed the name. Logback brackets its thread for the same reason.
+        //
+        // ABSENT, NOT EMPTY, when there is no origin: neither a pair of brackets saying only that
+        // something is missing, nor the whitespace where one would have gone. @see the class note
+        if (style == Style.FULL && origin != null && !origin.isEmpty()) {
+            out.append('[').append(origin).append("] ");
+        }
         return out.toString();
-    }
-
-    /** How wide {@link #of} would be for a line with no origin — what a caller pads chrome to. */
-    public static int width(Style style) {
-        if (style == null || style == Style.NONE) return 0;
-        return style == Style.FULL ? TIME_WIDTH + ORIGIN_WIDTH : TIME_WIDTH;
     }
 
     /**
@@ -95,15 +94,6 @@ public final class ConsolePrefix {
         out.append(':');
         two(out, time.getSecond());
         out.append("] ");
-    }
-
-    private static void appendOrigin(StringBuilder out, @Nullable String origin) {
-        int start = out.length();
-        if (origin != null && !origin.isEmpty()) out.append(origin);
-        // PADDED TO THE COLUMN, or past it if the name is long -- @see the class note. The trailing gap
-        // is part of the width, so a name that exactly fills it still has one space after it.
-        while (out.length() - start < ORIGIN_WIDTH - 1) out.append(' ');
-        out.append(' ');
     }
 
     private static void two(StringBuilder out, int value) {

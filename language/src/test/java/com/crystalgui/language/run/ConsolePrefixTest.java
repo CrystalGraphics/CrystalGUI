@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -29,7 +30,6 @@ public class ConsolePrefixTest {
     public void nothingIsStampedWhenNothingWasAskedFor() {
         assertEquals("", ConsolePrefix.of(ConsolePrefix.Style.NONE, at(22, 59, 20), "Ask.java:24"));
         assertEquals("", ConsolePrefix.of(null, at(22, 59, 20), "Ask.java:24"));
-        assertEquals(0, ConsolePrefix.width(ConsolePrefix.Style.NONE));
     }
 
     /** {@code [22:59:20] } — zero-padded, because 9:5:3 does not align with anything. */
@@ -40,34 +40,40 @@ public class ConsolePrefixTest {
         assertEquals("[00:00:00] ", ConsolePrefix.of(ConsolePrefix.Style.TIME, at(0, 0, 0), null));
     }
 
-    /** The origin follows it, and the message column is the same on both lines. */
+    /** Each part bracketed, one space between them, and one space before the message. */
     @Test
-    public void theOriginIsPaddedSoTheMessageColumnHolds() {
-        String withOrigin = ConsolePrefix.of(ConsolePrefix.Style.FULL, at(22, 59, 20), "Ask.java:24");
-        String without = ConsolePrefix.of(ConsolePrefix.Style.FULL, at(22, 59, 20), null);
-
-        assertTrue("the origin is not in the stamp", withOrigin.contains("Ask.java:24"));
-        assertEquals("a line with no origin does not line up with one that has it",
-                withOrigin.length(), without.length());
-        assertEquals(withOrigin.length(), ConsolePrefix.width(ConsolePrefix.Style.FULL));
-        assertTrue("the stamp runs into the message", withOrigin.endsWith(" "));
+    public void theStampIsItsPartsAndSingleSpaces() {
+        assertEquals("[22:59:20] [Ask.java:24] ",
+                ConsolePrefix.of(ConsolePrefix.Style.FULL, at(22, 59, 20), "Ask.java:24"));
     }
 
     /**
-     * <b>A long origin pushes its own line out and leaves the rest aligned.</b>
+     * <b>A line with no origin is not indented past one.</b>
      *
-     * <p>The alternative is truncating, and there is nothing here to truncate: shortening
-     * {@code VeryLongScriptName.java:1204} means dropping either the file or the line, and both halves
-     * are the answer to "where did this come from". It would also want an ellipsis, which this codebase
-     * has twice been bitten by assuming a font has.</p>
+     * <p>The first version reserved a fixed column and padded into it, on the usual logging-framework
+     * argument about the eye following the left edge of the text. It bought alignment that was already
+     * there — almost every line has an origin, so the column was near-constant anyway — and it charged
+     * the rare line without one sixteen columns of whitespace, which reads as an empty field rather than
+     * as an absent one.</p>
      */
     @Test
-    public void aLongOriginOverflowsRatherThanBeingCut() {
-        String stamp = ConsolePrefix.of(ConsolePrefix.Style.FULL, at(1, 2, 3),
-                "VeryLongScriptName.java:1204");
-        assertTrue("the origin was truncated", stamp.contains("VeryLongScriptName.java:1204"));
-        assertTrue("and it should push past the column rather than fitting in it",
-                stamp.length() > ConsolePrefix.width(ConsolePrefix.Style.FULL));
+    public void aLineWithNoOriginIsNotIndented() {
+        String stamp = ConsolePrefix.of(ConsolePrefix.Style.FULL, at(22, 59, 20), null);
+        assertEquals("[22:59:20] ", stamp);
+        assertFalse("an absent origin should leave no empty brackets", stamp.contains("[]"));
+    }
+
+    /**
+     * <b>Nothing is truncated.</b>
+     *
+     * <p>Shortening {@code VeryLongScriptName.java:1204} means dropping either the file or the line, and
+     * both halves are the answer to "where did this come from". It would also want an ellipsis, which
+     * this codebase has twice been bitten by assuming a font has.</p>
+     */
+    @Test
+    public void aLongOriginIsNotCut() {
+        assertEquals("[01:02:03] [VeryLongScriptName.java:1204] ",
+                ConsolePrefix.of(ConsolePrefix.Style.FULL, at(1, 2, 3), "VeryLongScriptName.java:1204"));
     }
 
     /** TIME stops at the time — the origin is the thing FULL adds. */
