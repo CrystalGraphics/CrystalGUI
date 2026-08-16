@@ -118,14 +118,30 @@ in `core/src/test/resources/` and not here: it is the SVG renderer's torture tes
 ## `general/action/` — IntelliJ Platform (Apache 2.0)
 
 `intentionBulb`, `addDirectory`, `addFile`, `copy`, `cut`, `delete`, `edit`, `paste`, `reformatCode`,
-`refresh`, `run`, `save` — action icons from the IntelliJ Platform, © 2000-2023 JetBrains s.r.o. and
-contributors, used under the Apache License 2.0.
+`refresh`, `run`, `rerun`, `save`, `scrollDown`, `softWrap`, `stop` — action icons from the IntelliJ
+Platform, © 2000-2023 JetBrains s.r.o. and contributors, used under the Apache License 2.0.
 
-**Unmodified**, and shipped with their `*_dark.svg` variants, which is the difference from `general/search/`
-above. Those were converted to `currentColor` because they are chrome marks that have to follow a theme and
-a toggle state; these carry meaning in their colour — the bulb's amber glass says "there is something to do
-here" and is the thing that makes it recognisable at 16px — so recolouring them from CSS would throw away
-what they are. `icon()` resolves the light/dark pair through `CgUiSvg.ofIcon`.
+The line this directory is split along is **whether the colour carries meaning**, and it is the same line
+`general/search/` sits on the far side of.
+
+**Unmodified**, shipped with their `*_dark.svg` variants: `intentionBulb`, `addDirectory`, `addFile`,
+`copy`, `cut`, `edit`, `paste`, `reformatCode`, `refresh`, `run`, `rerun`, `save`, `stop`. These carry
+meaning in their colour — the bulb's amber glass says "there is something to do here", Stop's red says the
+button is live — and recolouring them from CSS would throw away what they are. `icon()` resolves the
+light/dark pair through `CgUiSvg.ofIcon`.
+
+**Modified**, which Apache 2.0 § 4(b) requires stating:
+
+- `delete`, `scrollDown`, `softWrap` — every hard-coded `fill="#6C707E"` replaced with
+  `fill="currentColor"`. They are chrome marks in a console's control stripe, not coloured symbols, so
+  they have to follow the theme and dim when their action is unavailable. Same change and same reason as
+  `general/search/`.
+- `rerunDisabled`, `stopDisabled` — **new files**, the geometry of `rerun` and `stop` recoloured to
+  `currentColor`, with the play triangle's pale interior dropped so the glyph reads as one flat tone.
+  They exist because the enabled pair's colour is baked in: `currentColor` is bound at draw time and a
+  hard `#DB3B4B` is not, so a CSS `color` rule dimmed every glyph in the Run panel except the two that
+  most needed it. Swapping the drawable on `:disabled` is what a hard-coded palette costs, and it is
+  JetBrains' own model — the Platform ships state variants rather than tinting one file.
 
 ## `general/search/` — IntelliJ Platform (Apache 2.0)
 

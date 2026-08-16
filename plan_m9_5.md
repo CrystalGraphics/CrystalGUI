@@ -9,15 +9,13 @@ carrying the output of running scripts, plus the indicator that says which files
 |---|---|---|
 | 9.5.1 | Capturing output — the thread-local marker | **done** — `ScriptOutput` + `ScriptHost` bracket, 11 tests |
 | 9.5.2 | The console as a text area | **rewritten from a ListView** — see below; the list was the wrong shape |
-| 9.5.3 | States, and the per-script filter | **done** — `RunState`/`RunSessions` (12 tests) and `RunConsole.setFilter` + the head picker (12 tests). **The rail itself is not built** |
+| 9.5.3 | States, the filter, and the rail | **done** — `RunState`/`RunSessions` (12), `RunConsole.setFilter` (12), `RunRail` + `RunElapsed` (8). The rail replaced the stand-in picker |
 | 9.5.4 | The ring, and `System.in` | **done** — collapsing removed with the list; `ScriptInput` mirrors `ScriptOutput`, 7 tests |
 | 9.5.5 | The running indicator | **done** — `RunDecorations`, 6 tests, and it is now *invalidated* so the row actually repaints. Editor-tab half **cut**, see 9.5.7 |
 | 9.5.6 | Stack-frame links | **done** — `ConsoleFilter` + `JavaStackFrameFilter`, 10 tests |
 | 9.5.7 | The running badge | **done** — `RunIndicators`, 6 tests. Editor tabs cut, see below |
 
-Written before any of it existed; the states above are current. What remains is **the rail** (9.5.3) —
-the states, the filter it drives and the input row are all built; what is missing is the column of live
-scripts itself.
+Written before any of it existed; the states above are current. **M9.5 is complete.**
 
 ### All of it lives in `language/`, not in `core/`
 
@@ -544,6 +542,93 @@ because a blocking read would make every future run of that file stop and wait f
 
 ---
 
+## 9.5.10 The rail as built, and the spinner it does not have
+
+### No spinner, and that is a correctness argument rather than a scope one
+
+IntelliJ spins an icon because a process gives it no other sign of life. **Here it would be actively
+wrong.** The steady state of an event-driven script is `LIVE` — loaded, handlers registered, waiting to
+fire — and in that state *nothing is executing*. A spinner claims work is happening; it would be spinning
+hardest for the scripts doing least.
+
+The ticking elapsed time says everything the spinner would and one thing more: not just that it is alive
+but for how long. And it has a property the spinner cannot: **it freezes** at the final duration, so a
+finished row reads the same whether you watched it end or came back an hour later. A spinner only ever
+says "now".
+
+### Elapsed, and where the resolution comes from
+
+Seconds are the smallest unit. Milliseconds change ten times faster than the eye reads and turn a quiet
+rail into a flicker; the question people actually ask it is "is this still going, and roughly how long".
+Two units, never three — `1 hr, 4 min` and not `1 hr, 4 min, 9 sec`, because the seconds are noise beside
+the hours and the row is the width of a filename. Below a second reads `<1 sec` and **never `0 sec`**,
+which would say "not started" about the one moment a script is most obviously alive.
+
+> **The timestamps are deliberately outside what counts as a change.** `RunSessions.set` no-ops on an
+> unchanged state, and that is the whole reason a per-tick script does not emit a signal twenty times a
+> second. Comparing whole records would have defeated it outright — two readings a nanosecond apart are
+> never equal — so the comparison is on `state` and `handlers` alone and the clock rides along.
+>
+> It also survives a handover between two ACTIVE states: a one-shot that registers handlers and settles
+> into `LIVE` is one run, not two, and restarting there would report an hour-old script as seconds old.
+
+### A SplitView, built lazily — revised from "a row, not a SplitView"
+
+The first build made the rail a plain child of a row, on the grounds that a split **cannot go below two
+panes** and so could not express "no rail yet". That reasoning was sound about `SplitView` and wrong about
+the feature: a rail you cannot widen cannot show a long filename, and the width is a real preference.
+
+Both facts still hold, so the answer is that **the split does not exist until the rail does**. The
+transcript sits alone in the body until the first script runs; `showRail()` then builds a `SplitView`,
+reparents the transcript into its second pane and puts the rail in the first. `hideRail()` reverses it.
+Nothing is ever a pane sized to nothing — `applySplit` writes `flex-grow`, which divides only *free*
+space, and `setPaneSizeLimits` clamps dragging rather than layout, so neither could have collapsed one.
+
+> **The reparent happens when a script starts, and that is not incidental.** A widget must never rebuild
+> the elements it is being clicked or dragged on. The rail appears in response to a *command* — from the
+> editor, the menu or a key — so nothing inside the console is under the pointer at that moment. Doing
+> the same move from a click in the transcript would detach the element the press is being dispatched
+> through.
+
+> **The minimum is on `.__run-left__`, not on the pane.** `split.first()` is the `__split-pane__` wrapper
+> the `SplitView` makes for itself, and the divider's clamp reads the pane's **content** — so a
+> `min-width` on the wrapper lands one level above where the clamp looks and the drag takes the rail
+> below its own minimum. It is stated in pixels rather than as a percentage, because "at least 150px"
+> stays true at every window size and "at least 15%" does not.
+
+> And a pane is a flex **column** whatever the split's orientation, so its child grows by *height*.
+> Reasoning from the split instead — "this one is horizontal, so grow by width" — collapses whichever
+> guess is wrong, and it presents as a sibling problem rather than a sizing one.
+
+The rail shows from the **first** script, keyed on *seen this session* rather than *live now* — one that
+appeared and vanished as scripts finished would be worse than one that stays once earned. It was briefly
+hidden below two on the IntelliJ analogy; that was wrong here, because a single run is exactly when
+somebody wants to see its state and its elapsed time.
+
+### The divider survives the session — `SessionState`
+
+A dock record says where a panel *is*, never what is inside it, so a dragged divider had nowhere to
+live and reset on every launch. The fix reuses what the engine already had rather than adding a panel
+API: `SplitView` now answers for its own weights through the `writeState`/`readState` hook every widget
+has, the split is given a stable id and `setSessionPersistent(true)`, and `UIWindow` hands it its
+payload as it joins the tree. Full account in `docs/CGUI_WORKBENCH_SERVICES.md`.
+
+> **The first version was a `PanelViewState` interface the panel implemented, and it was the wrong
+> shape** — a second mechanism beside `writeState`, reaching only the panel's root, so a divider three
+> levels down had to be proxied out by hand and back again. Worth recording because the interface
+> version worked: it passed its tests and persisted the divider. Being made of the wrong parts is not
+> something a test can report.
+
+Two halves are specific to this panel:
+
+- **Nothing is parked here any more.** The split is built when the first script runs, and it takes its
+  remembered width from `registerElement` as it joins the window — so the rail arrives already the right
+  width, with no field on the panel holding a value for a widget that does not exist yet.
+- **The filter is deliberately not persisted.** One more line, and wrong: a remembered filter naming a
+  script that is not running again opens the console empty for a reason three clicks away.
+
+---
+
 ## What it reuses
 
 `ListView` — virtualised, and a firehose demands it. `TreeSearch` for the filter, in the permanent
@@ -557,7 +642,12 @@ panel shape of `ProblemsPanel`.
   reach the console, and Minecraft's own logging reaches neither.
 - A script printing every tick does not flood: the **ring** bounds the transcript and an eviction is
   reported rather than dropped silently. (Collapsing was removed with the list — see 9.5.4.)
-- The rail shows a tick-driven script as `Live` and does not strobe.
+- The rail shows a tick-driven script as `Live` and does not strobe, and its elapsed time ticks while the
+  script is active and freezes at the final duration once it is not.
+- The divider between the rail and the transcript is draggable, holds at a width that can still show a
+  filename, and comes back where it was left — including when the panel is not opened until after the
+  session has been restored, and including across a session that never opened it at all.
+- Selecting a rail row narrows the transcript to that script; the All row restores it.
 - Stopping a script through §19.3 moves it to `Stopped` and **leaves its transcript**.
 - A stack-trace frame opens the file at the line, is visibly a link before it is clicked, and still
   opens the right line **after the ring has evicted from the front of the transcript**.

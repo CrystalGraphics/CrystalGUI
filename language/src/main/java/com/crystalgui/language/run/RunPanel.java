@@ -2,13 +2,17 @@ package com.crystalgui.language.run;
 
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.fs.Resource;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIFrameTicker;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Button;
-import com.crystalgui.ui.elements.Dropdown;
+import com.crystalgui.ui.elements.SplitView;
 import com.crystalgui.ui.elements.TextField;
 import com.crystalgui.ui.elements.UIText;
+import com.crystalgui.ui.input.keymap.Keymap;
+import com.crystalgui.ui.input.keymap.KeyChord;
+import com.crystalgui.ui.elements.Tooltip;
 
 import javax.annotation.Nullable;
 
@@ -31,14 +35,20 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
 
     public static final String NOTICE_CLASS = "__run-notice__";
     public static final String SPACER_CLASS = "__spacer__";
-    public static final String FILTER_CLASS = "__run-filter__";
     public static final String INPUT_CLASS = "__run-input__";
+    public static final String BODY_CLASS = "__run-body__";
 
-    /** The picker's first row — everything, whoever wrote it. */
-    public static final String ALL_SCRIPTS = "All output";
-    public static final String HEAD_CLASS = "__head__";
+    public static final String STRIPE_CLASS = "__run-stripe__";
+    public static final String LEFT_CLASS = "__run-left__";
+    public static final String RUNBAR_CLASS = "__run-bar__";
+    public static final String SEP_CLASS = "__run-sep__";
+    public static final String RERUN_CLASS = "__run-rerun__";
     public static final String ACTION_CLASS = "__run-action__";
     public static final String STOP_CLASS = "__run-stop__";
+    public static final String WRAP_CLASS = "__run-wrap__";
+    public static final String END_CLASS = "__run-end__";
+    /** On the soft-wrap button while wrapping is on. A CLASS, not a pseudo-class: the widget flips it. */
+    public static final String ON_CLASS = "__on__";
     public static final String CLEAR_CLASS = "__run-clear__";
 
     /** Fired when a navigable span is clicked — the line it was on, and the span. @see ConsoleFilter */
@@ -56,6 +66,15 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
     public final Signal.Action onStopRequested = new Signal.Action();
 
     /**
+     * Asked to run one script again.
+     *
+     * <p>Carries the script, because unlike Stop this one has a <em>subject</em>: stopping is a question
+     * about whatever is currently running, and there is only ever one answer to that. Re-running is a
+     * question about a particular file.</p>
+     */
+    public final Signal.Value<Resource> onRerunRequested = new Signal.Value<>();
+
+    /**
      * Asked to show one script's output, or everything when null.
      *
      * <p>Applied here as well as announced — unlike Stop, filtering IS this view's business, and a host
@@ -65,35 +84,82 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
 
     private final RunConsoleView view = new RunConsoleView();
     private final UIText notice = new UIText("");
-    private final UIElement head = new UIElement();
-    private final UIElement spacer = new UIElement();
-    private final Dropdown filterPicker = new Dropdown(ALL_SCRIPTS);
+    private final UIElement stripe = new UIElement();
+    /**
+     * The rail and its own toolbar, as one column.
+     *
+     * <p>IntelliJ puts the RUN controls in a horizontal bar above the tree and the CONSOLE controls in a
+     * vertical stripe beside the output, and the split is not decorative: rerun and stop act on a
+     * <em>script</em>, which is what the rail lists, while wrap and scroll act on the <em>transcript</em>.
+     * Each toolbar sits with the thing it operates on.</p>
+     */
+    private final UIElement leftColumn = new UIElement();
+    private final UIElement runBar = new UIElement();
+    /**
+     * The rule under the run bar.
+     *
+     * <p>An ELEMENT, because a border cannot draw one here: the paint path takes {@code border().left} as
+     * its stroke width and strokes a uniform box, so a bottom-only hairline resolves, lays out, and draws
+     * nothing at all. The find bar spent a session on exactly this, and {@code statusbarview} spells its
+     * separators the same way.</p>
+     */
+    private final UIElement separator = new UIElement();
+
+    /**
+     * The row under the toolbar: the rail, the transcript, and the console's control stripe.
+     *
+     * <p>The rail REPLACED the head's dropdown rather than joining it — both answer the same question,
+     * which script's output am I looking at, and two controls for one question is the arrangement where
+     * they drift apart.</p>
+     */
+    private final UIElement body = new UIElement();
+    private final RunRail rail = new RunRail();
+    private boolean railShown;
+
+    /**
+     * The rail beside the transcript, with a draggable divider.
+     *
+     * <p><b>Built lazily, and it has to be.</b> A {@code SplitView} cannot go below two panes —
+     * {@code removePane} refuses outright — and it cannot collapse one to nothing either: {@code
+     * applySplit} writes {@code flex-grow}, which divides only FREE space, and {@code setPaneSizeLimits}
+     * clamps dragging rather than layout. So "no rail until something has run" cannot be a pane sized to
+     * zero; it has to be the split not existing yet, with the transcript sitting in the body on its own
+     * until it does.</p>
+     */
+    @Nullable private SplitView split;
+
+    /** A quarter of the panel -- the rail is a list of filenames, not the thing you are reading. */
+    private static final float DEFAULT_SPLIT = 24f;
 
     /**
      * Where a line for {@code System.in} is typed.
      *
-     * <h4>A row of its own, not the transcript's last line</h4>
-     *
-     * <p>The sketch was "a text area that is read-only except for the last line", which is what a terminal
-     * looks like — and what it would take is a genuine editable-REGION feature in {@code TextEditor}: not
-     * three guard sites but a caret that cannot be moved above the boundary, a selection that cannot span
-     * it, a backspace that stops at it, and a paste and an undo that respect it. {@code setReadOnly} is
-     * one flag and none of that exists.</p>
-     *
-     * <p>So the input is a {@code TextField}, which already has every one of those behaviours for the one
-     * line it owns. The cost is that the prompt and the answer are on different rows; the alternative was
-     * an editor that is <em>mostly</em> read-only, which is the state where a user discovers they have
-     * silently edited the transcript. If the editable region lands later this row is where it plugs in.</p>
+     * <p>A row of its own rather than the transcript's editable last line: that would need a genuine
+     * editable-REGION in {@code TextEditor} — a caret that cannot move above the boundary, a selection
+     * that cannot span it, a backspace that stops at it, and a paste and an undo that respect it.
+     * {@code setReadOnly} is one flag and none of that exists.</p>
      */
     private final TextField inputField = new TextField();
     private boolean inputShown;
 
-    /** What the picker currently offers, so it is rebuilt only when the script set actually moves. */
-    private List<String> offered = List.of();
     private final Button stop = new Button("");
     private final Button clear = new Button("");
+    private final Button wrap = new Button("");
+    private final Button rerun = new Button("");
+    private final Button toEnd = new Button("");
 
     @Nullable private RunConsole console;
+    /**
+     * What the rail lists.
+     *
+     * <p>Separate from the console because they are different models: the console holds <em>output</em>
+     * and knows a script only by the name on a line, while a session is keyed by the {@code Resource} and
+     * carries the state and the clock. The panel is the one place both are in scope.</p>
+     */
+    @Nullable private RunSessions sessions;
+
+    /** The rail's current row, or null for "All output" — what Rerun acts on. @see #refreshActions */
+    @Nullable private Resource selected;
     @Nullable private Connection watch;
     private long noticed = -1;
     private boolean ticking;
@@ -117,9 +183,39 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
             inputField.setText("");
         });
 
-        addInternalChild(head);
-        addInternalChild(notice);
-        addInternalChild(view.element());
+        body.addClass(BODY_CLASS);
+        leftColumn.addClass(LEFT_CLASS);
+        leftColumn.addChild(rail);
+
+        body.addChild(view.element());
+        // AFTER the transcript, so it sits on the trailing edge. IntelliJ's console keeps its controls in
+        // a narrow vertical stripe there rather than in a full-width bar above, and the reason is space:
+        // a row across the whole panel spends 22px of height to hold four glyphs, on a panel whose entire
+        // job is showing as many lines as it can.
+        body.addChild(stripe);
+        rail.onScriptChosen.connect(script -> {
+            selected = script;
+            RunConsole showing = console;
+            // THE NAME, because RunConsole filters on the script name a message carries -- a Resource is
+            // what the rail holds and what a session is keyed by, and the two meet here rather than one
+            // of them having to know about the other.
+            emitFilter(script == null ? null : script.name());
+        });
+
+        // THE STRIP DIRECTLY UNDER THE PANEL'S HEADER, spanning its whole width and carrying a separator
+        // of its own -- which is where IntelliJ's run controls are, and one level shallower than the first
+        // attempt put them. Inside the rail's column they were indented behind a second boundary and read
+        // as belonging to the list rather than to the run.
+        runBar.addClass(RUNBAR_CLASS);
+        separator.addClass(SEP_CLASS);
+        separator.setHitTest(false);
+        addInternalChild(runBar);
+        addInternalChild(separator);
+        addInternalChild(body);
+        // THE NOTICE IS NOT ATTACHED YET. An empty UIText still measures a full LINE of height, so a
+        // permanently-attached one puts a blank band under the toolbar on every console that has never
+        // evicted anything -- which is every console, nearly always. Attached by refreshNotice when it has
+        // something to say. The same reason the input row and the rail attach rather than hide.
         // NOT ADDED YET. It is attached only while something is blocked on a read -- see refreshInput --
         // because a permanent field would sit under every transcript claiming input is wanted, and would
         // take a tab stop and a `gap-all` slot to say nothing.
@@ -136,12 +232,7 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
      * recognised glyph already says.</p>
      */
     private void buildHead() {
-        head.addClass(HEAD_CLASS);
-        // THE CLASS IS WHAT DOES IT. Written without one first, so `> .__spacer__` matched nothing, the
-        // element never grew, and the toolbar sat against the leading edge looking deliberate.
-        spacer.addClass(SPACER_CLASS);
-        spacer.setHitTest(false);
-
+        stripe.addClass(STRIPE_CLASS);
         // THE GLYPH COMES FROM THE SHEET. `overlay` takes a drawable rather than `icon(...)` text, and
         // more to the point a widget writing its own artwork is the rule this codebase keeps: structure
         // and state in Java, appearance in CSS.
@@ -153,20 +244,78 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
         clear.addClass(CLEAR_CLASS);
         clear.onPressed.connect(onClearRequested::emit);
 
-        // THE LEADING EDGE, because the trailing one belongs to the run controls. A filter is about what
-        // you are looking at; Stop and Clear are about what is happening. Keeping them apart is what stops
-        // a reader hunting along one undifferentiated row of glyphs.
-        filterPicker.addClass(FILTER_CLASS);
-        filterPicker.attachSelectionListener(index -> {
-            String label = filterPicker.getSelectedOption();
-            // INDEX 0 IS "everything", spelled as null rather than as a magic label the console has to
-            // know: RunConsole filters on a script name, and "All output" is not one.
-            emitFilter(index == 0 || label == null ? null : label);
+        // SOFT WRAP IS A TOGGLE, so its on-ness is a class this widget writes rather than a pseudo-class
+        // the engine evaluates -- :checked is re-evaluated on the engine's terms and has cost a round here
+        // before. @see RunPanel#ON_CLASS
+        wrap.addClass(ACTION_CLASS);
+        wrap.addClass(WRAP_CLASS);
+        wrap.onPressed.connect(() -> {
+            boolean on = !view.isSoftWrap();
+            view.setSoftWrap(on);
+            if (on) wrap.addClass(ON_CLASS);
+            else wrap.removeClass(ON_CLASS);
         });
 
-        head.addChild(spacer);
-        head.addChild(stop);
-        head.addChild(clear);
+        toEnd.addClass(ACTION_CLASS);
+        toEnd.addClass(END_CLASS);
+        toEnd.onPressed.connect(view::scrollToEnd);
+
+        rerun.addClass(ACTION_CLASS);
+        rerun.addClass(RERUN_CLASS);
+        rerun.onPressed.connect(() -> {
+            Resource script = selected;
+            if (script != null) onRerunRequested.emit(script);
+        });
+
+        runBar.addChild(rerun);
+        runBar.addChild(stop);
+
+        stripe.addChild(wrap);
+        stripe.addChild(toEnd);
+        stripe.addChild(clear);
+
+        // ATTACHED ONCE, HERE. `Tooltip.attach` ADDS a listener pair rather than replacing one, so calling
+        // it again to update the text leaves the first tooltip attached and showing -- the new text never
+        // appears however correct the lookup is. The two that change are retained and re-worded through
+        // `setText`; the three that never change are attached and forgotten. `StatusBarView` carries the
+        // same note.
+        rerunTip = Tooltip.attach(rerun, "Rerun");
+        stopTip = Tooltip.attach(stop, "Stop");
+        Tooltip.attach(wrap, "Soft-Wrap");
+        Tooltip.attach(toEnd, "Scroll to End");
+        Tooltip.attach(clear, "Clear All");
+    }
+
+    /**
+     * The two tooltips that name a script, retained so they can be re-worded rather than re-attached.
+     *
+     * @see #describeAction
+     */
+    @Nullable private Tooltip rerunTip;
+    @Nullable private Tooltip stopTip;
+
+    /** What the last refresh wrote, so an unchanged tooltip is not rebuilt sixty times a second. */
+    private String rerunText = "";
+    private String stopText = "";
+
+    /**
+     * "Rerun 'Main.java' (Shift+F10)" — the verb, the subject, and what would actually fire it.
+     *
+     * <p><b>The accelerator is READ FROM THE KEYMAP, never spelled here.</b> A literal is a promise the
+     * widget cannot keep the moment anything rebinds the command, and it fails silently: the tooltip goes
+     * on confidently naming a key that now does something else. {@code Keymap.acceleratorFor} resolves
+     * outward from this element, which is the same lookup the menus already use.</p>
+     *
+     * <p>Unbound is an ordinary answer rather than an error, so the parenthesis is simply absent — most
+     * commands are never bound, and a tooltip reading "Soft-Wrap ()" is worse than one reading
+     * "Soft-Wrap".</p>
+     */
+    private String describeAction(String verb, @Nullable Resource script, String commandId) {
+        StringBuilder out = new StringBuilder(verb);
+        if (script != null) out.append(" '").append(script.name()).append('\'');
+        KeyChord chord = Keymap.acceleratorFor(this, commandId);
+        if (chord != null) out.append(" (").append(chord).append(')');
+        return out.toString();
     }
 
     private void emitFilter(@Nullable String script) {
@@ -176,47 +325,39 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
     }
 
     /**
-     * Keeps the picker's rows in step with what has actually written to the console.
+     * Shows the rail once anything has run, and advances its clocks.
      *
-     * <p><b>Only when the set moves</b>, which is why {@code RunConsole.scripts()} is a kept list rather
-     * than a derived one — this is asked on every frame the console changes.</p>
+     * <p><b>One script is enough, and that reverses the first attempt.</b> It hid below two on the
+     * argument that a rail listing one thing is a caption — which was written before the row had a clock
+     * on it. A single row now says the two things worth knowing: that the script is alive, and for how
+     * long. And a control that appears and disappears as scripts come and go is worse than one that is
+     * simply there; IntelliJ's run tree is always present for the same reason.</p>
      *
-     * <p><b>And hidden below two scripts.</b> A filter offering one choice is a control that cannot do
-     * anything, and the panel's head is four glyphs wide; the same reason the rail stays out of the way
-     * until there is something to choose between.</p>
+     * <p>Still keyed on <b>seen this session</b> rather than <em>live now</em>, so a finished script keeps
+     * its row and its final duration instead of the rail emptying the moment things settle.</p>
+     *
+     * <p>Attached and detached rather than hidden: a hidden child still counts for the body's layout and
+     * would leave a permanent notch beside a console that has never run anything.</p>
      */
-    private void refreshPicker(@Nullable RunConsole showing) {
-        List<String> scripts = showing == null ? List.of() : showing.scripts();
-        if (scripts.equals(offered)) return;
-        offered = scripts;
-
-        boolean worthShowing = scripts.size() > 1;
-        if (!worthShowing) {
-            // REMOVED, not merely hidden. A hidden child still counts for the head's `gap-all`, so a
-            // display:none picker would put a permanent notch to the left of a console that has no filter
-            // to offer -- the trap SearchField's option strip already paid for.
-            if (filterPicker.getParent() != null) head.removeInternalChild(filterPicker);
-            return;
+    private void refreshRail() {
+        RunSessions listing = sessions;
+        boolean wanted = listing != null && !listing.scripts().isEmpty();
+        if (wanted != railShown) {
+            railShown = wanted;
+            if (wanted) showRail();
+            else hideRail();
         }
-
-        String selected = showing == null ? null : showing.filter();
-        filterPicker.clearOptions();
-        filterPicker.addOption(ALL_SCRIPTS);
-        for (String script : scripts) filterPicker.addOption(script);
-        // RE-SELECTED AFTER THE REBUILD, because clearOptions drops the selection with the rows. Without
-        // this, a script starting while a filter is on would silently reset the view to everything.
-        if (selected != null && scripts.contains(selected)) filterPicker.select(selected);
-        else filterPicker.select(0);
-
-        if (filterPicker.getParent() == null) head.insertInternalChildAt(filterPicker, 0);
+        // EVERY FRAME while it is up, because the elapsed time is the liveness signal -- see RunRail for
+        // why that stands in for a spinner rather than beside one.
+        if (railShown) rail.tick();
     }
 
     /**
      * Shows the input row exactly while a script is blocked reading {@code System.in}.
      *
-     * <p><b>Attached and detached rather than hidden</b>, for the reason the picker is: a hidden child
-     * still counts for the column's {@code gap-all}, and it would also stay in the Tab sequence — so a
-     * console with nothing to answer would have an invisible tab stop under it.</p>
+     * <p><b>Attached and detached rather than hidden</b>, for the reason the rail is: a hidden child still
+     * counts for the column's {@code gap-all}, and it would also stay in the Tab sequence — so a console
+     * with nothing to answer would have an invisible tab stop under it.</p>
      *
      * <p>Focus follows it in, because the field appearing IS the prompt: a script that stops dead waiting
      * for input, with a field somewhere below that has to be found and clicked, has not asked a question
@@ -243,6 +384,96 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
         }
     }
 
+    /**
+     * Keeps the two run controls honest about what they can actually do.
+     *
+     * <p><b>They follow different rules, and that is the point.</b> Stop is a question about whatever is
+     * running — there is only ever one answer, so it needs no selection and stays live whenever anything
+     * is active, including while "All output" is showing. Rerun is a question about a particular file, so
+     * it needs a row; with All selected there is no subject and the button says so by going dead.</p>
+     *
+     * <p>Disabled controls also leave HIT TESTING, not merely gain a {@code :disabled} rule: that
+     * pseudo-class ties with {@code :hover} on specificity, so a dead button keeps lighting up under the
+     * pointer and keeps showing its tooltip — a control explaining what it would have done.</p>
+     */
+    private void refreshActions() {
+        RunSessions listing = sessions;
+        boolean anythingRunning = listing != null && !listing.active().isEmpty();
+        setStoppable(anythingRunning);
+
+        boolean canRerun = selected != null;
+        rerun.setEnabled(canRerun);
+        rerun.setHitTest(canRerun);
+
+        // The subject is whatever the rail has selected, so both re-word as it moves. Read live rather
+        // than written from the selection handler, because the ACCELERATOR can change without the
+        // selection changing -- a rebind has no reason to tell this panel about itself.
+        String wantRerun = describeAction("Rerun", selected, ScriptCommands.RUN);
+        if (!wantRerun.equals(rerunText)) {
+            rerunText = wantRerun;
+            if (rerunTip != null) rerunTip.setText(wantRerun);
+        }
+        // STOP NAMES WHAT IS RUNNING, not what is selected. The two differ constantly -- reading one
+        // script's output while another is still going is the normal case, and a Stop offering to stop
+        // the thing you are merely looking at would be a button that lies about its own effect.
+        RunSessions running = sessions;
+        Resource stopping = running == null ? null : running.active().stream().findFirst().orElse(null);
+        String wantStop = describeAction("Stop", stopping, ScriptCommands.STOP);
+        if (!wantStop.equals(stopText)) {
+            stopText = wantStop;
+            if (stopTip != null) stopTip.setText(wantStop);
+        }
+    }
+
+    /**
+     * Moves the transcript into a split beside the rail.
+     *
+     * <p>Reparenting a live widget, which is why it happens HERE and not on a gesture: the rail appears
+     * when a script first runs — a command, from the editor or the keyboard — so nothing in the console is
+     * being pressed or dragged at that moment. Doing it from a click inside the transcript would detach
+     * the element the press is being dispatched through.</p>
+     */
+    private void showRail() {
+        if (split != null) return;
+        SplitView built = new SplitView();
+        body.removeChild(view.element());
+        built.first(leftColumn);
+        built.second(view.element());
+        // A floor in PIXELS rather than a percentage: "at least 150px" stays true at every window size and
+        // "at least 15%" does not -- a narrow panel would otherwise clamp the rail to a width that cannot
+        // hold a filename.
+        built.setPercentage(DEFAULT_SPLIT);
+        built.setPaneSizeLimits(0, 150f, 400f);
+        // NAMED AND OPTED IN, which is the whole of remembering where the divider was left. The id ties a
+        // stored payload to a widget that does not exist for most of a session -- this split is built the
+        // first time a script runs -- and UIWindow hands it its state as it joins the tree, so the default
+        // above is overwritten before the first frame rather than after it.
+        built.setId(SPLIT_ID);
+        built.setSessionPersistent(true);
+        split = built;
+        body.addChildAt(built, 0);
+    }
+
+    private void hideRail() {
+        SplitView built = split;
+        if (built == null) return;
+        split = null;
+        body.removeChild(built);
+        body.addChildAt(view.element(), 0);
+    }
+
+    /**
+     * The split's session identity -- see {@code SessionState}.
+     *
+     * <p>Namespaced, because the store is keyed by element id across the whole workbench and a bare
+     * "split" would collide with the next panel that wanted one.</p>
+     *
+     * <p>The FILTER is deliberately not persisted, and it would be one more line. A remembered filter
+     * naming a script that is not running again opens the console empty for a reason three clicks away --
+     * the same document-versus-view boundary the undo stack already draws.</p>
+     */
+    private static final String SPLIT_ID = "run.rail-split";
+
     /** Whether Stop is offered — false while nothing runs, so a dead control is never live. */
     public RunPanel setStoppable(boolean stoppable) {
         stop.setEnabled(stoppable);
@@ -260,6 +491,16 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
     /** The transcript, for a host that wants its selection or its scroll position. */
     public RunConsoleView view() {
         return view;
+    }
+
+    /**
+     * Gives the rail its model. <b>Required for the rail to show anything</b> — without it {@code tick}
+     * has nothing to list and the column comes up empty, which is exactly how it first shipped.
+     */
+    public RunPanel bindSessions(@Nullable RunSessions sessions) {
+        this.sessions = sessions;
+        rail.bindTo(sessions);
+        return this;
     }
 
     public RunPanel bindTo(@Nullable RunConsole console) {
@@ -305,7 +546,8 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
         }
         view.drain();
         RunConsole showing = console;
-        refreshPicker(showing);
+        refreshRail();
+        refreshActions();
         refreshInput(showing);
         long dropped = showing == null ? 0 : showing.dropped();
         if (dropped != noticed) {
@@ -314,6 +556,9 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
             // having missed something rather than as the ring having done its job.
             notice.setText(dropped == 0 ? ""
                     : dropped + (dropped == 1 ? " earlier line dropped" : " earlier lines dropped"));
+            boolean wanted = dropped > 0;
+            if (wanted && notice.getParent() == null) addInternalChild(notice);
+            else if (!wanted && notice.getParent() != null) removeInternalChild(notice);
         }
         return true;
     }

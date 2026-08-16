@@ -641,6 +641,173 @@ runpanel {
     overflow: hidden;
 }
 
+/* The rail and the transcript, side by side. A plain ROW rather than a SplitView: a split cannot go below
+ * two panes, so "no rail until there is something to choose between" would have to be a pane sized to
+ * nothing -- which applySplit cannot express, since it writes flex-grow and that only divides FREE space.
+ * Attaching and detaching one child of a row says it exactly, and costs no divider nobody asked for. */
+runpanel .__run-body__ {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+    flex-direction: row;
+    overflow: hidden;
+}
+
+/* The column of scripts. A FIXED width: the rail holds a filename and a duration, both of which have a
+ * knowable size, and a draggable divider is a SplitView away if one is ever wanted. */
+/* The rail and its toolbar, as one column. IntelliJ puts the RUN controls in a horizontal bar above the
+ * tree and the CONSOLE controls in a vertical stripe beside the output, and the split is not decorative:
+ * rerun and stop act on a SCRIPT, which is what the rail lists, while wrap and scroll act on the
+ * TRANSCRIPT. Each toolbar sits with the thing it operates on. */
+runpanel .__run-left__ {
+    flex-direction: column;
+    /* FILLS ITS PANE now that a SplitView owns the width. The minimum is stated HERE rather than on the
+     * pane, because `split.first()` is the `__split-pane__` wrapper the SplitView makes for itself -- the
+     * divider's clamp reads the pane's CONTENT, so a rule on the wrapper lands one level above where it
+     * looks and the drag can take the rail below its own minimum. */
+    width: 100%;
+    height: 100%;
+    min-width: 150px;
+    background-color: var(--run-rail-bg, #191A1C);
+    /* The divider is `.__run-vsep__`, an element beside this one -- a `border-width-right` here drew
+     * nothing at all, for the reason spelled out on the stripe above. */
+}
+
+/* The run controls, on a strip spanning the panel directly under its header -- IntelliJ's arrangement,
+ * and it is about what the controls BELONG to: rerun and stop act on the run as a whole, so they sit
+ * above everything the run produced rather than inside the list of scripts. Its own separator, the same
+ * weight as the header's, so the strip reads as a band and not as the first row of the rail. */
+runpanel .__run-bar__ {
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+    width: 100%;
+    /* THE PANEL HEADER'S OWN HEIGHT, read from the same token rather than guessed at, so the two bands
+     * above the transcript are the same weight and stay that way if a theme changes one. */
+    height: var(--panel-header-h, 22px);
+    padding-left: 2px;
+    /* NO GAP. The buttons carry their own padding, so a gap on top of it separates the GLYPHS by padding
+     * + gap + padding -- three sources for one visual distance, and tuning the one named "gap" moves it
+     * least. Tightening is the button box's job; see `.__run-action__`. */
+    gap-all: 0;
+}
+
+/* The rule under it. An ELEMENT and not a border: the paint path takes `border().left` as the stroke
+ * width and strokes a uniform box, so a bottom-only hairline resolves, lays out and draws NOTHING. The
+ * find bar paid for that once and `statusbarview` spells its separators this way for the same reason. */
+runpanel .__run-sep__ {
+    width: 100%;
+    height: 1px;
+    flex-shrink: 0;
+    background-color: var(--run-rail-border, #303236);
+}
+
+runpanel .__run-rerun__ {
+    overlay: icon("crystalgui:general/action/rerun");
+}
+
+runpanel .__run-rail__ {
+    width: 100%;
+    /* THE FILL IDIOM IN A COLUMN -- a basis of zero and grow, or the rail keeps its content size and
+     * overhangs the column by however many scripts have run. */
+    height: 0;
+    flex-grow: 1;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+runpanel .__run-rail__ listview {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+}
+
+runpanel .__run-rail__ .__row__ {
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    height: 22px;
+    padding-left: 6px;
+    padding-right: 6px;
+    gap-all: 6px;
+}
+
+runpanel .__run-rail__ .__row__:hover {
+    background-color: var(--run-rail-hover-bg, #2E3033);
+}
+
+runpanel .__run-rail__ .__row__.__selected__ {
+    background-color: var(--run-rail-selected-bg, #2E436E);
+}
+
+/* The state mark. AN ICON WHERE AN ICON SAYS IT BETTER, and a dot where it does not.
+ *
+ * Finished and failed are the two states with a settled, universally-read symbol -- a tick and an error
+ * badge -- and both are ENDINGS, which is what a reader scanning a finished list is looking for. The live
+ * states have no such symbol: a spinner would be the obvious one and is wrong here, because a script that
+ * is LIVE has handlers registered and is executing nothing (see RunRail). So they stay a plain dot, whose
+ * only claim is "this one is still on".
+ *
+ * The box is the icon's size, and the dot states shrink INSIDE it rather than the box changing -- a mark
+ * that moved the name left or right depending on state would make the column ripple as scripts finish. */
+runpanel .__run-rail__ .__run-rail-glyph__ {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    overlay-fit: contain;
+}
+
+runpanel .__run-rail__ .__run-rail-glyph__.runstate-running,
+runpanel .__run-rail__ .__run-rail-glyph__.runstate-live,
+runpanel .__run-rail__ .__run-rail-glyph__.runstate-stopped,
+runpanel .__run-rail__ .__run-rail-glyph__.runstate-compiled {
+    width: 6px;
+    height: 6px;
+    margin-left: 3px;
+    margin-right: 3px;
+    border-radius: 3px;
+    background-color: var(--run-rail-idle, #6B6B6B);
+}
+
+runpanel .__run-rail__ .__run-rail-glyph__.runstate-running,
+runpanel .__run-rail__ .__run-rail-glyph__.runstate-live {
+    background-color: var(--run-live-fg, #5FAD65);
+}
+
+runpanel .__run-rail__ .__run-rail-glyph__.runstate-stopped {
+    background-color: var(--run-rail-stopped, #FFAF0F);
+}
+
+/* THE TICK AND THE ERROR BADGE carry their own colour, so nothing here tints them. */
+runpanel .__run-rail__ .__run-rail-glyph__.runstate-finished {
+    overlay: icon("crystalgui:general/greenCheckmark");
+}
+
+runpanel .__run-rail__ .__run-rail-glyph__.runstate-failed {
+    overlay: icon("crystalgui:general/errorDialog");
+}
+
+/* THE FILL IDIOM IN A ROW is `width: 0; flex-grow: 1` -- neither flex-grow alone nor width: 100% works,
+ * and flex-shrink defaults to 0 here so without a basis of zero the name keeps its content size and
+ * pushes the duration off the end. */
+runpanel .__run-rail__ .__run-rail-name__ {
+    width: 0;
+    flex-grow: 1;
+    font-size: 9px;
+    color: var(--run-rail-fg, #BCBEC4);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* The elapsed time, quieter than the name. It ticks, so it must not compete with the thing it qualifies --
+ * a counter as loud as the filename makes the rail look like it is changing when only a clock is. */
+runpanel .__run-rail__ .__run-rail-time__ {
+    flex-shrink: 0;
+    font-size: 8px;
+    color: var(--run-rail-time-fg, #6B6B6B);
+    white-space: nowrap;
+}
+
 /* The transcript. It IS a `texteditor` -- a plain one, configured, not a subclass -- so it already
  * carries the editor's monospace family, the document's surface and ink, the caret and the selection
  * band. That is the whole point of repurposing: a console inherits every decision the editor has already
@@ -650,7 +817,34 @@ runpanel {
  * A widget's cascade identity is its tag and a tag is its lowercased class name, so `runconsoleview`
  * matched none of the twelve `texteditor` rules -- no surface colour, no font, no line height. Nothing
  * below compensates for that; the fix was to stop subclassing. */
+/* THE SPLIT IS A FLEX ITEM TOO, and it is in the body's ROW -- so it takes the row idiom, `width: 0;
+ * flex-grow: 1`, exactly as the bare console did before it moved in here.
+ *
+ * A `splitview` is `width: 100%` by default, which in a row means "as wide as the body" and leaves the
+ * 26px control stripe beside it nothing at all -- and `flex-shrink` defaults to 0 here, so the stripe is
+ * not squeezed, it is pushed clean outside the box. The buttons did not move or restyle; they were
+ * off-screen. */
+runpanel .__run-body__ > splitview {
+    width: 0;
+    flex-grow: 1;
+    height: 100%;
+}
+
+/* A PANE IS A FLEX COLUMN whatever the split's orientation, so its child grows by HEIGHT -- reasoning
+ * from the split instead ("this one is horizontal, so grow by width") collapses whichever guess is wrong,
+ * and it fails as a sibling problem rather than a sizing one. */
+runpanel splitview .__split-pane__ {
+    flex-direction: column;
+}
+
 runpanel .__run-console__ {
+    /* IN A SPLIT PANE, WHICH IS A FLEX COLUMN -- whatever the split's orientation. So this is the COLUMN
+     * fill idiom and not the row one: `width: 100%; height: 0; flex-grow: 1`.
+     *
+     * It was `width: 0` while the console sat in a plain row beside the rail, and moving it into the pane
+     * without turning the idiom round left it exactly zero pixels wide -- the rail rendered, the divider
+     * dragged, and the transcript was simply not there. Reasoning from the split ("this one is
+     * horizontal, so grow by width") is the same mistake in a different hat. */
     width: 100%;
     height: 0;
     flex-grow: 1;
@@ -689,43 +883,62 @@ runpanel .__run-console__ .__syntax__::highlight(link) {
     text-decoration-line: underline;
 }
 
-/* The toolbar. Icon-only and against the trailing edge, which is where every IDE console keeps its run
- * controls -- the leading edge belongs to the transcript, and a control there would sit above the first
- * line of output and read as part of it. */
-runpanel > .__head__ {
-    width: 100%;
-    flex-shrink: 0;
-    flex-direction: row;
+/* The controls, as a vertical stripe on the console's TRAILING edge -- IntelliJ's console keeps them
+ * there and the reason is space: a full-width bar spends 22px of height to hold four glyphs, on a panel
+ * whose entire job is showing as many lines as it can. A stripe spends 24px of width instead, next to a
+ * transcript that already has room at the right of most lines. */
+runpanel .__run-stripe__ {
+    flex-direction: column;
     align-items: center;
-    gap-all: 2px;
-    height: 22px;
-    padding-left: 4px;
-    padding-right: 4px;
-}
-
-/* WHAT PUTS THE GROUP AT THE TRAILING EDGE. width: 0 and not 100%: in a row it is the former that
- * yields the remaining space, and the latter pushes the buttons off the end. */
-runpanel > .__head__ > .__spacer__ {
-    width: 0;
-    flex-grow: 1;
+    flex-shrink: 0;
+    /* Just wide enough for a button and a hair either side -- an 18px button in a 20px column. It was
+     * 26px, which put 7px of dead ground beside a 12px glyph and read as a wide empty band rather than a
+     * column of controls. IntelliJ's is the button's width and nothing more. */
+    width: 20px;
+    height: 100%;
+    padding-top: 2px;
+    gap-all: 0;
+    /* NO BORDER AND NO FILL OF ITS OWN.
+     *
+     * `border-width-left: 1px` here drew a grey frame around the whole stripe -- top, right and bottom
+     * included -- because the paint path takes `border().left` as the stroke width and strokes a UNIFORM
+     * box. That is the same property that makes a bottom-only hairline draw NOTHING: name the left and
+     * you get all four sides, name any other and you get none. Two opposite wrong results from one
+     * mistake, and only the left-hand spelling looks like it is working.
+     *
+     * The fill went with it. IntelliJ's console stripe sits on the panel's own ground -- a band of its own
+     * colour makes it read as a separate region rather than as controls belonging to the transcript. */
 }
 
 /* A console control is a glyph, not a labelled button. `min-height` is a DIFFERENT PROPERTY from
  * `height`, so the base `button` rule's minimum wins at any specificity until it is cleared here --
  * which is what held earlier attempts at a compact toggle open at 14px through three rounds of shrinking
  * `height`. The padding has to go for the same reason. */
+/* A console control is a glyph, not a labelled button. `min-height` is a DIFFERENT PROPERTY from
+ * `height`, so the base `button` rule's minimum wins at any specificity until it is cleared here.
+ *
+ * THE DRAWING IS 12px AND THE TARGET IS 20px, which is what the padding is for. `overlay-fit: contain`
+ * scales the artwork to the box it is given, so a 20px button drew a 20px glyph -- huge beside 9px row
+ * text. `overlay-origin: content-box` moves that box inside the padding, which shrinks and centres the
+ * drawing without shrinking the thing you have to hit. */
 runpanel .__run-action__ {
+    /* 18px BOX AROUND A 12px GLYPH. The padding is what actually sets the spacing between two icons --
+     * 3px below one and 3px above the next -- so this is the number to change when they look loose, not
+     * the parent's `gap-all`. The glyph size is held at 12 by the content box: 18 - 3 - 3.
+     *
+     * `min-height`/`min-width` are cleared because `button` carries `min-height: 14px` in the base sheet,
+     * and a minimum is a DIFFERENT PROPERTY from a height -- it wins at any specificity without ever
+     * appearing to compete, which is how three rounds of shrinking `height` once changed nothing. */
     width: 18px;
     height: 18px;
     min-height: 0;
     min-width: 0;
-    padding-left: 0;
-    padding-right: 0;
-    padding-top: 0;
-    padding-bottom: 0;
+    padding-all: 3px;
     flex-shrink: 0;
     background: none;
     color: var(--run-action-fg, #9DA0A8);
+    overlay-origin: content-box;
+    overlay-fit: contain;
 }
 
 /* `background` and `background-color` are separate properties, and a rule setting only the colour is
@@ -745,6 +958,25 @@ runpanel .__run-action__:disabled:hover {
     background: none;
     background-color: transparent;
     color: var(--run-action-disabled-fg, #5A5D63);
+}
+
+/* RERUN AND STOP SWAP THEIR ARTWORK, because `color` cannot reach them.
+ *
+ * Both are JetBrains' own drawings and carry their own palette -- `#208A3C` green, `#DB3B4B` red, baked
+ * into the file. `currentColor` is bound at draw time and a hard fill is not, so the rule above dimmed
+ * every glyph in the panel except the two that most needed it: a dead Rerun stayed as green as a live
+ * one, and Stop stayed red with nothing to stop. Nothing in the cascade was wrong and nothing was
+ * missing, which is why it read as the enablement not working at all.
+ *
+ * The disabled twins are the same geometry recoloured to `currentColor`, so THEY take the tone above --
+ * one file serves any future state rather than one file per state per theme. `overlay-fit` is inherited
+ * from the base rule and deliberately not repeated. */
+runpanel .__run-rerun__:disabled {
+    overlay: icon("crystalgui:general/action/rerunDisabled");
+}
+
+runpanel .__run-stop__:disabled {
+    overlay: icon("crystalgui:general/action/stopDisabled");
 }
 
 /* The per-script filter. A `dropdown` is its own tag and inherits nothing from `button` — a widget's
@@ -773,12 +1005,30 @@ runpanel .__run-filter__:hover {
 }
 
 runpanel .__run-stop__ {
-    overlay: icon("crystalgui:stop");
+    overlay: icon("crystalgui:general/action/stop");
     overlay-fit: contain;
 }
 
 runpanel .__run-clear__ {
-    overlay: icon("crystalgui:trash");
+    overlay: icon("crystalgui:general/action/delete");
+}
+
+runpanel .__run-wrap__ {
+    overlay: icon("crystalgui:general/action/softWrap");
+    overlay-fit: contain;
+}
+
+/* A TOGGLE THAT IS ON, said with a class the widget writes rather than `:checked` -- the engine
+ * re-evaluates a pseudo-class on its terms, and this state is one the button flips from its own handler.
+ * That distinction has cost a round here before. */
+runpanel .__run-wrap__.__on__ {
+    background: none;
+    background-color: var(--run-action-hover-bg, #2E3033);
+    color: var(--run-action-hover-fg, #DFE1E5);
+}
+
+runpanel .__run-end__ {
+    overlay: icon("crystalgui:general/action/scrollDown");
     overlay-fit: contain;
 }
 

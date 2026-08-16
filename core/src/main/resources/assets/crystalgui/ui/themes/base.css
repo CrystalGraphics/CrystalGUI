@@ -360,6 +360,25 @@ theme {
      * so the two greens cannot drift apart again — which they had, having been chosen weeks apart. */
     --run-live-fg: var(--success-icon);
     --run-notice-fg: var(--fg-hint);
+    /* The live-script rail. Its own surface, one step back from the transcript, because it is chrome
+     * beside content -- the same relationship every tool window's header has with its body. */
+    --run-rail-bg: var(--surface-panel);
+    --run-rail-border: var(--divider);
+    --run-rail-fg: var(--fg);
+    --run-rail-hover-bg: var(--hover-bg);
+    /* A dot for a state that is neither good nor bad -- compiled, or finished and gone. `--fg-disabled`
+     * rather than a grey of its own: the row is still there and still selectable, it simply is not doing
+     * anything, which is what a disabled foreground means everywhere else in this table. */
+    --run-rail-idle: var(--fg-disabled);
+    --run-rail-selected-bg: var(--selection-bg);
+    /* The controls' stripe. The rail's surface, because they are the same kind of thing -- chrome framing
+     * the transcript on either side -- and a third grey between them would read as a third region. */
+    --run-stripe-bg: var(--surface-panel);
+    /* The ICON tier for both, not the body colour: these are 6px dots, and --error/--warning are darkened
+     * until a SENTENCE in them reads on the surface. The same distinction --run-live-fg makes. */
+    --run-rail-failed: var(--error-icon);
+    --run-rail-stopped: var(--warning-icon);
+    --run-rail-time-fg: var(--fg-hint);
 
     --scrollbar-corner: #00000000;
     --scrollbar-track: #00000000;

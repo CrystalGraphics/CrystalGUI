@@ -47,7 +47,7 @@ public final class RunPanels {
      */
     public static RunPanel install(Workbench workbench, RunConsole console, RunSessions sessions,
                                    @Nullable ScriptHost host) {
-        RunPanel panel = new RunPanel().bindTo(console);
+        RunPanel panel = new RunPanel().bindTo(console).bindSessions(sessions);
 
         // BESIDE PROBLEMS, and for the reason Workbench gives for its own anchors: closing a panel and
         // reopening it from the activity bar should land it back where it was rather than somewhere
