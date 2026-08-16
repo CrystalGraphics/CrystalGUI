@@ -1365,6 +1365,25 @@ texteditor.__file-editor__ {
     width: 100%;
     height: 0;
     flex-grow: 1;
+
+    /* ...AND ITS BOTTOM CORNERS ARE THE ISLAND'S, now that `tabview .__pane__` no longer insets it.
+     * A tab's content sits flush against the group, so the two bottom corners of the document ARE the
+     * two bottom corners of the panel — a square editor there squares off the island beneath it. The
+     * inset used to hide this: 3px of island showed around the paper, which is what read as a black
+     * border, and the curve was still visible in it.
+     *
+     * ONLY THE BOTTOM TWO. The strip is above, so the top corners belong to it and not to us.
+     *
+     * THIS IS THE FIRST ROUNDED CLIPPER WITH A TRANSPARENT SURFACE, and it found a latent hole in the
+     * engine on the way in. A radius on a clipping element promotes it to OverflowClip.MASK, whose
+     * default mask is the element's own BACKGROUND — and four of the five shipped schemes paint a
+     * deliberately transparent paper (dark-plus.css records why), so the mask was zero everywhere and
+     * would have multiplied the whole document away. Fixed where it belongs, in UIElement.maskFill:
+     * a mask that reveals nothing is never what a clip meant. Nothing is needed here but the radius.
+     *
+     * The layer pass is free at this size — 799 frames against a 785-frame baseline over ten seconds
+     * of cgui-dock, i.e. inside the run-to-run noise, and in the wrong direction. */
+    border-radius: 0 0 var(--radius-panel, 0px) var(--radius-panel, 0px);
 }
 
 /* A PANEL THAT FOLLOWS SOMETHING, rather than being it — the Inspector, which shows whichever shader
