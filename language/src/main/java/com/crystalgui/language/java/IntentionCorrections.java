@@ -13,6 +13,7 @@ import org.eclipse.jdt.core.dom.Expression;
 import org.eclipse.jdt.core.dom.ExpressionStatement;
 import org.eclipse.jdt.core.dom.ForStatement;
 import org.eclipse.jdt.core.dom.IfStatement;
+import org.eclipse.jdt.core.dom.InfixExpression;
 import org.eclipse.jdt.core.dom.SimpleName;
 import org.eclipse.jdt.core.dom.Statement;
 import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
@@ -20,6 +21,7 @@ import org.eclipse.jdt.core.dom.VariableDeclarationStatement;
 import org.eclipse.jdt.core.dom.WhileStatement;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -53,12 +55,15 @@ final class IntentionCorrections {
     static final String JOIN_DECLARATION = "java.intention.joinDeclaration";
     static final String ADD_BRACES = "java.intention.addBraces";
     static final String REMOVE_BRACES = "java.intention.removeBraces";
+    static final String FLIP_IF_ELSE = "java.intention.flipIfElse";
+    static final String NEGATE_COMPARISON = "java.intention.negateComparison";
 
     private IntentionCorrections() {
     }
 
     static List<Correction> all() {
-        return List.of(new SplitDeclaration(), new JoinDeclaration(), new AddBraces(), new RemoveBraces());
+        return List.of(new SplitDeclaration(), new JoinDeclaration(), new AddBraces(), new RemoveBraces(),
+                new FlipIfElse(), new NegateComparison());
     }
 
     // ── Declaration and assignment ──────────────────────────────────────────────────────────────
@@ -354,5 +359,117 @@ final class IntentionCorrections {
         int at = position;
         while (at > 0 && Character.isWhitespace(source.charAt(at - 1))) at--;
         return at;
+    }
+
+    // ── The condition ───────────────────────────────────────────────────────────────────────────
+
+    /**
+     * "Flip if/else" — negate the condition and swap the branches, which together change nothing.
+     *
+     * <p>The pair is the point: negating alone changes what the program does, swapping alone changes what
+     * the program does, and doing both is a pure reading change. That is why this is one intention and not
+     * two, and why the negation lives in {@link Negation} where "Negate comparison" can share it.</p>
+     *
+     * <p><b>Refused on an {@code else if}.</b> The else branch of a chain is another {@code if}, so
+     * swapping would hoist a whole tail into the then-position and leave the chain meaning something else.
+     * IntelliJ refuses it there too.</p>
+     *
+     * <p>Three text ranges — the condition and the two branches — so every brace, comment and line break
+     * inside either branch arrives exactly as written. A rewriter would regenerate both bodies.</p>
+     */
+    private static final class FlipIfElse implements Correction {
+
+        @Override public String id() {
+            return FLIP_IF_ELSE;
+        }
+
+        @Override public int[] problems() {
+            return NONE;
+        }
+
+        @Override public void contribute(FixContext context, IProblem problem, List<CodeAction> out) {
+            IfStatement conditional = context.at(IfStatement.class, candidate -> flippable(context, candidate));
+            if (conditional == null) return;
+            Statement then = conditional.getThenStatement();
+            Statement otherwise = conditional.getElseStatement();
+            Expression condition = conditional.getExpression();
+            String source = context.source();
+
+            List<Change> changes = new ArrayList<>();
+            changes.add(new Change(condition.getStartPosition(),
+                    condition.getStartPosition() + condition.getLength(), Negation.of(condition, source)));
+            changes.add(new Change(then.getStartPosition(), then.getStartPosition() + then.getLength(),
+                    textOf(otherwise, source)));
+            changes.add(new Change(otherwise.getStartPosition(),
+                    otherwise.getStartPosition() + otherwise.getLength(), textOf(then, source)));
+            changes.sort(Comparator.comparingInt(Change::from));
+
+            ChangeSet edit = context.changeSet(changes);
+            if (edit == null) return;
+            out.add(context.intention(FLIP_IF_ELSE, "Flip if/else",
+                    "Swaps the two branches and negates the condition, which together change nothing.",
+                    edit));
+        }
+
+        private static boolean flippable(FixContext context, IfStatement conditional) {
+            Statement otherwise = conditional.getElseStatement();
+            if (otherwise == null || otherwise instanceof IfStatement) return false;
+            if (conditional.getThenStatement() == null || conditional.getExpression() == null) return false;
+            return context.touches(conditional.getStartPosition(),
+                    conditional.getThenStatement().getStartPosition());
+        }
+    }
+
+    /**
+     * "Negate comparison" — {@code n == 0} becomes {@code n != 0}.
+     *
+     * <p><b>Only a comparison, and that restriction is what makes it honest.</b> This one changes what the
+     * program does — unlike every other intention in this file, which are all meaning-preserving — so it
+     * has to be unmistakably an edit somebody asked for rather than something that reads as a tidy. A
+     * flipped {@code ==} is exactly that: it says one thing, the reader can see both halves, and there is
+     * no version of it that quietly does something else. Wrapping an arbitrary condition in {@code !}
+     * would not be.</p>
+     */
+    private static final class NegateComparison implements Correction {
+
+        @Override public String id() {
+            return NEGATE_COMPARISON;
+        }
+
+        @Override public int[] problems() {
+            return NONE;
+        }
+
+        @Override public void contribute(FixContext context, IProblem problem, List<CodeAction> out) {
+            InfixExpression comparison = context.at(InfixExpression.class,
+                    candidate -> negatable(context, candidate));
+            if (comparison == null) return;
+
+            ChangeSet edit = context.changeSet(new Change(comparison.getStartPosition(),
+                    comparison.getStartPosition() + comparison.getLength(),
+                    Negation.of(comparison, context.source())));
+            if (edit == null) return;
+            out.add(context.intention(NEGATE_COMPARISON, "Negate comparison",
+                    "Replaces this comparison with its opposite. This changes what the code does.", edit));
+        }
+
+        private static boolean negatable(FixContext context, InfixExpression candidate) {
+            if (candidate.hasExtendedOperands()) return false;
+            InfixExpression.Operator operator = candidate.getOperator();
+            boolean comparison = operator == InfixExpression.Operator.EQUALS
+                    || operator == InfixExpression.Operator.NOT_EQUALS
+                    || operator == InfixExpression.Operator.LESS
+                    || operator == InfixExpression.Operator.LESS_EQUALS
+                    || operator == InfixExpression.Operator.GREATER
+                    || operator == InfixExpression.Operator.GREATER_EQUALS;
+            return comparison && context.touches(candidate.getStartPosition(),
+                    candidate.getStartPosition() + candidate.getLength());
+        }
+    }
+
+    /** What a node's own characters are — never a regenerated form. */
+    private static String textOf(Statement statement, String source) {
+        int start = statement.getStartPosition();
+        return source.substring(start, start + statement.getLength());
     }
 }
