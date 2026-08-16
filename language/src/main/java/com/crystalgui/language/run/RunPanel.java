@@ -46,8 +46,6 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
     public static final String INPUT_CLASS = "__run-input__";
     public static final String BODY_CLASS = "__run-body__";
 
-    /** The transcript and its input row, as one column. @see #consoleColumn */
-    public static final String CONSOLE_COLUMN_CLASS = "__run-console-column__";
     public static final String STRIPE_CLASS = "__run-stripe__";
     public static final String LEFT_CLASS = "__run-left__";
     public static final String RUNBAR_CLASS = "__run-bar__";
@@ -133,18 +131,6 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
      * they drift apart.</p>
      */
     private final UIElement body = new UIElement();
-
-    /**
-     * The transcript, its input row, and the empty-state note — one column, which the split moves whole.
-     *
-     * <p><b>The input row belongs to the transcript, not to the panel.</b> It was an internal child of
-     * the panel itself, which is a column spanning everything — so a field for typing into one script's
-     * {@code System.in} was drawn across the rail as well, wider than the thing it answers and lined up
-     * with nothing. A terminal's input sits under its output; this is what makes that true here, and it
-     * is also what the split now carries as its second pane.</p>
-     */
-    private final UIElement consoleColumn = new UIElement();
-
     private final RunRail rail = new RunRail();
     private boolean railShown;
 
@@ -241,13 +227,11 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
         leftColumn.addClass(LEFT_CLASS);
         leftColumn.addChild(rail);
 
-        consoleColumn.addClass(CONSOLE_COLUMN_CLASS);
-        consoleColumn.addChild(view.element());
-        body.addChild(consoleColumn);
+        body.addChild(view.element());
         // THE STRIPE AND THE RUN BAR ARE NOT ATTACHED YET, and neither is anything else that acts on a
         // run -- nothing has run. @see #showControls
         buildEmptyState();
-        consoleColumn.addChild(emptyNote);
+        body.addChild(emptyNote);
         rail.onScriptChosen.connect(script -> {
             selected = script;
             RunConsole showing = console;
@@ -390,7 +374,10 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
      * way; the empty state simply did not copy it.</p>
      */
     private void showControls() {
-        detach(consoleColumn, emptyNote);
+        detach(body, emptyNote);
+        // THE TRANSCRIPT COMES BACK WITH THEM. `showRail` has usually already moved it into the split's
+        // pane by now, in which case it has a parent and this does nothing.
+        if (view.element().getParent() == null) body.addChildAt(view.element(), 0);
         if (runBar.getParent() != null) return;
         insertInternalChildAt(runBar, 0);
         insertInternalChildAt(separator, 1);
@@ -408,7 +395,12 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
      * panel that kept a Rerun button for a file that no longer exists would be offering to run it.</p>
      */
     private void hideControls() {
-        if (emptyNote.getParent() == null) consoleColumn.addChild(emptyNote);
+        // THE TRANSCRIPT GOES TOO, which is what IntelliJ's empty Run window shows: a note on the tool
+        // window's own ground, and no console at all. Leaving it attached is not neutral -- an editor
+        // paints its OWN surface, several shades darker than the panel around it, so an empty console
+        // reads as a black hole where a panel should be. There is also nothing in it by definition.
+        detach(body, view.element());
+        if (emptyNote.getParent() == null) body.addChild(emptyNote);
         if (runBar.getParent() == null) return;
         detach(body, stripe);
         removeInternalChild(runBar);
@@ -619,17 +611,32 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
      * <p>Focus follows it in, because the field appearing IS the prompt: a script that stops dead waiting
      * for input, with a field somewhere below that has to be found and clicked, has not asked a question
      * so much as hidden one. Taken back when it goes, or focus would sit on a detached element.</p>
+     *
+     * <h4>Under the transcript, not across the panel</h4>
+     *
+     * <p>It was an internal child of the <em>panel</em>, which is a column spanning the rail as well — so
+     * the field for answering one script's read was drawn over the list of scripts too, wider than the
+     * thing it belongs to and lined up with nothing. A terminal's input sits under its output.</p>
+     *
+     * <p><b>The split's second pane is already that place</b>, and it needs no wrapper: a pane is a flex
+     * column whatever the split's orientation, so the transcript and the field stack there for free. A
+     * column of my own was tried first and cost a session — the transcript stopped rendering at all, and
+     * nothing about the wrapper's own box was wrong. The pane is a box the engine already lays out
+     * correctly, which is the whole argument for using it.</p>
+     *
+     * <p>And there is always a pane when this is reachable: a script can only be blocked on a read if a
+     * script is running, and the rail — and therefore the split — appears the moment one does. The
+     * fallback is the panel, so a console being filled by something with no rail still shows its field
+     * somewhere rather than nowhere.</p>
      */
     private void refreshInput(@Nullable RunConsole showing) {
         boolean wanted = showing != null && showing.isAwaitingInput();
         if (wanted == inputShown) return;
         inputShown = wanted;
 
+        UIElement host = inputHost();
         if (wanted) {
-            // UNDER THE TRANSCRIPT, not across the panel. It was an internal child of the panel, which is
-            // a column spanning the rail as well -- so the field for answering one script's read was drawn
-            // over the list of scripts too, wider than the thing it belongs to and aligned with nothing.
-            consoleColumn.addChild(inputField);
+            host.addChild(inputField);
             inputField.setText("");
             // POINTER focus: this is not a keyboard gesture and the ring would outline the field on every
             // read a script makes. @see UIElement#requestPointerFocus
@@ -639,9 +646,16 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
             // CgSystemInput, a CrystalGraphics platform type core takes as compileOnly and does not pass
             // on, so naming it from here fails to compile on a supertype nobody meant to depend on.
             boolean hadFocus = inputField.isFocused();
-            detach(consoleColumn, inputField);
+            UIElement parent = inputField.getParent();
+            if (parent != null) detach(parent, inputField);
             if (hadFocus) view.element().requestPointerFocus();
         }
+    }
+
+    /** The transcript's own pane while there is one, and the panel otherwise. @see #refreshInput */
+    private UIElement inputHost() {
+        SplitView built = split;
+        return built == null ? this : built.pane(1);
     }
 
     /**
@@ -749,7 +763,7 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
         // previous parent and knows to fall back to `removeInternalChild` when the child is internal --
         // which this one is, since `markAsInternal` recursed over `body`. The explicit `removeChild` that
         // used to precede this returned false and did nothing; the add is what always moved it.
-        built.second(consoleColumn);
+        built.second(view.element());
         // A floor in PIXELS rather than a percentage: "at least 150px" stays true at every window size and
         // "at least 15%" does not -- a narrow panel would otherwise clamp the rail to a width that cannot
         // hold a filename.
@@ -771,7 +785,7 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
         split = null;
         // THE COLUMN COMES BACK FIRST, so the add reparents it out of the pane before the split itself
         // is detached -- otherwise it would go with the split and there would be no transcript at all.
-        body.addChildAt(consoleColumn, 0);
+        body.addChildAt(view.element(), 0);
         detach(body, built);
     }
 

@@ -836,36 +836,12 @@ runpanel splitview .__split-pane__ {
     flex-direction: column;
 }
 
-/* THE TRANSCRIPT AND ITS INPUT ROW, AS ONE COLUMN -- and the empty-state note over the top of them.
- *
- * The input row used to be an internal child of the PANEL, which is a column spanning the rail as well,
- * so the field for answering one script's read was drawn across the list of scripts too. A terminal's
- * input sits under its output; this column is what makes that true, and it is what the split carries as
- * its second pane rather than the bare transcript.
- *
- * TWO FILL IDIOMS, because this element lives in a ROW before anything has run and in a COLUMN after --
- * a split pane is a flex column whatever the split's orientation. Stating both is what the body/splitview
- * pair above already does for the same reason; guessing one collapses whichever case is wrong, and it
- * fails as a sibling problem rather than a sizing one. */
-runpanel .__run-console-column__ {
-    flex-direction: column;
-    overflow: hidden;
-}
-
-/* In the body, which is a ROW: `width: 0; flex-grow: 1`. */
-runpanel .__run-body__ > .__run-console-column__ {
-    width: 0;
-    flex-grow: 1;
-    height: 100%;
-}
-
-/* In a split pane, which is a COLUMN: `width: 100%; height: 0; flex-grow: 1`. */
-runpanel splitview .__run-console-column__ {
-    width: 100%;
-    height: 0;
-    flex-grow: 1;
-}
-
+/* NO WRAPPER AROUND THE TRANSCRIPT. One was tried, to give the `System.in` row somewhere to sit under
+ * the output rather than across the whole panel, and it cost a session: the transcript stopped rendering
+ * entirely, in both the split and the no-split case, with nothing wrong with the wrapper's own box that
+ * an isolated layout probe could reproduce. The input row lives in the split's second pane instead --
+ * already a flex column, already laid out correctly, and always present when a script can be blocked on
+ * a read. @see RunPanel#refreshInput */
 runpanel .__run-console__ {
     /* IN A SPLIT PANE, WHICH IS A FLEX COLUMN -- whatever the split's orientation. So this is the COLUMN
      * fill idiom and not the row one: `width: 100%; height: 0; flex-grow: 1`.
