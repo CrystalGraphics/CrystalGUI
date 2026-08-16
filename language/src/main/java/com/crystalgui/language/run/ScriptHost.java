@@ -186,7 +186,14 @@ public final class ScriptHost implements Closeable {
             // generated class and has never heard of a file. Taking a whole ScriptRef instead would let
             // a caller pair a file with the wrong class -- which fails by attributing nothing, since no
             // stack frame would ever match.
-            this.ref = file == null ? null : new ScriptRef(file, wrapped.className());
+            //
+            // THE BINARY NAME, which is what `prepare` loads the class under and therefore what its
+            // STACK FRAMES carry. This said `className()`, and the two agree for exactly as long as a
+            // script stays in the default package: declare one and the frames read `demo.Main` against a
+            // ref saying `Main`, `ScriptRef.owns` matches nothing, and every line loses the origin that
+            // says which of the script's lines printed it. Silent -- the output still arrives, still
+            // filters and still stops; only the column naming its source comes back empty.
+            this.ref = file == null ? null : new ScriptRef(file, wrapped.binaryName());
             return this;
         }
 
