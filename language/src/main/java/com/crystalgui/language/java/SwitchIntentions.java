@@ -330,11 +330,32 @@ final class SwitchIntentions {
                             + switched.getExpression().getLength());
         }
 
-        /** One arrow branch: its label text, and the statements it runs with any trailing break removed. */
+        /**
+         * One arrow branch: its label text, and the statements it runs with any trailing break removed.
+         *
+         * <h3>Three shapes, and the middle one is why this is not just "braces or not"</h3>
+         *
+         * <p>A single expression statement or {@code throw} follows the arrow bare. A single statement that
+         * may <em>not</em> — a {@code return}, which is the common case for a switch that produces a value
+         * — still needs its block, but the block goes <b>on one line</b>. Anything longer opens up.</p>
+         *
+         * <p>The braces there are not a formatting choice; {@code case "a" -> return "first";} does not
+         * parse. Their <em>layout</em> is, and spreading one statement over three lines defeats the reason
+         * to convert at all: the arrow form earns its keep by reading as a table, and a three-line block per
+         * branch turns a six-line switch into eighteen.</p>
+         */
         private static void appendArrowBody(StringBuilder built, Group group, String source, String indent) {
-            if (group.body.size() == 1 && bareArrowBodyAllowed(group.body.get(0))) {
-                built.append(Negation.textOf(group.body.get(0), source).trim()).append('\n');
-                return;
+            if (group.body.size() == 1) {
+                Statement only = group.body.get(0);
+                String text = Negation.textOf(only, source).trim();
+                if (bareArrowBodyAllowed(only)) {
+                    built.append(text).append('\n');
+                    return;
+                }
+                if (!(only instanceof Block) && text.indexOf('\n') < 0) {
+                    built.append("{ ").append(text).append(" }\n");
+                    return;
+                }
             }
             built.append("{\n");
             for (Statement statement : group.body) {
