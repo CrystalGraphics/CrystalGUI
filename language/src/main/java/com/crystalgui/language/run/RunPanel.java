@@ -17,9 +17,7 @@ import com.crystalgui.ui.input.keymap.Keymap;
 
 import javax.annotation.Nullable;
 
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -570,44 +568,65 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
         }
     }
 
-    /** Which scripts were active last frame, so a newly started one can be told apart from a busy one. */
-    private final Set<Resource> activeLastFrame = new HashSet<>();
+    /** When the run this last followed began, so only a NEWER one moves the rail. @see #followNewRuns */
+    private long followedAt;
+    private boolean followedAny;
 
-    /** The session version {@link #activeLastFrame} reflects. @see RunSessions#version */
+    /** The session version {@link #followNewRuns} last examined. @see RunSessions#version */
     private int knownRunVersion = Integer.MIN_VALUE;
 
     /**
-     * Moves the rail to a script that has just started.
+     * Moves the rail to the script that has just started, and takes the view to its output.
      *
-     * <h4>The filter is a view, and a run is the strongest statement about what you want to see</h4>
+     * <h4>A run always selects its own row</h4>
      *
-     * <p>With {@code B.java} selected, running {@code A.java} showed nothing at all: the transcript is
-     * filtered to B, so A's output arrived somewhere off screen and the console sat there looking dead
-     * while the script was working perfectly. IntelliJ switches to the new run's tab for exactly this.</p>
+     * <p>Running is the strongest statement anybody makes about what they want to see, so it wins over
+     * whatever the rail was showing — including <em>All output</em>. That reverses the first version,
+     * which left All alone on the reasoning that it already shows the new run. True, and beside the
+     * point: it shows the new run <em>at the bottom of everything else</em>, so a second script started
+     * from All appended its output below a screenful of the first one's and nothing moved. <b>All output
+     * is a place you go deliberately</b>, and every run defaults to its own row.</p>
      *
-     * <p><b>All output is left alone</b>, deliberately. It is already showing the new run, so moving the
-     * selection would narrow a view the reader had deliberately widened — the opposite of the fix.</p>
+     * <h4>Keyed on the run's START, not on what is active now</h4>
+     *
+     * <p>This asked {@code active()} once a frame and treated anything newly in it as a new run, which
+     * misses the case it most needs to catch: a script that runs in twenty milliseconds is {@code
+     * RUNNING} and then {@code FINISHED} between two frames, so it is <em>never</em> sampled as active
+     * and never selected. Its own start time cannot be missed that way — {@code scripts()} is ordered
+     * newest-first, so the head of that list is the last run to have begun whether or not it is still
+     * going.</p>
+     *
+     * <p>Compared by subtraction, and only ever forward. {@code nanoTime} has an arbitrary origin, and
+     * "only when something NEWER began" is also what keeps this out of the way of {@code forget}: remove
+     * the newest row and an older one becomes the head of the list, which is not a run starting.</p>
      *
      * <p><b>Pulled, never pushed.</b> {@code RunSessions} announces from the thread whose run just
      * changed state, and selecting a row rebuilds list elements; doing it from there would build widgets
      * off the UI thread, which is the crash this panel has already paid for once.</p>
      */
     private void followNewRuns(RunSessions listing) {
-        List<Resource> active = listing.active();
         // AFTER rail.tick(), which is what puts a first-time script into the rail's own row list -- ask
         // to select it before that and there is no row to select.
-        if (selected != null) {
-            for (Resource script : active) {
-                if (activeLastFrame.contains(script) || script.equals(selected)) continue;
-                // THE RAIL ANNOUNCES IT BACK, which is what updates `selected` and the filter. One path
-                // in and one path out, so a run-driven change and a click are indistinguishable
-                // downstream. @see RunRail#showing
-                rail.showing(script);
-                break;
-            }
-        }
-        activeLastFrame.clear();
-        activeLastFrame.addAll(active);
+        List<Resource> scripts = listing.scripts();
+        if (scripts.isEmpty()) return;
+        Resource newest = scripts.get(0);
+        RunSessions.Session session = listing.sessionOf(newest);
+        if (session == null) return;
+
+        long startedAt = session.startedNanos();
+        if (followedAny && startedAt - followedAt <= 0) return;
+        followedAny = true;
+        followedAt = startedAt;
+
+        // THE RAIL ANNOUNCES IT BACK, which is what updates `selected` and the filter. One path in and
+        // one path out, so a run-driven change and a click are indistinguishable downstream.
+        rail.showing(newest);
+        // AND THE VIEW GOES TO THE TAIL EVEN WHEN THE SELECTION DID NOT MOVE. Re-running the script
+        // already showing changes no filter, so the view would be left wherever the reader had scrolled
+        // to during the last run -- which for anything that printed more than a screenful is nowhere
+        // near the run that just started. `scrollToEnd` re-arms the follow, so the rest of the run keeps
+        // pulling the view down.
+        view.scrollToEnd();
     }
 
     /**
