@@ -50,22 +50,49 @@ public class QuickFixCast {
     }
 
     /**
-     * NOT OFFERED. The same TypeMismatch id, and a cast here is IllegalCast -- one error traded for
-     * another. This is the whole safety argument for the family, so it is the case worth trying by hand.
+     * NO CAST HERE. Same TypeMismatch id, and a cast would be IllegalCast -- one error traded for another.
+     * The value is what it is, so the DECLARATION is the part that is wrong, and that is what is offered.
+     *
+     * IntelliJ also offers "Change parameter 's' type to 'Integer'". That one edits a method SIGNATURE, so
+     * every caller has to still compile afterwards -- which this engine cannot see for a script's method,
+     * so it is deliberately not offered.
      */
     void unrelated(String s) {
+        // FIX: "Change variable 'n' type to 'String'"
         Integer n = s;
         System.out.println(n);
     }
 
     /**
-     * NOT OFFERED, and for a different reason: an argument mismatch is ParameterMismatch reported on the
-     * METHOD NAME, not TypeMismatch on the argument. Working out which argument is wrong means redoing
-     * overload resolution, so it is a separate row that is not written yet.
+     * An argument mismatch is a different problem -- ParameterMismatch, reported on the METHOD NAME, so
+     * neither the id nor the range says which argument is wrong. That is worked out from the one method of
+     * that name and arity.
      */
     void take(Dog d) { }
 
     void argument(Animal a) {
+        // FIX: "Cast argument to 'Dog'"
         take(a);
+    }
+
+    /** Only the one that is wrong, wherever it sits in the list. */
+    void takeTwo(int n, Dog d) { }
+
+    void secondArgument(Animal a) {
+        // FIX: "Cast argument to 'Dog'"
+        takeTwo(1, a);
+    }
+
+    /**
+     * NOT OFFERED. Two overloads of the same arity, and no way to know which was meant -- ECJ names one in
+     * its message, but that is its guess rendered for a person rather than an answer that can be read. A
+     * cast to the wrong one compiles and calls the wrong method.
+     */
+    void ambiguous(Dog d) { }
+
+    void ambiguous(String s) { }
+
+    void overloaded(Animal a) {
+        ambiguous(a);
     }
 }
