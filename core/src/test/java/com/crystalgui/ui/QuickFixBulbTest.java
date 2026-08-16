@@ -4,12 +4,18 @@ import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.diagnostic.Diagnostic;
+import com.crystalgui.text.lang.CodeAction;
+import com.crystalgui.text.lang.CodeActionKind;
+import com.crystalgui.text.lang.CodeActionProvider;
+import com.crystalgui.text.lang.LanguageServices;
+import com.crystalgui.text.lang.Versioned;
 import com.crystalgui.ui.elements.editor.TextEditor;
 
 import org.junit.Before;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -124,5 +130,50 @@ public class QuickFixBulbTest extends UiTestBase {
             if (found != null) return found;
         }
         return null;
+    }
+
+    // ── Intentions ──────────────────────────────────────────────────────────────────────────────
+
+    /** An engine that offers one action on row 1 and nothing anywhere else, with no diagnostic at all. */
+    private void intentionOnRow(int row) {
+        int only = editor.buffer().document().lineStartOffset(row);
+        editor.setLanguageServices(new LanguageServices() {
+            @Override public String id() {
+                return "stub";
+            }
+
+            @Override public CodeActionProvider codeActions() {
+                return (request, answer) -> answer.accept(Versioned.of(request.version(),
+                        request.from() == only
+                                ? List.of(new CodeAction("stub.intention", "Do the thing",
+                                        CodeActionKind.REFACTOR, null, null, Map.of(), false, request.version()))
+                                : List.of()));
+            }
+        });
+        settle();
+    }
+
+    /**
+     * <b>An action with no diagnostic still lights the bulb.</b>
+     *
+     * <p>The rule used to be <em>bulb ⟺ diagnostic</em>, which was the same thing as <em>bulb ⟺ actions</em>
+     * only while every action came from a problem. An intention — "Replace with lambda" is the first —
+     * fires on code where nothing is wrong, so it lit no bulb and marked no stripe, and the feature was
+     * reachable only by knowing to press Alt+Enter. The class's own note said this rule would have to
+     * change when that happened.</p>
+     */
+    @Test
+    public void anIntentionLightsTheBulbWithNoDiagnostic() {
+        intentionOnRow(1);
+        putCaretOn(1);
+        assertTrue("an offered action with no problem behind it must still show a bulb", bulbVisible());
+    }
+
+    /** And a row the engine offers nothing for stays dark, so the bulb is not simply always on. */
+    @Test
+    public void aRowWithNothingOfferedStaysDark() {
+        intentionOnRow(1);
+        putCaretOn(3);
+        assertTrue("nothing is offered here", !bulbVisible());
     }
 }

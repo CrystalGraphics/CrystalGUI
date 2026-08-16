@@ -1854,7 +1854,17 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /** Code actions get a lane of their own, so a hover's request cannot cancel the palette's. */
     private static final int LANE_ACTIONS = 2;
 
-    private final int[] resolveSerials = new int[3];
+    /**
+     * The gutter bulb's own poll — and it must not share {@link #LANE_ACTIONS}.
+     *
+     * <p>A lane keeps only its newest request: the callback compares its serial against the lane's and
+     * drops itself if anything asked later. The bulb asks whenever the caret moves, so on one lane it
+     * would cancel the request Alt+Enter had in flight and the menu would simply never open — worst on a
+     * slow answer, which is the case the whole asynchronous path exists for.</p>
+     */
+    static final int LANE_BULB = 3;
+
+    private final int[] resolveSerials = new int[4];
 
     /**
      * Resolve the name at {@code offset} and hand the answer over, or report that nothing was asked.
@@ -1912,17 +1922,22 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * {@code goToDefinition} sets out at length: the callback may legitimately never fire.</p>
      */
     public boolean requestCodeActions(int offset, java.util.function.Consumer<List<CodeAction>> answer) {
+        return requestCodeActions(LANE_ACTIONS, offset, answer);
+    }
+
+    /** @see #LANE_BULB for why the gutter bulb asks on a lane of its own. */
+    boolean requestCodeActions(int lane, int offset, java.util.function.Consumer<List<CodeAction>> answer) {
         List<Diagnostic> problems = diagnosticsAt(offset);
         List<CodeAction> shapeDerived = DiagnosticActions.forProblems(problems);
         if (languageServices == null) {
             if (!shapeDerived.isEmpty()) answer.accept(shapeDerived);
             return false;
         }
-        final int serial = ++resolveSerials[LANE_ACTIONS];
+        final int serial = ++resolveSerials[lane];
         CodeActionProvider.Request request =
                 CodeActionProvider.Request.at(offset, problems, buffer.version());
         languageServices.codeActions().actionsAt(request, reply -> {
-            if (serial != resolveSerials[LANE_ACTIONS] || reply == null) return;
+            if (serial != resolveSerials[lane] || reply == null) return;
             List<CodeAction> merged = new ArrayList<>();
             // ONLY THE ENGINE'S HALF IS GATED. Its actions carry offsets from a parse that may have been
             // superseded; the shape-derived ones carry no edit at all and cannot go stale.
