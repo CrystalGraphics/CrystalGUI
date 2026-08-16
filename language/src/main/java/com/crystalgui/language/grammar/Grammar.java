@@ -39,7 +39,17 @@ public enum Grammar {
     CSS(Language.PLAIN, "css", org.treesitter.TreeSitterCss::new, List.of(),
             "css"),
 
-    JAVASCRIPT(Language.PLAIN, "javascript", org.treesitter.TreeSitterJavascript::new, List.of(),
+    /**
+     * JavaScript — the second language with an engine behind it (M10).
+     *
+     * <p>It sat on {@link Language#PLAIN} until then, and the cost of that was not colour: it was
+     * <b>editing</b>. {@code Language} is what supplies the comment syntax the toggle-comment command
+     * uses, the bracket pairs auto-close and auto-indent read, and the {@code .} that opens a completion
+     * list — so a {@code .js} file coloured beautifully and could not be commented out, closed a brace,
+     * or offered a member list, all silently. The tree-sitter grammar had nothing to do with any of
+     * them.</p>
+     */
+    JAVASCRIPT(Language.JAVASCRIPT, "javascript", org.treesitter.TreeSitterJavascript::new, List.of(),
             "js", "mjs", "cjs"),
 
     /**

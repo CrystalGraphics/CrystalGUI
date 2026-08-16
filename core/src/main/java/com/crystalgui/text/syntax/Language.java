@@ -1,5 +1,6 @@
 package com.crystalgui.text.syntax;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import javax.annotation.Nullable;
@@ -95,6 +96,30 @@ public record Language(
     /** GLSL — the shader graph's language, and the reason any of this exists. */
     public static final Language GLSL = cFamily("glsl");
 
+    /**
+     * JavaScript — the C family plus one pair Java does not have.
+     *
+     * <p>The backtick is a <b>self-closing pair</b> like the quotes, so typing one writes two and typing
+     * the second walks over it. It is spelled here rather than derived because {@link #cFamily} is shared
+     * with Java and GLSL, where a backtick is not a delimiter at all — adding it there would auto-close a
+     * character those languages treat as ordinary.</p>
+     *
+     * <p>It does <b>not</b> indent, for the same reason the quotes do not: a template literal's body is
+     * text, and an auto-indent that treated it as a block would reflow the string. That the body can
+     * contain <code>${…}</code> and therefore real code is true and does not change the answer — the
+     * braces inside it are their own pair, and they indent.</p>
+     */
+    public static final Language JAVASCRIPT = javaScript();
+
+    private static Language javaScript() {
+        // DERIVED FROM cFamily rather than spelled out, because this record's own note says brackets are
+        // stated once: a second copy of the five C pairs is a second copy to get wrong.
+        Language c = cFamily("javascript");
+        List<BracketPair> pairs = new ArrayList<>(c.brackets());
+        pairs.add(new BracketPair('`', '`', false));
+        return new Language(c.name(), c.lineComment(), c.blockCommentStart(), c.blockCommentEnd(), pairs);
+    }
+
     /** @see #JAVA */
     public static Language java() {
         return JAVA;
@@ -103,6 +128,11 @@ public record Language(
     /** @see #GLSL */
     public static Language glsl() {
         return GLSL;
+    }
+
+    /** @see #JAVASCRIPT */
+    public static Language javascript() {
+        return JAVASCRIPT;
     }
 
     public boolean hasLineComment() {

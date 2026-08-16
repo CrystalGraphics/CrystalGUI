@@ -751,30 +751,66 @@ it with the same bindings, console and Run button.
 
 **ES6 on JVM 8, specifically:** it is a Rhino-jar limit, not a JVM one, and it is **frozen**. The 1.7.x
 line is the last that runs on Java 8; 1.8+ needs Java 11. So band 8 gets whatever 1.7.15.1 implements
-and will never get more; bands 11/17 (1.9.1) are closer to complete ES2015 and can move up. From memory,
-and therefore **every "yes" below is a probe item (§15) until step 2 has run** — the probe file is the
-truth, this table is the expectation it is checked against:
+and will never get more; bands 11/17 (1.9.1) are closer to complete ES2015 and can move up.
+**Measured** by `RhinoCapabilityProbeTest` (M10 §1) against the real jars — this table is generated from
+`build/probe/rhino-<band>.properties` and six of its cells contradict what this document first guessed,
+which is the probe earning its place:
 
-| ES2015 feature | 1.7.15.1 (JVM 8) | 1.9.1 (JVM 11/17) |
+| Construct | 1.7.15.1 (JVM 8) | 1.9.1 (JVM 11/17) |
 |---|---|---|
-| `let` / `const`, block scoping | yes | yes |
+| `let` / `const` | yes | yes |
 | Arrow functions | yes | yes |
-| Template literals (incl. tagged) | yes | yes |
-| Default / rest params, spread | mostly (rest is the shaky one) | yes |
-| Destructuring (array/object, defaults) | mostly | yes |
-| `for…of`, iterators, `Symbol` | yes | yes |
-| Map/Set/WeakMap/WeakSet, typed arrays | yes | yes |
-| Promise | yes (microtask drain — probe) | yes |
-| Generators (`function*`) | partial | yes |
-| Shorthand/computed properties, getters/setters | yes | yes |
-| Array/String/Object ES2015 methods | most | all |
-| **`class`** | **no** | **no** (measured at M5) |
-| **ES modules `import`/`export`** | **no** | **no** |
-| `async`/`await` | no | no |
-| `?.` / `??` / `**` | no (probably) | probe |
-| Proxy/Reflect, BigInt | partial/uncertain | better |
+| Template literals, tagged | yes | yes |
+| **Default parameters** (`f(a = 1)`) | **no** | yes |
+| Rest parameters (`f(...a)`) | yes | yes |
+| **Spread in a call** (`f(...a)`) | **no** | **no** |
+| Spread in an array literal | no | yes |
+| Destructuring, array + object | yes | yes |
+| Destructuring with defaults | no | yes |
+| `for…of` | yes | yes |
+| Generators (`function*`) | yes | yes |
+| Shorthand properties | yes | yes |
+| Computed properties (`{[k]: v}`) | no | yes |
+| Getters / setters | yes | yes |
+| `**` | yes | yes |
+| Trailing comma in a call | yes | yes |
+| **`?.` / `??`** | no | **yes** |
+| **`class`** | **no** | **no** |
+| **`import` / `export`** | **no** | **no** |
+| **`async` / `await`** | **no** | **no** |
+| `Symbol`, `Map`, `Set`, `WeakMap`, `Promise`, typed arrays | yes | yes |
+| `Proxy`, `Reflect` | **no** | yes |
+| `RegExp`, regex literals | yes | yes — **but see below** |
+| `Java` global | no (we install it — §6.4) | no (we install it) |
 
-Two consequences, both built here:
+What the guesses got wrong, recorded because the pattern is instructive: rest parameters and generators
+were expected to be shaky on band 8 and are fine; **default parameters, spread and computed properties**
+were expected to be fine and are refused there; `**` was expected to be refused and is not; and `?.`/`??`
+turn out to be **available on 1.9.1**, which makes them the most valuable thing an author gains by
+running on Java 11+. Note also that *spread in a call* is refused by **both** Rhinos while spread in an
+array literal is accepted by the newer one — the two are one feature in the spec and two in this engine.
+
+> **Two behavioural findings from the same probe, both load-bearing.**
+>
+> **1. The engine loader must be the thread context classloader before Rhino is touched at all.** Rhino
+> 1.8+ resolves its regular-expression engine through `ServiceLoader` on
+> `org.mozilla.javascript.RegExpLoader`, and the no-argument `ServiceLoader.load` reads the *thread's*
+> loader, not the caller's — which for a child-first engine loader is the host's, and cannot see the
+> service file inside the band jar. **And the answer is cached at class initialisation**, so setting the
+> loader late does nothing: the probe swapped it inside its own `enter()` and still got no regexes,
+> because reading `Context.VERSION_ES6` one line earlier had already cached the negative answer. The
+> symptom is not a load error — it is `"Regular expressions are not available."` thrown from the first
+> regex a script evaluates, on bands 11 and 17 only, while band 8 works either way because its Rhino
+> predates the lookup. `RhinoExecutor` installs the loader before its first Rhino call and restores it
+> after, and §15 keeps this as a standing question for any future engine with a `ServiceLoader` seam
+> (ECJ has one too).
+>
+> **2. Promises drain on their own, and a sealed scope still takes globals.** §15's two open behavioural
+> questions, both answered "no work needed": a resolved promise's continuation has run by the time
+> `evaluateString` returns, so `JsHost` needs no microtask pump; and `initStandardObjects(null, true)`
+> still accepts `putProperty`, so `console`/`Java` may be installed after sealing rather than before.
+
+Two consequences, both built here:Two consequences, both built here:
 
 - **A script's syntax ceiling follows the *player's* band, not the author's.** Somebody authoring on Java
   17 can write what band 8 refuses and never see it, because the diagnostics come from the host's own
@@ -805,8 +841,10 @@ rename/find-usages/signature help for JS ahead of Java having them.
 
 ## 15. Verify before building on it (the probe's list — §23's discipline)
 
-1. `Context.getSourcePositionFromStack` visibility per band, and whether `new EvaluatorException("")`
-   on the script thread carries the current line in interpreted mode.
+1. ~~`Context.getSourcePositionFromStack` visibility per band~~ — **answered: package-private on all
+   three**, so the direct route is out. Still open: whether `new EvaluatorException("")` constructed on
+   the script thread carries the current line in interpreted mode, or whether `RhinoOrigin` needs the
+   same-package accessor shaded beside Rhino (§9.4).
 2. `JavaMembers` refuses a `ClassShutter`-hidden class for an object *passed in* as a binding, not
    only for `Packages` lookups.
 3. Rhino's interpreter treats a `java.lang.Error` from `observeInstructionCount` as uncatchable by
@@ -819,10 +857,15 @@ rename/find-usages/signature help for JS ahead of Java having them.
 6. `SymbolKind` has a kind for a plain JS object/`Object.prototype` container (`OBJECT`), or `PROPERTY`/
    `MODULE` cover it — a core edit if not, and a one-line one.
 7. `NativeFunction`'s arity/name accessors are the same names on both Rhinos.
-8. Promises: whether Rhino drains its microtask queue at the end of `Script.exec` on both bands, or
-   `JsHost` must drain it (`Context.processMicrotasks` or its per-band spelling).
-9. `?.`, `??`, `**`, rest parameters, generators — accepted or refused, per band; the answer is the
-   probe file the policy, the keyword set and the compatibility-band warning all read.
+8. ~~Promises drain at the end of an evaluation~~ — **answered: they do**, on every band. No pump.
+9. ~~`?.`, `??`, `**`, rest parameters, generators per band~~ — **answered**, and six of the guesses were
+   wrong; see the measured table in §13a. The probe file is what the policy, the keyword set and the
+   compatibility-band warning read.
+9a. ~~Whether a sealed scope still takes new globals~~ — **answered: it does**, so install order is free.
+9b. **A standing question for every engine, raised by the regexp finding:** does any other adapter reach
+   a `ServiceLoader` seam? ECJ has service files of its own, so the same "engine loader must be the
+   thread context classloader, before first class-init" rule may already apply to the Java engine
+   without anything having noticed — nothing it does today needs one, and that is not a guarantee.
 10. `CompilerEnvirons.setGenerateObserverCount(true)` makes the observer fire in compiled mode on both
     Rhinos, and the generated class-file version loads on band 8.
 11. `EngineApiSurfaceTest`'s existing Rhino block already pins `Context`, `ContextFactory`, `ClassShutter`,

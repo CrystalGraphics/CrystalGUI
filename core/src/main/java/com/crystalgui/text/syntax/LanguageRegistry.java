@@ -117,6 +117,11 @@ public final class LanguageRegistry {
         // engine's own sources opened as plain text.
         Entry glsl = new Entry(Language.GLSL, KeywordTokenizer::glsl);
         registerExtensions(glsl, "glsl", "vert", "frag", "geom", "tesc", "tese", "comp", "shader");
+
+        // `.mjs` and `.cjs` beside `.js`, matching the three the JS grammar already claims -- a registry
+        // that knew fewer would open one of them as plain text with the grammar sitting right there.
+        Entry javascript = new Entry(Language.JAVASCRIPT, KeywordTokenizer::javascript);
+        registerExtensions(javascript, "js", "mjs", "cjs");
     }
 
     private LanguageRegistry() {
