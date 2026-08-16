@@ -147,4 +147,45 @@ public class ProblemBandPrimaryTest extends UiTestBase {
         show(List.of(source("organize", "Organize imports")));
         assertNull("a whole-file tidy is not the answer to this problem", popup.primaryAction());
     }
+
+    // ── What the header band says ───────────────────────────────────────────────────────────────
+
+    /**
+     * <b>An intention's description fills the band a diagnostic would have.</b>
+     *
+     * <p>The band paints its own ground and a bottom border, so it is a <em>header</em> rather than a line
+     * of text — and a header whose content is hidden is not absent, it is a blank grey strip that reads as a
+     * message which failed to load. Reported from the harness on "Join declaration and assignment", where
+     * every part of the popup was correct and the top of it said nothing.</p>
+     */
+    @Test
+    public void anIntentionPutsItsDescriptionInTheHeader() {
+        popup.showProblemsAt(window, List.of(), 10f, 10f, 12f);
+        popup.setProblem(List.of(), List.of(refactor("split", "Split into declaration and assignment")
+                .describedAs("Separates the declaration from its initial value.")));
+        settle();
+        assertEquals("Separates the declaration from its initial value.", popup.headerText());
+    }
+
+    /**
+     * <b>A quick fix does not, and deliberately.</b> The compiler has already said the useful thing, and an
+     * action's own title one line above its own title says nothing twice.
+     */
+    @Test
+    public void aProblemStillShowsTheCompilersMessage() {
+        show(List.of(fix("create", "Create method 'helpr()'", false)));
+        assertEquals("cannot resolve method 'helpr'", popup.headerText());
+    }
+
+    /**
+     * <b>And with neither, the band says nothing rather than saying nothing loudly.</b> The refusal that
+     * keeps the original defect from coming back through a future intention that forgets a description.
+     */
+    @Test
+    public void anActionWithNoDescriptionLeavesTheHeaderEmpty() {
+        popup.showProblemsAt(window, List.of(), 10f, 10f, 12f);
+        popup.setProblem(List.of(), List.of(refactor("bare", "Do the thing")));
+        settle();
+        assertEquals("", popup.headerText());
+    }
 }

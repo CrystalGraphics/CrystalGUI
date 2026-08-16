@@ -1239,6 +1239,15 @@ documentationpopup .__doc-problem__ {
  *
  * flex-shrink: 0 for the reason the tooltip's label carries it: the band paints the ground the text sits
  * on, so a label that gave way would leave the ground wider than the glyphs. */
+/* THE BAND WITH NOTHING TO SAY gives up its top padding rather than drawing an empty one.
+ *
+ * It paints its own ground and a bottom border, so it is a header rather than a line of text -- and a
+ * header whose content is hidden is not absent, it is a blank grey strip that reads as a message which
+ * failed to load. An intention normally fills it with its description; this is for one that has none. */
+documentationpopup .__doc-problem__.__no-message__ {
+    padding-top: 0px;
+}
+
 documentationpopup .__doc-problem-message__ {
     font-size: 8;
     padding-bottom: -3px;

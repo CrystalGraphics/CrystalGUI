@@ -78,10 +78,17 @@ import javax.annotation.Nullable;
  *                  (an import per candidate, a rename per near miss) and those problems must still offer
  *                  one thing to press. @see DocumentationPopup's primary row
  * @param version   the document version {@link #edit} was computed against
+ * @param description one line saying what this action <em>does</em>, or null — <b>for an action that
+ *                  answers no problem</b>. The popup's header band exists to state the diagnostic, and an
+ *                  INTENTION has none: "Join declaration and assignment" opened a popup whose header was a
+ *                  blank grey strip, which reads as a message that failed to load rather than as a message
+ *                  that does not exist. A quick fix leaves this null, because the compiler has already
+ *                  said the useful thing and repeating the title above the title says nothing twice.
+ *                  IntelliJ carries the same text per intention, in its settings and its preview
  */
 public record CodeAction(String id, String title, CodeActionKind kind, @Nullable ChangeSet edit,
                          @Nullable String commandId, Map<String, String> arguments,
-                         boolean preferred, long version) {
+                         boolean preferred, long version, @Nullable String description) {
 
     /**
      * Tier, then preferred, then insertion order — which the sort being <b>stable</b> preserves.
@@ -104,7 +111,19 @@ public record CodeAction(String id, String title, CodeActionKind kind, @Nullable
     /** An edit-only action — the shape every correction produces, with nothing for a command to read. */
     public CodeAction(String id, String title, CodeActionKind kind, @Nullable ChangeSet edit,
                       @Nullable String commandId, boolean preferred, long version) {
-        this(id, title, kind, edit, commandId, Map.of(), preferred, version);
+        this(id, title, kind, edit, commandId, Map.of(), preferred, version, null);
+    }
+
+    /** The shape before {@link #description} existed, kept so adding it broke no caller. */
+    public CodeAction(String id, String title, CodeActionKind kind, @Nullable ChangeSet edit,
+                      @Nullable String commandId, Map<String, String> arguments,
+                      boolean preferred, long version) {
+        this(id, title, kind, edit, commandId, arguments, preferred, version, null);
+    }
+
+    /** A copy carrying {@code description}. @see #description() */
+    public CodeAction describedAs(String description) {
+        return new CodeAction(id, title, kind, edit, commandId, arguments, preferred, version, description);
     }
 
     /** The common shape: a fix that edits the document. */

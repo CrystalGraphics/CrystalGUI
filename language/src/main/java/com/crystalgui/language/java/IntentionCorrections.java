@@ -3,7 +3,6 @@ package com.crystalgui.language.java;
 import com.crystalgui.text.Change;
 import com.crystalgui.text.ChangeSet;
 import com.crystalgui.text.lang.CodeAction;
-import com.crystalgui.text.lang.CodeActionKind;
 
 import org.eclipse.jdt.core.compiler.IProblem;
 import org.eclipse.jdt.core.dom.Assignment;
@@ -100,8 +99,9 @@ final class IntentionCorrections {
             ChangeSet edit = context.changeSet(new Change(after, value,
                     ";\n" + indent + name.getIdentifier() + " = "));
             if (edit == null) return;
-            out.add(context.action(SPLIT_DECLARATION, "Split into declaration and assignment",
-                    CodeActionKind.REFACTOR, edit));
+            out.add(context.intention(SPLIT_DECLARATION, "Split into declaration and assignment",
+                    "Separates the declaration from its initial value, leaving the value as an "
+                            + "assignment on its own line.", edit));
         }
 
         private static boolean triggered(FixContext context, VariableDeclarationStatement statement) {
@@ -145,8 +145,8 @@ final class IntentionCorrections {
             int value = assignment.getRightHandSide().getStartPosition();
             ChangeSet edit = context.changeSet(new Change(after, value, " = "));
             if (edit == null) return;
-            out.add(context.action(JOIN_DECLARATION, "Join declaration and assignment",
-                    CodeActionKind.REFACTOR, edit));
+            out.add(context.intention(JOIN_DECLARATION, "Join declaration and assignment",
+                    "Moves the assigned value up onto the declaration it belongs to.", edit));
         }
 
         private static boolean triggered(FixContext context, VariableDeclarationStatement statement) {
@@ -204,7 +204,9 @@ final class IntentionCorrections {
             changes.add(new Change(end, end, "\n" + indent + "}"));
             ChangeSet edit = context.changeSet(changes);
             if (edit == null) return;
-            out.add(context.action(ADD_BRACES, "Add braces", CodeActionKind.REFACTOR, edit));
+            out.add(context.intention(ADD_BRACES, "Add braces",
+                    "Wraps this single-statement body in a block, so a second statement can be added "
+                            + "without changing what runs.", edit));
         }
 
         /** The unbraced branch the request is asking about, or null. */
@@ -256,7 +258,8 @@ final class IntentionCorrections {
             changes.add(new Change(innerEnd, blockEnd, ""));
             ChangeSet edit = context.changeSet(changes);
             if (edit == null) return;
-            out.add(context.action(REMOVE_BRACES, "Remove braces", CodeActionKind.REFACTOR, edit));
+            out.add(context.intention(REMOVE_BRACES, "Remove braces",
+                    "Unwraps a block holding one statement.", edit));
         }
 
         private static Branch branchToUnbrace(FixContext context, Statement owner) {

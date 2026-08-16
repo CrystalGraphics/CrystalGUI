@@ -108,6 +108,19 @@ final class FixContext {
         return new CodeAction(id, title, kind, edit, null, false, version);
     }
 
+    /**
+     * An <b>intention</b> — {@link CodeActionKind#REFACTOR}, and carrying a line saying what it does.
+     *
+     * <p>The description is not decoration. The popup's header band exists to state the diagnostic, and an
+     * intention has none — so without one the band draws as a blank grey strip, which reads as a message
+     * that failed to load rather than as a message that does not exist. A quick fix leaves it null,
+     * because the compiler already said the useful thing.</p>
+     */
+    CodeAction intention(String id, String title, String description, ChangeSet edit) {
+        return new CodeAction(id, title, CodeActionKind.REFACTOR, edit, null, false, version)
+                .describedAs(description);
+    }
+
     // ── Building an edit ────────────────────────────────────────────────────────────────────────
 
     /** A rewriter over this unit's tree. @see Rewrites */
