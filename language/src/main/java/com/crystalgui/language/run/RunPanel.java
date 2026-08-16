@@ -38,6 +38,9 @@ import java.util.function.BooleanSupplier;
 public final class RunPanel extends UIElement implements UIFrameTicker {
 
     public static final String NOTICE_CLASS = "__run-notice__";
+    public static final String EMPTY_CLASS = "__run-empty__";
+    public static final String EMPTY_HEAD_CLASS = "__run-empty-head__";
+    public static final String EMPTY_LINE_CLASS = "__run-empty-line__";
     public static final String INPUT_CLASS = "__run-input__";
     public static final String BODY_CLASS = "__run-body__";
 
@@ -224,11 +227,10 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
         leftColumn.addChild(rail);
 
         body.addChild(view.element());
-        // AFTER the transcript, so it sits on the trailing edge. IntelliJ's console keeps its controls in
-        // a narrow vertical stripe there rather than in a full-width bar above, and the reason is space:
-        // a row across the whole panel spends 22px of height to hold four glyphs, on a panel whose entire
-        // job is showing as many lines as it can.
-        body.addChild(stripe);
+        // THE STRIPE AND THE RUN BAR ARE NOT ATTACHED YET, and neither is anything else that acts on a
+        // run -- nothing has run. @see #showControls
+        buildEmptyState();
+        body.addChild(emptyNote);
         rail.onScriptChosen.connect(script -> {
             selected = script;
             RunConsole showing = console;
@@ -245,8 +247,6 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
         runBar.addClass(RUNBAR_CLASS);
         separator.addClass(SEP_CLASS);
         separator.setHitTest(false);
-        addInternalChild(runBar);
-        addInternalChild(separator);
         addInternalChild(body);
         // THE NOTICE IS NOT ATTACHED YET. An empty UIText still measures a full LINE of height, so a
         // permanently-attached one puts a blank band under the toolbar on every console that has never
@@ -257,6 +257,93 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
         // take a tab stop and a `gap-all` slot to say nothing.
 
         view.onLinkActivated.connect(onLinkActivated::emit);
+    }
+
+    /**
+     * What the panel says before anything has run.
+     *
+     * <h4>A blank rectangle is not a neutral answer</h4>
+     *
+     * <p>This shipped as one: a black area under a toolbar offering Rerun and Stop with nothing to rerun
+     * or stop. It reads as broken, which is the worst thing a panel can say to somebody opening it for
+     * the first time — and it is the panel most likely to <em>be</em> opened first, since the activity
+     * bar has a button for it. IntelliJ centres a note here, VS Code's panels do, and the Problems view
+     * in this very application already does ("No problems").</p>
+     *
+     * <h4>The toolbar goes with it, which IntelliJ's screenshot also shows</h4>
+     *
+     * <p>Rerun and Stop over nothing are exactly the dead controls this panel refuses everywhere else —
+     * see {@link #refreshActions}, which takes three of them out of hit testing rather than leave them
+     * lit. The difference here is that there is no <em>state</em> in which they could be live yet, so the
+     * honest thing is not a greyed row but no row: the same argument {@code ScriptWorkbench.install}
+     * makes for answering null instead of wiring a dead Run command.</p>
+     *
+     * <h4>Attached and detached, never hidden</h4>
+     *
+     * <p>A hidden child keeps its place in the Tab sequence, so a hidden run bar would be two invisible
+     * tab stops in front of the transcript — the same reason the rail and the input row attach rather
+     * than hide.</p>
+     */
+    private final UIElement emptyNote = new UIElement();
+    private final UIText emptyHeading = new UIText("To run a script, do one of the following:");
+    private final UIText emptyRunLine = new UIText("");
+    private final UIText emptyPaletteLine =
+            new UIText("— Find “Run Script” in the command palette");
+
+    /** What {@link #refreshEmptyState} last wrote, so an unchanged line is not rebuilt every frame. */
+    private String emptyRunText = "";
+
+    private void buildEmptyState() {
+        emptyNote.addClass(EMPTY_CLASS);
+        // NOT HIT-TESTABLE, all of it. It is a caption over the console's own surface, and a caption that
+        // swallowed a press would make the area behind it dead to a click for no visible reason.
+        emptyNote.setHitTest(false);
+        emptyHeading.addClass(EMPTY_HEAD_CLASS);
+        emptyRunLine.addClass(EMPTY_LINE_CLASS);
+        emptyPaletteLine.addClass(EMPTY_LINE_CLASS);
+        emptyNote.addChild(emptyHeading);
+        emptyNote.addChild(emptyRunLine);
+        emptyNote.addChild(emptyPaletteLine);
+    }
+
+    /**
+     * Keeps the note's accelerator honest.
+     *
+     * <p><b>Read from the keymap, never spelled.</b> A literal is a promise the panel cannot keep the
+     * moment anything rebinds Run, and it fails in the worst possible place: the one screen whose entire
+     * job is telling somebody which key to press. {@link #describeAction} is the same lookup the tooltips
+     * use, and an unbound command simply drops the parenthesis rather than printing an empty one.</p>
+     */
+    private void refreshEmptyState() {
+        String wanted = "— Open a .java file and press " + describeAction("Run", null, ScriptCommands.RUN);
+        if (wanted.equals(emptyRunText)) return;
+        emptyRunText = wanted;
+        emptyRunLine.setText(wanted);
+    }
+
+    /** Puts the run controls back, once there is a run for them to act on. @see #emptyNote */
+    private void showControls() {
+        body.removeChild(emptyNote);
+        insertInternalChildAt(runBar, 0);
+        insertInternalChildAt(separator, 1);
+        // LAST IN THE BODY, so it sits on the trailing edge. IntelliJ's console keeps its controls in a
+        // narrow vertical stripe there rather than in a full-width bar above, and the reason is space: a
+        // row across the whole panel spends 22px of height to hold four glyphs, on a panel whose entire
+        // job is showing as many lines as it can.
+        body.addChild(stripe);
+    }
+
+    /**
+     * Takes them away again — reachable, because {@code RunSessions.forget} can empty the list.
+     *
+     * <p>A workspace that deletes the only script it has ever run goes back to having run nothing, and a
+     * panel that kept a Rerun button for a file that no longer exists would be offering to run it.</p>
+     */
+    private void hideControls() {
+        body.removeChild(stripe);
+        removeInternalChild(runBar);
+        removeInternalChild(separator);
+        body.addChild(emptyNote);
     }
 
     /**
@@ -336,6 +423,9 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
     private String rerunText = "";
     private String stopText = "";
 
+    /** The buffer size last pushed into the console. @see ConsoleSettings */
+    private int budgetApplied = -1;
+
     /**
      * "Rerun 'Main.java' (Shift+F10)" — the verb, the subject, and what would actually fire it.
      *
@@ -382,9 +472,18 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
         boolean wanted = listing != null && !listing.scripts().isEmpty();
         if (wanted != railShown) {
             railShown = wanted;
-            if (wanted) showRail();
-            else hideRail();
+            // THE SAME MOMENT, and deliberately one flag rather than two: "something has run" is the only
+            // question either half asks. The rail appears, the note goes, and the controls that act on a
+            // run arrive together.
+            if (wanted) {
+                showControls();
+                showRail();
+            } else {
+                hideRail();
+                hideControls();
+            }
         }
+        if (!railShown) refreshEmptyState();
         // EVERY FRAME while it is up, because the elapsed time is the liveness signal -- see RunRail for
         // why that stands in for a spinner rather than beside one.
         if (railShown) rail.tick();
@@ -512,6 +611,20 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
         boolean anythingToClear = hasOutput();
         clear.setEnabled(anythingToClear);
         clear.setHitTest(anythingToClear);
+
+        // THE BUFFER SIZE, PULLED. Settings resolve outward through the tree, so this cannot be applied
+        // at install time -- the panel is not attached yet and would resolve nothing but the default.
+        // Reading it per frame also means a change in the Preferences window lands without this panel
+        // subscribing to a Settings instance it would have to be handed. Guarded, because setBudgetKb on
+        // an unchanged value is still a write. @see ConsoleSettings
+        RunConsole target = console;
+        if (target != null) {
+            int wantedBudget = ConsoleSettings.bufferKb(this);
+            if (wantedBudget != budgetApplied) {
+                budgetApplied = wantedBudget;
+                target.setBudgetKb(wantedBudget);
+            }
+        }
 
         // The subject is whatever the rail has selected, so both re-word as it moves. Read live rather
         // than written from the selection handler, because the ACCELERATOR can change without the

@@ -359,6 +359,10 @@ theme {
      * read as a 10px mark. Read by the activity bar's dot AND by the file tree's row, from this one name,
      * so the two greens cannot drift apart again — which they had, having been chosen weeks apart. */
     --run-live-fg: var(--success-icon);
+    /* The "nothing has run yet" note. The SAME hint tone as the eviction notice, deliberately: both are
+     * the panel talking about itself rather than showing a script's output, and a second grey for the
+     * same voice is how two of them come to disagree. */
+    --run-empty-fg: var(--fg-hint);
     --run-notice-fg: var(--fg-hint);
     /* The live-script rail. Its own surface, one step back from the transcript, because it is chrome
      * beside content -- the same relationship every tool window's header has with its body. */
