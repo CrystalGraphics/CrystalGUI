@@ -42,7 +42,7 @@ final class ProblemSpans {
     }
 
     /**
-     * The span this problem should <b>mark</b>, which is ECJ's own except for three.
+     * The span this problem should <b>mark</b>, which is ECJ's own except for four families.
      *
      * <p>Every other {@code unused} problem is already reported on the name alone — the field, the nested
      * type, the local, the import, the type parameter. {@code UnusedPrivateMethod} and
@@ -57,6 +57,11 @@ final class ProblemSpans {
      * and so does the fix that answers it: the same call finds both, so the underline and the cast can
      * never disagree about which argument they mean.</p>
      *
+     * <p>The {@code @Override} and {@code @SafeVarargs} families are the same misdirection a third time,
+     * and {@link AnnotationCorrections#markedSpan} owns the detail: ECJ marks the method name, while the
+     * annotation above it is the only part anybody can act on and the only part the fix will touch. javac
+     * and IntelliJ both point at the annotation.</p>
+     *
      * <p>Decided here rather than in the editor because this is the only side that knows what an id means —
      * the widget is language-agnostic by design. And decided on the DIAGNOSTIC rather than on the fade
      * alone, so the Problems row navigates to the name too, which is where every IDE puts these.</p>
@@ -67,6 +72,8 @@ final class ProblemSpans {
             int[] argument = CastCorrections.mismatchedArgumentSpan(unit, reported);
             return argument == null ? reported : argument;
         }
+        int[] annotation = AnnotationCorrections.markedSpan(unit, problem, reported);
+        if (annotation != null) return annotation;
         if (problem.getID() != IProblem.UnusedPrivateMethod
                 && problem.getID() != IProblem.UnusedPrivateConstructor) {
             return reported;

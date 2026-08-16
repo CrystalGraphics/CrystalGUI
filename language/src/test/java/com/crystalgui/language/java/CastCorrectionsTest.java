@@ -1,15 +1,9 @@
 package com.crystalgui.language.java;
 
-import com.crystalgui.text.diagnostic.Diagnostic;
-import com.crystalgui.text.lang.CodeAction;
-
 import org.eclipse.jdt.core.compiler.IProblem;
 import org.junit.Test;
 
-import java.util.List;
-
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
 
 /**
  * "Cast expression to 'Dog'" — and the case that looks identical and must be refused.
@@ -219,43 +213,11 @@ public class CastCorrectionsTest extends FixFixture {
      */
     @Test
     public void theFixIsOfferedOverTheRangeItMarks() {
-        String source = ANIMALS
-                + "    void take(Dog d) { }\n"
-                + "    void go(Animal a) { take(a); }\n"
-                + "}\n";
-        int[] span = markedSpan(source, IProblem.ParameterMismatch);
-        assertNotNull("the fix must be offered where the underline is",
-                withId(actionsOver("Script", source, span[0], span[1]), CastCorrections.CAST_ARGUMENT));
-    }
-
-    /** The text a problem's reported range actually covers. */
-    private static String marked(String source, int problemId) {
-        int[] span = markedSpan(source, problemId);
-        return source.substring(span[0], span[1]);
-    }
-
-    /** A problem's reported range, in the source's own offsets. */
-    private static int[] markedSpan(String source, int problemId) {
-        String code = Integer.toString(problemId);
-        for (Diagnostic problem : diagnosticsOf(source)) {
-            if (!code.equals(problem.code())) continue;
-            return new int[] {offsetOf(source, problem.start().row(), problem.start().column()),
-                    offsetOf(source, problem.end().row(), problem.end().column())};
-        }
-        throw new AssertionError("problem " + problemId + " is not reported");
-    }
-
-    private static int offsetOf(String source, int row, int column) {
-        int at = 0;
-        for (int line = 0; line < row; line++) at = source.indexOf('\n', at) + 1;
-        return at + column;
-    }
-
-    private static CodeAction withId(List<CodeAction> actions, String id) {
-        for (CodeAction action : actions) {
-            if (id.equals(action.id())) return action;
-        }
-        return null;
+        assertOfferedWhereMarked(ANIMALS
+                        + "    void take(Dog d) { }\n"
+                        + "    void go(Animal a) { take(a); }\n"
+                        + "}\n",
+                IProblem.ParameterMismatch, CastCorrections.CAST_ARGUMENT);
     }
 
     // ── When a cast cannot answer ───────────────────────────────────────────────────────────────

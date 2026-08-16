@@ -203,6 +203,51 @@ public abstract class FixFixture {
                 errors(now) <= errors(was));
     }
 
+    /**
+     * <b>The fix is offered over the range the diagnostic marks</b> — for any family whose mark is not
+     * ECJ's own.
+     *
+     * <p>The invariant rather than a coordinate: whatever {@code ProblemSpans} decides to underline, the
+     * caret sitting on it must get the answer. It is stated here because it is not a property of any one
+     * correction — it is the seam between where a problem is <em>drawn</em> and where it is <em>routed</em>,
+     * and those were two independent readings until a cast fix went unreachable from its own squiggle.</p>
+     *
+     * <p>Asking near the mark is a different question and every family's other tests ask it: a needle
+     * spanning a whole call or a whole signature covers ECJ's range too, which is why seventeen cast tests
+     * passed over exactly this.</p>
+     */
+    protected static void assertOfferedWhereMarked(String source, int problemId, String id) {
+        int[] span = markedSpan(source, problemId);
+        for (CodeAction action : actionsOver("Script", source, span[0], span[1])) {
+            if (id.equals(action.id())) return;
+        }
+        throw new AssertionError(id + " is not offered over the range problem " + problemId
+                + " marks — '" + source.substring(span[0], span[1]) + "'");
+    }
+
+    /** A problem's reported range, in the source's own offsets. */
+    protected static int[] markedSpan(String source, int problemId) {
+        String code = Integer.toString(problemId);
+        for (Diagnostic problem : diagnosticsOf(source)) {
+            if (!code.equals(problem.code())) continue;
+            return new int[] {offsetOf(source, problem.start().row(), problem.start().column()),
+                    offsetOf(source, problem.end().row(), problem.end().column())};
+        }
+        throw new AssertionError("problem " + problemId + " is not reported");
+    }
+
+    /** The text a problem's reported range actually covers — what the reader sees underlined. */
+    protected static String marked(String source, int problemId) {
+        int[] span = markedSpan(source, problemId);
+        return source.substring(span[0], span[1]);
+    }
+
+    private static int offsetOf(String source, int row, int column) {
+        int at = 0;
+        for (int line = 0; line < row; line++) at = source.indexOf('\n', at) + 1;
+        return at + column;
+    }
+
     // ── Plumbing ────────────────────────────────────────────────────────────────────────────────
 
     private static CodeAction require(String source, String needle, String id) {
