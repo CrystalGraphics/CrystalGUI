@@ -337,6 +337,53 @@ public class RunConsoleTest {
                 "Main.java:12", row.substring(link.start(), link.end()));
     }
 
+    /**
+     * <b>The stamp is measurable, because three things have to start after it.</b>
+     *
+     * <p>A link's columns have to move right past it, and a line's colour has to <em>begin</em> after it.
+     * The second was missed: an echoed input line painted its own timestamp green and italic along with
+     * the words, and an error line would have painted one red — which reads as the stamp belonging to the
+     * line rather than to the console.</p>
+     */
+    @Test
+    public void theStampIsMeasuredApartFromTheLine() {
+        TextBuffer buffer = new TextBuffer();
+        RunConsole console = attached(buffer);
+        console.setPrefixStyle(ConsolePrefix.Style.TIME);
+        console.startRun("Main.java");
+        console.append(out("Main.java", "hello"));
+        console.drain();
+
+        // 0 heading, 1 break, 2 output
+        assertEquals("a boundary is never stamped, so nothing of it belongs to the console",
+                0, console.stampWidth(0));
+        assertEquals("[HH:mm:ss] ".length(), console.stampWidth(2));
+        assertEquals("the measured stamp is not the one that was written",
+                "hello", buffer.line(2).substring(console.stampWidth(2)));
+
+        console.setPrefixStyle(ConsolePrefix.Style.NONE);
+        console.drain();
+        assertEquals("nothing is stamped, so nothing is measured", 0, console.stampWidth(2));
+    }
+
+    /** And a link's shift is that same measurement, so the two cannot drift apart. */
+    @Test
+    public void aLinksShiftIsTheStampsWidth() {
+        TextBuffer buffer = new TextBuffer();
+        RunConsole console = attached(buffer).addFilter(new JavaStackFrameFilter());
+        console.setPrefixStyle(ConsolePrefix.Style.FULL);
+        console.append(new RunMessage("Main.java", null, null, 0, RunLevel.ERROR,
+                "at X.y(Main.java:12)"));
+        console.drain();
+
+        ConsoleFilter.Link link = console.linksAt(0).get(0);
+        assertEquals("the underline starts somewhere other than where the text does",
+                "Main.java:12",
+                buffer.line(0).substring(link.start(), link.end()));
+        assertTrue("a link cannot begin inside the stamp",
+                link.start() >= console.stampWidth(0));
+    }
+
     /** Changing the style rewrites every row — half a stamped transcript reads as a stopped clock. */
     @Test
     public void aStyleChangeRestampsWhatIsAlreadyThere() {

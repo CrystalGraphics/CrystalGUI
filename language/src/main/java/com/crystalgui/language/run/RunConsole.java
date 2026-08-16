@@ -640,6 +640,24 @@ public final class RunConsole {
     }
 
     /**
+     * How many of a row's columns are the stamp rather than the line itself.
+     *
+     * <p><b>Everything that colours or points at a row needs this</b>, and each of them gets it wrong in
+     * its own way without it. A link's columns come from a filter that was handed the script's text and
+     * has never heard of a prefix, so they have to be moved right. A line's colour runs to the end of the
+     * row, so it has to start further right — and it did not: an echoed input line painted its own
+     * timestamp green and italic along with the words, which reads as the stamp belonging to the line
+     * rather than to the console.</p>
+     *
+     * <p>Zero for a boundary, which is never stamped, and zero when nothing is.</p>
+     */
+    public int stampWidth(int row) {
+        Line line = lineAt(row);
+        if (line == null || line.isDivider() || prefixStyle == ConsolePrefix.Style.NONE) return 0;
+        return ConsolePrefix.of(prefixStyle, line.millis(), line.origin()).length();
+    }
+
+    /**
      * The row as it is drawn — the stamp, then what the script said.
      *
      * <p><b>Boundaries are never stamped.</b> They are the console talking about itself rather than
@@ -789,8 +807,7 @@ public final class RunConsole {
         // prefix, and both the underline and the click test are computed in row columns. Unshifted, every
         // link on a stamped line is underlined a dozen characters to the left of the text it names, and a
         // click in the middle of it opens nothing.
-        int shift = line.isDivider() ? 0 : ConsolePrefix.of(prefixStyle, line.millis(), line.origin())
-                .length();
+        int shift = stampWidth(row);
         if (shift == 0) return found;
         List<ConsoleFilter.Link> shifted = new ArrayList<>(found.size());
         for (ConsoleFilter.Link link : found) {

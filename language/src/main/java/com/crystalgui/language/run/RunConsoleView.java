@@ -563,15 +563,23 @@ public final class RunConsoleView {
             String capture = captureFor(line);
             List<ConsoleFilter.Link> links = showing.linksAt(row);
 
+            // THE STAMP IS NOT PART OF THE LINE. It belongs to the console rather than to the script, so
+            // a line's colour begins after it -- an echoed input line painted its own timestamp green and
+            // italic along with the words, and an error would have painted one red. Left UNCAPTURED
+            // rather than given a colour of its own: it takes the surface's foreground, which is what it
+            // already looked like, and one capture per row is enough. @see RunConsole#stampWidth
+            int from = Math.min(end, start + showing.stampWidth(row));
+            if (from >= end) return;
+
             if (links.isEmpty()) {
                 // ORDINARY OUTPUT IS LEFT ALONE, not given a capture meaning "normal". An uncaptured
                 // span takes the surface's own foreground, which is what plain output is -- and naming
                 // it would put every line of every transcript through the cascade for nothing.
-                if (capture != null) tokens.add(new SyntaxToken(start, end, capture));
+                if (capture != null) tokens.add(new SyntaxToken(from, end, capture));
                 return;
             }
 
-            int cursor = start;
+            int cursor = from;
             for (ConsoleFilter.Link link : links) {
                 int linkStart = Math.min(end, start + link.start());
                 int linkEnd = Math.min(end, start + link.end());
