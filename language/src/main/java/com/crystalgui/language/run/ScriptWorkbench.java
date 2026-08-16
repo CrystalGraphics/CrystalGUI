@@ -96,6 +96,12 @@ public final class ScriptWorkbench implements Closeable {
                 () -> showConsole(workbench));
 
         panel.onClearRequested.connect(console::clear);
+        // THE CONSOLE'S OWN VERBS, AND ITS RIGHT-CLICK MENU. Registered here rather than in RunPanels
+        // because this is where the CommandRegistry is -- and the menu is the reason they are commands at
+        // all: a row is built from one, by design, and MenuBuilder being the single path is an invariant
+        // this codebase has already paid for.
+        ConsoleCommands.register(registry, panel);
+        RunPanels.attachContextMenu(registry, panel);
         // THE SUBJECT IS ACCEPTED AND NOT YET USED, which is honest rather than lazy: `ScriptHost` holds
         // exactly one live run, so "stop that one" and "stop whatever is running" are the same request
         // and pretending otherwise would be a second code path nothing exercises. The signal carries it
@@ -335,6 +341,7 @@ public final class ScriptWorkbench implements Closeable {
     @Override
     public void close() throws IOException {
         ScriptCommands.unregister(registry);
+        ConsoleCommands.unregister(registry);
         host.close();
     }
 }

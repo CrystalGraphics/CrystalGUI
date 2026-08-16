@@ -509,9 +509,7 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
         // CLEAR IS DEAD OVER AN EMPTY TRANSCRIPT, as IntelliJ's is. The same rule Stop and Rerun already
         // follow, and the same pairing: out of hit testing too, so it cannot light up or show a tooltip
         // explaining what it would have done.
-        RunConsole showing = console;
-        boolean anythingToClear = showing != null
-                && (showing.lineCount() > 0 || showing.transcriptSize() > 0);
+        boolean anythingToClear = hasOutput();
         clear.setEnabled(anythingToClear);
         clear.setHitTest(anythingToClear);
 
@@ -655,6 +653,18 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
     /** The transcript, for a host that wants its selection or its scroll position. */
     public RunConsoleView view() {
         return view;
+    }
+
+    /**
+     * Whether there is anything to clear — asked by the Clear button and by its menu row.
+     *
+     * <p>Both, from here, so the row cannot grey on a different rule from the control beside it. And it
+     * asks the <b>transcript</b> as well as the document: under a filter the document is a subset, so a
+     * console showing one script's empty output still has plenty to forget.</p>
+     */
+    public boolean hasOutput() {
+        RunConsole showing = console;
+        return showing != null && (showing.lineCount() > 0 || showing.transcriptSize() > 0);
     }
 
     /**
