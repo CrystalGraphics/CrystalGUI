@@ -78,6 +78,82 @@ public class ScriptConsoleTest {
         assertEquals("from the script", lineText(console, 0));
         assertEquals("Script.java", lineScript(console, 0));
         assertEquals("nothing leaked to the real stream", 0, passthrough.size());
+
+        // AND IT KNOWS WHICH LINE SAID IT. The whole path has to hold for this: ECJ has to emit a line
+        // number table (`-g`), `Safepoints` has to preserve it through the ASM rewrite, the ref has to
+        // name the class the frames actually carry, and the walk has to find it. Any one of those
+        // failing leaves the stamp's origin column blank -- which is what shipped, and which looks like
+        // the column being decorative rather than like four things having to agree.
+        console.drain();
+        assertNotNull("the line that printed it was not recorded", console.lineAt(0).origin());
+        assertTrue("the origin should name the script's own file: " + console.lineAt(0).origin(),
+                console.lineAt(0).origin().startsWith("Script.java:"));
+    }
+
+    /**
+     * <b>And the same for a file that declares its own class, which is the ordinary case.</b>
+     *
+     * <p>A snippet goes through {@code ScriptPrelude.wrap} and a real {@code Main.java} through
+     * {@code compilationUnit}, and the two build the script's identity from different halves — the ref is
+     * made from the wrapper's {@code className} while the class is loaded under its {@code binaryName}.
+     * Those agree for a class in the default package and stop agreeing the moment one declares a package,
+     * at which point the stack frames carry a name the ref has never heard of and every origin comes back
+     * null. The symptom is a blank column rather than an error.</p>
+     */
+    @Test
+    public void aDeclaredClassAlsoRecordsWhereItPrintedFrom() throws Throwable {
+        RunConsole console = new RunConsole().attach(new TextBuffer());
+        System.setOut(new PrintStream(
+                ScriptOutput.routed(new ByteArrayOutputStream(), RunLevel.OUT, console), true,
+                StandardCharsets.UTF_8));
+
+        ScriptHost.Compiled compiled = host.compileSource("Main",
+                "public class Main {\n"
+                        + "    public static void main(String[] args) {\n"
+                        + "        System.out.println(\"declared\");\n"
+                        + "    }\n"
+                        + "}\n", Map.of());
+        assertTrue(String.valueOf(compiled.messages()), compiled.successful());
+
+        compiled.withSource(Resource.of(Resource.SCHEME_PROJECT, "src/Main.java"));
+        host.run(compiled, Map.of());
+
+        console.drain();
+        assertEquals("declared", lineText(console, 0));
+        assertEquals("the line that printed it was not recorded", "Main.java:3",
+                console.lineAt(0).origin());
+    }
+
+    /**
+     * <b>And for one that declares a package — where the two names genuinely differ.</b>
+     *
+     * <p>{@code Compiled.withSource} built the ref from {@code className} while {@code prepare} loads the
+     * class by {@code binaryName}, so a packaged script's frames read {@code demo.Main} against a ref
+     * saying {@code Main}. {@code ScriptRef.owns} then matched nothing and every line lost its origin.</p>
+     */
+    @Test
+    public void aPackagedClassStillRecordsWhereItPrintedFrom() throws Throwable {
+        RunConsole console = new RunConsole().attach(new TextBuffer());
+        System.setOut(new PrintStream(
+                ScriptOutput.routed(new ByteArrayOutputStream(), RunLevel.OUT, console), true,
+                StandardCharsets.UTF_8));
+
+        ScriptHost.Compiled compiled = host.compileSource("Main",
+                "package demo;\n"
+                        + "public class Main {\n"
+                        + "    public static void main(String[] args) {\n"
+                        + "        System.out.println(\"packaged\");\n"
+                        + "    }\n"
+                        + "}\n", Map.of());
+        assertTrue(String.valueOf(compiled.messages()), compiled.successful());
+
+        compiled.withSource(Resource.of(Resource.SCHEME_PROJECT, "src/Main.java"));
+        host.run(compiled, Map.of());
+
+        console.drain();
+        assertEquals("packaged", lineText(console, 0));
+        assertEquals("a packaged script lost its origin", "Main.java:4",
+                console.lineAt(0).origin());
     }
 
     /**

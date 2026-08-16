@@ -189,8 +189,14 @@ public final class ScriptOutput {
      * whole trace to read one frame of it. This walk stops at the first match.</p>
      */
     static RunMessage message(ScriptRef script, RunLevel level, String text) {
+        // THE DEEPEST OWNED FRAME THAT CAN NAME A LINE, which is not always the deepest owned one. A
+        // lambda body compiles into the script's own class and is owned, but a synthetic frame can carry
+        // no line number at all -- and taking it and finding none threw away an enclosing frame that had
+        // one. Printing from inside a `forEach` is the ordinary way to hit that, and it costs the origin
+        // of exactly the lines people wrap in lambdas.
         Optional<StackWalker.StackFrame> frame = StackWalker.getInstance().walk(
-                frames -> frames.filter(f -> script.owns(f.getClassName())).findFirst());
+                frames -> frames.filter(f -> script.owns(f.getClassName()) && f.getLineNumber() > 0)
+                        .findFirst());
         if (frame.isEmpty()) {
             // Output from a script that is running but not on the stack -- a callback the engine
             // invoked, say. Real, attributable to the script, and with no line to name, so it is shown
