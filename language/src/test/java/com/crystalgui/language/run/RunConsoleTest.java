@@ -276,6 +276,86 @@ public class RunConsoleTest {
         assertTrue(console.lineAt(6).isRunStart());
     }
 
+    /**
+     * <b>The stamp is on the document, and the model keeps the script's own text.</b>
+     *
+     * <p>Which is what lets the style change without the transcript being re-timed, and what keeps a
+     * filter — and every {@code ConsoleFilter} — working on what the script actually said.</p>
+     */
+    @Test
+    public void aStampedLineDecoratesTheDocumentAndNotTheModel() {
+        TextBuffer buffer = new TextBuffer();
+        RunConsole console = attached(buffer);
+        console.setPrefixStyle(ConsolePrefix.Style.TIME);
+        console.append(out("Main.java", "hello"));
+        console.drain();
+
+        assertEquals("the model should hold what the script printed", "hello", console.lineAt(0).text());
+        String row = buffer.line(0);
+        assertTrue("the document row is not stamped: " + row, row.endsWith("hello"));
+        assertTrue("the stamp is not a clock: " + row, row.startsWith("["));
+        assertEquals(ConsolePrefix.width(ConsolePrefix.Style.TIME) + "hello".length(), row.length());
+    }
+
+    /** A boundary is never stamped — it is the console talking about itself, not output. */
+    @Test
+    public void boundariesAreNotStamped() {
+        TextBuffer buffer = new TextBuffer();
+        RunConsole console = attached(buffer);
+        console.setPrefixStyle(ConsolePrefix.Style.FULL);
+        console.startRun("Main.java");
+        console.append(out("Main.java", "hello"));
+        console.drain();
+
+        assertEquals("a heading was given a timestamp", "Main.java", buffer.line(0));
+        assertTrue("the output line lost its stamp", buffer.line(2).startsWith("["));
+    }
+
+    /**
+     * <b>A link's columns are shifted past the stamp.</b>
+     *
+     * <p>A {@code ConsoleFilter} is handed the script's own text — that is what keeps it testable — but
+     * the row on screen begins with the prefix, and both the underline and the click test are computed in
+     * ROW columns. Unshifted, every link on a stamped line is underlined a dozen characters to the left
+     * of the text it names and a click in the middle of it opens nothing. Nothing throws; the underline
+     * simply sits on the wrong words.</p>
+     */
+    @Test
+    public void aLinksColumnsFollowTheTextOnScreen() {
+        TextBuffer buffer = new TextBuffer();
+        RunConsole console = attached(buffer).addFilter(new JavaStackFrameFilter());
+        console.setPrefixStyle(ConsolePrefix.Style.FULL);
+        console.append(new RunMessage("Main.java", null, null, 0, RunLevel.ERROR,
+                "\tat X.y(Main.java:12)"));
+        console.drain();
+
+        java.util.List<ConsoleFilter.Link> links = console.linksAt(0);
+        assertEquals(1, links.size());
+        ConsoleFilter.Link link = links.get(0);
+        String row = buffer.line(0);
+        assertEquals("the underline is not over the text it names",
+                "Main.java:12", row.substring(link.start(), link.end()));
+    }
+
+    /** Changing the style rewrites every row — half a stamped transcript reads as a stopped clock. */
+    @Test
+    public void aStyleChangeRestampsWhatIsAlreadyThere() {
+        TextBuffer buffer = new TextBuffer();
+        RunConsole console = attached(buffer);
+        console.append(out("Main.java", "hello"));
+        console.drain();
+        assertEquals("hello", buffer.line(0));
+
+        console.setPrefixStyle(ConsolePrefix.Style.TIME);
+        console.drain();
+        assertTrue("the line already there was left unstamped", buffer.line(0).endsWith("hello"));
+        assertTrue(buffer.line(0).startsWith("["));
+
+        console.setPrefixStyle(ConsolePrefix.Style.NONE);
+        console.drain();
+        assertEquals("turning it off left the stamp behind", "hello", buffer.line(0));
+    }
+
     /** Never two breaks in a row, and never one above the first line. */
     @Test
     public void breaksAreNotDoubledOrLeading() {

@@ -732,6 +732,9 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
                 budgetApplied = wantedBudget;
                 target.setBudgetKb(wantedBudget);
             }
+            // THE STAMP, pulled the same way. `setPrefixStyle` no-ops on an unchanged value and queues a
+            // rebuild otherwise, so this costs a comparison on every frame but the one that matters.
+            target.setPrefixStyle(ConsoleSettings.prefixStyle(this));
         }
 
         // The subject is whatever the rail has selected, so both re-word as it moves. Read live rather

@@ -66,14 +66,21 @@ public final class RunConsole {
         private final int line;
         private final boolean divider;
         private final boolean opening;
+        @Nullable private final String origin;
+        private final long millis;
 
         Line(String text, RunLevel level, String script, @Nullable Resource file, int line,
              boolean divider) {
-            this(text, level, script, file, line, divider, false);
+            this(text, level, script, file, line, divider, false, null, 0L);
         }
 
         Line(String text, RunLevel level, String script, @Nullable Resource file, int line,
              boolean divider, boolean opening) {
+            this(text, level, script, file, line, divider, opening, null, 0L);
+        }
+
+        Line(String text, RunLevel level, String script, @Nullable Resource file, int line,
+             boolean divider, boolean opening, @Nullable String origin, long millis) {
             this.text = text;
             this.level = level;
             this.script = script;
@@ -81,6 +88,19 @@ public final class RunConsole {
             this.line = line;
             this.divider = divider;
             this.opening = opening;
+            this.origin = origin;
+            this.millis = millis;
+        }
+
+        /** {@code Ask.java:24} — the script's own line that printed this, or null. @see ConsolePrefix */
+        @Nullable
+        public String origin() {
+            return origin;
+        }
+
+        /** When it was printed, in wall time. Zero for a boundary, which nothing stamps. */
+        public long millis() {
+            return millis;
         }
 
         public String text() {
@@ -267,8 +287,13 @@ public final class RunConsole {
     /** Enqueues one line. Safe from a script's thread, the game's, or anywhere else. */
     public void append(RunMessage message) {
         if (message == null) return;
+        // STAMPED WHEN IT WAS PRINTED, not when it is drawn. A frame can be several lines behind a burst,
+        // so a clock read at drain would give a whole burst the same time -- the time the panel got round
+        // to it. The formatting still happens at drain, so the style can change without the transcript
+        // having to be re-timed. @see ConsolePrefix
         enqueue(new Line(message.text(), message.level(), message.script(),
-                message.file(), message.line(), false));
+                message.file(), message.line(), false, false,
+                message.origin(), System.currentTimeMillis()));
     }
 
     /** The one way anything reaches {@link #pending}, so the bound cannot be bypassed. */
@@ -453,6 +478,13 @@ public final class RunConsole {
             changed = true;
         }
 
+        // A RESTYLE IS A REBUILD TOO, for the same reason and through the same door.
+        if (prefixRestyled) {
+            prefixRestyled = false;
+            rebuild(target);
+            changed = true;
+        }
+
         // A FILTER CHANGE IS A REBUILD, and it happens HERE rather than in the setter for the reason the
         // clear does: the document may only be touched on the thread that draws it, and a caller wiring a
         // rail row or a menu item should not have to know that.
@@ -506,7 +538,7 @@ public final class RunConsole {
             if (line.script() != null && !line.script().isEmpty()) scriptsSeen.add(line.script());
             if (!passes(line)) continue;
             if (incoming == null) incoming = new StringBuilder();
-            incoming.append(line.text()).append('\n');
+            incoming.append(display(line)).append('\n');
             shown.add(line);
         }
         // A BURST FILTERED DOWN TO NOTHING IS NOT A CHANGE. Every line may belong to another script, and
@@ -584,6 +616,42 @@ public final class RunConsole {
         return next.isDivider() || previous.isRunStart();
     }
 
+    /**
+     * The row as it is drawn — the stamp, then what the script said.
+     *
+     * <p><b>Boundaries are never stamped.</b> They are the console talking about itself rather than
+     * output, and a timestamp on a heading would claim a run started at the moment the panel drew it.
+     * Leaving them flush at the margin also sets them apart from the indented output around them, which
+     * is the separation the whole boundary treatment exists for.</p>
+     */
+    private String display(Line line) {
+        if (line.isDivider() || prefixStyle == ConsolePrefix.Style.NONE) return line.text();
+        return ConsolePrefix.of(prefixStyle, line.millis(), line.origin()) + line.text();
+    }
+
+    /**
+     * What each row is stamped with. Applied like the filter — see {@link #drain}.
+     *
+     * <p>A style change rewrites every row, so it is a rebuild rather than something that takes effect
+     * from the next line onward: half a transcript stamped and half not would read as the clock having
+     * stopped.</p>
+     */
+    public RunConsole setPrefixStyle(ConsolePrefix.Style style) {
+        ConsolePrefix.Style wanted = style == null ? ConsolePrefix.Style.NONE : style;
+        if (wanted == prefixStyle) return this;
+        prefixStyle = wanted;
+        prefixRestyled = true;
+        onDidChange.emit();
+        return this;
+    }
+
+    public ConsolePrefix.Style prefixStyle() {
+        return prefixStyle;
+    }
+
+    private volatile ConsolePrefix.Style prefixStyle = ConsolePrefix.Style.NONE;
+    private volatile boolean prefixRestyled;
+
     private boolean passes(Line line) {
         return filter == null || filter.equals(line.script());
     }
@@ -595,7 +663,7 @@ public final class RunConsole {
         for (Line line : all) {
             if (!passes(line)) continue;
             shown.add(line);
-            text.append(line.text()).append('\n');
+            text.append(display(line)).append('\n');
         }
         // SELECTION IS LOST HERE, unavoidably: it names offsets that no longer exist. IntelliJ loses it
         // switching console tabs too. Worth stating rather than discovering.
@@ -692,7 +760,21 @@ public final class RunConsole {
         // SORTED, because the tokenizer walks them in order to emit the gaps between them, and two filters
         // answering the same line have no reason to agree about which comes first.
         found.sort((a, b) -> Integer.compare(a.start(), b.start()));
-        return found;
+
+        // SHIFTED PAST THE STAMP. A filter is handed the script's own text -- that is what keeps it
+        // testable and keeps the console's decoration out of it -- but the ROW on screen begins with the
+        // prefix, and both the underline and the click test are computed in row columns. Unshifted, every
+        // link on a stamped line is underlined a dozen characters to the left of the text it names, and a
+        // click in the middle of it opens nothing.
+        int shift = line.isDivider() ? 0 : ConsolePrefix.of(prefixStyle, line.millis(), line.origin())
+                .length();
+        if (shift == 0) return found;
+        List<ConsoleFilter.Link> shifted = new ArrayList<>(found.size());
+        for (ConsoleFilter.Link link : found) {
+            shifted.add(new ConsoleFilter.Link(link.start() + shift, link.end() + shift,
+                    link.fileName(), link.line()));
+        }
+        return shifted;
     }
 
     /**
