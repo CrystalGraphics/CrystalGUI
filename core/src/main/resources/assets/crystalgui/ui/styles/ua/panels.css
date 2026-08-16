@@ -777,13 +777,21 @@ runpanel .__run-rail__ .__run-rail-glyph__.runstate-stopped {
     background-color: var(--run-rail-stopped, #FFAF0F);
 }
 
-/* THE TICK AND THE ERROR BADGE carry their own colour, so nothing here tints them. */
+/* THE TICK CARRIES ITS OWN COLOUR and the error badge does NOT, which is not a distinction anybody would
+ * guess from the file names. `greenCheckmark.svg` names its green; `errorDialog.svg` fills its disc with
+ * `currentColor`, so it takes whatever `color` resolves to at the element — and `color` inherits, so on a
+ * rail row that is the row's near-white text. A failed script was marked with a plain white disc: not
+ * obviously an icon at all, and certainly not an error.
+ *
+ * The Problems panel's own severity rule pairs the same icon with a colour for exactly this reason (see
+ * `.__severity__.severity-error` above). `--run-rail-failed` was declared for this and never used. */
 runpanel .__run-rail__ .__run-rail-glyph__.runstate-finished {
     overlay: icon("crystalgui:general/greenCheckmark");
 }
 
 runpanel .__run-rail__ .__run-rail-glyph__.runstate-failed {
     overlay: icon("crystalgui:general/errorDialog");
+    color: var(--run-rail-failed, #C75450);
 }
 
 /* THE FILL IDIOM IN A ROW is `width: 0; flex-grow: 1` -- neither flex-grow alone nor width: 100% works,
