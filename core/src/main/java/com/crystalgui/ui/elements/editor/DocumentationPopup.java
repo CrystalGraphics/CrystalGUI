@@ -87,6 +87,9 @@ public final class DocumentationPopup extends Popover {
     public static final String PROBLEM_CLASS = "__doc-problem__";
     public static final String PROBLEM_MESSAGE_CLASS = "__doc-problem-message__";
     public static final String PROBLEM_ACTIONS_CLASS = "__doc-problem-actions__";
+
+    /** On the header band when it has nothing to say — see {@link #setProblem}. */
+    public static final String NO_MESSAGE_CLASS = "__no-message__";
     public static final String PROBLEM_ACTION_CLASS = "__doc-problem-action__";
     public static final String PROBLEM_SHORTCUT_CLASS = "__doc-problem-shortcut__";
 
@@ -170,6 +173,9 @@ public final class DocumentationPopup extends Popover {
 
     /** Tracked rather than read back: display is a style write, not a queryable flag. */
     private boolean problemShown;
+
+    /** What the header band is currently drawing — the observable, tracked because the element has none. */
+    private String headerShown = "";
 
     @Nullable
     private SymbolInfo shown;
@@ -315,21 +321,41 @@ public final class DocumentationPopup extends Popover {
         // anonymous class offered nothing while the gutter bulb beside it said there was something.
         problemShown = any;
         problemRow.setDisplayed(any || anyAction);
-        problemMessage.setDisplayed(any);
-        if (!any && !anyAction) return;
-
-        if (any) {
-            StringBuilder message = new StringBuilder();
-            for (com.crystalgui.text.diagnostic.Diagnostic problem : problems) {
-                if (message.length() > 0) message.append(" · ");
-                message.append(problem.message());
-            }
-            problemMessage.invalidateMeasurement();
-            problemMessage.setText(message.toString());
+        if (!any && !anyAction) {
+            problemMessage.setDisplayed(false);
+            headerShown = "";
+            return;
         }
 
         CodeAction primary = primaryOf(actions, any);
         primaryShown = primary;
+
+        // THE HEADER IS THE DIAGNOSTIC, OR WHAT THE ACTION DOES WHEN THERE IS NO DIAGNOSTIC.
+        //
+        // The band paints its own ground and a bottom border, so it is a header rather than a line of
+        // text -- and a header with its content hidden is not absent, it is a blank grey strip. That is
+        // what an INTENTION got: "Join declaration and assignment" opened a popup whose top band said
+        // nothing, which reads as a message that failed to load rather than as one that does not exist.
+        //
+        // A quick fix leaves `description` null on purpose. The compiler has already said the useful
+        // thing, and an action's own title one line above its own title says nothing twice.
+        String header = any ? joined(problems)
+                : primary == null || primary.description() == null ? "" : primary.description();
+        problemMessage.setDisplayed(!header.isEmpty());
+        headerShown = header;
+        // AND WHEN THERE IS STILL NOTHING TO SAY, the band gives up its top padding rather than drawing an
+        // empty one -- the same rule, one step further along, for an intention that forgot a description.
+        if (header.isEmpty()) {
+            problemRow.addClass(NO_MESSAGE_CLASS);
+        } else {
+            problemRow.removeClass(NO_MESSAGE_CLASS);
+        }
+        if (!header.isEmpty()) {
+            problemMessage.invalidateMeasurement();
+            problemMessage.setText(header);
+        }
+
+
         boolean hasPrimary = primary != null;
         primaryAction.setDisplayed(hasPrimary);
         primaryShortcut.setDisplayed(hasPrimary);
@@ -381,6 +407,16 @@ public final class DocumentationPopup extends Popover {
      * {@code REFACTOR} above {@code SOURCE} — so "first" is still "best" and the no-problem case needs no
      * ordering of its own.</p>
      */
+    /** Every message, in one line — a caret can sit under more than one diagnostic. */
+    private static String joined(List<com.crystalgui.text.diagnostic.Diagnostic> problems) {
+        StringBuilder message = new StringBuilder();
+        for (com.crystalgui.text.diagnostic.Diagnostic problem : problems) {
+            if (message.length() > 0) message.append(" · ");
+            message.append(problem.message());
+        }
+        return message.toString();
+    }
+
     @Nullable
     private static CodeAction primaryOf(List<CodeAction> actions, boolean hasProblem) {
         for (CodeAction action : actions) {
@@ -400,9 +436,17 @@ public final class DocumentationPopup extends Popover {
         return primaryShown;
     }
 
-    /** What the problem band says, or empty. */
-    public String problemText() {
-        return problemShown ? problemMessage.getText() : "";
+    /**
+     * <b>What the header band actually says</b>, or empty when it is not drawn.
+     *
+     * <p>Reads the element rather than a flag. It used to be gated on {@code problemShown}, which was the
+     * same thing as "the band has text" only while the band could hold nothing but a diagnostic — an
+     * intention's description goes in the same place, and a gate on the diagnostic would report the band as
+     * empty while it visibly is not. The observable has to be what a reader sees, or a test can pass
+     * against a blank strip.</p>
+     */
+    public String headerText() {
+        return headerShown;
     }
 
     /** What is currently on screen, or null. The only observable of what a resolve produced. */
