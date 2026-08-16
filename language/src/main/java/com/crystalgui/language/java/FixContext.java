@@ -8,6 +8,7 @@ import com.crystalgui.text.lang.CodeActionKind;
 
 import org.eclipse.jdt.core.compiler.IProblem;
 import org.eclipse.jdt.core.dom.ASTNode;
+import org.eclipse.jdt.core.dom.ASTVisitor;
 import org.eclipse.jdt.core.dom.BodyDeclaration;
 import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.dom.FieldDeclaration;
@@ -19,6 +20,7 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * Everything a {@link Correction} is given, and the small number of things every one of them does.
@@ -181,6 +183,45 @@ final class FixContext {
             node = node.getParent();
         }
         return type.isInstance(node) ? type.cast(node) : null;
+    }
+
+    /**
+     * The node of {@code type} whose trigger range the request touches — what an <b>intention</b> finds,
+     * as {@link #enclosing} is what a fix finds.
+     *
+     * <p>{@code triggered} decides, per candidate, whether the request is close enough: an intention is
+     * almost never offered over a whole node — {@code LambdaCorrections} answers on the header and never
+     * the body, because one offered anywhere inside a forty-line anonymous class is in every popup that
+     * class contains.</p>
+     *
+     * <h3>Outward, then inward, and the second half is not symmetry</h3>
+     *
+     * <p>A request is a RANGE. A caret inside the header lands on a child and the node wanted is an
+     * ancestor, so the walk goes up. But the moment the range is wider than the trigger — a selected line,
+     * a fixture's whole {@code // FIX:} line — the node covering it is the enclosing statement and the
+     * candidate is a CHILD, so walking outward passes it by forever. Every fixture line failed on exactly
+     * this while every caret-driven test passed, twice, in two different families.</p>
+     */
+    <T extends ASTNode> T at(Class<T> type, Predicate<T> triggered) {
+        ASTNode node = NodeFinder.perform(unit, from, Math.max(0, to - from));
+        if (node == null) return null;
+        for (ASTNode walk = node; walk != null; walk = walk.getParent()) {
+            if (type.isInstance(walk) && triggered.test(type.cast(walk))) return type.cast(walk);
+        }
+        List<T> found = new ArrayList<>(1);
+        node.accept(new ASTVisitor() {
+            @Override public void preVisit(ASTNode candidate) {
+                if (found.isEmpty() && type.isInstance(candidate) && triggered.test(type.cast(candidate))) {
+                    found.add(type.cast(candidate));
+                }
+            }
+        });
+        return found.isEmpty() ? null : found.get(0);
+    }
+
+    /** Whether the request touches {@code [start, end]} — the usual body of a {@code triggered}. */
+    boolean touches(int start, int end) {
+        return from <= end && start <= to;
     }
 
     /**
