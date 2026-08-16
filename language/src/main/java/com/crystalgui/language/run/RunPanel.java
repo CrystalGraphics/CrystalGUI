@@ -39,11 +39,15 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
 
     public static final String NOTICE_CLASS = "__run-notice__";
     public static final String EMPTY_CLASS = "__run-empty__";
+    /** The block inside it — see {@link #buildEmptyState} for why the note needs two containers. */
+    public static final String EMPTY_LINES_CLASS = "__run-empty-lines__";
     public static final String EMPTY_HEAD_CLASS = "__run-empty-head__";
     public static final String EMPTY_LINE_CLASS = "__run-empty-line__";
     public static final String INPUT_CLASS = "__run-input__";
     public static final String BODY_CLASS = "__run-body__";
 
+    /** The transcript and its input row, as one column. @see #consoleColumn */
+    public static final String CONSOLE_COLUMN_CLASS = "__run-console-column__";
     public static final String STRIPE_CLASS = "__run-stripe__";
     public static final String LEFT_CLASS = "__run-left__";
     public static final String RUNBAR_CLASS = "__run-bar__";
@@ -129,6 +133,18 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
      * they drift apart.</p>
      */
     private final UIElement body = new UIElement();
+
+    /**
+     * The transcript, its input row, and the empty-state note — one column, which the split moves whole.
+     *
+     * <p><b>The input row belongs to the transcript, not to the panel.</b> It was an internal child of
+     * the panel itself, which is a column spanning everything — so a field for typing into one script's
+     * {@code System.in} was drawn across the rail as well, wider than the thing it answers and lined up
+     * with nothing. A terminal's input sits under its output; this is what makes that true here, and it
+     * is also what the split now carries as its second pane.</p>
+     */
+    private final UIElement consoleColumn = new UIElement();
+
     private final RunRail rail = new RunRail();
     private boolean railShown;
 
@@ -225,11 +241,13 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
         leftColumn.addClass(LEFT_CLASS);
         leftColumn.addChild(rail);
 
-        body.addChild(view.element());
+        consoleColumn.addClass(CONSOLE_COLUMN_CLASS);
+        consoleColumn.addChild(view.element());
+        body.addChild(consoleColumn);
         // THE STRIPE AND THE RUN BAR ARE NOT ATTACHED YET, and neither is anything else that acts on a
         // run -- nothing has run. @see #showControls
         buildEmptyState();
-        body.addChild(emptyNote);
+        consoleColumn.addChild(emptyNote);
         rail.onScriptChosen.connect(script -> {
             selected = script;
             RunConsole showing = console;
@@ -284,6 +302,7 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
      * than hide.</p>
      */
     private final UIElement emptyNote = new UIElement();
+    private final UIElement emptyLines = new UIElement();
     private final UIText emptyHeading = new UIText("To run a script, do one of the following:");
     private final UIText emptyRunLine = new UIText("");
     private final UIText emptyPaletteLine =
@@ -292,17 +311,33 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
     /** What {@link #refreshEmptyState} last wrote, so an unchanged line is not rebuilt every frame. */
     private String emptyRunText = "";
 
+    /**
+     * Two containers, because the block is centred and its lines are not.
+     *
+     * <p>Centring the lines <em>individually</em> — one column with {@code align-items: center} — puts
+     * every line's left edge at a different x, so the two dashes do not line up with each other and the
+     * heading sits indented between them. IntelliJ's note is a left-aligned block that happens to be
+     * centred, which is why its dashes form a column.</p>
+     *
+     * <p>So the outer element centres, and the inner one shrinks to its widest line and left-aligns
+     * inside it. There is no way to say that with one container: {@code align-items} is the cross-axis
+     * rule for a container's children, and a child cannot both be centred and align its own children to
+     * a shared edge.</p>
+     */
     private void buildEmptyState() {
         emptyNote.addClass(EMPTY_CLASS);
         // NOT HIT-TESTABLE, all of it. It is a caption over the console's own surface, and a caption that
         // swallowed a press would make the area behind it dead to a click for no visible reason.
         emptyNote.setHitTest(false);
+        emptyLines.addClass(EMPTY_LINES_CLASS);
+        emptyLines.setHitTest(false);
         emptyHeading.addClass(EMPTY_HEAD_CLASS);
         emptyRunLine.addClass(EMPTY_LINE_CLASS);
         emptyPaletteLine.addClass(EMPTY_LINE_CLASS);
-        emptyNote.addChild(emptyHeading);
-        emptyNote.addChild(emptyRunLine);
-        emptyNote.addChild(emptyPaletteLine);
+        emptyLines.addChild(emptyHeading);
+        emptyLines.addChild(emptyRunLine);
+        emptyLines.addChild(emptyPaletteLine);
+        emptyNote.addChild(emptyLines);
     }
 
     /**
@@ -321,8 +356,42 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
     }
 
     /** Puts the run controls back, once there is a run for them to act on. @see #emptyNote */
+    /**
+     * Detaches a child whether it is public or internal.
+     *
+     * <h4>{@code removeChild} silently refuses an internal child, and almost everything here is one</h4>
+     *
+     * <p>{@code markAsInternal()} <b>recurses</b>, so {@code addInternalChild(body)} marks not only
+     * {@code body} but everything already under it — the transcript, the console column, the note. A
+     * later {@code body.removeChild(note)} then hits {@code if (child.isInternalUI()) return false} and
+     * does nothing, <b>returning a boolean nobody was checking</b>.</p>
+     *
+     * <p>That is exactly how the empty-state note came to be drawn over a live console with a full rail
+     * beside it: every other line of {@code showControls} worked, so the toolbar appeared, the stripe
+     * appeared, the rail appeared, and the one call that was supposed to take the note away was a no-op.
+     * Nothing threw and nothing logged.</p>
+     *
+     * <p>The engine already knows this shape — {@code addChildAtInternal} reparents with
+     * {@code if (!previous.removeChild(child)) previous.removeInternalChild(child)}. This is that pair,
+     * named, so a caller cannot half-remember it.</p>
+     */
+    private static void detach(UIElement parent, UIElement child) {
+        if (child.getParent() != parent) return;
+        if (!parent.removeChild(child)) parent.removeInternalChild(child);
+    }
+
+    /**
+     * Puts the run controls back, once there is a run for them to act on.
+     *
+     * <p><b>Idempotent, and called every frame rather than on a transition.</b> The transition version
+     * had exactly one chance to get it right and no way to notice it had not — which is the other half of
+     * the bug above. Guarding on what is actually attached makes a frame that finds the tree wrong
+     * correct it, and costs three null checks. {@code tickFrame}'s eviction notice has always worked this
+     * way; the empty state simply did not copy it.</p>
+     */
     private void showControls() {
-        body.removeChild(emptyNote);
+        detach(consoleColumn, emptyNote);
+        if (runBar.getParent() != null) return;
         insertInternalChildAt(runBar, 0);
         insertInternalChildAt(separator, 1);
         // LAST IN THE BODY, so it sits on the trailing edge. IntelliJ's console keeps its controls in a
@@ -339,10 +408,11 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
      * panel that kept a Rerun button for a file that no longer exists would be offering to run it.</p>
      */
     private void hideControls() {
-        body.removeChild(stripe);
+        if (emptyNote.getParent() == null) consoleColumn.addChild(emptyNote);
+        if (runBar.getParent() == null) return;
+        detach(body, stripe);
         removeInternalChild(runBar);
         removeInternalChild(separator);
-        body.addChild(emptyNote);
     }
 
     /**
@@ -470,20 +540,21 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
         // ASKED WITHOUT A COPY. `scripts()` snapshots the key set under the lock, and this is a question
         // about emptiness asked once a frame forever. @see RunSessions#isEmpty
         boolean wanted = listing != null && !listing.isEmpty();
+        // THE SPLIT IS BUILT ON THE TRANSITION, because building one is not idempotent -- it reparents
+        // the transcript and takes a remembered divider position with it.
         if (wanted != railShown) {
             railShown = wanted;
-            // THE SAME MOMENT, and deliberately one flag rather than two: "something has run" is the only
-            // question either half asks. The rail appears, the note goes, and the controls that act on a
-            // run arrive together.
-            if (wanted) {
-                showControls();
-                showRail();
-            } else {
-                hideRail();
-                hideControls();
-            }
+            if (wanted) showRail();
+            else hideRail();
         }
-        if (!railShown) refreshEmptyState();
+        // THE CONTROLS ARE ASKED EVERY FRAME, because these ARE idempotent and the transition version had
+        // one chance to be right with no way to notice it was not. @see #showControls
+        if (wanted) {
+            showControls();
+        } else {
+            hideControls();
+            refreshEmptyState();
+        }
         // EVERY FRAME while it is up, because the elapsed time is the liveness signal -- see RunRail for
         // why that stands in for a spinner rather than beside one.
         if (railShown) rail.tick();
@@ -555,7 +626,10 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
         inputShown = wanted;
 
         if (wanted) {
-            addInternalChild(inputField);
+            // UNDER THE TRANSCRIPT, not across the panel. It was an internal child of the panel, which is
+            // a column spanning the rail as well -- so the field for answering one script's read was drawn
+            // over the list of scripts too, wider than the thing it belongs to and aligned with nothing.
+            consoleColumn.addChild(inputField);
             inputField.setText("");
             // POINTER focus: this is not a keyboard gesture and the ring would outline the field on every
             // read a script makes. @see UIElement#requestPointerFocus
@@ -565,7 +639,7 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
             // CgSystemInput, a CrystalGraphics platform type core takes as compileOnly and does not pass
             // on, so naming it from here fails to compile on a supertype nobody meant to depend on.
             boolean hadFocus = inputField.isFocused();
-            removeInternalChild(inputField);
+            detach(consoleColumn, inputField);
             if (hadFocus) view.element().requestPointerFocus();
         }
     }
@@ -670,9 +744,12 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
     private void showRail() {
         if (split != null) return;
         SplitView built = new SplitView();
-        body.removeChild(view.element());
         built.first(leftColumn);
-        built.second(view.element());
+        // REPARENTED BY THE ADD, not by a remove here. `addChildAtInternal` already detaches from the
+        // previous parent and knows to fall back to `removeInternalChild` when the child is internal --
+        // which this one is, since `markAsInternal` recursed over `body`. The explicit `removeChild` that
+        // used to precede this returned false and did nothing; the add is what always moved it.
+        built.second(consoleColumn);
         // A floor in PIXELS rather than a percentage: "at least 150px" stays true at every window size and
         // "at least 15%" does not -- a narrow panel would otherwise clamp the rail to a width that cannot
         // hold a filename.
@@ -692,8 +769,10 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
         SplitView built = split;
         if (built == null) return;
         split = null;
-        body.removeChild(built);
-        body.addChildAt(view.element(), 0);
+        // THE COLUMN COMES BACK FIRST, so the add reparents it out of the pane before the split itself
+        // is detached -- otherwise it would go with the split and there would be no transcript at all.
+        body.addChildAt(consoleColumn, 0);
+        detach(body, built);
     }
 
     /**

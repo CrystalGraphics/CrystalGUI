@@ -836,6 +836,36 @@ runpanel splitview .__split-pane__ {
     flex-direction: column;
 }
 
+/* THE TRANSCRIPT AND ITS INPUT ROW, AS ONE COLUMN -- and the empty-state note over the top of them.
+ *
+ * The input row used to be an internal child of the PANEL, which is a column spanning the rail as well,
+ * so the field for answering one script's read was drawn across the list of scripts too. A terminal's
+ * input sits under its output; this column is what makes that true, and it is what the split carries as
+ * its second pane rather than the bare transcript.
+ *
+ * TWO FILL IDIOMS, because this element lives in a ROW before anything has run and in a COLUMN after --
+ * a split pane is a flex column whatever the split's orientation. Stating both is what the body/splitview
+ * pair above already does for the same reason; guessing one collapses whichever case is wrong, and it
+ * fails as a sibling problem rather than a sizing one. */
+runpanel .__run-console-column__ {
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* In the body, which is a ROW: `width: 0; flex-grow: 1`. */
+runpanel .__run-body__ > .__run-console-column__ {
+    width: 0;
+    flex-grow: 1;
+    height: 100%;
+}
+
+/* In a split pane, which is a COLUMN: `width: 100%; height: 0; flex-grow: 1`. */
+runpanel splitview .__run-console-column__ {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+}
+
 runpanel .__run-console__ {
     /* IN A SPLIT PANE, WHICH IS A FLEX COLUMN -- whatever the split's orientation. So this is the COLUMN
      * fill idiom and not the row one: `width: 100%; height: 0; flex-grow: 1`.
@@ -1060,6 +1090,21 @@ runpanel .__run-empty__ {
     flex-direction: column;
     align-items: center;
     justify-content: center;
+}
+
+/* THE BLOCK IS CENTRED; ITS LINES ARE NOT.
+ *
+ * One container cannot say both. `align-items: center` on the column above centres each line
+ * INDIVIDUALLY, so every line's left edge lands at a different x -- the two dashes stop lining up with
+ * each other and the heading sits indented between them. IntelliJ's note is a left-aligned block that
+ * happens to be centred, which is why its dashes form a column.
+ *
+ * So this one shrinks to its widest line and aligns its children to that edge, and the one above centres
+ * it. No width: a flex item with no size and `flex-shrink: 0` (the default here) takes its content size,
+ * which is exactly the widest line. */
+runpanel .__run-empty-lines__ {
+    flex-direction: column;
+    align-items: flex-start;
     gap-all: 3px;
 }
 
