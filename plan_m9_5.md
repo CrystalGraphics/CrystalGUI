@@ -17,7 +17,8 @@ carrying the output of running scripts, plus the indicator that says which files
 | 9.5.8 | The per-script filter | **done** — folded into 9.5.3's rail; the head's stand-in picker is gone |
 | 9.5.9 | `System.in` | **done** — `ScriptInput`, 7 tests, and an input row that appears only while something is waiting |
 | 9.5.10 | The rail as built | **done** — a lazily-built `SplitView`, elapsed time, the right stripe, and no spinner (and the argument for why) |
-| 9.5.11 | The review pass | **done** — 9 defects, 13 gaps and both sweeps, 167 tests passing |
+| 9.5.11 | The review pass | **done** — 9 defects, 13 gaps and both sweeps |
+| 9.5.12 | What using it found | **done** — see below. The panel at **193 tests**, up from 133 |
 
 Written before any of it existed; the states above are current. **M9.5 is complete** — every exit
 criterion below has been met and the last of them, stop-leaves-its-transcript, confirmed in the harness.
@@ -746,6 +747,33 @@ rather than stored as offsets; the input queue drained only on interruption; the
 rule in both routers; the read-only editor still answering Ctrl+F, Ctrl+A, Ctrl+C and refusing Ctrl+X/V
 through its own `enabledWhen`; the prelude keeping the author's line numbers, so a trace's `Main.java:12`
 is the line on screen.
+
+---
+
+## 9.5.12 What using it found
+
+Everything above was found by reading. This section is what a session of actually *running* scripts
+turned up, and it is a different list — nearly all of it invisible to a reader and obvious within
+seconds to a user. Recorded because the shape repeats: **the review pass caught wrong logic, and the
+harness caught wrong assumptions.**
+
+| What | The fault underneath |
+|---|---|
+| The empty-state note drawn over a live console | `markAsInternal()` **recurses**, and `removeChild` silently refuses an internal child — so `body.removeChild(note)` returned a boolean nobody was checking. Now an `AGENTS.md` invariant |
+| The note's lines individually centred | `align-items: center` centres each *child*; a centred block with left-aligned lines needs two containers, and one cannot say both |
+| The transcript vanishing entirely | A wrapper added around it to host the input row. An isolated layout probe cleared the nesting, so the cause is **unexplained** — the wrapper was removed rather than kept. The input row lives in the split's second pane, which the engine already lays out correctly |
+| A failed run marked with a white disc | `errorDialog.svg` fills with `currentColor` and `greenCheckmark.svg` names its own green — a distinction nothing about the filenames suggests. It also had to become `statusError`, the artwork Problems uses, or one window shows two error marks |
+| Notification text clipped and spilling | `UIText` latches whether it self-sizes on its **first** `recompute()`, which for a card runs before any layout — so `white-space: normal` and `width: 100%` were both silently overridden. `neverSelfSizeWidth()` is the lock |
+| Origins never appearing | The script's ref was built from `className` while frames carry `binaryName`; they agree only in the default package. Plus a lambda's synthetic frame carries no line, so the walk must skip to one that does |
+| Switching rail rows showing an empty band | `scrollToTail` refused to move whenever `top >= max - 0.5f`, which is true of every offset **past** the end. Two earlier fixes asked for a scroll that this declined |
+| A fast script never selecting its row | New runs were detected by sampling `active()` per frame; a script that finishes inside one frame is never sampled. Keyed on the run's **start** instead |
+| An input echo colouring its own timestamp | A row's capture ran from the start of the row, swallowing the stamp — which would have painted an error's timestamp red too |
+
+Features that came out of the same session, none of them in the plan: the rail sorted newest-first with
+selection preserved by item; **Remove** on a rail row, taking that script's output with it; run boundaries
+made findable (a blank line, a `(run N)` ordinal, a capture of their own); `[HH:mm:ss] [Script.java:24]`
+line stamps behind a three-state preference; per-tab scroll memory carrying the follow lock; and the
+input echo drawn apart from output.
 
 ---
 
