@@ -28,8 +28,11 @@ import static org.junit.Assert.assertTrue;
  * wiring, or a rewrite of both. Same reasoning as {@link ExecutionNeedsNoGrammarTest}: a reference in
  * the constant pool is the fact, and the commit that adds it is the moment to fail.</p>
  *
- * <p>The scan is on this package only. {@code .java} is allowed to name {@code .run} — the Java runtime
- * implements the interface — and {@code .engine} holds the band loader both languages share.</p>
+ * <p>The scan is on this package only. {@code .java} and {@code .js} are each allowed to name
+ * {@code .run} — both implement the interface — and {@code .engine} holds the band loader they share.
+ * <b>The forbidden list gained {@code .js} the moment that package existed</b>, which is the test doing
+ * its job in the direction that matters: it is trivially true today, and it is what stops the second
+ * engine being wired in the way the first one was before this test was written.</p>
  */
 public class RunShellIsEngineNeutralTest {
 
@@ -38,6 +41,7 @@ public class RunShellIsEngineNeutralTest {
     /** What the shell must not name. */
     private static final List<String> FORBIDDEN = List.of(
             "com/crystalgui/language/java/",
+            "com/crystalgui/language/js/",
             "com/crystalgui/language/engine/JavaEngine",
             "com/crystalgui/language/engine/JlsLevel",
             "org/eclipse/",

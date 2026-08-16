@@ -14,8 +14,6 @@ import com.crystalgui.text.syntax.Language;
 import com.crystalgui.text.syntax.LanguageRegistry;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
 
 /**
@@ -43,12 +41,12 @@ import java.util.List;
 public final class JavaLanguage {
 
     /**
-     * Where a dev run says the staged bands are.
-     *
-     * <p>A directory laid out one subdirectory per band, which is what {@code EngineSource.directory}
-     * reads and what a real deployment would ship. Absent everywhere else, and absent is fine.</p>
+     * @deprecated moved to {@link EngineHost#ENGINES_DIRECTORY_PROPERTY} — what it names is a
+     *             <b>band</b>, staged with Rhino beside ECJ, not this language's engine. Kept because
+     *             the harness and a dev run name it.
      */
-    public static final String ENGINES_DIRECTORY_PROPERTY = "crystalgui.engines.dir";
+    @Deprecated
+    public static final String ENGINES_DIRECTORY_PROPERTY = EngineHost.ENGINES_DIRECTORY_PROPERTY;
 
     private static JavaEngine engine;
     private static JobScheduler scheduler;
@@ -132,12 +130,9 @@ public final class JavaLanguage {
         return stem.isEmpty() ? "Script" : stem;
     }
 
-    /** The staged-directory source a dev run sets up, or nothing. */
+    /** The staged-directory source a dev run sets up, or nothing. @see EngineHost#defaultSource */
     public static EngineSource defaultSource() {
-        String configured = System.getProperty(ENGINES_DIRECTORY_PROPERTY);
-        if (configured == null || configured.trim().isEmpty()) return EngineSource.NONE;
-        Path root = Path.of(configured.trim());
-        return Files.isDirectory(root) ? EngineSource.directory(root) : EngineSource.NONE;
+        return EngineHost.defaultSource();
     }
 
     /** The shared engine, or null when none opened. */

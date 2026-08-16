@@ -3,6 +3,8 @@ package com.crystalgui.language.engine;
 import java.io.Closeable;
 import java.io.IOException;
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.CodeSource;
 import java.util.ArrayList;
 import java.util.List;
@@ -126,6 +128,27 @@ public final class EngineHost implements Closeable {
     }
 
     // ── The process-wide host ───────────────────────────────────────────────────────────────────
+
+    /**
+     * Where a dev run says the staged bands are.
+     *
+     * <p>A directory laid out one subdirectory per band, which is what {@link EngineSource#directory}
+     * reads and what a real deployment would ship. Absent everywhere else, and absent is fine.</p>
+     *
+     * <p><b>Here rather than on a language</b>, because what it names is a <em>band</em> — ECJ and Rhino
+     * staged side by side in one directory, because they are pinned together and loaded together. It sat
+     * on {@code JavaLanguage} while Java was the only engine, and the second language delegating to the
+     * first for the location of its own jars is the shape that reads as a mistake even when it works.</p>
+     */
+    public static final String ENGINES_DIRECTORY_PROPERTY = "crystalgui.engines.dir";
+
+    /** The staged-directory source a dev run sets up, or nothing. */
+    public static EngineSource defaultSource() {
+        String configured = System.getProperty(ENGINES_DIRECTORY_PROPERTY);
+        if (configured == null || configured.trim().isEmpty()) return EngineSource.NONE;
+        Path root = Path.of(configured.trim());
+        return Files.isDirectory(root) ? EngineSource.directory(root) : EngineSource.NONE;
+    }
 
     private static EngineHost shared;
 

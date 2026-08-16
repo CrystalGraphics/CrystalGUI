@@ -41,6 +41,7 @@ public class ExecutionNeedsNoGrammarTest {
     private static final List<String> EXECUTION_PACKAGES = List.of(
             "com/crystalgui/language/run/",
             "com/crystalgui/language/java/",
+            "com/crystalgui/language/js/",
             "com/crystalgui/language/map/",
             "com/crystalgui/language/engine/");
 

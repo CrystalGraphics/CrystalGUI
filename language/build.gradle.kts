@@ -186,6 +186,16 @@ dependencies {
     // Pinned to band 8's version for the usual reason: an API added later must fail the build now.
     compileOnly("org.eclipse.platform:org.eclipse.text:$eclipseTextBand8")
 
+    // AND RHINO, same rule, same band. The JS adapter names `org.mozilla.javascript.*` for exactly the
+    // reason the ECJ one names JDT: it lives on the far side of the bridge and its whole job is to speak
+    // the engine's API. Pinned to band 8's 1.7.15.1 -- the last release that runs on Java 8, and
+    // therefore the intersection every band shares -- so a method that arrived in 1.9.1 fails this build
+    // instead of failing on a 1.7.10 client.
+    //
+    // The probe is what says which SYNTAX each band accepts; this says which API all of them carry.
+    // Two different questions about the same jars, and neither answers the other.
+    compileOnly("org.mozilla:rhino:$rhinoBand8")
+
     // AND ON THE TEST COMPILE PATH, so a fix's test can write `IProblem.UnusedImport` instead of the
     // literal 268435844. That is not merely nicer to read: a correction is keyed on a problem id, and a
     // test naming the id in digits is a test nobody can check against the table it is testing.
