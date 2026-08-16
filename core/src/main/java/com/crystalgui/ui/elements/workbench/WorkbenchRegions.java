@@ -180,7 +180,7 @@ public final class WorkbenchRegions {
             rowWeights.add(weightOf(DockRegion.SIDEBAR));
         }
         rowParts.add(editor);
-        rowWeights.add(1f - weightOf(DockRegion.SIDEBAR) - weightOf(DockRegion.AUXILIARY));
+        rowWeights.add(editorShareOf(DockRegion.SIDEBAR, DockRegion.AUXILIARY));
         if (isVisible(DockRegion.AUXILIARY)) {
             rowParts.add(hosts.get(DockRegion.AUXILIARY));
             rowWeights.add(weightOf(DockRegion.AUXILIARY));
@@ -191,12 +191,36 @@ public final class WorkbenchRegions {
         List<UIElement> columnParts = new ArrayList<>();
         List<Float> columnWeights = new ArrayList<>();
         columnParts.add(rowContent);
-        columnWeights.add(1f - weightOf(DockRegion.PANEL));
+        columnWeights.add(editorShareOf(DockRegion.PANEL));
         if (isVisible(DockRegion.PANEL)) {
             columnParts.add(hosts.get(DockRegion.PANEL));
             columnWeights.add(weightOf(DockRegion.PANEL));
         }
         rootBox.setOnlyChild(SplitFill.mount(frame, columnParts, columnWeights));
+    }
+
+    /**
+     * What the editor keeps on one axis: the whole of it, less the regions <b>actually on screen</b>.
+     *
+     * <p><b>Only the visible ones, and that word is the entire bug this replaced.</b> Subtracting a
+     * hidden region's share as well left the axis summing to less than one — 0.78 with the auxiliary bar
+     * closed, since its 0.22 was still being taken off — and {@link SplitFill} then normalises, because a
+     * flex row whose weights total below one leaves the remainder blank rather than distributing it. So
+     * every visible pane was silently scaled up by 1/0.78, and the <em>sidebar's rendered width depended
+     * on whether an unrelated region was open</em>: 256px of 1000 with the auxiliary bar shut, 200px with
+     * it open. Opening anything from a stripe button resized the file tree, which is how it was found.</p>
+     *
+     * <p>Counting only what is mounted makes the total exactly one again, so the normalisation is a
+     * no-op in the steady state and a region renders at the share it was given. It also keeps
+     * {@link #captureWeights} honest for free: it reads the live weights straight back into the model, so
+     * the two only agree while the model's scale and the split's are the same one.</p>
+     */
+    private float editorShareOf(DockRegion... regions) {
+        float taken = 0f;
+        for (DockRegion region : regions) {
+            if (isVisible(region)) taken += weightOf(region);
+        }
+        return 1f - taken;
     }
 
     /**
