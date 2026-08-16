@@ -2,11 +2,15 @@ package com.crystalgui.language.java;
 
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.language.engine.EngineBand;
+import com.crystalgui.language.engine.EngineHost;
 import com.crystalgui.language.engine.EngineSource;
 import com.crystalgui.language.engine.JavaEngine;
+import com.crystalgui.language.map.MappingSet;
+import com.crystalgui.language.run.ScriptCache;
+import com.crystalgui.language.run.ScriptRuntimes;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.lang.LanguageServices;
+import com.crystalgui.text.syntax.Language;
 import com.crystalgui.text.syntax.LanguageRegistry;
 
 import java.io.IOException;
@@ -68,17 +72,15 @@ public final class JavaLanguage {
      */
     public static synchronized boolean register(JobScheduler scheduler, EngineSource source) {
         if (engine != null) return true;
-        if (source == null) return false;
 
-        EngineBand band = EngineBand.detect();
+        // THE BAND'S LOADER IS SHARED, not opened here: Rhino ships in the same band as ECJ, and a
+        // JavaScript language registering after this one reaches its adapters through the same host.
+        // Opening a loader per language would be two copies of twenty jars for one process.
+        EngineHost host = EngineHost.shared(source);
+        if (host == null) return false;
         try {
-            if (source.jarsFor(band).isEmpty()) {
-                System.err.println("[crystalgui] no Java engine for band " + band + " from " + source
-                        + "; the editor will colour but not analyse");
-                return false;
-            }
-            engine = JavaEngine.open(band, source);
-        } catch (IOException | RuntimeException unavailable) {
+            engine = JavaEngine.over(host);
+        } catch (RuntimeException unavailable) {
             System.err.println("[crystalgui] the Java engine did not open; the editor will colour but "
                     + "not analyse: " + unavailable);
             return false;
@@ -95,6 +97,14 @@ public final class JavaLanguage {
         LanguageRegistry.Entry current = LanguageRegistry.forFileName("Any.java");
         LanguageRegistry.registerExtensions(current.withServices(
                 (buffer, resource) -> servicesFor(buffer, resource, classpath)), "java");
+
+        // AND THAT JAVA CAN RUN. The Run panel is written against ScriptRuntime and finds its runtimes
+        // here rather than by asking this class -- so a second language contributes the same way and the
+        // panel is not edited. The cache root is the workbench's to choose, which is why this is a
+        // provider and not an instance.
+        ScriptRuntimes.contribute(Language.JAVA, cacheRoot -> new ScriptHost(engine,
+                cacheRoot == null ? ScriptCache.inMemory() : ScriptCache.directory(cacheRoot),
+                MappingSet.IDENTITY, "identity", JavaLanguage.class.getClassLoader(), classpath));
         return true;
     }
 
@@ -140,12 +150,13 @@ public final class JavaLanguage {
     }
 
     /**
-     * Closes the engine.
+     * Forgets the engine, and closes the shared band host.
      *
      * <p>Does not unregister: a document opened afterwards would then get services over a closed engine,
      * which fails at the first analysis rather than at the point the decision was made. Shutdown is the
      * end of the process in every host that has one, and a host that genuinely restarts the stack should
-     * be re-registering rather than half-tearing-down.</p>
+     * be re-registering rather than half-tearing-down. Closing the shared host from here is the same
+     * reasoning: this is process end, and every other language in that band is ending with it.</p>
      */
     public static synchronized void shutdown() {
         if (engine == null) return;
@@ -155,5 +166,6 @@ public final class JavaLanguage {
             // Nothing above this can act on it, and the process is ending.
         }
         engine = null;
+        EngineHost.shutdown();
     }
 }

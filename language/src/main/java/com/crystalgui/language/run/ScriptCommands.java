@@ -17,9 +17,17 @@ import java.util.function.Supplier;
  * <h3>Commands rather than buttons, and it is the same argument the editor's actions already made</h3>
  *
  * <p>A command is one named thing that a keybinding, a menu row, the palette and a toolbar button all
- * point at. Wiring a Run button directly to {@link ScriptHost#run} would give exactly one way to run a
- * script — no accelerator, no palette entry, nothing for a keymap to rebind — and the second affordance
- * would then be a second call site that can drift from the first.</p>
+ * point at. Wiring a Run button directly to {@link ScriptRuntime#runAsync} would give exactly one way to
+ * run a script — no accelerator, no palette entry, nothing for a keymap to rebind — and the second
+ * affordance would then be a second call site that can drift from the first.</p>
+ *
+ * <h3>One Run for every language, and the compilation says which runtime it belongs to</h3>
+ *
+ * <p>There is no {@code java.run} and {@code js.run}: Shift+F10 means "run what is in front of me" in
+ * any language, and a menu row per language would be a menu that grows a row every time a runtime is
+ * added. So the source hands back a {@link ScriptRuntime.Compiled}, which knows the runtime that made
+ * it, and Run asks that runtime. Stop asks all of them, because "stop whatever is running" is the only
+ * meaning Stop has ever had.</p>
  *
  * <h3>Stop is enabled only while something is running, and that is not decoration</h3>
  *
@@ -56,7 +64,7 @@ public final class ScriptCommands {
 
         /** @param script the file to compile, or null for "whatever is current" */
         @Nullable
-        ScriptHost.Compiled compile(@Nullable Resource script);
+        ScriptRuntime.Compiled compile(@Nullable Resource script);
     }
 
     /**
@@ -81,7 +89,7 @@ public final class ScriptCommands {
      *                  itself would be a command that only works in one shell. Null for a host with no
      *                  opinion — a test, a headless runner
      */
-    public static void register(CommandRegistry registry, ScriptHost host,
+    public static void register(CommandRegistry registry, ScriptRuntimes runtimes,
                                 ScriptSource source,
                                 Supplier<Map<String, Object>> bindings,
                                 @Nullable BiConsumer<ScriptRef, Throwable> onFailure,
@@ -92,7 +100,7 @@ public final class ScriptCommands {
         registry.register(Command.of(RUN, "Run Script")
                 .binding("Shift+F10")
                 .run(context -> {
-                    ScriptHost.Compiled compiled = source.compile(subjectOf(context));
+                    ScriptRuntime.Compiled compiled = source.compile(subjectOf(context));
                     if (compiled == null || !compiled.successful()) return;
                     // AFTER the compile check, so a file that did not build does not summon an empty
                     // console -- its errors belong to Problems, which is where both references send them.
@@ -105,7 +113,9 @@ public final class ScriptCommands {
                         // ASYNC, ALWAYS. Running on the UI thread would mean a script with a slow loop
                         // freezes the frame that is meant to offer the Stop button -- so the one
                         // affordance that could rescue the situation is the one that cannot be reached.
-                        host.runAsync(compiled, bindings == null ? Map.of() : bindings.get(), onFailure);
+                        // THE RUNTIME THAT COMPILED IT, not "the" runtime -- there is one per language.
+                        compiled.runtime().runAsync(compiled,
+                                bindings == null ? Map.of() : bindings.get(), onFailure);
                     } catch (Throwable failed) {
                         if (onFailure != null) onFailure.accept(compiled.ref(), failed);
                     }
@@ -113,8 +123,17 @@ public final class ScriptCommands {
 
         registry.register(Command.of(STOP, "Stop Script")
                 .binding("Mod+F2")
-                .enabledWhen(context -> host.isRunning())
-                .run(host::stop));
+                .enabledWhen(context -> runtimes.isAnyRunning())
+                .run(runtimes::stopAll));
+    }
+
+    /** Both commands against a single runtime — a test, or a host with exactly one language. */
+    public static void register(CommandRegistry registry, ScriptRuntime runtime,
+                                ScriptSource source,
+                                Supplier<Map<String, Object>> bindings,
+                                @Nullable BiConsumer<ScriptRef, Throwable> onFailure,
+                                @Nullable Runnable onStarted) {
+        register(registry, ScriptRuntimes.of(runtime), source, bindings, onFailure, onStarted);
     }
 
     /**

@@ -55,10 +55,13 @@ import javax.annotation.Nullable;
  *                            registry and an unregistered id is simply not run
  * @param insertTextFormat    whether {@link #insertText} is literal or a snippet
  * @param deprecated          drawn struck through, like {@link SymbolModifier#DEPRECATED}
- * @param inheritedFromObject whether this is one of the seven {@code java.lang.Object} members every type
- *                            has. They are drawn quieter and sorted last within their kind — they are
- *                            always present, so they are never what you opened the list for, and IntelliJ
- *                            de-emphasises them for exactly that reason
+ * @param inheritedFromObject whether this is a member every value has because the language's universal
+ *                            base supplies it — {@code java.lang.Object}'s seven, JavaScript's
+ *                            {@code Object.prototype}. They are drawn quieter and sorted last within their
+ *                            kind — they are always present, so they are never what you opened the list
+ *                            for, and IntelliJ de-emphasises them for exactly that reason. <b>The engine
+ *                            decides</b>: which type is the root is a fact about a language, so this layer
+ *                            names none of them and {@link #from(SymbolInfo)} answers false
  * @param modifiers           what the symbol is, beyond its kind — {@code static}, {@code abstract}.
  *                            Kind and modifier are <b>orthogonal</b> axes and an icon needs both: a static
  *                            method and an instance method are the same kind and draw differently, so
@@ -113,9 +116,6 @@ public record CompletionItem(String label, SymbolKind kind, @Nullable String det
         modifiers = modifiers == null || modifiers.isEmpty() ? Set.of() : Set.copyOf(modifiers);
     }
 
-    /** The type whose members every other type inherits. */
-    public static final String OBJECT = "java.lang.Object";
-
     /** The simplest item: a word, and what it is. */
     public static CompletionItem of(String label, SymbolKind kind) {
         return builder(label, kind).build();
@@ -127,15 +127,27 @@ public record CompletionItem(String label, SymbolKind kind, @Nullable String det
      * <p><b>The label carries the signature and the filter does not</b>, which is the four-field design
      * doing the one job it exists for: {@code getProperty(String, String)} is shown, {@code getProperty} is
      * typed, and two overloads stop being two identical rows the user cannot choose between.</p>
+     *
+     * <p>{@link #inheritedFromObject} is left false: see {@link #builderFrom} for the engine's half.</p>
      */
     public static CompletionItem from(SymbolInfo symbol) {
+        return builderFrom(symbol).build();
+    }
+
+    /**
+     * {@link #from}, unfinished — for an engine that has one more thing to say about the row.
+     *
+     * <p>Which is normally {@link Builder#inheritedFromObject}: this layer used to decide it by comparing
+     * the container against a Java class name, and that was one language's fact written into the seam
+     * every language shares. The engine knows its own root type; it sets the flag here.</p>
+     */
+    public static Builder builderFrom(SymbolInfo symbol) {
         Builder builder = builder(symbol.name() + symbol.parameterList(), symbol.kind())
                 .detail(symbol.type() == null ? symbol.container() : symbol.type().displayName())
                 .documentation(symbol.documentation())
                 .filterText(symbol.name())
                 .sortText(symbol.name())
                 .modifiers(symbol.modifiers())
-                .inheritedFromObject(OBJECT.equals(symbol.container()))
                 .deprecated(symbol.is(SymbolModifier.DEPRECATED));
         if (symbol.isInvocable()) {
             // ACCEPTING A METHOD WRITES ITS BRACKETS, with the caret inside when there is an argument to
@@ -148,7 +160,7 @@ public record CompletionItem(String label, SymbolKind kind, @Nullable String det
         } else {
             builder.insertText(symbol.name());
         }
-        return builder.build();
+        return builder;
     }
 
     public static Builder builder(String label, SymbolKind kind) {

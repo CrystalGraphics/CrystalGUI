@@ -1,6 +1,6 @@
 package com.crystalgui.language.java;
 
-import com.crystalgui.language.engine.bridge.SourceAnalyzer;
+import com.crystalgui.language.engine.bridge.Analysis;
 import com.crystalgui.text.lang.CodeAction;
 import com.crystalgui.text.lang.CodeActionProvider;
 import com.crystalgui.text.lang.Versioned;
@@ -32,7 +32,7 @@ import java.util.function.Supplier;
 final class JavaCodeActions implements CodeActionProvider,
         com.crystalgui.language.engine.bridge.CodeActionContext {
 
-    private final Supplier<SourceAnalyzer.Analysis> analysis;
+    private final Supplier<Analysis> analysis;
 
     /**
      * The classpath index, for the one fix that needs to know what is out there.
@@ -44,7 +44,7 @@ final class JavaCodeActions implements CodeActionProvider,
      */
     private final TypeIndex types;
 
-    JavaCodeActions(Supplier<SourceAnalyzer.Analysis> analysis, TypeIndex types) {
+    JavaCodeActions(Supplier<Analysis> analysis, TypeIndex types) {
         this.analysis = analysis;
         this.types = types;
     }
@@ -75,7 +75,7 @@ final class JavaCodeActions implements CodeActionProvider,
 
     @Override
     public void actionsAt(Request request, Consumer<Versioned<List<CodeAction>>> answer) {
-        SourceAnalyzer.Analysis current = analysis.get();
+        Analysis current = analysis.get();
         if (current == null) {
             answer.accept(Versioned.of(request.version(), List.of()));
             return;

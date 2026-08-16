@@ -1,5 +1,6 @@
 package com.crystalgui.language.run;
 
+import com.crystalgui.language.java.ScriptHost;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.fs.Resource;

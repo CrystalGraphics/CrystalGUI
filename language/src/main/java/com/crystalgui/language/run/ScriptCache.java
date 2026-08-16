@@ -36,7 +36,7 @@ public interface ScriptCache {
     };
 
     /** An unbounded map. Fine for a session — a script's classes are kilobytes and there are dozens. */
-    static ScriptCache inMemory() {
+    public static ScriptCache inMemory() {
         final Map<ScriptCacheKey, Map<String, byte[]>> entries = new LinkedHashMap<>();
         return new ScriptCache() {
             @Override
@@ -65,7 +65,7 @@ public interface ScriptCache {
      * ever ask for again. What it does mean is that the directory grows, and pruning it is a
      * housekeeping job for whoever owns the world folder rather than a correctness one.</p>
      */
-    static ScriptCache directory(Path root) {
+    public static ScriptCache directory(Path root) {
         return new ScriptCache() {
             @Override
             public Map<String, byte[]> get(ScriptCacheKey key) {

@@ -29,7 +29,7 @@ import static org.junit.Assert.*;
 public class ScriptInputTest {
 
     private static final ScriptRef SCRIPT =
-            new ScriptRef(Resource.of(CgPath.of("workspace", "src/Main.java")), "Main");
+            ScriptRef.ofClass(Resource.of(CgPath.of("workspace", "src/Main.java")), "Main");
 
     private static RunConsole console() {
         return new RunConsole().attach(new TextBuffer());

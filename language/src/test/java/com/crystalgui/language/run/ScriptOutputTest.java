@@ -21,7 +21,7 @@ import static org.junit.Assert.*;
 public class ScriptOutputTest {
 
     private static final ScriptRef SCRIPT =
-            new ScriptRef(Resource.of(Resource.SCHEME_PROJECT, "src/Main.java"),
+            ScriptRef.ofClass(Resource.of(Resource.SCHEME_PROJECT, "src/Main.java"),
                     ScriptOutputTest.class.getName());
 
     @After
@@ -183,8 +183,7 @@ public class ScriptOutputTest {
      */
     @Test
     public void nestingRestoresTheOuterScript() {
-        ScriptRef inner = new ScriptRef(Resource.of(Resource.SCHEME_PROJECT, "src/Other.java"),
-                "other.Other");
+        ScriptRef inner = ScriptRef.ofClass(Resource.of(Resource.SCHEME_PROJECT, "src/Other.java"), "other.Other");
 
         ScriptRef beforeOuter = ScriptOutput.enter(SCRIPT);
         ScriptRef beforeInner = ScriptOutput.enter(inner);
@@ -235,8 +234,7 @@ public class ScriptOutputTest {
      */
     @Test
     public void aLambdaIsStillTheScript() {
-        ScriptRef script = new ScriptRef(Resource.of(Resource.SCHEME_PROJECT, "src/Main.java"),
-                "scripts.Main");
+        ScriptRef.ClassOrigin script = new ScriptRef.ClassOrigin("scripts.Main");
         assertTrue(script.owns("scripts.Main"));
         assertTrue(script.owns("scripts.Main$1"));
         assertTrue(script.owns("scripts.Main$$Lambda$14"));

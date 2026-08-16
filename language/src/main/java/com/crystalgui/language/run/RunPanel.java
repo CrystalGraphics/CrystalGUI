@@ -64,7 +64,7 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
      * Asked to clear, and asked to stop.
      *
      * <p>Signals rather than the panel doing either itself, because it is a view over a
-     * {@link RunConsole} and knows nothing about a {@code ScriptHost}. Clearing could arguably live here;
+     * {@link RunConsole} and knows nothing about a {@code ScriptRuntime}. Clearing could arguably live here;
      * stopping certainly could not, and having the two work differently would be worse than routing both
      * the same way.</p>
      */
@@ -74,7 +74,7 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
      * Asked to stop a script — the one the button was offering, or null for "whatever is running".
      *
      * <p><b>Carries a subject even though nothing needs one yet</b>, and that is the point. {@code
-     * ScriptHost} holds exactly one live run, so today the answer is never ambiguous — but
+     * ScriptRuntime} holds exactly one live run, so today the answer is never ambiguous — but
      * {@link RunSessions} is a map, the rail lists several rows, and {@link RunState#LIVE} exists
      * precisely so that more than one script can be alive at once. The day that lands, a payload-free
      * signal does not fail: it stops the wrong script, silently, and every call site already written
@@ -331,6 +331,16 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
         emptyNote.addChild(emptyLines);
     }
 
+    /** What the empty state says can run — {@code java}, {@code java, javascript}. @see RunPanels */
+    private String runnableLanguages = "";
+
+    /** Names the languages that can run here, for the empty state's caption. Empty for "a script". */
+    public RunPanel setRunnableLanguages(String languages) {
+        this.runnableLanguages = languages == null ? "" : languages.trim();
+        refreshEmptyState();
+        return this;
+    }
+
     /**
      * Keeps the note's accelerator honest.
      *
@@ -340,7 +350,8 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
      * use, and an unbound command simply drops the parenthesis rather than printing an empty one.</p>
      */
     private void refreshEmptyState() {
-        String wanted = "— Open a .java file and press " + describeAction("Run", null, ScriptCommands.RUN);
+        String what = runnableLanguages.isEmpty() ? "a script" : "a " + runnableLanguages + " file";
+        String wanted = "— Open " + what + " and press " + describeAction("Run", null, ScriptCommands.RUN);
         if (wanted.equals(emptyRunText)) return;
         emptyRunText = wanted;
         emptyRunLine.setText(wanted);

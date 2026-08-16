@@ -1,6 +1,6 @@
 package com.crystalgui.language.java;
 
-import com.crystalgui.language.engine.bridge.SourceAnalyzer;
+import com.crystalgui.language.engine.bridge.Analysis;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.Change;
 import com.crystalgui.text.lang.CompletionItem;
@@ -70,14 +70,14 @@ final class JavaCompletionProvider implements CompletionProvider {
     private static final String COMPLETION_PROBE = "CrystalGuiCompletionProbe";
 
     private final TextBuffer buffer;
-    private final Supplier<SourceAnalyzer.Analysis> analysis;
+    private final Supplier<Analysis> analysis;
     private final TypeIndex types;
 
     /**
      * Analyses arbitrary text — used only for the probe parse below, and only when the ordinary analysis
      * could not resolve a receiver.
      */
-    private final java.util.function.Function<String, SourceAnalyzer.Analysis> reanalyse;
+    private final java.util.function.Function<String, Analysis> reanalyse;
 
     /** Set by {@link #openCodeItems} whenever the answer drew on the type index. */
     private boolean typesSampled;
@@ -85,8 +85,8 @@ final class JavaCompletionProvider implements CompletionProvider {
     /** Set by {@link #memberItems} when the receiver did not resolve — see the note there. */
     private boolean unresolvedReceiver;
 
-    JavaCompletionProvider(TextBuffer buffer, Supplier<SourceAnalyzer.Analysis> analysis, TypeIndex types,
-                           java.util.function.Function<String, SourceAnalyzer.Analysis> reanalyse) {
+    JavaCompletionProvider(TextBuffer buffer, Supplier<Analysis> analysis, TypeIndex types,
+                           java.util.function.Function<String, Analysis> reanalyse) {
         this.buffer = buffer;
         this.analysis = analysis;
         this.types = types;
@@ -95,7 +95,7 @@ final class JavaCompletionProvider implements CompletionProvider {
 
     @Override
     public void complete(Request request, Consumer<Versioned<CompletionList>> answer) {
-        SourceAnalyzer.Analysis current = analysis.get();
+        Analysis current = analysis.get();
         if (current == null) {
             answer.accept(Versioned.of(buffer.version(), CompletionList.EMPTY));
             return;
@@ -141,7 +141,7 @@ final class JavaCompletionProvider implements CompletionProvider {
      * through the same path, because {@code resolveAt} lands on the method name and its type is the return
      * type — which is why this needs no expression parser of its own.</p>
      */
-    private List<CompletionItem> memberItems(SourceAnalyzer.Analysis current, int dotOffset, int caret) {
+    private List<CompletionItem> memberItems(Analysis current, int dotOffset, int caret) {
         int nameEnd = dotOffset;
         String text = buffer.toString();
         while (nameEnd > 0 && Character.isWhitespace(text.charAt(nameEnd - 1))) nameEnd--;
@@ -185,7 +185,7 @@ final class JavaCompletionProvider implements CompletionProvider {
         }
         String text = buffer.toString();
         int at = Math.max(0, Math.min(caret, text.length()));
-        SourceAnalyzer.Analysis probed =
+        Analysis probed =
                 reanalyse.apply(text.substring(0, at) + COMPLETION_PROBE + text.substring(at));
         if (probed == null) {
             unresolvedReceiver = true;
@@ -218,7 +218,7 @@ final class JavaCompletionProvider implements CompletionProvider {
      * offering nothing because the list looks authoritative and the error arrives after acceptance. The
      * same rule {@code membersOf} already applies to accessibility.</p>
      */
-    private List<CompletionItem> membersFrom(SourceAnalyzer.Analysis from, SymbolInfo receiver, int caret) {
+    private List<CompletionItem> membersFrom(Analysis from, SymbolInfo receiver, int caret) {
         boolean staticAccess = receiver.kind() != null && isTypeKind(receiver.kind());
         List<CompletionItem> items = new ArrayList<>();
         for (SymbolInfo member : from.membersOf(receiver.type(), caret)) {
@@ -251,7 +251,7 @@ final class JavaCompletionProvider implements CompletionProvider {
     }
 
     /** Locals, parameters, fields, then keywords, then types that would need an import. */
-    private List<CompletionItem> openCodeItems(SourceAnalyzer.Analysis current, Request request) {
+    private List<CompletionItem> openCodeItems(Analysis current, Request request) {
         List<CompletionItem> items = new ArrayList<>();
         for (SymbolInfo symbol : current.symbolsInScope(request.offset())) items.add(itemFor(symbol));
 
@@ -294,8 +294,16 @@ final class JavaCompletionProvider implements CompletionProvider {
      * added to {@link SymbolInfo} reaches every provider rather than the one somebody remembered.</p>
      */
     private static CompletionItem itemFor(SymbolInfo symbol) {
-        return CompletionItem.from(symbol);
+        // THE ONE THING THE SEAM CANNOT KNOW: which type is the language's root. `java.lang.Object` is
+        // Java's answer and lives here, not in core -- JavaScript's is `Object.prototype`, and a shared
+        // constant would have been one language's fact written into every language's seam.
+        return CompletionItem.builderFrom(symbol)
+                .inheritedFromObject(OBJECT.equals(symbol.container()))
+                .build();
     }
+
+    /** The type whose members every other Java type inherits. */
+    private static final String OBJECT = "java.lang.Object";
 
     /**
      * A type that is not imported yet — and the import that accepting it must bring.

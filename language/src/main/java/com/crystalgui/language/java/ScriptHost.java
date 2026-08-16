@@ -1,17 +1,26 @@
-package com.crystalgui.language.run;
+package com.crystalgui.language.java;
 
+import com.crystalgui.fs.Resource;
 import com.crystalgui.language.engine.JavaEngine;
 import com.crystalgui.language.engine.ScriptClassLoader;
 import com.crystalgui.language.engine.bridge.ScriptCompiler;
-import com.crystalgui.language.java.HostClasspath;
-import com.crystalgui.language.java.ScriptPrelude;
 import com.crystalgui.language.map.InheritanceAwareRemapper;
 import com.crystalgui.language.map.MappingSet;
-import com.crystalgui.fs.Resource;
+import com.crystalgui.language.run.ConsoleFilter;
+import com.crystalgui.language.run.JavaStackFrameFilter;
+import com.crystalgui.language.run.RunSessions;
+import com.crystalgui.language.run.RunState;
+import com.crystalgui.language.run.Safepoints;
+import com.crystalgui.language.run.ScriptCache;
+import com.crystalgui.language.run.ScriptCacheKey;
+import com.crystalgui.language.run.ScriptOutput;
+import com.crystalgui.language.run.ScriptRef;
+import com.crystalgui.language.run.ScriptRuntime;
+import com.crystalgui.language.run.ScriptStoppedException;
+import com.crystalgui.text.syntax.Language;
 
 import javax.annotation.Nullable;
 
-import java.io.Closeable;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -24,7 +33,15 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 
 /**
- * Compile always, run explicitly, re-run replaces — the execution service.
+ * Compile always, run explicitly, re-run replaces — the <b>Java</b> execution service.
+ *
+ * <h3>One {@link ScriptRuntime} among what will be several</h3>
+ *
+ * <p>The shell — commands, console, rail, sessions — is written against {@link ScriptRuntime} and never
+ * against this class, which is why this lives beside the rest of the Java engine rather than beside the
+ * panel. What is Java's here is everything below the interface: the prelude that wraps a snippet in a
+ * class, ECJ on the far side of the bridge, the readable→runtime remap, safepoint injection into class
+ * files, a loader per run. A JavaScript runtime shares none of that and the shell will not notice.</p>
  *
  * <h3>The lifecycle, and why it is that one</h3>
  *
@@ -58,10 +75,13 @@ import java.util.function.BiConsumer;
  * would defeat it is the host keeping a reference to a script object; nothing here does, and a caller
  * that stores one has taken the decision knowingly.</p>
  */
-public final class ScriptHost implements Closeable {
+public final class ScriptHost implements ScriptRuntime {
 
     /** The method a prelude-wrapped script exposes. @see ScriptPrelude */
     private static final String ENTRY_POINT = "run";
+
+    /** The extension a Java script is named with; stripped when {@link #compileScript} derives the class. */
+    private static final String EXTENSION = ".java";
 
     private final JavaEngine engine;
     private final ScriptCache cache;
@@ -99,6 +119,7 @@ public final class ScriptHost implements Closeable {
      * transitions and it is the only thing that sees all of them: a caller sees the run it started, and
      * never sees the {@code STOPPED} that another caller's Stop produced.</p>
      */
+    @Override
     public ScriptHost reportTo(RunSessions sessions) {
         this.sessions = sessions;
         return this;
@@ -110,14 +131,35 @@ public final class ScriptHost implements Closeable {
                 ScriptHost.class.getClassLoader(), null);
     }
 
+    @Override
+    public Language language() {
+        return Language.JAVA;
+    }
+
+    /** The JVM frame filter — {@code at Foo.method(Foo.java:12)} becomes a link. */
+    @Override
+    public List<ConsoleFilter> consoleFilters() {
+        return List.of(new JavaStackFrameFilter());
+    }
+
     // ── Compile ─────────────────────────────────────────────────────────────────────────────────
 
     /**
-     * Compiles a script, from the cache when it can.
+     * The seam's compile: a file's name becomes the class name, the way Java itself insists.
      *
-     * <p>Returns the compile output — pre-remap and pre-instrumentation — because that is what the
-     * cache key describes and what a caller inspecting diagnostics wants to see.</p>
+     * <p>{@code Main.java} compiles as {@code Main}, and a bare {@code Main} is accepted too — a scratch
+     * buffer with no path is named by whoever holds it. The stem <b>has to match the type the file
+     * declares</b> or ECJ reports "The public type X must be defined in its own file", a diagnostic about
+     * the compiler's bookkeeping on the author's first line.</p>
      */
+    @Override
+    public Compiled compileScript(String scriptName, String source, Map<String, String> bindingTypes) {
+        String name = scriptName == null || scriptName.isEmpty() ? "Script" : scriptName;
+        String className = name.endsWith(EXTENSION)
+                ? name.substring(0, name.length() - EXTENSION.length()) : name;
+        return compileSource(className.isEmpty() ? "Script" : className, source, bindingTypes);
+    }
+
     /**
      * Compiles a source file, picking its shape.
      *
@@ -131,24 +173,31 @@ public final class ScriptHost implements Closeable {
                 : preludeFor(className, bindingTypes).wrap(source));
     }
 
+    /**
+     * Compiles a wrapped unit, from the cache when it can.
+     *
+     * <p>Returns the compile output — pre-remap and pre-instrumentation — because that is what the
+     * cache key describes and what a caller inspecting diagnostics wants to see.</p>
+     */
     public Compiled compile(ScriptPrelude.Wrapped wrapped) {
         ScriptCacheKey key = ScriptCacheKey.of(wrapped.unitSource(), mappingsId,
                 engine.band().minimumFeatureVersion());
         Map<String, byte[]> cached = cache.get(key);
         if (cached != null) {
-            return new Compiled(wrapped, key, cached, List.of(), true, true);
+            return new Compiled(this, wrapped, key, cached, List.of(), true, true);
         }
         ScriptCompiler.Result result = engine.compiler().compile(
                 wrapped.className(), wrapped.unitSource(), classpath, engine.releaseLevel());
         // ONLY A SUCCESSFUL COMPILE IS CACHED. Caching a failure would serve it back after the author
         // fixed the file, which reads as the editor refusing to notice an edit.
         if (result.successful()) cache.put(key, result.classes());
-        return new Compiled(wrapped, key, result.classes(), result.messages(),
+        return new Compiled(this, wrapped, key, result.classes(), result.messages(),
                 false, result.successful());
     }
 
     /** A compilation, and where it came from. */
-    public static final class Compiled {
+    public static final class Compiled implements ScriptRuntime.Compiled {
+        private final ScriptHost host;
         private final ScriptPrelude.Wrapped wrapped;
         private final ScriptCacheKey key;
         private final Map<String, byte[]> classes;
@@ -157,14 +206,21 @@ public final class ScriptHost implements Closeable {
         private final boolean successful;
         private ScriptRef ref;
 
-        Compiled(ScriptPrelude.Wrapped wrapped, ScriptCacheKey key, Map<String, byte[]> classes,
-                 List<String> messages, boolean fromCache, boolean successful) {
+        Compiled(ScriptHost host, ScriptPrelude.Wrapped wrapped, ScriptCacheKey key,
+                 Map<String, byte[]> classes, List<String> messages, boolean fromCache,
+                 boolean successful) {
+            this.host = host;
             this.wrapped = wrapped;
             this.key = key;
             this.classes = classes;
             this.messages = messages;
             this.fromCache = fromCache;
             this.successful = successful;
+        }
+
+        @Override
+        public ScriptRuntime runtime() {
+            return host;
         }
 
         /**
@@ -180,6 +236,7 @@ public final class ScriptHost implements Closeable {
          * <p>Optional. A host with no console — a test, a dedicated server — leaves it null and nothing
          * routes anywhere. @see ScriptOutput</p>
          */
+        @Override
         public Compiled withSource(Resource file) {
             // BUILT HERE, from the two halves neither side has both of: the caller knows which file the
             // source came from and cannot know what the prelude wrapped it into, while this knows the
@@ -193,10 +250,11 @@ public final class ScriptHost implements Closeable {
             // ref saying `Main`, `ScriptRef.owns` matches nothing, and every line loses the origin that
             // says which of the script's lines printed it. Silent -- the output still arrives, still
             // filters and still stops; only the column naming its source comes back empty.
-            this.ref = file == null ? null : new ScriptRef(file, wrapped.binaryName());
+            this.ref = file == null ? null : ScriptRef.ofClass(file, wrapped.binaryName());
             return this;
         }
 
+        @Override
         public ScriptRef ref() {
             return ref;
         }
@@ -208,6 +266,7 @@ public final class ScriptHost implements Closeable {
          * useful to inspect and is not permission to run: a script whose broken method produced no
          * body would load fine and fail at the first call, which is a worse report of the same error.</p>
          */
+        @Override
         public boolean successful() {
             return successful && !classes.isEmpty();
         }
@@ -216,6 +275,7 @@ public final class ScriptHost implements Closeable {
             return classes;
         }
 
+        @Override
         public List<String> messages() {
             return messages;
         }
@@ -270,9 +330,10 @@ public final class ScriptHost implements Closeable {
      *                  file the moment somebody presses Run on one that does not build while an older
      *                  script is still alive. Null ref for a run with no source attached
      */
-    public Thread runAsync(Compiled compiled, Map<String, Object> bindings,
+    @Override
+    public Thread runAsync(ScriptRuntime.Compiled compiled, Map<String, Object> bindings,
                            @Nullable BiConsumer<ScriptRef, Throwable> onFailure) throws Throwable {
-        Running prepared = prepare(compiled, bindings);
+        Running prepared = prepare(own(compiled), bindings);
         stop();
         running.set(prepared);
 
@@ -295,6 +356,18 @@ public final class ScriptHost implements Closeable {
     }
 
     /** Everything between bytes and an invocable instance. */
+    /**
+     * A compilation this host made — the only kind it can run.
+     *
+     * <p>The seam hands back the general type, and the shell hands it straight back; a compilation from
+     * a different runtime reaching this method is a wiring fault, named as one rather than as a
+     * {@code ClassCastException} deep in {@code prepare}.</p>
+     */
+    private static Compiled own(ScriptRuntime.Compiled compiled) {
+        if (compiled instanceof Compiled) return (Compiled) compiled;
+        throw new IllegalArgumentException("not a Java compilation: " + compiled);
+    }
+
     private Running prepare(Compiled compiled, Map<String, Object> bindings) throws Throwable {
         if (!compiled.successful()) {
             throw new IllegalStateException("cannot run a script that did not compile: "
@@ -389,6 +462,7 @@ public final class ScriptHost implements Closeable {
      *
      * @return whether there was something to stop
      */
+    @Override
     public boolean stop() {
         Running current = running.getAndSet(null);
         if (current == null) return false;
@@ -397,6 +471,7 @@ public final class ScriptHost implements Closeable {
         return true;
     }
 
+    @Override
     public boolean isRunning() {
         Running current = running.get();
         return current != null && (current.thread == null || current.thread.isAlive());

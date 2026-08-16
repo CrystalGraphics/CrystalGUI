@@ -1,5 +1,6 @@
 package com.crystalgui.language.run;
 
+import com.crystalgui.language.java.ScriptHost;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.language.engine.EngineBand;
 import com.crystalgui.language.engine.EngineSource;
