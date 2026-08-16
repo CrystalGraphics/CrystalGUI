@@ -97,7 +97,8 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
         // THE SAME CLASSPATH, handed on rather than re-derived: a signature quoted out of a source
         // archive has to resolve against what this parse resolved against, or the binding keys the two
         // are matched by would not be the same strings. @see AttachedSources
-        return new EcjAnalysis(unit, source, version, AttachedSources.forClasspath(classpath));
+        return new EcjAnalysis(unit, source, version, releaseLevel,
+                AttachedSources.forClasspath(classpath));
     }
 
     /**
@@ -191,10 +192,21 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
         /** Locals and parameters written to after their declaration. @see #collectReassigned */
         private Set<String> reassigned;
 
-        EcjAnalysis(CompilationUnit unit, String source, long version, AttachedSources attached) {
+        /**
+         * The Java level this file is being analysed at.
+         *
+         * <p>Carried so a correction can refuse to write source the target cannot compile. Read from the
+         * REQUEST rather than from the AST: {@code AST.apiLevel()} is the DOM's API generation, which is
+         * how the tree may be <em>inspected</em>, and says nothing about what this file may contain.</p>
+         */
+        private final int releaseLevel;
+
+        EcjAnalysis(CompilationUnit unit, String source, long version, int releaseLevel,
+                    AttachedSources attached) {
             this.unit = unit;
             this.source = source == null ? "" : source;
             this.version = version;
+            this.releaseLevel = releaseLevel;
             this.signatures = new JavaSignatures(unit, this.source, this::captureFor, attached);
             this.reassigned = unit == null ? Set.of() : collectReassigned(unit);
         }
@@ -231,7 +243,7 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
         @Override
         public List<com.crystalgui.text.lang.CodeAction> codeActionsIn(
                 int from, int to, com.crystalgui.language.engine.bridge.CodeActionContext context) {
-            return JavaQuickFixes.in(unit, source, version, from, to, context);
+            return JavaQuickFixes.in(unit, source, version, releaseLevel, from, to, context);
         }
 
         @Override

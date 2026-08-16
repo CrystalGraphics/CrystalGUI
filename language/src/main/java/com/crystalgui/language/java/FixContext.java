@@ -41,14 +41,16 @@ final class FixContext {
     private final String source;
     private final long version;
     private final CodeActionContext host;
+    private final int releaseLevel;
     private final int from;
     private final int to;
 
-    FixContext(CompilationUnit unit, String source, long version, CodeActionContext host,
-               int from, int to) {
+    FixContext(CompilationUnit unit, String source, long version, int releaseLevel,
+               CodeActionContext host, int from, int to) {
         this.unit = unit;
         this.source = source;
         this.version = version;
+        this.releaseLevel = releaseLevel;
         this.host = host == null ? CodeActionContext.NONE : host;
         this.from = from;
         this.to = to;
@@ -60,6 +62,19 @@ final class FixContext {
 
     String source() {
         return source;
+    }
+
+    /**
+     * The Java level this file is analysed at — <b>what a correction may write</b>.
+     *
+     * <p>A fix that emits an arrow {@code switch} into a file compiled at 8 produces a syntax error where
+     * there was working code, which is the worst outcome this layer has. The engine already runs in bands
+     * (8, 11, 17) and the level is part of the analysis request, so this is a fact rather than a guess —
+     * never taken from {@code AST.apiLevel()}, which describes the DOM's API generation and not the
+     * source.</p>
+     */
+    int releaseLevel() {
+        return releaseLevel;
     }
 
     /** Where the actions were asked for — the caret, or a selection. What an intention decides from. */
