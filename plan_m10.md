@@ -710,10 +710,31 @@ two-engine design *is* the performance answer, and JS does not need to be fast b
 it with the same bindings, console and Run button.
 
 **ES6 on JVM 8, specifically:** it is a Rhino-jar limit, not a JVM one, and it is **frozen**. The 1.7.x
-line is the last that runs on Java 8; 1.8+ needs Java 11. So band 8 gets whatever 1.7.15.1 implements —
-`let`/`const`, arrows, templates, most destructuring/spread, `for…of`, `Symbol`, Map/Set, typed arrays,
-Promise; **no `class`, no modules, no `async`**, `?.`/`??` doubtful — and will never get more. Bands 11/17
-(1.9.1) are closer to complete ES2015 and can move up. Two consequences, both built here:
+line is the last that runs on Java 8; 1.8+ needs Java 11. So band 8 gets whatever 1.7.15.1 implements
+and will never get more; bands 11/17 (1.9.1) are closer to complete ES2015 and can move up. From memory,
+and therefore **every "yes" below is a probe item (§15) until step 2 has run** — the probe file is the
+truth, this table is the expectation it is checked against:
+
+| ES2015 feature | 1.7.15.1 (JVM 8) | 1.9.1 (JVM 11/17) |
+|---|---|---|
+| `let` / `const`, block scoping | yes | yes |
+| Arrow functions | yes | yes |
+| Template literals (incl. tagged) | yes | yes |
+| Default / rest params, spread | mostly (rest is the shaky one) | yes |
+| Destructuring (array/object, defaults) | mostly | yes |
+| `for…of`, iterators, `Symbol` | yes | yes |
+| Map/Set/WeakMap/WeakSet, typed arrays | yes | yes |
+| Promise | yes (microtask drain — probe) | yes |
+| Generators (`function*`) | partial | yes |
+| Shorthand/computed properties, getters/setters | yes | yes |
+| Array/String/Object ES2015 methods | most | all |
+| **`class`** | **no** | **no** (measured at M5) |
+| **ES modules `import`/`export`** | **no** | **no** |
+| `async`/`await` | no | no |
+| `?.` / `??` / `**` | no (probably) | probe |
+| Proxy/Reflect, BigInt | partial/uncertain | better |
+
+Two consequences, both built here:
 
 - **A script's syntax ceiling follows the *player's* band, not the author's.** Somebody authoring on Java
   17 can write what band 8 refuses and never see it, because the diagnostics come from the host's own
