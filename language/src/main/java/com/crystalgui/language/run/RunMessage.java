@@ -42,37 +42,11 @@ public record RunMessage(String script, @Nullable String origin, @Nullable Resou
         return file != null && line > 0;
     }
 
-    /**
-     * What {@link RunConsole} folds on — <b>the origin AND the text</b>.
-     *
-     * <h3>This keyed on the origin alone, and that was wrong</h3>
-     *
-     * <p>The argument was that a handler printing {@code tick 1}, {@code tick 2}, {@code tick 3}
-     * produces a different string every time and so would never fold — while being exactly the thing
-     * that has to. The premise is true and the conclusion does not follow: those three lines are not one
-     * message repeating, they are <b>three messages</b>, and folding them into a row that shows only the
-     * newest does not compress the transcript, it <em>deletes</em> two thirds of it.</p>
-     *
-     * <p>It showed the first time a real script ran. {@code RunTest.java} prints its output through a
-     * helper, so every line in the file shared that helper's origin — and thirteen distinct results
-     * collapsed into one row reading {@code ×13}, with twelve of them gone. A console that loses output
-     * is worse than a console that scrolls.</p>
-     *
-     * <p>So the key is the text too, which is Unity's rule ("only the first instance of <em>recurring</em>
-     * messages"). The origin stays in the key as an extra separation: two call sites printing the same
-     * string are two facts, and keeping them apart is strictly more information than Unity offers. The
-     * per-tick flood that motivated the original rule is answered by the ring, which is where a bound
-     * belongs.</p>
-     *
-     * <p>Null when there is nothing safe to fold on. @see #origin</p>
-     */
-    @Nullable
-    String collapseKey() {
-        return origin == null ? null : script + "\u0000" + level + "\u0000" + origin + "\u0000" + text;
-    }
-
-    /** Roughly what this costs the ring, in characters. @see RunConsole */
-    int weight() {
-        return text.length() + (origin == null ? 0 : origin.length()) + script.length();
-    }
+    // COLLAPSING IS GONE, AND SO IS WHAT IT NEEDED. `collapseKey()` folded repeated lines into a `×N`
+    // row and `weight()` sized one for the ring; both went with the ListView, because a text area has
+    // nowhere to put a badge without becoming a list again, and the ring measures the document rather
+    // than guessing at a message's cost. They outlived their only caller by a release -- which is how a
+    // method nobody calls becomes a thing the next person reads and reasons about. The argument for
+    // keying on origin AND text is not lost with them: it is in `plan_m9_5.md` §9.5.4, where a decision
+    // belongs.
 }
