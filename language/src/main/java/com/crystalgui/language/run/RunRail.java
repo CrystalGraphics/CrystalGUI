@@ -172,6 +172,20 @@ public final class RunRail extends UIElement {
         if (tooltip != null) tooltip.setText(describe(session));
     }
 
+    /**
+     * The All row's own words.
+     *
+     * <p>It is not a script, so every answer {@link #describe} can give is wrong about it — and the one
+     * it gave was {@code Never run}, which is the most wrong of them: the row that shows EVERYTHING said
+     * nothing had. Separate rather than a null branch inside {@code describe}, because null there
+     * genuinely does mean "a script this workspace has never run" and both callers need that to stay
+     * true.</p>
+     */
+    private void describeAllRow(UIElement row) {
+        Tooltip tooltip = tooltips.get(row);
+        if (tooltip != null) tooltip.setText("Output from every script");
+    }
+
     private static String describe(@Nullable RunSessions.Session session) {
         if (session == null) return "Never run";
         if (session.state() == RunState.LIVE) {
@@ -225,7 +239,7 @@ public final class RunRail extends UIElement {
                 if (template.querySelector("." + ROW_TIME_CLASS) instanceof UIText time) time.setText("");
                 UIElement glyph = template.querySelector("." + ROW_GLYPH_CLASS);
                 if (glyph != null) swapState(glyph, null);
-                describeInto(template, null);
+                describeAllRow(template);
                 return;
             }
 

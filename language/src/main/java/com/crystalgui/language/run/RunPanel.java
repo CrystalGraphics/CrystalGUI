@@ -9,14 +9,14 @@ import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.SplitView;
 import com.crystalgui.ui.elements.TextField;
-import com.crystalgui.ui.elements.UIText;
-import com.crystalgui.ui.input.keymap.Keymap;
-import com.crystalgui.ui.input.keymap.KeyChord;
 import com.crystalgui.ui.elements.Tooltip;
+import com.crystalgui.ui.elements.UIText;
+import com.crystalgui.ui.input.keymap.KeyChord;
+import com.crystalgui.ui.input.keymap.Keymap;
 
 import javax.annotation.Nullable;
 
-import java.util.List;
+import java.util.function.BooleanSupplier;
 
 /**
  * What the running scripts have printed — a toolbar over a read-only text area.
@@ -34,7 +34,6 @@ import java.util.List;
 public final class RunPanel extends UIElement implements UIFrameTicker {
 
     public static final String NOTICE_CLASS = "__run-notice__";
-    public static final String SPACER_CLASS = "__spacer__";
     public static final String INPUT_CLASS = "__run-input__";
     public static final String BODY_CLASS = "__run-body__";
 
@@ -148,6 +147,9 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
     private final Button rerun = new Button("");
     private final Button toEnd = new Button("");
 
+    /** What the soft-wrap button is currently showing, so an unchanged state writes no class. */
+    private boolean wrapShown;
+
     @Nullable private RunConsole console;
     /**
      * What the rail lists.
@@ -249,12 +251,11 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
         // before. @see RunPanel#ON_CLASS
         wrap.addClass(ACTION_CLASS);
         wrap.addClass(WRAP_CLASS);
-        wrap.onPressed.connect(() -> {
-            boolean on = !view.isSoftWrap();
-            view.setSoftWrap(on);
-            if (on) wrap.addClass(ON_CLASS);
-            else wrap.removeClass(ON_CLASS);
-        });
+        // THE STATE IS NOT WRITTEN HERE. This flips the editor; `refreshActions` reads the editor back
+        // and writes the class. Doing both here looks tighter and is what left Alt+Z -- which reaches
+        // the same setting through the editor's own keymap -- showing an off button over a wrapped
+        // transcript. @see #refreshActions
+        wrap.onPressed.connect(() -> view.setSoftWrap(!view.isSoftWrap()));
 
         toEnd.addClass(ACTION_CLASS);
         toEnd.addClass(END_CLASS);
@@ -397,13 +398,27 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
      * pointer and keeps showing its tooltip — a control explaining what it would have done.</p>
      */
     private void refreshActions() {
-        RunSessions listing = sessions;
-        boolean anythingRunning = listing != null && !listing.active().isEmpty();
-        setStoppable(anythingRunning);
+        // THE SAME QUESTION THE STOP COMMAND ASKS, and that is the whole reason it is a supplier. The
+        // button used to read `sessions.active()` while `script.stop`'s `enabledWhen` read
+        // `host.isRunning()`, and the two disagree exactly when it matters: a stop that has been asked
+        // for but not yet obeyed clears the host's run and leaves the session RUNNING until the thread
+        // actually dies, so the menu row correctly greyed while the button stayed red and did nothing.
+        setStoppable(stoppable.getAsBoolean());
 
         boolean canRerun = selected != null;
         rerun.setEnabled(canRerun);
         rerun.setHitTest(canRerun);
+
+        // PULLED, NEVER PUSHED. Soft wrap is also bound to Alt+Z on the editor itself, so the button's
+        // own handler is not the only thing that can flip it -- a toggle written only where it is
+        // clicked goes stale the first time somebody uses the keyboard, and then reports the opposite
+        // of the truth.
+        boolean wrapping = view.isSoftWrap();
+        if (wrapping != wrapShown) {
+            wrapShown = wrapping;
+            if (wrapping) wrap.addClass(ON_CLASS);
+            else wrap.removeClass(ON_CLASS);
+        }
 
         // The subject is whatever the rail has selected, so both re-word as it moves. Read live rather
         // than written from the selection handler, because the ACCELERATOR can change without the
@@ -474,14 +489,31 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
      */
     private static final String SPLIT_ID = "run.rail-split";
 
+    /**
+     * What decides whether Stop is offered — asked once a frame.
+     *
+     * <p><b>A supplier and not a boolean</b>, because the answer belongs to whatever can actually stop
+     * something. The panel used to derive it from {@link RunSessions}, which is a different question from
+     * the one {@code script.stop}'s own {@code enabledWhen} asks, and two answers to "is anything
+     * running" disagree at the worst moment: a script that has been asked to stop and has not yet obeyed
+     * is gone from the host and still active in the sessions map, so the menu row greyed while the button
+     * stayed lit over a run nothing could stop.</p>
+     */
+    private BooleanSupplier stoppable = () -> false;
+
+    /** @see #stoppable */
+    public RunPanel setStoppableWhen(BooleanSupplier predicate) {
+        this.stoppable = predicate == null ? () -> false : predicate;
+        return this;
+    }
+
     /** Whether Stop is offered — false while nothing runs, so a dead control is never live. */
-    public RunPanel setStoppable(boolean stoppable) {
+    private void setStoppable(boolean stoppable) {
         stop.setEnabled(stoppable);
         // AND OUT OF HIT TESTING, not merely dimmed. `:disabled` and `:hover` tie on specificity, so a
         // disabled control keeps lighting up under the pointer and keeps showing its tooltip -- a dead
         // control explaining what it would have done.
         stop.setHitTest(stoppable);
-        return this;
     }
 
     public boolean acceptsPublicChildren() {

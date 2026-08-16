@@ -7,8 +7,14 @@ import com.crystalgui.text.TextBuffer;
 import javax.annotation.Nullable;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * The transcript — a document a script writes into, bounded, with a level per line.
@@ -107,15 +113,35 @@ public final class RunConsole {
      */
     public static final int DEFAULT_BUDGET_KB = 1024;
 
-    /** Written from any thread, read only by {@link #drain}. */
     /**
      * What makes a span of a line navigable. Copy-on-write because a filter may be registered while the
      * UI thread is walking the chain to paint a row.
      */
-    private final List<ConsoleFilter> filters = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final List<ConsoleFilter> filters = new CopyOnWriteArrayList<>();
 
     private final ConcurrentLinkedQueue<Line> pending = new ConcurrentLinkedQueue<>();
     private volatile boolean clearRequested;
+
+    /**
+     * What {@link #pending} is holding, so the queue can be bounded without walking it.
+     *
+     * <h4>The ring did not cover this, and the gap was invisible</h4>
+     *
+     * <p>{@link #drain} is the only thing that trims, and it is called once a frame <b>by the panel</b> —
+     * so a panel that is closed is a panel that is detached, its ticker unregisters, and nothing drains
+     * at all. A script printing every tick then grew this queue without limit for as long as the console
+     * stayed shut, which is precisely when nobody is watching for it. "The transcript is bounded" was
+     * true of everything the reader could see and false of everything else.</p>
+     *
+     * <p>Approximate under concurrent appends, and that is fine: a bound trimmed a few lines early or
+     * late is still a bound. {@code ConcurrentLinkedQueue} tolerates a producer polling, which is what
+     * makes this safe to do from the printing thread rather than deferring it to a drain that may never
+     * come.</p>
+     */
+    private final AtomicInteger pendingChars = new AtomicInteger();
+
+    /** Lines dropped from {@link #pending} before they were ever shown, merged into {@link #dropped}. */
+    private final AtomicLong pendingDropped = new AtomicLong();
 
     /**
      * <b>The whole transcript</b>, in arrival order — the truth the document is derived from, and what
@@ -134,7 +160,7 @@ public final class RunConsole {
     private int allChars;
 
     /** Distinct script names in arrival order — what the filter picker offers. @see #scripts() */
-    private final java.util.LinkedHashSet<String> scriptsSeen = new java.util.LinkedHashSet<>();
+    private final LinkedHashSet<String> scriptsSeen = new LinkedHashSet<>();
 
     /** The script whose output is shown, or null for everything. Applied in {@link #drain}. */
     @Nullable private String filter;
@@ -143,7 +169,7 @@ public final class RunConsole {
     private volatile boolean filterRequested;
 
     @Nullable private TextBuffer buffer;
-    private int budgetChars = DEFAULT_BUDGET_KB * 1024;
+    private volatile int budgetChars = DEFAULT_BUDGET_KB * 1024;
     private long dropped;
 
     // ── Input: a console reads as well as writes ─────────────────────────────────────────────────
@@ -156,8 +182,8 @@ public final class RunConsole {
      * the instant between {@code awaitingInput} going true and the reader actually blocking would be
      * dropped — a race that costs the user their keystroke and looks like the field being ignored.</p>
      */
-    private final java.util.concurrent.ArrayBlockingQueue<String> input =
-            new java.util.concurrent.ArrayBlockingQueue<>(1);
+    private final ArrayBlockingQueue<String> input =
+            new ArrayBlockingQueue<>(1);
 
     private volatile boolean awaitingInput;
     @Nullable private volatile String awaitingScript;
@@ -220,9 +246,42 @@ public final class RunConsole {
     /** Enqueues one line. Safe from a script's thread, the game's, or anywhere else. */
     public void append(RunMessage message) {
         if (message == null) return;
-        pending.add(new Line(message.text(), message.level(), message.script(),
+        enqueue(new Line(message.text(), message.level(), message.script(),
                 message.file(), message.line(), false));
+    }
+
+    /** The one way anything reaches {@link #pending}, so the bound cannot be bypassed. */
+    private void enqueue(Line line) {
+        pending.add(line);
+        pendingChars.addAndGet(charsOf(line));
+        boundPending();
         onDidChange.emit();
+    }
+
+    /**
+     * Drops the oldest <em>queued</em> lines when the queue outgrows the budget.
+     *
+     * <p>The same bound as {@link #trimToBudget}, applied at the other end of the pipe — because between
+     * the two there is a queue nothing trims, and it is unbounded exactly while the panel is closed.
+     * Counted into {@link #pendingDropped} rather than {@link #dropped} directly: that field belongs to
+     * the UI thread, and this runs on whichever thread printed.</p>
+     */
+    private void boundPending() {
+        while (pendingChars.get() > budgetChars) {
+            Line oldest = pending.poll();
+            if (oldest == null) {
+                // Everything queued has been drained since the check above. Nothing to correct but the
+                // counter, which a concurrent drain has already taken the characters off.
+                return;
+            }
+            pendingChars.addAndGet(-charsOf(oldest));
+            pendingDropped.incrementAndGet();
+        }
+    }
+
+    /** What one line costs the ring — its text and the newline the document will give it. */
+    private static int charsOf(Line line) {
+        return line.text().length() + 1;
     }
 
     /**
@@ -235,8 +294,7 @@ public final class RunConsole {
      */
     public void startRun(String label) {
         String text = label == null ? "" : label;
-        pending.add(new Line(text, RunLevel.OUT, text, null, 0, true));
-        onDidChange.emit();
+        enqueue(new Line(text, RunLevel.OUT, text, null, 0, true));
     }
 
     /**
@@ -280,6 +338,10 @@ public final class RunConsole {
         if (target == null) return false;
 
         boolean changed = false;
+        // BEFORE THE CLEAR, so a clear zeroes these along with everything else it forgets. Not counted
+        // as a document change: nothing was written, something was lost -- the notice reads `dropped()`
+        // on its own. @see #boundPending
+        dropped += pendingDropped.getAndSet(0);
         if (clearRequested) {
             clearRequested = false;
             if (!all.isEmpty() || target.length() > 0) {
@@ -308,8 +370,9 @@ public final class RunConsole {
         // from a loop can be thousands.
         StringBuilder incoming = null;
         for (Line line = pending.poll(); line != null; line = pending.poll()) {
+            pendingChars.addAndGet(-charsOf(line));
             all.add(line);
-            allChars += line.text().length() + 1;
+            allChars += charsOf(line);
             if (line.script() != null && !line.script().isEmpty()) scriptsSeen.add(line.script());
             if (!passes(line)) continue;
             if (incoming == null) incoming = new StringBuilder();
@@ -392,7 +455,7 @@ public final class RunConsole {
      * <p>Queued like {@link #clear}, applied in {@link #drain} — see there for why.</p>
      */
     public RunConsole setFilter(@Nullable String script) {
-        if (java.util.Objects.equals(filterRequested ? requestedFilter : filter, script)) return this;
+        if (Objects.equals(filterRequested ? requestedFilter : filter, script)) return this;
         requestedFilter = script;
         filterRequested = true;
         onDidChange.emit();

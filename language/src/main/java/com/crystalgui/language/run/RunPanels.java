@@ -48,6 +48,13 @@ public final class RunPanels {
     public static RunPanel install(Workbench workbench, RunConsole console, RunSessions sessions,
                                    @Nullable ScriptHost host) {
         RunPanel panel = new RunPanel().bindTo(console).bindSessions(sessions);
+        // ONE SOURCE FOR "IS ANYTHING RUNNING", and it is the host — the same object `script.stop`'s own
+        // `enabledWhen` asks. The panel used to answer this from RunSessions instead, which is a
+        // different question: a stop that has been asked for and not yet obeyed leaves the host with
+        // nothing to stop while the session stays RUNNING until the thread dies, so the menu row greyed
+        // and the button stayed red over a run that was already gone. A console filled by somebody else
+        // has no host and therefore nothing this panel could stop.
+        panel.setStoppableWhen(host == null ? () -> false : host::isRunning);
 
         // BESIDE PROBLEMS, and for the reason Workbench gives for its own anchors: closing a panel and
         // reopening it from the activity bar should land it back where it was rather than somewhere
