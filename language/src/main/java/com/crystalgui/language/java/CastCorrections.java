@@ -93,7 +93,7 @@ final class CastCorrections {
             if (!actual.isCastCompatible(expected)) return;
 
             ImportPlan imports = context.importPlan();
-            String written = writtenName(expected, imports, expression);
+            String written = TypeNames.writtenName(expected, imports, expression);
             if (written == null) return;
 
             ASTRewrite rewrite = context.rewrite();
@@ -159,76 +159,6 @@ final class CastCorrections {
                 || expression instanceof LambdaExpression;
     }
 
-    /**
-     * The type as this file may write it, or null when it cannot be written at all.
-     *
-     * <p>Built up rather than taken from {@code getQualifiedName()}, which renders a parameterized type as
-     * {@code java.util.List<java.lang.String>} — every name in it fully qualified, which compiles and is
-     * nobody's idea of a cast. Each part goes through {@link ImportPlan} separately so the result is what
-     * the file would have written by hand.</p>
-     *
-     * <p><b>Null for anything not denotable.</b> A capture, a wildcard or an intersection has no source
-     * form to cast to; offering one would produce a fix that cannot compile, which is the failure the
-     * compatibility guard above exists to avoid in the other direction.</p>
-     */
-    private static String writtenName(ITypeBinding type, ImportPlan imports, ASTNode at) {
-        if (type.isPrimitive()) return type.getName();
-        if (type.isArray()) {
-            String component = writtenName(type.getComponentType(), imports, at);
-            return component == null ? null : component + "[]";
-        }
-        if (type.isCapture() || type.isWildcardType() || type.isIntersectionType()
-                || type.isAnonymous() || type.isNullType()) {
-            return null;
-        }
-        // A TYPE VARIABLE IS NOT A TARGET, and the corpus is what said so: three files offered
-        // "Cast argument to 'E'" and each came back with one MORE error than it started with. A cast to a
-        // type variable is erased, so it proves nothing at runtime and only silences the compiler — and it
-        // is writable at all only where that variable is in scope, which a static method or a different
-        // type's parameter is not. What failed in these cases is inference, and a cast does not repair
-        // inference.
-        if (type.isTypeVariable()) return null;
-        if (type.isParameterizedType()) {
-            String raw = imports.nameFor(type.getErasure().getQualifiedName());
-            StringBuilder built = new StringBuilder(raw).append('<');
-            ITypeBinding[] arguments = type.getTypeArguments();
-            for (int i = 0; i < arguments.length; i++) {
-                String argument = writtenName(arguments[i], imports, at);
-                if (argument == null) return null;
-                if (i > 0) built.append(", ");
-                built.append(argument);
-            }
-            return built.append('>').toString();
-        }
-        if (inScopeUnqualified(type, at)) return type.getName();
-        String qualified = type.getQualifiedName();
-        return qualified.isEmpty() ? null : imports.nameFor(qualified);
-    }
-
-    /**
-     * Whether a NESTED type's simple name resolves where the cast is being written.
-     *
-     * <p>{@link ImportPlan} shortens by package, which is the right rule for a type somewhere else and no
-     * rule at all for one declared in this file: {@code Script.Dog} has no package to strip, so it came out
-     * qualified — correct, compiling, and not what anyone writing by hand would put. The scope that makes
-     * the short form legal is lexical, so it is answered lexically: the simple name resolves when the cast
-     * sits inside the type that declares it, or inside the type itself.</p>
-     *
-     * <p>A sibling top-level class in the same file is deliberately <em>not</em> in that scope and keeps the
-     * qualified form, which is what makes this a check rather than an assumption that a file has one type.</p>
-     */
-    private static boolean inScopeUnqualified(ITypeBinding type, ASTNode at) {
-        ITypeBinding declaring = type.getDeclaringClass();
-        if (declaring == null) return false;
-        for (ASTNode walk = at; walk != null; walk = walk.getParent()) {
-            if (!(walk instanceof AbstractTypeDeclaration)) continue;
-            ITypeBinding enclosing = ((AbstractTypeDeclaration) walk).resolveBinding();
-            if (enclosing != null && (enclosing.isEqualTo(declaring) || enclosing.isEqualTo(type))) {
-                return true;
-            }
-        }
-        return false;
-    }
     // ── The argument shape, which is a different problem entirely ───────────────────────────────
 
     /**
@@ -279,7 +209,7 @@ final class CastCorrections {
                 if (!actual.isCastCompatible(wanted[i])) continue;
 
                 ImportPlan imports = context.importPlan();
-                String written = writtenName(wanted[i], imports, argument);
+                String written = TypeNames.writtenName(wanted[i], imports, argument);
                 if (written == null) continue;
                 ChangeSet edit = castInPlace(context, imports, argument, written);
                 if (edit == null) continue;
@@ -421,7 +351,7 @@ final class CastCorrections {
             if (actual.isCastCompatible(declared)) return;
 
             ImportPlan imports = context.importPlan();
-            String written = writtenName(actual, imports, expression);
+            String written = TypeNames.writtenName(actual, imports, expression);
             if (written == null) return;
 
             ASTRewrite rewrite = context.rewrite();
