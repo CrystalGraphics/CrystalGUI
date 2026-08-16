@@ -51,6 +51,32 @@ public class DeadCodeTest extends FixFixture {
         assertResolves(source, "int unreachable", DeadCodeCorrections.REMOVE_BRANCH, IProblem.DeadCode);
     }
 
+    /**
+     * <b>A branch with no braces, which is where this quietly did nothing.</b>
+     *
+     * <p>ECJ's span for {@code if (false) doThing();} covers the <em>expression</em> and stops before the
+     * semicolon, so the node covering it exactly is the {@code MethodInvocation} — whose parent is the
+     * {@code ExpressionStatement}, not the {@code if}. The correction asks what the dead node's parent is,
+     * saw the wrong one, and declined. Every braced branch worked, because there the span is the
+     * {@code Block} and a block is already a statement, so the whole suite passed over it.</p>
+     */
+    @Test
+    public void aBracelessBranchIsFixedToo() {
+        String source = """
+                public class Script {
+                    void go() {
+                        if (false) System.out.println("never");
+                    }
+                }
+                """;
+        assertFix(source, "System.out.println(\"never\")", DeadCodeCorrections.REMOVE_BRANCH, """
+                public class Script {
+                    void go() {
+                    }
+                }
+                """);
+    }
+
     /** A dead {@code else} loses the else clause and leaves the {@code then} exactly where it was. */
     @Test
     public void aDeadElseLosesOnlyTheElse() {

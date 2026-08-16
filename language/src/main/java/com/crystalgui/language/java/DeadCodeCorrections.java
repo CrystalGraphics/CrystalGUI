@@ -58,6 +58,49 @@ final class DeadCodeCorrections {
         return List.of(new SimplifyConstantCondition());
     }
 
+    /**
+     * Collapses an {@code if} whose condition is known to be {@code value} — the one definition of which
+     * branch survives, shared by everything that can prove a condition constant.
+     *
+     * <p>Two callers reach this from opposite ends and must not answer differently: dead code knows which
+     * branch <em>cannot run</em>, and a redundant null check knows what the condition <em>evaluates to</em>.
+     * The same three shapes fall out either way — an always-true {@code if} keeps its {@code then} and
+     * drops any {@code else}; an always-false one becomes its {@code else}, or goes entirely when there is
+     * none.</p>
+     *
+     * <p><b>Nothing lifts a block's contents into the enclosing one.</b> A block is a statement, so it goes
+     * where the {@code if} was and keeps its own scope; unwrapping it is IntelliJ's separate offer and can
+     * collide with a name already declared outside.</p>
+     */
+    static void collapseIf(FixContext context, IfStatement statement, boolean value,
+                           String id, List<CodeAction> out) {
+        ASTRewrite rewrite = context.rewrite();
+        String title;
+        if (value) {
+            Statement dead = statement.getElseStatement();
+            if (dead != null) {
+                rewrite.remove(dead, null);
+                title = "Remove unreachable 'else'";
+            } else {
+                // Nothing is unreachable — the test simply always passes, so the `if` itself is the noise.
+                rewrite.replace(statement, rewrite.createMoveTarget(statement.getThenStatement()), null);
+                title = "Remove redundant condition";
+            }
+        } else {
+            Statement survivor = statement.getElseStatement();
+            if (survivor == null) {
+                rewrite.remove(statement, null);
+                title = "Remove unreachable 'if'";
+            } else {
+                rewrite.replace(statement, rewrite.createMoveTarget(survivor), null);
+                title = "Replace 'if' with its 'else'";
+            }
+        }
+        ChangeSet edit = context.changesFrom(rewrite);
+        if (edit == null) return;
+        out.add(context.preferredFix(id, title, edit));
+    }
+
     private static final class SimplifyConstantCondition implements Correction {
 
         @Override public String id() {
@@ -73,6 +116,19 @@ final class DeadCodeCorrections {
         @Override public void contribute(FixContext context, IProblem problem, List<CodeAction> out) {
             ASTNode dead = context.enclosing(problem, ASTNode.class);
             if (dead == null) return;
+            // A BRACELESS BRANCH REPORTS THE EXPRESSION, NOT THE STATEMENT. For `if (c) doThing();` ECJ's
+            // span stops before the semicolon, so the node covering it exactly is the MethodInvocation and
+            // its parent is the ExpressionStatement rather than the `if` -- and the fix declined, silently,
+            // for every branch somebody had not wrapped in braces. A braced branch works because the span
+            // is the Block, which is already a statement.
+            //
+            // Climbing only while the parent STARTS AT THE SAME OFFSET is what keeps this from walking out
+            // of a block: a statement that is dead for another reason (the one after a `return`) is not the
+            // head of its enclosing block, so the walk stops rather than blaming an outer `if`.
+            while (!(dead instanceof Statement) && dead.getParent() != null
+                    && dead.getParent().getStartPosition() == dead.getStartPosition()) {
+                dead = dead.getParent();
+            }
             StructuralPropertyDescriptor slot = dead.getLocationInParent();
             ASTNode parent = dead.getParent();
 
@@ -91,26 +147,10 @@ final class DeadCodeCorrections {
             }
 
             if (!(parent instanceof IfStatement)) return;
-            IfStatement statement = (IfStatement) parent;
-            ASTRewrite rewrite = context.rewrite();
-            String title;
-            if (slot == IfStatement.ELSE_STATEMENT_PROPERTY) {
-                // The condition is always true: the else can never run, and the then stays where it is.
-                rewrite.remove(dead, null);
-                title = "Remove unreachable 'else'";
-            } else {
-                Statement survivor = statement.getElseStatement();
-                if (survivor == null) {
-                    rewrite.remove(statement, null);
-                    title = "Remove unreachable 'if'";
-                } else {
-                    rewrite.replace(statement, rewrite.createMoveTarget(survivor), null);
-                    title = "Replace 'if' with its 'else'";
-                }
-            }
-            ChangeSet edit = context.changesFrom(rewrite);
-            if (edit == null) return;
-            out.add(context.preferredFix(REMOVE_BRANCH, title, edit));
+            // Which branch is dead IS what the condition evaluates to: a dead `else` means it is always
+            // true, a dead `then` means always false.
+            collapseIf(context, (IfStatement) parent,
+                    slot == IfStatement.ELSE_STATEMENT_PROPERTY, REMOVE_BRANCH, out);
         }
 
         /** The branch's own source, quoted and elided — a title should name what it will leave behind. */
