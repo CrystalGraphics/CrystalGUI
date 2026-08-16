@@ -7,8 +7,10 @@ import com.crystalgui.text.TextBuffer;
 import javax.annotation.Nullable;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -63,15 +65,22 @@ public final class RunConsole {
         @Nullable private final Resource file;
         private final int line;
         private final boolean divider;
+        private final boolean opening;
 
         Line(String text, RunLevel level, String script, @Nullable Resource file, int line,
              boolean divider) {
+            this(text, level, script, file, line, divider, false);
+        }
+
+        Line(String text, RunLevel level, String script, @Nullable Resource file, int line,
+             boolean divider, boolean opening) {
             this.text = text;
             this.level = level;
             this.script = script;
             this.file = file;
             this.line = line;
             this.divider = divider;
+            this.opening = opening;
         }
 
         public String text() {
@@ -98,6 +107,18 @@ public final class RunConsole {
         /** A run boundary rather than something a script printed. */
         public boolean isDivider() {
             return divider;
+        }
+
+        /**
+         * The boundary that <b>opens</b> a run, as opposed to the one that closes it.
+         *
+         * <p>They are drawn differently on purpose. The opening line is a heading — it tells you where to
+         * start reading — while the closing one is a footnote about a run you have already read. Giving
+         * both the same faded grey is what made two runs of one script hard to tell apart: the seam was
+         * there and looked like every other quiet line around it.</p>
+         */
+        public boolean isRunStart() {
+            return opening;
         }
 
         /** Whether a click on this line has somewhere to go. */
@@ -293,9 +314,26 @@ public final class RunConsole {
      * one. Clearing is a button; it is not the price of running again.</p>
      */
     public void startRun(String label) {
-        String text = label == null ? "" : label;
-        enqueue(new Line(text, RunLevel.OUT, text, null, 0, true));
+        String name = label == null ? "" : label;
+        // JUST THE NAME. The break above it and the ordinal after it are both decided in `drain`, which
+        // is the only place that knows what the transcript already holds -- and the only thread allowed
+        // to ask. This one is called from whichever thread the run changed state on.
+        enqueue(new Line(name, RunLevel.OUT, name, null, 0, true, true));
     }
+
+    /**
+     * How many times each script has been started since the last clear — what a header's ordinal counts.
+     *
+     * <p>Kept here rather than derived from {@link #all}, for the reason {@link #scripts()} is kept: the
+     * ring evicts, and a count derived from surviving lines would <b>fall</b> as old runs aged out. "Run
+     * 2" turning back into "run 1" is worse than no ordinal at all.</p>
+     *
+     * <p><b>Touched only by {@link #drain}</b>, which is what makes a plain map safe here — {@code
+     * startRun} is called from whichever thread a run changed state on, and this is reset from the frame.
+     * A clear is queued as well, so numbering at announce time would also count runs the clear was about
+     * to forget.</p>
+     */
+    private final Map<String, Integer> runs = new HashMap<>();
 
     /**
      * Closes a run — the boundary that says the output above it is finished.
@@ -359,6 +397,7 @@ public final class RunConsole {
         all.clear();
         shown.clear();
         scriptsSeen.clear();
+        runs.clear();
         allChars = 0;
         dropped = 0;
         if (buffer != null) buffer.load("");
@@ -386,6 +425,7 @@ public final class RunConsole {
                 all.clear();
                 shown.clear();
                 scriptsSeen.clear();
+                runs.clear();
                 allChars = 0;
                 dropped = 0;
                 changed = true;
@@ -399,6 +439,7 @@ public final class RunConsole {
                 final String name = polled;
                 all.removeIf(line -> name.equals(line.script()));
                 scriptsSeen.remove(name);
+                runs.remove(name);
                 // AND THE FILTER GOES WITH IT. A console narrowed to a script that no longer exists shows
                 // an empty document with no row selected to explain why -- which reads as the transcript
                 // having been cleared rather than as the filter outliving its subject.
@@ -425,9 +466,38 @@ public final class RunConsole {
         // ONE INSERT FOR THE WHOLE BURST, not one per line. Twenty lines a second is twenty edits a
         // second otherwise, each of which invalidates the editor's measurement caches -- and a burst
         // from a loop can be thousands.
+        // THE BREAK BEFORE A RUN IS DECIDED HERE, not when the run was announced.
+        //
+        // A blank line is what makes the seam between two runs of one script findable without reading —
+        // vertical space is what every terminal and log viewer uses for "a new section", and it needs no
+        // glyph anybody's font might lack. But whether there is anything to be separated FROM is a
+        // question only this method can answer: a clear is queued too, so a run started right after one
+        // would otherwise open with a blank row above the top of an empty console.
+        List<Line> batch = null;
+        for (Line polled = pending.poll(); polled != null; polled = pending.poll()) {
+            pendingChars.addAndGet(-charsOf(polled));
+            if (batch == null) batch = new ArrayList<>();
+            Line line = polled;
+            if (line.isRunStart()) {
+                if (!(all.isEmpty() && batch.isEmpty())) {
+                    batch.add(new Line("", line.level(), line.script(), null, 0, true, false));
+                }
+                // AND THE ORDINAL IS NUMBERED HERE TOO, for two reasons that agree. A clear is queued, so
+                // a count incremented when the run was announced would still be counting runs the clear
+                // was about to forget -- "Loud.java (run 5)" as the first line of a console somebody had
+                // just emptied. And `startRun` is called from the script's own thread while this map is
+                // reset from the frame, which is a plain HashMap being written from two threads.
+                int ordinal = runs.merge(line.script(), 1, Integer::sum);
+                if (ordinal > 1) {
+                    line = new Line(line.script() + " (run " + ordinal + ")",
+                            line.level(), line.script(), null, 0, true, true);
+                }
+            }
+            batch.add(line);
+        }
+
         StringBuilder incoming = null;
-        for (Line line = pending.poll(); line != null; line = pending.poll()) {
-            pendingChars.addAndGet(-charsOf(line));
+        for (Line line : batch == null ? List.<Line>of() : batch) {
             all.add(line);
             allChars += charsOf(line);
             if (line.script() != null && !line.script().isEmpty()) scriptsSeen.add(line.script());

@@ -62,6 +62,17 @@ public final class RunConsoleView {
     public static final String LINK_CAPTURE = "link";
 
     /**
+     * The capture a run's opening line is painted with.
+     *
+     * <p>Its own name rather than one of §10.1's, and scoped to the console in the sheet like
+     * {@link #LINK_CAPTURE} is, because no colour scheme has an opinion about a run boundary — it is a
+     * console affordance rather than a category of code. A rule must be added in the same edit as the
+     * name: a capture with none is not an error, it simply takes the surface's own foreground, which
+     * looks exactly like the boundary not being marked at all.</p>
+     */
+    public static final String RUN_START_CAPTURE = "run.start";
+
+    /**
      * On the console while the pointer is over a navigable span — what turns the cursor into a pointer.
      *
      * <p>A class rather than a {@code cursor} written from Java, for two reasons that agree. The house
@@ -443,6 +454,10 @@ public final class RunConsoleView {
         @Nullable
         private String captureFor(@Nullable RunConsole.Line line) {
             if (line == null) return null;
+            // A HEADING AND A FOOTNOTE, not two identical grey lines. The line that OPENS a run tells you
+            // where to start reading and is coloured to be found while scrolling; the one that closes it
+            // is a remark about a run already read, and stays quiet. @see RunConsole.Line#isRunStart
+            if (line.isRunStart()) return RUN_START_CAPTURE;
             if (line.isDivider()) return "comment";
             switch (line.level()) {
                 case ERROR: return "diagnostic.error";
