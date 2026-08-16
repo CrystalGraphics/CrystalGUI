@@ -292,7 +292,11 @@ public final class ScriptOutput {
         private void emit(ScriptRef script, ByteArrayOutputStream buffer) {
             String text = new String(buffer.toByteArray(), StandardCharsets.UTF_8);
             buffer.reset();
-            target.append(message(script, level, text));
+            // HERE, AT THE LINE BOUNDARY, and not in the console. A sequence can be split across two
+            // write() calls, so anything scanning the byte stream would have to buffer across them; by
+            // this point the whole line exists. And a console is not the only consumer of a RunMessage --
+            // a headless host keeping a transcript wants the same text. @see AnsiEscapes
+            target.append(message(script, level, AnsiEscapes.strip(text)));
         }
 
         /**

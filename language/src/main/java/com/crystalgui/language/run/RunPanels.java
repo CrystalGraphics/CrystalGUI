@@ -1,10 +1,13 @@
 package com.crystalgui.language.run;
 
+import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.text.TextPoint;
+import com.crystalgui.ui.elements.chrome.ContextMenu;
 import com.crystalgui.ui.elements.dock.DockDropZone;
 import com.crystalgui.ui.elements.dock.DockPanelDescriptor;
+import com.crystalgui.ui.elements.editor.EditorCommands;
 import com.crystalgui.ui.elements.editor.TextEditor;
 import com.crystalgui.ui.elements.workbench.Workbench;
 import com.crystalgui.ui.elements.workbench.decoration.FileDecorations;
@@ -121,6 +124,29 @@ public final class RunPanels {
         // the real stream untouched. Redirecting it wholesale would park the game on a text field.
         ScriptInput.install(console);
         return panel;
+    }
+
+    /**
+     * Gives the transcript a right-click menu — the editor's own verbs, then the console's.
+     *
+     * <h3>Copy is spliced in, never re-declared</h3>
+     *
+     * <p>The transcript <em>is</em> a {@code TextEditor}, so {@code editor.copy} and {@code
+     * editor.selectAll} already work on it and already resolve their target the way every other editor
+     * command does. Registering console-flavoured twins would be the mistake this codebase has a named
+     * invariant about — one command asking the position, never one per widget — and it fails visibly:
+     * two Copy rows, one of which is greyed. {@code ContextMenu} composes fixed items with contributed
+     * ones, which is exactly the seam for this.</p>
+     *
+     * <p>The console's own three are <em>contributed</em> rather than listed, so a later addition to
+     * {@link ConsoleCommands} appears here without this method changing — which is the property the whole
+     * {@code MenuId} design exists to buy.</p>
+     */
+    static void attachContextMenu(CommandRegistry registry, RunPanel panel) {
+        ContextMenu.attach(panel.view().element(), registry, element -> ContextMenu.builder()
+                .item(EditorCommands.PREFIX + "copy")
+                .item(EditorCommands.PREFIX + "selectAll")
+                .contributions(ConsoleCommands.CONTEXT));
     }
 
     /**

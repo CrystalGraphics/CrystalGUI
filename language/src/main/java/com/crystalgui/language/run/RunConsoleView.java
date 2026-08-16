@@ -142,17 +142,22 @@ public final class RunConsoleView {
         // every sign that events were arriving -- while the press handler recorded nothing, so the release
         // had no press to match and refused silently. Two rounds went to the offsets before the phase.
         editor.onMouseUp.attachListener((element, event) -> {
-            // A DRAG IS A SELECTION GESTURE, and navigating away from text somebody just selected is the
-            // opposite of what they asked for. This is also what makes a double-click safe -- it selects
-            // the word, so it is refused, and a link follows a SINGLE click as IntelliJ's console does.
-            //
-            // Asked of the selection rather than compared against the press offset, which is both
-            // unavailable (above) and wrong: the editor reveals the caret on press and this console
-            // scrolls smoothly, so the same screen point resolves to a different offset either side of it.
-            if (editor.selections().hasSelection()) return;
             int offset = offsetOf(event);
             ConsoleFilter.Link link = linkAt(offset);
-            if (link != null) activate(link, offset);
+            if (link != null) {
+                // A MARKED SPAN FOLLOWS A SINGLE CLICK, as IntelliJ's console hyperlinks do -- it is
+                // underlined, so the click is asking for exactly what it looks like it will get.
+                //
+                // A DRAG IS A SELECTION GESTURE, though, and navigating away from text somebody just
+                // selected is the opposite of what they asked for. Asked of the selection rather than
+                // compared against the press offset, which is both unavailable (above) and wrong: the
+                // editor reveals the caret on press and this console scrolls smoothly, so the same
+                // screen point resolves to a different offset either side of it.
+                if (!editor.selections().hasSelection()) activate(link, offset);
+                return;
+            }
+            // AND UNMARKED TEXT NEEDS A DELIBERATE ONE. @see #activateOrigin
+            if (event.getDetail() >= 2) activateOrigin(offset);
         }, false, true);
         // THE ONLY THING HOVER CHANGES. The underline is permanent, as IntelliJ's console hyperlinks are,
         // because the token cache is per row and cleared wholesale -- restyling one span on hover would
@@ -173,6 +178,47 @@ public final class RunConsoleView {
         pointerOverLink = over;
         if (over) editor.addClass(OVER_LINK_CLASS);
         else editor.removeClass(OVER_LINK_CLASS);
+    }
+
+    /**
+     * Opens the line of the script that <em>printed</em> this row — Unity's console gesture.
+     *
+     * <h4>The data was already there and nothing was asking for it</h4>
+     *
+     * <p>{@code ScriptOutput} walks the stack for every line to find the script's own deepest frame, so
+     * every row a script printed already knows which of its lines caused it. Collapsing used to consume
+     * that and went with the list, after which the walk was paid for on every {@code println} and read by
+     * nothing but a redundant fallback in link resolution. This is the other end of that: the question
+     * "which line printed this?" is the first one anybody asks of a scripting console, and Unity answers
+     * it by double-clicking the entry.</p>
+     *
+     * <h4>Why a double-click, and why only here</h4>
+     *
+     * <p>A single click cannot have it: this is <b>unmarked</b> text — there is no underline, so a click
+     * that navigated would be a click doing something the row never offered. A modifier would be the
+     * usual answer and is unavailable: {@code MouseEvent} carries no modifier state and {@code
+     * CgModifiers} lives in CrystalGraphics' platform module, which {@code core} takes as
+     * {@code compileOnly} and does not pass on to {@code language/}.</p>
+     *
+     * <p>So it is restricted instead. It fires only on a row with an origin — output the user's own
+     * script printed — which excludes engine output, run boundaries, and every stack frame (those carry a
+     * {@link ConsoleFilter.Link} and are handled above, on a single click). Double-clicking still selects
+     * the word as it always did; the jump is additional, exactly as it is in Unity.</p>
+     */
+    private void activateOrigin(int offset) {
+        RunConsole showing = console;
+        if (showing == null || offset < 0) return;
+        TextBuffer buffer = editor.buffer();
+        if (offset > buffer.length()) return;
+        RunConsole.Line line = showing.lineAt(buffer.offsetToPoint(offset).row());
+        if (line == null || !line.isNavigable()) return;
+
+        // A SPAN OVER THE WHOLE ROW, so the one consumer -- which resolves a name to a workspace file and
+        // opens it at a line -- needs no second entry point and no notion of "a link that is not really
+        // a link". `Link` refuses an empty span, and a blank row is a real possibility.
+        int end = Math.max(1, line.text().length());
+        onLinkActivated.emit(line,
+                new ConsoleFilter.Link(0, end, line.file().name(), line.line()));
     }
 
     private void activate(ConsoleFilter.Link link, int offset) {
