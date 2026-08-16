@@ -20,22 +20,29 @@ does for `Context`. Section 9 lists the claims that need it.
 
 ---
 
-## 0. Status
+## 0. Status — the minor milestones
 
-| § | Item | State |
-|---|---|---|
-| 1 | Language plumbing — `Language.JAVASCRIPT`, `Grammar` mapping, keyword tier | not started |
-| 2 | Band probe — what each Rhino parses, warns, exposes | not started |
-| 3 | The bridge — `JsSourceAnalyzer`, `JsExecutor`, adapters inside the band loader | not started |
-| 4 | Analysis — diagnostics, semantic tokens, scopes, JSDoc | not started |
-| 5 | Resolution — the four tiers, and Java interop through the Java resolver | not started |
-| 6 | Completion — open code, members, live scope, Java members, `Java.type` | not started |
-| 7 | Quick Documentation — signatures, JSDoc bodies, Java members quoted | not started |
-| 8 | Quick fixes and intentions — the JS catalog | not started |
-| 9 | Execution — `JsHost implements ScriptRuntime`, stop, origin, console, filters | not started |
-| 10 | Sandbox — the policy object at all four layers | not started |
-| 11 | Member-lookup remapping (§16.1) — the seam now, the patch when M12 has data | not started |
-| 12 | Harness scene, fixtures, docs | not started |
+The order below is the build order (§12 has each one's contents and tests). Two things about it are
+deliberate: **10.2 puts a `.js` file into the harness workspace the moment services exist**, so every
+milestone after it is visible in the same file the way `Main.java` shows the Java engine — and
+**execution (10.5) comes before resolution and completion**, because the live-scope tier, the
+provenance band and the runtime diagnostics all need something to have run, and because Run is the
+most visible thing to have early.
+
+| Milestone | Delivers | Visible in `workspace/src/Main.js` as | State |
+|---|---|---|---|
+| **10.1** Plumbing + probe | `Language.JAVASCRIPT`, `Grammar` mapping, keyword tier; `RhinoCapabilityProbeTest` and the per-band probe files everything later reads | nothing new yet (tree-sitter already colours it) | not started |
+| **10.2** Bridge + registration + the fixture | `JsSourceAnalyzer`/`JsExecutor`/`JsAstView`; adapter skeletons; `JsLanguage.register()` through `EngineHost.shared`; `JsHost` skeleton contributed to `ScriptRuntimes`; **`Main.js` in the harness workspace and `HarnessWorkspace` registering JS** | the file exists, opens with services attached (owner id `javascript`), Run knows it is a script | not started |
+| **10.3** Diagnostics | parse errors + warnings via IDE mode, `RhinoProblemPolicy`, band-refusal re-titling, retention through errors, **compatibility band** | squiggles and Problems rows; `class` on band 8 says why | not started |
+| **10.4** Semantic tokens + scopes | `RhinoScopes`, the visitor, JSDoc recording | parameters/locals/consts/captured/unresolved coloured; unused greyed | not started |
+| **10.5** Execution | `JsHost`, `RhinoExecutor.run/stop/currentLine/snapshotScope`, console/prompt/`Java` globals, `RhinoOrigin`, `RhinoStackFrameFilter`, runtime errors as `js-runtime` diagnostics | Shift+F10 runs it; output attributed by line; Stop works; a thrown error squiggles its line | not started |
+| **10.6** Resolution + interop | the four tiers, `InteropResolver` over the Java probe unit, reflection fallback | (feeds 10.7/10.8) | not started |
+| **10.7** Completion | `JsCompletionProvider`, `JsKeywords` (band-filtered), `Java.type` insertion, live-object completion | `.` after a Java object lists its members; after a run, `w.` on a global works | not started |
+| **10.8** Quick Documentation | `JsSignatures`, tier provenance in the owner band, Java members quoted through `AttachedSources` | Mod+Q / hover shows `function add(a, b)` with JSDoc, or the Java popup for a Java member | not started |
+| **10.9** Quick fixes + intentions | `JsRewrites`, `JsQuickFixes`, the §8 catalog, `fixtures/js/` | Alt+Enter offers the catalog | not started |
+| **10.10** Sandbox | `ScriptPolicy` in `language.run`, four consumers | a refused type is absent everywhere, one test | not started |
+| **10.11** Remap seam | `MemberNameMapper` hook, patched `JavaMembers`, resolver/completion reading the reverse | the round-trip fixture runs by readable name | not started |
+| **10.12** Parity audit + docs | every matrix row tested or documented; AGENTS.md rows; `plan_syntax.md` §16.1/§20 updates | — | not started |
 
 Exit criteria (the row's four, plus what matching the Java engine adds):
 
@@ -591,64 +598,97 @@ patch is attempted, and the patch is one method.
 
 ---
 
-## 12. Steps, in order, each with its test
+## 12. The milestones, each with its contents and its test
 
-1. **Language plumbing.** `Language.JAVASCRIPT` in core (`cFamily` brackets + a self-closing backtick
-   pair; `.` trigger falls out); `Grammar.JAVASCRIPT` → `Language.JAVASCRIPT`; `KeywordTokenizer.javascript`
-   for the engineless tier and its `LanguageRegistry` entry (so a dedicated server colours `.js` keywords
-   as it colours `.java`'s). Test: `LanguageRegistry.forFileName("a.js").language() == JAVASCRIPT`, headless.
-2. **Band probe.** `RhinoCapabilityProbeTest` in `language.engine`, beside `EngineApiSurfaceTest`: per
-   band, parse a fixture per construct (`class`, `import`, `export`, `async`, `await`, `=>`, template,
-   `let`/`const`, destructuring, spread, `for…of`, `?.`, `??`, `**`, generators) and record accepted/
-   refused into `build/probe/rhino-<band>.properties`; assert the shape (every construct has an answer)
-   and pin the API surface this milestone uses (`Parser`, `CompilerEnvirons.ideEnvirons`,
-   `ErrorCollector`, `ParseProblem.getFileOffset`, `Scope.getSymbolTable`, `AstNode.getJsDoc`,
-   `ContextFactory.observeInstructionCount`, `Context.setApplicationClassLoader`, `WrapFactory`,
-   `RhinoException.getScriptStack`, `NativeJavaObject.unwrap`). The properties file is what
-   `RhinoProblemPolicy` and `JsKeywords` read at build time; nothing about a band's syntax is a constant.
-3. **Bridge + adapters.** `JsSourceAnalyzer`, `JsExecutor`, `JsAstView` in `engine.bridge`;
-   `RhinoSourceAnalyzer`, `RhinoExecutor` skeletons; `JsLanguage.register()` through `EngineHost.shared`.
-   Test: `JsLanguageRegistrationTest` mirrors `JavaLanguageRegistrationTest` — front door, registry,
-   services non-null, and `ScriptRuntimes.open(null).forFile("a.js")` non-null.
-4. **Diagnostics + policy.** `RhinoProblemPolicy` from the probe file; re-titled band refusals; retention
-   through errors. Test: `class` on band 8 → one error with the engine's message; a stray `.` keeps last
-   parse's unused-warning; a runtime error becomes a `js-runtime` diagnostic and clears on the next run.
-5. **Semantic tokens + scopes.** `RhinoScopes`, the visitor. Test: a `BindingChecklistTest` twin —
-   parameter/local/const/captured/reassigned/builtin/global/unresolved each asserted on a fixture,
-   including on broken source.
-6. **Resolution tiers + interop.** `JsResolver`, four tiers, `InteropResolver` over the Java probe unit
-   with LRU; reflection fallback. Test: `new java.util.ArrayList()` → `membersOf` equals the Java
-   analyser's for `ArrayList` (same list, same order); JSDoc `@param {string}` typed a parameter; live
-   scope typed a global after a run.
-7. **Completion.** `JsCompletionProvider`, `JsKeywords` (band-filtered), `Java.type` insertion. Test: the
-   `JavaMemberCompletionTest` twin, plus "post-run completion on a live object" (the row's criterion),
-   plus "no `class` keyword offered on band 8".
-8. **Quick Documentation.** `JsSignatures`, tier provenance in the owner band. Test: `DocumentationPopupTest`
-   twin over JS symbols; a Java member from JS quotes `src.zip` when present.
-9. **Quick fixes.** `JsRewrites`, `JsQuickFixes`, the catalog of §8, fixtures under `fixtures/js/`.
-   Test: one fixture per family through the `FixFixture` shape; `Negation`, `Names`, `SimilarNames`,
-   `SwitchIntentions`' rule reused rather than copied (a test that asserts the JS intention and the Java
-   one agree on the same shape).
-10. **Execution.** `JsHost`, `RhinoExecutor.run/stop/currentLine/snapshotScope`, `RhinoOrigin`,
-    `RhinoStackFrameFilter`, console/prompt/`Java` globals. Test: `ScriptHostTest` twin (runs, replaces,
-    stops a spinning loop **and** a blocked prompt, 100 runs pin nothing — the scope must be collectable),
-    `ScriptConsoleTest` twin (a line lands with its origin), `ScriptCommandsTest` runs unchanged against
-    `ScriptRuntimes.of(javaHost, jsHost)` and picks the right one per file. `RunShellIsEngineNeutralTest`
-    green throughout — the shell was not touched.
-11. **Sandbox.** `ScriptPolicy` in `language.run`, four consumers. Test: the row's fourth criterion — one
-    test, refused class absent from `membersOf`, from the completion list, from `TypeIndex.filtered`, and
-    the call throws at run.
-12. **Remap.** The `JavaMembers` patch behind `MemberNameMapper`; resolver/completion read the reverse.
-    Test: the row's third criterion on the `RemapRoundTripTest` fixture.
-13. **Harness + fixtures + docs.** `workspace/src/app.js` grows into the JS `Main.java` (a "look at the
-    colours and the fixes" file); a `RunTest.js`; `CgUiDockScene` needs no change beyond
-    `JsLanguage.register()` in `HarnessWorkspace`. AGENTS.md: the `language/` row gains `.js`; new
-    invariants for "interpreted mode + Error is the stop", "application loader is the host loader",
-    "PARENT_FIRST is not widened for JS". `plan_syntax.md` §16.1: record the static-structure decision
-    (§1.2 above) and the `Java.type` correction; §20 M10 row: point here.
+Numbered as §0 numbers them. Each is one commit-sized unit with its own exit, and each after 10.2 is
+checked in the harness against `workspace/src/Main.js` as well as by its tests.
 
-Order matters in two places: 2 before 4/7 (the policy and keyword set are *read from* the probe), and 10
-before 6's live tier and 8's provenance (there is no live scope until something runs).
+**10.1 — Plumbing + probe.** `Language.JAVASCRIPT` in core (`cFamily` brackets + a self-closing
+backtick pair; `.` trigger falls out); `Grammar.JAVASCRIPT` → `Language.JAVASCRIPT`;
+`KeywordTokenizer.javascript` for the engineless tier and its `LanguageRegistry` entry (so a dedicated
+server colours `.js` keywords as it colours `.java`'s). Then `RhinoCapabilityProbeTest` in
+`language.engine`, beside `EngineApiSurfaceTest`: per band, parse a fixture per construct (`class`,
+`import`, `export`, `async`, `await`, `=>`, template, `let`/`const`, destructuring, rest/spread,
+`for…of`, `?.`, `??`, `**`, generators) and record accepted/refused into
+`build/probe/rhino-<band>.properties`; assert the shape (every construct has an answer) and pin the API
+surface this milestone uses (`Parser`, `CompilerEnvirons.ideEnvirons`, `ErrorCollector`,
+`ParseProblem.getFileOffset`, `Scope.getSymbolTable`, `AstNode.getJsDoc`,
+`ContextFactory.observeInstructionCount`, `Context.setApplicationClassLoader`, `WrapFactory`,
+`RhinoException.getScriptStack`, `NativeJavaObject.unwrap`, and the §15 questions). The properties file
+is what `RhinoProblemPolicy`, `JsKeywords` and the compatibility-band warning read; nothing about a
+band's syntax is a constant, and band 8's file ships as a resource. *Tests:*
+`LanguageRegistry.forFileName("a.js").language() == JAVASCRIPT` headless; the probe files exist and
+every construct in §13a's table has an answer.
+
+**10.2 — Bridge + registration + the fixture.** `JsSourceAnalyzer`, `JsExecutor`, `JsAstView` in
+`engine.bridge`; `RhinoSourceAnalyzer` and `RhinoExecutor` skeletons (parse, no policy yet; compile,
+no run yet); `JsLanguageServices extends AnalysedLanguageServices` with `analyse` wired;
+`JsLanguage.register()` through `EngineHost.shared`, `withServices` on the `.js`/`.mjs`/`.cjs`
+entries, and a `JsHost` skeleton contributed to `ScriptRuntimes` so Run recognises the file. **And the
+harness:** `HarnessWorkspace` calls `JsLanguage.register()` beside `JavaLanguage.register()`, and
+`gl-debug-harness/workspace/src/Main.js` is created — the JS twin of `Main.java`, a deliberately
+over-featured file whose sections are added milestone by milestone (a section per thing to look at,
+headed with what should be visible). `app.js` stays as the small fixture it is. *Tests:*
+`JsLanguageRegistrationTest` mirrors `JavaLanguageRegistrationTest` — front door, registry, services
+non-null with id `javascript`, `ScriptRuntimes.open(null).forFile("Main.js")` non-null.
+
+**10.3 — Diagnostics.** `RhinoProblemPolicy` from the probe file; re-titled band refusals; retention
+through errors (`optionalProblemsAnalysed` false on a parse error); the **compatibility band** setting
+(§4). *Tests:* `class` on band 8 → one error with the engine's message, and on a band that accepts it a
+compatibility warning when the target is 8; a stray `.` keeps the last parse's unused warning where its
+text now is; Problems rows navigate to the offset Rhino reported.
+
+**10.4 — Semantic tokens + scopes.** `RhinoScopes`, the `NodeVisitor`, JSDoc recording. *Tests:* a
+`BindingChecklistTest` twin — parameter/local/const/captured/reassigned/builtin/global/unresolved
+each asserted on a fixture, including on broken source; unused local/parameter/function reported.
+
+**10.5 — Execution.** `JsHost implements ScriptRuntime` (host) ↔ `RhinoExecutor.run/stop/currentLine/
+snapshotScope` (child); fresh scope per run, application loader = host loader, `console.*`/`print`/
+`readLine`/`Java.type` globals; `RhinoOrigin`; `RhinoStackFrameFilter` ahead of the JVM one; runtime
+`RhinoException`s pushed as `js-runtime` diagnostics and cleared by the next run; the live-scope
+snapshot taken on the script thread and published through the scheduler. *Tests:* `ScriptHostTest`
+twin (runs, replaces, stops a spinning loop **and** a blocked `readLine`, 100 runs pin nothing — the
+scope must be collectable), `ScriptConsoleTest` twin (a line lands with its origin), `ScriptCommandsTest`
+unchanged against `ScriptRuntimes.of(javaHost, jsHost)` picking the right runtime per file;
+`RunShellIsEngineNeutralTest` green throughout.
+
+**10.6 — Resolution + interop.** `JsResolver` with the four tiers; `InteropResolver` over the Java
+probe unit with a small LRU; the reflection fallback when the Java engine is absent. *Tests:*
+`new java.util.ArrayList()` → `membersOf` equals the Java analyser's for `ArrayList` (same list, same
+order); JSDoc `@param {string}` types a parameter; the live scope types a global after a run; the tier
+that answered is on the `SymbolInfo`.
+
+**10.7 — Completion.** `JsCompletionProvider`, `JsKeywords` (band-filtered), `Java.type` insertion as
+one edit, live-object completion, the probe re-parse for an unresolved receiver. *Tests:* the
+`JavaMemberCompletionTest` twin; "post-run completion on a live object" (the row's criterion); no
+`class` keyword offered on band 8; `inheritedFromObject` set for `Object.prototype`'s ids.
+
+**10.8 — Quick Documentation.** `JsSignatures`, tier provenance in the owner band, Java members quoted
+through `AttachedSources`. *Tests:* `DocumentationPopupTest` twin over JS symbols; a Java member from
+JS quotes `src.zip` when present; go-to-definition to a JS declaration and to a Java one.
+
+**10.9 — Quick fixes + intentions.** `JsRewrites`, `JsQuickFixes`, the §8 catalog, fixtures under
+`fixtures/js/`; `plan_quickfix_catalog.md` gains a JS column. *Tests:* one fixture per family through
+the `FixFixture` shape; `Negation`, `Names`, `SimilarNames`, `SwitchIntentions`' rule reused rather
+than copied — a test asserting the JS intention and the Java one agree on the same shape.
+
+**10.10 — Sandbox.** `ScriptPolicy` in `language.run`, consulted by the shutter, the bindings, the
+resolver and `TypeIndex.filtered`. *Test:* the row's fourth criterion — one test, refused class absent
+from `membersOf`, from the completion list, from the index, and the call throws at run.
+
+**10.11 — Remap seam.** The `JavaMembers` patch behind a `MemberNameMapper` bridge hook;
+resolver/completion reading the reverse mapping. *Test:* the row's third criterion on the
+`RemapRoundTripTest` fixture — a readable-name call runs against a renamed member.
+
+**10.12 — Parity audit + docs.** Every §2 matrix row: *Full*/*Partial* has a test, *Best-effort* has a
+fallback test, *No* is documented in the SPI javadoc. AGENTS.md: the `language/` row gains `.js`; new
+invariants for "interpreted mode + `Error` is the stop", "application loader is the host loader",
+"`PARENT_FIRST` is not widened for JS". `plan_syntax.md` §16.1: record the static-structure decision
+(§1.2) and the `Java.type` correction; §20 M10 row: point here (done). `RunTest.js` beside `Main.js`.
+
+Order matters in two places: 10.1 before 10.3/10.7 (the policy and keyword set are *read from* the
+probe), and 10.5 before 10.6's live tier and 10.8's provenance (there is no live scope until something
+runs).
 
 ---
 
