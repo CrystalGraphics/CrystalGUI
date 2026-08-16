@@ -201,9 +201,32 @@ public final class RunSessions {
         return null;
     }
 
-    /** Every script this workspace knows about, in the order it first ran them. */
+    /**
+     * Every script this workspace knows about, <b>most recently started first</b>.
+     *
+     * <h4>Newest first, and by the CLOCK rather than by insertion</h4>
+     *
+     * <p>The rail is a list you read downward, and the run you care about is nearly always the one that
+     * just happened — it is the reason you opened the panel. Insertion order put it at the bottom, under
+     * everything that had already finished, and grew in the wrong direction all session.</p>
+     *
+     * <p>Reversing insertion order would be the cheap version and it is wrong for the case that matters:
+     * <b>a re-run</b>. A script first run an hour ago and re-run just now is the newest thing here, and
+     * insertion order still has it wherever it was. {@code startedNanos} is reset when a run begins from
+     * a state that was not already active, so sorting on it puts a re-run where it belongs.</p>
+     *
+     * <p><b>Compared by subtraction, never by {@code <}.</b> {@code System.nanoTime()} has an arbitrary
+     * origin and may be negative, so an ordinary comparison of two readings is wrong across the point
+     * where it wraps; the difference is correct for any two instants within ~292 years of each other,
+     * which is the same reason this class refuses a sentinel timestamp elsewhere.</p>
+     */
     public synchronized List<Resource> scripts() {
-        return Collections.unmodifiableList(new ArrayList<>(sessions.keySet()));
+        List<Map.Entry<Resource, Session>> entries = new ArrayList<>(sessions.entrySet());
+        entries.sort((left, right) ->
+                Long.signum(right.getValue().startedNanos() - left.getValue().startedNanos()));
+        List<Resource> found = new ArrayList<>(entries.size());
+        for (Map.Entry<Resource, Session> entry : entries) found.add(entry.getKey());
+        return Collections.unmodifiableList(found);
     }
 
     /** Only the ones that can still do something — what the indicator marks. */

@@ -129,12 +129,19 @@ public final class RunRail extends UIElement {
             // SET alone -- a script going LIVE is not a new row, and rebuilding for it would recycle
             // every row twenty times a second, which is the thing this method exists to avoid.
             if (!scripts.equals(known)) {
+                // CAPTURED BY ITEM, BEFORE THE REBUILD. The list selects by INDEX, and this list is
+                // ordered newest-first -- so a re-run reorders it and an index that is still perfectly
+                // valid now points at a DIFFERENT script. The row would highlight one file while the
+                // transcript went on showing another, and nothing would announce the change because no
+                // selection event fired. The engine already records this trap for trees; a sorted list
+                // has it for the same reason.
+                Resource chosen = selectedScript();
                 known = scripts;
                 items.clear();
                 // THE NULL IS THE "All output" ROW. @see #items
                 items.add(null);
                 for (Resource script : scripts) items.add(script);
-                if (list.getSelectedIndices().isEmpty()) list.select(0);
+                restoreSelection(chosen);
             }
         }
         // IN PLACE, never through the list: refreshing would rebind every row and take the press out from
@@ -147,6 +154,29 @@ public final class RunRail extends UIElement {
         for (Map.Entry<Integer, UIElement> realised : list.realisedRows().entrySet()) {
             writeRow(realised.getKey(), realised.getValue());
         }
+    }
+
+    /**
+     * The script the rail is showing, or null for the All row — <b>and for nothing selected</b>.
+     *
+     * <p>The two collapse deliberately: both mean "not narrowed to a script", and both restore to the
+     * same row. Distinguishing them would buy a caller nothing and cost it a case to get wrong.</p>
+     */
+    @Nullable
+    private Resource selectedScript() {
+        for (int index : list.getSelectedIndices()) {
+            return index <= 0 || index >= items.size() ? null : items.get(index);
+        }
+        return null;
+    }
+
+    /** Puts the selection back on the same SCRIPT after a rebuild, wherever it has moved to. */
+    private void restoreSelection(@Nullable Resource script) {
+        int index = script == null ? 0 : known.indexOf(script) + 1;
+        // A SCRIPT THAT IS NO LONGER LISTED falls back to All rather than to whatever took its index --
+        // `forget` can remove the very row that was selected.
+        if (index <= 0 || index >= items.size()) index = 0;
+        list.select(index);
     }
 
     /**
