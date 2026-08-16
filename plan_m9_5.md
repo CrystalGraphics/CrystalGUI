@@ -17,6 +17,7 @@ carrying the output of running scripts, plus the indicator that says which files
 | 9.5.8 | The per-script filter | **done** — folded into 9.5.3's rail; the head's stand-in picker is gone |
 | 9.5.9 | `System.in` | **done** — `ScriptInput`, 7 tests, and an input row that appears only while something is waiting |
 | 9.5.10 | The rail as built | **done** — a lazily-built `SplitView`, elapsed time, the right stripe, and no spinner (and the argument for why) |
+| 9.5.11 | The review pass | **A1–A9 and B1–B10 done**, 160 tests passing. B11–B13 (Preferences, forgotten rail rows, **the empty state**) and the C/D sweeps remain |
 
 Written before any of it existed; the states above are current. **M9.5 is complete** — every exit
 criterion below has been met and the last of them, stop-leaves-its-transcript, confirmed in the harness.
@@ -639,12 +640,110 @@ Two halves are specific to this panel:
 
 ---
 
+## 9.5.11 The review pass — what a final read of the whole thing found
+
+Written 2026-08-16, after every exit criterion above was met, from a read of every class in
+`language/.../run`, the `runpanel` block of `panels.css`, the run tokens in `base.css`, and the core seams
+the panel leans on (`Keymap.acceleratorFor`, the editor's read-only paths, `ToolWindowManager.showPanel`).
+It is ranked, and the ranking is the recommendation: A and B are the work; C and D are a sweep.
+
+> **State, 2026-08-16 (same day).** **A1–A9 and B1–B10 are done**, across five commits, with the run
+> package at **160 tests passing and none skipped** (up from 133). **B11–B13 and the C/D sweeps are
+> open**, B13 — the empty state — being the one with a user waiting on it.
+>
+> Three of the nine defects have **no test**, and the reason is structural rather than an omission:
+> A4 (the soft-wrap mirror), A6 (the All-output tooltip) and A9 (Stop's source) are all widget wiring,
+> and `language/src/test` has neither Taffy nor CrystalGraphics on its classpath — a `UIElement` cannot
+> be constructed there at all. That is the same wall `TailFollow` was extracted to get around, and the
+> same judgement applies: the logic worth pinning gets pulled out to where it can be tested, and pure
+> wiring is verified in the harness. Everything with a seam that could be reached headlessly got one.
+>
+> Two entries changed shape once they were built, and both are recorded at the change rather than
+> silently: **B8** was a decision and it went *wire it, not delete it* — see the row for the gesture
+> argument, which the absence of reachable modifier state settles. **B9** turned out not to need the
+> editor-wide context menu it was filed under: `ContextMenu` composes fixed items with contributed ones,
+> so the console splices Copy and Select All in rather than declaring twins of them.
+
+### A. Defects — things that are wrong today
+
+| # | What | Where | Fix |
+|---|---|---|---|
+| A1 | **Rerun lies about its subject.** The tooltip says *Rerun 'Foo.java'* from the rail's selection and the button is dead without one — but the wiring runs `ScriptCommands.RUN`, which compiles the **active editor**. Select `A.java` in the rail with `B.java` on screen: the button says A and runs B | `RunPanel.describeAction`, `ScriptWorkbench.java:118` | `ScriptCommands` gains a run-this-`Resource` entry (from its open document if open, else disk); rerun passes `selected`. IntelliJ's rerun re-runs *that* configuration |
+| A2 | **A prompt without a newline never appears.** `Routed` emits only on `\n` and deliberately not on `flush()`, so `print("Name? "); readLine()` shows the input row with no prompt, and `print("done")` as a script's last statement is lost | `ScriptOutput.Routed` | Emit the thread's partial line at the two moments it can no longer be completed: when `ScriptInput` is about to block, and in `ScriptOutput.exit()`. Cap the partial buffer (64KB) while there, so a script printing a 10MB string without a newline cannot grow it unbounded |
+| A3 | **The ring is unbounded while the panel is closed.** `drain()` runs only from `RunPanel.tickFrame`, a hidden panel is *detached*, and a detached ticker unregisters — so `pending` grows without limit for a chatty script whose panel the user closed. The exit criterion "does not grow it without limit" holds only with the panel open | `RunConsole.append/drain` | Bound `pending` in `append` with an `AtomicInteger` char count: evict from the head past the budget and merge the count into `dropped` at the next drain (a `ConcurrentLinkedQueue` tolerates a producer polling) |
+| A4 | **Alt+Z desyncs the wrap button.** `TextEditor` binds `editor.toggleSoftWrap` on itself, so the console honours it, but `__on__` is flipped only in the button's own handler | `RunPanel.java:252` | Pull per frame from `view.isSoftWrap()` in `refreshActions` — the same push→pull lesson Stop already paid for |
+| A5 | **Running steals focus from the editor.** `onStarted` → `showPanel` → `requestPointerFocus(container)`, deliberately. IntelliJ's default is *activate* the tool window and *not focus* it ("Focus tool window" is off) — Shift+F10 then typing should keep typing | `ScriptWorkbench.install` | In the hook: remember `activeEditor().isFocused()`, show, restore with `requestPointerFocus()`. Expressible from `language/` without naming `UIInputHandler` |
+| A6 | The **All output** row's tooltip reads *Never run* | `RunRail.Rows.bind(null, …)` | Say "All output", or attach none for that row |
+| A7 | **`ScriptInput.Routed.buffered/position` are shared, not per-thread.** A script that reads one byte of a line and ends leaves the rest for the next script's first `read()` | `ScriptInput.Routed` | A `ThreadLocal`, as `ScriptOutput.Routed` already does; or clear on `ScriptOutput.exit` |
+| A8 | **A failure is attributed to the last thing COMPILED, not the thing that threw.** `report()` labels the trace with `lastScript`, which `compileActive` overwrites before it knows the compile succeeded — run A, press Run on a broken B, and A's later exception arrives labelled B | `ScriptWorkbench.lastScript` | The host knows the `ScriptRef` of the run that failed; hand it to `onFailure` (`BiConsumer<ScriptRef, Throwable>`) or let the host append the trace itself |
+| A9 | **Two truths for "is anything running".** The Stop *command* is enabled by `host.isRunning()` (a thread is alive); the Stop *button* by `sessions.active()` (a state was reported). A script that swallows the stop leaves `running` null and its session `RUNNING` — the button stays red and pressing it does nothing | `ScriptCommands`, `RunPanel.refreshActions` | One source; the button should mirror the command's enablement, since that is what the menu row shows |
+
+### B. Foundational gaps — what every reference console has and this does not
+
+| # | What | Why it is foundational | Shape |
+|---|---|---|---|
+| B1 | **No end-of-run line.** A boundary is printed at start and nothing at the end. IntelliJ: *Process finished with exit code 0*; VS Code: *[Done] exited with code=0 in 0.53 seconds* | With All output showing two scripts interleaved you cannot tell where one run's output ended — and a run that printed nothing is indistinguishable from one that never ran | The `sessions.onDidChange` listener that draws the opening divider appends `Main.java finished in 1.2 sec` / `stopped after 4 sec` / `failed after 0.3 sec` as a `comment`-coloured divider, elapsed read from the session |
+| B2 | **Scroll-to-End is a button, not a state.** IntelliJ's stays *pressed* while following | There is no visual answer to "will new output pull the view down?", which is exactly the question a reader has after scrolling up | `toEnd` takes `__on__` per frame from `follow.isFollowing()`, as `wrap` does |
+| B3 | **Wrap does not persist.** IntelliJ remembers soft-wrap on the console; `SessionState` now exists and the panel does not use it | The one setting a console has, forgotten every launch | `writeState`/`readState` on `RunPanel` for wrap; `setId` + `setSessionPersistent(true)` from `RunPanels.install` |
+| B4 | **Clear All is live over an empty transcript.** IntelliJ dims it | Same rule Stop and Rerun already follow: a dead control leaves hit testing | `clear.setEnabled(lineCount() > 0 \|\| transcriptSize() > 0)` in `refreshActions` |
+| B5 | **A new run does not select its row.** IntelliJ switches to the new run's tab. Here, with `B.java` selected in the rail, running `A.java` shows nothing new — the console reads as dead | The filter is a view over the transcript, and starting a run is the strongest signal of what you want to see | Per frame (pull — the session signal is on the script thread): if a session became active since the last frame and the rail is not on All, select it. Leave All alone |
+| B6 | **A script blocked on `System.in` with the panel closed hangs invisibly.** The panel opens on run; close it, and a later read has nothing on screen to say why the script stopped | The input row *is* the prompt (9.5.9's own argument), and a prompt nobody can see is not one | Reading stdin brings the panel forward the way running does — a `JobScheduler` hop from `awaitInput`, since it is on the script thread; at minimum the stripe badge |
+| B7 | **Stop has no subject.** `onStopRequested` is a `Signal.Action`. Correct today only because `ScriptHost` holds exactly one `Running`; `RunSessions`, `RunRail` and `RunState.LIVE` are all built for several live scripts, and when that lands this goes wrong silently | One call site now; several later | `Signal.Value<Resource>` with null meaning "whatever is running" — the seam costs one signature while there is one caller |
+| B8 | **The per-line origin is computed and never used.** `ScriptOutput.message` walks the stack for every `println` to record the script's own line, and nothing navigates to it since collapse went — only `Line.file()` (which the `ScriptRef` already knew) is read | Either it is Unity's gesture — double-click a plain output line opens the `println` that produced it, which the plan's own reference does — or it is a stack walk per line for nothing | Decide. Wiring it is a click on a non-link line → `onLinkActivated` with the origin; dropping it removes the walk and `RunMessage.at`'s line. Not both |
+| B9 | **No context menu on the console.** `MenuId.EDITOR_CONTEXT` is declared and nothing attaches it, so this is an editor-wide gap and not a Run one — but Copy / Select All / Clear All / Scroll to End on right-click is what people reach for in a console first | Out of 9.5's scope. Recorded so it is not rediscovered as a Run bug | Belongs to the editor; the console inherits it the day it exists |
+| B10 | **ANSI escapes are shown, not interpreted.** IntelliJ's console decodes them; a library that colours its own log lines prints `[31m` here | Low for in-JVM Java scripts, higher the moment JS or a logging binding lands | A `ConsoleFilter`-shaped decoder is the wrong seam (filters find spans, they do not rewrite text); it is a pass in `Routed.emit` |
+| B11 | **The buffer size and wrap default have no Preferences entry.** IntelliJ exposes the cycle buffer size in Settings; ours is `DEFAULT_BUDGET_KB` | Low; recorded because the constant is the kind that gets edited in code when a setting was wanted | Two rows in `Preferences`, once B3 gives the panel state to write |
+| B12 | **A deleted script keeps its rail row.** `RunSessions.forget` exists and nothing calls it | Cosmetic until a workspace deletes files often | The explorer's delete path calls `forget` |
+| B13 | **No empty state.** A panel nothing has run in is a black rectangle under a rerun/stop bar with nothing to rerun or stop. IntelliJ centres a note — *To run your code, do one of the following: — Click the Run icon in the editor gutter — Select "Run…" in the editor context menu — Launch a run configuration (Alt+Shift+F10)* — and shows **no toolbar** until there is a run | The first thing a new user sees is the panel with nothing in it, and a blank surface says "broken" where a sentence says "not yet". Every reference tool window with a precondition does this (Problems: *No problems*, Notifications: *No new notifications*) | A centred `UIText` block attached while `sessions.scripts()` is empty and detached on the first run — same attach/detach rule as the rail and the input row, for the same `gap-all` reason. Lines: *To run a script, open a `.java` file and:* — *press Run (Shift+F10)* — *choose Run ▸ Run Script from the menu*. **The accelerator is read from the keymap** (`Keymap.acceleratorFor(this, ScriptCommands.RUN)`), never spelled — the tooltip rule. And the run bar + separator hide with it: rerun and stop over nothing are the dead controls the panel already refuses elsewhere. Wants `--run-empty-fg` (→ `--fg-hint`) and a `.__run-empty__` rule; the note is `setHitTest(false)` |
+
+### C. Cleanups
+
+- **Dead code:** `RunMessage.collapseKey()`, `RunMessage.weight()`, and the `origin` javadoc all describe the
+  removed collapse; `ScriptOutput.java:140` still says "it simply does not collapse". `RunPanel.SPACER_CLASS`;
+  `RunRail.showing()` (never called); `RunPanel.onFilterRequested` (no listener); `RunConsole.transcriptSize()`
+  is test-only; `RunSessions.clear()`/`forget()` unused (see B12 before deleting the second).
+- **Dead CSS:** `.__run-filter__` and its `:hover` — the dropdown they style is gone. Stale comments at
+  `panels.css:644–657` ("a plain ROW rather than a SplitView … a FIXED width") and the reference to
+  `.__run-vsep__`, which does not exist; the "A console control is a glyph" comment is present twice.
+- **Inline FQNs** (the house rule is import, never inline): `RunConsole` — `CopyOnWriteArrayList`,
+  `LinkedHashSet`, `ArrayBlockingQueue`, `Objects`; `RunRail` — `Map`, `HashMap`, `Locale`, `SelectionMode`;
+  `RunSessions` — `LongSupplier`; `ScriptHost` — `Modifier`, `Consumer`; `ScriptOutput` — `IOException`.
+- `RunPanel`: unused `import java.util.List`; imports out of order (`Tooltip` after the keymap pair); the
+  orphan doc comment at `RunConsole.java:110`; `refreshActions` reads `sessions` twice into `listing` and
+  `running`.
+- The **What it reuses** section below was written for the list version and still names `ListView` and
+  `TreeSearch`; corrected in the same edit as this section.
+
+### D. Optimisations — per frame, none urgent
+
+- `RunRail.writeRow` runs `querySelector` twice per realised row every frame and rebuilds the tooltip string;
+  a `Row` holder built in `createTemplate` (glyph/name/time fields) removes both walks — the "slots built in
+  `createTemplate`" pattern the tree rows already use.
+- `RunSessions.scripts()`/`active()` allocate a fresh list under lock per call, and `refreshRail` +
+  `refreshActions` call them three times a frame. A `boolean anyActive()` and a version counter (rebuild
+  `known` only when it moved) make the settled frame allocation-free.
+- `ScriptOutput.Routed.write(byte[])` fetches the `ThreadLocal` buffer per byte; hoist `pending.get()` once
+  per call.
+- `ScriptOutput.message` walks the stack per line — see B8; the answer there decides whether this stays.
+- `refreshActions` calls `Keymap.acceleratorFor` twice a frame — a parent walk and a map lookup. Fine.
+
+### Not findings — checked and sound
+
+The thread rules (queue in, drain on the frame; pull enablement, never push); the tail-follow lock; the
+ring measured on the transcript rather than the document under a filter; links recomputed from row text
+rather than stored as offsets; the input queue drained only on interruption; the always-original-stream
+rule in both routers; the read-only editor still answering Ctrl+F, Ctrl+A, Ctrl+C and refusing Ctrl+X/V
+through its own `enabledWhen`; the prelude keeping the author's line numbers, so a trace's `Main.java:12`
+is the line on screen.
+
+---
+
 ## What it reuses
 
-`ListView` — virtualised, and a firehose demands it. `TreeSearch` for the filter, in the permanent
-presentation rather than the transient one, since a console's filter is how you are expected to start.
-`Workbench.openAndReveal` for stack-trace navigation. `FileDecorations` for the indicator. The dock
-panel shape of `ProblemsPanel`.
+`TextEditor` — the transcript is a plain one, configured, and everything a console needs (selection,
+drag-select, copy, virtualised rows, find) came with it. `SplitView` for the rail, `ListView` for its rows.
+`Workbench.openFile` with a continuation for stack-trace navigation. `FileDecorations` for the indicator.
+`SessionState` for the divider. The dock panel shape of `ProblemsPanel`.
 
 ## Exit criteria
 
