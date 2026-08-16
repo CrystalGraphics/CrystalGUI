@@ -39,11 +39,23 @@ public final class ConsoleCommands {
      */
     public static final MenuId CONTEXT = MenuId.of("run/console/context");
 
+    /** Removes one script from the rail and the transcript. @see #RAIL_CONTEXT */
+    public static final String REMOVE = "console.removeScript";
+
+    /**
+     * Where a rail ROW's right-click rows are contributed — a different menu from the transcript's.
+     *
+     * <p>They are about different subjects: the transcript's verbs act on the console as a whole, and
+     * these act on the one script the pointer named. Sharing an id would put Clear All on a row and
+     * Remove on the transcript, each offering to do something to a thing the user did not point at.</p>
+     */
+    public static final MenuId RAIL_CONTEXT = MenuId.of("run/rail/context");
+
     private ConsoleCommands() {
     }
 
     /**
-     * Registers all three against one panel.
+     * Registers the console's verbs against one panel.
      *
      * <p>No default bindings. Soft wrap already has {@code Alt+Z} through the editor's own keymap, which
      * reaches the transcript because the transcript is an editor; inventing a second chord for it would
@@ -62,6 +74,12 @@ public final class ConsoleCommands {
                 .menu(CONTEXT, "1_view", 10)
                 .run(() -> panel.view().scrollToEnd()));
 
+        registry.register(Command.of(REMOVE, "Remove")
+                .menu(RAIL_CONTEXT, "2_edit", 10)
+                // GREYED FOR A LIVE SCRIPT rather than absent. @see RunPanel#canRemoveContextScript
+                .enabledWhen(context -> panel.canRemoveContextScript())
+                .run(panel::removeContextScript));
+
         registry.register(Command.of(TOGGLE_SOFT_WRAP, "Soft-Wrap")
                 .menu(CONTEXT, "1_view", 20)
                 // CHECKED IN THE MENU, which is what a toggle owes a row: the button shows its state with
@@ -70,10 +88,11 @@ public final class ConsoleCommands {
                 .run(() -> panel.view().setSoftWrap(!panel.view().isSoftWrap())));
     }
 
-    /** Removes all three — for a host that is torn down, and for a test that must not leak them. */
+    /** Removes them all — for a host that is torn down, and for a test that must not leak them. */
     public static void unregister(CommandRegistry registry) {
         registry.unregister(CLEAR);
         registry.unregister(SCROLL_TO_END);
         registry.unregister(TOGGLE_SOFT_WRAP);
+        registry.unregister(REMOVE);
     }
 }

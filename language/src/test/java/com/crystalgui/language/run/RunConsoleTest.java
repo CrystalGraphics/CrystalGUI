@@ -231,6 +231,80 @@ public class RunConsoleTest {
         assertEquals(0, console.lineCount());
     }
 
+    /**
+     * <b>Forgetting one script takes its lines and leaves everyone else's.</b>
+     *
+     * <p>A clear is the blunt answer: the complaint is a console filling up with runs you have finished
+     * reading, and taking everything is not what was asked. The rail's Remove is the selective one.</p>
+     */
+    @Test
+    public void forgettingOneScriptLeavesTheOthers() {
+        RunConsole console = attached(new TextBuffer());
+        console.append(out("A.java", "from A"));
+        console.append(out("B.java", "from B"));
+        console.append(out("A.java", "from A again"));
+        console.drain();
+        assertEquals(3, console.lineCount());
+
+        console.forget("A.java");
+        console.drain();
+
+        assertEquals("only B's line should be left", 1, console.lineCount());
+        assertEquals("from B", console.lineAt(0).text());
+        assertEquals("and A should be gone from the picker too",
+                java.util.List.of("B.java"), console.scripts());
+    }
+
+    /**
+     * <b>The ring's budget is re-measured, not adjusted.</b>
+     *
+     * <p>The running total is what the ring trims against. Left describing lines that are gone, it would
+     * evict from a transcript that had just shrunk — the console would keep dropping its oldest surviving
+     * output for as long as the phantom characters were counted, and report drops nobody caused.</p>
+     */
+    @Test
+    public void forgettingGivesTheBudgetBack() {
+        TextBuffer buffer = new TextBuffer();
+        RunConsole console = attached(buffer).setBudgetKb(1);
+        for (int i = 0; i < 60; i++) console.append(out("noisy.java", "a line of some length " + i));
+        console.append(out("quiet.java", "the only line that matters"));
+        console.drain();
+
+        console.forget("noisy.java");
+        console.drain();
+        long droppedAfterForget = console.dropped();
+
+        // Nothing new is written, so nothing may be evicted: a stale total would trim the survivor.
+        for (int i = 0; i < 5; i++) console.drain();
+        assertEquals("the ring kept trimming against characters that were gone",
+                droppedAfterForget, console.dropped());
+        assertEquals(1, console.lineCount());
+        assertEquals("the only line that matters", console.lineAt(0).text());
+    }
+
+    /**
+     * <b>A filter naming the forgotten script is dropped with it.</b>
+     *
+     * <p>Otherwise the console is narrowed to something that no longer exists: an empty document with no
+     * row selected to explain it, which reads as the transcript having been cleared.</p>
+     */
+    @Test
+    public void forgettingTheFilteredScriptRestoresAllOutput() {
+        RunConsole console = attached(new TextBuffer());
+        console.append(out("A.java", "from A"));
+        console.append(out("B.java", "from B"));
+        console.setFilter("A.java");
+        console.drain();
+        assertEquals(1, console.lineCount());
+
+        console.forget("A.java");
+        console.drain();
+
+        assertNull("the filter outlived its subject", console.filter());
+        assertEquals("everything else should be showing again", 1, console.lineCount());
+        assertEquals("from B", console.lineAt(0).text());
+    }
+
     /** Clearing is queued, so it cannot land between two lines of a burst that preceded it. */
     @Test
     public void clearingEmptiesEverything() {

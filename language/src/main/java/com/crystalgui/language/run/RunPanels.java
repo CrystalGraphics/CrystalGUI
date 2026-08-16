@@ -1,6 +1,7 @@
 package com.crystalgui.language.run;
 
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.ClipboardCommands;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.WorkspaceFileService;
@@ -10,6 +11,7 @@ import com.crystalgui.ui.elements.dock.DockDropZone;
 import com.crystalgui.ui.elements.dock.DockPanelDescriptor;
 import com.crystalgui.ui.elements.editor.EditorCommands;
 import com.crystalgui.ui.elements.editor.TextEditor;
+import com.crystalgui.ui.elements.list.ListView;
 import com.crystalgui.ui.elements.workbench.Workbench;
 import com.crystalgui.ui.elements.workbench.decoration.FileDecorations;
 
@@ -122,6 +124,19 @@ public final class RunPanels {
             }
         });
 
+        // REMOVING A SCRIPT TAKES ITS OUTPUT WITH IT, and that is the whole point of the verb: the
+        // complaint it answers is a console that fills up with runs you have finished reading. Dropping
+        // the row alone would leave those lines under All output with nothing to filter them to -- worse
+        // than before, because the transcript would then hold text the rail could not account for.
+        //
+        // Here rather than in the panel because this is where both models are in scope; the panel is a
+        // view over them and does not get to decide what a "remove" touches. @see RunPanel#onRemoveRequested
+        panel.onRemoveRequested.connect(script -> {
+            if (script == null) return;
+            sessions.forget(script);
+            console.forget(script.name());
+        });
+
         // THE CONSOLE'S OWN PREFERENCES. Declared here rather than from ScriptWorkbench because a host
         // that shows a console somebody else fills still wants to size its buffer.
         ConsoleSettings.declare();
@@ -170,6 +185,26 @@ public final class RunPanels {
                 .item(EditorCommands.PREFIX + "copy")
                 .item(EditorCommands.PREFIX + "selectAll")
                 .contributions(ConsoleCommands.CONTEXT));
+
+        // AND THE RAIL'S ROWS, which are about a script rather than about the transcript.
+        //
+        // The list's own default menu is declined first: `attach` keeps one live menu per attachment
+        // site, but two attachments on one element are two listeners and BOTH would open -- so Copy is
+        // spliced in here instead, from the same command the default installer would have used.
+        ListView<Resource> rows = panel.rail().list();
+        rows.suppressDefaultContextMenu();
+        ContextMenu.attach(rows, registry, element -> {
+            int index = rows.indexOfRowElement(element);
+            if (index < 0) return null;
+            // THE ROW THE POINTER NAMED, told to both: the list needs it so Copy acts on that row rather
+            // than on the selection, and the rail needs it so Remove does. Neither moves the selection --
+            // a right-click says what it is about and leaves what you were reading alone.
+            rows.setContextRow(index);
+            panel.rail().setContextIndex(index);
+            return ContextMenu.builder()
+                    .item(ClipboardCommands.COPY)
+                    .contributions(ConsoleCommands.RAIL_CONTEXT);
+        });
     }
 
     /**

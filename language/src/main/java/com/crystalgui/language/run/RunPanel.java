@@ -93,6 +93,15 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
      */
     public final Signal.Value<Resource> onRerunRequested = new Signal.Value<>();
 
+    /**
+     * Asked to forget one script entirely — its rail row and everything it printed.
+     *
+     * <p>A signal rather than the panel doing it, for the reason Clear is one: the panel is a view over a
+     * {@code RunConsole} and a {@code RunSessions}, and which of them a "remove" touches is the
+     * application's decision. Here it is both, and {@code RunPanels} is where both are in scope.</p>
+     */
+    public final Signal.Value<Resource> onRemoveRequested = new Signal.Value<>();
+
     // NO onFilterRequested SIGNAL. It existed for a host that wanted to know which script was being
     // shown -- "a rail highlighting the same script" was the case named -- and the rail turned out to be
     // the thing that RAISES the filter rather than something that follows it, so nothing ever listened.
@@ -872,6 +881,33 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
     /** The transcript, for a host that wants its selection or its scroll position. */
     public RunConsoleView view() {
         return view;
+    }
+
+    /** The list of scripts, for a host attaching a context menu to its rows. */
+    public RunRail rail() {
+        return rail;
+    }
+
+    /**
+     * Whether the right-clicked row can be forgotten.
+     *
+     * <p><b>A live script cannot.</b> Its row is the only handle on a run that is still printing, and
+     * removing it would leave output arriving from something with no way to filter to it, no clock and no
+     * Stop. IntelliJ will not close a running tab without stopping it either. Dimmed rather than hidden,
+     * which is what this codebase's menus do — a row that vanishes is a row nobody learns.</p>
+     */
+    public boolean canRemoveContextScript() {
+        Resource script = rail.contextScript();
+        RunSessions listing = sessions;
+        return script != null && (listing == null || !listing.isActive(script));
+    }
+
+    /** Announces the removal of the right-clicked row. @see #onRemoveRequested */
+    public void removeContextScript() {
+        Resource script = rail.contextScript();
+        // RE-CHECKED AT ACTIVATION. The menu was built when it was opened, and a script can go live
+        // between the press that opened it and the press that chose a row.
+        if (script != null && canRemoveContextScript()) onRemoveRequested.emit(script);
     }
 
     /**
