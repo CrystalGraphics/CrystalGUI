@@ -55,6 +55,11 @@ public final class RunPanels {
         // and the button stayed red over a run that was already gone. A console filled by somebody else
         // has no host and therefore nothing this panel could stop.
         panel.setStoppableWhen(host == null ? () -> false : host::isRunning);
+        // NAMED AND OPTED IN, which is the whole of remembering soft wrap between launches. The id ties
+        // a stored payload to the widget; UIWindow hands it its state as it joins the tree, so a
+        // restored setting is applied before the first frame rather than after it.
+        panel.setId(RunPanel.PANEL_ID);
+        panel.setSessionPersistent(true);
 
         // BESIDE PROBLEMS, and for the reason Workbench gives for its own anchors: closing a panel and
         // reopening it from the activity bar should land it back where it was rather than somewhere

@@ -3,6 +3,7 @@ package com.crystalgui.language.run;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.fs.Resource;
+import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIFrameTicker;
 import com.crystalgui.ui.UIWindow;
@@ -149,6 +150,16 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
 
     /** What the soft-wrap button is currently showing, so an unchanged state writes no class. */
     private boolean wrapShown;
+
+    /**
+     * The same, for the tail-follow button.
+     *
+     * <p>False rather than true, which is not an arbitrary initial value: it mirrors what is on the
+     * ELEMENT, and the element starts with no {@code __on__} class. The lock itself starts armed, so
+     * seeding this to match <em>it</em> instead would make the first frame agree that nothing had
+     * changed — and the button would sit unlit over a console that was following.</p>
+     */
+    private boolean followShown;
 
     @Nullable private RunConsole console;
     /**
@@ -420,6 +431,26 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
             else wrap.removeClass(ON_CLASS);
         }
 
+        // SCROLL TO END IS A STATE AS WELL AS A VERB, which is IntelliJ's own control: its button stays
+        // pressed while the console is following. Pressing it is not the only way to arm the lock --
+        // scrolling back to the bottom does too -- so this is pulled for the same reason wrap is, and
+        // without it the panel has no answer at all to "will the newest line keep finding me?".
+        boolean following = view.isFollowingTail();
+        if (following != followShown) {
+            followShown = following;
+            if (following) toEnd.addClass(ON_CLASS);
+            else toEnd.removeClass(ON_CLASS);
+        }
+
+        // CLEAR IS DEAD OVER AN EMPTY TRANSCRIPT, as IntelliJ's is. The same rule Stop and Rerun already
+        // follow, and the same pairing: out of hit testing too, so it cannot light up or show a tooltip
+        // explaining what it would have done.
+        RunConsole showing = console;
+        boolean anythingToClear = showing != null
+                && (showing.lineCount() > 0 || showing.transcriptSize() > 0);
+        clear.setEnabled(anythingToClear);
+        clear.setHitTest(anythingToClear);
+
         // The subject is whatever the rail has selected, so both re-word as it moves. Read live rather
         // than written from the selection handler, because the ACCELERATOR can change without the
         // selection changing -- a rebind has no reason to tell this panel about itself.
@@ -518,6 +549,43 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
 
     public boolean acceptsPublicChildren() {
         return false;
+    }
+
+    /**
+     * The panel's session identity — see {@code SessionState}.
+     *
+     * <p>Namespaced like the split's, because the store is keyed by element id across the whole
+     * workbench.</p>
+     */
+    public static final String PANEL_ID = "run.panel";
+
+    private static final String KEY_SOFT_WRAP = "wrap";
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p><b>Soft wrap, and deliberately nothing else.</b> It is the one setting this panel has, IntelliJ
+     * remembers it on its console, and forgetting it means anybody who prefers wrapped output re-presses
+     * the button every launch.</p>
+     *
+     * <p>The FILTER is not persisted, and it would be one more line. A remembered filter naming a script
+     * that is not running again opens the console empty for a reason three clicks away — the same
+     * document-versus-view boundary the undo stack already draws. Nor is the tail-follow lock, which is a
+     * statement about where the reader is looking right now and is meaningless before the first line
+     * arrives.</p>
+     */
+    @Override
+    protected <T> void writeState(StateMap<T> out) {
+        super.writeState(out);
+        out.putBoolIfNot(KEY_SOFT_WRAP, view.isSoftWrap(), false);
+    }
+
+    @Override
+    protected <T> void readState(StateMap<T> in) {
+        super.readState(in);
+        // THROUGH THE VIEW, so the button's own mirror picks it up on the next frame rather than being
+        // written here. One writer for the class, one reader -- @see #refreshActions
+        view.setSoftWrap(in.getBool(KEY_SOFT_WRAP, false));
     }
 
     /** The transcript, for a host that wants its selection or its scroll position. */
