@@ -244,7 +244,17 @@ public abstract class FixFixture {
      * The caller closes it.
      */
     protected static SourceAnalyzer.Analysis analyse(String className, String source, int level) {
-        return analyzer.analyze(className, source, List.of(), level, VERSION);
+        return analyse(className, source, List.of(), level);
+    }
+
+    /**
+     * The same, with a classpath — for the coverage probe, which asks what a file reports when its types
+     * actually resolve as well as when they do not. The two answers are different populations of problem,
+     * and only measuring both says which of them a fix would be for.
+     */
+    protected static SourceAnalyzer.Analysis analyse(String className, String source,
+                                                     List<String> classpath, int level) {
+        return analyzer.analyze(className, source, classpath, level, VERSION);
     }
 
     /** The newest language level this band's engine parses. */

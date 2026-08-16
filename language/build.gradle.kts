@@ -574,6 +574,10 @@ tasks.test {
     systemProperty("cgui.test.corpus", if (project.hasProperty("noCorpus")) "false" else "true")
     // The repository root, so the corpus can find the other modules' sources from inside this one.
     systemProperty("cgui.test.repoRoot", rootProject.projectDir.absolutePath)
+    // `-Pcoverage` prints what the engine reports and cannot answer, over the same corpus. An instrument
+    // rather than a check -- it asserts nothing and its output is only useful to a person deciding what to
+    // build next -- so unlike the corpus it stays off by default. See CoverageProbeTest.
+    systemProperty("cgui.test.coverage", project.hasProperty("coverage").toString())
 
     // THE BAND JARS REACH THE TESTS AS PATHS, NOT AS A DEPENDENCY. Putting them on testRuntimeClasspath
     // would let a test resolve an engine class through the ordinary loader, which is exactly what the
