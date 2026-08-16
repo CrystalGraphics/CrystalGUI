@@ -36,6 +36,66 @@ public class RunSessionsTest {
         assertEquals("only the transition is a change", 1, changes.get());
     }
 
+    /**
+     * <b>The version moves only when the map does — which is the whole point of it.</b>
+     *
+     * <p>Two per-frame readers, the rail and the panel, used to copy this map to answer questions whose
+     * answers change a handful of times in a session. The counter is what lets them ask an int instead,
+     * and it is only worth anything if a tick handler reporting {@code LIVE} twenty times a second does
+     * not move it — which is the same no-op {@link #repeatingAStateIsNotAChange} pins from the other
+     * side. Version and signal have to agree, or a reader that trusts one and a reader that trusts the
+     * other will disagree about what the current state is.</p>
+     */
+    @Test
+    public void theVersionTracksRealChangesAndNothingElse() {
+        RunSessions sessions = new RunSessions();
+        int start = sessions.version();
+
+        sessions.set(script("tick.js"), RunState.LIVE, 3);
+        int afterFirst = sessions.version();
+        assertNotEquals("a first state was not counted", start, afterFirst);
+
+        for (int i = 0; i < 100; i++) sessions.set(script("tick.js"), RunState.LIVE, 3);
+        assertEquals("a repeated state moved the version", afterFirst, sessions.version());
+
+        sessions.set(script("tick.js"), RunState.STOPPED);
+        assertNotEquals("a real transition was not counted", afterFirst, sessions.version());
+
+        int beforeForget = sessions.version();
+        sessions.forget(script("tick.js"));
+        assertNotEquals("forgetting a script was not counted", beforeForget, sessions.version());
+
+        int afterForget = sessions.version();
+        sessions.forget(script("never-ran.js"));
+        assertEquals("forgetting something absent moved the version", afterForget, sessions.version());
+    }
+
+    /**
+     * The allocation-free queries answer exactly what the copying ones did.
+     *
+     * <p>Asserted against each other rather than against literals, because the risk is not that one of
+     * them is wrong on its own — it is that the cheap one and the copying one drift, and then a control
+     * greys on a different rule from the row beside it.</p>
+     */
+    @Test
+    public void theCheapQueriesAgreeWithTheCopyingOnes() {
+        RunSessions sessions = new RunSessions();
+        assertEquals(sessions.scripts().isEmpty(), sessions.isEmpty());
+        assertEquals(!sessions.active().isEmpty(), sessions.anyActive());
+        assertNull(sessions.firstActive());
+
+        sessions.set(script("done.java"), RunState.FINISHED);
+        assertEquals(sessions.scripts().isEmpty(), sessions.isEmpty());
+        assertEquals("a finished script is not active", !sessions.active().isEmpty(),
+                sessions.anyActive());
+        assertNull("a finished script was offered as the thing to stop", sessions.firstActive());
+
+        sessions.set(script("live.java"), RunState.LIVE, 1);
+        assertEquals(!sessions.active().isEmpty(), sessions.anyActive());
+        assertEquals("firstActive disagreed with active()",
+                sessions.active().get(0), sessions.firstActive());
+    }
+
     /** A changed handler count IS a change — it is what the rail shows beside the state. */
     @Test
     public void aHandlerCountChangeIsAChange() {

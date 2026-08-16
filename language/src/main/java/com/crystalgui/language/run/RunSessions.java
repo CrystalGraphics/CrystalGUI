@@ -90,6 +90,19 @@ public final class RunSessions {
     private final Map<Resource, Session> sessions = new LinkedHashMap<>();
 
     /**
+     * Bumped whenever the map actually changes — what lets a per-frame reader skip a snapshot.
+     *
+     * <p>{@link #scripts()} and {@link #active()} both copy under the lock, and the panel asked for one
+     * or the other three times a frame to answer questions whose answer changes a handful of times in a
+     * session: has anything run, is anything running, has something just started. A counter turns all
+     * three into an int comparison on the frames where nothing happened, which is nearly all of them.</p>
+     *
+     * <p>It counts <em>changes</em>, not calls to {@link #set} — {@code set} no-ops when the state is
+     * unchanged, which is what keeps a per-tick script from bumping this twenty times a second.</p>
+     */
+    private int version;
+
+    /**
      * The clock, injectable so a test can step it.
      *
      * <p>{@code nanoTime} rather than wall time: this measures a duration, and wall time can go backwards
@@ -130,6 +143,7 @@ public final class RunSessions {
             Session updated = new Session(state, Math.max(0, handlers), started, now);
             if (updated.sameStateAs(previous)) return;
             sessions.put(script, updated);
+            version++;
         }
         onDidChange.emit(script);
     }
@@ -149,6 +163,42 @@ public final class RunSessions {
     public synchronized boolean isActive(Resource script) {
         Session session = sessions.get(script);
         return session != null && session.isActive();
+    }
+
+    /**
+     * How many times this has changed — an int a per-frame reader can compare instead of copying.
+     *
+     * @see #version
+     */
+    public synchronized int version() {
+        return version;
+    }
+
+    /** Whether anything has ever run. {@code scripts().isEmpty()} without the copy. */
+    public synchronized boolean isEmpty() {
+        return sessions.isEmpty();
+    }
+
+    /** Whether anything can still do something. {@code !active().isEmpty()} without the copy. */
+    public synchronized boolean anyActive() {
+        for (Session session : sessions.values()) {
+            if (session.isActive()) return true;
+        }
+        return false;
+    }
+
+    /**
+     * The first script that is still active, or null.
+     *
+     * <p>What Stop names. The panel asked this as {@code active().stream().findFirst()}, which builds a
+     * list and a stream to look at one element — once a frame, forever.</p>
+     */
+    @Nullable
+    public synchronized Resource firstActive() {
+        for (Map.Entry<Resource, Session> entry : sessions.entrySet()) {
+            if (entry.getValue().isActive()) return entry.getKey();
+        }
+        return null;
     }
 
     /** Every script this workspace knows about, in the order it first ran them. */
@@ -175,6 +225,7 @@ public final class RunSessions {
         boolean removed;
         synchronized (this) {
             removed = sessions.remove(script) != null;
+            if (removed) version++;
         }
         if (removed) onDidChange.emit(script);
     }
