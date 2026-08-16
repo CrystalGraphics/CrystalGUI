@@ -232,6 +232,68 @@ public class RunConsoleTest {
     }
 
     /**
+     * <b>A second run of one script is findable without reading the text.</b>
+     *
+     * <p>Retaining history is the decision this console made — our transcript is one filtered surface per
+     * workspace rather than IntelliJ's console per run configuration, so clearing on each run would take
+     * other scripts' output with it. The cost of that decision is exactly this: two runs of one script
+     * print the same thing twice, and the seam between them is the only thing saying where the last one
+     * ended. A blank line puts it there, an ordinal names it, and a capture of its own colours it.</p>
+     */
+    @Test
+    public void aSecondRunOpensWithABreakAndAnOrdinal() {
+        RunConsole console = attached(new TextBuffer());
+        console.startRun("Ask.java");
+        console.append(out("Ask.java", "hello"));
+        console.endRun("Ask.java", "Ask.java finished in 1 sec");
+        console.startRun("Ask.java");
+        console.drain();
+
+        // header, output, footer, BLANK, header
+        assertEquals(5, console.lineCount());
+        assertEquals("the first run should not be pushed down by a break above it",
+                "Ask.java", console.lineAt(0).text());
+        assertTrue("the opening line is a heading, not a footnote", console.lineAt(0).isRunStart());
+
+        assertEquals("nothing separates the runs", "", console.lineAt(3).text());
+        assertEquals("the second run is not named as one", "Ask.java (run 2)",
+                console.lineAt(4).text());
+        assertTrue(console.lineAt(4).isRunStart());
+        assertFalse("the closing line must stay a footnote", console.lineAt(2).isRunStart());
+        assertTrue("and still a boundary", console.lineAt(2).isDivider());
+    }
+
+    /**
+     * <b>The ordinal counts runs, not surviving lines.</b>
+     *
+     * <p>Derived from the transcript it would <em>fall</em> as the ring evicted old runs, so "run 3" would
+     * become "run 2" while the reader watched. A clear is the one thing that genuinely starts again.</p>
+     */
+    @Test
+    public void theOrdinalSurvivesEvictionAndResetsOnClear() {
+        RunConsole console = attached(new TextBuffer()).setBudgetKb(1);
+        for (int i = 0; i < 3; i++) {
+            console.startRun("Loud.java");
+            for (int line = 0; line < 40; line++) {
+                console.append(out("Loud.java", "a line of some length " + line));
+            }
+            console.drain();
+        }
+        assertTrue("the ring should have evicted the earliest runs", console.dropped() > 0);
+
+        console.startRun("Loud.java");
+        console.drain();
+        String header = console.lineAt(console.lineCount() - 1).text();
+        assertEquals("the ordinal fell as old runs aged out", "Loud.java (run 4)", header);
+
+        console.clear();
+        console.startRun("Loud.java");
+        console.drain();
+        assertEquals("a clear is a fresh start and the count should say so",
+                "Loud.java", console.lineAt(0).text());
+    }
+
+    /**
      * <b>Forgetting one script takes its lines and leaves everyone else's.</b>
      *
      * <p>A clear is the blunt answer: the complaint is a console filling up with runs you have finished

@@ -902,6 +902,22 @@ runpanel .__run-console__ .__syntax__::highlight(link) {
     text-decoration-line: underline;
 }
 
+/* WHERE A RUN BEGINS. Two runs of one script print the same thing twice, so the seam between them is the
+ * only thing saying where the last one ended -- and it used to be the same faded grey as the line that
+ * closed the run before it, in a transcript that already has quiet lines in it. A reader had to parse the
+ * text to find a boundary that should be visible while scrolling past.
+ *
+ * So the pair is a HEADING and a FOOTNOTE: the opening line is coloured to be found, and the closing one
+ * stays `comment` grey because it is a remark about a run already read. The blank line above it does the
+ * rest -- vertical space is what every terminal and log viewer uses to mean "a new section", and it needs
+ * no glyph anybody's font might lack.
+ *
+ * The accent rather than the link colour, though both are blue: a link is UNDERLINED and this is not,
+ * which is the distinction that matters when one of them is clickable and the other is a caption. */
+runpanel .__run-console__ .__syntax__::highlight(run.start) {
+    color: var(--run-boundary-fg, #3574F0);
+}
+
 /* The controls, as a vertical stripe on the console's TRAILING edge -- IntelliJ's console keeps them
  * there and the reason is space: a full-width bar spends 22px of height to hold four glyphs, on a panel
  * whose entire job is showing as many lines as it can. A stripe spends 24px of width instead, next to a
