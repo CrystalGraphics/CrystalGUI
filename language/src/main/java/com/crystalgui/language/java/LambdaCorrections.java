@@ -166,31 +166,12 @@ final class LambdaCorrections {
      * contains, competing with the fixes for the real problems on those lines.</p>
      */
     private static ClassInstanceCreation creationAt(FixContext context) {
-        int from = context.from();
-        int to = context.to();
-        ASTNode node = NodeFinder.perform(context.unit(), from, Math.max(0, to - from));
-        if (node == null) return null;
-
-        // UP FIRST: a caret inside the header lands on the type or the `new`, whose creation is an
-        // ancestor.
-        for (ASTNode walk = node; walk != null; walk = walk.getParent()) {
-            if (walk instanceof ClassInstanceCreation && headerOverlaps((ClassInstanceCreation) walk, from, to)) {
-                return (ClassInstanceCreation) walk;
-            }
-        }
-
-        // AND THEN DOWN, which is not symmetry for its own sake. A request is a RANGE, and the moment it
-        // is wider than the header — a selected line, `return new Comparator<String>() {` — the node
-        // covering it is the statement and the creation is a CHILD of it, so walking outward passes it by
-        // forever. Every fixture line failed on exactly this while every caret-driven test passed.
-        ClassInstanceCreation[] found = {null};
-        node.accept(new ASTVisitor() {
-            @Override public boolean visit(ClassInstanceCreation candidate) {
-                if (found[0] == null && headerOverlaps(candidate, from, to)) found[0] = candidate;
-                return found[0] == null;
-            }
-        });
-        return found[0];
+        // THE UP-THEN-DOWN WALK IS FixContext.at's, and used to be written out here. It is the same search
+        // every intention needs and the trap in it — a request wider than the trigger makes the wanted node
+        // a CHILD of the one covering it, so walking outward passes it forever — cost this family every
+        // fixture line and then cost the intentions family the same one, which is what moved it.
+        return context.at(ClassInstanceCreation.class,
+                candidate -> headerOverlaps(candidate, context.from(), context.to()));
     }
 
     /** Whether the request touches {@code new …()} — up to the opening brace, never the body. */
