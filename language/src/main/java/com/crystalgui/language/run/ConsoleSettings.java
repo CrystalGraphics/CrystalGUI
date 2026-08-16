@@ -4,6 +4,8 @@ import com.crystalgui.core.settings.Setting;
 import com.crystalgui.core.settings.SettingsCategory;
 import com.crystalgui.core.settings.SettingsRegistry;
 
+import java.util.List;
+
 /**
  * What the console lets you change — the cycle buffer, and nothing else.
  *
@@ -51,6 +53,38 @@ public final class ConsoleSettings {
     public static final int MINIMUM_KB = 16;
 
     /**
+     * What each line is stamped with.
+     *
+     * <p><b>A setting rather than a decision, because decorating output is a real trade.</b> IntelliJ's
+     * console shows the process's bytes and nothing else, and somebody reading a script's own aligned
+     * output wants exactly that — a prefix pushes their table sideways and makes a copied line text the
+     * script never printed. But an event-driven script prints the same sentence at 10:14 and at 10:47,
+     * and without a clock the transcript cannot say whether anything is still happening.</p>
+     *
+     * <p>Spelled with the enum's own constant names so the two cannot disagree — the same rule
+     * {@code WorkbenchSettings.SORT_ORDER} follows.</p>
+     */
+    public static final Setting<String> LINE_PREFIX =
+            Setting.select("run.consoleLinePrefix", "Stamp console lines with",
+                            List.of(ConsolePrefix.Style.NONE.name(),
+                                    ConsolePrefix.Style.TIME.name(),
+                                    ConsolePrefix.Style.FULL.name()),
+                            ConsolePrefix.Style.FULL.name())
+                    .description("NONE shows exactly what the script printed. TIME adds [22:59:20]. "
+                            + "FULL adds the script line that printed it as well.");
+
+    /** The style in force at {@code panel}. Unknown values fall back rather than throwing. */
+    public static ConsolePrefix.Style prefixStyle(RunPanel panel) {
+        try {
+            return ConsolePrefix.Style.valueOf(panel.resolve(LINE_PREFIX));
+        } catch (IllegalArgumentException | NullPointerException unknown) {
+            // A HAND-EDITED settings file is the case this covers, and a console that refused to draw
+            // would be a worse answer than one that draws the default.
+            return ConsolePrefix.Style.FULL;
+        }
+    }
+
+    /**
      * Declares the set. Idempotent — the registry replaces a same-id declaration, and this is the same
      * instance every time.
      */
@@ -59,6 +93,7 @@ public final class ConsoleSettings {
         // somebody's navigation by accident. Same rule WorkbenchSettings states for its four.
         SettingsCategory.page("run", "Run");
         SettingsRegistry.get().register(BUFFER_KB);
+        SettingsRegistry.get().register(LINE_PREFIX);
     }
 
     /** The value in force at {@code panel}, clamped. Settings resolve outward through the tree. */
