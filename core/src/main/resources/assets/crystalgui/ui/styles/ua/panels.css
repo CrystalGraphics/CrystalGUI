@@ -1064,6 +1064,43 @@ runpanel .__run-input__ {
     border-color: var(--accent, #3574F0);
 }
 
+/* WHAT THE PANEL SAYS BEFORE ANYTHING HAS RUN.
+ *
+ * A blank rectangle is not a neutral answer -- it reads as broken, on the panel most likely to be opened
+ * first because the activity bar has a button for it. IntelliJ centres a note here and so does every VS
+ * Code panel with a precondition; the Problems view in this application already does.
+ *
+ * ABSOLUTE AND INSET TO NOTHING, so it sits over the console's own surface rather than beside it: the
+ * transcript is empty by definition here, so there is nothing to displace, and laying the note out in
+ * the flow would give the console a share of the height it does not need. `.__run-empty__` is a child of
+ * the body, whose containing block it fills. */
+runpanel .__run-empty__ {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap-all: 3px;
+}
+
+/* `font-size` DOES NOT INHERIT -- `default.css` opens with `* { font-size: 10 }`, which is a candidate at
+ * STYLESHEET origin on every element, and inheritance only applies where there is no candidate at any
+ * origin. So each line states its own, and a rule on the container above would silently do nothing. */
+runpanel .__run-empty-head__ {
+    font-size: 10px;
+    color: var(--run-empty-fg, #6B6B6B);
+    white-space: nowrap;
+}
+
+runpanel .__run-empty-line__ {
+    font-size: 10px;
+    color: var(--run-empty-fg, #6B6B6B);
+    white-space: nowrap;
+}
+
 /* The ring's eviction notice. Never hidden when non-empty: a transcript that quietly begins in the
  * middle reads as the console having missed something. */
 runpanel .__run-notice__ {

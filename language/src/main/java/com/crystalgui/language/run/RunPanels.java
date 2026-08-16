@@ -3,6 +3,7 @@ package com.crystalgui.language.run;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
+import com.crystalgui.fs.WorkspaceFileService;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.ui.elements.chrome.ContextMenu;
 import com.crystalgui.ui.elements.dock.DockDropZone;
@@ -102,6 +103,28 @@ public final class RunPanels {
                 editor.requestPointerFocus();
             });
         });
+
+        // A SCRIPT THAT NO LONGER EXISTS IS NOT A SCRIPT THIS WORKSPACE HAS RUN. `RunSessions.forget`
+        // has existed since the map did and nothing ever called it, so a deleted file kept its rail row,
+        // its elapsed time and its Rerun -- a button offering to run a file that is gone, which fails at
+        // the compile with a message about the file not being open rather than about it not being there.
+        //
+        // A RENAME COUNTS TOO, and it is the case that would have been missed: the run under the old name
+        // is over, and `Operation.source()` is the only place the old path still exists by the time this
+        // fires. Both come off `onDidRun` rather than `onWillRun` -- a delete the server refuses must not
+        // take the row with it.
+        workbench.files().onDidRun.connect(operation -> {
+            if (operation == null) return;
+            if (operation.kind() == WorkspaceFileService.Kind.DELETE) {
+                sessions.forget(Resource.of(operation.target()));
+            } else if (operation.kind() == WorkspaceFileService.Kind.MOVE && operation.source() != null) {
+                sessions.forget(Resource.of(operation.source()));
+            }
+        });
+
+        // THE CONSOLE'S OWN PREFERENCES. Declared here rather than from ScriptWorkbench because a host
+        // that shows a console somebody else fills still wants to size its buffer.
+        ConsoleSettings.declare();
 
         // THE INDICATOR, which is free once the provider exists: the tree already merges independent
         // contributors and bubbles them to folders.
