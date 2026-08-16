@@ -90,6 +90,49 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
     @Override
     public Analysis analyze(String className, String source, List<String> classpath,
                             int releaseLevel, long version) {
+        CompilationUnit unit = parse(className, source, classpath, releaseLevel, true);
+        // JDT COULD NOT FINISH, so ask it for the half it can still do. See parse().
+        if (unit == null) unit = parse(className, source, classpath, releaseLevel, false);
+        if (unit == null) return null;
+        // THE SAME CLASSPATH, handed on rather than re-derived: a signature quoted out of a source
+        // archive has to resolve against what this parse resolved against, or the binding keys the two
+        // are matched by would not be the same strings. @see AttachedSources
+        return new EcjAnalysis(unit, source, version, AttachedSources.forClasspath(classpath));
+    }
+
+    /**
+     * One parse attempt, or {@code null} if JDT failed outright.
+     *
+     * <h3>Why this can fail at all, and why a throw here is worse than anywhere else</h3>
+     *
+     * <p>JDT's binding layer asserts on its own invariants, and one of them does not hold on real code:
+     * a record whose component types are unresolvable makes it tag the canonical constructor as
+     * containing missing types and then <em>assert that it did not</em> — {@code AssertionError}, out of
+     * {@code createAST}, on a file that is perfectly good Java. The corpus pass found it on its first
+     * run and its report named this method.</p>
+     *
+     * <p>An analysis runs on a scheduler lane, so an {@code Error} escaping here does not degrade the
+     * feature — it takes the job down. The document then holds no diagnostics, no colouring and no
+     * completions, with nothing on screen to say why, and every later keystroke schedules the same
+     * failure. A script declaring a record over a type that is not on the classpath — a mod class, on a
+     * server without it — is enough.</p>
+     *
+     * <h3>The fallback is a real answer, not a null</h3>
+     *
+     * <p>The failure is in <em>resolution</em>, so the retry turns resolution off. What survives is the
+     * whole tree: syntax errors, folding regions, structure, and the grammar-level colouring that never
+     * needed bindings. What is lost is the semantic layer — which is exactly the tier that was broken
+     * anyway, and its absence is already how this stack spells "not available" (see the three
+     * independent tiers in AGENTS.md). Returning {@code null} instead would be indistinguishable from
+     * a document nobody has analysed.</p>
+     *
+     * <p><b>{@code OutOfMemoryError} is rethrown</b> and nothing else is: retrying a second, larger parse
+     * after the heap has run out is how a recoverable stall becomes an unrecoverable one. A cancellation
+     * cannot arrive here — the stop mechanism is the running <em>script</em>'s interrupt status on the
+     * execution lane, and this method runs no user code.</p>
+     */
+    private static CompilationUnit parse(String className, String source, List<String> classpath,
+                                         int releaseLevel, boolean resolveBindings) {
         ASTParser parser = ASTParser.newParser(EcjOptions.jlsLevel());
         parser.setSource(source.toCharArray());
         // THE PATH THE SOURCE ITSELF IMPLIES, not the caller's guess. A file declaring a package
@@ -97,13 +140,13 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
         // expected package" on line 1 -- about its own bookkeeping, on the author's first line.
         parser.setUnitName(SourcePackages.unitPath(className, source));
         parser.setKind(ASTParser.K_COMPILATION_UNIT);
-        parser.setResolveBindings(true);
+        parser.setResolveBindings(resolveBindings);
         // THE TWO THAT MATTER WHILE TYPING. Without them a half-written statement yields an AST with no
         // bindings at all, so every name in the file loses its colour on the keystroke that breaks it
         // and gets it back on the one that fixes it -- which reads as the highlighter flickering rather
         // than as the file being briefly invalid.
         parser.setStatementsRecovery(true);
-        parser.setBindingsRecovery(true);
+        parser.setBindingsRecovery(resolveBindings);
         parser.setCompilerOptions(compilerOptions(releaseLevel));
 
         String[] entries = classpath == null ? new String[0] : classpath.toArray(new String[0]);
@@ -111,11 +154,13 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
         // mechanisms, and which one is used is a property of the host rather than of the jar.
         parser.setEnvironment(entries, new String[0], new String[0], true);
 
-        CompilationUnit unit = (CompilationUnit) parser.createAST(null);
-        // THE SAME CLASSPATH, handed on rather than re-derived: a signature quoted out of a source
-        // archive has to resolve against what this parse resolved against, or the binding keys the two
-        // are matched by would not be the same strings. @see AttachedSources
-        return new EcjAnalysis(unit, source, version, AttachedSources.forClasspath(classpath));
+        try {
+            return (CompilationUnit) parser.createAST(null);
+        } catch (OutOfMemoryError exhausted) {
+            throw exhausted;
+        } catch (RuntimeException | Error failed) {
+            return null;
+        }
     }
 
     private static Map<String, String> compilerOptions(int releaseLevel) {
