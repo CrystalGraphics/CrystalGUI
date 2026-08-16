@@ -2136,8 +2136,11 @@ public class TextEditor extends ScrollerView implements UndoScope {
         if (docPopup == null) return;
         List<Diagnostic> problems = diagnosticsAt(offset);
         docPopup.setProblem(problems, List.of());
-        if (problems.isEmpty()) return;
-
+        // NO LONGER GATED ON A PROBLEM. It was, and that made an INTENTION unreachable from here: there
+        // is no diagnostic behind "Replace with lambda", so the request was never made and the popup for
+        // a convertible anonymous class showed a signature and nothing to do — while the gutter bulb two
+        // inches away said there was something. The same rule that had to change for the bulb, in the one
+        // other place it was written down.
         popupActions.disconnectAll();
         popupActions.add(docPopup.onActionChosen.connect(action -> {
             if (applyCodeAction(action)) closeQuickDocumentation();

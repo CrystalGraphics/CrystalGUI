@@ -14,6 +14,7 @@ import org.junit.Test;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 
 /**
@@ -111,5 +112,39 @@ public class ProblemBandPrimaryTest extends UiTestBase {
         available.sort(CodeAction.ORDER);
         show(available);
         assertEquals("Create method 'helper()'", popup.primaryAction().title());
+    }
+    // ── Intentions, which have no problem behind them ───────────────────────────────────────────
+
+    private static CodeAction refactor(String id, String title) {
+        return new CodeAction(id, title, CodeActionKind.REFACTOR, ChangeSet.empty(10), null, false, 0L);
+    }
+
+    /**
+     * <b>With no problem, the top action takes the slot whatever kind it is.</b>
+     *
+     * <p>The QUICK_FIX-only rule is really "the inline action must answer the message above it", and with
+     * no message there is nothing for it to answer. An intention is the only reason the strip opened at
+     * all — "Replace with lambda" on a convertible anonymous class — so refusing it there leaves a popup
+     * showing a bare "More actions…" and the one thing on offer a keystroke further away. IntelliJ shows
+     * exactly this inline, with Alt+Shift+Enter beside it.</p>
+     */
+    @Test
+    public void anIntentionTakesTheSlotWhenThereIsNoProblem() {
+        popup.showProblemsAt(window, List.of(), 10f, 10f, 12f);
+        popup.setProblem(List.of(), List.of(refactor("lambda", "Replace with lambda")));
+        settle();
+        assertNotNull("nothing was put in the inline slot", popup.primaryAction());
+        assertEquals("Replace with lambda", popup.primaryAction().title());
+    }
+
+    /**
+     * <b>And a tidy still may not take it while there IS a problem.</b> That is the half of the rule that
+     * has to survive: "Organize imports" beside a real error is a thing to choose, not to default to, and
+     * one keystroke from a hover is exactly defaulting to it.
+     */
+    @Test
+    public void aTidyStillCannotTakeTheSlotBesideAProblem() {
+        show(List.of(source("organize", "Organize imports")));
+        assertNull("a whole-file tidy is not the answer to this problem", popup.primaryAction());
     }
 }
