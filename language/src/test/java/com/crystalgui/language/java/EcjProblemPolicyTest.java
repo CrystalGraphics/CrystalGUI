@@ -122,19 +122,9 @@ public class EcjProblemPolicyTest extends FixFixture {
                 "Script", marked(source, IProblem.UnusedPrivateConstructor));
     }
 
-    /** The text a problem's reported range actually covers. */
-    private static String marked(String source, int problemId) {
-        Diagnostic problem = first(source, problemId);
-        assertNotNull("problem " + problemId + " is not reported", problem);
-        String[] lines = source.split("\n", -1);
-        StringBuilder text = new StringBuilder();
-        for (int row = problem.start().row(); row <= problem.end().row() && row < lines.length; row++) {
-            int from = row == problem.start().row() ? problem.start().column() : 0;
-            int to = row == problem.end().row() ? problem.end().column() : lines[row].length();
-            text.append(lines[row], Math.min(from, lines[row].length()), Math.min(to, lines[row].length()));
-        }
-        return text.toString();
-    }
+    // `marked` was a third copy of the same walk and is now FixFixture's, beside the assertion that says
+    // the fix has to be reachable from whatever it returns — which is the property these two are really
+    // about and neither of them was checking.
 
     // ── Drawn as dead weight ────────────────────────────────────────────────────────────────────
 
