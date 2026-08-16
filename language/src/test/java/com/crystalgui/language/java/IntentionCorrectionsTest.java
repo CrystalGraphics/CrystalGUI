@@ -231,6 +231,80 @@ public class IntentionCorrectionsTest extends FixFixture {
     }
 
     /**
+     * <b>The {@code else} keeps its own line.</b> Reported from the harness: deleting the closing brace also
+     * deleted the line break it was providing, so {@code else if (…)} closed up onto the end of the
+     * statement that had been inside — legal Java, unreadable, and with the second branch still indented
+     * for a block that no longer existed.
+     */
+    @Test
+    public void removingBracesFromAThenBranchKeepsTheElseOnItsOwnLine() {
+        assertFix(""
+                        + "public class Script {\n"
+                        + "    void go(int n) {\n"
+                        + "        if (n == 1) {\n"
+                        + "            System.out.println(1);\n"
+                        + "        } else if (n == 2) {\n"
+                        + "            System.out.println(2);\n"
+                        + "        }\n"
+                        + "    }\n"
+                        + "}\n",
+                "if (n == 1)", IntentionCorrections.REMOVE_BRACES, ""
+                        + "public class Script {\n"
+                        + "    void go(int n) {\n"
+                        + "        if (n == 1)\n"
+                        + "            System.out.println(1);\n"
+                        + "        else if (n == 2) {\n"
+                        + "            System.out.println(2);\n"
+                        + "        }\n"
+                        + "    }\n"
+                        + "}\n");
+    }
+
+    /** A {@code do}'s {@code while} is the same shape and would have closed up the same way. */
+    @Test
+    public void removingBracesFromADoBodyKeepsTheWhileOnItsOwnLine() {
+        assertFix(""
+                        + "public class Script {\n"
+                        + "    void go(int n) {\n"
+                        + "        do {\n"
+                        + "            n--;\n"
+                        + "        } while (n > 0);\n"
+                        + "    }\n"
+                        + "}\n",
+                "do {", IntentionCorrections.REMOVE_BRACES, ""
+                        + "public class Script {\n"
+                        + "    void go(int n) {\n"
+                        + "        do\n"
+                        + "            n--;\n"
+                        + "        while (n > 0);\n"
+                        + "    }\n"
+                        + "}\n");
+    }
+
+    /**
+     * <b>And the pair still round-trips with an {@code else} present</b>, which is what the fix to the
+     * other direction is for: adding braces brings the continuation back up onto the brace, because
+     * {@code } else} is the shape Java is written in and because otherwise the two drift a line apart
+     * every time somebody uses both.
+     */
+    @Test
+    public void theBracePairRoundTripsThroughAnElse() {
+        String before = ""
+                + "public class Script {\n"
+                + "    void go(int n) {\n"
+                + "        if (n == 1) {\n"
+                + "            System.out.println(1);\n"
+                + "        } else {\n"
+                + "            System.out.println(2);\n"
+                + "        }\n"
+                + "    }\n"
+                + "}\n";
+        String bare = applied(before, require(before, "if (n == 1)", IntentionCorrections.REMOVE_BRACES));
+        String rebraced = applied(bare, require(bare, "if (n == 1)", IntentionCorrections.ADD_BRACES));
+        assertEquals("the pair must round-trip across an else", before, rebraced);
+    }
+
+    /**
      * <b>A declaration is not a legal unbraced body.</b> {@code if (x) int a = 1;} does not compile, so
      * removing these braces breaks the file outright.
      */
