@@ -8,10 +8,14 @@ import com.crystalgui.ui.elements.Tooltip;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.elements.list.ListRenderer;
 import com.crystalgui.ui.elements.list.ListView;
+import com.crystalgui.ui.elements.list.SelectionMode;
 
 import javax.annotation.Nullable;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 /**
  * The column of scripts this workspace has run — IntelliJ's run tree, in the one shape that fits.
@@ -72,7 +76,7 @@ public final class RunRail extends UIElement {
     public RunRail() {
         addClass(RAIL_CLASS);
         list.setRenderer(new Rows());
-        list.setSelectionMode(com.crystalgui.ui.elements.list.SelectionMode.SINGLE);
+        list.setSelectionMode(SelectionMode.SINGLE);
         list.onSelectionChanged.connect(indices -> {
             if (indices.isEmpty()) return;
             int index = indices.iterator().next();
@@ -120,7 +124,7 @@ public final class RunRail extends UIElement {
         // a script is first run; the STATE changes on every transition, and a script finishing changes no
         // set at all. So a finished script kept its green dot until something else happened to rebuild the
         // list, and running a second script appeared to "fix" the first one's mark.
-        for (java.util.Map.Entry<Integer, UIElement> realised : list.realisedRows().entrySet()) {
+        for (Map.Entry<Integer, UIElement> realised : list.realisedRows().entrySet()) {
             writeRow(realised.getKey(), realised.getValue());
         }
     }
@@ -168,10 +172,10 @@ public final class RunRail extends UIElement {
      */
     private void swapState(UIElement glyph, @Nullable RunState state) {
         for (RunState value : RunState.values()) {
-            glyph.removeClass(STATE_CLASS_PREFIX + value.name().toLowerCase(java.util.Locale.ROOT));
+            glyph.removeClass(STATE_CLASS_PREFIX + value.name().toLowerCase(Locale.ROOT));
         }
         if (state != null) {
-            glyph.addClass(STATE_CLASS_PREFIX + state.name().toLowerCase(java.util.Locale.ROOT));
+            glyph.addClass(STATE_CLASS_PREFIX + state.name().toLowerCase(Locale.ROOT));
         }
     }
 
@@ -201,7 +205,7 @@ public final class RunRail extends UIElement {
             return "Live (" + handlers + (handlers == 1 ? " handler)" : " handlers)");
         }
         String name = session.state().name();
-        return name.charAt(0) + name.substring(1).toLowerCase(java.util.Locale.ROOT);
+        return name.charAt(0) + name.substring(1).toLowerCase(Locale.ROOT);
     }
 
     /**
@@ -211,7 +215,7 @@ public final class RunRail extends UIElement {
      * {@code bind} — which runs for every visible row on every scroll step — leaves the previous tooltip
      * attached and showing, and the text then never appears to update however correct the lookup is.</p>
      */
-    private final java.util.Map<UIElement, Tooltip> tooltips = new java.util.HashMap<>();
+    private final Map<UIElement, Tooltip> tooltips = new HashMap<>();
 
     /** One row: a state glyph, the file's name, and how long it has been going. */
     private final class Rows implements ListRenderer<Resource> {

@@ -653,8 +653,6 @@ runpanel .__run-body__ {
     overflow: hidden;
 }
 
-/* The column of scripts. A FIXED width: the rail holds a filename and a duration, both of which have a
- * knowable size, and a draggable divider is a SplitView away if one is ever wanted. */
 /* The rail and its toolbar, as one column. IntelliJ puts the RUN controls in a horizontal bar above the
  * tree and the CONSOLE controls in a vertical stripe beside the output, and the split is not decorative:
  * rerun and stop act on a SCRIPT, which is what the rail lists, while wrap and scroll act on the
@@ -669,8 +667,9 @@ runpanel .__run-left__ {
     height: 100%;
     min-width: 150px;
     background-color: var(--run-rail-bg, #191A1C);
-    /* The divider is `.__run-vsep__`, an element beside this one -- a `border-width-right` here drew
-     * nothing at all, for the reason spelled out on the stripe above. */
+    /* NO BORDER ON THIS EDGE. The SplitView's own divider is the boundary now, and a `border-width-right`
+     * here would draw nothing anyway -- the paint path takes `border().left` as its stroke width, so
+     * naming any other edge resolves and draws nothing at all. */
 }
 
 /* The run controls, on a strip spanning the panel directly under its header -- IntelliJ's arrangement,
@@ -913,9 +912,7 @@ runpanel .__run-stripe__ {
 /* A console control is a glyph, not a labelled button. `min-height` is a DIFFERENT PROPERTY from
  * `height`, so the base `button` rule's minimum wins at any specificity until it is cleared here --
  * which is what held earlier attempts at a compact toggle open at 14px through three rounds of shrinking
- * `height`. The padding has to go for the same reason. */
-/* A console control is a glyph, not a labelled button. `min-height` is a DIFFERENT PROPERTY from
- * `height`, so the base `button` rule's minimum wins at any specificity until it is cleared here.
+ * `height`. The padding has to go for the same reason.
  *
  * THE DRAWING IS 12px AND THE TARGET IS 20px, which is what the padding is for. `overlay-fit: contain`
  * scales the artwork to the box it is given, so a 20px button drew a 20px glyph -- huge beside 9px row
@@ -979,30 +976,10 @@ runpanel .__run-stop__:disabled {
     overlay: icon("crystalgui:general/action/stopDisabled");
 }
 
-/* The per-script filter. A `dropdown` is its own tag and inherits nothing from `button` — a widget's
- * cascade identity is its tag, never its Java supertype, which is why `Dropdown extends Button` needs its
- * own geometry stated rather than borrowing the action rules above. */
-runpanel .__run-filter__ {
-    height: 18px;
-    min-height: 0;
-    flex-shrink: 0;
-    /* A FLOOR, NOT A SIZE. The head is a packed row and flex-shrink defaults to 0 here, so whatever can
-     * give is the only thing that gives -- and a picker squeezed to nothing is not a picker. */
-    min-width: 90px;
-    max-width: 180px;
-    padding-left: 6px;
-    padding-right: 4px;
-    font-size: 9px;
-    background: none;
-    background-color: transparent;
-    color: var(--run-action-fg, #9DA0A8);
-}
-
-runpanel .__run-filter__:hover {
-    background: none;
-    background-color: var(--run-action-hover-bg, #2E3033);
-    color: var(--run-action-hover-fg, #DFE1E5);
-}
+/* NO `.__run-filter__` RULES. The head carried a `dropdown` picking which script's output to show, and
+ * the rail replaced it rather than joining it -- both answer the same question, and two controls for one
+ * question is the arrangement where they drift apart. The rules outlived the widget by a release, which
+ * is how a stylesheet comes to describe a UI nobody can see. */
 
 runpanel .__run-stop__ {
     overlay: icon("crystalgui:general/action/stop");

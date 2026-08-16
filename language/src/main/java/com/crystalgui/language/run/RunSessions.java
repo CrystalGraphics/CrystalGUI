@@ -10,6 +10,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.LongSupplier;
 
 /**
  * Which scripts are live, and in what state — the rail beside the console, and the source the running
@@ -43,7 +44,13 @@ import java.util.Map;
  */
 public final class RunSessions {
 
-    /** Fired with the script whose state changed, or null when the whole set was cleared. */
+    /**
+     * Fired with the script whose state changed. <b>Never null</b> — every emitter names one.
+     *
+     * <p>It used to say "or null when the whole set was cleared", which was true of a {@code clear()}
+     * nothing called and is now true of nothing at all. Listeners still guard, and should: a null check
+     * that can never fire is cheaper than a contract two classes have to agree about.</p>
+     */
     public final Signal.Value<Resource> onDidChange = new Signal.Value<>();
 
     /**
@@ -89,13 +96,13 @@ public final class RunSessions {
      * across an NTP correction — which would show a script that has been live for an hour as having
      * started in the future.</p>
      */
-    private final java.util.function.LongSupplier clock;
+    private final LongSupplier clock;
 
     public RunSessions() {
         this(System::nanoTime);
     }
 
-    public RunSessions(java.util.function.LongSupplier clock) {
+    public RunSessions(LongSupplier clock) {
         this.clock = clock == null ? System::nanoTime : clock;
     }
 
@@ -172,11 +179,9 @@ public final class RunSessions {
         if (removed) onDidChange.emit(script);
     }
 
-    public void clear() {
-        synchronized (this) {
-            if (sessions.isEmpty()) return;
-            sessions.clear();
-        }
-        onDidChange.emit(null);
-    }
+    // NO clear(). It was the obvious counterpart to `forget` and nothing ever wanted it: a workspace
+    // closing takes the whole `RunSessions` with it, and "forget every run" is not a gesture either
+    // reference offers -- IntelliJ's run tabs are closed one at a time. The signal it emitted carried a
+    // null script, which is why `onDidChange` is documented as "or null when the whole set was cleared";
+    // that sentence now describes nothing, and the only emitter left always names a script.
 }

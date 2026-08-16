@@ -193,8 +193,8 @@ public final class ScriptOutput {
                 frames -> frames.filter(f -> script.owns(f.getClassName())).findFirst());
         if (frame.isEmpty()) {
             // Output from a script that is running but not on the stack -- a callback the engine
-            // invoked, say. Real, attributable to the script, and with no line to name; it simply does
-            // not collapse. @see RunMessage#collapseKey
+            // invoked, say. Real, attributable to the script, and with no line to name, so it is shown
+            // like any other row and double-clicking it goes nowhere. @see RunConsoleView#activateOrigin
             return RunMessage.of(script.name(), level, text);
         }
         int line = frame.get().getLineNumber();

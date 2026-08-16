@@ -91,13 +91,12 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
      */
     public final Signal.Value<Resource> onRerunRequested = new Signal.Value<>();
 
-    /**
-     * Asked to show one script's output, or everything when null.
-     *
-     * <p>Applied here as well as announced — unlike Stop, filtering IS this view's business, and a host
-     * that wants to know (a rail highlighting the same script) can listen. @see RunConsole#setFilter</p>
-     */
-    public final Signal.Value<String> onFilterRequested = new Signal.Value<>();
+    // NO onFilterRequested SIGNAL. It existed for a host that wanted to know which script was being
+    // shown -- "a rail highlighting the same script" was the case named -- and the rail turned out to be
+    // the thing that RAISES the filter rather than something that follows it, so nothing ever listened.
+    // An announcement with no audience is not free: it is a public signal that reads as a supported
+    // integration point, so the next person wires to it and finds it fires only for gestures the rail
+    // happens to make. `RunConsole.filter()` answers the same question at the moment it is asked.
 
     private final RunConsoleView view = new RunConsoleView();
     private final UIText notice = new UIText("");
@@ -449,7 +448,6 @@ public final class RunPanel extends UIElement implements UIFrameTicker {
     private void emitFilter(@Nullable String script) {
         RunConsole showing = console;
         if (showing != null) showing.setFilter(script);
-        onFilterRequested.emit(script);
     }
 
     /**
