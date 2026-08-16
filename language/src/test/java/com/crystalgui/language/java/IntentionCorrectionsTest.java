@@ -2,6 +2,8 @@ package com.crystalgui.language.java;
 
 import org.junit.Test;
 
+import static org.junit.Assert.assertEquals;
+
 /**
  * The four intentions — where nothing is wrong and something could be different.
  *
@@ -120,6 +122,55 @@ public class IntentionCorrectionsTest extends FixFixture {
                         + "}\n",
                 "int a", IntentionCorrections.SPLIT_DECLARATION,
                 "one type node serves both fragments");
+    }
+
+    // ── The pairs round-trip, which is why none of them is a diagnostic ─────────────────────────
+
+    /**
+     * <b>Split then join returns the original, character for character</b> — and the same for the braces.
+     *
+     * <p>Asserted because it is the argument for why these four are <em>not</em> reported. A diagnostic is a
+     * claim that something is wrong, and here the fix's own inverse is offered on the result: mark
+     * {@code int a = 1;} as "can be split" and applying it produces {@code int a; a = 1;}, which "can be
+     * joined". <b>The mark never clears — it only changes its wording</b>, so it is a problem nobody can
+     * ever resolve. That is why IntelliJ ships all four as intentions with no inspection behind them, while
+     * the anonymous-class conversion this engine <em>does</em> report is one-directional.</p>
+     *
+     * <p>It is also an ordinary regression guard: two edits that are meant to be inverses and are not
+     * would leave the file subtly reformatted every time somebody used the pair.</p>
+     */
+    @Test
+    public void splitAndJoinAreExactInverses() {
+        String before = ""
+                + "public class Script {\n"
+                + "    void go() {\n"
+                + "        int a = 1;\n"
+                + "        System.out.println(a);\n"
+                + "    }\n"
+                + "}\n";
+        String split = applied(before,
+                require(before, "int a", IntentionCorrections.SPLIT_DECLARATION));
+        String rejoined = applied(split,
+                require(split, "int a;", IntentionCorrections.JOIN_DECLARATION));
+        assertEquals("the pair must round-trip exactly, or the mark could never clear",
+                before, rejoined);
+    }
+
+    @Test
+    public void addingAndRemovingBracesAreExactInverses() {
+        String before = ""
+                + "public class Script {\n"
+                + "    void go(boolean flag) {\n"
+                + "        if (flag)\n"
+                + "            System.out.println(1);\n"
+                + "    }\n"
+                + "}\n";
+        String braced = applied(before,
+                require(before, "if (flag)", IntentionCorrections.ADD_BRACES));
+        String unbraced = applied(braced,
+                require(braced, "if (flag)", IntentionCorrections.REMOVE_BRACES));
+        assertEquals("the pair must round-trip exactly, or the mark could never clear",
+                before, unbraced);
     }
 
     // ── Braces ──────────────────────────────────────────────────────────────────────────────────

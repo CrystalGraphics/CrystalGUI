@@ -250,7 +250,7 @@ public abstract class FixFixture {
 
     // ── Plumbing ────────────────────────────────────────────────────────────────────────────────
 
-    private static CodeAction require(String source, String needle, String id) {
+    protected static CodeAction require(String source, String needle, String id) {
         CodeAction action = offered(source, needle, id);
         assertNotNull("no action <" + id + "> over <" + needle + ">; offered: " + idsIn(source, needle),
                 action);
