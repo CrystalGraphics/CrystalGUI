@@ -8,8 +8,6 @@ import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.language.java.JavaLanguage;
-import com.crystalgui.language.map.MappingSet;
 import com.crystalgui.ui.elements.editor.TextEditor;
 import com.crystalgui.ui.elements.workbench.Workbench;
 
@@ -35,27 +33,29 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *
  * <p>So the host supplies the two things only it knows — which workbench, and where to cache — and this
  * supplies the rest. A mod adds what scripts can reach through {@link ScriptBindings}, which is a
- * registry precisely so no host has to know which mods are present.</p>
+ * registry precisely so no host has to know which mods are present; a language adds that it can run
+ * through {@link ScriptRuntimes}, which is a registry for the same reason. <b>Nothing here names a
+ * language.</b> Which file is a script, which runtime compiles it, what a stack frame looks like in its
+ * output — every one of those is asked of the runtimes, so the day a second one registers, this class
+ * is not edited.</p>
  *
  * <h3>Everything is optional except the workbench</h3>
  *
- * <p>{@link #install} answers null when no engine is available rather than wiring a dead Run command.
+ * <p>{@link #install} answers null when no runtime is available rather than wiring a dead Run command.
  * A menu row and an accelerator that do nothing teach people the feature is broken, which is worse than
  * their absence teaching them it is unavailable.</p>
  */
 public final class ScriptWorkbench implements Closeable {
 
-    private static final String JAVA = ".java";
-
-    private final ScriptHost host;
+    private final ScriptRuntimes runtimes;
     private final RunConsole console;
     private final RunSessions sessions;
     private final RunPanel panel;
     private final CommandRegistry registry;
 
-    private ScriptWorkbench(ScriptHost host, RunConsole console, RunSessions sessions,
+    private ScriptWorkbench(ScriptRuntimes runtimes, RunConsole console, RunSessions sessions,
                             RunPanel panel, CommandRegistry registry) {
-        this.host = host;
+        this.runtimes = runtimes;
         this.console = console;
         this.sessions = sessions;
         this.panel = panel;
@@ -63,30 +63,29 @@ public final class ScriptWorkbench implements Closeable {
     }
 
     /**
-     * Wires scripting into {@code workbench}, or answers null when no engine is present.
+     * Wires scripting into {@code workbench}, or answers null when no language has a runtime.
      *
      * @param cacheRoot where compiled scripts are cached between launches; null for memory only
      */
     @Nullable
     public static ScriptWorkbench install(CommandRegistry registry, Workbench workbench,
                                           @Nullable Path cacheRoot) {
-        if (!JavaLanguage.isAvailable()) return null;
-
-        ScriptHost host = new ScriptHost(JavaLanguage.engine(),
-                cacheRoot == null ? ScriptCache.inMemory() : ScriptCache.directory(cacheRoot),
-                MappingSet.IDENTITY, "identity",
-                ScriptWorkbench.class.getClassLoader(), null);
+        ScriptRuntimes runtimes = ScriptRuntimes.open(cacheRoot);
+        if (runtimes.isEmpty()) return null;
 
         // THE FILTER CHAIN IS THE CONSOLE'S, not the panel's -- what counts as navigable is a property of
         // the output, and a headless host that keeps a transcript without showing it still wants to know.
-        // Java only for now; M10's JS and M11's GLSL each add one class here and change nothing else.
-        RunConsole console = new RunConsole().addFilter(new JavaStackFrameFilter());
+        // Each runtime says what in ITS output is a place: a JVM frame for Java, and whatever a Rhino
+        // error names for JavaScript, without this class learning either shape.
+        RunConsole console = new RunConsole();
+        for (ConsoleFilter filter : runtimes.consoleFilters()) console.addFilter(filter);
         RunSessions sessions = new RunSessions();
-        RunPanel panel = RunPanels.install(workbench, console, sessions, host);
+        runtimes.reportTo(sessions);
+        RunPanel panel = RunPanels.install(workbench, console, sessions, runtimes);
 
         ScriptWorkbench installed =
-                new ScriptWorkbench(host, console, sessions, panel, registry);
-        ScriptCommands.register(registry, host,
+                new ScriptWorkbench(runtimes, console, sessions, panel, registry);
+        ScriptCommands.register(registry, runtimes,
                 script -> installed.compileFor(workbench, script),
                 ScriptBindings::values,
                 installed::report,
@@ -102,17 +101,17 @@ public final class ScriptWorkbench implements Closeable {
         // this codebase has already paid for.
         ConsoleCommands.register(registry, panel);
         RunPanels.attachContextMenu(registry, panel);
-        // THE SUBJECT IS ACCEPTED AND NOT YET USED, which is honest rather than lazy: `ScriptHost` holds
+        // THE SUBJECT IS ACCEPTED AND NOT YET USED, which is honest rather than lazy: each runtime holds
         // exactly one live run, so "stop that one" and "stop whatever is running" are the same request
         // and pretending otherwise would be a second code path nothing exercises. The signal carries it
         // so the day a second run can be live, this line is the only one that has to change.
-        panel.onStopRequested.connect(script -> host.stop());
+        panel.onStopRequested.connect(script -> runtimes.stopAll());
         // A SCRIPT THAT STOPS TO ASK A QUESTION MUST BE ABLE TO ASK IT. The input row IS the prompt --
         // §9.5.9's own argument for having no label and no empty state -- and a prompt behind a closed
         // panel is not one: the script simply stops, with nothing anywhere saying why.
         console.onDidChange.connect(() -> installed.inputWanted(workbench));
         // RERUN NAMES ITS SUBJECT, and still goes through the command -- the same reason ScriptCommands
-        // exists at all: a Run button wired straight to ScriptHost.run would be a second, subtly
+        // exists at all: a Run button wired straight to ScriptRuntime.runAsync would be a second, subtly
         // different way to start a script than the keybinding and the palette.
         panel.onRerunRequested.connect(script -> installed.rerun(workbench, script));
 
@@ -148,8 +147,8 @@ public final class ScriptWorkbench implements Closeable {
         return installed;
     }
 
-    public ScriptHost host() {
-        return host;
+    public ScriptRuntimes runtimes() {
+        return runtimes;
     }
 
     public RunConsole console() {
@@ -251,7 +250,7 @@ public final class ScriptWorkbench implements Closeable {
      * question about the application whose answer changes with every tab switch and every keystroke.</p>
      */
     @Nullable
-    private ScriptHost.Compiled compileFor(Workbench workbench, @Nullable Resource script) {
+    private ScriptRuntime.Compiled compileFor(Workbench workbench, @Nullable Resource script) {
         if (script == null) return compileActive(workbench);
 
         CgPath path = script.asPath();
@@ -275,7 +274,7 @@ public final class ScriptWorkbench implements Closeable {
     }
 
     @Nullable
-    private ScriptHost.Compiled compileActive(Workbench workbench) {
+    private ScriptRuntime.Compiled compileActive(Workbench workbench) {
         TextEditor editor = workbench.activeEditor();
         if (editor == null) {
             Notifications.warning("Run: no text file is open");
@@ -292,15 +291,20 @@ public final class ScriptWorkbench implements Closeable {
      * does.</p>
      */
     @Nullable
-    private ScriptHost.Compiled compile(@Nullable CgPath path, TextEditor editor) {
+    private ScriptRuntime.Compiled compile(@Nullable CgPath path, TextEditor editor) {
         String name = path == null ? "Script" : path.name();
-        if (!name.endsWith(JAVA)) {
-            Notifications.warning("Run: " + name + " is not a Java file");
+        // WHICH RUNTIME is the file's language's, and the file's language is the registry's answer -- the
+        // same one that chose the editor's tokenizer. A file no runtime claims is refused with the list
+        // of what would have worked, which is a better message than "not a Java file" the moment there
+        // are two.
+        ScriptRuntime runtime = runtimes.forFile(name);
+        if (runtime == null) {
+            Notifications.warning("Run: " + name + " is not a script this workbench can run ("
+                    + runtimes.languageNames() + ")");
             return null;
         }
-        String className = name.substring(0, name.length() - JAVA.length());
-        ScriptHost.Compiled compiled = host.compileSource(
-                className, editor.buffer().document().toString(), ScriptBindings.types());
+        ScriptRuntime.Compiled compiled = runtime.compileScript(
+                name, editor.buffer().document().toString(), ScriptBindings.types());
         if (!compiled.successful()) {
             // THE DIAGNOSTICS ALREADY SAY WHAT IS WRONG, in the editor, on the line. This says only that
             // the run did not start, because a notification repeating a compiler message is a second
@@ -322,7 +326,7 @@ public final class ScriptWorkbench implements Closeable {
      * Appending explicitly puts the trace where the author is already looking — one row per frame, so
      * they can be read and navigated individually rather than arriving as one block.</p>
      *
-     * <p><b>Attributed from the run that threw</b>, which {@link ScriptHost} hands over, rather than from
+     * <p><b>Attributed from the run that threw</b>, which the runtime hands over, rather than from
      * a "last compiled" field this used to keep. That field was written when a compile <em>began</em>,
      * so pressing Run on a file with errors re-labelled the script still running, and its next exception
      * arrived in the transcript under a filename that had never executed a line — filtered to the wrong
@@ -342,6 +346,6 @@ public final class ScriptWorkbench implements Closeable {
     public void close() throws IOException {
         ScriptCommands.unregister(registry);
         ConsoleCommands.unregister(registry);
-        host.close();
+        runtimes.close();
     }
 }

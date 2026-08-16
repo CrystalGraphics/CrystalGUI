@@ -8,7 +8,6 @@ import java.io.OutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
@@ -178,32 +177,16 @@ public final class ScriptOutput {
     // ── Where a line came from ──────────────────────────────────────────────────────────────────
 
     /**
-     * Builds a message, attributing it to <b>the script's own deepest frame</b>.
+     * Builds a message, attributing it to the script's own line — as the script's runtime finds it.
      *
-     * <p>Not the frame that called {@code println}: a script calling a helper that prints should be told
-     * which of <em>its</em> lines caused the output, not which line of the helper emitted it. Walking
-     * down to the first frame the script owns gives that, and it is what makes the collapse key stable
-     * for a helper called from two places — they are genuinely two origins.</p>
-     *
-     * <p>{@code StackWalker} rather than {@code new Throwable().getStackTrace()}, which materialises the
-     * whole trace to read one frame of it. This walk stops at the first match.</p>
+     * <p>How is the runtime's business ({@link ScriptRef.Origin}): a JVM class walks its own frames, a
+     * Rhino script asks its context. This only knows that an answer below 1 means the script is running
+     * but not on the stack — a callback the engine invoked, say. Real, attributable to the script, and with
+     * no line to name, so it is shown like any other row and double-clicking it goes nowhere.
+     * @see RunConsoleView#activateOrigin</p>
      */
     static RunMessage message(ScriptRef script, RunLevel level, String text) {
-        // THE DEEPEST OWNED FRAME THAT CAN NAME A LINE, which is not always the deepest owned one. A
-        // lambda body compiles into the script's own class and is owned, but a synthetic frame can carry
-        // no line number at all -- and taking it and finding none threw away an enclosing frame that had
-        // one. Printing from inside a `forEach` is the ordinary way to hit that, and it costs the origin
-        // of exactly the lines people wrap in lambdas.
-        Optional<StackWalker.StackFrame> frame = StackWalker.getInstance().walk(
-                frames -> frames.filter(f -> script.owns(f.getClassName()) && f.getLineNumber() > 0)
-                        .findFirst());
-        if (frame.isEmpty()) {
-            // Output from a script that is running but not on the stack -- a callback the engine
-            // invoked, say. Real, attributable to the script, and with no line to name, so it is shown
-            // like any other row and double-clicking it goes nowhere. @see RunConsoleView#activateOrigin
-            return RunMessage.of(script.name(), level, text);
-        }
-        int line = frame.get().getLineNumber();
+        int line = script.origin().currentLine();
         return line > 0
                 ? RunMessage.at(script.name(), script.file(), line, level, text)
                 : RunMessage.of(script.name(), level, text);

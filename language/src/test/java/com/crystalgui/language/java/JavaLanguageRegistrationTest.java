@@ -3,7 +3,6 @@ package com.crystalgui.language.java;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.language.engine.EngineSource;
 import com.crystalgui.language.grammar.TreeSitterLanguages;
-import com.crystalgui.language.run.ScriptHost;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;

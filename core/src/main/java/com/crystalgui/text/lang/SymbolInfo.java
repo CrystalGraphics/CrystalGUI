@@ -170,25 +170,36 @@ public record SymbolInfo(String name, SymbolKind kind, @Nullable TypeRef type,
         return new SymbolInfo(name, kind, type, null, null, Set.of(), null);
     }
 
+    // EVERY WITHER CARRIES EVERY FIELD. These used to route through the seven-component constructor,
+    // which silently dropped parameters, signature and containerKind -- so an engine building a symbol
+    // as `of(...).withSignature(s).withType(t)` lost the signature on the second call, with nothing
+    // failing. Order-sensitive builders on a seam are a trap for every engine that comes after the
+    // first, which is exactly the shape a JS adapter would write.
+
     public SymbolInfo withType(@Nullable TypeRef newType) {
-        return new SymbolInfo(name, kind, newType, container, documentation, modifiers, declaration);
+        return new SymbolInfo(name, kind, newType, container, documentation, modifiers, declaration,
+                parameters, signature, containerKind);
     }
 
     public SymbolInfo withContainer(@Nullable String newContainer) {
-        return new SymbolInfo(name, kind, type, newContainer, documentation, modifiers, declaration);
+        return new SymbolInfo(name, kind, type, newContainer, documentation, modifiers, declaration,
+                parameters, signature, containerKind);
     }
 
     public SymbolInfo withDocumentation(@Nullable String docs) {
-        return new SymbolInfo(name, kind, type, container, docs, modifiers, declaration);
+        return new SymbolInfo(name, kind, type, container, docs, modifiers, declaration,
+                parameters, signature, containerKind);
     }
 
     public SymbolInfo withModifiers(SymbolModifier... added) {
         return new SymbolInfo(name, kind, type, container, documentation,
-                added == null ? Set.of() : Set.of(added), declaration);
+                added == null ? Set.of() : Set.of(added), declaration,
+                parameters, signature, containerKind);
     }
 
     public SymbolInfo withDeclaration(@Nullable DeclarationSite site) {
-        return new SymbolInfo(name, kind, type, container, documentation, modifiers, site);
+        return new SymbolInfo(name, kind, type, container, documentation, modifiers, site,
+                parameters, signature, containerKind);
     }
 
     public boolean is(SymbolModifier modifier) {

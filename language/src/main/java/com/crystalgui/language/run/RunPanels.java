@@ -48,19 +48,24 @@ public final class RunPanels {
     /**
      * Registers the panel, routes output into it, and marks running files.
      *
-     * @param host the script host this workspace runs through, so its state transitions reach the rail.
-     *             Null for a workbench that shows a console somebody else fills
+     * @param runtimes the runtimes this workspace runs through, so "is anything running" is answered by
+     *                 the things that would be stopped. Null for a workbench that shows a console somebody
+     *                 else fills
      */
     public static RunPanel install(Workbench workbench, RunConsole console, RunSessions sessions,
-                                   @Nullable ScriptHost host) {
+                                   @Nullable ScriptRuntimes runtimes) {
         RunPanel panel = new RunPanel().bindTo(console).bindSessions(sessions);
-        // ONE SOURCE FOR "IS ANYTHING RUNNING", and it is the host — the same object `script.stop`'s own
-        // `enabledWhen` asks. The panel used to answer this from RunSessions instead, which is a
-        // different question: a stop that has been asked for and not yet obeyed leaves the host with
+        // ONE SOURCE FOR "IS ANYTHING RUNNING", and it is the runtimes — the same objects `script.stop`'s
+        // own `enabledWhen` asks. The panel used to answer this from RunSessions instead, which is a
+        // different question: a stop that has been asked for and not yet obeyed leaves the runtime with
         // nothing to stop while the session stays RUNNING until the thread dies, so the menu row greyed
         // and the button stayed red over a run that was already gone. A console filled by somebody else
-        // has no host and therefore nothing this panel could stop.
-        panel.setStoppableWhen(host == null ? () -> false : host::isRunning);
+        // has no runtime and therefore nothing this panel could stop.
+        panel.setStoppableWhen(runtimes == null ? () -> false : runtimes::isAnyRunning);
+        // THE EMPTY STATE NAMES WHAT WOULD WORK. "Open a .java file" was true for exactly as long as Java
+        // was the only language that could run; the languages are asked, so a second runtime changes the
+        // caption without anyone remembering to.
+        panel.setRunnableLanguages(runtimes == null ? "" : runtimes.languageNames());
         // NAMED AND OPTED IN, which is the whole of remembering soft wrap between launches. The id ties
         // a stored payload to the widget; UIWindow hands it its state as it joins the tree, so a
         // restored setting is applied before the first frame rather than after it.
@@ -151,7 +156,7 @@ public final class RunPanels {
         // The same call drives the stripe button's dot, because both are the same question.
         RunIndicators.install(workbench, sessions, decorations);
 
-        if (host != null) host.reportTo(sessions);
+        if (runtimes != null) runtimes.reportTo(sessions);
 
         // LAST, because it replaces System.out process-wide and everything above is inert if it throws.
         // Installing before the panel is registered would leave output arriving at a console nobody can
