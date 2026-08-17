@@ -11,17 +11,19 @@ sections 1 and 3.
 
 ---
 
-## 0. Where this stands (2026-08-17)
+## 0. Where this stands — **THE PLAN IS DONE** (2026-08-17)
 
 | Step | State | Commits |
 |---|---|---|
 | §1 — the ten defects | **done** | `a8df75e`†/`a30a917` (D1–D5), `246831d` (D6–D10) |
-| §6.1 — shared classes | **done bar two small items** | `a30a917` (`Indent`), `021913d` (`Scopes`), `d1d0271` (`Precedence`, `SideEffects`), `2243809`† (`Names`) |
-| §6.2 — `TypeNames.typeNode` + `Expected` | not started | — |
+| §6.1 — shared classes | **done** | `a30a917` (`Indent`), `021913d` (`Scopes`), `d1d0271` (`Precedence`, `SideEffects`), `2243809`† (`Names`), `1b06f91` (`Correction.NONE`, `changeSet`, `text`) |
+| §6.2 — `TypeNames.typeNode` + `Expected` | **done** | `8876156` (`typeNode`), `a7ffadb` (`Expected`, the Cast walks) |
 | §6.3 — the guards | **done**, folded into §1 | see above |
-| §6.4 — `Inspection` SPI + stale docs | not started | — |
+| §6.4 — `Inspection` SPI + stale docs | **done** | `0cb5135`, and `acaecad` for §2's small rows |
 
-Left in §6.1: **`Correction.NONE`** (eight spellings of `new int[0]`) and **`FixContext.changeSet(List<Change>, ImportPlan)` + `text(node)`** (four hand-rolled merges). Neither was started.
+Everything §2 lists is closed except the two rows recorded below as deliberately left. Three defects were
+found *by doing the work* rather than by the audit: the array-initialiser split (§1's note), the
+`ArrayCreation` bracket trap, and the lambda-`return` type in `Create`. Each is written up in its commit.
 
 † Two chunks were swept into a *concurrent session's* commits by a broad `git add` in this shared
 worktree — `Indent.java` plus most of the `LoopIntentions`/`SwitchIntentions` edits into `a8df75e`
@@ -94,23 +96,23 @@ Each row is a place two families will disagree the first time one is edited.
 | `KEYWORDS` | **2 identical 60-entry sets** | `Names`, `CreateCorrections` | ✅ Create's deleted |
 | Fresh-name derivation | 4 | `Names.derive`, `Create.parameterName` (own primitive→letter table that disagrees: boolean→`b` vs `flag`), `Lambda.freeName`, `Exception.freeExceptionName` | ✅ `Names.derive` + new `Names.free(taken, stems…)` |
 | Names declared in a scope | 3 | `Names.declaredIn`, `Exception.freeExceptionName`'s visitor, `Lambda.namesInScopeAt` | ✅ two of three. **`Lambda.namesInScopeAt` stays** — a precise scope walk, not a subtree collect |
-| Spelling a type binding | **2 parallel systems** | `TypeNames.writtenName` (String) vs `Create.typeFor` (Type node) — differ on type variables (null vs erasure), anonymous (null vs `Object`), recovered (guarded vs not) | ⬜ §6.2. Recovered is guarded on both sides now (D6) |
-| Zero / default value | 2 | `TypeNames.defaultValue`, `Create.zeroOf` | ⬜ §6.2 |
-| Expected type from context | 3 | `Cast.expectedTypeOf`, `Create.returnTypeFor`, ad-hoc reads in `Value` | ⬜ §6.2 |
+| Spelling a type binding | **2 parallel systems** | `TypeNames.writtenName` (String) vs `Create.typeFor` (Type node) — differ on type variables (null vs erasure), anonymous (null vs `Object`), recovered (guarded vs not) | ✅ `TypeNames.typeNode` beside `writtenName` — two answers, one set of shared rules |
+| Zero / default value | 2 | `TypeNames.defaultValue`, `Create.zeroOf` | ✅ done in `8876156`/`a7ffadb` |
+| Expected type from context | 3 | `Cast.expectedTypeOf`, `Create.returnTypeFor`, ad-hoc reads in `Value` | ✅ done in `8876156`/`a7ffadb` |
 | Precedence — "binds looser than a cast / needs wrapping" | **2 identical lists** | `Cast.bindsLooserThanACast` ≡ `VariableIntentions.needsParentheses` | ✅ `Precedence.needsParenthesesWhenWrapped` |
 | Precedence — "is atomic / needs no parens" | 2 **different** lists | `Negation.parenthesised` vs `Expression.needsNoParentheses` | ✅ and they were **right to differ**: `Precedence.isPrimary` and `bindsTighterThanUnary` over one list |
 | `hasCall` (side effect) | 2, differ by `ArrayCreation` | `Cast`, `VariableIntentions` | ✅ and **right to differ**: `SideEffects.lostByDeleting` / `addedByRepeating` |
-| Comparison-operator set | 2 | `Negation.opposite`, `Intention.negatable` | ⬜ |
-| `leaves(Statement)` | 2 **in one file** | `SwitchIntentions` inner + outer | ⬜ |
-| `textOf` | 1 + 1 stray + ~6 inline substrings | `Negation.textOf(ASTNode)`; `Intention.textOf(Statement)`; `source.substring(start, start+len)` in Loop, Variable, Lambda, DeadCode, Unused | ⬜ `FixContext.text(node)`, §6.1 leftover |
-| changes + import insertions → `ChangeSet` | 4 hand-rolled | `Value`, `Loop`, `Variable`, `Lambda` — `FixContext.changesFrom(rewrite, imports)` covers only the rewriter path | ⬜ §6.1 leftover |
-| `NONE` / `new int[0]` | 8 spellings | should be one constant on `Correction` | ⬜ §6.1 leftover |
-| `isRecovered` recursive check | dead duplicate | `ImplementCorrections.isRecovered` — the rule moved into `TypeNames.writtenName` (its own comment says so); the copy and both calls stayed | ⬜ §6.2 |
-| Cast building | 2 | `CastToExpectedType.contribute` inlines the body of `castInPlace` | ⬜ §6.2 |
-| Cast-argument walk | 2 | `CastArgument.contribute` and `mismatchedArgumentSpan` are one loop written twice | ⬜ §6.2 |
-| Last field / last constructor-or-field | 2 | `Value.lastFieldOf`, `Create.lastConstructorOrFieldOf` | ⬜ |
-| Declaration lookup by binding | 2 ways | `Value.InitialiseVariable.declarationOf` walks the unit; `Modifier` uses `unit.findDeclaringNode` | ⬜ |
-| Unused-import set | 2 | `ImportCorrections.OrganizeImports` (`HashSet`) and `Unused.RemoveAllUnusedImports` (`List` + `contains`) | ⬜ |
+| Comparison-operator set | 2 | `Negation.opposite`, `Intention.negatable` | ✅ `Negation.isComparison` |
+| `leaves(Statement)` | 2 **in one file** | `SwitchIntentions` inner + outer | ✅ `transfersControl`, the block-unwrapping caller keeping its own name |
+| `textOf` | 1 + 1 stray + ~6 inline substrings | `Negation.textOf(ASTNode)`; `Intention.textOf(Statement)`; `source.substring(start, start+len)` in Loop, Variable, Lambda, DeadCode, Unused | ✅ `FixContext.text(node)` and its static twin |
+| changes + import insertions → `ChangeSet` | 4 hand-rolled | `Value`, `Loop`, `Variable`, `Lambda` — `FixContext.changesFrom(rewrite, imports)` covers only the rewriter path | ✅ done in `1b06f91` |
+| `NONE` / `new int[0]` | 8 spellings | should be one constant on `Correction` | ✅ done in `1b06f91` |
+| `isRecovered` recursive check | dead duplicate | `ImplementCorrections.isRecovered` — the rule moved into `TypeNames.writtenName` (its own comment says so); the copy and both calls stayed | ✅ done in `8876156`/`a7ffadb` |
+| Cast building | 2 | `CastToExpectedType.contribute` inlines the body of `castInPlace` | ✅ done in `8876156`/`a7ffadb` |
+| Cast-argument walk | 2 | `CastArgument.contribute` and `mismatchedArgumentSpan` are one loop written twice | ✅ done in `8876156`/`a7ffadb` |
+| Last field / last constructor-or-field | 2 | `Value.lastFieldOf`, `Create.lastConstructorOrFieldOf` | 🔸 **left** — two six-line loops with different predicates and clear names; a predicate-taking helper costs more indirection than it saves |
+| Declaration lookup by binding | 2 ways | `Value.InitialiseVariable.declarationOf` walks the unit; `Modifier` uses `unit.findDeclaringNode` | ✅ `findDeclaringNode`, which JDT ships |
+| Unused-import set | 2 | `ImportCorrections.OrganizeImports` (`HashSet`) and `Unused.RemoveAllUnusedImports` (`List` + `contains`) | ✅ `FixContext.unusedImports()` |
 | Inline FQNs | ~14 | `Negation.parenthesised` ×5, `CastCorrections` ×2 (`org.eclipse.jdt.core.dom.Type`), `ImportPlan` ×1, `JavaCodeActions` `implements` clause, `EcjSourceAnalyzer` ×~10 | 🔸 **10 left** — Negation's five went with its list, four of the analyzer's with the two walks. Remaining: `Cast` ×2, `EcjSourceAnalyzer` ×7, `ImportPlan` ×1 |
 
 ---
@@ -134,10 +136,10 @@ them. Family files lose their private helpers and get shorter.
   copies differed by `ArrayCreation` because they were asking about deletion and duplication.
 - ✅ **`Indent`** — `at(source, pos)` and **`reindent(text, toIndent)`**, which shifts by the *minimum
   common leading whitespace* rather than trimming. Landed early with D5. (`ofLine` was not needed.)
-- ⬜ **`Expected.typeOf(expression)`** — initialiser, assignment RHS, return (stopping at lambda),
+- ✅ **`Expected.typeOf(expression)`** — initialiser, assignment RHS, return (stopping at lambda),
   argument (via sole candidate), condition → boolean, cast operand. `Cast`, `Create` and `Value` all
   read it; `Create.returnTypeFor` becomes `Expected.typeOf(call)` + `TypeNames`. **Not started** — it
-  is §6.2's, with `TypeNames.typeNode`.
+  is in, with `TypeNames.typeNode`
 
 ### 3.2 Existing classes that grow or shrink
 
