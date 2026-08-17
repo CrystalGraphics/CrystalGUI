@@ -78,7 +78,7 @@ final class IndentGuidesPart extends EditorViewPart {
         for (int viewLine = firstLine; viewLine <= lastLine; viewLine++) {
             int row = editor.modelAt(viewLine).row();
             int levels = levelsByRow[Math.max(0, Math.min(row - firstRow, levelsByRow.length - 1))];
-            final float top = editor.textOriginY() + viewLine * height - editor.getScrollTop();
+            final float top = editor.topOfViewLine(viewLine);
 
             // Half the CODE MARGIN left of the indent stop -- never half a space. A space is wider than
             // the margin, so nudging by one put the level-0 guide underneath the gutter, which has a

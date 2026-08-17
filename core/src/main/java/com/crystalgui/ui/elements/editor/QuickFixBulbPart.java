@@ -61,7 +61,7 @@ final class QuickFixBulbPart extends EditorViewPart {
         float height = editor.lineHeight();
         // IN THE FOLD COLUMN, which is the gutter's own decoration lane -- the same box the fold arrows
         // live in, so the bulb lines up with them and needs no geometry of its own.
-        final float top = editor.textOriginY() + viewLine * height - editor.getScrollTop();
+        final float top = editor.topOfViewLine(viewLine);
         final float width = editor.gutterFoldWidth();
         StyleGroup.defaultPipeline(bulbElement().getStyle().getLayoutGroup(),
                 l -> l.positionType(TaffyPosition.ABSOLUTE)

@@ -89,7 +89,7 @@ final class FoldingDecorationsPart extends EditorViewPart {
             else arrow.removeClass(TextEditor.FOLD_COLLAPSED_CLASS);
 
             // Relative to the COLUMN, so left is 0 rather than the gutter offset.
-            final float top = editor.textOriginY() + viewLine * height - editor.getScrollTop();
+            final float top = editor.topOfViewLine(viewLine);
             StyleGroup.defaultPipeline(arrow.getStyle().getLayoutGroup(),
                     l -> l.positionType(TaffyPosition.ABSOLUTE)
                             .left(0f).top(top).width(columnWidth).height(height));
@@ -180,7 +180,7 @@ final class FoldingDecorationsPart extends EditorViewPart {
             // Centred WITHIN the row rather than filling it. A chip as tall as the line makes its text
             // look shrunken inside a slab, and the line's leading sits below the glyphs, so a full-height
             // box is not centred on the text beside it either. Hugging the text is what IntelliJ draws.
-            final float top = editor.textOriginY() + viewLine * height - editor.getScrollTop()
+            final float top = editor.topOfViewLine(viewLine)
                     + Math.max(0f, (height - box) / 2f);
 
             // NO left shift, and this reverses an earlier choice. The box begins exactly where the row

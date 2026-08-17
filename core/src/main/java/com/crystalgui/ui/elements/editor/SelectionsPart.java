@@ -97,7 +97,7 @@ final class SelectionsPart extends EditorViewPart {
             // visible as a rim above and below the selection -- two decorations describing the same row
             // and disagreeing about where it starts.
             final float bandInk = height;
-            final float top = editor.textOriginY() + viewLine * height - editor.getScrollTop();
+            final float top = editor.topOfViewLine(viewLine);
             final float bandLeft = left;
             final float width = Math.max(1f, right - left);
             StyleGroup.defaultPipeline(bandAt(index++).getStyle().getLayoutGroup(),
