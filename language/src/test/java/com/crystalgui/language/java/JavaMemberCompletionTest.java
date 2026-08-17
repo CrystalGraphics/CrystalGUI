@@ -600,4 +600,39 @@ public class JavaMemberCompletionTest {
         assertNotNull(substring);
         assertFalse("an ordinary member is not inherited", substring.inheritedFromObject());
     }
+
+    /**
+     * A CALL is a receiver — the shape a JavaScript bug made worth asking about here too.
+     *
+     * <p>{@code list.get(0).} puts a {@code )} immediately before the dot, so whatever resolves the receiver
+     * has to answer for an offset no identifier covers. The JavaScript engine did not, and opened an empty
+     * popup on the commonest shape in interop code; this asks the same question of ECJ, because "it works in
+     * the other engine" is a claim and not a test.</p>
+     */
+    @Test
+    public void aCallIsAReceiver() {
+        String source = ""
+                + "import java.util.List;\n"
+                + "class Demo {\n"
+                + "    void run(List<String> list) {\n"
+                + "        list.get(0).\n"
+                + "    }\n"
+                + "}\n";
+        TextBuffer buffer = new TextBuffer(source);
+        LanguageServices services = new JavaLanguageServices(
+                buffer, engine, null, "Demo", HostClasspath.detect());
+        try {
+            int caret = source.indexOf("get(0).") + "get(0).".length();
+            AtomicReference<CompletionList> answered = new AtomicReference<>(CompletionList.EMPTY);
+            services.completion().complete(
+                    CompletionProvider.Request.character(caret, "", "."),
+                    (Versioned<CompletionList> v) -> answered.set(v.orElse(CompletionList.EMPTY)));
+            List<String> labels = labelsOf(answered.get().items());
+            assertFalse("a call receiver offered nothing at all", labels.isEmpty());
+            assertTrue("String's members are missing from " + labels.size() + " rows",
+                    labels.toString().contains("length"));
+        } finally {
+            services.close();
+        }
+    }
 }

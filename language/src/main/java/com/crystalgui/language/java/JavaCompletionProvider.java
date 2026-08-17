@@ -165,7 +165,12 @@ final class JavaCompletionProvider implements CompletionProvider {
             // for it.
             return probedMemberItems(caret);
         }
-        return membersFrom(current, receiver, caret);
+        List<CompletionItem> direct = membersFrom(current, receiver, caret);
+        // AND IF THE RECEIVER RESOLVED TO SOMETHING WITH NOTHING ON IT, ask the probe anyway. A type that
+        // resolved from a tree the parser had to recover can be plausible and wrong -- the trailing dot is
+        // exactly the state where that happens -- and an empty member list is the one outcome that is never
+        // a useful answer. Costs one parse, only when the ordinary path produced nothing.
+        return direct.isEmpty() ? probedMemberItems(caret) : direct;
     }
 
     /**
