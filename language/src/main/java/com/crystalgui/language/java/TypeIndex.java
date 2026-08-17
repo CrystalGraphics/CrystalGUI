@@ -129,6 +129,53 @@ public final class TypeIndex {
      * linear scan with no allocation, and it is <b>exactly the same predicate</b>: anything it rejects the
      * DP would also reject, so nothing is lost by asking the cheap question first.</p>
      */
+    /**
+     * A view of this index that hides what a policy refuses.
+     *
+     * <p>A <b>view</b> and not a copy, because the index is shared per classpath and holds fifty thousand
+     * entries: filtering it would mean a second scan and a second fifty thousand, and the policy is a
+     * property of the <em>asker</em> rather than of the classpath. The filter is applied to the answer, so
+     * two callers with different policies read the same index.</p>
+     *
+     * <p>A {@link Predicate} rather than the policy type, so this package stays free of {@code language.run}
+     * — the same reason every crossing into an engine is a JDK type.</p>
+     */
+    public Filtered filtered(java.util.function.Predicate<String> allowsClass) {
+        return new Filtered(this, allowsClass);
+    }
+
+    /** @see #filtered */
+    public static final class Filtered {
+
+        private final TypeIndex index;
+        private final java.util.function.Predicate<String> allowsClass;
+
+        private Filtered(TypeIndex index, java.util.function.Predicate<String> allowsClass) {
+            this.index = index;
+            this.allowsClass = allowsClass;
+        }
+
+        /**
+         * As {@link TypeIndex#matching}, minus what the policy refuses.
+         *
+         * <p>{@code truncated} is carried through unchanged: it says the index had more to give, which is
+         * still true after filtering and is what makes the consumer ask again as the query narrows.</p>
+         */
+        public Match matching(String prefix) {
+            Match all = index.matching(prefix);
+            if (allowsClass == null) return all;
+            List<Entry> kept = new ArrayList<>(all.entries().size());
+            for (Entry entry : all.entries()) {
+                if (allowsClass.test(entry.qualifiedName())) kept.add(entry);
+            }
+            return new Match(kept, all.truncated());
+        }
+
+        public Kind kindOf(Entry entry) {
+            return index.kindOf(entry);
+        }
+    }
+
     public Match matching(String prefix) {
         if (prefix == null || prefix.isEmpty()) return new Match(List.of(), false);
         ensureBuilt();

@@ -11,6 +11,7 @@ import com.crystalgui.language.java.HostClasspath;
 import com.crystalgui.language.java.JavaLanguage;
 import com.crystalgui.language.java.JavaLanguageServices;
 import com.crystalgui.language.java.TypeIndex;
+import com.crystalgui.language.run.ScriptPolicy;
 import com.crystalgui.language.run.ScriptRuntimes;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.lang.LanguageServices;
@@ -101,6 +102,9 @@ public final class JsLanguage {
         }
 
         JsLanguage.scheduler = jobs;
+        // THE POLICY REACHES A FRESHLY OPENED ANALYSER. A host that restricted before registering -- or
+        // that registers twice -- must not end up with an analyser obeying allow-all.
+        analyzer.restrictTo(policy::allowsClass);
         lendTheJavaEngine();
 
         // THE EXISTING ENTRIES, WITH SERVICES ADDED -- not new ones. Every extension is read and
@@ -126,6 +130,33 @@ public final class JsLanguage {
 
     /** Whether the Java engine has already been lent. @see #lendTheJavaEngine */
     private static boolean javaLent;
+
+    /**
+     * What a script may reach — <b>one policy for the process</b>.
+     *
+     * <p>Process-wide rather than per workbench, and that is the point: the same allowlist is read by the
+     * executor's class shutter, by resolution, by the completion list and by the type-index view, and a
+     * policy each of them could be told separately is a policy some of them would be told. An allowlist is
+     * a deployment decision, so there is one deployment's worth of it.</p>
+     */
+    private static ScriptPolicy policy = ScriptPolicy.allowAll();
+
+    /**
+     * Restricts every JavaScript surface at once.
+     *
+     * <p>The <b>only</b> way to set it. {@code JsHost.restrictTo} forwards here rather than keeping its own,
+     * because a class refused at run time and offered by the completion list is a worse failure than either
+     * restriction alone — and two fields is how that happens.</p>
+     */
+    public static synchronized void restrictTo(@Nullable ScriptPolicy target) {
+        policy = target == null ? ScriptPolicy.allowAll() : target;
+        if (analyzer != null) analyzer.restrictTo(policy::allowsClass);
+    }
+
+    /** The policy every JavaScript surface obeys. */
+    public static synchronized ScriptPolicy policy() {
+        return policy;
+    }
 
     /**
      * The classpath index a {@code Java.type("…")} string completes from, or null.
@@ -179,7 +210,7 @@ public final class JsLanguage {
         // last moment the ordering could still be wrong -- and the first at which it certainly is not.
         lendTheJavaEngine();
         return new JsLanguageServices(buffer, analyzer, scheduler, sourceNameFor(resource), resource,
-                typeIndex());
+                typeIndex(), JsLanguage::policy);
     }
 
     /**

@@ -41,7 +41,7 @@ most visible thing to have early.
 | **10.7** Completion | `JsCompletionProvider`, `JsKeywords` (measured per band), the probe re-parse, `Java.type("…")` names from the shared `TypeIndex`, live-object completion with the inherited half | `.` after a Java object lists its members; after a run, `settings.` lists what it has; no refused keyword offered | **done** — see "10.7 as built" |
 | **10.8** Quick Documentation | `JsSignatures`, the per-member interop probe (`InteropResolver.describeMember`) so a Java member is quoted through `AttachedSources`, declaration sites both ways | Mod+Q shows `function join(name: string, count: number): string`, and `public boolean add(E e)` for a Java member | **done** — see "10.8 as built" |
 | **10.9** Quick fixes + intentions | `JsRewrites` (text edits over Rhino's absolute positions), `JsQuickFixes` — eleven families, `SimilarNames` shared with the Java catalog | Alt+Enter offers a repair for an unused name, a misspelt one, `var`→`let`/`const`, `==`→`===`, either `Java.type` spelling, a template literal, and try/catch | **done** — see "10.9 as built" |
-| **10.10** Sandbox | `ScriptPolicy` in `language.run`, four consumers | a refused type is absent everywhere, one test | not started |
+| **10.10** Sandbox | `ScriptPolicy` in `language.run`; the class shutter, `InteropResolver`, the completion list and `TypeIndex.filtered` all read it, through **one** entry point | a refused class is absent from `membersOf`, from the popup and from the index, and throws when called | **done** — see "10.10 as built" |
 | **10.11** Remap seam | `MemberNameMapper` hook, patched `JavaMembers`, resolver/completion reading the reverse | the round-trip fixture runs by readable name | not started |
 | **10.12** Parity audit + docs | every matrix row tested or documented; AGENTS.md rows; `plan_syntax.md` §16.1/§20 updates | — | not started |
 
@@ -821,6 +821,31 @@ cannot pass against an edit at the wrong offsets.
 **10.10 — Sandbox.** `ScriptPolicy` in `language.run`, consulted by the shutter, the bindings, the
 resolver and `TypeIndex.filtered`. *Test:* the row's fourth criterion — one test, refused class absent
 from `membersOf`, from the completion list, from the index, and the call throws at run.
+
+**10.10 as built** — one entry point, and why that is the whole design:
+
+- **`JsLanguage.restrictTo` is the only way to set it**, and `JsHost.restrictTo` forwards there. It began as
+  a field on the host, which is a bug in waiting rather than a style question: the executor would have obeyed
+  the host's while resolution, completion and the index obeyed the language's, so a class could be **offered
+  by the popup and refused at run time** — worse than either restriction alone, because the editor would be
+  actively wrong. One policy, four readers. It is process-wide for the same reason: an allowlist is a
+  deployment decision, so there is one deployment's worth of it.
+- **The type index is filtered by a VIEW, never a copy.** It holds fifty thousand entries and is shared per
+  classpath, and the policy belongs to the asker rather than to the classpath — so `TypeIndex.filtered` wraps
+  the answer and two callers with different postures read one index.
+- **`InteropResolver` filters on the way out**, not at the probe: the Java engine's answer about a class is
+  the same whatever the policy is, so the cached analysis stays reusable and the refusal lives in one place.
+  A member whose *declaring* class is refused goes too — an inherited `toString()` is still a call into the
+  type that declared it. The member cache is cleared when the policy changes; the analysis cache is not,
+  because it is policy-free.
+- **An array is its element type and a primitive is always reachable.** Refusing `java.util.List[]` while
+  admitting `java.util.List` refuses a spelling rather than a class, and refusing `int` makes every method
+  taking one undescribable.
+- **An empty allowlist refuses everything.** A host that means "no Java at all" must be able to say it, and
+  silently widening a policy is the worst thing this class could do.
+- **It is not a security boundary and the javadoc says so.** A script runs in the game's JVM, so a determined
+  author has reflection; this stops accidents and casual reach, which is what the trust model asks for.
+  Saying it beats letting a reader infer a sandbox that is not one.
 
 **10.11 — Remap seam.** The `JavaMembers` patch behind a `MemberNameMapper` bridge hook;
 resolver/completion reading the reverse mapping. *Test:* the row's third criterion on the

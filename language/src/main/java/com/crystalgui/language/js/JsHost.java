@@ -13,6 +13,7 @@ import com.crystalgui.language.run.RunLevel;
 import com.crystalgui.language.run.RunSessions;
 import com.crystalgui.language.run.RunState;
 import com.crystalgui.language.run.ScriptOutput;
+import com.crystalgui.language.run.ScriptPolicy;
 import com.crystalgui.language.run.ScriptRef;
 import com.crystalgui.language.run.ScriptRuntime;
 import com.crystalgui.language.run.ScriptStoppedException;
@@ -90,6 +91,8 @@ public final class JsHost implements ScriptRuntime {
     @Nullable
     private RunSessions sessions;
 
+
+
     public JsHost(JsExecutor executor) {
         this(executor, null);
     }
@@ -108,6 +111,24 @@ public final class JsHost implements ScriptRuntime {
     public JsHost reportTo(@Nullable RunSessions target) {
         this.sessions = target;
         return this;
+    }
+
+    /**
+     * Forwards to {@link JsLanguage#restrictTo}, which is the one place the policy lives.
+     *
+     * <p>Kept as a field here at first, and that was the bug in waiting: the executor would have obeyed this
+     * one while resolution and the completion list obeyed the language's, so a class could be refused at run
+     * time and offered by the popup that suggested it. One policy, four readers.</p>
+     */
+    @Override
+    public JsHost restrictTo(ScriptPolicy target) {
+        JsLanguage.restrictTo(target);
+        return this;
+    }
+
+    /** What every JavaScript surface obeys. @see JsLanguage#policy */
+    public ScriptPolicy policy() {
+        return JsLanguage.policy();
     }
 
     // ── Compile ─────────────────────────────────────────────────────────────────────────────────
@@ -300,8 +321,11 @@ public final class JsHost implements ScriptRuntime {
             // the previous run threw would otherwise sit under a line this run may sail past.
             publishRuntimeProblems(List.of());
             try {
+                // THE POLICY AS A PREDICATE, which is all the child may hold: it becomes Rhino's own
+                // ClassShutter, so a refused class is refused at the moment the script names it rather
+                // than by anything this side could check afterwards.
                 Object answer = executor.run(compiled, bindings, this::out, this::err,
-                        JsHost::readLineFromSystemIn, name -> true);
+                        JsHost::readLineFromSystemIn, JsLanguage.policy()::allowsClass);
                 report(RunState.FINISHED);
                 return answer;
             } catch (InterruptedException stopped) {

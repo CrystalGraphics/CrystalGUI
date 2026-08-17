@@ -20,6 +20,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * A Java class reached from JavaScript, answered by the <b>Java</b> engine.
@@ -68,6 +69,29 @@ final class InteropResolver {
     private final List<String> classpath;
     private final int releaseLevel;
 
+    /**
+     * What a script may reach, or null for everything.
+     *
+     * <p>Consulted on the way <em>out</em> rather than at the probe: the Java engine's answer is the same
+     * whatever the policy is, so filtering here keeps the cached analysis reusable if the policy ever
+     * changes, and keeps the refusal in one place instead of woven through the probe.</p>
+     */
+    @Nullable private volatile Predicate<String> allowsClass;
+
+    void restrictTo(@Nullable Predicate<String> policy) {
+        this.allowsClass = policy;
+        // THE MEMBER CACHE GOES, the analysis cache stays. A member list is what the policy filters, so a
+        // cached one describes the old posture; an Analysis describes the class and is policy-free.
+        synchronized (this) {
+            members.clear();
+        }
+    }
+
+    private boolean permits(@Nullable String binaryName) {
+        Predicate<String> policy = allowsClass;
+        return policy == null || binaryName == null || binaryName.isEmpty() || policy.test(binaryName);
+    }
+
     /** Access-ordered, so eviction drops the least recently asked-about class. */
     private final LinkedHashMap<String, Probe> cache = new LinkedHashMap<>(16, 0.75f, true) {
         @Override
@@ -99,12 +123,19 @@ final class InteropResolver {
      */
     synchronized List<SymbolInfo> membersOf(String binaryName, boolean staticSide) {
         if (binaryName == null || binaryName.isEmpty()) return List.of();
+        // A REFUSED CLASS HAS NO MEMBERS, which is what makes the completion list and the run agree: the
+        // shutter refuses the call, and this refuses to have suggested it.
+        if (!permits(binaryName)) return List.of();
         Probe probe = probeFor(binaryName);
         List<SymbolInfo> all = probe == null ? reflectMembers(binaryName) : probe.members();
         if (all.isEmpty()) return all;
         List<SymbolInfo> filtered = new ArrayList<>(all.size());
         for (SymbolInfo member : all) {
-            if (member.is(SymbolModifier.STATIC) == staticSide) filtered.add(member);
+            if (member.is(SymbolModifier.STATIC) != staticSide) continue;
+            // AND A MEMBER WHOSE DECLARING CLASS IS REFUSED goes too, however reachable the receiver is:
+            // `toString()` inherited from a refused type is still a call into it.
+            if (!permits(member.container())) continue;
+            filtered.add(member);
         }
         // A CLASS WITH NO STATICS STILL HAS SOME -- `class` itself, and anything inherited from Object is
         // instance-side -- so an empty static list is a real answer and not a reason to fall back to the
@@ -145,6 +176,7 @@ final class InteropResolver {
     @Nullable
     synchronized SymbolInfo describeMember(String binaryName, SymbolInfo member, boolean staticSide) {
         if (java == null || binaryName == null || member == null || member.name().isEmpty()) return null;
+        if (!permits(binaryName)) return null;
         String key = binaryName + (staticSide ? "#" : ".") + member.name() + "/" + member.parameters().size();
         SymbolInfo cached = members.get(key);
         if (cached != null) return cached == ABSENT ? null : cached;
@@ -227,6 +259,7 @@ final class InteropResolver {
     @Nullable
     synchronized SymbolInfo describe(String binaryName, boolean staticSide) {
         if (binaryName == null || binaryName.isEmpty()) return null;
+        if (!permits(binaryName)) return null;
         int lastDot = binaryName.lastIndexOf('.');
         String simple = lastDot < 0 ? binaryName : binaryName.substring(lastDot + 1);
         String container = lastDot < 0 ? null : binaryName.substring(0, lastDot);
@@ -249,6 +282,7 @@ final class InteropResolver {
     /** Whether the class exists at all — what decides a package chain is a type and not a typo. */
     synchronized boolean exists(String binaryName) {
         if (binaryName == null || binaryName.isEmpty()) return false;
+        if (!permits(binaryName)) return false;
         if (java != null) return probeFor(binaryName) != null;
         return loadClass(binaryName) != null;
     }
