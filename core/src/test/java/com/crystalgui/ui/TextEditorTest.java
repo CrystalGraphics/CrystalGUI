@@ -407,6 +407,25 @@ public class TextEditorTest extends UiTestBase {
     }
 
     /**
+     * <b>Ctrl+D keeps going after it wraps.</b> It resumed from the last selection BY POSITION, so once
+     * the search wrapped to the top the newest caret was there and the resume point was still at the
+     * bottom — every further press found the match it had already taken and refused. Multi-caret simply
+     * stopped responding, which is what "kind of broken" looked like from the outside.
+     */
+    @Test
+    public void addingCaretsAtOccurrencesSurvivesTheWrap() {
+        build("cat dog cat bird cat");
+        editor.setSelection(8, 11);                     // the middle "cat"
+
+        assertTrue("the third", editor.addCaretAtNextOccurrence());
+        assertTrue("then the first, having wrapped", editor.addCaretAtNextOccurrence());
+        assertEquals(3, editor.caretCount());
+
+        assertFalse("and there is genuinely nothing left", editor.addCaretAtNextOccurrence());
+        assertEquals("which is not the same as losing what it had", 3, editor.caretCount());
+    }
+
+    /**
      * <b>Undo puts the caret back where the typing happened.</b> Reported from the harness: the text came
      * back and the caret did not, so the next keystroke landed wherever it had been left.
      */
