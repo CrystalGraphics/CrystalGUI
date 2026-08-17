@@ -400,6 +400,22 @@ final class Queries {
         out = out.replaceAll(
                 "(?s)(field:\\s*\\(field_identifier\\)\\s*)@function\\b",
                 "$1@function.call");
+
+        // JAVASCRIPT'S METHOD CALL, which the vendored query captures as a DECLARATION:
+        //   (call_expression function: (member_expression property: (property_identifier) @function.method))
+        // so `console.log(...)` took the declaration blue while Java's `println(...)` took the call
+        // colour, from the same scheme, three lines apart on screen. The same complaint the Java split
+        // above answers, in the language that had not been checked for it.
+        //
+        // ANCHORED ON `call_expression function:`, because the identical inner shape spells a real
+        // declaration two patterns earlier -- `(assignment_expression left: (member_expression property:
+        // (property_identifier) @function.method) right: [(function_expression) (arrow_function)])` is
+        // `Foo.prototype.bar = function () {}`, which IS a declaration and must keep the blue. Matching
+        // the member_expression alone would have recoloured both.
+        out = out.replaceAll(
+                "(?s)(\\(call_expression\\s+function:\\s*\\(member_expression\\s+property:\\s*"
+                        + "\\(property_identifier\\)\\s*)@function\\.method",
+                "$1@function.call");
         return out;
     }
 

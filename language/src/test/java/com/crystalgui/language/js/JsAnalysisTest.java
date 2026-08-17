@@ -16,6 +16,7 @@ import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -194,7 +195,45 @@ public class JsAnalysisTest {
         // of them can change.
         assertEquals(List.of("constant", "constant"),
                 capturesOf("function f() { const K = 2; return K; }", "K"));
-        assertEquals(List.of("function"), capturesOf("function named() { return 1; }", "named"));
+        // A DECLARATION, AND SAID SO — `function.method` rather than bare `function`, which is what the
+        // Java engine emits for a method declaration and what every reference scheme colours differently
+        // from a call (Islands gives the declaration a blue and leaves the call at the default
+        // foreground). Bare `function` is what a producer says when it cannot tell the two apart; this
+        // one can. Pinned at `function` until the JavaScript and Java output were dumped side by side.
+        assertEquals(List.of("function.method"),
+                capturesOf("function named() { return 1; }", "named"));
+    }
+
+    /**
+     * <b>A call is the grammar's answer, and the engine stands aside.</b>
+     *
+     * <p>Every top-level function used inside another function was marked {@code variable.captured} —
+     * {@code owner} is null at script scope and {@code isInside(x, null)} answers "is there any enclosing
+     * function at all", so a global read from anywhere counted. Semantic tokens <em>replace</em> grammar
+     * tokens, so `summarise(…)`, `describe(…)` and every other call in a typical file drew as a captured
+     * variable instead of a call: the mark was on nearly every name, which is the same as being on none.</p>
+     *
+     * <p>It also retyped what it described — the capture was a literal {@code "variable.captured"}, so a
+     * function came out a variable. Both halves had to go for a call to read as a call.</p>
+     */
+    @Test
+    public void aFunctionCalledFromAnotherFunctionIsNotACapturedVariable() {
+        String source = "function helper() { return 1; }\nfunction main() { return helper(); }";
+        for (String capture : capturesOf(source, "helper")) {
+            assertNotEquals("a top-level function is not a closure capture",
+                    "variable.captured", capture);
+            assertFalse("nor is it a variable of any kind: " + capture,
+                    capture.startsWith("variable"));
+        }
+    }
+
+    /** A genuine capture — declared in a function, read from one nested inside it — still says so. */
+    @Test
+    public void aRealClosureCaptureIsStillMarked() {
+        List<String> captures = capturesOf(
+                "function outer() { var held = 1; return function () { return held; }; }", "held");
+        assertTrue("the inner read must be marked captured, got " + captures,
+                captures.contains("variable.captured"));
     }
 
     /** A binding that moves, in a language with no {@code final} to say so. */

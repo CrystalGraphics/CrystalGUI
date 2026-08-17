@@ -487,8 +487,19 @@ public final class RhinoScopes {
                 if (isAssignmentTarget(name)) declared.reassigned = true;
                 // CAPTURED: used from inside a function other than the one that declared it. That is
                 // what a closure IS, and it is invisible to anything that has not resolved the scopes.
+                //
+                // A TOP-LEVEL DECLARATION IS NOT ONE, and leaving that out made the mark useless rather
+                // than merely wrong. `owner` is null for anything declared at script scope, and
+                // `isInside(x, null)` answers "is there ANY enclosing function" -- so every global read
+                // from inside any function counted, which is nearly every name in nearly every file.
+                // Every top-level `function` called from another function was marked, and the mark
+                // REPLACES the grammar's answer, so the whole file drew as captured variables instead of
+                // as calls. A closure closes over an enclosing FUNCTION's binding; a global is a global.
                 FunctionNode using = enclosingFunction(name);
-                if (using != declared.owner && isInside(using, declared.owner)) declared.captured = true;
+                if (declared.owner != null && using != declared.owner
+                        && isInside(using, declared.owner)) {
+                    declared.captured = true;
+                }
                 return true;
             }
         });
