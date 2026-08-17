@@ -320,7 +320,12 @@ final class RhinoResolution {
      * empty box in the popup and forgetting one is invisible until somebody hovers exactly that shape.</p>
      */
     private static SymbolInfo signed(SymbolInfo symbol, RhinoScopes.Declaration declared) {
-        return symbol.withSignature(JsSignatures.of(symbol, parameterNamesOf(declared)));
+        // WITH THE KEYWORD THAT WAS ACTUALLY WRITTEN. `let` and `var` are one SymbolKind because nothing
+        // above the engine needs to tell them apart, so the distinction has to travel beside the symbol
+        // rather than inside it -- and without it every `let` in the file rendered as `var`, which is a
+        // claim about scoping rather than a cosmetic slip.
+        return symbol.withSignature(JsSignatures.of(symbol, parameterNamesOf(declared),
+                declared.isLet ? "let" : null));
     }
 
     /**
