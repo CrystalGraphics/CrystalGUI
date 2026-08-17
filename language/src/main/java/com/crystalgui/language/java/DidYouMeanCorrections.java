@@ -249,11 +249,7 @@ final class DidYouMeanCorrections {
          * where there was one before, not a silent edit.</p>
          */
         private static void collectLocalsAbove(SimpleName use, Set<String> into) {
-            ASTNode scope = use;
-            while (scope != null && !(scope instanceof MethodDeclaration)
-                    && !(scope instanceof LambdaExpression) && !(scope instanceof Initializer)) {
-                scope = scope.getParent();
-            }
+            ASTNode scope = Scopes.enclosingNameScope(use);
             if (scope == null) return;
             int before = use.getStartPosition();
             scope.accept(new ASTVisitor() {

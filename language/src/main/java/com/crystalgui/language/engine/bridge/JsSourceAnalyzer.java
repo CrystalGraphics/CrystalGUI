@@ -1,5 +1,7 @@
 package com.crystalgui.language.engine.bridge;
 
+import java.util.List;
+
 /**
  * What the <b>JavaScript</b> engine can say about a source file — the analysis half of the JS bridge.
  *
@@ -36,6 +38,40 @@ public interface JsSourceAnalyzer {
      * @param version    the document version this describes, carried through to every answer
      */
     Analysis analyze(String sourceName, String source, long version);
+
+    /**
+     * Parses one script, against what the last run of it left in scope.
+     *
+     * <p>The live scope is the top resolution tier — what a value <em>is</em> outranks what the author
+     * said and what the syntax suggests — and it is per <b>document</b>, because it is the result of
+     * running that document. So it arrives with the request rather than being set on the analyser, which
+     * is one object shared by every open file.</p>
+     */
+    default Analysis analyze(String sourceName, String source, long version,
+                             LiveScopeSnapshot liveScope) {
+        return analyze(sourceName, source, version);
+    }
+
+    /**
+     * Lends this analyser the <b>Java</b> engine, so a Java type reached from JavaScript is answered by
+     * the resolver that answers for Java.
+     *
+     * <p>{@code new java.util.ArrayList()}, {@code Java.type("a.b.C")}, a JSDoc {@code {java.util.List}} —
+     * for every one of those, "what members does it have" is a question the Java engine already answers
+     * better than reflection can: generic substitution, accessibility, and the binding keys
+     * {@code AttachedSources} needs to quote a signature out of {@code src.zip}. Asking it means a member
+     * list reached from JavaScript is <em>the same list</em> a {@code .java} file would have shown, which
+     * is the whole point of the interop tier.</p>
+     *
+     * <p>Optional, and its absence is not a failure: a build that ships Rhino without ECJ falls back to
+     * reflection over the host loader, which is also exactly what Rhino itself will do at call time — so
+     * the fallback shows what the script can really call, just with less detail.</p>
+     *
+     * <p>Called once at registration. It is a lend rather than an ownership transfer: the Java engine is
+     * the Java language's to open and to close, and this analyser must never close it.</p>
+     */
+    default void useJavaEngine(SourceAnalyzer java, List<String> classpath, int releaseLevel) {
+    }
 
     /**
      * The JavaScript engine's analysis — the general

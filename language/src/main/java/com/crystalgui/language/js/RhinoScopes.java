@@ -71,17 +71,37 @@ final class RhinoScopes {
         /** The function the declaration is inside, or null at the top level. */
         @Nullable final FunctionNode owner;
 
+        /**
+         * The name node itself — where the JSDoc above it is looked for.
+         *
+         * <p>Held rather than re-found from the offset because the tree is already in hand and a second
+         * walk to recover a node we had would be the shape this whole class exists to avoid.</p>
+         */
+        @Nullable final AstNode declaringNode;
+
+        /**
+         * What it was declared equal to — the {@code InferenceTier}'s entire input.
+         *
+         * <p>{@code var x = new java.util.ArrayList()} keeps the {@code new} expression; a function
+         * declaration keeps the {@link FunctionNode}; {@code var x;} keeps null, which is the honest
+         * answer for a declaration that says nothing about its value.</p>
+         */
+        @Nullable final AstNode initializer;
+
         boolean reassigned;
         boolean captured;
         final List<int[]> references = new ArrayList<>();
 
         Declaration(String name, SymbolKind kind, int offset, int length,
-                    @Nullable FunctionNode owner) {
+                    @Nullable FunctionNode owner, @Nullable AstNode declaringNode,
+                    @Nullable AstNode initializer) {
             this.name = name;
             this.kind = kind;
             this.offset = offset;
             this.length = length;
             this.owner = owner;
+            this.declaringNode = declaringNode;
+            this.initializer = initializer;
         }
 
         /** Declared and never mentioned again — what the unused-name warning is built from. */
@@ -188,7 +208,8 @@ final class RhinoScopes {
                 SymbolKind kind = ((VariableDeclaration) node).isConst()
                         ? SymbolKind.CONSTANT : SymbolKind.LOCAL_VARIABLE;
                 for (VariableInitializer initializer : ((VariableDeclaration) node).getVariables()) {
-                    declare(initializer.getTarget(), kind, enclosingFunction(node));
+                    declare(initializer.getTarget(), kind, enclosingFunction(node),
+                            initializer.getInitializer());
                 }
             } else if (node instanceof FunctionNode) {
                 FunctionNode function = (FunctionNode) node;
@@ -197,11 +218,11 @@ final class RhinoScopes {
                 // function being declared and reports every top-level function as owned, which made the
                 // unused-name rule warn about `main` in the fixture this milestone is traced in.
                 declare(function.getFunctionName(), SymbolKind.FUNCTION,
-                        enclosingFunction(function.getParent()));
+                        enclosingFunction(function.getParent()), function);
                 // A PARAMETER, by contrast, genuinely belongs to its function -- so the name node's own
                 // enclosing function is the right answer, and is what `declare` would have found anyway.
                 for (AstNode parameter : function.getParams()) {
-                    declare(parameter, SymbolKind.PARAMETER, function);
+                    declare(parameter, SymbolKind.PARAMETER, function, null);
                 }
             }
             return true;
@@ -216,7 +237,7 @@ final class RhinoScopes {
      * not need in order to be right about everything else.</p>
      */
     private void declare(@Nullable AstNode target, SymbolKind kind,
-                         @Nullable FunctionNode owner) {
+                         @Nullable FunctionNode owner, @Nullable AstNode initializer) {
         if (!(target instanceof Name)) return;
         Name name = (Name) target;
         String identifier = name.getIdentifier();
@@ -231,9 +252,73 @@ final class RhinoScopes {
         Key key = new Key(defining, identifier);
         if (byKey.containsKey(key)) return;
         Declaration declared = new Declaration(identifier, kind, name.getAbsolutePosition(),
-                Math.max(1, name.getLength()), owner);
+                Math.max(1, name.getLength()), owner, name, initializer);
         byKey.put(key, declared);
         inOrder.add(declared);
+    }
+
+    // ── What the resolver asks ──────────────────────────────────────────────────────────────────
+
+    /**
+     * The declarations visible at {@code offset}, <b>nearest first</b>.
+     *
+     * <p>Nearest-first is the order completion wants and the order a reader expects: a local shadows a
+     * global, and the thing you just declared is the thing you are most likely about to type. Ordered by
+     * how deeply the declaration's owning function is nested rather than by textual distance, because
+     * that is what scoping actually means — a name declared at the top of a long function is nearer than
+     * one declared on the line above it at file scope.</p>
+     *
+     * <p>Hoisting is not modelled: every declaration in an enclosing function is visible, including ones
+     * written below the offset. That is right for {@code var} and for a function declaration, and wrong
+     * only for the temporal dead zone of a {@code let} — which is a runtime error rather than a
+     * resolution question, and which no completion list has ever bothered to model.</p>
+     */
+    List<Declaration> visibleAt(int offset) {
+        List<Declaration> visible = new ArrayList<>();
+        for (Declaration declared : inOrder) {
+            if (declared.owner == null || containsOffset(declared.owner, offset)) visible.add(declared);
+        }
+        visible.sort((a, b) -> Integer.compare(depthOf(b.owner), depthOf(a.owner)));
+        return visible;
+    }
+
+    /** The declaration of {@code name} visible at {@code offset}, or null. */
+    @Nullable
+    Declaration visibleDeclaration(String name, int offset) {
+        Declaration best = null;
+        int bestDepth = -1;
+        for (Declaration declared : inOrder) {
+            if (!declared.name.equals(name)) continue;
+            if (declared.owner != null && !containsOffset(declared.owner, offset)) continue;
+            int depth = depthOf(declared.owner);
+            if (depth > bestDepth) {
+                best = declared;
+                bestDepth = depth;
+            }
+        }
+        return best;
+    }
+
+    /** Whether any declaration anywhere in the file carries this name — the package-root shadow test. */
+    boolean declaresAnywhere(String name) {
+        for (Declaration declared : inOrder) {
+            if (declared.name.equals(name)) return true;
+        }
+        return false;
+    }
+
+    private static boolean containsOffset(@Nullable FunctionNode function, int offset) {
+        if (function == null) return true;
+        int start = function.getAbsolutePosition();
+        return offset >= start && offset <= start + function.getLength();
+    }
+
+    private static int depthOf(@Nullable FunctionNode function) {
+        int depth = 0;
+        for (AstNode at = function; at != null; at = at.getParent()) {
+            if (at instanceof FunctionNode) depth++;
+        }
+        return depth;
     }
 
     @Nullable
@@ -318,10 +403,11 @@ final class RhinoScopes {
     /** Whether this name is being written to — the left of an {@code =}, or a {@code ++}/{@code --}. */
     private static boolean isAssignmentTarget(Name name) {
         AstNode parent = name.getParent();
-        if (parent instanceof UnaryExpression) {
-            int operator = ((UnaryExpression) parent).getOperator();
-            return operator == Token.INC || operator == Token.DEC;
-        }
+        // NOT `getOperator() == Token.INC`. Token constants are inlined at compile time and the bands
+        // renumbered them, so that comparison quietly stopped recognising `count++` on every band but
+        // the one this module compiles against -- and a reassignment that is not noticed is a colour
+        // that is silently wrong. Found while typing a number literal as a boolean. @see RhinoTokens
+        if (RhinoTokens.isIncrementOrDecrementOf(parent, name.getIdentifier())) return true;
         // THE LEFT SIDE ONLY: `a = b` reassigns `a` and merely reads `b`. Asking the Assignment node
         // for its left half says that; comparing offsets only happens to say it.
         return parent instanceof Assignment && ((Assignment) parent).getLeft() == name;

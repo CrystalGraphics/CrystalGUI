@@ -435,11 +435,7 @@ final class LambdaCorrections {
 
     /** {@code name}, or {@code name1}, {@code name2}… — the first spelling nothing in scope has taken. */
     private static String freeName(String name, Set<String> taken) {
-        if (!taken.contains(name)) return name;
-        for (int suffix = 1; ; suffix++) {
-            String candidate = name + suffix;
-            if (!taken.contains(candidate)) return candidate;
-        }
+        return Names.free(taken, name);
     }
 
     /**

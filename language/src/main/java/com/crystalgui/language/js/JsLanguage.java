@@ -4,8 +4,11 @@ import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.language.engine.EngineHost;
 import com.crystalgui.language.engine.EngineSource;
+import com.crystalgui.language.engine.JavaEngine;
 import com.crystalgui.language.engine.bridge.JsExecutor;
 import com.crystalgui.language.engine.bridge.JsSourceAnalyzer;
+import com.crystalgui.language.java.HostClasspath;
+import com.crystalgui.language.java.JavaLanguage;
 import com.crystalgui.language.run.ScriptRuntimes;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.lang.LanguageServices;
@@ -88,6 +91,7 @@ public final class JsLanguage {
         }
 
         JsLanguage.scheduler = jobs;
+        lendTheJavaEngine();
 
         // THE EXISTING ENTRIES, WITH SERVICES ADDED -- not new ones. Every extension is read and
         // rewritten individually because they need not share an entry: nothing stops a host registering
@@ -110,7 +114,41 @@ public final class JsLanguage {
         return true;
     }
 
-    private static LanguageServices servicesFor(TextBuffer buffer, @Nullable Resource resource) {
+    /** Whether the Java engine has already been lent. @see #lendTheJavaEngine */
+    private static boolean javaLent;
+
+    /**
+     * Hands the analyser the Java engine, when this build has one.
+     *
+     * <p>What it buys is the interop tier: a Java type reached from a script is answered by the resolver
+     * that answers for Java, so the member list behind {@code new java.util.ArrayList().} is the same
+     * list a {@code .java} file would show — generic substitution, accessibility, deprecation marks and
+     * the binding keys that quote a signature out of {@code src.zip}.</p>
+     *
+     * <p><b>Tried again whenever a document opens</b>, rather than only at registration, so the order
+     * the two languages register in does not decide whether interop works. It would be easy to require
+     * Java first — every host we ship does it that way — and the failure would be silent: the member list
+     * would quietly fall back to reflection, which answers plausibly and less well. An ordering rule
+     * nothing enforces is one somebody eventually breaks.</p>
+     */
+    private static void lendTheJavaEngine() {
+        if (analyzer == null || javaLent) return;
+        JavaEngine java = JavaLanguage.engine();
+        if (java == null) return;
+        javaLent = true;
+        analyzer.useJavaEngine(java.analyzer(), HostClasspath.detect(), java.releaseLevel());
+    }
+
+    /** Re-lends the Java engine — for a host that opened the two languages in the other order. */
+    public static synchronized void useJavaEngine() {
+        lendTheJavaEngine();
+    }
+
+    private static synchronized LanguageServices servicesFor(TextBuffer buffer,
+                                                            @Nullable Resource resource) {
+        // THE LATE CHANCE. A document cannot open before both languages have registered, so this is the
+        // last moment the ordering could still be wrong -- and the first at which it certainly is not.
+        lendTheJavaEngine();
         return new JsLanguageServices(buffer, analyzer, scheduler, sourceNameFor(resource), resource);
     }
 
@@ -158,6 +196,7 @@ public final class JsLanguage {
      * decision was made.</p>
      */
     public static synchronized void shutdown() {
+        javaLent = false;
         analyzer = null;
         executor = null;
         scheduler = null;

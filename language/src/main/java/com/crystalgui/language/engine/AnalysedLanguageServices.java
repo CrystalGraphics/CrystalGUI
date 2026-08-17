@@ -207,6 +207,18 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
     }
 
     /**
+     * Re-runs the analysis because something the engine reads has changed, though the text has not.
+     *
+     * <p>There is exactly one such input today and it is the reason this exists: a JavaScript run leaves
+     * globals behind, and a name that was unresolved before it is a global after it — so the colours and
+     * every resolution answer are stale until the file is analysed again. Debounced like any other
+     * trigger, because a run ending is no more urgent than a keystroke.</p>
+     */
+    protected final void reanalyse() {
+        schedule();
+    }
+
+    /**
      * Analyses arbitrary text on the calling thread — the completion probe's shape.
      *
      * <p>Version {@code -1}, because this describes text the document does not contain and must never be

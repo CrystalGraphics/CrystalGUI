@@ -104,6 +104,18 @@ public interface JsExecutor {
     int currentLine();
 
     /**
+     * What the last run left in its global scope, walked once — or {@link LiveScopeSnapshot#EMPTY}.
+     *
+     * <p><b>Called on the script's own thread, at the end of the run.</b> A Rhino scope belongs to the
+     * {@code Context} that made it and a {@code Context} is single-threaded, so reading it from anywhere
+     * else is undefined; and holding it rather than snapshotting it would keep every value the script
+     * built alive for as long as the file is open, which is what the disposal test exists to refuse.</p>
+     */
+    default LiveScopeSnapshot snapshotScope() {
+        return LiveScopeSnapshot.EMPTY;
+    }
+
+    /**
      * Where a failure out of {@link #run} happened, or null when {@code thrown} is not the engine's.
      *
      * <p>The host cannot ask the exception itself: its class is Rhino's, defined by a loader the host does

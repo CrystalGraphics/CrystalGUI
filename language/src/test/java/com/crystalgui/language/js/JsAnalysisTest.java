@@ -208,6 +208,34 @@ public class JsAnalysisTest {
     }
 
     /**
+     * And {@code ++}/{@code --} are assignments too — the case that was written and never tested.
+     *
+     * <p>It was detected with {@code getOperator() == Token.INC}, and a {@code Token} constant is a
+     * {@code static final int} that <b>javac inlines</b>: this module compiles against the band-8 Rhino
+     * and the later bands renumbered the set, so the comparison quietly stopped matching on every band a
+     * user is actually likely to be on. Nothing threw — the colour was simply wrong. The test above
+     * passed throughout, because it only ever used {@code a = 2}. @see RhinoTokens</p>
+     */
+    @Test
+    public void anIncrementIsAReassignmentToo() {
+        for (String mutation : new String[]{"a++", "++a", "a--", "--a"}) {
+            List<String> captures = capturesOf("function f() { var a = 1; " + mutation + "; return a; }",
+                    "a");
+            assertEquals(mutation + " did not mark every occurrence: " + captures, 3, captures.size());
+            for (String capture : captures) {
+                assertEquals(mutation + " is an assignment", "variable.reassigned", capture);
+            }
+        }
+        // AND AN ORDINARY UNARY IS NOT ONE. Without this the fix could be "call every unary a write",
+        // which would mark `-a` and `typeof a` as mutations and make the colour meaningless.
+        for (String read : new String[]{"-a", "!a", "typeof a", "void a"}) {
+            List<String> captures = capturesOf("function f() { var a = 1; return " + read + "; }", "a");
+            assertEquals(read + " was treated as an assignment", List.of("variable", "variable"),
+                    captures);
+        }
+    }
+
+    /**
      * The single most important thing to be able to see in JavaScript, and the least visible.
      *
      * <p>A closure is a use from inside a function other than the one that declared the name. Nothing

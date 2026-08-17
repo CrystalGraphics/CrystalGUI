@@ -1,11 +1,15 @@
 package com.crystalgui.language.js;
 
 import com.crystalgui.language.engine.bridge.JsExecutor;
+import com.crystalgui.language.engine.bridge.LiveScopeSnapshot;
 
 import org.mozilla.javascript.BaseFunction;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.ContextFactory;
 import org.mozilla.javascript.EvaluatorException;
+import org.mozilla.javascript.Function;
+import org.mozilla.javascript.NativeArray;
+import org.mozilla.javascript.NativeJavaClass;
 import org.mozilla.javascript.NativeObject;
 import org.mozilla.javascript.RhinoException;
 import org.mozilla.javascript.Script;
@@ -14,11 +18,14 @@ import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.Undefined;
 import org.mozilla.javascript.WrappedException;
+import org.mozilla.javascript.Wrapper;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -186,6 +193,12 @@ public final class RhinoExecutor implements JsExecutor {
                     ScriptableObject scope = cx.initStandardObjects(null, false);
                     installGlobals(cx, scope, run, out, err, readLine, allowsClass);
                     bind(cx, scope, bindings, allowsClass);
+                    // WHAT WAS THERE BEFORE THE SCRIPT RAN. The standard library, our console globals and
+                    // the host's bindings all live on this same scope, so "what did the run define" is a
+                    // difference rather than a listing -- without the baseline the live tier would offer
+                    // `Object`, `Math` and `parseInt` as things the script had just created.
+                    run.scope = scope;
+                    run.baseline = idsOf(scope);
                     return compiled.exec(cx, scope);
                 } catch (Stopped stopped) {
                     throw interrupted();
@@ -198,6 +211,11 @@ public final class RhinoExecutor implements JsExecutor {
                     }
                     throw wrapped;
                 } finally {
+                    // ON THE SCRIPT'S OWN THREAD, WHILE THE CONTEXT IS STILL ENTERED, and whether the run
+                    // finished or threw -- a script that failed halfway still defined what it defined,
+                    // and that is exactly the state somebody debugging wants to look at.
+                    LAST_SNAPSHOT.set(snapshotOf(run));
+                    run.scope = null;
                     Context.exit();
                 }
             });
@@ -352,6 +370,120 @@ public final class RhinoExecutor implements JsExecutor {
         if (thread.isAlive()) thread.interrupt();
     }
 
+    /**
+     * The last run on <b>this thread</b>, snapshotted.
+     *
+     * <p>Per thread because that is what identifies a run once it is over: {@code RUNS} is keyed the same
+     * way and is emptied when the run returns, and the host asks for this immediately afterwards on the
+     * same thread. A daemon script thread dies with its run, so nothing accumulates.</p>
+     */
+    private static final ThreadLocal<LiveScopeSnapshot> LAST_SNAPSHOT = new ThreadLocal<>();
+
+    @Override
+    public LiveScopeSnapshot snapshotScope() {
+        LiveScopeSnapshot taken = LAST_SNAPSHOT.get();
+        return taken == null ? LiveScopeSnapshot.EMPTY : taken;
+    }
+
+    /**
+     * Walks the run's global scope once, into types that hold nothing of Rhino's.
+     *
+     * <p>Every property read is guarded, because a property can be a getter and a getter is somebody's
+     * code: a script that defines one which throws must not take the snapshot -- and with it the whole
+     * run's reporting -- down with it. The name is still recorded, as something whose kind is unknown.</p>
+     */
+    private static LiveScopeSnapshot snapshotOf(Run run) {
+        ScriptableObject scope = run.scope;
+        if (scope == null) return LiveScopeSnapshot.EMPTY;
+        List<LiveScopeSnapshot.Entry> entries = new ArrayList<>();
+        for (Object id : scope.getIds()) {
+            if (!(id instanceof String)) continue;
+            String name = (String) id;
+            if (run.baseline != null && run.baseline.contains(name)) continue;
+            try {
+                entries.add(describe(name, ScriptableObject.getProperty(scope, name)));
+            } catch (RuntimeException | StackOverflowError unreadable) {
+                entries.add(LiveScopeSnapshot.Entry.of(name, LiveScopeSnapshot.Kind.OTHER));
+            }
+        }
+        return LiveScopeSnapshot.of(entries);
+    }
+
+    private static Set<String> idsOf(ScriptableObject scope) {
+        Set<String> ids = new LinkedHashSet<>();
+        for (Object id : scope.getIds()) {
+            if (id instanceof String) ids.add((String) id);
+        }
+        return ids;
+    }
+
+    /** One live value, classified. */
+    private static LiveScopeSnapshot.Entry describe(String name, Object value) {
+        if (value == null || value == Scriptable.NOT_FOUND) {
+            return LiveScopeSnapshot.Entry.of(name, LiveScopeSnapshot.Kind.NULL);
+        }
+        if (Undefined.isUndefined(value)) {
+            return LiveScopeSnapshot.Entry.of(name, LiveScopeSnapshot.Kind.UNDEFINED);
+        }
+        if (value instanceof NativeJavaClass) {
+            Object unwrapped = ((NativeJavaClass) value).unwrap();
+            String className = unwrapped instanceof Class ? ((Class<?>) unwrapped).getName() : null;
+            return new LiveScopeSnapshot.Entry(name, LiveScopeSnapshot.Kind.JAVA_CLASS, className,
+                    null, -1, List.<String>of());
+        }
+        if (value instanceof Wrapper) {
+            Object unwrapped = ((Wrapper) value).unwrap();
+            return new LiveScopeSnapshot.Entry(name, LiveScopeSnapshot.Kind.JAVA_OBJECT,
+                    unwrapped == null ? null : unwrapped.getClass().getName(), null, -1,
+                    List.<String>of());
+        }
+        if (value instanceof BaseFunction) {
+            BaseFunction function = (BaseFunction) value;
+            return new LiveScopeSnapshot.Entry(name, LiveScopeSnapshot.Kind.FUNCTION, null,
+                    function.getFunctionName(), function.getArity(), ownIdsOf(function));
+        }
+        if (value instanceof Function) {
+            return new LiveScopeSnapshot.Entry(name, LiveScopeSnapshot.Kind.FUNCTION, null, name, -1,
+                    List.<String>of());
+        }
+        if (value instanceof NativeArray) {
+            return LiveScopeSnapshot.Entry.of(name, LiveScopeSnapshot.Kind.ARRAY);
+        }
+        if (value instanceof CharSequence) {
+            return LiveScopeSnapshot.Entry.of(name, LiveScopeSnapshot.Kind.STRING);
+        }
+        if (value instanceof Number) return LiveScopeSnapshot.Entry.of(name, LiveScopeSnapshot.Kind.NUMBER);
+        if (value instanceof Boolean) {
+            return LiveScopeSnapshot.Entry.of(name, LiveScopeSnapshot.Kind.BOOLEAN);
+        }
+        if (value instanceof Scriptable) {
+            Scriptable object = (Scriptable) value;
+            String className = object.getClassName();
+            if ("Object".equals(className)) {
+                return new LiveScopeSnapshot.Entry(name, LiveScopeSnapshot.Kind.OBJECT, null, null, -1,
+                        ownIdsOf(object));
+            }
+            if ("RegExp".equals(className)) {
+                return LiveScopeSnapshot.Entry.of(name, LiveScopeSnapshot.Kind.REGEXP);
+            }
+            return LiveScopeSnapshot.Entry.of(name, LiveScopeSnapshot.Kind.OTHER);
+        }
+        return LiveScopeSnapshot.Entry.of(name, LiveScopeSnapshot.Kind.OTHER);
+    }
+
+    /** An object's OWN property names -- never its prototype's, which are the standard library's. */
+    private static List<String> ownIdsOf(Scriptable object) {
+        List<String> ids = new ArrayList<>();
+        try {
+            for (Object id : object.getIds()) {
+                if (id instanceof String) ids.add((String) id);
+            }
+        } catch (RuntimeException unreadable) {
+            return List.of();
+        }
+        return ids;
+    }
+
     @Override
     public int currentLine() {
         Context cx = Context.getCurrentContext();
@@ -381,6 +513,10 @@ public final class RhinoExecutor implements JsExecutor {
     /** One run's stop flag. Filed on the {@code Context}, found by thread. */
     private static final class Run {
         volatile boolean stopRequested;
+        /** The run's scope, held only until the snapshot is taken in the same {@code finally}. */
+        volatile ScriptableObject scope;
+        /** What was on the scope before the script ran. @see #snapshotOf */
+        volatile Set<String> baseline;
     }
 
     /**

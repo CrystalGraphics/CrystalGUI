@@ -49,6 +49,24 @@ final class Names {
     }
 
     /**
+     * The first of {@code stems} nothing has taken, else the first stem numbered.
+     *
+     * <p>For the cases where the <em>stem</em> is the convention rather than derived from a type: a catch
+     * parameter is {@code e}, and {@code ex} when something already is — which is what everybody writes
+     * and is not something {@link #derive} could work out. Numbering falls back to the first stem, because
+     * {@code e1} is a numbered {@code e} and {@code ex1} is nothing anybody means.</p>
+     */
+    static String free(Set<String> taken, String... stems) {
+        for (String stem : stems) {
+            if (!taken.contains(stem)) return stem;
+        }
+        String stem = stems[0];
+        for (int n = 1; ; n++) {
+            if (!taken.contains(stem + n)) return stem + n;
+        }
+    }
+
+    /**
      * A name from a type — the conventional single letter for a primitive, the lowercased name else.
      *
      * <p>{@code i} for an {@code int} is what everybody writes and what IntelliJ generates; it also
