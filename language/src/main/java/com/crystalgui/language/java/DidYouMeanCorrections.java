@@ -8,7 +8,6 @@ import org.eclipse.jdt.core.dom.AST;
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTVisitor;
 import org.eclipse.jdt.core.dom.AbstractTypeDeclaration;
-import org.eclipse.jdt.core.dom.AnonymousClassDeclaration;
 import org.eclipse.jdt.core.dom.FieldAccess;
 import org.eclipse.jdt.core.dom.IMethodBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
@@ -151,11 +150,11 @@ final class DidYouMeanCorrections {
             if (call instanceof MethodInvocation && ((MethodInvocation) call).getName() == name) {
                 MethodInvocation invocation = (MethodInvocation) call;
                 receiver = invocation.getExpression() == null
-                        ? enclosingTypeOf(invocation)
+                        ? Scopes.enclosingTypeBinding(invocation)
                         : invocation.getExpression().resolveTypeBinding();
                 arity = invocation.arguments().size();
             } else if (call instanceof SuperMethodInvocation && ((SuperMethodInvocation) call).getName() == name) {
-                ITypeBinding here = enclosingTypeOf(call);
+                ITypeBinding here = Scopes.enclosingTypeBinding(call);
                 receiver = here == null ? null : here.getSuperclass();
                 arity = ((SuperMethodInvocation) call).arguments().size();
             } else {
@@ -163,7 +162,7 @@ final class DidYouMeanCorrections {
             }
             if (receiver == null) return;
 
-            ITypeBinding here = enclosingTypeOf(call);
+            ITypeBinding here = Scopes.enclosingTypeBinding(call);
             Map<String, Boolean> arityMatch = new LinkedHashMap<>();   // name -> has an overload of that arity
             Set<String> visited = new LinkedHashSet<>();
             collectMethods(receiver, here, arity, arityMatch, visited);
@@ -217,7 +216,7 @@ final class DidYouMeanCorrections {
         @Override public void contribute(FixContext context, IProblem problem, List<CodeAction> out) {
             SimpleName name = context.enclosing(problem, SimpleName.class);
             if (name == null) return;
-            ITypeBinding here = enclosingTypeOf(name);
+            ITypeBinding here = Scopes.enclosingTypeBinding(name);
 
             Set<String> candidates = new LinkedHashSet<>();
             ASTNode parent = name.getParent();
@@ -282,15 +281,6 @@ final class DidYouMeanCorrections {
     }
 
     // ── Shared ──────────────────────────────────────────────────────────────────────────────────
-
-    /** The binding of the type declaration (named or anonymous) enclosing {@code node}, or null. */
-    private static ITypeBinding enclosingTypeOf(ASTNode node) {
-        for (ASTNode at = node.getParent(); at != null; at = at.getParent()) {
-            if (at instanceof AbstractTypeDeclaration) return ((AbstractTypeDeclaration) at).resolveBinding();
-            if (at instanceof AnonymousClassDeclaration) return ((AnonymousClassDeclaration) at).resolveBinding();
-        }
-        return null;
-    }
 
     /** Whether a member with these modifiers on {@code owner} may be named from inside {@code here}. */
     private static boolean visibleFrom(int modifiers, ITypeBinding owner, ITypeBinding here) {

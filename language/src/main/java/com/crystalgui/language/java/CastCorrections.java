@@ -473,10 +473,6 @@ final class CastCorrections {
      * case seen — which is the kind that survives a refactor and then does not.</p>
      */
     private static MethodDeclaration enclosingMethod(ASTNode at) {
-        for (ASTNode walk = at; walk != null; walk = walk.getParent()) {
-            if (walk instanceof MethodDeclaration) return (MethodDeclaration) walk;
-            if (walk instanceof LambdaExpression) return null;
-        }
-        return null;
+        return Scopes.enclosingMethod(at, Scopes.Stop.LAMBDA);
     }
 }

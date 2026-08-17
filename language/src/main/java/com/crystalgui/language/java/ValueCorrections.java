@@ -237,7 +237,7 @@ final class ValueCorrections {
             Assignment assignment = assignmentTo(context, problem);
             if (assignment == null) return;
             SimpleName name = (SimpleName) assignment.getLeftHandSide();
-            AbstractTypeDeclaration owner = enclosingType(assignment);
+            AbstractTypeDeclaration owner = Scopes.enclosingTypeDeclaration(assignment);
             if (!(owner instanceof TypeDeclaration)) return;
 
             ITypeBinding type = assignment.getRightHandSide().resolveTypeBinding();
@@ -249,7 +249,7 @@ final class ValueCorrections {
             // STATIC IF THE SITE IS. A field generated from an assignment inside a static method must be
             // static too, or the fix trades "cannot be resolved" for "cannot make a static reference to a
             // non-static field" — a different error in the same place, which reads as the fix not working.
-            boolean isStatic = inStaticContext(assignment);
+            boolean isStatic = Scopes.isStaticContext(assignment);
             String declaration = "private " + (isStatic ? "static " : "")
                     + written + " " + name.getIdentifier() + ";";
 
@@ -297,22 +297,6 @@ final class ValueCorrections {
         return type == null || "void".equals(type.getName()) || type.isNullType() ? null : assignment;
     }
 
-    private static AbstractTypeDeclaration enclosingType(ASTNode at) {
-        for (ASTNode walk = at; walk != null; walk = walk.getParent()) {
-            if (walk instanceof AbstractTypeDeclaration) return (AbstractTypeDeclaration) walk;
-        }
-        return null;
-    }
-
-    private static boolean inStaticContext(ASTNode at) {
-        for (ASTNode walk = at; walk != null; walk = walk.getParent()) {
-            if (walk instanceof MethodDeclaration) {
-                return Modifier.isStatic(((MethodDeclaration) walk).getModifiers());
-            }
-            if (walk instanceof AbstractTypeDeclaration) return false;
-        }
-        return false;
-    }
 
     /**
      * "Initialize field 'a'" — a blank {@code final} field no constructor assigns.
@@ -345,7 +329,7 @@ final class ValueCorrections {
         @Override public void contribute(FixContext context, IProblem problem, List<CodeAction> out) {
             MethodDeclaration constructor = context.enclosing(problem, MethodDeclaration.class);
             if (constructor == null || !constructor.isConstructor()) return;
-            AbstractTypeDeclaration owner = enclosingType(constructor);
+            AbstractTypeDeclaration owner = Scopes.enclosingTypeDeclaration(constructor);
             if (!(owner instanceof TypeDeclaration)) return;
 
             for (Object each : ((TypeDeclaration) owner).bodyDeclarations()) {

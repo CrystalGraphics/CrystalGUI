@@ -106,7 +106,7 @@ final class VariableIntentions {
         @Override public void contribute(FixContext context, IProblem problem, List<CodeAction> out) {
             Expression expression = context.at(Expression.class, candidate -> extractable(context, candidate));
             if (expression == null) return;
-            Statement statement = enclosingStatement(expression);
+            Statement statement = Scopes.enclosingStatement(expression);
             if (statement == null || !(statement.getParent() instanceof Block)) return;
             // NOTHING GOES ABOVE `super(…)` OR `this(…)`. An explicit constructor invocation must be the
             // first statement in its constructor, so a declaration inserted before one is not legal
@@ -319,11 +319,7 @@ final class VariableIntentions {
                 ITypeBinding created = ((ClassInstanceCreation) expression).getType().resolveBinding();
                 if (created != null) base = Names.lower(created.getErasure().getName());
             }
-            ASTNode scope = at;
-            while (scope.getParent() != null && !(scope instanceof MethodDeclaration)) {
-                scope = scope.getParent();
-            }
-            return Names.derive(base, type, Names.declaredIn(scope));
+            return Names.derive(base, type, Names.declaredIn(Scopes.enclosingMethodOrRoot(at)));
         }
     }
 
@@ -409,12 +405,7 @@ final class VariableIntentions {
         private static List<SimpleName> usesOf(VariableDeclarationStatement declaration,
                                                IVariableBinding variable, SimpleName declared) {
             List<SimpleName> uses = new ArrayList<>();
-            ASTNode method = declaration.getParent();
-            while (method.getParent() != null
-                    && !(method instanceof MethodDeclaration)) {
-                method = method.getParent();
-            }
-            method.accept(new ASTVisitor() {
+            Scopes.enclosingMethodOrRoot(declaration).accept(new ASTVisitor() {
                 @Override public boolean visit(SimpleName name) {
                     if (name == declared) return true;
                     IVariableBinding bound = name.resolveBinding() instanceof IVariableBinding
@@ -515,13 +506,6 @@ final class VariableIntentions {
             }
         });
         return found[0];
-    }
-
-    private static Statement enclosingStatement(ASTNode at) {
-        for (ASTNode walk = at; walk != null; walk = walk.getParent()) {
-            if (walk instanceof Statement) return (Statement) walk;
-        }
-        return null;
     }
 
 }

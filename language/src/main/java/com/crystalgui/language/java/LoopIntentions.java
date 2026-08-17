@@ -14,7 +14,6 @@ import org.eclipse.jdt.core.dom.ForStatement;
 import org.eclipse.jdt.core.dom.IVariableBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
 import org.eclipse.jdt.core.dom.InfixExpression;
-import org.eclipse.jdt.core.dom.MethodDeclaration;
 import org.eclipse.jdt.core.dom.MethodInvocation;
 import org.eclipse.jdt.core.dom.PostfixExpression;
 import org.eclipse.jdt.core.dom.PrefixExpression;
@@ -92,7 +91,7 @@ final class LoopIntentions {
             // THE INDEX IS NOT TAKEN -- the conversion is what deletes it. Leaving it in the set made the
             // derived name collide with the very declaration being removed, so every `int` loop over an
             // `int[]` produced `for (int i1 : xs)` beside no `i` at all.
-            Set<String> taken = Names.declaredIn(enclosingMethodOf(loop));
+            Set<String> taken = Names.declaredIn(Scopes.enclosingMethodOrRoot(loop));
             taken.remove(counted.index.getName());
             String name = Names.derive(null, element, taken);
             String sequence = source.substring(counted.sequence.getStartPosition(),
@@ -279,12 +278,4 @@ final class LoopIntentions {
         return false;
     }
 
-    private static ASTNode enclosingMethodOf(Statement at) {
-        ASTNode scope = at;
-        while (scope.getParent() != null
-                && !(scope instanceof MethodDeclaration)) {
-            scope = scope.getParent();
-        }
-        return scope;
-    }
 }

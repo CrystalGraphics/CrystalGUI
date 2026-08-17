@@ -873,12 +873,7 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
         }
 
         private static IMethodBinding enclosingMethod(ASTNode node) {
-            ASTNode walk = node;
-            while (walk != null && !(walk instanceof org.eclipse.jdt.core.dom.MethodDeclaration)) {
-                walk = walk.getParent();
-            }
-            return walk == null ? null
-                    : ((org.eclipse.jdt.core.dom.MethodDeclaration) walk).resolveBinding();
+            return Scopes.enclosingMethodBinding(node);
         }
 
         /** The declared parameter type for whichever argument slot {@code argument} occupies. */
@@ -1155,14 +1150,15 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                     binding == null ? java.util.Set.of() : modifiersOf(binding), null));
         }
 
-        /** The type a caret sits inside, which is what accessibility is judged from. */
+        /**
+         * The type a caret sits inside, which is what accessibility is judged from.
+         *
+         * <p>An anonymous class counts as that type, which this used to walk straight past — so a caret in
+         * one judged what it could see from the class around it, and a private member of the anonymous
+         * class it is standing in was not offered.</p>
+         */
         private static ITypeBinding enclosingTypeAt(CompilationUnit unit, int offset) {
-            ASTNode node = NodeFinder.perform(unit, offset, 0);
-            while (node != null && !(node instanceof org.eclipse.jdt.core.dom.AbstractTypeDeclaration)) {
-                node = node.getParent();
-            }
-            return node == null ? null
-                    : ((org.eclipse.jdt.core.dom.AbstractTypeDeclaration) node).resolveBinding();
+            return Scopes.enclosingTypeBinding(NodeFinder.perform(unit, offset, 0));
         }
 
         @Override
