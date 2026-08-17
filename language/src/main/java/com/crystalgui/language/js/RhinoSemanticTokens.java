@@ -91,6 +91,13 @@ final class RhinoSemanticTokens {
         for (Name free : scopes.freeNames()) {
             String name = free.getIdentifier();
             if (name == null || name.isEmpty()) continue;
+            // STAND ASIDE FOR A MORE SPECIFIC PASS, and do it FIRST -- before asking what kind of free
+            // name this is. `java` is both a known global and the root of a package chain, so testing
+            // "is it a builtin" earlier claimed it here and `markJavaChains` claimed it again: two tokens
+            // on one range under unrelated names, resolved by paint order rather than by intent. Which is
+            // the exact defect this branch was added to prevent, recreated one pass further along.
+            if (isCallTarget(free) || isInJavaChain(free, scopes)) continue;
+
             String capture;
             if (hostBindings.contains(name)) {
                 capture = "variable.global";
@@ -98,12 +105,6 @@ final class RhinoSemanticTokens {
                 // BUILTIN, and the distinction from a host binding is worth drawing: one is JavaScript
                 // and travels everywhere, the other is this application's and does not.
                 capture = "variable.builtin";
-            } else if (isCallTarget(free)) {
-                // LEFT TO markUnresolvedCalls, which marks the same span `function.unresolved`. Emitting
-                // both put two tokens on one range under unrelated names, and which one painted was left
-                // to order -- the exact overlap the engine's own rule says never to create, and it reads
-                // as a colour-scheme bug rather than an ordering one because both names resolve.
-                continue;
             } else {
                 capture = "variable.unresolved";
             }
@@ -164,6 +165,23 @@ final class RhinoSemanticTokens {
             add(tokens, callee.getAbsolutePosition(), callee.getLength(), "function.unresolved");
             return true;
         });
+    }
+
+    /**
+     * Whether this name is a segment of a Java package chain — {@code java} in {@code java.util.List}.
+     *
+     * <p>Asked of the <b>outermost</b> {@code PropertyGet} above it, because that is the node
+     * {@link #markJavaChains} recognises and colours. Asking the immediate parent would answer about
+     * {@code java.util}, whose lower-case last segment is a package rather than a type — so the chain
+     * would be unrecognised here and coloured there, which is how one name ends up with two tokens.</p>
+     */
+    private static boolean isInJavaChain(Name name, RhinoScopes scopes) {
+        AstNode outermost = null;
+        for (AstNode at = name.getParent(); at instanceof PropertyGet; at = at.getParent()) {
+            outermost = at;
+        }
+        return outermost != null
+                && RhinoInference.javaNameOf(outermost, scopes::declaresAnywhere) != null;
     }
 
     /** Whether this name is the thing being called in {@code name(…)} — never {@code a.name(…)}. */

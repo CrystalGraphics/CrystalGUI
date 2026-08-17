@@ -275,7 +275,12 @@ public class JsAnalysisTest {
         assertEquals(List.of("variable.builtin"), capturesOf("var a = Math.max(1, 2);", "Math"));
         // Rhino's own Java bridge, which `initStandardObjects` does not define and a script uses
         // constantly. Marking `java.util.List` unresolved would be the most visible possible error.
-        assertEquals(List.of("variable.builtin"), capturesOf("var l = new java.util.ArrayList();", "java"));
+        //
+        // `module` RATHER THAN `variable.builtin`, since 10.12: a package root inside a chain is drawn as
+        // the package it is, which is strictly more than "the engine has this name". ONE token either way
+        // -- the free-name pass stands aside for whichever pass below it is more specific, because two
+        // tokens on one range are resolved by paint order rather than by intent.
+        assertEquals(List.of("module"), capturesOf("var l = new java.util.ArrayList();", "java"));
     }
 
     /** Two functions' {@code i} are two declarations, not one — scope identity, not name identity. */

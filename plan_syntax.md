@@ -903,20 +903,39 @@ Rhino is the **execution and truth** layer, not the analysis layer:
   `import`/`export` highlight beautifully (tree-sitter parses modern JS) and are flagged by the
   engine the moment they're typed, with the real message. Also: no `class` snippet in the JS
   completion set — do not teach what cannot run.
-- **Static structure** (scopes, references for completion before first run): tree-sitter's JS tree
-  + `locals.scm`. Do not build a second JS analyzer on Rhino's AST.
+- **Static structure** (scopes, references for completion before first run): ~~tree-sitter's JS tree
+  + `locals.scm`~~ — **revised at M10, and the reasoning is in `plan_m10.md` §1.2.** It comes from
+  **Rhino's own AST**, and that is not the thing this bullet warned against: the parse already happens
+  for diagnostics, `Name.getDefiningScope()` is the parser's own resolution, and reading it is not
+  building anything. `locals.scm` would have been a *third* view of one file — grammar tokens, Rhino
+  diagnostics, tree-sitter scopes — disagreeing with the engine exactly where it matters, since a query
+  will happily scope a `class` body this engine refuses to run. `locals.scm` keeps its M11 place for the
+  **engineless** languages, where there is no engine to ask.
+  *(One trap, recorded because it looks like the right answer: `Scope.getSymbolTable()` is populated and
+  every `Symbol.getNode()` is null in IDE mode, so there is no position to colour. Declarations come from
+  the declaring node; the table is only good for the name.)*
 - **Runtime introspection** (after a run): the live scope — walk actual objects and prototype
   chains, a REPL's answer, better than inference. Java interop values (`Java.type(...)`,
   `Packages.*`, a returned Java object) resolve **into the Java resolver** — the same
   `membersOf`, the same completion items. v1's observation stands: resolving `Java.type(...)`
   well buys more than resolving JS well.
+  *(Two corrections from M10. **Rhino has no `Java.type`** — that is Nashorn's, and this plan named it as
+  though it existed; we install it as a host function, because a call with a string literal is statically
+  readable and is one expression a completion list can insert where `Packages.a.b.C` is a chain of four.
+  And the live scope **contributes a type, it does not replace a symbol**: rebuilding a declared function
+  from its live entry cost the JSDoc description, the parameter types and the return type after any run.)*
 - **The §15.5 mapping boundary applies to JS too, and at *call time*.** Rhino resolves Java
   members by reflection when the call executes — against runtime names — so a JS script calling
   `world.getBlock(...)` fails in production with §15.5 fully built, because no compiler ever sees
-  a JS member access. Member lookup itself must remap: patch the lookup layer (`JavaMembers`) in
-  our shaded per-band Rhino, or adopt KubeJS's maintained remapping fork where its band coverage
-  allows — which fork *existing* is the proof this is the required shape (§23.12). Without it the
-  JS engine is dev-only; this is not optional. The JS resolver and completion read through the
+  a JS member access. Member lookup itself must remap. ~~Patch the lookup layer (`JavaMembers`) in our
+  shaded per-band Rhino, or adopt KubeJS's maintained remapping fork~~ — **neither, as built at M10.11.**
+  `JavaMembers` is internal and differs between the two Rhinos we ship, so a patched copy is a fork to
+  re-derive at every band move; and subclassing `NativeJavaObject` is *unavailable*, since its
+  `(Scriptable, Object, Class)` constructor exists on band 8 and not on band 11+. It is a **membrane**
+  over whatever wrapper Rhino makes — a `Scriptable` + `Wrapper` + `SymbolScriptable` (+ `Function` for a
+  class object) that forwards everything and translates the name on the way through. That the fork exists
+  is still the proof this is the required shape (§23.12). Without it the JS engine is dev-only; this is
+  not optional. The JS resolver and completion read through the
   same mapping tables, so authors see readable names in both languages.
 
 ### 16.2 Best-effort is the contract
