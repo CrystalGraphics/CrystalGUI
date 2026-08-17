@@ -62,6 +62,12 @@ final class RhinoTokens {
      */
     static boolean isIncrementOrDecrementOf(@Nullable AstNode parent, @Nullable String name) {
         if (parent == null || name == null || name.isEmpty()) return false;
+        // THE LENGTH FIRST, because `toSource` RENDERS THE WHOLE SUBTREE and this is asked of the parent
+        // of every name in the file, on every keystroke. A name that is an argument of a large call
+        // re-rendered that entire call each time, which is quadratic in the one place the analyser can
+        // least afford it. `name++` is exactly two characters longer than the name, so anything else is
+        // rejected without allocating.
+        if (parent.getLength() != name.length() + 2) return false;
         String text = textOf(parent);
         if (text == null) return false;
         return text.equals(name + "++") || text.equals(name + "--")

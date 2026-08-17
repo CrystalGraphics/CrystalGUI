@@ -59,6 +59,22 @@ final class JsRewrites {
         return source.substring(start, clamp(Math.max(start, to)));
     }
 
+    /**
+     * How long the source is, and what one character of it is.
+     *
+     * <p>Here because the fix catalog was asking for both through {@link #textIn} — {@code length()} as
+     * {@code textIn(0, MAX_VALUE).length()}, which <b>copies the whole document to measure it</b>, and once
+     * per character of a comparison's operator gap; and {@code charAt} as a one-character substring. Both
+     * are a field read on a String and neither should have allocated at all.</p>
+     */
+    int length() {
+        return source.length();
+    }
+
+    char charAt(int offset) {
+        return offset < 0 || offset >= source.length() ? '\0' : source.charAt(offset);
+    }
+
     // ── The four primitives ─────────────────────────────────────────────────────────────────────
 
     ChangeSet replace(int from, int to, String insert) {

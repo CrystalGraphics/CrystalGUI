@@ -2,17 +2,16 @@ package com.crystalgui.language.js;
 
 import com.crystalgui.text.lang.SymbolKind;
 
-import org.mozilla.javascript.Token;
 import org.mozilla.javascript.ast.Assignment;
 import org.mozilla.javascript.ast.AstNode;
 import org.mozilla.javascript.ast.AstRoot;
+import org.mozilla.javascript.ast.CatchClause;
 import org.mozilla.javascript.ast.FunctionNode;
 import org.mozilla.javascript.ast.Name;
 import org.mozilla.javascript.ast.NodeVisitor;
 import org.mozilla.javascript.ast.ObjectProperty;
 import org.mozilla.javascript.ast.PropertyGet;
 import org.mozilla.javascript.ast.Scope;
-import org.mozilla.javascript.ast.UnaryExpression;
 import org.mozilla.javascript.ast.VariableDeclaration;
 import org.mozilla.javascript.ast.VariableInitializer;
 
@@ -72,6 +71,24 @@ final class RhinoScopes {
         @Nullable final FunctionNode owner;
 
         /**
+         * The scope the name was introduced into — <b>where it is visible</b>, block and all.
+         *
+         * <p>Held rather than derived from {@link #owner}, because a function is not the unit of scoping
+         * in this language and has not been since {@code let}: two sibling blocks each declaring
+         * {@code let x} are two declarations that are never visible at the same time, and asking the
+         * function would say both are visible everywhere in it — so a completion list showed the name
+         * twice and a hover in the second block described the first one's initializer.</p>
+         *
+         * <p>A {@code var} is hoisted to its function by the language, so its defining scope <em>is</em>
+         * the function and the same test gives the right answer for it. Null only for a declaration in a
+         * tree the parser could not scope, which is treated as visible everywhere.</p>
+         */
+        @Nullable final Scope declaringScope;
+
+        /** {@code let} rather than {@code var} — which is the only thing that tells the two apart. */
+        final boolean isLet;
+
+        /**
          * The name node itself — where the JSDoc above it is looked for.
          *
          * <p>Held rather than re-found from the offset because the tree is already in hand and a second
@@ -94,7 +111,7 @@ final class RhinoScopes {
 
         Declaration(String name, SymbolKind kind, int offset, int length,
                     @Nullable FunctionNode owner, @Nullable AstNode declaringNode,
-                    @Nullable AstNode initializer) {
+                    @Nullable AstNode initializer, @Nullable Scope declaringScope, boolean isLet) {
             this.name = name;
             this.kind = kind;
             this.offset = offset;
@@ -102,11 +119,30 @@ final class RhinoScopes {
             this.owner = owner;
             this.declaringNode = declaringNode;
             this.initializer = initializer;
+            this.declaringScope = declaringScope;
+            this.isLet = isLet;
         }
 
         /** Declared and never mentioned again — what the unused-name warning is built from. */
         boolean isUnused() {
             return references.isEmpty();
+        }
+
+        /**
+         * Whether this is one the analyser warns about — <b>said once</b>, because the fix catalog has to
+         * agree with it.
+         *
+         * <p>The rule was spelled twice, in {@code RhinoSourceAnalyzer.withUnusedWarnings} and in
+         * {@code JsQuickFixes.unusedDeclarationAt}, and the day one changed the other would offer
+         * "Remove 'x'" on a name carrying no warning, or fail to offer it on one that does.</p>
+         *
+         * <p>Two exclusions, and neither is laziness. A <b>parameter</b>, because a callback's signature is
+         * fixed by whoever calls it — {@code function (err, data)} ignoring {@code err} is idiomatic. A
+         * <b>top-level</b> declaration, because a script's top level <em>is</em> its surface: nothing in the
+         * file needs to use {@code main} for the host to call it.</p>
+         */
+        boolean isReportableUnused() {
+            return isUnused() && offset >= 0 && kind != SymbolKind.PARAMETER && owner != null;
         }
     }
 
@@ -205,12 +241,23 @@ final class RhinoScopes {
                 // parser happened to set and is `Token.VAR` for a `const` on both bands -- so the
                 // obvious comparison compiles, runs, and quietly colours every constant as a local.
                 // Rhino ships the predicate for exactly this reason; use it.
-                SymbolKind kind = ((VariableDeclaration) node).isConst()
+                VariableDeclaration declaration = (VariableDeclaration) node;
+                SymbolKind kind = declaration.isConst()
                         ? SymbolKind.CONSTANT : SymbolKind.LOCAL_VARIABLE;
-                for (VariableInitializer initializer : ((VariableDeclaration) node).getVariables()) {
+                // `let` AND `const` ARE BLOCK-SCOPED AND `var` IS NOT, which is the whole difference
+                // between them and the thing that decides where each name is visible.
+                boolean blockScoped = declaration.isConst() || declaration.isLet();
+                for (VariableInitializer initializer : declaration.getVariables()) {
                     declare(initializer.getTarget(), kind, enclosingFunction(node),
-                            initializer.getInitializer());
+                            initializer.getInitializer(), blockScoped);
                 }
+            } else if (node instanceof CatchClause) {
+                // A CATCH PARAMETER IS DECLARED, and nothing else declares it: Rhino scopes `e` to the
+                // catch clause but no VariableDeclaration introduces it, so without this every `catch (e)`
+                // body reported `e` as an unresolved free name -- drawn as a mistake, and offered a
+                // "did you mean" and a "declare as a local" for a name the language already declared.
+                declare(((CatchClause) node).getVarName(), SymbolKind.PARAMETER,
+                        enclosingFunction(node), null, true);
             } else if (node instanceof FunctionNode) {
                 FunctionNode function = (FunctionNode) node;
                 // A FUNCTION'S NAME BELONGS TO THE SCOPE AROUND IT, NOT TO ITSELF -- so the owner is the
@@ -218,11 +265,11 @@ final class RhinoScopes {
                 // function being declared and reports every top-level function as owned, which made the
                 // unused-name rule warn about `main` in the fixture this milestone is traced in.
                 declare(function.getFunctionName(), SymbolKind.FUNCTION,
-                        enclosingFunction(function.getParent()), function);
+                        enclosingFunction(function.getParent()), function, false);
                 // A PARAMETER, by contrast, genuinely belongs to its function -- so the name node's own
                 // enclosing function is the right answer, and is what `declare` would have found anyway.
                 for (AstNode parameter : function.getParams()) {
-                    declare(parameter, SymbolKind.PARAMETER, function, null);
+                    declare(parameter, SymbolKind.PARAMETER, function, null, true);
                 }
             }
             return true;
@@ -230,16 +277,33 @@ final class RhinoScopes {
     }
 
     /**
-     * Records one declared name.
+     * Records one declared name — or, for a destructuring pattern, every name it binds.
      *
-     * <p>Anything that is not a plain {@link Name} is skipped — a destructuring target is a pattern
-     * rather than a name, and pulling its bindings out is a separate piece of work that a colour does
-     * not need in order to be right about everything else.</p>
+     * <p>A pattern was skipped outright at first, on the grounds that pulling its bindings out is
+     * separate work a colour does not need. That was wrong in the direction that matters: the names are
+     * <em>declarations</em>, so skipping them left every one of them a free name — drawn as a mistake,
+     * offered a rename, and counted as unresolved. Walking the pattern for its {@link Name}s is a few
+     * lines and gets the common shapes ({@code var {a, b} = o}, {@code var [x, y] = pair}) right; a
+     * key in {@code {a: x}} is excluded by the same position test the reference walk uses, since it is
+     * the {@code x} that binds.</p>
      */
     private void declare(@Nullable AstNode target, SymbolKind kind,
-                         @Nullable FunctionNode owner, @Nullable AstNode initializer) {
-        if (!(target instanceof Name)) return;
-        Name name = (Name) target;
+                         @Nullable FunctionNode owner, @Nullable AstNode initializer,
+                         boolean blockScoped) {
+        if (target == null) return;
+        if (!(target instanceof Name)) {
+            // A PATTERN. Only the initializer of the whole pattern is known, and it describes the object
+            // rather than any one name in it -- so each binding is declared with none.
+            for (Name bound : namesIn(target)) {
+                declareName(bound, kind, owner, null, blockScoped);
+            }
+            return;
+        }
+        declareName((Name) target, kind, owner, initializer, blockScoped);
+    }
+
+    private void declareName(Name name, SymbolKind kind, @Nullable FunctionNode owner,
+                             @Nullable AstNode initializer, boolean blockScoped) {
         String identifier = name.getIdentifier();
         if (identifier == null || identifier.isEmpty()) return;
 
@@ -248,13 +312,39 @@ final class RhinoScopes {
         // parser gave up on may not -- a declaration with no scope must still be coloured.
         Scope defining = name.getDefiningScope();
         if (defining == null) defining = enclosingScope(name);
+        // AND A `var` IS HOISTED TO ITS FUNCTION whatever block it was written in, which is the language's
+        // rule rather than a convenience: `var` inside an `if` is visible after it. Only reached when the
+        // parser did not scope the name itself, since it hoists too -- but the fallback above finds the
+        // nearest BLOCK, and left alone it would make a hoisted name invisible one line later.
+        if (!blockScoped) defining = hoisted(defining, name);
 
         Key key = new Key(defining, identifier);
         if (byKey.containsKey(key)) return;
         Declaration declared = new Declaration(identifier, kind, name.getAbsolutePosition(),
-                Math.max(1, name.getLength()), owner, name, initializer);
+                Math.max(1, name.getLength()), owner, name, initializer, defining,
+                blockScoped && kind == SymbolKind.LOCAL_VARIABLE);
         byKey.put(key, declared);
         inOrder.add(declared);
+    }
+
+    /** Every name a destructuring pattern binds — never the keys it reads them out of. */
+    private static List<Name> namesIn(AstNode pattern) {
+        List<Name> bound = new ArrayList<>();
+        pattern.visit(node -> {
+            if (node instanceof Name && !isPropertyName((Name) node)) bound.add((Name) node);
+            return true;
+        });
+        return bound;
+    }
+
+    /** The function or script scope around {@code defining} — where a {@code var} actually lands. */
+    @Nullable
+    private static Scope hoisted(@Nullable Scope defining, Name name) {
+        if (defining instanceof FunctionNode || defining instanceof AstRoot) return defining;
+        for (AstNode at = defining == null ? name : defining; at != null; at = at.getParent()) {
+            if (at instanceof FunctionNode || at instanceof AstRoot) return (Scope) at;
+        }
+        return defining;
     }
 
     // ── What the resolver asks ──────────────────────────────────────────────────────────────────
@@ -276,9 +366,9 @@ final class RhinoScopes {
     List<Declaration> visibleAt(int offset) {
         List<Declaration> visible = new ArrayList<>();
         for (Declaration declared : inOrder) {
-            if (declared.owner == null || containsOffset(declared.owner, offset)) visible.add(declared);
+            if (containsOffset(declared.declaringScope, offset)) visible.add(declared);
         }
-        visible.sort((a, b) -> Integer.compare(depthOf(b.owner), depthOf(a.owner)));
+        visible.sort((a, b) -> Integer.compare(depthOf(b.declaringScope), depthOf(a.declaringScope)));
         return visible;
     }
 
@@ -289,8 +379,8 @@ final class RhinoScopes {
         int bestDepth = -1;
         for (Declaration declared : inOrder) {
             if (!declared.name.equals(name)) continue;
-            if (declared.owner != null && !containsOffset(declared.owner, offset)) continue;
-            int depth = depthOf(declared.owner);
+            if (!containsOffset(declared.declaringScope, offset)) continue;
+            int depth = depthOf(declared.declaringScope);
             if (depth > bestDepth) {
                 best = declared;
                 bestDepth = depth;
@@ -299,26 +389,34 @@ final class RhinoScopes {
         return best;
     }
 
+    /**
+     * Whether {@code scope} covers {@code offset} — null being the whole file.
+     *
+     * <p>By the scope's own extent rather than by the enclosing function's, which is what makes two
+     * sibling blocks' {@code let x} two names that are never both in scope. A null scope is a
+     * declaration the parser could not place, and it is treated as visible rather than as invisible:
+     * losing a name is worse than offering one twice.</p>
+     */
+    private static boolean containsOffset(@Nullable Scope scope, int offset) {
+        if (scope == null) return true;
+        int start = scope.getAbsolutePosition();
+        return offset >= start && offset <= start + scope.getLength();
+    }
+
+    private static int depthOf(@Nullable Scope scope) {
+        int depth = 0;
+        for (AstNode at = scope; at != null; at = at.getParent()) {
+            if (at instanceof Scope) depth++;
+        }
+        return depth;
+    }
+
     /** Whether any declaration anywhere in the file carries this name — the package-root shadow test. */
     boolean declaresAnywhere(String name) {
         for (Declaration declared : inOrder) {
             if (declared.name.equals(name)) return true;
         }
         return false;
-    }
-
-    private static boolean containsOffset(@Nullable FunctionNode function, int offset) {
-        if (function == null) return true;
-        int start = function.getAbsolutePosition();
-        return offset >= start && offset <= start + function.getLength();
-    }
-
-    private static int depthOf(@Nullable FunctionNode function) {
-        int depth = 0;
-        for (AstNode at = function; at != null; at = at.getParent()) {
-            if (at instanceof FunctionNode) depth++;
-        }
-        return depth;
     }
 
     @Nullable

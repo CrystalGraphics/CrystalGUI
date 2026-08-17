@@ -18,8 +18,10 @@ import org.mozilla.javascript.ast.PropertyGet;
 import javax.annotation.Nullable;
 
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -103,9 +105,18 @@ final class RhinoResolution {
      */
     @Nullable
     private SymbolInfo resolveExpression(int offset) {
-        AstNode call = nodeAt(offset, FunctionCall.class);
-        if (call == null) return null;
-        TypeRef type = typeOf(call, offset);
+        // ANY EXPRESSION, not only a call. A dot after `'text'`, `[1, 2]`, `(x)` or a parenthesised chain
+        // is the same question with the same answer available, and answering only for calls meant those
+        // fell through to the live-names sample -- a popup listing the run's globals as members of a
+        // string literal.
+        // STRICTLY CONTAINING, which for an expression is a different question from the one `nameAt` asks.
+        // The offset here is the character before the dot — the `)` of `append('b')` — and an inclusive
+        // test also matches every node that merely ENDS there, so the innermost match was the string
+        // argument `'b'` and the chain resolved to `string`. This is JDT's zero-length `NodeFinder` trap
+        // in Rhino's spelling: ask about the character itself, not the boundary beside it.
+        AstNode expression = nodeAt(offset, AstNode.class, true);
+        if (expression == null) return null;
+        TypeRef type = typeOf(expression, offset);
         if (type == null) return null;
         // NO NAME, because a call has none — it is a value, not a declaration. The type is the whole
         // answer, and it is what a member lookup and a hover each need.
@@ -199,7 +210,13 @@ final class RhinoResolution {
         String identifier = name.getIdentifier();
         if (identifier == null || identifier.isEmpty()) return null;
 
-        RhinoScopes.Declaration declared = scopes.visibleDeclaration(identifier, offset);
+        // THE PARSER'S OWN ANSWER FIRST. It resolved this exact node while parsing, so it already knows
+        // which of two same-named declarations this use refers to -- where the offset search below can
+        // only pick the deepest scope covering the caret, and picked the wrong one for anything shadowed
+        // in a sibling block. Asked only when there is a node; the search stays for the callers that have
+        // an offset and nothing else.
+        RhinoScopes.Declaration declared = scopes.declarationOf(name);
+        if (declared == null) declared = scopes.visibleDeclaration(identifier, offset);
         if (declared != null) return fromDeclaration(declared, identifier);
 
         // NOT DECLARED HERE. A run may have made it a global, or it may be a Java package root, or it
@@ -217,43 +234,76 @@ final class RhinoResolution {
     /**
      * A declared name, typed by whichever tier can.
      *
-     * <p>The live scope is asked first even for a declared name, and that is deliberate: a top-level
-     * {@code var} <em>is</em> a global once the file has run, so after a run the editor knows what it
-     * actually became — which is more than its initializer said, and is the entire reason the tier
-     * exists.</p>
+     * <h3>The live tier contributes a TYPE; it never replaces the declaration</h3>
+     *
+     * <p>It used to: a top-level name found in the live scope was rebuilt from the live entry alone, so
+     * after any run a documented {@code function join(name, count)} hovered with <b>no description, no
+     * parameter types and type {@code function}</b> — and because a call's type is its callee's,
+     * {@code join('a', 1).} stopped completing entirely. The tier order (§5.1) is about which tier knows
+     * the <em>type</em>; the description, the parameter list and the kind are the file's, and no run
+     * improves on them.</p>
+     *
+     * <p>So the file is read first and the run is asked only for a type — and a <b>declared function</b>
+     * is never typed by it, because a live function's type is always the string {@code function} while
+     * {@code SymbolInfo.type()} for anything invocable means its <em>return</em> type. A variable that
+     * became a Java object still types from the run, which is the case the tier was added for.</p>
      */
     private SymbolInfo fromDeclaration(RhinoScopes.Declaration declared, String identifier) {
         DeclarationSite site = DeclarationSite.here(lines.pointAt(declared.offset),
                 lines.pointAt(declared.offset + declared.length));
         String container = containerOf(declared);
+        RhinoJsDoc doc = docFor(declared);
 
-        SymbolInfo fromRun = declared.owner == null ? fromLiveScope(identifier) : null;
-        if (fromRun != null) {
-            return signed(new SymbolInfo(identifier, declared.kind, fromRun.type(),
-                    suffixed(container, FROM_LAST_RUN), null, modifiersOf(declared, false), site,
-                    fromRun.parameters()), declared);
-        }
-
-        RhinoJsDoc doc = RhinoJsDoc.forDeclaration(root, declared.declaringNode, declared.offset, source);
+        // WHAT THE FILE SAYS. A FUNCTION DECLARATION'S TYPE IS WHAT IT RETURNS, never "function" -- that
+        // is what a `type` means for anything invocable, in both engines -- so it is unknown unless JSDoc
+        // said. A VARIABLE holding a function is the other case and keeps `function`, because there the
+        // value really is one.
         String declaredType = doc.declaredType();
-        if (declaredType != null) {
-            return signed(new SymbolInfo(identifier, declared.kind, typeNamed(declaredType),
-                    suffixed(container, FROM_JSDOC), emptyToNull(doc.description()),
-                    modifiersOf(declared, doc.isDeprecated()), site, parametersOf(declared, doc)),
-                    declared);
-        }
+        TypeRef stated = declaredType != null ? typeNamed(declaredType)
+                : declared.kind == SymbolKind.FUNCTION ? null
+                : RhinoInference.typeOf(declared.initializer, scopes::declaresAnywhere);
 
-        // A FUNCTION DECLARATION'S TYPE IS WHAT IT RETURNS, never "function". That is what a `type` means
-        // for anything invocable -- Java's METHOD symbols carry their return type -- and it is what makes
-        // `add(1).` resolvable at all: a call's type is its callee's. Unknown unless JSDoc said, which is
-        // the honest answer for a language with no declared return types. A VARIABLE holding a function is
-        // the other case and keeps `function`, because there the value really is one.
-        TypeRef inferred = declared.kind == SymbolKind.FUNCTION
-                ? null : RhinoInference.typeOf(declared.initializer, scopes::declaresAnywhere);
-        return signed(new SymbolInfo(identifier, declared.kind, inferred, container,
+        TypeRef live = liveTypeFor(declared, identifier);
+        TypeRef type = live != null ? live : stated;
+        String tier = live != null ? FROM_LAST_RUN : declaredType != null ? FROM_JSDOC : null;
+
+        return signed(new SymbolInfo(identifier, declared.kind, type,
+                tier == null ? container : suffixed(container, tier),
                 emptyToNull(doc.description()), modifiersOf(declared, doc.isDeprecated()), site,
                 parametersOf(declared, doc)), declared);
     }
+
+    /** What the last run made of a declared name, when that is more than the file could say. */
+    @Nullable
+    private TypeRef liveTypeFor(RhinoScopes.Declaration declared, String identifier) {
+        // ONLY A TOP-LEVEL DECLARATION IS A GLOBAL; a local of the same name is a different binding, and
+        // typing it from the run would describe somebody else's value.
+        if (declared.owner != null) return null;
+        SymbolInfo global = fromLiveScope(identifier);
+        TypeRef type = global == null ? null : global.type();
+        if (type == null) return null;
+        // @see the class note on this method -- a declared function is never typed by the run.
+        if (declared.kind == SymbolKind.FUNCTION && !JsTypeRef.isJava(type)) return null;
+        return type;
+    }
+
+    /**
+     * The doc comment for a declaration, read once.
+     *
+     * <p>{@code symbolsInScope} builds a symbol for every visible declaration on every keystroke, and
+     * finding a doc comment is a scan of the file's whole comment list — so the popup's own filter was
+     * paying for a scan per declaration per character typed, for descriptions it then threw away.</p>
+     */
+    private RhinoJsDoc docFor(RhinoScopes.Declaration declared) {
+        RhinoJsDoc cached = docs.get(declared);
+        if (cached != null) return cached;
+        RhinoJsDoc read = RhinoJsDoc.forDeclaration(root, declared.declaringNode, declared.offset, source);
+        docs.put(declared, read);
+        return read;
+    }
+
+    /** Identity-keyed: a {@code Declaration} is one object per parse and has no value equality. */
+    private final Map<RhinoScopes.Declaration, RhinoJsDoc> docs = new IdentityHashMap<>();
 
     /**
      * The symbol with its declaration rendered onto it.
@@ -324,7 +374,9 @@ final class RhinoResolution {
         switch (entry.kind()) {
             case FUNCTION: return JsTypeRef.js(JsTypeRef.FUNCTION);
             case ARRAY: return JsTypeRef.js(JsTypeRef.ARRAY);
-            case OBJECT: return JsTypeRef.js(JsTypeRef.OBJECT);
+            // WITH THE PROPERTIES THE RUN SAW ON IT, so `membersOf` answers a live object exactly as it
+            // answers an object literal -- one path rather than a second one in the completion provider.
+            case OBJECT: return JsTypeRef.object(entry.ownIds());
             case STRING: return JsTypeRef.js(JsTypeRef.STRING);
             case NUMBER: return JsTypeRef.js(JsTypeRef.NUMBER);
             case BOOLEAN: return JsTypeRef.js(JsTypeRef.BOOLEAN);
@@ -416,8 +468,7 @@ final class RhinoResolution {
         if (parameters == null || index >= parameters.size()) return null;
         AstNode parameter = parameters.get(index);
         if (!(parameter instanceof Name)) return null;
-        RhinoJsDoc doc = RhinoJsDoc.forDeclaration(root, callee.declaringNode, callee.offset, source);
-        String declaredType = doc.paramType(((Name) parameter).getIdentifier());
+        String declaredType = docFor(callee).paramType(((Name) parameter).getIdentifier());
         return declaredType == null ? null : typeNamed(declaredType);
     }
 
@@ -456,13 +507,24 @@ final class RhinoResolution {
      * is what makes a hover over the last character of an identifier resolve.</p>
      */
     @Nullable
-    private AstNode nodeAt(int offset, Class<? extends AstNode> kind) {
+    AstNode nodeAt(int offset, Class<? extends AstNode> kind) {
+        return nodeAt(offset, kind, false);
+    }
+
+    /**
+     * @param strict whether the offset must be a character <em>of</em> the node rather than its end
+     *               boundary. False is what a hover wants — a caret just past the last character of an
+     *               identifier still means that identifier. True is what a receiver lookup wants, since
+     *               there the offset is deliberately the last character of the expression.
+     */
+    @Nullable
+    private AstNode nodeAt(int offset, Class<? extends AstNode> kind, boolean strict) {
         if (root == null) return null;
         AstNode[] best = new AstNode[1];
         root.visit(node -> {
             int start = node.getAbsolutePosition();
             int end = start + node.getLength();
-            if (offset < start || offset > end) {
+            if (offset < start || (strict ? offset >= end : offset > end)) {
                 // NOT A REASON TO STOP DESCENDING. A parent's reported extent does not always cover its
                 // children in a recovered tree, and pruning on it loses the node under the caret in
                 // exactly the broken files this parser exists to answer for.
@@ -472,6 +534,18 @@ final class RhinoResolution {
             return true;
         });
         return best[0];
+    }
+
+    /**
+     * The innermost node covering {@code offset} — <b>one definition</b>, shared with the fix catalog.
+     *
+     * <p>{@code JsQuickFixes} had a second copy of this walk and called it five times per Alt+Enter, so a
+     * single gesture walked the whole tree six times over. It holds this object already; there is no
+     * reason for it to hold a visitor too.</p>
+     */
+    @Nullable
+    AstNode nodeCovering(int offset) {
+        return nodeAt(offset, AstNode.class);
     }
 
     // ── Small shared pieces ─────────────────────────────────────────────────────────────────────

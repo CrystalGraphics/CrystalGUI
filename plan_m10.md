@@ -43,7 +43,7 @@ most visible thing to have early.
 | **10.9** Quick fixes + intentions | `JsRewrites` (text edits over Rhino's absolute positions), `JsQuickFixes` — eleven families, `SimilarNames` shared with the Java catalog | Alt+Enter offers a repair for an unused name, a misspelt one, `var`→`let`/`const`, `==`→`===`, either `Java.type` spelling, a template literal, and try/catch | **done** — see "10.9 as built" |
 | **10.10** Sandbox | `ScriptPolicy` in `language.run`; the class shutter, `InteropResolver`, the completion list and `TypeIndex.filtered` all read it, through **one** entry point | a refused class is absent from `membersOf`, from the popup and from the index, and throws when called | **done** — see "10.10 as built" |
 | **10.11** Remap seam | `MemberNameMapper` bridge hook; `RhinoRemapping` — a **membrane** over Rhino's own wrapper rather than a patched `JavaMembers`; `InteropResolver` renaming what it lists | a readable-name call runs against a renamed member, and the member list shows the readable name | **done** — see "10.11 as built" |
-| **10.12** Parity audit + docs | every matrix row tested or documented; AGENTS.md rows; `plan_syntax.md` §16.1/§20 updates | — | not started |
+| **10.12** Parity audit + docs | every matrix row tested or documented; AGENTS.md rows; `plan_syntax.md` §16.1/§20 updates | — | **review done, fixes pending** — §12a is the full audit of 10.1–10.11 (56 findings, five tiers, ranked); the fixes it names come before the parity pass, since several matrix rows must be re-marked first (R-20) |
 
 Exit criteria (the row's four, plus what matching the Java engine adds):
 
@@ -890,6 +890,327 @@ invariants for "interpreted mode + `Error` is the stop", "application loader is 
 Order matters in two places: 10.1 before 10.3/10.7 (the policy and keyword set are *read from* the
 probe), and 10.5 before 10.6's live tier and 10.8's provenance (there is no live scope until something
 runs).
+
+---
+
+## 12a. The M10 review — findings before 10.12 (2026-08-17)
+
+Every file M10 produced or touched was read end to end against the §2 matrix, the as-built notes above and
+the engine's own rules (`AGENTS.md`, `RhinoTokens`, the loader law) — the 26 files of `language.js`, the
+bridge additions (`JsSourceAnalyzer`, `JsExecutor`, `LiveScopeSnapshot`, `MemberNameMapper`),
+`AnalysedLanguageServices`' new lane, `ScriptPolicy`, the `TypeIndex`/`SimilarNames`/`ScriptRuntimes`
+changes, the twelve JS test classes, `RhinoCapabilityProbeTest`, `HarnessWorkspace` and `Main.js`.
+**Nothing here has been fixed.** Each item has an id so a fix commit can name what it closes; the tiers are
+in the order they should be worked, and within a tier the items are in the order they were found rather than
+ranked further. Size is a guess: S = under an hour, M = a session, L = a day.
+
+The one-line summary, for a reader deciding whether to read on: the machinery is sound and the tests are real,
+but (A) two of the four resolution tiers quietly break each other after a run, host bindings are invisible to
+the analyser, and a handful of edits and lookups are wrong in the way that survives a green suite; (B) six
+matrix rows are marked at a fidelity the code does not deliver; (C) the keystroke path does more full-tree
+walks and whole-document copies than it needs to; (D) the package has three hand-typed lists that were each
+supposed to be read from the engine, four dead members, unused imports and a dozen inlined FQNs.
+
+### A. Correctness — wrong answers, or breakage the suite cannot see
+
+- **R-01 · The live tier destroys what JSDoc and inference knew, after any run.** `RhinoResolution.fromDeclaration`
+  asks the live scope first for every top-level declaration and, when it answers, builds the symbol from the
+  live *kind* alone: a top-level `function join(name, count)` documented with `@param {string}` and
+  `@returns {string}` hovers as type `function`, with no description and `?` parameters, the moment the file
+  has been run — and because "a call's type is its callee's", `join('a', 1).` stops completing. The plan's rule
+  ("what a value *is* outranks what the author said") is right for a *variable* whose live value is more
+  informative than its declaration; for a declared function the live tier adds nothing and takes everything.
+  Fix: merge rather than override — the live tier supplies the type only when the declaration tier's type is
+  null or the live kind contradicts it (a `var x;` later assigned an object), and never replaces a JSDoc
+  description or parameter types. Test: hover and `.`-complete a documented function *after* `run()`. Size M.
+- **R-02 · Host bindings are unknown to the analyser.** `RhinoExecutor.bind` puts them in scope *before* the
+  baseline is taken, so `snapshotOf` excludes them; `RhinoSemanticTokens.of` is always handed
+  `hostBindings = Set.of()` (`ParsedScript.semanticTokens`); and `JsHost.compileScript` drops
+  `bindingTypes` outright ("BINDING TYPES ARE IGNORED, and that is not an omission" — it is one). Result on a
+  real host: a binding a mod offers is coloured `variable.unresolved`, is offered "Declare 'world' as a local"
+  and "Change to …", hovers as nothing and completes to nothing — while `ScriptBindings.types()` carries its
+  exact Java type, which the interop tier could type it with statically. The matrix row "bindings as scope
+  properties" is marked Full and the `variable.global` capture it promises is dead code. Fix: hand
+  `ScriptBindings.types()` across the bridge with the request (a `Map<String,String>` beside `liveScope` on
+  `JsSourceAnalyzer.analyze`), declare each as a known global of `JsTypeRef.javaInstance(type)`, colour it
+  `variable.global`, keep it out of the "did you mean" candidates. Invisible in the harness only because it
+  registers no bindings. Size M.
+- **R-03 · `remove-unused` on the first of several names deletes across statements.** `JsQuickFixes.removeUnused`
+  finds the comma to take with `edits.textIn(0, start).lastIndexOf(',')` — the last comma *anywhere in the
+  file* before the initializer. For `var unused = 1, kept = 2;` there is none inside the statement, so it
+  takes one from an earlier line and the edit deletes from there to `unused = 1`. Fixture covers only the
+  second-position case (`oneUnusedNameOfSeveralLosesOnlyItsOwnInitializer`). Fix: bound the search to the
+  statement; when the initializer is first, remove the comma *after* it. Add the first-position fixture. Size S.
+- **R-04 · `concatenationToTemplate` changes arithmetic.** `1 + 2 + 'a'` is `"3a"`; the intention rewrites it
+  to `` `${1}${2}a` `` = `"12a"`. The guard "contains a string literal" is not the rule; the rule is that the
+  leftmost `+` must already be string concatenation, i.e. `parts[0]` or `parts[1]` is a string literal. Fixture
+  `anArithmeticSumIsNotOfferedATemplate` tests a chain with *no* string and so cannot see this. Size S.
+- **R-05 · A `catch (e)` parameter is a free name.** `RhinoScopes.collectDeclarations` declares `var`/`let`/
+  `const`, function names and parameters — not a catch clause's name (nor `for (x in …)`'s undeclared
+  iterator, nor destructuring targets, the last documented as skipped). Rhino resolves `e` to the catch
+  `Scope`, no declaration is keyed there, so `e` inside every `catch` block is `variable.unresolved` and gets
+  a rename/declare fix offered. Untested — no analysis fixture contains a `catch`. Fix: declare
+  `CatchClause.getVarName()` (kind PARAMETER, owner = enclosing function) and, separately, decide what to
+  do about a destructuring pattern's names (declare each `Name` under it, at least). Size S/M.
+- **R-06 · Block scope is not modelled, and it shows up as duplicates and wrong picks.** `Declaration.owner` is a
+  `FunctionNode`, so `visibleAt`/`visibleDeclaration` treat every `let`/`const` as function-scoped: two
+  sibling-block `let x`s are two declarations (correct, keyed by `Scope`) that both appear in the completion
+  list, and `visibleDeclaration` picks the *first* for a hover in the second block. `resolveName(Name, …)`
+  has the `Name` in hand and should ask `scopes.declarationOf(name)` — the parser's own answer — before
+  falling back to the depth heuristic, which is only needed where there is no node. Then `visibleAt` should
+  walk the `Scope` chain from the offset. Size M.
+- **R-07 · The membrane blinds two Java-class checks.** Under a mapping every Java class object is a
+  `MappedFunction`, not a `NativeJavaClass`; `RhinoExecutor.describe` reaches the `Wrapper` branch and
+  reports `var W = Java.type('…')` as `JAVA_OBJECT` of `java.lang.Class`, so after a run `W.` lists
+  `Class`'s instance members; `RhinoConsoleFormat.inspect` prints `class java.util.ArrayList` — the exact
+  "reads as a typo" the javadoc guards against. Both branches should test `unwrap() instanceof Class` rather
+  than the wrapper's class. Size S.
+- **R-08 · The membrane is not a `SymbolScriptable`.** `NativeJavaObject` implements it (per band — verify with
+  the probe), and it is how `for (x of javaList)` and `Symbol.iterator` reach a Java `Iterable`. A membrane
+  that only forwards `Scriptable` loses that for every mapped deployment. Forward `get/has/put/delete(Symbol,…)`
+  when the delegate implements it. Size S, plus one probe row.
+- **R-09 · `RhinoExecutor.stop(Thread)` interrupts a thread it has no run on.** `if (thread.isAlive()) thread.interrupt()`
+  runs whether or not `RUNS.get(thread)` found anything ("harmless when nothing of ours is running" — it is
+  not: it sets the interrupt status of a foreign thread). Reachable: `JsHost.run` (sync) after the executor
+  has removed its `RUNS` entry but before `running` is cleared, or a Stop that lands in the window between
+  `running.set(prepared)` and `prepared.thread = …` in both `run` and `runAsync`. Fix: interrupt only when a
+  run of ours is registered; set `prepared.thread` before publishing `running`; and consider clearing the
+  re-armed interrupt status in `JsHost` when the caller was synchronous. Size S.
+- **R-10 · `describeMember`'s cache key is arity, not signature.** `binaryName + "." + name + "/" + parameters.size()`
+  makes `Math.max(int,int)` and `max(double,double)` one entry: the second hover shows the first's quoted
+  line. Key on the parameter qualified names. Size S.
+- **R-11 · Nested classes disagree between editor and runtime.** `RhinoInference.javaNameOf` yields
+  `java.util.Map.Entry`, which the Java probe resolves (source form) — while `Java.type("java.util.Map.Entry")`
+  and the reflection fallback need `Map$Entry` and throw "no such class". Nashorn's `Java.type` retries by
+  replacing the last dots with `$`; do the same in `installGlobals`' `type` and in `InteropResolver.loadClass`.
+  Size S.
+- **R-12 · Two tokens on one range for an unresolved call.** `RhinoSemanticTokens.of` emits `variable.unresolved`
+  for the callee `Name` (it is a free name) and `markUnresolvedCalls` emits `function.unresolved` on the same
+  span; which paints is order-dependent — the exact overlap `AGENTS.md` warns about. Skip the free-name token
+  when the name is a call target. Size S.
+- **R-13 · `RhinoGlobals` is short of what the executor installs.** `prompt` (installed beside `readLine`),
+  and the package roots `edu` and `net` (installed by `initStandardObjects` and listed in
+  `RhinoInference.PACKAGE_ROOTS`) are missing, so `prompt('…')` and `net.minecraft.…` — the most likely first
+  line a mod author writes — are marked unresolved and offered a rename. Root cause is three lists that must
+  agree (see R-32). Size S once R-32 is done.
+- **R-14 · Runtime problems are mapped against the wrong document.** `JsHost.publishFailure` reports a row/column
+  from the text *as compiled*; `AnalysedLanguageServices.reportRuntimeProblems` converts it against the buffer
+  *now*. A line typed above during the run puts the squiggle one row off — the "conversion is only legal
+  against the document the analysis saw" rule, broken by the one lane that was added after it was written.
+  Fix: carry the buffer version the compile saw on the `ScriptRef`/`Compiled`, and either refuse a stale report
+  or map it through the intervening `ChangeSet`s. Size M.
+- **R-15 · The Rhino "measured" claims about `WrapFactory` contradict Rhino's published source.** `RhinoRemapping`
+  and `RhinoExecutor.wrap` both state that on the band we run against `WrapFactory.wrap` "constructs the
+  wrapper directly rather than calling `wrapAsJavaObject`" and that `Context.javaToJS` "does not route through
+  the context's factory". In every Rhino source since 1.7 `wrap()` ends in `return wrapAsJavaObject(...)` and
+  `javaToJS` calls `cx.getWrapFactory().wrap(...)`. The code is correct either way (both hooks are overridden),
+  but the comments teach a false fact; the earlier "inert" behaviour is more plausibly explained by the
+  `NativeJavaObject`-subclass constructor that was failing at the same time. Either pin the claim in the probe
+  (call `wrap` on each band with a factory whose `wrapAsJavaObject` records) or soften the two comments to
+  "overridden at both hooks so the question does not arise". Size S.
+- **R-16 · `resolveExpression` only knows calls.** A dot after `"str"`, `[1,2]`, `(x)` or a parenthesised
+  chain resolves nothing and falls to the live-names sample. `nodeAt(offset, AstNode.class)` then
+  `typeOf(node)` covers all of them for free. Size S. (Its usefulness depends on R-22.)
+- **R-17 · `JsTypeRef.object(keys)` (uncommitted, this session) breaks the class's own invariant.** Two literals
+  share `qualifiedName() == "Object"` and differ in `keys`, and `keys` is the one mutable field in an
+  otherwise immutable value type. Make it a constructor argument; and since the live tier's `OBJECT` entries
+  carry `ownIds`, `typeOfLive` should build the same shape so `membersOf` answers live objects too and
+  `JsCompletionProvider.memberItems` loses its second code path for them. Size S.
+- **R-18 · `AnalysedLanguageServices` publishes `this` from its constructor.** `ATTACHED.put(file, this)`
+  runs before the subclass constructor body; a runtime thread that calls `attachedTo(file)` in that window
+  sees a half-built services object. Reachable only across threads and only if a run for that file is already
+  in flight when its document reopens; still, register from `start()`. Size S.
+
+### B. Design and parity — where the matrix says one thing and the code another
+
+- **R-20 · Six matrix rows overstate what shipped.** Recorded here so 10.12 audits against the truth rather than
+  the table: *Rhino's own warnings* (`msg.no.side.effects`, `msg.var.redecl`, `msg.dup.parms` …) — the policy
+  turns nothing on and strict mode is off, so none is ever emitted; *constant-condition dead branches* — not
+  implemented; *`?.`/`??` refusals* — no re-title (10.3b); *Java-derived semantic tokens* (`module` on
+  package segments, `type` on a `Packages`/`Java.type` result, `property`/`function.call` on a resolved
+  Java member, `deprecated` from Java's `@Deprecated`) — none emitted; *`expectedTypeAt` for a Java callee* —
+  still only JSDoc, though 10.6's note promised it "with 10.7"; *`Packages.`/`java.util.` completion from the
+  `TypeIndex`* — only the `Java.type("` string is served. Each is either built (most are S–M) or the row is
+  re-marked and the "No" documented in the SPI javadoc, per 10.12's own rule. Size: decision first.
+- **R-21 · The JS standard prototypes are never listed.** `"abc".`, `[1,2].`, `settings.label.` complete to
+  nothing (or, worse, to the live-names sample — R-22). `RhinoGlobals` already reads `Object.prototype` per
+  band; read `String/Array/Number/Function/RegExp.prototype` the same way (`getAllIds`) and let
+  `RhinoResolution.membersOf` answer them for `JsTypeRef.js(...)`. This is what makes R-16 worth doing. Size M.
+- **R-22 · The "untypable receiver" fallback fires for typed receivers with no members.** A receiver that
+  resolved to `string`/`number`/`Array` yields an empty `membersOf`, `probedMembers` is skipped (the type was
+  non-null), no live entry, so `memberItems` marks the answer partial and offers *every global the run left*
+  as members of a string. Restrict the sample to a receiver whose type is genuinely unknown. Size S (with R-21).
+- **R-23 · `SimilarNames` is loaded twice.** `JsQuickFixes` (child-side, imports `org.mozilla`) imports
+  `com.crystalgui.language.java.SimilarNames`; the band loader is child-first for `com.crystalgui.language.*`
+  and carries our class files, so it defines its own copy — a second class with the same name on the far side
+  of the bridge, silently, and the first breach of "the child names only JDK types, `text.*` and the bridge".
+  Harmless today (stateless), and a precedent. Move it to a package the loader shares (it is language-neutral
+  string ranking; `com.crystalgui.text.lang` in core would do) or add a bytecode scan that fails when a
+  Rhino-importing class names `language.java`/`language.run`. Size S.
+- **R-24 · The Rhino-side/host-side split is no longer legible from the names.** `Js*` was host, `Rhino*` was
+  child; now `JsQuickFixes`/`JsRewrites` are child (they import the AST) and `RhinoOrigin`/`RhinoStackFrameFilter`
+  are host. Either rename (`RhinoQuickFixes`, `RhinoRewrites`, `JsOrigin`, `JsStackFrameFilter`) or put a
+  two-column table in the package's javadoc; the loader law is the one thing a newcomer must not guess. Size S.
+- **R-25 · TCCL is the engine loader for the whole of every run.** `RhinoThread.with` wraps the entire script
+  execution, so every host callback a script makes runs with the band loader as context loader — any
+  `ServiceLoader`/TCCL lookup in mod or CrystalGUI code called from a script now resolves against the child
+  loader and can define duplicate host classes. The class note says the answer is cached at Rhino class
+  initialisation, which means one warm-up under `with(...)` at adapter construction (touch `Context`,
+  compile one regex) would make every later entry safe *without* swapping TCCL for the run's duration. Keep
+  `with` for the parse and the compile; drop it from `run`, or narrow it to `enterContext`. Size S, plus a test
+  that a script's Java call sees the host's TCCL. Verify on band 11/17 first (the regex symptom).
+- **R-26 · `InteropResolver` serialises hovers behind analyses, and compiles on the UI thread.** Every method is
+  `synchronized`; `describe`/`exists`/`describeMember` run an ECJ analysis inside the lock, from the analysis
+  job *and* from `resolveAt` on the UI thread. And with `MAX_CACHED = 12` a file whose JSDoc names more than
+  twelve Java classes thrashes the LRU on every `symbolsInScope` (each declaration → `parametersOf` →
+  `typeNamed` → `exists`). Cache the *derived* facts (type name, member list — plain values) unbounded and keep
+  the `Analysis` LRU small (or close an analysis right after its members are read; `javaTypeOf` is the only
+  reader of the live `TypeRef` and it is unused — R-40); take the probe out of the lock. Size M.
+- **R-27 · `ScriptPolicy` handles `Foo[]` but not the JVM's `[LFoo;`.** The shutter is asked with binary names;
+  arrays never reach it today, so it is latent — but the javadoc claims arrays are handled and the one form a
+  JVM produces would be refused. Normalise `[L…;`/`[[I` too, or say which spelling is meant. Size S.
+- **R-28 · `JsCompletionProvider.itemFor` marks only `Object.prototype` inherited.** For a Java receiver the root
+  is `java.lang.Object`, and Java's own provider sinks those; from JS `toString`, `hashCode`, `wait`,
+  `notify` sit at full rank in every `new java.util.ArrayList().` list. Ask the symbol's container against
+  both roots. Size S.
+- **R-29 · The engineless keyword/global lists have grown a host-side twin.** `JsCompletionProvider.GLOBALS` is
+  a hand-typed 26-name array — the exact list `RhinoGlobals` exists to *not* be — and already differs from the
+  engine's (no `Map`, `Set`, `Symbol`, `Promise`, `Infinity`, `Reflect`, `Packages`). Cross it the way
+  `keywords()` crosses: a `globals()` default on `JsSourceAnalyzer`, or fold the builtins into
+  `symbolsInScope`. Size S.
+- **R-30 · "Did you mean" ignores the builtins.** `consle.log` — the commonest typo — offers nothing, because
+  `suggestSimilarNames` ranks over declarations and live names only. Add `RhinoGlobals.names()`. Size S.
+- **R-31 · `let` is recorded as `var`.** `RhinoScopes` keeps only `isConst()`; `JsSignatures.keywordFor` then
+  prints `var` for every `let`, and `varToLetOrConst` cannot tell whether the keyword it is offering to change
+  is already `let` except by reading three characters of text. Record `isLet()` on `Declaration`. Size S.
+- **R-32 · Three lists that must agree, in three files.** Package roots: `RhinoInference.PACKAGE_ROOTS`
+  (7), `JsCompletionProvider.PACKAGE_ROOTS` (7, host-side copy), `RhinoGlobals` (5 of them). Host globals:
+  `RhinoExecutor.installGlobals` installs `console/print/readLine/prompt/Java`, `RhinoGlobals` lists four of
+  the five. One constant per fact, on the child side, crossed once (`JsSourceAnalyzer.globals()`), and
+  `RhinoExecutor` and `RhinoGlobals` reading the same `HOST_GLOBALS`. Closes R-13 and R-29 properly. Size S.
+- **R-33 · Two definitions of "the host loader".** `RhinoExecutor.APPLICATION_LOADER` and
+  `InteropResolver.HOST_LOADER` are both `JsExecutor.class.getClassLoader()` with different decoration; the
+  editor's `exists()` and the runtime's `Java.type` can therefore disagree about a class (R-11 is one way).
+  One package-private holder. Size S.
+- **R-34 · `unusedDeclarationAt` re-states `withUnusedWarnings`' rule.** Which unused declarations are reported
+  (not parameters, not top level) is spelled twice, once in the analyser and once in the fix catalog; the day
+  one changes the fix appears on a warning that is not there. One predicate on `Declaration`. Size S.
+- **R-35 · `MAX_SIGNATURE_LINE = 72` and `isPrimitive` are each defined twice.** `JsSignatures`/`JavaSignatures`
+  and `InteropResolver`/`ScriptPolicy`. Share the constant (core's `Signature`?) and the primitive test. Size S.
+- **R-36 · The 10.6 note about `JsAstView` is contradicted by 10.9.** "still the right shape for the 10.9 fix
+  catalog, which is host-side" — the catalog was built child-side (`JsQuickFixes` walks the Rhino AST). Fix
+  the note; there is no `JsAstView` and there should not be. Size S (docs).
+- **R-37 · §0's "the shell is not edited" exit criterion is already false, by design.** `ScriptPolicy` and
+  `ScriptRuntime.restrictTo` are in `language.run` (§10 says why) and `ScriptRuntimes.consoleFilters` dedupes.
+  Rewrite the criterion as what it now means: no file under `language.run` *names a language*, which is what
+  `RunShellIsEngineNeutralTest` actually pins. Size S (docs).
+
+### C. Performance on the keystroke and console paths
+
+- **R-40 · Whole-tree walks per query, several per gesture.** `RhinoResolution.nodeAt` and
+  `JsQuickFixes.nodeCovering` are two copies of the same unpruned visitor; `actionsIn` calls its copy five
+  times per Alt+Enter, and a completion pays `nameAt` + `resolveExpression` + the probe re-parse's own two.
+  One `nodeAt` shared by both, computed once per gesture; prune subtrees that end before the offset (the
+  "recovered tree may not cover its children" caveat only forbids pruning by *parent extent*, not by
+  position of siblings already passed). Size S.
+- **R-41 · `RhinoTokens.isIncrementOrDecrementOf` renders the parent's whole subtree per reference.**
+  `parent.toSource()` for every `Name` visited in `collectReferences` — a name that is an argument of a large
+  call, or an element of a long array literal, re-renders the entire parent each time: quadratic on the file
+  the analyser runs on at every keystroke. Cheap gate first: `parent.getLength() == name.length() + 2` before
+  any `toSource`. And verify on the probe whether `org.mozilla.javascript.ast.UpdateExpression` exists on
+  1.7.15.1 — if it does, `parent instanceof UpdateExpression && operand == name` is a class test needing no
+  operator constant at all, and the text path can go. Size S.
+- **R-42 · `buffer.toString()` up to five times per completion.** `receiverEndingAt`, `memberItems`,
+  `identifierEndingAt`, `probedMembers`, `typeNamesFor` each materialise the rope. Read once per
+  `complete()`. Size S.
+- **R-43 · `JsQuickFixes.length()` copies the document to measure it, inside a loop.**
+  `edits.textIn(0, Integer.MAX_VALUE).length()` is the loop bound of `operatorOffsetIn` (per character of the
+  gap) and `charAt` allocates a one-character substring. `JsRewrites` should expose `length()` and `charAt()`.
+  Size S.
+- **R-44 · `symbolsInScope` does JSDoc + signature work for every declaration on every keystroke.**
+  `fromDeclaration` parses the doc comment (a scan of the whole comment list) and renders a `Signature` per
+  visible declaration; the popup then filters most away. Either build the `SymbolInfo` lazily behind the
+  filter or cache `RhinoJsDoc.forDeclaration` per declaration on the `Declaration`. Size S–M.
+- **R-45 · `currentLine()` builds an exception per console line.** `new EvaluatorException("origin")` fills a
+  JVM stack trace (`Throwable.fillInStackTrace`) as well as the interpreter's frame chain — the JsExecutor
+  javadoc calls it cheap and it is not, per line of a script that prints in a loop. Rhino's `RhinoException`
+  cannot disable stack-trace filling from outside; measure, and if it shows, throttle (attribute per burst) or
+  accept a same-package accessor in the shaded jar as §9.4 already contemplates. Size S to measure.
+- **R-46 · Membrane translation allocates per hop.** `translateIn` builds `getName().replace('.', '/')` for
+  every class in the hierarchy on every *miss*; `getIds` does it per id. A `ClassValue<String>` for the
+  internal name makes it a lookup. Only matters under a mapping; note and defer. Size S.
+- **R-47 · `getIds()`/`readable()` walk superclasses only while `translate` walks interfaces too** — and
+  neither walks super-interfaces. A mapping on `Collection` is missed for a class implementing `List`.
+  Symmetric walk over the full type hierarchy, once, cached per class. Size S.
+
+### D. Cleanliness — dead code, drift, style
+
+- **R-50 · Dead members:** `RhinoThread.run`, `RhinoInference.isJavaTypeCall`, `InteropResolver.javaTypeOf`,
+  `RhinoSourceAnalyzer.ParsedScript.source()`, `JsQuickFixes.wrapInTryCatch`'s `to` parameter, and
+  `InteropResolver.hasJavaEngine` (test-only; keep or move behind a testing door). Size S.
+- **R-51 · Unused imports:** `TextPoint` in `RhinoSourceAnalyzer`; `Token` and `UnaryExpression` in
+  `RhinoScopes` (both named only in comments). Size S.
+- **R-52 · Inlined fully-qualified names**, against the standing rule (import, never inline):
+  `JsCompletionProvider` ×4 (`java.util.function.Function`, `Consumer`), `JsLanguageServices` ×1
+  (`Supplier`), `JsKeywords` ×2 (`java.util.Set`), `RhinoSourceAnalyzer` ×2 (`Predicate`), `RhinoInference`
+  ×1 (`org.mozilla.javascript.Node`), `TypeIndex` ×3 (`Predicate`), and in tests `JsSandboxTest` ×3
+  (`TypeIndex`), `JsRemapTest` ×1 (`TypeRef`), `JsAnalysisTest`/`JsResolutionTest` (`java.util.List`). Size S.
+- **R-53 · Explicit type witnesses** (`List.<String>of()`, `Set.<String>of()`, `Collections.<X>emptyList()`)
+  in `RhinoExecutor`, `RhinoResolution`, `RhinoSourceAnalyzer`, `JsSignatures`, `JsLanguageServices` —
+  fourteen sites the compiler infers unaided. Size S.
+- **R-54 · Orphaned and doubled javadoc:** `JsKeywords` (a javadoc for "Every keyword this engine accepts"
+  sits above `NOT_OFFERED`, whose own doc follows it), `RhinoGlobals.isBuiltin` (two stacked doc blocks),
+  `JavaLanguageServices.typeIndexFor` (two stacked), `TypeIndex.matching`'s doc now sits above `filtered`
+  and `matching` has none. Size S.
+- **R-55 · Stale prose:** `RhinoSourceAnalyzer`'s class note ("Resolution and completion are M10.6 and M10.7
+  and answer empty until then"); `JsSourceAnalyzer.useJavaEngine` ("Called once at registration" — it is now
+  retried on every document open); plan §1.2 table ("finally still runs" — 10.5 as built says it does not);
+  `Main.js` header ("Still to come: M10.9") with no 10.9/10.10/10.11 sections; `JsKeywords.UNCONDITIONAL`
+  claims "statement and declaration starters only" while listing `in`, `instanceof`, `typeof`, `void`,
+  `delete`. Size S.
+- **R-56 · Small shapes:** four telescoping constructors on `JsLanguageServices` (one full one plus a test
+  convenience would do); `JsCompletionProvider.sampled` is per-request state kept in a field; `JsHost` has a
+  triple blank line at its field block; `RhinoStackFrameFilter.apply` declares `links = null` then assigns;
+  `ParsedScript`'s constructor assigns `fixes` first out of order; `RhinoConsoleFormat.inspect` tests
+  `ConsString` after `CharSequence`, which already covers it; `JsLanguage.shutdown()` resets the mapping
+  but not the policy. Size S.
+- **R-57 · `JsRewrites` says it stamps the version and does not.** The class note ("every edit is one
+  `ChangeSet`, stamped with the analysis version") describes what `JsQuickFixes.fix/refactor` do with
+  `edits.version()`; `ChangeSet.of` carries no version. Move the sentence to where it is true. Size S.
+- **R-58 · `LineIndex` splits on `\n` only.** Correct for the buffer's normalised text; say so, since the Java
+  side never had the question (ECJ reports rows). Size S (docs).
+
+### E. Tests and the probe — what is unpinned
+
+- **R-60 · Three band divergences the code is built around are not in `RhinoCapabilityProbeTest`:** the
+  `Token` renumbering (`RhinoTokens`' whole reason), the `NativeJavaObject(Scriptable, Object, Class)`
+  constructor's absence on band 11+ (`RhinoRemapping`'s reason), and whether `WrapFactory.wrap` routes through
+  `wrapAsJavaObject` (R-15). Each is one reflective row; the plan's own rule (§15) is that every band claim is
+  pinned before it is built on. Add `NativeJavaObject implements SymbolScriptable` (R-08) and
+  `UpdateExpression` presence (R-41) while there. Size S.
+- **R-61 · Missing fixtures for A-tier items:** hover/complete a documented function after a run (R-01);
+  a host binding coloured and typed (R-02); first-of-several `remove-unused` (R-03); `1 + 2 + 'a'` (R-04);
+  a `catch (e)` body (R-05); sibling-block `let` hover (R-06); `Java.type` of a nested class (R-11);
+  a mapped `Java.type` result in the live scope and in `console.log` (R-07); `for…of` over a Java list under
+  a mapping (R-08). Size: with the fixes.
+- **R-62 · `JsRemapTest` and `JsSandboxTest` restore process-wide state in `@After`, `JsLanguage.shutdown()`
+  does not.** A test that fails before its `@After` leaks a mapping into every later test in the JVM (the
+  test says so itself). `shutdown()` — or a `resetForTesting()` — should restore *both* the policy and the
+  mapping, and the two test classes should call that. Size S.
+
+### F. 10.12, unchanged — plus what this review adds to it
+
+The 10.12 list in §12 stands (matrix audit, AGENTS rows, the three invariants, `plan_syntax.md` §16.1,
+`RunTest.js`). This review adds: audit the matrix against R-20 first, so rows are re-marked before tests are
+written for them; add the AGENTS invariants this review found the hard way — *host bindings must reach the
+analyser as well as the executor* (R-02), *the live tier merges, it does not override* (R-01), *the child may
+name only JDK/`text.*`/bridge types, and a shared utility is moved rather than imported across* (R-23),
+*a `Rhino` prefix means child-side* (R-24); and fix the plan's own three inconsistencies (R-36, R-37, and
+§1.2's `finally` row).
+
+Suggested order: A (R-01…R-18) as one commit per two or three related items with their fixtures; then R-32/33/
+34/35 (the one-definition items) and R-50…R-58 in a single cleanliness commit; then B's decisions and builds;
+C after measuring; E's probe rows alongside whichever A-item they pin.
 
 ---
 

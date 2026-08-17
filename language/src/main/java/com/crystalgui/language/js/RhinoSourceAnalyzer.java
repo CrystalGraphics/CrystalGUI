@@ -6,7 +6,6 @@ import com.crystalgui.language.engine.bridge.MemberNameMapper;
 import com.crystalgui.language.engine.bridge.SourceAnalyzer;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
-import com.crystalgui.text.TextPoint;
 import com.crystalgui.language.engine.bridge.CodeActionContext;
 import com.crystalgui.text.lang.CodeAction;
 import com.crystalgui.text.lang.SymbolInfo;
@@ -45,11 +44,11 @@ import java.util.Set;
  *
  * <h3>What is here, and what is not</h3>
  *
- * <p>The parse, the problems ({@link RhinoProblemPolicy}), the scopes ({@link RhinoScopes}) and the
- * colours they justify ({@link RhinoSemanticTokens}). Resolution and completion are M10.6 and M10.7 and
- * answer empty until then — which is not a stub in the pejorative sense: it is exactly what
- * {@link com.crystalgui.language.engine.bridge.Analysis} promises an engine may say, and every consumer
- * above already treats an empty answer as ordinary rather than as a failure.</p>
+ * <p>The parse, the problems ({@link RhinoProblemPolicy}), the scopes ({@link RhinoScopes}), the colours
+ * they justify ({@link RhinoSemanticTokens}), the four resolution tiers ({@link RhinoResolution}) and the
+ * fix catalog ({@link JsQuickFixes}) — every question {@link com.crystalgui.language.engine.bridge.Analysis}
+ * asks, answered from the one parse this holds. What crosses the bridge is the answer; the tree never
+ * does.</p>
  */
 public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
 
@@ -266,9 +265,9 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
                                                        LineIndex lines) {
         List<Diagnostic> out = new ArrayList<>(problems);
         for (RhinoScopes.Declaration declared : scopes.declarations()) {
-            if (!declared.isUnused() || declared.offset < 0) continue;
-            if (declared.kind == SymbolKind.PARAMETER) continue;
-            if (declared.owner == null) continue;
+            // SAID ONCE, on the declaration, because the fix catalog offers "Remove 'x'" against exactly
+            // this set. @see RhinoScopes.Declaration#isReportableUnused for the two exclusions.
+            if (!declared.isReportableUnused()) continue;
             out.add(new Diagnostic(lines.pointAt(declared.offset),
                     lines.pointAt(declared.offset + declared.length),
                     DiagnosticSeverity.WARNING,
