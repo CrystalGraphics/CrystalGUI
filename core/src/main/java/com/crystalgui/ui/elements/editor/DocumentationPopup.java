@@ -865,9 +865,24 @@ public final class DocumentationPopup extends Popover {
             }
         }
 
-        int nameStart = line.length();
-        line.append(symbol.name());
-        TextRange nameRange = TextRange.of(nameStart, line.length());
+        // A SYMBOL WITH NO NAME IS A VALUE, NOT A DECLARATION, and both engines produce one deliberately:
+        // `list.get(0)` resolves to a type with nothing to point go-to-definition at, which is the whole
+        // answer a member lookup needs (`EcjSourceAnalyzer.expressionAt`, `RhinoResolution` line for line).
+        // Resolution is shared with completion, so hover gets them too -- and rendered one unguarded, which
+        // is how `TextRange.of(7, 7)` threw out of a HOVER TICK: a crash from moving the mouse over a call.
+        //
+        // The type alone is then the right thing to draw, and is what IntelliJ shows for an expression.
+        // The separator belongs to the NAME rather than to what precedes it, or the line ends `"String "`
+        // with a trailing space the box measures and no name to justify it.
+        String name = symbol.name();
+        TextRange nameRange = null;
+        if (!name.isEmpty()) {
+            int nameStart = line.length();
+            line.append(name);
+            nameRange = TextRange.of(nameStart, line.length());
+        } else if (line.length() > 0 && line.charAt(line.length() - 1) == ' ') {
+            line.setLength(line.length() - 1);
+        }
         // The parameter list is deliberately NOT highlighted as a unit: its types belong to the same
         // vocabulary as the return type, and colouring the brackets with them reads as one long type name.
         line.append(symbol.parameterList());
@@ -877,7 +892,9 @@ public final class DocumentationPopup extends Popover {
         UIText only = definitionLines.get(0);
         if (!modifierRanges.isEmpty()) only.highlights().set(HL_MODIFIER, modifierRanges);
         if (typeRange != null) only.highlights().set(HL_TYPE, typeRange);
-        only.highlights().set(HL_NAME, nameRange);
+        // Conditional like the two above it, and safe for the same reason: layOutSignatureLines clears
+        // every band on every line before any is set, so an unset name cannot leave the previous symbol's.
+        if (nameRange != null) only.highlights().set(HL_NAME, nameRange);
     }
 
     /**

@@ -129,6 +129,48 @@ public class DocumentationPopupTest extends UiTestBase {
     }
 
     /**
+     * <b>A symbol with no name renders its type and does not throw.</b>
+     *
+     * <p>Both engines produce one deliberately — {@code EcjSourceAnalyzer.expressionAt} and
+     * {@code RhinoResolution} answer a bare {@link TypeRef} for {@code list.get(0)}, because a call is a
+     * value rather than a declaration and there is nothing to point go-to-definition at. Resolution is
+     * shared with completion, which is the consumer that wants exactly that, so hover receives them too.</p>
+     *
+     * <p>It rendered the name band unguarded, so {@code TextRange.of(7, 7)} threw
+     * {@code "TextRange must be non-empty"} out of a <b>hover tick</b> — a crash from moving the mouse
+     * across a chained call, on the commonest shape in Java. Asserted on the text rather than on the
+     * absence of an exception alone, because the trailing separator belongs to the name: without that the
+     * line is {@code "String "} and the box measures a space it has no name to justify.</p>
+     */
+    @Test
+    public void anExpressionWithNoNameRendersItsTypeAlone() {
+        show(new SymbolInfo("", SymbolKind.UNKNOWN, TypeRef.of("String"), null, null, Set.of(), null));
+
+        assertEquals("String", popup.definitionText());
+        assertTrue("there is no name, so there is no name band",
+                ranges(DocumentationPopup.HL_NAME).isEmpty());
+        assertEquals("and the type is still banded over its own characters",
+                List.of(TextRange.of(0, 6)), ranges(DocumentationPopup.HL_TYPE));
+    }
+
+    /**
+     * And the band-clearing rule holds across it: a nameless symbol shown after a named one must not keep
+     * the previous name's range, which would be a colour over a string that no longer contains it.
+     */
+    @Test
+    public void anExpressionWithNoNameDropsThePreviousSymbolsNameBand() {
+        show(field("entryPoint", "Method", SymbolModifier.STATIC));
+        assertFalse("fixture is pointless if nothing was banded",
+                ranges(DocumentationPopup.HL_NAME).isEmpty());
+
+        show(new SymbolInfo("", SymbolKind.UNKNOWN, TypeRef.of("String"), null, null, Set.of(), null));
+
+        assertEquals("String", popup.definitionText());
+        assertTrue("the previous symbol's name band is live over unrelated characters",
+                ranges(DocumentationPopup.HL_NAME).isEmpty());
+    }
+
+    /**
      * <b>The owner band is coloured like an import line</b> — packages, the owner's own kind, and its
      * type parameters, in the same three capture names the editor uses.
      *
