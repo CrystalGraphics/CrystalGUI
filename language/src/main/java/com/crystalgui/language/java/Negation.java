@@ -64,6 +64,16 @@ final class Negation {
         return "!" + parenthesised(condition, source);
     }
 
+    /**
+     * Whether this operator is one of the six comparisons — so negating it is flipping it.
+     *
+     * <p>Asked rather than re-listed: "Negate comparison" carried its own copy of the same six, and a
+     * seventh added to one and not the other is an intention offered on something it cannot negate.</p>
+     */
+    static boolean isComparison(InfixExpression.Operator operator) {
+        return opposite(operator) != null;
+    }
+
     /** The comparison that is this one's opposite, or null when the operator is not a comparison. */
     private static InfixExpression.Operator opposite(InfixExpression.Operator operator) {
         if (operator == InfixExpression.Operator.EQUALS) return InfixExpression.Operator.NOT_EQUALS;

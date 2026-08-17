@@ -80,12 +80,7 @@ final class ImportCorrections {
                 if (at >= region[0] && at < region[1]) return;
             }
 
-            Set<ImportDeclaration> unused = new HashSet<>();
-            for (IProblem problem : unit.getProblems()) {
-                if (problem.getID() != IProblem.UnusedImport) continue;
-                ImportDeclaration declaration = context.enclosing(problem, ImportDeclaration.class);
-                if (declaration != null) unused.add(declaration);
-            }
+            Set<ImportDeclaration> unused = context.unusedImports();
 
             List<String> others = new ArrayList<>(), javax = new ArrayList<>(),
                     java = new ArrayList<>(), statics = new ArrayList<>();

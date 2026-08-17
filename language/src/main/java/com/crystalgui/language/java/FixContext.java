@@ -12,12 +12,14 @@ import org.eclipse.jdt.core.dom.ASTVisitor;
 import org.eclipse.jdt.core.dom.BodyDeclaration;
 import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.dom.FieldDeclaration;
+import org.eclipse.jdt.core.dom.ImportDeclaration;
 import org.eclipse.jdt.core.dom.NodeFinder;
 import org.eclipse.jdt.core.dom.rewrite.ASTRewrite;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -252,6 +254,24 @@ final class FixContext {
     /** The characters {@code node} actually occupies — never a regenerated form. */
     String text(ASTNode node) {
         return text(node, source);
+    }
+
+    /**
+     * Every import this unit reports as unused, in the order the problems arrived.
+     *
+     * <p>Two corrections need the whole set rather than the one they were asked about — "organise imports"
+     * to leave them out, and "remove all unused imports" to delete them — and each had built it, one with
+     * a {@code HashSet} and one with a {@code List} and {@code contains}. Ordered here because a caller
+     * turning it into edits needs document order and {@code ChangeSet.of} refuses anything else.</p>
+     */
+    Set<ImportDeclaration> unusedImports() {
+        Set<ImportDeclaration> unused = new LinkedHashSet<>();
+        for (IProblem problem : unit.getProblems()) {
+            if (problem.getID() != IProblem.UnusedImport) continue;
+            ImportDeclaration declaration = enclosing(problem, ImportDeclaration.class);
+            if (declaration != null) unused.add(declaration);
+        }
+        return unused;
     }
 
     /**

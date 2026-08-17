@@ -125,12 +125,7 @@ final class UnusedCorrections {
         }
 
         @Override public void contribute(FixContext context, IProblem problem, List<CodeAction> out) {
-            List<ImportDeclaration> unused = new ArrayList<>();
-            for (IProblem each : context.unit().getProblems()) {
-                if (each.getID() != IProblem.UnusedImport) continue;
-                ImportDeclaration declaration = context.enclosing(each, ImportDeclaration.class);
-                if (declaration != null && !unused.contains(declaration)) unused.add(declaration);
-            }
+            List<ImportDeclaration> unused = new ArrayList<>(context.unusedImports());
             if (unused.size() < 2) return;
 
             List<Change> changes = new ArrayList<>(unused.size());
