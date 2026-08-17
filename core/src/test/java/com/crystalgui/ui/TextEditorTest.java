@@ -2518,6 +2518,10 @@ public class TextEditorTest extends UiTestBase {
         assertTrue(commands.contains("editor.deleteLines"));
         assertTrue(commands.contains("editor.toggleLineComment"));
         assertTrue(commands.contains("editor.addCaretAtNextOccurrence"));
+        // THE ONE THAT WAS NOT. Ctrl+Space was matched inside the completion key handler, so it could
+        // not be rebound and did not appear in any list — the single exception in a widget whose own
+        // section header says its named actions are commands.
+        assertTrue(commands.contains("editor.triggerSuggest"));
         assertTrue(commands.contains("editor.toggleSoftWrap"));
         assertNotNull("a palette needs a label to render", commands.get("editor.deleteLines").getLabel());
     }
