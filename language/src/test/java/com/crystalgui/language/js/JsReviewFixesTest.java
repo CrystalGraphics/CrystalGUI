@@ -124,7 +124,7 @@ public class JsReviewFixesTest {
         for (SyntaxToken token : analyse(source).semanticTokens()) {
             if (token.start() == source.lastIndexOf("e)") ) continue;
             assertFalse("the catch parameter is drawn as a mistake: " + token,
-                    "variable.unresolved".equals(token.capture())
+                    "variable.unresolved".equals(token.name())
                             && "e".equals(source.substring(token.start(), token.end())));
         }
         SymbolInfo symbol = analyse(source).resolveAt(source.indexOf("print(e)") + 6);
@@ -223,8 +223,8 @@ public class JsReviewFixesTest {
         boolean drawnAsGlobal = false;
         for (SyntaxToken token : analyse(source).semanticTokens()) {
             if (token.start() != 0) continue;
-            assertFalse("a host binding is drawn as a mistake", "variable.unresolved".equals(token.capture()));
-            drawnAsGlobal |= "variable.global".equals(token.capture());
+            assertFalse("a host binding is drawn as a mistake", "variable.unresolved".equals(token.name()));
+            drawnAsGlobal |= "variable.global".equals(token.name());
         }
         assertTrue("the `variable.global` capture is still unused", drawnAsGlobal);
 
@@ -319,7 +319,7 @@ public class JsReviewFixesTest {
         String source = "var w = net.minecraft.world.World;\n";
         for (SyntaxToken token : analyse(source).semanticTokens()) {
             assertFalse("a package root is drawn as unresolved",
-                    "variable.unresolved".equals(token.capture())
+                    "variable.unresolved".equals(token.name())
                             && "net".equals(source.substring(token.start(), token.end())));
         }
     }

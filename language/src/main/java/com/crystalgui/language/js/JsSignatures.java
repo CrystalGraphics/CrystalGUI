@@ -56,18 +56,32 @@ final class JsSignatures {
      */
     @Nullable
     static Signature of(SymbolInfo symbol, List<String> parameterNames) {
+        return of(symbol, parameterNames, null);
+    }
+
+    /**
+     * @param keyword what actually introduced this declaration, when the caller knows — {@code let}
+     *                rather than the {@code var} a {@code LOCAL_VARIABLE} would otherwise print.
+     *
+     *                <p>Handed in rather than carried on {@code SymbolInfo}, for the reason the parameter
+     *                names are: the seam is language-neutral and {@code let} is a fact about JavaScript's
+     *                syntax, not about what a symbol is. Whoever holds the declaration node knows it.</p>
+     */
+    @Nullable
+    static Signature of(SymbolInfo symbol, List<String> parameterNames, @Nullable String keyword) {
         if (symbol == null || symbol.name().isEmpty()) return null;
         List<String> names = parameterNames == null ? List.of() : parameterNames;
-        Signature flat = render(symbol, names, false);
+        Signature flat = render(symbol, names, keyword, false);
         if (flat == null) return null;
         // TRIED FLAT FIRST and kept if it fits, exactly as the Java side does: breaking unconditionally
         // would put `const RATE` on two lines, which is worse than the problem being solved.
         return longestLine(flat.text()) <= MAX_SIGNATURE_LINE ? flat
-                : render(symbol, names, true);
+                : render(symbol, names, keyword, true);
     }
 
     @Nullable
-    private static Signature render(SymbolInfo symbol, List<String> names, boolean broken) {
+    private static Signature render(SymbolInfo symbol, List<String> names, @Nullable String keyword,
+                                    boolean broken) {
         switch (symbol.kind()) {
             case FUNCTION:
                 return function(symbol, names, broken);
@@ -83,7 +97,7 @@ final class JsSignatures {
             case PARAMETER:
             case PROPERTY:
             case FIELD:
-                return variable(symbol);
+                return variable(symbol, keyword);
             case CLASS:
                 return javaClass(symbol);
             default:
@@ -149,9 +163,9 @@ final class JsSignatures {
      * reads {@code const} and never {@code var}. That distinction is the one thing about a JavaScript
      * variable a reader cannot get from the name and the reason the engine tracks it at all.</p>
      */
-    private static Signature variable(SymbolInfo symbol) {
+    private static Signature variable(SymbolInfo symbol, @Nullable String declared) {
         Signature.Builder out = new Signature.Builder();
-        String keyword = keywordFor(symbol);
+        String keyword = declared != null ? declared : keywordFor(symbol);
         if (keyword != null) out.word(keyword, "keyword");
         out.append(symbol.name(), captureFor(symbol));
         if (isKnown(symbol.type())) {
@@ -173,10 +187,10 @@ final class JsSignatures {
             case CONSTANT:
                 return "const";
             case LOCAL_VARIABLE:
-                // `var` OR `let`, and the engine cannot yet tell them apart: RhinoScopes records both as
-                // LOCAL_VARIABLE because nothing above it needed the distinction. `var` is the honest
-                // choice while that is true -- it is what the overwhelming majority of scripts on a
-                // Rhino band are written with, and a wrong `let` would be a claim about scoping.
+                // `var`, unless the caller said otherwise. RhinoScopes records which keyword was written
+                // and passes it in; this is the answer for a symbol that reached here from somewhere with
+                // no declaration node to read -- the live scope, or a host binding -- where `var` is what
+                // the overwhelming majority of scripts on a Rhino band are written with.
                 return "var";
             default:
                 return null;

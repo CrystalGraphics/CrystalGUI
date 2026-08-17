@@ -256,8 +256,12 @@ final class RhinoScopes {
                 // catch clause but no VariableDeclaration introduces it, so without this every `catch (e)`
                 // body reported `e` as an unresolved free name -- drawn as a mistake, and offered a
                 // "did you mean" and a "declare as a local" for a name the language already declared.
-                declare(((CatchClause) node).getVarName(), SymbolKind.PARAMETER,
-                        enclosingFunction(node), null, true);
+                //
+                // BY POSITION, NOT `getVarName()`. That accessor exists on the band this module compiles
+                // against and throws NoSuchMethodError on the band it runs on -- the ObjectProperty
+                // divergence for the fourth time. The parameter is the clause's FIRST NAME in source
+                // order, which is structural and cannot renumber. @see #firstNameIn
+                declare(firstNameIn(node), SymbolKind.PARAMETER, enclosingFunction(node), null, true);
             } else if (node instanceof FunctionNode) {
                 FunctionNode function = (FunctionNode) node;
                 // A FUNCTION'S NAME BELONGS TO THE SCOPE AROUND IT, NOT TO ITSELF -- so the owner is the
@@ -325,6 +329,27 @@ final class RhinoScopes {
                 blockScoped && kind == SymbolKind.LOCAL_VARIABLE);
         byKey.put(key, declared);
         inOrder.add(declared);
+    }
+
+    /**
+     * The first {@link Name} inside {@code node}, in source order.
+     *
+     * <p>Through {@code visit} rather than through {@code getFirstChild()}, and that is the whole trick:
+     * a node whose parts are <b>fields</b> rather than entries in the generic child list has no first
+     * child at all — {@code getFirstChild()} answers null and the walk finds nothing. {@code visit} is
+     * overridden per node type and reaches the fields, so it works whichever way a band stores them.</p>
+     *
+     * <p>Source order is what makes it the right answer here: a catch clause visits its parameter before
+     * its body, so the first name is the one being declared.</p>
+     */
+    @Nullable
+    private static Name firstNameIn(AstNode node) {
+        Name[] found = new Name[1];
+        node.visit(visited -> {
+            if (found[0] == null && visited instanceof Name && visited != node) found[0] = (Name) visited;
+            return found[0] == null;
+        });
+        return found[0];
     }
 
     /** Every name a destructuring pattern binds — never the keys it reads them out of. */

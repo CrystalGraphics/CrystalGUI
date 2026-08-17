@@ -493,7 +493,11 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
         }
         int lineEnd = text.indexOf('\n', at);
         if (lineEnd < 0) lineEnd = text.length();
-        return Math.min(lineEnd, at + Math.max(0, point.column()));
+        // THE COLUMN IS CLAMPED BEFORE IT IS ADDED, never after. `Diagnostic.onRow` spells "to the end of
+        // this line" as Integer.MAX_VALUE, so `at + column` OVERFLOWS to a negative number and the whole
+        // mark collapses to a point — which reads as a diagnostic that was never widened rather than as
+        // arithmetic. `Rope.pointToOffset` learned the same lesson; this is its second reader.
+        return at + Math.max(0, Math.min(point.column(), lineEnd - at));
     }
 
     private TextPoint pointOf(int offset) {

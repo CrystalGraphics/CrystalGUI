@@ -2,7 +2,6 @@ package com.crystalgui.language.js;
 
 import com.crystalgui.text.lang.TypeRef;
 
-import org.mozilla.javascript.Node;
 import org.mozilla.javascript.ast.ArrayLiteral;
 import org.mozilla.javascript.ast.AstNode;
 import org.mozilla.javascript.ast.FunctionCall;
@@ -128,18 +127,26 @@ final class RhinoInference {
     }
 
     /**
-     * An object property's key node, found by position rather than by an accessor.
+     * An object property's key node — the first thing it visits, which is not the same as its first child.
      *
-     * <p>{@code ObjectProperty.getLeft()} is declared on a different supertype in the two Rhino versions
-     * we ship, so a call compiled against band 8 throws {@code NoSuchMethodError} on band 11+. The key is
-     * simply the first child, and children are in source order.</p>
+     * <p>Two accessors are unavailable and one is a trap. {@code getLeft()} is declared on a different
+     * supertype in the two Rhino versions we ship, so a call compiled against band 8 throws
+     * {@code NoSuchMethodError} on band 11+. And {@code getFirstChild()} answers <b>null</b> here, because
+     * on the band we run against a property's key and value are <em>fields</em> rather than entries in the
+     * generic child list — so the obvious structural reading found no key for any literal in any file, and
+     * every {@code o.} offered the prototype's members and none of the object's own.</p>
+     *
+     * <p>{@code visit} is overridden per node type and reaches the fields whichever way they are stored,
+     * and it goes key before value. That is the one reading that is true on both bands.</p>
      */
     @Nullable
     private static AstNode leftOf(ObjectProperty property) {
-        for (Node child : property) {
-            return child instanceof AstNode ? (AstNode) child : null;
-        }
-        return null;
+        AstNode[] key = new AstNode[1];
+        property.visit(visited -> {
+            if (key[0] == null && visited != property) key[0] = visited;
+            return key[0] == null;
+        });
+        return key[0];
     }
 
     // ── Java names ──────────────────────────────────────────────────────────────────────────────
