@@ -436,6 +436,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /** The anchor a drag extends from, in document offsets: {@code {start, end}} of the initial unit. */
     private int[] dragAnchor;
 
+    /** Whether this drag belongs to a caret Alt+click added. @see #extendDragTo */
+    private boolean draggingAddedCaret;
+
     /** Last pointer position in this element's space, for autoscroll while dragging. */
     private float pointerX, pointerY;
 
@@ -1218,7 +1221,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
                 addCaret(offset);
                 dragGranularity = 1;
                 dragAnchor = new int[] { offset, offset };
+                draggingAddedCaret = true;
             } else {
+                draggingAddedCaret = false;
                 dragGranularity = clicks;
                 dragAnchor = unitAt(offset, clicks);
                 if (extend) {
@@ -1258,6 +1263,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             selecting = false;
             dragGranularity = 1;
             dragAnchor = null;
+            draggingAddedCaret = false;
         }, false, false);
     }
 
@@ -3146,6 +3152,26 @@ public class TextEditor extends ScrollerView implements UndoScope {
         }
         Selection extended = MouseSelection.extend(
                 buffer.document(), dragAnchor, offset, dragGranularity, wordClassifier);
+
+        // AN ALT-DRAG EXTENDS THE CARET IT ADDED AND LEAVES THE OTHERS ALONE.
+        //
+        // `setSelection` is documented as collapsing to a single selection, which is right for an
+        // ordinary drag and destroys the entire point of an Alt+click: the press added a caret, the very
+        // first pointer Move afterwards replaced every caret with one, and it took a movement of a single
+        // pixel. Reported from the harness as multi-caret being "kind of broken", which is what it looks
+        // like from the outside -- the carets appear and then silently do not survive the mouse.
+        //
+        // The primary is the one `add` just made -- `normalise` carries the index through its sort and
+        // its merges for exactly this kind of reason.
+        if (draggingAddedCaret && selections.isMultiple()) {
+            List<Selection> all = new ArrayList<>(selections.all());
+            int at = Math.max(0, Math.min(selections.primaryIndex(), all.size() - 1));
+            all.set(at, extended);
+            selections.setAll(all, at);
+            afterSelectionChange();
+            ensureCaretVisible();
+            return;
+        }
         setSelection(extended.anchor(), extended.head());
     }
 
@@ -3277,19 +3303,49 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
         String needle = buffer.document().slice(primary.start(), primary.end()).toString();
         if (needle.isEmpty()) return false;
-        String haystack = buffer.toString();
 
-        int from = selections.all().get(selections.count() - 1).end();
-        int at = haystack.indexOf(needle, from);
-        if (at < 0) at = haystack.indexOf(needle);
+        // FROM THE ONE MOST RECENTLY ADDED, which is the primary -- `SelectionModel.add` makes it so, and
+        // `normalise` carries the index through its sort.
+        //
+        // Taking the last selection BY POSITION worked for as long as the matches ran down the document
+        // and died the moment the search wrapped: the newest caret was then at the top and the last-by-
+        // position one still at the bottom, so every further press resumed from the end, found the match
+        // it had already taken, and refused. Multi-caret simply stopped responding, which is what was
+        // reported.
+        int at = nextUnselectedOccurrence(needle, primary.end());
         if (at < 0) return false;
-        for (Selection existing : selections.all()) {
-            if (existing.start() == at) return false;   // already have this one
-        }
         selections.add(new Selection(at, at + needle.length()));
         afterSelectionChange();
         ensureCaretVisible();
         return true;
+    }
+
+    /**
+     * The next occurrence of {@code needle} at or after {@code from} that no caret already holds, wrapping
+     * once — or {@code -1} when every occurrence is taken.
+     *
+     * <p>Skipping rather than refusing is the second half of the same bug: a match that is already
+     * selected is a reason to keep looking, not a reason to stop. Refusing left the next unselected one
+     * unreachable whenever an earlier match happened to lie in the way.</p>
+     */
+    private int nextUnselectedOccurrence(String needle, int from) {
+        // Through the whole document as a String, which is the copy §3.3 of the review is about; the
+        // search here is a correctness fix and deliberately does not pretend to be the performance one.
+        String haystack = buffer.toString();
+        for (int at = haystack.indexOf(needle, from); at >= 0; at = haystack.indexOf(needle, at + 1)) {
+            if (!alreadySelected(at, needle.length())) return at;
+        }
+        for (int at = haystack.indexOf(needle); at >= 0 && at < from; at = haystack.indexOf(needle, at + 1)) {
+            if (!alreadySelected(at, needle.length())) return at;
+        }
+        return -1;
+    }
+
+    private boolean alreadySelected(int start, int length) {
+        for (Selection existing : selections.all()) {
+            if (existing.start() == start && existing.end() == start + length) return true;
+        }
+        return false;
     }
 
     /** A caret at every occurrence of the selection — {@code Ctrl+Shift+L}. */
