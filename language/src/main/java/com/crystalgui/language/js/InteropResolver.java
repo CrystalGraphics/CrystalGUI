@@ -1,7 +1,6 @@
 package com.crystalgui.language.js;
 
 import com.crystalgui.language.engine.bridge.Analysis;
-import com.crystalgui.language.engine.bridge.JsExecutor;
 import com.crystalgui.language.engine.bridge.MemberNameMapper;
 import com.crystalgui.language.engine.bridge.SourceAnalyzer;
 import com.crystalgui.text.lang.SymbolInfo;
@@ -16,6 +15,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -86,6 +86,9 @@ final class InteropResolver {
         this.memberNames = mapper == MemberNameMapper.IDENTITY ? null : mapper;
         synchronized (this) {
             members.clear();
+            // AND THE LISTS, WHICH CARRY THE NAMES. The analyses do not: what a class declares is a fact
+            // about the class, and the mapping only decides what those declarations are CALLED.
+            memberLists.clear();
         }
     }
 
@@ -110,10 +113,11 @@ final class InteropResolver {
 
     void restrictTo(@Nullable Predicate<String> policy) {
         this.allowsClass = policy;
-        // THE MEMBER CACHE GOES, the analysis cache stays. A member list is what the policy filters, so a
+        // THE MEMBER CACHES GO, the analysis cache stays. A member list is what the policy filters, so a
         // cached one describes the old posture; an Analysis describes the class and is policy-free.
         synchronized (this) {
             members.clear();
+            memberLists.clear();
         }
     }
 
@@ -156,8 +160,7 @@ final class InteropResolver {
         // A REFUSED CLASS HAS NO MEMBERS, which is what makes the completion list and the run agree: the
         // shutter refuses the call, and this refuses to have suggested it.
         if (!permits(binaryName)) return List.of();
-        Probe probe = probeFor(binaryName);
-        List<SymbolInfo> all = probe == null ? reflectMembers(binaryName) : probe.members();
+        List<SymbolInfo> all = memberListOf(binaryName);
         if (all.isEmpty()) return all;
         List<SymbolInfo> filtered = new ArrayList<>(all.size());
         for (SymbolInfo member : all) {
@@ -207,13 +210,27 @@ final class InteropResolver {
     synchronized SymbolInfo describeMember(String binaryName, SymbolInfo member, boolean staticSide) {
         if (java == null || binaryName == null || member == null || member.name().isEmpty()) return null;
         if (!permits(binaryName)) return null;
-        String key = binaryName + (staticSide ? "#" : ".") + member.name() + "/" + member.parameters().size();
+        // KEYED BY THE PARAMETER TYPES, not by how many there are. `Math.max(int, int)` and
+        // `max(double, double)` are two members with one arity, so an arity key made the second hover show
+        // the first one's quoted declaration -- a signature for a member the user is not looking at, which
+        // is the one thing worse than no signature.
+        String key = binaryName + (staticSide ? "#" : ".") + member.name() + signatureKeyOf(member);
         SymbolInfo cached = members.get(key);
         if (cached != null) return cached == ABSENT ? null : cached;
 
         SymbolInfo described = probeMember(binaryName, member, staticSide);
         members.put(key, described == null ? ABSENT : described);
         return described;
+    }
+
+    /** {@code (int,int)} — what tells two overloads of one name apart. */
+    private static String signatureKeyOf(SymbolInfo member) {
+        StringBuilder key = new StringBuilder("(");
+        for (TypeRef parameter : member.parameters()) {
+            if (key.length() > 1) key.append(',');
+            key.append(parameter.qualifiedName());
+        }
+        return key.append(')').toString();
     }
 
     /** A sentinel, so a member with no quotable declaration is not re-probed on every hover. */
@@ -285,6 +302,31 @@ final class InteropResolver {
         }
     }
 
+    /**
+     * The whole member list for a class, <b>derived once and kept</b> however small the analysis cache is.
+     *
+     * <p>The analyses are what cost memory — each holds a resolved AST — and the derived list is a handful
+     * of plain records. Holding only the analyses meant a file whose JSDoc names more than {@link
+     * #MAX_CACHED} Java classes thrashed the LRU on every keystroke: {@code symbolsInScope} asks about
+     * every declaration, so each pass re-ran an ECJ analysis per class, in order, evicting the one the next
+     * declaration was about to need.</p>
+     *
+     * <p>Dropped wholesale when the policy or the mapping changes, like the member cache — those two decide
+     * what a list <em>says</em>, where an analysis is a fact about the class and is unaffected.</p>
+     */
+    private List<SymbolInfo> memberListOf(String binaryName) {
+        List<SymbolInfo> cached = memberLists.get(binaryName);
+        if (cached != null) return cached;
+        Probe probe = probeFor(binaryName);
+        List<SymbolInfo> found = probe == null ? reflectMembers(binaryName) : probe.members();
+        List<SymbolInfo> stored = found == null ? List.of() : List.copyOf(found);
+        memberLists.put(binaryName, stored);
+        return stored;
+    }
+
+    /** Derived facts, unbounded — see {@link #memberListOf}. Cleared with the member cache. */
+    private final Map<String, List<SymbolInfo>> memberLists = new HashMap<>();
+
     /** What the class itself is, for a hover over {@code java.util.ArrayList}. */
     @Nullable
     synchronized SymbolInfo describe(String binaryName, boolean staticSide) {
@@ -302,25 +344,32 @@ final class InteropResolver {
                 container, null, Set.of(), null);
     }
 
-    /** The {@code TypeRef} the Java engine uses for this class — the only kind its {@code membersOf} takes. */
-    @Nullable
-    synchronized TypeRef javaTypeOf(String binaryName) {
-        Probe probe = probeFor(binaryName);
-        return probe == null ? null : probe.type();
-    }
-
-    /** Whether the class exists at all — what decides a package chain is a type and not a typo. */
+    /**
+     * Whether the class exists at all — what decides a package chain is a type and not a typo.
+     *
+     * <p><b>Remembered separately from the analyses.</b> Every JSDoc type name and every package chain in
+     * the file asks this, once per keystroke through {@code symbolsInScope}; going through the LRU meant a
+     * yes/no answer could evict the member list somebody was about to read.</p>
+     */
     synchronized boolean exists(String binaryName) {
         if (binaryName == null || binaryName.isEmpty()) return false;
         if (!permits(binaryName)) return false;
-        if (java != null) return probeFor(binaryName) != null;
-        return loadClass(binaryName) != null;
+        Boolean known = existence.get(binaryName);
+        if (known != null) return known;
+        boolean found = java != null ? probeFor(binaryName) != null : JsLoaders.load(binaryName) != null;
+        existence.put(binaryName, found);
+        return found;
     }
+
+    /** Whether a name is a class, unbounded — a boolean per name asked about. @see #exists */
+    private final Map<String, Boolean> existence = new HashMap<>();
 
     synchronized void close() {
         for (Probe probe : cache.values()) probe.close();
         cache.clear();
         members.clear();
+        memberLists.clear();
+        existence.clear();
     }
 
     // ── The probe unit ──────────────────────────────────────────────────────────────────────────
@@ -394,28 +443,11 @@ final class InteropResolver {
 
     // ── The reflection fallback ─────────────────────────────────────────────────────────────────
 
-    /**
-     * The host's loader — the one whose classes a script actually reaches.
-     *
-     * <p>Read from the bridge interface, which is parent-first by construction, for the reason
-     * {@code RhinoExecutor} spells out: this class is defined by the band loader, so its own loader would
-     * answer with the engine's view rather than the application's.</p>
-     */
-    private static final ClassLoader HOST_LOADER = JsExecutor.class.getClassLoader();
-
-    @Nullable
-    private static Class<?> loadClass(String binaryName) {
-        try {
-            // INITIALIZE = FALSE. Resolving a name in an editor must never run a static initialiser --
-            // that is somebody's code, executed because the caret moved.
-            return Class.forName(binaryName, false, HOST_LOADER);
-        } catch (ClassNotFoundException | LinkageError absent) {
-            return null;
-        }
-    }
-
     private static List<SymbolInfo> reflectMembers(String binaryName) {
-        Class<?> type = loadClass(binaryName);
+        // THROUGH THE ONE LOOKUP — @see JsLoaders. It held its own copy of the host loader, spelled
+        // differently from the executor's, so the editor's "does this class exist" and the runtime's "load
+        // this class" were two questions with two answers about one name.
+        Class<?> type = JsLoaders.load(binaryName);
         if (type == null) return List.of();
         List<SymbolInfo> members = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();

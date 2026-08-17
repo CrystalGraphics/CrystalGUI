@@ -96,8 +96,7 @@ public final class ScriptPolicy {
     public boolean allowsClass(@Nullable String binaryName) {
         if (allowed == null) return true;
         if (binaryName == null || binaryName.isEmpty()) return false;
-        String name = binaryName;
-        while (name.endsWith("[]")) name = name.substring(0, name.length() - 2);
+        String name = elementTypeOf(binaryName);
         // A PRIMITIVE IS NOT A CLASS ANYBODY CAN REACH THROUGH. `int` has no package and no members, and
         // refusing it would make every method taking one undescribable.
         if (name.indexOf('.') < 0 && isPrimitive(name)) return true;
@@ -123,6 +122,29 @@ public final class ScriptPolicy {
         return false;
     }
 
+    /**
+     * The element type of an array, in <b>either</b> spelling — or the name unchanged.
+     *
+     * <p>{@code java.util.List[]} is what a source-level name looks like and what the editor asks about;
+     * {@code [Ljava.util.List;} is what the JVM calls the same type, and it is what a {@code ClassShutter}
+     * is handed when a script touches one. Handling only the first meant the javadoc's promise about arrays
+     * was kept for the surface that never sees one and broken for the surface that does.</p>
+     */
+    private static String elementTypeOf(String binaryName) {
+        String name = binaryName;
+        while (name.endsWith("[]")) name = name.substring(0, name.length() - 2);
+        int depth = 0;
+        while (depth < name.length() && name.charAt(depth) == '[') depth++;
+        if (depth == 0) return name;
+        String element = name.substring(depth);
+        // `[Lfoo.Bar;` is a reference array; `[I`, `[D` and the rest are primitive ones, whose one-letter
+        // element name is not a class name at all and is left to the primitive test.
+        if (element.startsWith("L") && element.endsWith(";")) {
+            return element.substring(1, element.length() - 1);
+        }
+        return element;
+    }
+
     /** A dot-boundary prefix test — so {@code java.util} does not admit {@code java.utility}. */
     private static boolean matches(String name, String prefix) {
         if (!name.startsWith(prefix)) return false;
@@ -131,10 +153,18 @@ public final class ScriptPolicy {
                 || name.charAt(prefix.length()) == '$';
     }
 
+    /**
+     * Whether this names a primitive — the source spelling, and the JVM's one-letter array element codes.
+     *
+     * <p>The second half is why an array of primitives is reachable: the shutter sees {@code [I} for an
+     * {@code int[]}, whose element name is {@code I}.</p>
+     */
     private static boolean isPrimitive(String name) {
         switch (name) {
             case "boolean": case "byte": case "char": case "short":
             case "int": case "long": case "float": case "double": case "void":
+            case "Z": case "B": case "C": case "S":
+            case "I": case "J": case "F": case "D":
                 return true;
             default:
                 return false;

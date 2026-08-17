@@ -71,9 +71,26 @@ final class RhinoThread {
 
     /** {@link #with}, for a body whose exceptions must reach the caller as themselves. */
     static <T> T withThrowing(ThrowingSupplier<T> body) throws Throwable {
+        return withLoader(RhinoThread.class.getClassLoader(), body);
+    }
+
+    /**
+     * Runs {@code body} with {@code loader} on the thread, and puts back what was there.
+     *
+     * <p>Exists to run a script's <b>own execution</b> under the loader the host had, rather than under
+     * ours. Everything above is about getting the engine loader on the thread for calls <em>into</em>
+     * Rhino; this is the other direction, and it matters as much: a script calls back out — into a mod's
+     * Java, into CrystalGUI — and any {@code ServiceLoader} or context-loader lookup that runs there would
+     * otherwise resolve against a child-first loader that defines its own copy of every host class.</p>
+     *
+     * <p>Safe because the one thing that must be resolved under the engine loader is resolved before this:
+     * Rhino caches its regular-expression engine at class initialisation, and {@code initStandardObjects}
+     * — which installs {@code RegExp} — has already run inside the outer scope. @see the class note</p>
+     */
+    static <T> T withLoader(ClassLoader loader, ThrowingSupplier<T> body) throws Throwable {
         Thread thread = Thread.currentThread();
         ClassLoader previous = thread.getContextClassLoader();
-        thread.setContextClassLoader(RhinoThread.class.getClassLoader());
+        thread.setContextClassLoader(loader);
         try {
             return body.get();
         } finally {
