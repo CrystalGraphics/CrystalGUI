@@ -39,11 +39,42 @@ path to links ever. Reusing `SyntaxToken` means the popup's rendering is the sam
 `CgMarkupParser` is the right tool for the javadoc **body** and the wrong one for the signature: it
 produces a `CgStyledText` directly, entering the pipeline *downstream of the cascade*, so its colours are
 baked and a scheme switch would not reach them.
-| 24.6 | GLSL diagnostics | **blocked, and the plan's premise below is wrong** |
-| 24.1 | The popup's **footer** band | **not built** — the one exit criterion of 24.1 that is unmet, and the only item left in M11 that needs no decision from anybody |
-| 24.5 | `locals.scm` | not started — **the licence fork below, not the standing rule**; that was checked and corrected |
-| 24.3 | `folds.scm` | not started — vendoring question below |
-| 24.4 | `indents.scm` | not started — vendoring question below |
+| 24.6 | GLSL diagnostics | **done** — and the premise below was wrong, so the backend changed first: `CgShaderParseException` now carries a line, placed once on the way out of `parse` by locating the token its message already quotes. `SourceChecker` + `CheckedDocument` in `core/` (which names no CrystalGraphics type); `ShaderSourceChecker` in the harness, where the compiler is |
+| 24.5 | `locals.scm` | **done** — `LocalScopes`. Grammar-tier and refining only the CATCH-ALL within it, which the existing GLSL colour tests caught: `PI` is `@constant` because a rule tested its spelling, and a `@local.definition.var` arriving later overwrote it purely by being last |
+| 24.3 | `folds.scm` | **done** — on `TreeSitterTokenizer`, which already owns the tree; a separate provider means a second parse per keystroke, and the two disagreeing for exactly the frames a fold arrow is clicked in |
+| 24.4 | `indents.scm` | **done** — `IndentationProvider` (levels, never characters) + `TreeIndents`, Neovim's dialect. `@indent.align` read and ignored: it needs a column |
+| 24.1 | The popup's **footer** band | **not built** — the one exit criterion of 24.1 that is unmet, and now the only item left in M11 |
+
+### The licence fork, resolved — nvim-treesitter, Apache-2.0
+
+Recorded here because the section below poses the question and does not answer it. **Not** because
+Neovim's dialect is nicer: Helix's is smaller and is the one actually written down as a specification.
+Because it is the only source of maintained files for all six of our languages under terms this
+repository already satisfies — the same terms the IntelliJ file icons ship under. `THIRD-PARTY.md`
+carries the notice and the statement of modifications in the same commit, as the section requires.
+
+Two deviations, both stated there:
+
+1. The `; inherits:` chain (`glsl` → `c`, `javascript` → `ecma,jsx`, `html` → `html_tags`) is resolved at
+   **vendoring** time by concatenation, since this engine implements no query inheritance. Every file's
+   header names the upstream sources it was built from. No pattern is edited, removed or reordered.
+2. Upstream's ECMAScript `locals.scm` captures **no parameters at all**, so every JavaScript argument
+   resolved to nothing and rendered as an ordinary local — the one distinction the family exists to draw.
+   Three patterns are appended at load, marked as ours. `css/locals.scm` does not exist upstream and CSS
+   keeps the grammar's own colouring.
+
+### What building it turned up
+
+- **Locals had to refine only the catch-all.** Appending scope tokens last made them win over every
+  refined highlight capture — `PI` went from `constant` to `variable`, a GLSL declaration from
+  `function.method` to `function`. Three existing tests caught it, which is what they are for.
+- **The locals query runs over the whole file and `tokenize` runs per viewport paint.** Uncached, 1000
+  repeat queries took **87 seconds** against a first query of 137ms — the same shape as the
+  reparse-per-query bug this class already has a test for. Cached per tree, cleared on reparse.
+- **`@fold` needs one region per start row.** A method declaration and its body block begin on one line,
+  which is two arrows in one gutter cell and two entries claiming the same handle. The widest wins.
+- **A one-line construct is not a fold**, whatever the query captured: there is nothing to hide, and an
+  arrow that does nothing when clicked teaches a reader to distrust the gutter.
 
 ### Follow-up: source attachment landed, and the assembled path did **not** get deleted
 
