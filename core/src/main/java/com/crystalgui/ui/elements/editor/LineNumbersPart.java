@@ -66,7 +66,7 @@ final class LineNumbersPart extends EditorViewPart {
             if (model.viewLineInRow() != 0) continue;
             int row = model.row();
             UIElement number = numberAt(used++);
-            ((UIText) number.getChildren().get(0)).setText(String.valueOf(row + 1));
+            ((UIText) number.getChildren().get(0)).setText(numberFor(row));
             StyleGroup.importantPipeline(number.getChildren().get(0).getStyle().getGeneralGroup(),
                     g -> g.fontSize(editor.getStyle().getGeneralGroup().fontSize())
                             .fontFamily(editor.getStyle().getGeneralGroup().fontFamily()));
@@ -93,6 +93,25 @@ final class LineNumbersPart extends EditorViewPart {
         }
         for (int i = used; i < numbers.size(); i++) DecorationPool.hide(numbers.get(i));
         insetHorizontalBarPastGutter();
+    }
+
+    /**
+     * What this row's number reads as — absolute, or the distance from the caret.
+     *
+     * <h3>The caret's own row keeps its ABSOLUTE number</h3>
+     *
+     * <p>Which is what makes relative numbering usable rather than merely clever: {@code 12j} needs the
+     * distances, and "which line am I on" needs the number, and a column of relative numbers with a zero
+     * in the middle answers only the first. Vim's {@code number relativenumber} pair does exactly this and
+     * VS Code's {@code lineNumbers: "relative"} follows it.</p>
+     *
+     * <p>The distance is measured in <b>document rows</b>, not view lines: a motion key moves by lines of
+     * the file, so counting the halves of a wrapped row would print a number that no keystroke matches.</p>
+     */
+    private String numberFor(int row) {
+        if (!editor.isRelativeLineNumbers()) return String.valueOf(row + 1);
+        int caretRow = editor.buffer().offsetToPoint(editor.getCaret()).row();
+        return row == caretRow ? String.valueOf(row + 1) : String.valueOf(Math.abs(row - caretRow));
     }
 
     private UIElement numberAt(int index) {

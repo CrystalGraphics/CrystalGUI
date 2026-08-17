@@ -176,6 +176,24 @@ public record SymbolInfo(String name, SymbolKind kind, @Nullable TypeRef type,
     // failing. Order-sensitive builders on a seam are a trap for every engine that comes after the
     // first, which is exactly the shape a JS adapter would write.
 
+    /**
+     * The same symbol under another name — for a language whose members are <b>renamed</b> before they are
+     * shown.
+     *
+     * <p>On an obfuscated deployment a method is declared as {@code func_147439_a} and must be listed as
+     * {@code getBlock}, or a completion list teaches an author to write names the mapping exists to hide.
+     * Everything else about the member is unchanged: it is the same declaration, described under the name
+     * the reader should use.</p>
+     *
+     * <p>Language-neutral by construction — any engine with a mapping layer between the names a class
+     * declares and the names a person writes needs exactly this, and none of them should have to rebuild the
+     * record by hand to get it.</p>
+     */
+    public SymbolInfo withName(String newName) {
+        return new SymbolInfo(newName, kind, type, container, documentation, modifiers, declaration,
+                parameters, signature, containerKind);
+    }
+
     public SymbolInfo withType(@Nullable TypeRef newType) {
         return new SymbolInfo(name, kind, newType, container, documentation, modifiers, declaration,
                 parameters, signature, containerKind);

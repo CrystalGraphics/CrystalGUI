@@ -99,6 +99,18 @@ public interface JsSourceAnalyzer {
     }
 
     /**
+     * Installs the mapping the member lists are shown through.
+     *
+     * <p>The <b>other direction</b> from the executor's: a member list read off a class is full of runtime
+     * names, and showing those would teach an author to write them — at which point the executor's
+     * translation has nothing to translate. Both halves or neither; a completion list offering
+     * {@code func_147439_a} beside a runtime that only accepts {@code getBlock} is an editor working against
+     * its user.</p>
+     */
+    default void useMemberNames(MemberNameMapper mapper) {
+    }
+
+    /**
      * The JavaScript engine's analysis — the general
      * {@link com.crystalgui.language.engine.bridge.Analysis}, plus what only a JS parse can offer.
      *
