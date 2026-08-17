@@ -39,7 +39,7 @@ most visible thing to have early.
 | **10.5** Execution | `JsHost`, `RhinoExecutor.run/stop/currentLine/describe`, console/`print`/`readLine`/`Java.type` globals, `RhinoConsoleFormat`, `RhinoOrigin`, `RhinoStackFrameFilter`, runtime errors as `js-runtime` diagnostics through a new engine-neutral `AnalysedLanguageServices.reportRuntimeProblems` lane | Shift+F10 runs it; output attributed by line; Stop works; a thrown error squiggles its line | **done** — see "10.5 as built" below. `snapshotScope` moves to 10.6, beside its only consumer |
 | **10.6** Resolution + interop | the four tiers (`RhinoResolution`), `RhinoJsDoc`, `RhinoInference`, `InteropResolver` over the Java probe unit + reflection fallback, `LiveScopeSnapshot` from `snapshotScope`, `JsTypeRef`, **`RhinoTokens`** | hover says what a name is and which tier said so; a Java receiver's members are the Java engine's; after a run a global is typed by what it became | **done** — see "10.6 as built" |
 | **10.7** Completion | `JsCompletionProvider`, `JsKeywords` (measured per band), the probe re-parse, `Java.type("…")` names from the shared `TypeIndex`, live-object completion with the inherited half | `.` after a Java object lists its members; after a run, `settings.` lists what it has; no refused keyword offered | **done** — see "10.7 as built" |
-| **10.8** Quick Documentation | `JsSignatures`, tier provenance in the owner band, Java members quoted through `AttachedSources` | Mod+Q / hover shows `function add(a, b)` with JSDoc, or the Java popup for a Java member | not started |
+| **10.8** Quick Documentation | `JsSignatures`, the per-member interop probe (`InteropResolver.describeMember`) so a Java member is quoted through `AttachedSources`, declaration sites both ways | Mod+Q shows `function join(name: string, count: number): string`, and `public boolean add(E e)` for a Java member | **done** — see "10.8 as built" |
 | **10.9** Quick fixes + intentions | `JsRewrites`, `JsQuickFixes`, the §8 catalog, `fixtures/js/` | Alt+Enter offers the catalog | not started |
 | **10.10** Sandbox | `ScriptPolicy` in `language.run`, four consumers | a refused type is absent everywhere, one test | not started |
 | **10.11** Remap seam | `MemberNameMapper` hook, patched `JavaMembers`, resolver/completion reading the reverse | the round-trip fixture runs by readable name | not started |
@@ -763,6 +763,28 @@ one edit, live-object completion, the probe re-parse for an unresolved receiver.
 **10.8 — Quick Documentation.** `JsSignatures`, tier provenance in the owner band, Java members quoted
 through `AttachedSources`. *Tests:* `DocumentationPopupTest` twin over JS symbols; a Java member from
 JS quotes `src.zip` when present; go-to-definition to a JS declaration and to a Java one.
+
+**10.8 as built** — two things the sketch did not anticipate:
+
+- **A Java member needs its own probe unit.** §7 said Java members are "quoted through `AttachedSources`,
+  exactly Java's", which reads as free — but quoting needs the member's **binding key**, and `membersOf`
+  deliberately carries no signature (it answers with hundreds for a completion list that would never read
+  one) while a `SymbolInfo` carries no binding at all. So the only way to get the Java engine's own answer
+  about one member is to hand it a unit in which that member is *named*:
+  `class $Probe { java.util.ArrayList $x; void $m(java.lang.Object $p0) { $x.add($p0); } }` — a parameter
+  of each of the member's declared types, passed at the call, which makes overload resolution exact rather
+  than a guess. Parameters rather than casts, because a cast of `null` is ambiguous for a primitive and a
+  cast to a type variable does not parse. Asked only on a hover, cached, and guarded end to end: it
+  produces `public boolean add(E e)`, parameter name included, which no class file carries.
+- **The probe contributes the signature and the declaration site ONLY** — never the whole description. It
+  resolves against the *generic* declaration, so it reports the container as `java.util.ArrayList<E>` where
+  `membersOf` says `java.util.ArrayList`; returning it wholesale made one member describe itself two
+  different ways depending on whether a hover or a completion had asked. Caught by a 10.6 test.
+- **Parameter NAMES are passed to `JsSignatures`, not carried on `SymbolInfo`.** Core's seam holds parameter
+  types and deliberately not names, because JDT reports `arg0` for a classpath member — a field populated
+  with a placeholder by the engine that has most members is worse than no field. JavaScript always has the
+  real names because the declaration is in the file, so whoever holds the AST hands them over.
+- The tier provenance §7 asks for was already done at 10.6, in the owner band's text.
 
 **10.9 — Quick fixes + intentions.** `JsRewrites`, `JsQuickFixes`, the §8 catalog, fixtures under
 `fixtures/js/`; `plan_quickfix_catalog.md` gains a JS column. *Tests:* one fixture per family through

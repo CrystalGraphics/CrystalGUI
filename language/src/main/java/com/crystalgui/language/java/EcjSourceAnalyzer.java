@@ -291,20 +291,15 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
          */
         private List<Diagnostic> inspections(CompilationUnit resolved) {
             List<Diagnostic> found = new ArrayList<>();
-            for (int[] span : LambdaCorrections.reportIn(resolved, source)) {
-                found.add(new Diagnostic(pointOf(resolved, span[0]), pointOf(resolved, span[1]),
-                        DiagnosticSeverity.WARNING,
-                        "Anonymous " + source.substring(span[0], span[1]).trim()
-                                + " can be replaced with lambda",
-                        "java", LambdaCorrections.REPORT_CODE,
-                        // FADED, NOT UNDERLINED — the same drawing the unused family gets, and IntelliJ's
-                        // own for this inspection. The tag is about how text is DRAWN rather than how bad
-                        // it is, and `new Comparator<String>()` is ceremony the lambda does without: it is
-                        // unnecessary in exactly the sense the tag names. A yellow squiggle under every
-                        // anonymous class in a file would also be the loudest thing on screen for
-                        // something nobody has to act on.
-                        java.util.Set.of(com.crystalgui.text.diagnostic.DiagnosticTag.UNNECESSARY),
-                        java.util.List.of()));
+            for (Inspection inspection : Inspection.all()) {
+                for (Inspection.Finding finding : inspection.reportIn(resolved, source)) {
+                    // THE ONE PLACE AN OFFSET BECOMES A POSITION. An inspection says what it found and
+                    // where in the source; a row and column mean something only against the document this
+                    // analysis actually saw, which is why they are not an inspection's to produce.
+                    found.add(new Diagnostic(pointOf(resolved, finding.from()),
+                            pointOf(resolved, finding.to()), finding.severity(), finding.message(),
+                            "java", inspection.code(), finding.tags(), List.of()));
+                }
             }
             return found;
         }

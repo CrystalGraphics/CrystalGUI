@@ -55,7 +55,7 @@ final class DeadCodeCorrections {
     }
 
     static List<Correction> all() {
-        return List.of(new SimplifyConstantCondition());
+        return List.of(new SimplifyConstantCondition(), new RemoveDeadBranch());
     }
 
     /**
@@ -101,11 +101,40 @@ final class DeadCodeCorrections {
         out.add(context.preferredFix(id, title, edit));
     }
 
+    /**
+     * The dead node ECJ reported, climbed to the statement it belongs to.
+     *
+     * <p><b>A braceless branch reports the EXPRESSION, not the statement.</b> For {@code if (c) doThing();}
+     * ECJ's span stops before the semicolon, so the node covering it exactly is the {@code MethodInvocation}
+     * and its parent is the {@code ExpressionStatement} rather than the {@code if} — and the fix declined,
+     * silently, for every branch somebody had not wrapped in braces. A braced branch works because the span
+     * is the {@code Block}, which is already a statement.</p>
+     *
+     * <p>Climbing only while the parent <b>starts at the same offset</b> is what keeps this from walking out
+     * of a block: a statement dead for another reason — the one after a {@code return} — is not the head of
+     * its enclosing block, so the walk stops rather than blaming an outer {@code if}.</p>
+     */
+    private static ASTNode deadStatementAt(FixContext context, IProblem problem) {
+        ASTNode dead = context.enclosing(problem, ASTNode.class);
+        if (dead == null) return null;
+        while (!(dead instanceof Statement) && dead.getParent() != null
+                && dead.getParent().getStartPosition() == dead.getStartPosition()) {
+            dead = dead.getParent();
+        }
+        return dead;
+    }
+
+    /**
+     * "Simplify to 'x'" — a ternary whose condition is constant, so one arm cannot run.
+     *
+     * <p>Split from {@link RemoveDeadBranch} because they answer under different ids and
+     * {@link Correction#id()} is the <b>correction's</b> identity: one class returning one id and emitting
+     * the other from {@code contribute} makes that identity a half-truth, and the popup's ranking, the
+     * fixture lookups and any future per-id setting all read it.</p>
+     */
     private static final class SimplifyConstantCondition implements Correction {
 
         @Override public String id() {
-            // Reported under two ids because the two answers read differently in a menu; the correction is
-            // one piece of logic, so contribute() picks which it is offering.
             return SIMPLIFY_CONDITIONAL;
         }
 
@@ -114,43 +143,19 @@ final class DeadCodeCorrections {
         }
 
         @Override public void contribute(FixContext context, IProblem problem, List<CodeAction> out) {
-            ASTNode dead = context.enclosing(problem, ASTNode.class);
-            if (dead == null) return;
-            // A BRACELESS BRANCH REPORTS THE EXPRESSION, NOT THE STATEMENT. For `if (c) doThing();` ECJ's
-            // span stops before the semicolon, so the node covering it exactly is the MethodInvocation and
-            // its parent is the ExpressionStatement rather than the `if` -- and the fix declined, silently,
-            // for every branch somebody had not wrapped in braces. A braced branch works because the span
-            // is the Block, which is already a statement.
-            //
-            // Climbing only while the parent STARTS AT THE SAME OFFSET is what keeps this from walking out
-            // of a block: a statement that is dead for another reason (the one after a `return`) is not the
-            // head of its enclosing block, so the walk stops rather than blaming an outer `if`.
-            while (!(dead instanceof Statement) && dead.getParent() != null
-                    && dead.getParent().getStartPosition() == dead.getStartPosition()) {
-                dead = dead.getParent();
-            }
-            StructuralPropertyDescriptor slot = dead.getLocationInParent();
-            ASTNode parent = dead.getParent();
+            ASTNode dead = deadStatementAt(context, problem);
+            if (dead == null || !(dead.getParent() instanceof ConditionalExpression)) return;
+            ConditionalExpression conditional = (ConditionalExpression) dead.getParent();
+            Expression survivor = dead.getLocationInParent() == ConditionalExpression.ELSE_EXPRESSION_PROPERTY
+                    ? conditional.getThenExpression() : conditional.getElseExpression();
+            if (survivor == null) return;
 
-            if (parent instanceof ConditionalExpression) {
-                ConditionalExpression conditional = (ConditionalExpression) parent;
-                Expression survivor = slot == ConditionalExpression.ELSE_EXPRESSION_PROPERTY
-                        ? conditional.getThenExpression() : conditional.getElseExpression();
-                if (survivor == null) return;
-                ASTRewrite rewrite = context.rewrite();
-                rewrite.replace(conditional, rewrite.createMoveTarget(survivor), null);
-                ChangeSet edit = context.changesFrom(rewrite);
-                if (edit == null) return;
-                out.add(context.preferredFix(SIMPLIFY_CONDITIONAL,
-                        "Simplify to " + quoted(context, survivor), edit));
-                return;
-            }
-
-            if (!(parent instanceof IfStatement)) return;
-            // Which branch is dead IS what the condition evaluates to: a dead `else` means it is always
-            // true, a dead `then` means always false.
-            collapseIf(context, (IfStatement) parent,
-                    slot == IfStatement.ELSE_STATEMENT_PROPERTY, REMOVE_BRANCH, out);
+            ASTRewrite rewrite = context.rewrite();
+            rewrite.replace(conditional, rewrite.createMoveTarget(survivor), null);
+            ChangeSet edit = context.changesFrom(rewrite);
+            if (edit == null) return;
+            out.add(context.preferredFix(SIMPLIFY_CONDITIONAL,
+                    "Simplify to " + quoted(context, survivor), edit));
         }
 
         /** The branch's own source, quoted and elided — a title should name what it will leave behind. */

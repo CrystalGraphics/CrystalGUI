@@ -2,6 +2,7 @@ package com.crystalgui.language.js;
 
 import com.crystalgui.language.engine.bridge.LiveScopeSnapshot;
 import com.crystalgui.text.lang.DeclarationSite;
+import com.crystalgui.text.lang.Signature;
 import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.text.lang.SymbolKind;
 import com.crystalgui.text.lang.SymbolModifier;
@@ -129,8 +130,25 @@ final class RhinoResolution {
             for (SymbolInfo candidate : interop.membersOf(javaName, staticSide)) {
                 // THE JAVA ENGINE'S OWN ANSWER, handed back unchanged. Rewriting it here would be a
                 // second opinion about a Java member, which is exactly what asking the Java engine was
-                // meant to avoid -- signature, generic substitution and deprecation all travel with it.
-                if (identifier.equals(candidate.name())) return candidate;
+                // meant to avoid -- generic substitution and deprecation both travel with it.
+                if (!identifier.equals(candidate.name())) continue;
+                // AND ITS SIGNATURE, WHICH `membersOf` DOES NOT CARRY, asked of the Java engine for this
+                // one member -- so a hover over `list.add` quotes `src.zip` exactly as it does in a .java
+                // file. Null when there is no source beside the class, and then the signature is assembled
+                // from what the member already reported. @see InteropResolver#describeMember
+                SymbolInfo described = interop.describeMember(javaName, candidate, staticSide);
+                Signature quoted = described == null ? null : described.signature();
+                if (quoted == null) {
+                    return candidate.withSignature(JsSignatures.of(candidate, List.<String>of()));
+                }
+                // THE SIGNATURE AND THE DECLARATION SITE ONLY -- never the whole description. The probe
+                // resolves against the GENERIC declaration, so it reports the container as
+                // `java.util.ArrayList<E>` where `membersOf` says `java.util.ArrayList`; returning it
+                // wholesale made one member describe itself two different ways depending on whether a
+                // hover or a completion had asked. The member's identity stays the list's.
+                SymbolInfo signed = candidate.withSignature(quoted);
+                return described.declaration() == null ? signed
+                        : signed.withDeclaration(described.declaration());
             }
         }
         // A PROPERTY WE CANNOT TYPE IS STILL A PROPERTY. Answering null would make a hover over an
@@ -208,17 +226,18 @@ final class RhinoResolution {
 
         SymbolInfo fromRun = declared.owner == null ? fromLiveScope(identifier) : null;
         if (fromRun != null) {
-            return new SymbolInfo(identifier, declared.kind, fromRun.type(),
+            return signed(new SymbolInfo(identifier, declared.kind, fromRun.type(),
                     suffixed(container, FROM_LAST_RUN), null, modifiersOf(declared, false), site,
-                    fromRun.parameters());
+                    fromRun.parameters()), declared);
         }
 
         RhinoJsDoc doc = RhinoJsDoc.forDeclaration(root, declared.declaringNode, declared.offset, source);
         String declaredType = doc.declaredType();
         if (declaredType != null) {
-            return new SymbolInfo(identifier, declared.kind, typeNamed(declaredType),
+            return signed(new SymbolInfo(identifier, declared.kind, typeNamed(declaredType),
                     suffixed(container, FROM_JSDOC), emptyToNull(doc.description()),
-                    modifiersOf(declared, doc.isDeprecated()), site, parametersOf(declared, doc));
+                    modifiersOf(declared, doc.isDeprecated()), site, parametersOf(declared, doc)),
+                    declared);
         }
 
         // A FUNCTION DECLARATION'S TYPE IS WHAT IT RETURNS, never "function". That is what a `type` means
@@ -228,9 +247,38 @@ final class RhinoResolution {
         // the other case and keeps `function`, because there the value really is one.
         TypeRef inferred = declared.kind == SymbolKind.FUNCTION
                 ? null : RhinoInference.typeOf(declared.initializer, scopes::declaresAnywhere);
-        return new SymbolInfo(identifier, declared.kind, inferred, container,
+        return signed(new SymbolInfo(identifier, declared.kind, inferred, container,
                 emptyToNull(doc.description()), modifiersOf(declared, doc.isDeprecated()), site,
-                parametersOf(declared, doc));
+                parametersOf(declared, doc)), declared);
+    }
+
+    /**
+     * The symbol with its declaration rendered onto it.
+     *
+     * <p>Here rather than at each of the three returns above, because a symbol without a signature draws an
+     * empty box in the popup and forgetting one is invisible until somebody hovers exactly that shape.</p>
+     */
+    private static SymbolInfo signed(SymbolInfo symbol, RhinoScopes.Declaration declared) {
+        return symbol.withSignature(JsSignatures.of(symbol, parameterNamesOf(declared)));
+    }
+
+    /**
+     * A function's parameter names, in order — which JavaScript always has and Java's compiled path never
+     * does.
+     *
+     * <p>Read from the declaration rather than carried on {@code SymbolInfo}: core's seam holds parameter
+     * TYPES and deliberately not names, because JDT reports {@code arg0} for a classpath member and a field
+     * populated with a placeholder by the engine that has most members is worse than no field.</p>
+     */
+    private static List<String> parameterNamesOf(RhinoScopes.Declaration declared) {
+        if (!(declared.initializer instanceof FunctionNode)) return List.of();
+        List<AstNode> parameters = ((FunctionNode) declared.initializer).getParams();
+        if (parameters == null || parameters.isEmpty()) return List.of();
+        List<String> names = new ArrayList<>(parameters.size());
+        for (AstNode parameter : parameters) {
+            names.add(parameter instanceof Name ? ((Name) parameter).getIdentifier() : "");
+        }
+        return names;
     }
 
     /** A global the last run left behind. */
@@ -244,8 +292,9 @@ final class RhinoResolution {
             for (int i = 0; i < entry.arity(); i++) unknown.add(TypeRef.of("?"));
             parameters = unknown;
         }
-        return new SymbolInfo(identifier, kindOf(entry), typeOfLive(entry),
+        SymbolInfo global = new SymbolInfo(identifier, kindOf(entry), typeOfLive(entry),
                 FROM_LAST_RUN, null, Set.of(), null, parameters);
+        return global.withSignature(JsSignatures.of(global, List.<String>of()));
     }
 
     private static SymbolKind kindOf(LiveScopeSnapshot.Entry entry) {
