@@ -2628,6 +2628,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
             Map<String, List<TextRange>> byName = new LinkedHashMap<>();
             addDocumentRanges(byName, "occurrence", occurrences, lineStart, lineEnd);
+            addDocumentRanges(byName, "selection-occurrence", selectionOccurrences, lineStart, lineEnd);
             // AFTER the occurrences, so a search hit wins the character where the two overlap. A search
             // is something you asked for; occurrences are something the caret happened to be standing in.
             addDocumentRanges(byName, "search", searchMatches, lineStart, lineEnd);
@@ -3520,23 +3521,62 @@ public class TextEditor extends ScrollerView implements UndoScope {
      */
     private void updateOccurrences() {
         occurrences.clear();
-        if (buffer.length() > OCCURRENCE_SCAN_LIMIT) return;
-        if (selections.isMultiple() || selections.hasSelection()) return;
+        selectionOccurrences.clear();
+        if (buffer.length() > OCCURRENCE_SCAN_LIMIT || selections.isMultiple()) return;
+
+        if (selections.hasSelection()) {
+            selectionOccurrences.addAll(selectedTextOccurrences());
+            return;
+        }
 
         int[] word = WordOperations.wordAt(buffer.document(), getCaret(), wordClassifier);
         if (word == null || word[1] <= word[0]) return;
         String needle = buffer.document().slice(word[0], word[1]).toString();
         if (needle.isEmpty() || !wordClassifier.isWordPart(needle.charAt(0))) return;
+        occurrences.addAll(matchesOf(needle, true));
+    }
 
+    /**
+     * <b>Selection highlight</b> — the other places the selected text appears.
+     *
+     * <h3>A different name from the caret's word, because it is a different statement</h3>
+     *
+     * <p>VS Code keeps {@code wordHighlight} and {@code selectionHighlight} apart and so does this: one
+     * marks where the symbol you are standing in also lives, the other marks where the characters you
+     * <em>chose</em> also appear. The second is by definition not whole-word — selecting {@code ell} is a
+     * request about those three letters — which is exactly why it must not wear the first one's colour.</p>
+     *
+     * <h3>One line, and not a trivial one</h3>
+     *
+     * <p>A multi-line selection is a block of code being moved, not a string being looked for, and marking
+     * every place a whole paragraph recurs answers a question nobody asked. Whitespace-only and
+     * single-character selections are refused for the reason the word case refuses {@code i}: the marks
+     * would outnumber the text.</p>
+     */
+    private List<TextRange> selectedTextOccurrences() {
+        Selection primary = selections.primary();
+        String selected = buffer.document().slice(primary.start(), primary.end()).toString();
+        if (selected.length() < MINIMUM_SELECTION_HIGHLIGHT || selected.trim().isEmpty()) return List.of();
+        if (selected.indexOf('\n') >= 0) return List.of();
+        return matchesOf(selected, false);
+    }
+
+    /** Every occurrence of {@code needle}, or nothing when it is its own only one. */
+    private List<TextRange> matchesOf(String needle, boolean wholeWords) {
         List<TextRange> found = TextSearch.findAll(buffer.toString(),
-                SearchQuery.of(needle, new SearchQuery.Options(true, true, false)));
-        // ONE IS NONE -- see the class note above.
-        if (found.size() < 2) return;
-        occurrences.addAll(found);
+                SearchQuery.of(needle, new SearchQuery.Options(true, wholeWords, false)));
+        // ONE IS NONE -- see the note on updateOccurrences.
+        return found.size() < 2 ? List.of() : found;
     }
 
     /** Occurrences of the word under the caret. Published under {@code ::highlight(occurrence)}. */
     private final List<TextRange> occurrences = new ArrayList<>();
+
+    /** The same for the SELECTED text, under {@code ::highlight(selection-occurrence)}. */
+    private final List<TextRange> selectionOccurrences = new ArrayList<>();
+
+    /** Below this a selection highlight marks more than it says. One character is every character. */
+    private static final int MINIMUM_SELECTION_HIGHLIGHT = 2;
 
     /**
      * Past this many characters the occurrence scan is skipped outright.

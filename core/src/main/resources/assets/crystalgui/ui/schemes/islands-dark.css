@@ -66,6 +66,10 @@ theme {
      * occurrence still reads as whatever kind of token it is — VS Code's editor.wordHighlightBackground. */
     --editor-occurrence-bg: #2F3A44;
 
+    /* The same for the SELECTED text -- fainter still, since the selection band is already saying
+     * where the thing you picked is. VS Code's editor.selectionHighlightBackground. */
+    --editor-selection-occurrence-bg: #26303A;
+
     /* ── Syntax ──
      *
      * The warm keyword is the single most recognisable thing about an IntelliJ window and the first thing

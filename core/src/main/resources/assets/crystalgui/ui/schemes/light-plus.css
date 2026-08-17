@@ -54,6 +54,10 @@ theme {
      * occurrence still reads as whatever kind of token it is — VS Code's editor.wordHighlightBackground. */
     --editor-occurrence-bg: #E4E9EE;
 
+    /* The same for the SELECTED text -- fainter still, since the selection band is already saying
+     * where the thing you picked is. VS Code's editor.selectionHighlightBackground. */
+    --editor-selection-occurrence-bg: #EDF1F5;
+
     /* ── Syntax — the six general names every tokenizer falls back to ── */
     --syntax-keyword: #0000FF;
     --syntax-keyword-control: #AF00DB;
