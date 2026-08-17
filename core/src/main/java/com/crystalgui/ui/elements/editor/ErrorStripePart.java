@@ -194,7 +194,7 @@ final class ErrorStripePart extends EditorViewPart {
                 // THE MARK IS THE ANCHOR, not the pointer. It is the thing being described, it does not
                 // move while the box is open, and anchoring to it is what puts the box beside the groove
                 // instead of on top of it.
-                editor.showProblemPopupAt(problem, element);
+                editor.langFeatures().showProblemPopupAt(problem, element);
             }, false, false);
             mark.onMouseDown.attachListener((element, event) -> {
                 Diagnostic problem = marked.get(slot);

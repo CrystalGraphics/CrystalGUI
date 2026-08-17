@@ -254,7 +254,7 @@ final class HoverDocumentation {
                 hide();
                 shownFor = word;
                 grace = 0f;
-                editor.showDocumentationAt(word);
+                editor.langFeatures().showDocumentationAt(word);
             }
             return;
         }
