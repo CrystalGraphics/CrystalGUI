@@ -57,7 +57,7 @@ final class DecorationPool {
         return used;
     }
 
-    /** The next element of the pass, growing the pool if it has run out. */
+    /** The next element of the pass, growing the pool if it has run out. Shown; the caller places it. */
     UIElement next() {
         while (elements.size() <= used) {
             UIElement element = new UIElement();
@@ -68,7 +68,7 @@ final class DecorationPool {
             parent.get().addInternalChild(element);
             elements.add(element);
         }
-        return elements.get(used++);
+        return show(elements.get(used++));
     }
 
     /** Retires everything this pass did not use. */
@@ -87,11 +87,35 @@ final class DecorationPool {
         return elements;
     }
 
-    /** Collapses one element's box and clears any text inside it. */
+    /**
+     * Retires one element — out of layout, box collapsed, any text cleared.
+     *
+     * <h3>{@code display: none} as well as a zero box, and the pair is not belt-and-braces</h3>
+     *
+     * <p>The zero box is written at DEFAULT origin, which is <b>below the user-agent sheet</b>. So the
+     * moment any pooled decoration is given a size in CSS — as the squiggle and the error-stripe mark now
+     * are, so that the part can read the value instead of owning it — the sheet outranks the collapse and
+     * a retired element goes on measuring its styled height. That is not a squiggle in the wrong place; it
+     * is a squiggle under text with no problem, which reads as the editor being wrong rather than the
+     * diagnostic. {@code SquigglesTest} and {@code ErrorStripeTest} both caught it within the same edit.</p>
+     *
+     * <p>{@link UIElement#setDisplayed} writes at IMPORTANT, so no stylesheet can outrank it, and it takes
+     * the element out of layout entirely rather than leaving a zero-sized box in the flow. The zero box
+     * stays underneath it because it is what a theme's own sizing is measured against on the way back in,
+     * and because clearing the text is a separate scar — a {@code UIText} has no clipping of its own and
+     * keeps painting its glyph where the box used to be.</p>
+     */
     static void hide(UIElement element) {
+        element.setDisplayed(false);
         StyleGroup.defaultPipeline(element.getStyle().getLayoutGroup(), l -> l.width(0f).height(0f));
         for (UIElement child : element.getChildren()) {
             if (child instanceof UIText label) label.setText("");
         }
+    }
+
+    /** The other half of {@link #hide} — puts a recycled element back into layout. */
+    static UIElement show(UIElement element) {
+        element.setDisplayed(true);
+        return element;
     }
 }

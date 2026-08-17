@@ -1,6 +1,7 @@
 package com.crystalgui.ui.elements.editor;
 
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.text.Rope;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
@@ -58,13 +59,17 @@ final class ErrorStripePart extends EditorViewPart {
     private static final float MIN_SNAP_PX = 5f;
 
     /**
-     * Percent of the groove's height. A single-row problem in a long file rounds to a fraction of a pixel,
-     * and a mark nobody can see is the same as no mark — so it is given a floor instead.
+     * What a mark is drawn at before the sheet has been matched — <b>not</b> the styling.
      *
-     * <p>A percentage rather than pixels so it stays proportionate at any {@code uiScale}, and so the
-     * groove's own height is the only geometry this part needs to know.</p>
+     * <p>{@code .__error-stripe__ { height: 1.2% }} in {@code ua/editor.css} is the real value. A
+     * percentage rather than pixels so it stays proportionate at any {@code uiScale}, and so the groove's
+     * own height is the only geometry this part needs to know: a single-row problem in a long file rounds
+     * to a fraction of a pixel, and a mark nobody can see is the same as no mark.</p>
+     *
+     * <p>Read rather than written for the reason {@link EditorViewPart#stylePercent} sets out — the
+     * mark's <em>top</em> is clamped against its height, so the two must be one number.</p>
      */
-    private static final float MARK_HEIGHT_PERCENT = 1.2f;
+    private static final float DEFAULT_MARK_PERCENT = 1.2f;
 
     private final List<UIElement> marks = new ArrayList<>();
 
@@ -93,7 +98,7 @@ final class ErrorStripePart extends EditorViewPart {
     /**
      * A press near a mark counts as a press on it.
      *
-     * <p>A mark is {@value #MARK_HEIGHT_PERCENT} percent of the groove — around a dozen pixels in a tall
+     * <p>A mark is a little over one percent of the groove — around a dozen pixels in a tall
      * window and fewer in a short one — so aiming at one is aiming at a target thinner than the pointer
      * is precise. A miss does not do nothing, which would be forgivable: it lands on the groove, and the
      * groove jumps proportionally, so you arrive a screenful away from the problem you were pointing at.
@@ -150,18 +155,21 @@ final class ErrorStripePart extends EditorViewPart {
         int viewLine = editor.viewLineOf(offset, LineProjection.Affinity.RIGHT);
         if (viewLine < 0) return index;
 
-        float fraction = Math.min(1f, viewLine / (float) viewLines);
-        // Kept inside the groove: at the very bottom the mark would otherwise hang off the end and be
-        // clipped to nothing, so the last problem in a file would be the one you cannot see.
-        float top = Math.min(100f - MARK_HEIGHT_PERCENT, fraction * 100f);
-
         UIElement mark = markAt(index);
         marked.set(index, diagnostic);
         index++;
         applySeverity(mark, diagnostic.severity());
+
+        // READ FROM THE SHEET, then used for both the height and the clamp below.
+        float markPercent = stylePercent(mark, LayoutProperties.HEIGHT, DEFAULT_MARK_PERCENT);
+        float fraction = Math.min(1f, viewLine / (float) viewLines);
+        // Kept inside the groove: at the very bottom the mark would otherwise hang off the end and be
+        // clipped to nothing, so the last problem in a file would be the one you cannot see.
+        float top = Math.min(100f - markPercent, fraction * 100f);
+
         StyleGroup.defaultPipeline(mark.getStyle().getLayoutGroup(),
                 l -> l.positionType(TaffyPosition.ABSOLUTE)
-                        .left(0).widthPercent(100f).topPercent(top).heightPercent(MARK_HEIGHT_PERCENT));
+                        .left(0).widthPercent(100f).topPercent(top).heightPercent(markPercent));
         return index;
     }
 
@@ -207,6 +215,9 @@ final class ErrorStripePart extends EditorViewPart {
             marks.add(mark);
             marked.add(null);
         }
-        return marks.get(index);
+        // BACK INTO LAYOUT -- see DecorationPool.hide. It matters more here than for a squiggle: a retired
+        // mark is still hit-testable, so one left in the groove would answer a press about a problem it no
+        // longer marks.
+        return DecorationPool.show(marks.get(index));
     }
 }

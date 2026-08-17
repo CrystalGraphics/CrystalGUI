@@ -43,6 +43,11 @@ final class CurrentLinePart extends EditorViewPart {
             DecorationPool.hide(gutterBand);
             return;
         }
+        // BACK INTO LAYOUT -- see DecorationPool.hide. Both halves, together, for the same reason
+        // they are hidden together: two bands that disagree about whether they are shown is worse
+        // than either state.
+        DecorationPool.show(band);
+        DecorationPool.show(gutterBand);
         float height = editor.lineHeight();
         int row = editor.buffer().offsetToPoint(editor.getCaret()).row();
         // THE WHOLE WRAPPED ROW, not the one view line the caret is on. The band answers "which line am I

@@ -1,6 +1,7 @@
 package com.crystalgui.ui.elements.editor;
 
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.text.Rope;
 import com.crystalgui.text.decoration.TrackedRange;
 import com.crystalgui.text.diagnostic.Diagnostic;
@@ -116,23 +117,31 @@ final class SquigglesPart extends EditorViewPart {
             float left = pad + editor.xOfView(viewLine, fromView.column()) - editor.getScrollLeft();
             float right = pad + editor.xOfView(viewLine, toView.column()) - editor.getScrollLeft();
             float width = Math.max(1f, right - left);
-            // Under the text rather than through it: the band sits at the bottom of the line box, so it
-            // never overlaps a glyph and never fights the selection band drawn behind the same characters.
-            float top = editor.topOfViewLine(viewLine) + height - SQUIGGLE_HEIGHT;
 
             UIElement band = bandAt(index++);
             applySeverity(band, diagnostic.severity());
+            // READ FROM THE SHEET, then used for both the height and the top -- see below.
+            float thickness = styleSize(band, LayoutProperties.HEIGHT, DEFAULT_THICKNESS);
+            // Under the text rather than through it: the band sits at the bottom of the line box, so it
+            // never overlaps a glyph and never fights the selection band drawn behind the same characters.
+            float top = editor.topOfViewLine(viewLine) + height - thickness;
             StyleGroup.defaultPipeline(band.getStyle().getLayoutGroup(),
                     l -> l.positionType(TaffyPosition.ABSOLUTE)
-                            .left(left).top(top).width(width).height(SQUIGGLE_HEIGHT));
+                            .left(left).top(top).width(width).height(thickness));
         }
         return index;
     }
 
-    /** Logical px. Here rather than in the sheet because the band's TOP is computed from it, and a height
-     * the cascade could change independently would put the underline somewhere other than the bottom of
-     * the line. The sheet still owns the colour. */
-    private static final float SQUIGGLE_HEIGHT = 1f;
+    /**
+     * What the band is drawn at when the sheet has not been matched yet — <b>not</b> the styling.
+     *
+     * <p>{@code .__squiggle__ { height: 1px }} in {@code ua/editor.css} is the real value. This used to be
+     * a Java constant under a note defending it: the band's <em>top</em> is computed from its height, so a
+     * height the cascade could change independently would put the underline somewhere other than the
+     * bottom of the line box. True, and true only of a value the part <b>writes</b> — reading it once and
+     * using it for both is what makes the two incapable of disagreeing, whatever a theme says.</p>
+     */
+    private static final float DEFAULT_THICKNESS = 1f;
 
     /** Set AND cleared, all three, because bands are recycled — a band that underlined an error and is
      * reused for a warning would otherwise carry both classes and take whichever the cascade preferred. */
@@ -159,6 +168,9 @@ final class SquigglesPart extends EditorViewPart {
             editor.textViewport().addInternalChild(band);
             bands.add(band);
         }
-        return bands.get(index);
+        // BACK INTO LAYOUT. Retirement is `display: none` at IMPORTANT -- see DecorationPool.hide for why
+        // a zero box alone cannot survive a sheet that sizes this class -- so taking a band out of the
+        // pool has to undo it.
+        return DecorationPool.show(bands.get(index));
     }
 }

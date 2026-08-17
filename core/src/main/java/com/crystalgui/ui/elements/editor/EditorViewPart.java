@@ -1,5 +1,10 @@
 package com.crystalgui.ui.elements.editor;
 
+import com.crystalgui.style.property.StyleProperty;
+import com.crystalgui.ui.UIElement;
+import dev.vfyjxf.taffy.style.LengthPercentageAuto;
+import dev.vfyjxf.taffy.style.TaffyDimension;
+
 /**
  * One piece of the editor's view, owning its own elements and placing them each pass.
  *
@@ -60,5 +65,45 @@ abstract class EditorViewPart {
     /** Whether this pass has any line to draw on. @see #render */
     protected final boolean hasWindow(int firstViewLine, int lastViewLine) {
         return lastViewLine >= firstViewLine;
+    }
+
+    /**
+     * A length the cascade gave this element, or {@code fallback} when the sheet says nothing usable.
+     *
+     * <p><b>Reading rather than writing is what lets a pixel value live in the sheet at all.</b> Several
+     * of these numbers are load-bearing twice over — a squiggle's height decides its height <em>and</em>
+     * its top, because the band sits at the bottom of the line box — and the note that used to defend
+     * keeping them in Java said exactly that: a height the cascade could change independently would put
+     * the underline somewhere other than where the part expected. That is only true of a value the part
+     * <em>writes</em>. Read it once and use it for both and the two cannot disagree, whatever the sheet
+     * says.</p>
+     *
+     * <p>The fallback is for the frame before the first selector match, not for a missing rule — a part
+     * whose sheet entry has been deleted should look wrong rather than quietly keep a number nobody can
+     * find. Only absolute lengths are honoured; {@link #stylePercent} is the other half.</p>
+     */
+    protected static float styleInset(UIElement element,
+                                      StyleProperty<LengthPercentageAuto> property, float fallback) {
+        LengthPercentageAuto value = element.getStyle().getLayoutGroup().getValueSave(property);
+        if (value == null || !value.isLength()) return fallback;
+        return Math.max(0f, value.getValue());
+    }
+
+    /** A {@code width}/{@code height} the cascade gave this element, in logical px. @see #styleInset */
+    protected static float styleSize(UIElement element,
+                                     StyleProperty<TaffyDimension> property, float fallback) {
+        TaffyDimension value = element.getStyle().getLayoutGroup().getValueSave(property);
+        if (value == null || !value.isLength()) return fallback;
+        return Math.max(0f, value.getValue());
+    }
+
+    /** The percentage flavour of {@link #styleSize} — for anything sized against its container. */
+    protected static float stylePercent(UIElement element,
+                                        StyleProperty<TaffyDimension> property, float fallback) {
+        TaffyDimension value = element.getStyle().getLayoutGroup().getValueSave(property);
+        if (value == null || !value.isPercent()) return fallback;
+        // The engine stores a percentage as a FRACTION, and every heightPercent()/topPercent() call site
+        // passes 0-100 -- so this converts back rather than handing over a number in the other unit.
+        return Math.max(0f, value.getValue() * 100f);
     }
 }
