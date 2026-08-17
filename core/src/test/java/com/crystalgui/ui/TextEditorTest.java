@@ -407,6 +407,39 @@ public class TextEditorTest extends UiTestBase {
     }
 
     /**
+     * <b>Undo puts the caret back where the typing happened.</b> Reported from the harness: the text came
+     * back and the caret did not, so the next keystroke landed wherever it had been left.
+     */
+    @Test
+    public void undoPutsTheCaretBackWhereTheEditWasMade() {
+        build("hello world");
+        editor.setCaret(5);
+        editor.insertAtCaret("XYZ");
+        assertEquals(8, editor.getCaret());
+
+        editor.setCaret(0);          // wander off, as anyone would before pressing Ctrl+Z
+        editor.buffer().undo();
+
+        assertEquals("helloXYZ world".replace("XYZ", ""), editor.getText());
+        assertEquals("the caret is at the edit, not where it was left", 5, editor.getCaret());
+    }
+
+    /** And redo puts it where that edit left it. */
+    @Test
+    public void redoPutsTheCaretWhereTheEditLeftIt() {
+        build("hello world");
+        editor.setCaret(5);
+        editor.insertAtCaret("XYZ");
+        editor.buffer().undo();
+        editor.setCaret(0);
+
+        editor.buffer().redo();
+
+        assertEquals("helloXYZ world", editor.getText());
+        assertEquals(8, editor.getCaret());
+    }
+
+    /**
      * <b>Enter between a brace pair opens a line between them and leaves the caret on it.</b> Reported
      * from the harness: it produced one line with the closing brace beside the caret, because the rule
      * asked whether the LINE ended in an opener and with the caret between the pair it ends in the closer.

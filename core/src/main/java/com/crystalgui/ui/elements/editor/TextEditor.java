@@ -831,6 +831,18 @@ public class TextEditor extends ScrollerView implements UndoScope {
             onChanged.emit(buffer.toString());
         });
 
+        // AN UNDO THAT MOVES THE TEXT BACK AND NOT THE CARET has moved the text out from under your
+        // hands. Every edit records where the carets were, and undo and redo hand them back here --
+        // after `onChanged` above, so this is the last word rather than something the clamp overwrites.
+        // Reported from the harness as "undo/redo don't put the caret back".
+        buffer.onSelectionsRestored.connect(restored -> {
+            if (restored.isEmpty()) return;
+            selections.setAll(restored, 0);
+            selections.clampTo(buffer.length());
+            afterSelectionChange();
+            ensureCaretVisible();
+        });
+
         // EVERY producer's problems get tracked ranges, not only the engine's. See retrackDiagnostics.
         diagnostics.onChanged.connect(this::retrackDiagnostics);
 
@@ -1115,7 +1127,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         changes.removeIf(Change::isEmpty);
         if (changes.isEmpty()) return;
         ChangeSet edit = ChangeSet.of(buffer.length(), changes);
-        buffer.edit(edit);
+        buffer.edit(edit, selections.all());
         selections.mapThrough(edit).collapseEachToHead();
         clearGoalColumns();
         viewCursorsPart.restartBlink();
@@ -2036,7 +2048,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         ChangeSet edit = action.edit();
         if (edit == null) return action.commandId() != null;
         buffer.breakUndoCoalescing();
-        buffer.edit(edit);
+        buffer.edit(edit, selections.all());
         buffer.breakUndoCoalescing();
         return true;
     }
@@ -3114,7 +3126,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         changes.removeIf(Change::isEmpty);
         if (changes.isEmpty()) return;
         ChangeSet edit = ChangeSet.of(buffer.length(), changes);
-        buffer.edit(edit);
+        buffer.edit(edit, selections.all());
         selections.mapThrough(edit);
         viewCursorsPart.restartBlink();
         ensureCaretVisible();
@@ -3742,7 +3754,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         }
         int replaced = changes.size();
         ChangeSet edit = ChangeSet.of(buffer.length(), changes);
-        buffer.edit(edit);
+        buffer.edit(edit, selections.all());
         buffer.breakUndoCoalescing();
         selections.mapThrough(edit).collapseEachToHead();
         find(lastSearch);
