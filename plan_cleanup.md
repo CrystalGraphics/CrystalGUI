@@ -11,6 +11,37 @@ sections 1 and 3.
 
 ---
 
+## 0. Where this stands (2026-08-17)
+
+| Step | State | Commits |
+|---|---|---|
+| §1 — the ten defects | **done** | `a8df75e`†/`a30a917` (D1–D5), `246831d` (D6–D10) |
+| §6.1 — shared classes | **done bar two small items** | `a30a917` (`Indent`), `021913d` (`Scopes`), `d1d0271` (`Precedence`, `SideEffects`), `2243809`† (`Names`) |
+| §6.2 — `TypeNames.typeNode` + `Expected` | not started | — |
+| §6.3 — the guards | **done**, folded into §1 | see above |
+| §6.4 — `Inspection` SPI + stale docs | not started | — |
+
+Left in §6.1: **`Correction.NONE`** (eight spellings of `new int[0]`) and **`FixContext.changeSet(List<Change>, ImportPlan)` + `text(node)`** (four hand-rolled merges). Neither was started.
+
+† Two chunks were swept into a *concurrent session's* commits by a broad `git add` in this shared
+worktree — `Indent.java` plus most of the `LoopIntentions`/`SwitchIntentions` edits into `a8df75e`
+("A whole-row mark skips the indentation…"), and the whole `Names` group into `2243809` ("M10.6 — the
+four resolution tiers…"). The tree is correct; only the attribution is wrong, and `git log` on those
+files leads to a message about something else.
+
+Green at each commit: 401 tests in the `java` package, corpus 709 files / 4009 actions / 45 regressions
+/ 0 engine crashes, no corpus failures.
+
+> **Two findings worth carrying forward, because both nearly went the wrong way.** Three of §2's rows
+> looked like drift and were **two different questions wearing one name** — an anonymous class is a type
+> you are *in* but not a declaration you may *add to*; `!x` admits a unary where dropping brackets does
+> not (`-(-a)` → `--a`); deleting `new int[n]` is free where evaluating it twice is not. Each is now two
+> named methods over one list rather than one merged answer. And `Lambda.namesInScopeAt` was left alone
+> deliberately: it is a *precise* scope walk, not a subtree collect, and folding it into
+> `Names.declaredIn` would have been a real loss.
+
+---
+
 ## 1. Defects (all reproduced) — **DONE**, in `a8df75e`/`a30a917` (D1–D5) and the commit after (D6–D10)
 
 Kept as written, because the diagnosis is the part worth having; the "what happens" column is now what
@@ -54,33 +85,33 @@ arrow switch, nested block       → same flattening                            
 
 Each row is a place two families will disagree the first time one is edited.
 
-| Concept | Copies | Where |
-|---|---|---|
-| `indentAt(source, pos)` | **4** identical | `IntentionCorrections`, `LambdaCorrections`, `SwitchIntentions`, `VariableIntentions` |
-| Enclosing type of a node | **5** | `DidYouMean.enclosingTypeOf`, `Create.enclosingTypeOf`, `Value.enclosingType`, `Cast.receiverOf`, `EcjSourceAnalyzer.enclosingTypeAt` — three different answers about anonymous classes |
-| Enclosing method / "the callable that owns this" | **5**, four stopping rules | `Cast.enclosingMethod` (stops at lambda), `Exception.enclosingMethod` (lambda/initializer/anonymous), `Loop.enclosingMethodOf` (walks to root), `VariableIntentions` ×3 inline (`usesOf`, `assignedAfter`, `freshName`), `DidYouMean.collectLocalsAbove` (method/lambda/initializer) |
-| Static context | 2 | `Value.inStaticContext`, `Create.isStaticCall` tail |
-| `KEYWORDS` | **2 identical 60-entry sets** | `Names`, `CreateCorrections` |
-| Fresh-name derivation | 4 | `Names.derive`, `Create.parameterName` (own primitive→letter table that disagrees: boolean→`b` vs `flag`), `Lambda.freeName`, `Exception.freeExceptionName` |
-| Names declared in a scope | 3 | `Names.declaredIn`, `Exception.freeExceptionName`'s visitor, `Lambda.namesInScopeAt` |
-| Spelling a type binding | **2 parallel systems** | `TypeNames.writtenName` (String) vs `Create.typeFor` (Type node) — differ on type variables (null vs erasure), anonymous (null vs `Object`), recovered (guarded vs not) |
-| Zero / default value | 2 | `TypeNames.defaultValue`, `Create.zeroOf` |
-| Expected type from context | 3 | `Cast.expectedTypeOf`, `Create.returnTypeFor`, ad-hoc reads in `Value` |
-| Precedence — "binds looser than a cast / needs wrapping" | **2 identical lists** | `Cast.bindsLooserThanACast` ≡ `VariableIntentions.needsParentheses` |
-| Precedence — "is atomic / needs no parens" | 2 **different** lists | `Negation.parenthesised` vs `Expression.needsNoParentheses` |
-| `hasCall` (side effect) | 2, differ by `ArrayCreation` | `Cast`, `VariableIntentions` |
-| Comparison-operator set | 2 | `Negation.opposite`, `Intention.negatable` |
-| `leaves(Statement)` | 2 **in one file** | `SwitchIntentions` inner + outer |
-| `textOf` | 1 + 1 stray + ~6 inline substrings | `Negation.textOf(ASTNode)`; `Intention.textOf(Statement)`; `source.substring(start, start+len)` in Loop, Variable, Lambda, DeadCode, Unused |
-| changes + import insertions → `ChangeSet` | 4 hand-rolled | `Value`, `Loop`, `Variable`, `Lambda` — `FixContext.changesFrom(rewrite, imports)` covers only the rewriter path |
-| `NONE` / `new int[0]` | 8 spellings | should be one constant on `Correction` |
-| `isRecovered` recursive check | dead duplicate | `ImplementCorrections.isRecovered` — the rule moved into `TypeNames.writtenName` (its own comment says so); the copy and both calls stayed |
-| Cast building | 2 | `CastToExpectedType.contribute` inlines the body of `castInPlace` |
-| Cast-argument walk | 2 | `CastArgument.contribute` and `mismatchedArgumentSpan` are one loop written twice |
-| Last field / last constructor-or-field | 2 | `Value.lastFieldOf`, `Create.lastConstructorOrFieldOf` |
-| Declaration lookup by binding | 2 ways | `Value.InitialiseVariable.declarationOf` walks the unit; `Modifier` uses `unit.findDeclaringNode` |
-| Unused-import set | 2 | `ImportCorrections.OrganizeImports` (`HashSet`) and `Unused.RemoveAllUnusedImports` (`List` + `contains`) |
-| Inline FQNs | ~14 | `Negation.parenthesised` ×5, `CastCorrections` ×2 (`org.eclipse.jdt.core.dom.Type`), `ImportPlan` ×1, `JavaCodeActions` `implements` clause, `EcjSourceAnalyzer` ×~10 |
+| Concept | Copies | Where | Now |
+|---|---|---|---|
+| `indentAt(source, pos)` | **4** identical | `IntentionCorrections`, `LambdaCorrections`, `SwitchIntentions`, `VariableIntentions` | ✅ `Indent.at` |
+| Enclosing type of a node | **5** | `DidYouMean.enclosingTypeOf`, `Create.enclosingTypeOf`, `Value.enclosingType`, `Cast.receiverOf`, `EcjSourceAnalyzer.enclosingTypeAt` — three different answers about anonymous classes | ✅ **two** methods: `Scopes.enclosingTypeBinding` (anonymous counts) and `enclosingTypeDeclaration` (named only). `Cast.receiverOf` is not one of these — it reads a call's receiver type |
+| Enclosing method / "the callable that owns this" | **5**, four stopping rules | `Cast.enclosingMethod` (stops at lambda), `Exception.enclosingMethod` (lambda/initializer/anonymous), `Loop.enclosingMethodOf` (walks to root), `VariableIntentions` ×3 inline (`usesOf`, `assignedAfter`, `freshName`), `DidYouMean.collectLocalsAbove` (method/lambda/initializer) | ✅ `Scopes.enclosingMethod(at, Stop…)` + `enclosingMethodOrRoot` + `enclosingNameScope` + `enclosingMethodBinding` |
+| Static context | 2 | `Value.inStaticContext`, `Create.isStaticCall` tail | ✅ `Scopes.isStaticContext`, on the stricter rule |
+| `KEYWORDS` | **2 identical 60-entry sets** | `Names`, `CreateCorrections` | ✅ Create's deleted |
+| Fresh-name derivation | 4 | `Names.derive`, `Create.parameterName` (own primitive→letter table that disagrees: boolean→`b` vs `flag`), `Lambda.freeName`, `Exception.freeExceptionName` | ✅ `Names.derive` + new `Names.free(taken, stems…)` |
+| Names declared in a scope | 3 | `Names.declaredIn`, `Exception.freeExceptionName`'s visitor, `Lambda.namesInScopeAt` | ✅ two of three. **`Lambda.namesInScopeAt` stays** — a precise scope walk, not a subtree collect |
+| Spelling a type binding | **2 parallel systems** | `TypeNames.writtenName` (String) vs `Create.typeFor` (Type node) — differ on type variables (null vs erasure), anonymous (null vs `Object`), recovered (guarded vs not) | ⬜ §6.2. Recovered is guarded on both sides now (D6) |
+| Zero / default value | 2 | `TypeNames.defaultValue`, `Create.zeroOf` | ⬜ §6.2 |
+| Expected type from context | 3 | `Cast.expectedTypeOf`, `Create.returnTypeFor`, ad-hoc reads in `Value` | ⬜ §6.2 |
+| Precedence — "binds looser than a cast / needs wrapping" | **2 identical lists** | `Cast.bindsLooserThanACast` ≡ `VariableIntentions.needsParentheses` | ✅ `Precedence.needsParenthesesWhenWrapped` |
+| Precedence — "is atomic / needs no parens" | 2 **different** lists | `Negation.parenthesised` vs `Expression.needsNoParentheses` | ✅ and they were **right to differ**: `Precedence.isPrimary` and `bindsTighterThanUnary` over one list |
+| `hasCall` (side effect) | 2, differ by `ArrayCreation` | `Cast`, `VariableIntentions` | ✅ and **right to differ**: `SideEffects.lostByDeleting` / `addedByRepeating` |
+| Comparison-operator set | 2 | `Negation.opposite`, `Intention.negatable` | ⬜ |
+| `leaves(Statement)` | 2 **in one file** | `SwitchIntentions` inner + outer | ⬜ |
+| `textOf` | 1 + 1 stray + ~6 inline substrings | `Negation.textOf(ASTNode)`; `Intention.textOf(Statement)`; `source.substring(start, start+len)` in Loop, Variable, Lambda, DeadCode, Unused | ⬜ `FixContext.text(node)`, §6.1 leftover |
+| changes + import insertions → `ChangeSet` | 4 hand-rolled | `Value`, `Loop`, `Variable`, `Lambda` — `FixContext.changesFrom(rewrite, imports)` covers only the rewriter path | ⬜ §6.1 leftover |
+| `NONE` / `new int[0]` | 8 spellings | should be one constant on `Correction` | ⬜ §6.1 leftover |
+| `isRecovered` recursive check | dead duplicate | `ImplementCorrections.isRecovered` — the rule moved into `TypeNames.writtenName` (its own comment says so); the copy and both calls stayed | ⬜ §6.2 |
+| Cast building | 2 | `CastToExpectedType.contribute` inlines the body of `castInPlace` | ⬜ §6.2 |
+| Cast-argument walk | 2 | `CastArgument.contribute` and `mismatchedArgumentSpan` are one loop written twice | ⬜ §6.2 |
+| Last field / last constructor-or-field | 2 | `Value.lastFieldOf`, `Create.lastConstructorOrFieldOf` | ⬜ |
+| Declaration lookup by binding | 2 ways | `Value.InitialiseVariable.declarationOf` walks the unit; `Modifier` uses `unit.findDeclaringNode` | ⬜ |
+| Unused-import set | 2 | `ImportCorrections.OrganizeImports` (`HashSet`) and `Unused.RemoveAllUnusedImports` (`List` + `contains`) | ⬜ |
+| Inline FQNs | ~14 | `Negation.parenthesised` ×5, `CastCorrections` ×2 (`org.eclipse.jdt.core.dom.Type`), `ImportPlan` ×1, `JavaCodeActions` `implements` clause, `EcjSourceAnalyzer` ×~10 | 🔸 **10 left** — Negation's five went with its list, four of the analyzer's with the two walks. Remaining: `Cast` ×2, `EcjSourceAnalyzer` ×7, `ImportPlan` ×1 |
 
 ---
 
@@ -89,22 +120,24 @@ Each row is a place two families will disagree the first time one is edited.
 Not a reshuffle: a small set of shared classes each owning **one question**, and every family calling
 them. Family files lose their private helpers and get shorter.
 
-### 3.1 New shared classes
+### 3.1 New shared classes — **all done except `Expected`**
 
-- **`Scopes`** — the tree-walk questions. `enclosingType(node)` (declared or anonymous, one rule);
-  `enclosingMethod(node, StopAt…)` with the stop rule as an explicit parameter (`LAMBDA`,
-  `INITIALIZER`, `ANONYMOUS`) so the four current variants are four calls of one method;
-  `enclosingStatement`; `isStaticContext`; `namesInScopeAt(node)`; `declaredIn(scope)` (moved from
-  `Names`). Kills ~12 private copies.
-- **`Precedence`** — `needsParenthesesWhenWrapped(expr)` (the loose-binding list) and `isAtomic(expr)`
-  (the tight list), one each. `Cast`, `VariableIntentions`, `Negation` and `Expression` all read them.
-- **`SideEffects.has(expr)`** — one list: calls, `new`, array creation, assignment, `++`/`--`.
-- **`Indent`** — `at(source, pos)`, `ofLine`, and the missing piece **`reindent(text, toIndent)`**,
-  which shifts by the *minimum common leading whitespace* rather than trimming. Fixes D5 in all three
-  places at once; every body-carrying intention uses only this.
-- **`Expected.typeOf(expression)`** — initialiser, assignment RHS, return (stopping at lambda),
+- ✅ **`Scopes`** — the tree-walk questions, as written below, with three corrections found in the
+  doing. The stop rule is a varargs `Stop` enum, so the four variants are four calls. `enclosingType`
+  is **two** methods, not one (binding-with-anonymous vs named declaration). `declaredIn` stayed on
+  `Names`, because the three copies of it collapse *into* `Names` rather than out of it — and
+  `namesInScopeAt` stayed on `Lambda`, being a precise scope walk that `declaredIn` cannot express.
+  Killed 11 private copies.
+- ✅ **`Precedence`** — `needsParenthesesWhenWrapped` plus **two** tight-list methods rather than one
+  `isAtomic`: `isPrimary` and `bindsTighterThanUnary`. The two lists differed for a reason.
+- ✅ **`SideEffects`** — **two** methods, `lostByDeleting` and `addedByRepeating`. Same finding: the
+  copies differed by `ArrayCreation` because they were asking about deletion and duplication.
+- ✅ **`Indent`** — `at(source, pos)` and **`reindent(text, toIndent)`**, which shifts by the *minimum
+  common leading whitespace* rather than trimming. Landed early with D5. (`ofLine` was not needed.)
+- ⬜ **`Expected.typeOf(expression)`** — initialiser, assignment RHS, return (stopping at lambda),
   argument (via sole candidate), condition → boolean, cast operand. `Cast`, `Create` and `Value` all
-  read it; `Create.returnTypeFor` becomes `Expected.typeOf(call)` + `TypeNames`.
+  read it; `Create.returnTypeFor` becomes `Expected.typeOf(call)` + `TypeNames`. **Not started** — it
+  is §6.2's, with `TypeNames.typeNode`.
 
 ### 3.2 Existing classes that grow or shrink
 
@@ -155,14 +188,16 @@ them. Family files lose their private helpers and get shorter.
 
 ## 4. Test infrastructure
 
-- `FixFixture` lacks **`assertSameSemantics(before, needle, id)`** — apply, re-analyse, assert the
-  error count did not rise. D3 and D4 would have failed such a fixture. Add it and use it in every
-  intention family.
-- `CorpusTest` **prints** semantic regressions. Promote "no file gains an error" to an assertion for
-  the intention families (they are the ones that generate code); keep it a print for the fix families
-  until the count is zero.
-- The corpus's 46 regressions have never been triaged by correction id. One run that histograms them
-  is the cheapest next probe: D1–D4 are all shapes it would flag.
+- ✅ **`FixFixture.assertSameSemantics(before, needle, id)`** — apply, re-analyse, assert the error count
+  did not rise. In, and used by D3 and D4. Still worth spreading to the other intention families.
+- ✅ **`CorpusTest` prints its failure list** as well as asserting it — the assertion message reaches
+  the XML report and nothing else, and which action broke which file is the one thing it exists to say.
+  (That is what made the array-initialiser split findable at all.)
+- ⬜ Promote "no file gains an error" to an **assertion** for the intention families (they are the ones
+  that generate code); keep it a print for the fix families until the count is zero.
+- 🔸 The regressions have now been histogrammed by action, twice: **17 `Change` (did-you-mean rename),
+  15 `Create`, 4 `Introduce`, 4 `Inline`** — and *none* from the intention families this round touched.
+  45 of them at the last run. The next probe is by correction id within those four.
 
 ---
 
@@ -175,20 +210,30 @@ problems, Alt+Insert generation, every T5/cross-file entry — parked, not start
 
 ## 6. Order — four commits, each green on the java package + corpus
 
-*(Defects done. `Indent` is in and step 1 is what remains of it.)*
-
-1. **Shared classes** — `Scopes`, `Precedence`, `SideEffects`, ~~`Indent` (with `reindent`)~~,
-   `Correction.NONE`, `FixContext.changeSet(changes, imports)` and `text(node)`, `Names` absorbing its
-   three copies. Pure moves; the existing tests are the net. Fixes D5, D10.
-2. **`TypeNames.typeNode` + `Expected`** — retire `Create.typeFor`/`zeroOf`/`returnTypeFor`,
+1. ~~**Shared classes**~~ — ~~`Scopes`, `Precedence`, `SideEffects`, `Indent` (with `reindent`)~~,
+   **`Correction.NONE`**, **`FixContext.changeSet(changes, imports)` and `text(node)`** ← *what is left*,
+   ~~`Names` absorbing its three copies~~. Pure moves; the existing tests are the net. Fixes D5, D10.
+   **The "pure moves" framing was wrong** and worth recording: three of the merges were two questions
+   that had to stay two methods, and one of them (`Precedence`) hid a live defect —
+   `((int[]) new int[0]).length` may not lose its brackets, because `new int[3].length` is a syntax
+   error. Read the two lists before merging any of the rows still open.
+2. **`TypeNames.typeNode` + `Expected`** ← **next** — retire `Create.typeFor`/`zeroOf`/`returnTypeFor`,
    `Cast.expectedTypeOf`; `Cast` shares `castInPlace` and `mismatchedArguments`; drop
-   `Implement.isRecovered`. Fixes D6.
-3. **Switch + Loop guards** — D1–D4 with a fixture each; by-binding rewrites of `assignedAfter` and
+   `Implement.isRecovered`. D6 is already guarded on both sides, so this is the duplication rather than
+   the defect: the point is that the recovered/typevar/anonymous rules exist **once** afterwards.
+3. ~~**Switch + Loop guards** — D1–D4 with a fixture each; by-binding rewrites of `assignedAfter` and
    `assignedAnywhereIn` (D8, D9); `isVar()` (D7). Add `assertSameSemantics` in the same commit and use
-   it here.
+   it here.~~ **Done first**, as §1 records — D1 and D2 were the two urgent rows and there was no reason
+   to make them wait on a refactor.
 4. **`Inspection` SPI + stale docs** — `Inspection` beside `Correction`; `DeadCode` id split; the
    indent-detection promise resolved one way or the other; FQNs imported.
 
-The two urgent items are **D1 and D2**: both are the class of failure this layer treats as worst
-(compiles, means something else), both are one-line guards, and both sit in *preferred* intentions —
-the row the popup shows first.
+~~The two urgent items are **D1 and D2**~~ — both fixed in `a30a917`, and they were the right things to
+take first: the class of failure this layer treats as worst (compiles, means something else), one guard
+each, and both in *preferred* intentions, the row the popup shows first.
+
+**The corpus earned its keep twice.** It found the array-initialiser split (§1's note) that no fixture
+would have covered, and it is the only reason the `Precedence` merge did not ship a file that stops
+parsing. Run it on every one of the steps still open — `rm -rf language/build/test-results/test/binary`
+first if a concurrent session has corrupted Gradle's previous-results file, which presents as an
+unrelated `java.io.EOFException` from `getPreviousFailedTestClasses`.
