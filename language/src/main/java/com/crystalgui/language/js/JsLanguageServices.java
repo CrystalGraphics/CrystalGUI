@@ -6,6 +6,8 @@ import com.crystalgui.language.engine.AnalysedLanguageServices;
 import com.crystalgui.language.engine.bridge.Analysis;
 import com.crystalgui.language.engine.bridge.JsSourceAnalyzer;
 import com.crystalgui.language.engine.bridge.LiveScopeSnapshot;
+import com.crystalgui.language.java.TypeIndex;
+import com.crystalgui.text.lang.CompletionProvider;
 import com.crystalgui.text.TextBuffer;
 
 import javax.annotation.Nullable;
@@ -58,6 +60,13 @@ public final class JsLanguageServices extends AnalysedLanguageServices {
      */
     private volatile LiveScopeSnapshot liveScope = LiveScopeSnapshot.EMPTY;
 
+    /**
+     * A supplier of the held analysis rather than the analysis itself, for the reason the Java services
+     * record: the held one is swapped on every parse, and a provider holding an instance would answer
+     * from whichever existed when it was built — plausibly, about a document from thirty seconds ago.
+     */
+    private final JsCompletionProvider completion;
+
     public JsLanguageServices(TextBuffer buffer, JsSourceAnalyzer analyzer,
                               @Nullable JobScheduler scheduler, String sourceName) {
         this(buffer, analyzer, scheduler, sourceName, null);
@@ -71,9 +80,22 @@ public final class JsLanguageServices extends AnalysedLanguageServices {
     public JsLanguageServices(TextBuffer buffer, JsSourceAnalyzer analyzer,
                               @Nullable JobScheduler scheduler, String sourceName,
                               @Nullable Resource file) {
+        this(buffer, analyzer, scheduler, sourceName, file, null);
+    }
+
+    /**
+     * @param types the classpath index a {@code Java.type("…")} string completes from, or null when this
+     *              build has no Java engine — in which case interop still resolves through reflection and
+     *              only the class-name list is absent
+     */
+    public JsLanguageServices(TextBuffer buffer, JsSourceAnalyzer analyzer,
+                              @Nullable JobScheduler scheduler, String sourceName,
+                              @Nullable Resource file, @Nullable TypeIndex types) {
         super(ID, buffer, scheduler, file);
         this.analyzer = analyzer;
         this.sourceName = sourceName == null || sourceName.isEmpty() ? "script.js" : sourceName;
+        this.completion = new JsCompletionProvider(buffer, this::current, this::liveScope,
+                analyzer::keywords, types, this::analyseText);
         start();
     }
 
@@ -102,5 +124,10 @@ public final class JsLanguageServices extends AnalysedLanguageServices {
     /** What the last run left in scope, or empty. */
     public LiveScopeSnapshot liveScope() {
         return liveScope;
+    }
+
+    @Override
+    public CompletionProvider completion() {
+        return completion;
     }
 }

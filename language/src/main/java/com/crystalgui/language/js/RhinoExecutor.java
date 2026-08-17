@@ -406,7 +406,10 @@ public final class RhinoExecutor implements JsExecutor {
                 entries.add(LiveScopeSnapshot.Entry.of(name, LiveScopeSnapshot.Kind.OTHER));
             }
         }
-        return LiveScopeSnapshot.of(entries);
+        // AND WHAT EVERY OBJECT INHERITS, read from this run's own Object.prototype rather than written
+        // down: it is the engine's list, it differs by band as the standard library grows, and a
+        // completion row marked "inherited" has to be one that actually is.
+        return LiveScopeSnapshot.of(entries, allIdsOf(ScriptableObject.getObjectPrototype(scope)));
     }
 
     private static Set<String> idsOf(ScriptableObject scope) {
@@ -469,6 +472,27 @@ public final class RhinoExecutor implements JsExecutor {
             return LiveScopeSnapshot.Entry.of(name, LiveScopeSnapshot.Kind.OTHER);
         }
         return LiveScopeSnapshot.Entry.of(name, LiveScopeSnapshot.Kind.OTHER);
+    }
+
+    /**
+     * Every id including the non-enumerable ones — which is what a PROTOTYPE's are.
+     *
+     * <p>{@code getIds()} answers only enumerable properties, and {@code toString}, {@code valueOf} and
+     * {@code hasOwnProperty} are all non-enumerable by specification. So the obvious accessor reports
+     * {@code Object.prototype} as having <em>no members at all</em>, and the completion list quietly loses
+     * everything every object inherits.</p>
+     */
+    private static List<String> allIdsOf(Scriptable object) {
+        if (!(object instanceof ScriptableObject)) return ownIdsOf(object);
+        try {
+            List<String> ids = new ArrayList<>();
+            for (Object id : ((ScriptableObject) object).getAllIds()) {
+                if (id instanceof String) ids.add((String) id);
+            }
+            return ids;
+        } catch (RuntimeException unreadable) {
+            return List.of();
+        }
     }
 
     /** An object's OWN property names -- never its prototype's, which are the standard library's. */

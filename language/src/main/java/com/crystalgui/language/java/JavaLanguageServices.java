@@ -85,7 +85,14 @@ public final class JavaLanguageServices extends AnalysedLanguageServices {
      * <p>Unbounded, and that is fine: a process has one or two classpaths, so this is a map with one or two
      * entries whose lifetime is the process's. Evicting would mean rescanning.</p>
      */
-    private static synchronized TypeIndex typeIndexFor(List<String> classpath) {
+    /**
+     * The index for a classpath, shared by every consumer of it.
+     *
+     * <p>Public because the JavaScript engine completes {@code Java.type("a.b.C")} from the same index:
+     * one scan of one classpath answers for both languages, and a second index would be the same fifty
+     * thousand entries built twice. @see TypeIndex's visibility note</p>
+     */
+    public static synchronized TypeIndex typeIndexFor(List<String> classpath) {
         return TYPE_INDICES.computeIfAbsent(classpath, TypeIndex::new);
     }
 

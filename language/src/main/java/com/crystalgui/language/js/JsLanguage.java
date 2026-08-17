@@ -9,6 +9,8 @@ import com.crystalgui.language.engine.bridge.JsExecutor;
 import com.crystalgui.language.engine.bridge.JsSourceAnalyzer;
 import com.crystalgui.language.java.HostClasspath;
 import com.crystalgui.language.java.JavaLanguage;
+import com.crystalgui.language.java.JavaLanguageServices;
+import com.crystalgui.language.java.TypeIndex;
 import com.crystalgui.language.run.ScriptRuntimes;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.lang.LanguageServices;
@@ -118,6 +120,25 @@ public final class JsLanguage {
     private static boolean javaLent;
 
     /**
+     * The classpath index a {@code Java.type("…")} string completes from, or null.
+     *
+     * <p>The <b>Java</b> language's index, shared rather than rebuilt: it is one scan of one classpath and
+     * fifty thousand entries, and the question "which types exist" has the same answer whichever language
+     * is asking. Null when no Java engine opened, which costs the class-name list and nothing else.</p>
+     */
+    @Nullable
+    private static TypeIndex typeIndex() {
+        return JavaLanguage.engine() == null ? null
+                : JavaLanguageServices.typeIndexFor(HostClasspath.detect());
+    }
+
+    /** The same index a document would get — for a test that builds its own services. */
+    @Nullable
+    public static TypeIndex typeIndexForTesting() {
+        return typeIndex();
+    }
+
+    /**
      * Hands the analyser the Java engine, when this build has one.
      *
      * <p>What it buys is the interop tier: a Java type reached from a script is answered by the resolver
@@ -149,7 +170,8 @@ public final class JsLanguage {
         // THE LATE CHANCE. A document cannot open before both languages have registered, so this is the
         // last moment the ordering could still be wrong -- and the first at which it certainly is not.
         lendTheJavaEngine();
-        return new JsLanguageServices(buffer, analyzer, scheduler, sourceNameFor(resource), resource);
+        return new JsLanguageServices(buffer, analyzer, scheduler, sourceNameFor(resource), resource,
+                typeIndex());
     }
 
     /**

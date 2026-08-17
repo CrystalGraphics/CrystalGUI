@@ -53,6 +53,19 @@ public interface JsSourceAnalyzer {
     }
 
     /**
+     * The keywords this engine accepts — what a completion list in open code may offer.
+     *
+     * <p>A question about the <em>engine</em>, not about the language, which is why it is asked here rather
+     * than answered from a table on the host side. The grammar parses modern JavaScript and the engine is
+     * what refuses it, differently per band: {@code class} and {@code async} are refused by every Rhino we
+     * ship, and offering a keyword that cannot run is worse than omitting it — a completion row is a
+     * promise that accepting it produces something the engine will take.</p>
+     */
+    default List<String> keywords() {
+        return List.of();
+    }
+
+    /**
      * Lends this analyser the <b>Java</b> engine, so a Java type reached from JavaScript is answered by
      * the resolver that answers for Java.
      *

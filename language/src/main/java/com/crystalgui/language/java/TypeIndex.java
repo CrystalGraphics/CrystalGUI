@@ -43,7 +43,18 @@ import java.util.zip.ZipFile;
  * to the compiler, which already has them. This answers exactly one question: "what types exist whose simple
  * name starts like this". Anything more is a second, worse copy of ECJ's own index.</p>
  */
-final class TypeIndex {
+public final class TypeIndex {
+
+    // ── VISIBILITY NOTE ────────────────────────────────────────────────────────────────────────
+    //
+    // This was package-private, and the widening is deliberate rather than incidental: "which types are
+    // on the classpath" stopped being a Java-only question when a .js file gained `Java.type("a.b.C")`
+    // completion, and the answer is the same scan of the same classpath. A second index for JavaScript
+    // would be fifty thousand entries and one filesystem walk, duplicated, to answer identically.
+    //
+    // Only the query surface is public -- `matching`, `kindOf`, `Entry`, `Match`, `Kind`. The scanning,
+    // the caches and the class-file reading stay package-private, so a caller cannot reach past the
+    // question into how it is answered.
 
     /**
      * One type: enough to draw a row, write the import, and later find its bytes.
@@ -52,8 +63,8 @@ final class TypeIndex {
      * root. The <b>same String instance</b> is shared by every entry from one archive, so this costs a
      * pointer per entry rather than a copy, which matters at fifty thousand of them.</p>
      */
-    record Entry(String simpleName, String packageName, String container) {
-        String qualifiedName() {
+    public record Entry(String simpleName, String packageName, String container) {
+        public String qualifiedName() {
             return packageName.isEmpty() ? simpleName : packageName + "." + simpleName;
         }
 
@@ -92,7 +103,7 @@ final class TypeIndex {
      * names it was given locally and never asks again as the query narrows — so typing {@code CgTex} shows
      * whatever forty things started with {@code C}, and the type actually being typed is not among them.</p>
      */
-    record Match(List<Entry> entries, boolean truncated) {
+    public record Match(List<Entry> entries, boolean truncated) {
     }
 
     /**
@@ -118,7 +129,7 @@ final class TypeIndex {
      * linear scan with no allocation, and it is <b>exactly the same predicate</b>: anything it rejects the
      * DP would also reject, so nothing is lost by asking the cheap question first.</p>
      */
-    Match matching(String prefix) {
+    public Match matching(String prefix) {
         if (prefix == null || prefix.isEmpty()) return new Match(List.of(), false);
         ensureBuilt();
         String needle = prefix.toLowerCase(Locale.ROOT);
@@ -218,12 +229,12 @@ final class TypeIndex {
      * malformed class, and the right response is the majority answer rather than no row at all: the name is
      * still correct and still worth offering.</p>
      */
-    Kind kindOf(Entry entry) {
+    public Kind kindOf(Entry entry) {
         return kinds.computeIfAbsent(entry.qualifiedName(), name -> readKind(entry));
     }
 
     /** What the icon layer needs: what it is, and whether it is abstract. */
-    record Kind(SymbolKind kind, boolean isAbstract) {
+    public record Kind(SymbolKind kind, boolean isAbstract) {
     }
 
     private static final Kind PLAIN_CLASS = new Kind(SymbolKind.CLASS, false);

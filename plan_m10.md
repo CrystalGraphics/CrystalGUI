@@ -38,7 +38,7 @@ most visible thing to have early.
 | **10.3b** Compatibility band | ship band 8's probe file as a resource; detect the six constructs 1.9.1 accepts and 1.7.15.1 refuses (default params, spread, computed properties, destructuring defaults, `?.`, `??`) from the AST; warn when the target band is older than the host | an author on Java 17 is told what a Java 8 player cannot load | **deferred** — needs a per-construct AST detector, which is a different kind of work from a message policy and is worth its own step |
 | **10.5** Execution | `JsHost`, `RhinoExecutor.run/stop/currentLine/describe`, console/`print`/`readLine`/`Java.type` globals, `RhinoConsoleFormat`, `RhinoOrigin`, `RhinoStackFrameFilter`, runtime errors as `js-runtime` diagnostics through a new engine-neutral `AnalysedLanguageServices.reportRuntimeProblems` lane | Shift+F10 runs it; output attributed by line; Stop works; a thrown error squiggles its line | **done** — see "10.5 as built" below. `snapshotScope` moves to 10.6, beside its only consumer |
 | **10.6** Resolution + interop | the four tiers (`RhinoResolution`), `RhinoJsDoc`, `RhinoInference`, `InteropResolver` over the Java probe unit + reflection fallback, `LiveScopeSnapshot` from `snapshotScope`, `JsTypeRef`, **`RhinoTokens`** | hover says what a name is and which tier said so; a Java receiver's members are the Java engine's; after a run a global is typed by what it became | **done** — see "10.6 as built" |
-| **10.7** Completion | `JsCompletionProvider`, `JsKeywords` (band-filtered), `Java.type` insertion, live-object completion | `.` after a Java object lists its members; after a run, `w.` on a global works | not started |
+| **10.7** Completion | `JsCompletionProvider`, `JsKeywords` (measured per band), the probe re-parse, `Java.type("…")` names from the shared `TypeIndex`, live-object completion with the inherited half | `.` after a Java object lists its members; after a run, `settings.` lists what it has; no refused keyword offered | **done** — see "10.7 as built" |
 | **10.8** Quick Documentation | `JsSignatures`, tier provenance in the owner band, Java members quoted through `AttachedSources` | Mod+Q / hover shows `function add(a, b)` with JSDoc, or the Java popup for a Java member | not started |
 | **10.9** Quick fixes + intentions | `JsRewrites`, `JsQuickFixes`, the §8 catalog, `fixtures/js/` | Alt+Enter offers the catalog | not started |
 | **10.10** Sandbox | `ScriptPolicy` in `language.run`, four consumers | a refused type is absent everywhere, one test | not started |
@@ -719,6 +719,33 @@ that answered is on the `SymbolInfo`.
 one edit, live-object completion, the probe re-parse for an unresolved receiver. *Tests:* the
 `JavaMemberCompletionTest` twin; "post-run completion on a live object" (the row's criterion); no
 `class` keyword offered on band 8; `inheritedFromObject` set for `Object.prototype`'s ids.
+
+**10.7 as built** — three corrections, all found by the tests:
+
+- **The probe re-parse is needed here too**, and leaving it out was the mistake worth recording. §6.1
+  argued a dynamic language can fall back to the live scope for an unresolved receiver, so `list.` was
+  meant to need no probe. But a trailing dot is not a parseable expression in *any* language — there is no
+  node at that offset — so the fallback fired for **every** statically typed receiver: a list appeared, it
+  was the wrong list, and nothing failed. The probe is now first and the live-scope fallback is the last
+  resort it was meant to be, for a receiver that genuinely has no knowable type.
+- **`Object.prototype`'s ids need `getAllIds()`.** `getIds()` answers only *enumerable* properties and
+  every prototype member is non-enumerable by specification, so the obvious accessor reports the root
+  prototype as having no members and the inherited half of a member list silently disappears.
+- **`builderFrom` already writes the call snippet**, and better than the copy this class started with: it
+  puts the caret *between* the brackets when there is an argument and *after* them when there is not. The
+  override always wrote `name($0)`, so accepting a no-argument method left the caret inside empty
+  brackets. One converter, per the Java provider's own note.
+- **Keywords are measured**, not tabled: each one whose support has ever depended on the version is put to
+  the band's own parser once and kept if it survives. `class`, `import`, `export`, `async` and `await`
+  fail on both shipped Rhinos and are therefore never offered — a completion row is a promise that
+  accepting it produces something that runs.
+- **`TypeIndex` became public** (its query surface only). "Which types are on the classpath" stopped being
+  a Java-only question when a `.js` file gained `Java.type("…")` completion, and a second index would be
+  the same fifty thousand entries and the same filesystem walk, duplicated, to answer identically.
+- **Class names are offered only inside the `Java.type("…")` string.** A bare Java class name is not
+  something JavaScript can write, so offering the index in open code would fill the popup with rows that
+  are all syntax errors where they would land. Inside the literal every row is right and needs no second
+  edit — the one place this interop is simpler than Java's, which has an import to bring.
 
 **10.8 — Quick Documentation.** `JsSignatures`, tier provenance in the owner band, Java members quoted
 through `AttachedSources`. *Tests:* `DocumentationPopupTest` twin over JS symbols; a Java member from

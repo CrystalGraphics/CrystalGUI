@@ -63,6 +63,31 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
      */
     private volatile InteropResolver interop;
 
+    /**
+     * Measured against this band's own parser, once. @see JsKeywords
+     *
+     * <p>Through {@link RhinoThread} like every other entry, and through the same {@code CompilerEnvirons}
+     * an ordinary analysis uses — a keyword that parses under different settings than the editor's would be
+     * offered and then reported as an error on the line it was inserted into.</p>
+     */
+    @Override
+    public List<String> keywords() {
+        return JsKeywords.supportedBy(RhinoSourceAnalyzer::parses);
+    }
+
+    /** Whether this engine parses {@code snippet} with no errors at all. */
+    private static boolean parses(String snippet) {
+        return RhinoThread.with(() -> {
+            ErrorCollector problems = new ErrorCollector();
+            try {
+                new Parser(environs(), problems).parse(snippet, "keyword-probe.js", 1);
+            } catch (RuntimeException refused) {
+                return Boolean.FALSE;
+            }
+            return problems.getErrors().isEmpty();
+        });
+    }
+
     @Override
     public void useJavaEngine(SourceAnalyzer java, List<String> classpath, int releaseLevel) {
         InteropResolver previous = interop;
@@ -92,17 +117,7 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
         String text = source == null ? "" : source;
         String name = sourceName == null || sourceName.isEmpty() ? "script.js" : sourceName;
 
-        CompilerEnvirons environs = new CompilerEnvirons();
-        environs.setLanguageVersion(Context.VERSION_ES6);
-        environs.setRecoverFromErrors(true);
-        environs.setIdeMode(true);
-        environs.setRecordingComments(true);
-        environs.setRecordingLocalJsDocComments(true);
-        // NEVER STRICT-BY-DEFAULT. Rhino's strict mode turns a pile of style opinions into warnings --
-        // trailing commas, missing semicolons, `==` against null -- and which of those are worth showing
-        // is `RhinoProblemPolicy`'s decision at M10.3, made per message id. Turning them all on here
-        // would decide it by accident, in the wrong file.
-        environs.setStrictMode(false);
+        CompilerEnvirons environs = environs();
 
         ErrorCollector problems = new ErrorCollector();
         AstRoot root = null;
@@ -135,6 +150,27 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
 
         return new ParsedScript(version, text, root, scopes, reported, parsed,
                 new RhinoResolution(root, scopes, text, lines, liveScope, interop, name));
+    }
+
+    /**
+     * The parser settings — one definition, so the keyword probe and the editor cannot disagree.
+     *
+     * <p>Built per call rather than shared: {@code CompilerEnvirons} is mutable and Rhino writes to it
+     * during a parse, so one instance handed to two parsers is a race with no symptom worth naming.</p>
+     */
+    private static CompilerEnvirons environs() {
+        CompilerEnvirons environs = new CompilerEnvirons();
+        environs.setLanguageVersion(Context.VERSION_ES6);
+        environs.setRecoverFromErrors(true);
+        environs.setIdeMode(true);
+        environs.setRecordingComments(true);
+        environs.setRecordingLocalJsDocComments(true);
+        // NEVER STRICT-BY-DEFAULT. Rhino's strict mode turns a pile of style opinions into warnings --
+        // trailing commas, missing semicolons, `==` against null -- and which of those are worth showing
+        // is `RhinoProblemPolicy`'s decision at M10.3, made per message id. Turning them all on here
+        // would decide it by accident, in the wrong file.
+        environs.setStrictMode(false);
+        return environs;
     }
 
     /**

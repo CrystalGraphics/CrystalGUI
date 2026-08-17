@@ -40,7 +40,8 @@ import java.util.Set;
 public final class LiveScopeSnapshot {
 
     /** Nothing has run, or the run defined nothing. */
-    public static final LiveScopeSnapshot EMPTY = new LiveScopeSnapshot(Collections.emptyMap());
+    public static final LiveScopeSnapshot EMPTY =
+            new LiveScopeSnapshot(Collections.emptyMap(), Collections.emptyList());
 
     /** What a live value turned out to be — enough to type it, colour it and list its members. */
     public enum Kind {
@@ -90,19 +91,41 @@ public final class LiveScopeSnapshot {
     }
 
     private final Map<String, Entry> byName;
+    private final List<String> objectPrototypeIds;
 
-    private LiveScopeSnapshot(Map<String, Entry> byName) {
+    private LiveScopeSnapshot(Map<String, Entry> byName, List<String> objectPrototypeIds) {
         this.byName = byName;
+        this.objectPrototypeIds = objectPrototypeIds;
     }
 
     /** Insertion order is the walk's order, which is Rhino's own id order — stable, not sorted. */
     public static LiveScopeSnapshot of(List<Entry> entries) {
-        if (entries == null || entries.isEmpty()) return EMPTY;
+        return of(entries, List.of());
+    }
+
+    /**
+     * @param objectPrototypeIds what every object inherits, read from the run's own
+     *                           {@code Object.prototype} rather than written down here — {@code toString},
+     *                           {@code valueOf}, {@code hasOwnProperty} and the rest. Held once for the
+     *                           whole snapshot instead of copied onto each entry, because it is the same
+     *                           list for every object in the scope
+     */
+    public static LiveScopeSnapshot of(List<Entry> entries, List<String> objectPrototypeIds) {
+        List<String> shared = objectPrototypeIds == null || objectPrototypeIds.isEmpty()
+                ? List.of() : List.copyOf(objectPrototypeIds);
+        if (entries == null || entries.isEmpty()) {
+            return shared.isEmpty() ? EMPTY : new LiveScopeSnapshot(Collections.emptyMap(), shared);
+        }
         Map<String, Entry> byName = new LinkedHashMap<>();
         for (Entry entry : entries) {
             if (entry != null && !entry.name().isEmpty()) byName.put(entry.name(), entry);
         }
-        return byName.isEmpty() ? EMPTY : new LiveScopeSnapshot(byName);
+        return byName.isEmpty() && shared.isEmpty() ? EMPTY : new LiveScopeSnapshot(byName, shared);
+    }
+
+    /** What every object inherits — a completion list marks these as inherited from the root. */
+    public List<String> objectPrototypeIds() {
+        return objectPrototypeIds;
     }
 
     @Nullable
