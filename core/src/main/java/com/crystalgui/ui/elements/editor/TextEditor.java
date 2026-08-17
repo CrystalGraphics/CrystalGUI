@@ -324,6 +324,16 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private boolean highlightsDirty = true;
 
     /**
+     * Says the published {@code ::highlight()} ranges no longer describe the document.
+     *
+     * <p>For the subsystems that own a range set of their own — find, occurrences — since the flag itself
+     * is the editor's and the pass that reads it is too.</p>
+     */
+    void markHighlightsDirty() {
+        highlightsDirty = true;
+    }
+
+    /**
      * Syntax tokens per MODEL row, with offsets relative to that row's start.
      *
      * <p>Asking the tokenizer is the single most expensive thing this class does per frame — measured at
@@ -679,43 +689,14 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * the set changes on every fold, and a stale answer here places a caret somewhere unpaintable.</p>
      */
     public java.util.List<FoldingModel.RowRange> hiddenRowRanges() {
-        return folding.hiddenRows();
+        return folds.hiddenRowRanges();
     }
 
     /** Opens every collapsed region hiding {@code row}. A no-op when the row is already visible, so this
      * does not disturb the fold state of a file whose problems are all in the open. */
     private void revealRow(int row) {
-        for (FoldingModel.RowRange range : folding.hiddenRows()) {
-            if (!range.contains(row)) continue;
-            StableViewport anchor = captureFoldAnchor();
-            ensureFoldingCurrent();
-            folding.setCollapseStateUp(false, row);
-            afterFoldChange(anchor);
-            return;
-        }
+        folds.revealRow(row);
     }
-
-
-    /**
-     * Which blocks are foldable and which are closed.
-     *
-     * <p><b>View state, not document state</b>, by the same boundary the engine draws for undo: it is how
-     * you are looking at the file, not what the file says. So it never reaches {@code UndoStack} and Ctrl+Z
-     * will not unfold — which is what VS Code and IntelliJ both do, and the same rule that keeps scroll
-     * position and selection out of the history.</p>
-     */
-    private final FoldingModel folding = new FoldingModel();
-
-    /**
-     * Where foldable regions come from. Indentation by default — see {@link IndentRangeProvider} for why
-     * that is Monaco's default too, and why brackets are not.
-     */
-    private FoldingRangeProvider foldingProvider = IndentRangeProvider.plain();
-
-    private boolean foldingEnabled = true;
-
-    /** Set by anything that could change the region set; drained once per frame by {@code refreshFolding}. */
-    private boolean foldingDirty = true;
 
     /**
      * The arrows' own container, sitting over the gutter's fold column.
@@ -805,7 +786,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // frame's style pass.
             forgetWidestLine();
             reprojectAfterEdit(change);
-            foldingDirty = true;
+            folds.markDirty();
             rebindRealisedLines();
             // A document that shrank can leave a selection pointing past its end, and the caret then
             // indexes a row that is not there. Clamped HERE rather than at the keystroke that caused it,
@@ -818,14 +799,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // undo and redo -- and offsets found against the old text describe the new one wrongly: the
             // count went stale and the highlights sat over whatever had moved into their place. Re-running
             // from this one signal is what makes undo correct without the undo path knowing about search.
-            if (lastSearch != null && !reentrantFind) {
-                reentrantFind = true;
-                try {
-                    find(lastSearch);
-                } finally {
-                    reentrantFind = false;
-                }
-            }
+            find.refreshAfterEdit();
             // A HOVER BOX DESCRIBES AN OFFSET, and typing moves it. Dismissed rather than re-resolved,
             // because what is on screen is now about a position that has shifted underneath it and the
             // pointer has not asked about wherever the text ended up. A Ctrl+Q popup is left alone: it was
@@ -1083,7 +1057,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * fit above the bottom of the box, and the near edge does not because scrolling a line to {@code top}
      * already places it at the first row of text rather than under the chrome above it.</p>
      */
-    private boolean caretIsInView() {
+    boolean caretIsInView() {
         float height = lineHeight();
         float top = viewLineOf(getCaret(), LineProjection.Affinity.LEFT) * height;
         return top >= getScrollTop()
@@ -1091,7 +1065,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     /** The shared tail of every selection change: end the undo run, re-place the carets, repaint. */
-    private void afterSelectionChange() {
+    void afterSelectionChange() {
         buffer.breakUndoCoalescing();
         updateBracketMatch();
         updateOccurrences();
@@ -1688,7 +1662,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     /** Forgets the widest line, so a shorter document reports a smaller scroll width. */
-    private void forgetWidestLine() {
+    void forgetWidestLine() {
         widestSeen = 0f;
     }
 
@@ -2650,10 +2624,10 @@ public class TextEditor extends ScrollerView implements UndoScope {
             addDocumentRanges(byName, "selection-occurrence", selectionOccurrences, lineStart, lineEnd);
             // AFTER the occurrences, so a search hit wins the character where the two overlap. A search
             // is something you asked for; occurrences are something the caret happened to be standing in.
-            addDocumentRanges(byName, "search", results.matches(), lineStart, lineEnd);
+            addDocumentRanges(byName, "search", find.matches(), lineStart, lineEnd);
             // A SECOND NAME rather than a second mechanism: `::highlight()` already carries
             // `text-decoration-line`, so an excluded span is struck through by the sheet.
-            addDocumentRanges(byName, "search-excluded", results.excludedRanges(), lineStart, lineEnd);
+            addDocumentRanges(byName, "search-excluded", find.excludedRanges(), lineStart, lineEnd);
             if (bracketPair != null) {
                 addDocumentRanges(byName, "bracket", List.of(
                         TextRange.of(bracketPair[0], bracketPair[0] + 1),
@@ -3754,19 +3728,27 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private static final int BRACKET_SCAN_LIMIT = 16 * 1024;
 
     // ── Find and replace ────────────────────────────────────────────────────────────────────────
+    //
+    // The subsystem itself is EditorFind; what is left here is the public surface the commands, the bar
+    // and the tests call. Delegating rather than re-exposing the object keeps `TextEditor.findNext()`
+    // working for every existing caller -- the extraction is a code move, and the 226 widget tests are
+    // the net under it.
+
+    private final EditorFind find = new EditorFind(this);
+
+    /** Find, replace and the bar. */
+    EditorFind finder() {
+        return find;
+    }
 
     /**
      * Finds every occurrence and publishes them under {@code ::highlight(search)}.
      *
-     * <p>Whole-document rather than viewport-bounded, unlike syntax highlighting, and for a reason: the
-     * match <em>count</em> is the answer the user wants, and "3 of 47" cannot be computed from what is on
-     * screen. The ranges themselves are still only rendered for realised rows.</p>
-     *
      * @return how many matches there are
+     * @see EditorFind#find(SearchQuery)
      */
     public int find(String query, boolean caseSensitive) {
-        return find(SearchQuery.of(query,
-                SearchQuery.Options.DEFAULT.withMatchCase(caseSensitive)));
+        return find.find(query, caseSensitive);
     }
 
     /**
@@ -3774,70 +3756,28 @@ public class TextEditor extends ScrollerView implements UndoScope {
      *
      * <p><b>Every</b> match, which is why this cannot go through {@link SearchMatcher#match} — that answers
      * "the best match in this candidate", which is the right question for a list row and the wrong one for
-     * a document. The word-boundary rule is still shared, via
-     * {@link SearchMatcher#isWholeWordAt}: a second definition of "a word" would be a second answer to the
-     * same toggle.</p>
-     *
-     * <p>An <b>uncompilable pattern finds nothing</b> and does not throw — it is recompiled on every
-     * keystroke while a regex is being typed.</p>
+     * a document. The word-boundary rule is still shared, via {@link SearchMatcher#isWholeWordAt}: a second
+     * definition of "a word" would be a second answer to the same toggle.</p>
      *
      * @return how many matches there are
      */
     public int find(@Nullable SearchQuery query) {
-        lastSearch = query == null || query.isEmpty() ? null : query;
-        // THE SCAN IS THE DOCUMENT'S, not this widget's -- see TextSearch. What stays here is what a view
-        // owns: which match is selected, what to paint, and where the caret goes.
-        results = results.withMatches(TextSearch.findAll(buffer.document(), lastSearch));
-        highlightsDirty = true;
-        return results.size();
+        return find.find(query);
     }
 
     /** The occurrences, the cursor and the exclusions. @see SearchResults */
     public SearchResults searchResults() {
-        return results;
+        return find.results();
     }
 
-    /**
-     * Excludes the selected match from Replace All, or puts it back — IntelliJ's <b>Exclude</b>.
-     *
-     * <p>The span stays in the list and stays visible; it is struck through instead.</p>
-     */
+    /** Excludes the selected match from Replace All, or puts it back — IntelliJ's <b>Exclude</b>. */
     public boolean toggleExcludeCurrentMatch() {
-        boolean changed = results.toggleExcludeCurrent();
-        if (changed) highlightsDirty = true;
-        return changed;
+        return find.toggleExcludeCurrentMatch();
     }
 
-    private SearchResults results = SearchResults.EMPTY;
-
-    /** Replace edits the buffer, which re-enters this listener; one pass is enough. */
-    private boolean reentrantFind;
-
-    /**
-     * The find & replace bar, built on first use and floated over the editor's top edge.
-     *
-     * <p>Floated rather than stacked above, which is what Monaco does: the editor's layout maths — view
-     * lines, the gutter, scroll extents — all measure against its own box, and pushing content down would
-     * put the bar inside every one of those sums.</p>
-     */
+    /** The find &amp; replace bar, built on first use and floated over the editor's top edge. */
     public SearchReplaceBar searchBar() {
-        if (searchBar == null) {
-            searchBar = new SearchReplaceBar(this);
-            searchBar.addClass("__editor-find__");
-            // PINNED TO THE VIEWPORT, not to the text. An absolute child of a scroller still moves with the
-            // content -- `top: 0` means the top of the DOCUMENT, so the bar scrolled away and left the
-            // editor behind it. `setScrollExempt` is what holds a decoration still while the text moves.
-            searchBar.setScrollExempt(true);
-            searchBar.layout(l -> l.positionType(TaffyPosition.ABSOLUTE)
-                    .top(0f).left(0f).widthPercent(100f));
-            searchBar.setDisplayed(false);
-            addInternalChild(searchBar);
-            searchBar.onClosed.connect(() -> {
-                UIWindow window = getAttachedWindow();
-                if (window != null) window.getInputHandler().requestPointerFocus(this);
-            });
-        }
-        return searchBar;
+        return find.bar();
     }
 
     /** Opens the find bar — Ctrl+F. */
@@ -3850,87 +3790,38 @@ public class TextEditor extends ScrollerView implements UndoScope {
         searchBar().openReplace();
     }
 
-    @Nullable
-    private SearchReplaceBar searchBar;
-
     /** Whether a replacement should take the case of what it replaced. @see TextSearch#preserveCase */
     public TextEditor setPreserveCase(boolean value) {
-        this.preserveCase = value;
+        find.setPreserveCase(value);
         return this;
     }
 
     public boolean preserveCase() {
-        return preserveCase;
+        return find.preserveCase();
     }
-
-    private boolean preserveCase;
-
-    /** The document text a match covers — what Preserve case reads to decide the replacement's shape. */
-    private String textIn(TextRange range) {
-        // SLICED, not substringed out of a copy of the file. `replaceAll` calls this once PER MATCH, so
-        // a document copy here made replacing n things cost n documents.
-        int length = buffer.length();
-        int from = Math.max(0, Math.min(range.start(), length));
-        int to = Math.max(from, Math.min(range.end(), length));
-        return buffer.document().slice(from, to).toString();
-    }
-
-    @Nullable
-    private SearchQuery lastSearch;
 
     /** Searches for the word under the caret — {@code Ctrl+F3}. */
     public boolean findWordUnderCaret() {
-        Selection primary = selections.primary();
-        int start = primary.start();
-        int end = primary.end();
-        if (primary.isEmpty()) {
-            int[] word = WordOperations.wordAt(buffer.document(), primary.head(), wordClassifier);
-            if (word == null) return false;
-            start = word[0];
-            end = word[1];
-        }
-        if (end <= start) return false;
-        find(buffer.document().slice(start, end).toString(), false);
-        return findNext();
+        return find.findWordUnderCaret();
     }
 
     public int matchCount() {
-        return results.size();
+        return find.matchCount();
     }
 
     /** Which match is selected, 1-based for display, or 0 when none is. */
     public int currentMatchNumber() {
-        return results.currentNumber();
+        return find.currentMatchNumber();
     }
 
     /** Selects the next match after the caret, wrapping. */
     public boolean findNext() {
-        if (results.isEmpty()) return false;
-        int caret = getCaret();
-        int next = 0;
-        for (int i = 0; i < results.size(); i++) {
-            if (results.matches().get(i).start() > caret) {
-                next = i;
-                break;
-            }
-            // No else. `next` starts at 0 and stays there, which IS the wrap: running off the end of a
-            // document whose last match is behind the caret returns to the first one.
-        }
-        return selectMatch(next);
+        return find.findNext();
     }
 
     /** Selects the previous match before the caret, wrapping. */
     public boolean findPrevious() {
-        if (results.isEmpty()) return false;
-        int caret = getSelectionStart();
-        int previous = results.size() - 1;
-        for (int i = results.size() - 1; i >= 0; i--) {
-            if (results.matches().get(i).start() < caret) {
-                previous = i;
-                break;
-            }
-        }
-        return selectMatch(previous);
+        return find.findPrevious();
     }
 
     /**
@@ -3941,6 +3832,10 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * newly typed query: it anchors on the caret, which after a wheel-scroll is still wherever you last
      * clicked — usually the top of the file — so typing a query scrolled the document back there. Nothing
      * about it was intermittent except whether you had clicked first.</p>
+     *
+     * <p>It stays on the editor rather than moving to {@code EditorFind} with the rest: it names no find
+     * state at all, and the next viewport-anchored feature would otherwise reach into the find subsystem
+     * to ask a question about the <em>scroll</em>.</p>
      */
     public int firstVisibleOffset() {
         // Through rowAtTopOfViewport, which is the same question zoom already asks. Written out again here
@@ -3952,86 +3847,25 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /**
      * Selects the first match at or after {@code offset}, wrapping — what a <b>fresh</b> query does.
      *
-     * <p>Distinct from {@link #findNext()} in both halves, and the difference is the whole point: this
-     * takes an anchor rather than reading the caret, and it accepts a match starting exactly <em>at</em>
-     * that anchor rather than strictly after it. Stepping wants "somewhere I am not"; typing wants "the
-     * nearest one from here", and a match on the first visible line is the nearest one.</p>
+     * @see EditorFind#findFrom(int)
      */
     public boolean findFrom(int offset) {
-        if (results.isEmpty()) return false;
-        if (!results.moveToFirstAtOrAfter(offset)) return false;
-        // NOT CENTRED. This runs on every keystroke in the find box, and centring there would scroll the
-        // document on each one -- exactly what anchoring on the viewport exists to prevent.
-        return selectMatch(results.current(), false);
-    }
-
-    /** Stepping — Enter, F3, the bar's arrows. Centres a match it had to scroll to. */
-    private boolean selectMatch(int index) {
-        return selectMatch(index, true);
-    }
-
-    /**
-     * @param centre whether an off-screen match is <b>centred</b> (stepping, which is arriving somewhere
-     *               new) or merely brought into view (a query being typed, which must not move the
-     *               document under the reader — see {@code SearchReplaceBar.runSearch})
-     */
-    private boolean selectMatch(int index, boolean centre) {
-        if (!results.moveTo(index)) return false;
-        TextRange match = results.currentMatch();
-        if (match == null) return false;
-        setSelection(match.start(), match.end());
-        // CENTRED, AND ONLY WHEN IT HAS TO MOVE AT ALL -- IntelliJ's ScrollType.CENTER, and the argument
-        // revealCaretCentred already makes: stepping to a match is arriving somewhere new, so it wants
-        // the most context, and minimal scrolling frames the destination hard against an edge with all
-        // the surrounding code on one side. A match already on screen must not move the view, or every
-        // press of Enter would lurch the file for no reason.
-        if (centre) {
-            if (!caretIsInView()) revealCaretCentred();
-        } else {
-            ensureCaretVisible();
-        }
-        return true;
+        return find.findFrom(offset);
     }
 
     /** Replaces the selected match and finds the next. */
     public boolean replaceCurrent(String replacement) {
-        TextRange match = results.currentMatch();
-        if (match == null) return false;
-        String text = replacement == null ? "" : replacement;
-        buffer.replace(match.start(), match.end(),
-                preserveCase ? TextSearch.preserveCase(textIn(match), text) : text);
-        buffer.breakUndoCoalescing();
-        find(lastSearch);
-        return true;
+        return find.replaceCurrent(replacement);
     }
 
     /**
      * Replaces every match as <b>one</b> edit.
      *
-     * <p>One {@link ChangeSet} rather than a loop of replacements: a loop would invalidate every later
-     * offset after the first, and would put each replacement on the undo stack separately — so undoing a
-     * replace-all would take one press per match.</p>
-     *
      * @return how many were replaced
+     * @see EditorFind#replaceAll(String)
      */
     public int replaceAll(String replacement) {
-        // WHAT THE USER DID NOT STRIKE OUT. `included()` is the whole point of Exclude: the excluded spans
-        // stay in the list and stay drawn, and only this skips them.
-        List<TextRange> targets = results.included();
-        if (targets.isEmpty()) return 0;
-        String text = replacement == null ? "" : replacement;
-        List<Change> changes = new ArrayList<>(targets.size());
-        for (TextRange match : targets) {
-            changes.add(new Change(match.start(), match.end(),
-                    preserveCase ? TextSearch.preserveCase(textIn(match), text) : text));
-        }
-        int replaced = changes.size();
-        ChangeSet edit = ChangeSet.of(buffer.length(), changes);
-        buffer.edit(edit, selections.all());
-        buffer.breakUndoCoalescing();
-        selections.mapThrough(edit).collapseEachToHead();
-        find(lastSearch);
-        return replaced;
+        return find.replaceAll(replacement);
     }
 
     /** Clips document-relative ranges to one line and rebases them onto it. */
@@ -4528,7 +4362,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * @param delta  pixels the viewport was scrolled INTO that line, so a partial scroll is not snapped
      *               to a line boundary on every zoom step
      */
-    private record StableViewport(int offset, float delta) {
+    record StableViewport(int offset, float delta) {
         static final StableViewport NONE = new StableViewport(-1, 0f);
     }
 
@@ -4550,7 +4384,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * because a zoom at the top has nothing to preserve — but folding at the top genuinely can need to
      * scroll to keep the caret still once the rows above it are gone.</p>
      */
-    private StableViewport captureFoldAnchor() {
+    StableViewport captureFoldAnchor() {
         float height = lineHeight();
         if (!(height > 0f)) return StableViewport.NONE;
         int caret = selections.primary().head();
@@ -4574,7 +4408,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * correction would show the wrong lines for the length of it — the same reason caret-follow scrolling
      * is immediate.</p>
      */
-    private void restoreStableViewport(StableViewport anchor) {
+    void restoreStableViewport(StableViewport anchor) {
         float height = lineHeight();
         if (anchor.offset() < 0 || !(height > 0f)) return;
         // The delta is re-added verbatim, which is what the original does. It is a pixel count taken at
@@ -4968,7 +4802,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     private float textHeight = -1f;
 
-    private void ensureCaretVisible() {
+    void ensureCaretVisible() {
         float height = lineHeight();
         float top = viewLineOf(getCaret(), LineProjection.Affinity.LEFT) * height;
         // IMMEDIATE, not the smooth scroll the sheet asks for. `scroll-behavior: smooth` is right for a
@@ -5188,7 +5022,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // exist, so asking first would realise rows against a count that is about to move -- and a
         // reprojection resets visibility whenever the row count changed, so the hidden rows have to be
         // reapplied on the far side of it rather than the near side.
-        if (refreshFolding()) {
+        if (folds.refreshFolding()) {
             firstRealised = -1;
             lastRealised = -1;
             rebindRealisedLines();
@@ -5342,266 +5176,120 @@ public class TextEditor extends ScrollerView implements UndoScope {
     // ===================================================================================================
     // Folding
     // ===================================================================================================
+    //
+    // The subsystem is EditorFolding; these are the calls the commands, the gutter arrows and the tests
+    // make. Every one of them was already one line over a private helper, so delegating changes nothing
+    // about them except which file the helper lives in.
 
-    /**
-     * Recomputes regions when something invalidated them, then pushes the hidden rows into the projection.
-     *
-     * <p>Runs every frame and is cheap when nothing moved: the recompute is gated on {@code foldingDirty},
-     * and {@link ProjectedLines#setHiddenAreas} reports whether it actually changed a row's visibility.</p>
-     *
-     * @return whether the set of visible rows changed, so the caller can drop what it has realised
-     */
-    private boolean refreshFolding() {
-        if (!foldingEnabled) return false;
-        if (foldingDirty) {
-            foldingDirty = false;
-            folding.update(buffer.document(), foldingProvider, tabSize);
-        }
-        return applyHiddenRows();
-    }
+    private final EditorFolding folds = new EditorFolding(this);
 
-    private boolean applyHiddenRows() {
-        List<FoldingModel.RowRange> hidden = folding.hiddenRows();
-        int[][] ranges = new int[hidden.size()][];
-        for (int i = 0; i < hidden.size(); i++) {
-            ranges[i] = new int[] { hidden.get(i).startRow(), hidden.get(i).endRow() };
-        }
-        return projections.setHiddenAreas(ranges);
+    /** Folding — regions, hidden rows, and the eight commands. */
+    EditorFolding folds() {
+        return folds;
     }
 
     /** The folding model, for tests and for anything wanting to drive folds directly. */
     public FoldingModel foldingModel() {
-        return folding;
+        return folds.model();
     }
 
     /**
      * The first row of every collapsed region — the whole fold state, as something storable.
      *
-     * <p>Rows rather than region indexes, because an index means nothing once the document changes: the
-     * regions are recomputed from the text, so index 3 is a different block after an edit while row 42 is
-     * still row 42 or is simply not foldable any more. IntelliJ and VS Code both persist folds by
-     * position for the same reason.</p>
-     *
-     * <p>A pure read, deliberately — it does <b>not</b> recompute stale regions. A getter that quietly
-     * runs a document-wide scan is the trap {@code getScrollWidth} already documents here; anything that
-     * has been painting has current regions, and anything that has not has no folds to report.</p>
+     * @see EditorFolding#collapsedRows()
      */
     public int[] collapsedRows() {
-        FoldingRegions regions = folding.regions();
-        int[] found = new int[regions.length()];
-        int count = 0;
-        for (int i = 0; i < regions.length(); i++) {
-            if (regions.isCollapsed(i)) found[count++] = regions.getStartLineNumber(i);
-        }
-        return java.util.Arrays.copyOf(found, count);
+        return folds.collapsedRows();
     }
 
     /**
      * Sets the fold state outright: every region starting on one of {@code startRows} is collapsed and
      * every other region is opened.
      *
-     * <p><b>Recomputes the regions first</b>, which is the entire reason this is a method rather than
-     * something a caller does through {@link #foldingModel()}. Regions are rebuilt from the text one frame
-     * <em>after</em> the text arrives, so a restore running straight after the content lands would collapse
-     * against an empty region set and silently do nothing — the failure would look like folds never having
-     * been saved.</p>
-     *
-     * <p>Goes through the same anchor-and-lift path every interactive fold does, so a caret left inside a
-     * region being closed is moved onto its header rather than becoming unpaintable. Restore the caret
-     * <em>before</em> calling this and that lift does the right thing for free.</p>
+     * @see EditorFolding#setCollapsedRows(int...)
      */
     public TextEditor setCollapsedRows(int... startRows) {
-        if (!foldingEnabled) return this;
-        StableViewport anchor = captureFoldAnchor();
-        ensureFoldingCurrent();
-        FoldingRegions regions = folding.regions();
-        for (int i = 0; i < regions.length(); i++) {
-            int start = regions.getStartLineNumber(i);
-            boolean wanted = false;
-            for (int row : startRows) {
-                if (row == start) {
-                    wanted = true;
-                    break;
-                }
-            }
-            regions.setCollapsed(i, wanted);
-        }
-        afterFoldChange(anchor);
+        folds.setCollapsedRows(startRows);
         return this;
     }
 
     /** Swaps the region source — a syntax-aware provider layers over the indent one this way. */
     public TextEditor setFoldingProvider(FoldingRangeProvider provider) {
-        this.foldingProvider = provider == null ? FoldingRangeProvider.none() : provider;
-        this.foldingDirty = true;
+        folds.setProvider(provider);
         return this;
     }
 
     public TextEditor setFoldingEnabled(boolean enabled) {
-        if (this.foldingEnabled == enabled) return this;
-        this.foldingEnabled = enabled;
-        if (!enabled) {
-            folding.setCollapseStateForAll(false);
-            applyHiddenRows();
-        }
-        this.foldingDirty = true;
+        folds.setEnabled(enabled);
         return this;
     }
 
     public boolean isFoldingEnabled() {
-        return foldingEnabled;
-    }
-
-    /**
-     * Ensures the regions are current before a command reads them.
-     *
-     * <p>A command can fire between an edit and the next frame, and the region set is only recomputed in
-     * {@code refreshFolding}. Without this a fold command right after typing would act on the regions of
-     * the document as it was, which is off by however many rows the edit added.</p>
-     */
-    private void ensureFoldingCurrent() {
-        if (foldingDirty) {
-            foldingDirty = false;
-            folding.update(buffer.document(), foldingProvider, tabSize);
-        }
-    }
-
-    /**
-     * Moves every caret out of a row that is about to be hidden, onto its region's header.
-     *
-     * <p>Not cosmetic: a caret on a hidden row has no view line, so it cannot be drawn where it actually
-     * is. {@code ProjectedLines.toViewPosition} walks it to the nearest visible row instead, and the caret
-     * is then painted on a line it is not on — typing inserts somewhere other than where it appears. VS
-     * Code does the same lift, which is why folding a block you are inside leaves the caret on the block's
-     * first line.</p>
-     *
-     * <p><b>EVERY caret, which this did not used to do.</b> It read {@code selections.primary()} inside the
-     * loop and returned after the first fix, so a secondary caret inside a folded block stayed there. With
-     * one caret that is indistinguishable from correct, and every folding test had one — the plural in the
-     * name and in this javadoc was the only evidence of the intent.</p>
-     */
-    private void liftCaretsOutOfHiddenRows() {
-        List<FoldingModel.RowRange> hidden = folding.hiddenRows();
-        if (hidden.isEmpty()) return;
-        boolean[] moved = { false };
-        selections.transform(selection -> {
-            int row = buffer.document().offsetToPoint(selection.head()).row();
-            for (FoldingModel.RowRange range : hidden) {
-                if (!range.contains(row)) continue;
-                moved[0] = true;
-                // The region's HEADER. hiddenRows() starts at startLineNumber + 1 -- the first row stays
-                // visible because it carries the fold arrow -- so startRow - 1 is that header, and is
-                // never negative.
-                return Selection.caret(buffer.document().lineStartOffset(range.startRow() - 1));
-            }
-            return selection;
-        });
-        // Several carets in one folded block all land on its header; setAll normalises them into one.
-        if (moved[0]) afterSelectionChange();
-    }
-
-    /**
-     * Finishes a fold change, keeping the viewport where it was.
-     *
-     * <p><b>The anchor is captured before the change, by the caller.</b> Folding removes rows above the
-     * viewport as readily as below it, and {@code scrollTop} is a pixel count — so collapsing everything
-     * while scrolled into a file silently pulls the whole document up past the top of the view, and
-     * fold-all near the end leaves the editor apparently empty. IntelliJ keeps the line you are on exactly
-     * where it is, which is the same guarantee zooming already makes here and the same
-     * {@code StableViewport} that makes it.</p>
-     */
-    private void afterFoldChange(StableViewport anchor) {
-        liftCaretsOutOfHiddenRows();
-        if (applyHiddenRows()) {
-            firstRealised = -1;
-            lastRealised = -1;
-            forgetWidestLine();
-        }
-        // AFTER the hidden rows are applied, or the anchor is resolved against the projection the fold
-        // just invalidated.
-        restoreStableViewport(anchor);
-        invalidateStyleMatch();
+        return folds.isEnabled();
     }
 
     /** Folds or unfolds the innermost region at the caret, stepping outwards when already in that state. */
     public void fold() {
-        StableViewport anchor = captureFoldAnchor();
-        ensureFoldingCurrent();
-        folding.setCollapseStateUp(true, caretRow());
-        afterFoldChange(anchor);
+        folds.fold();
     }
 
     public void unfold() {
-        StableViewport anchor = captureFoldAnchor();
-        ensureFoldingCurrent();
-        folding.setCollapseStateUp(false, caretRow());
-        afterFoldChange(anchor);
+        folds.unfold();
     }
 
     /** Folds or unfolds the region at the caret and everything inside it. */
     public void foldRecursively() {
-        StableViewport anchor = captureFoldAnchor();
-        ensureFoldingCurrent();
-        FoldingRegions.Region region = folding.getRegionAtLine(caretRow());
-        if (region != null && !region.isCollapsed()) folding.toggleCollapseState(Integer.MAX_VALUE, caretRow());
-        afterFoldChange(anchor);
+        folds.foldRecursively();
     }
 
     public void foldAll() {
-        StableViewport anchor = captureFoldAnchor();
-        ensureFoldingCurrent();
-        folding.collapseAllKeepingDocumentVisible(buffer.lineCount());
-        afterFoldChange(anchor);
+        folds.foldAll();
     }
 
     public void unfoldAll() {
-        StableViewport anchor = captureFoldAnchor();
-        ensureFoldingCurrent();
-        folding.setCollapseStateForAll(false);
-        afterFoldChange(anchor);
+        folds.unfoldAll();
     }
 
     /** Folds every region at exactly {@code level}, leaving the block the caret is in open. */
     public void foldLevel(int level) {
-        StableViewport anchor = captureFoldAnchor();
-        ensureFoldingCurrent();
-        folding.setCollapseStateAtLevel(level, true, caretRow());
-        afterFoldChange(anchor);
+        folds.foldLevel(level);
     }
 
     /** Toggles the region whose first row is {@code row} — what clicking a gutter arrow does. */
     public void toggleFoldAt(int row) {
-        ensureFoldingCurrent();
-        FoldingRegions.Region region = folding.getRegionStartingAt(row);
-        if (region == null) return;
-        StableViewport anchor = captureFoldAnchor();
-        region.setCollapsed(!region.isCollapsed());
-        afterFoldChange(anchor);
+        folds.toggleFoldAt(row);
     }
 
     int caretRow() {
         return buffer.document().offsetToPoint(selections.primary().head()).row();
     }
 
-    /**
-     * What a collapsed region's chip reads.
-     *
-     * <p>{@code "...}"} rather than plain {@code "..."} whenever the region's last row is the one that
-     * closes it — so the header {@code void f() {} plus the chip renders as {@code void f() {...}}, which
-     * is IntelliJ's collapsed form and the whole point of swallowing the closing row. The closer is taken
-     * from the DOCUMENT rather than assumed, so {@code });} comes back intact instead of being guessed at
-     * as a bare brace.</p>
-     */
+    /** What a collapsed region's chip reads. @see EditorFolding#placeholderTextFor */
     String placeholderTextFor(FoldingRegions.Region region) {
-        int endRow = region.endLineNumber();
-        if (endRow <= region.startLineNumber() || endRow >= buffer.lineCount()) {
-            return FOLD_PLACEHOLDER_TEXT;
-        }
-        String closing = buffer.document().line(endRow).trim();
-        if (closing.isEmpty()) return FOLD_PLACEHOLDER_TEXT;
-        char first = closing.charAt(0);
-        if (first != '}' && first != ')' && first != ']') return FOLD_PLACEHOLDER_TEXT;
-        return FOLD_PLACEHOLDER_TEXT + closing;
+        return folds.placeholderTextFor(region);
+    }
+
+    /**
+     * Drops every realised line, so the next pass rebuilds them.
+     *
+     * <p>For folding, which changes <em>which</em> rows exist rather than only where they are — what is
+     * realised is keyed on a view-line window that no longer describes the same text.</p>
+     */
+    void dropRealisedLines() {
+        firstRealised = -1;
+        lastRealised = -1;
+        forgetWidestLine();
+    }
+
+    /**
+     * Re-runs selector matching over the editor's subtree.
+     *
+     * <p>{@code invalidateStyleMatch} is {@code protected} on {@code UIElement} — deliberately, so nothing
+     * outside a widget can force its cascade — and the parts and subsystems are outside it in Java's terms
+     * while being inside it in every other sense. This is the one forwarder rather than a widening.</p>
+     */
+    void invalidateStyles() {
+        invalidateStyleMatch();
     }
 
 
@@ -5699,8 +5387,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * the chip now begins.</p>
      */
     private int collapsedHeaderCut(int row) {
-        if (!foldingEnabled) return -1;
-        FoldingRegions.Region region = folding.getRegionStartingAt(row);
+        if (!folds.isEnabled()) return -1;
+        FoldingRegions.Region region = folds.model().getRegionStartingAt(row);
         if (region == null || !region.isCollapsed()) return -1;
         int opener = FoldingDecorationsPart.trailingOpenerIndex(buffer.document().line(row));
         return opener < 0 ? -1 : rowMetrics(row).line().displayIndexOf(opener);
