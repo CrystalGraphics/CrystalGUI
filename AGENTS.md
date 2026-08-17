@@ -1223,12 +1223,20 @@ mapping is worth stating because two of the five come from elsewhere in that tre
 | `TypeOperations` | `common/cursor/cursorTypeOperations.ts` |
 | `LineOperations` | `contrib/linesOperations/browser/linesOperations.ts` — **not** `common/cursor/` |
 | `MouseSelection` | `browser/controller/mouseHandler.ts` — **not** `common/cursor/` |
+| `ColumnSelection` | `common/cursor/cursorColumnSelection.ts` |
 
-Monaco's `common/cursor/` holds twelve files; the seven we have no counterpart for are its orchestration
+Monaco's `common/cursor/` holds twelve files; the six we have no counterpart for are its orchestration
 layer (`cursor.ts`, `cursorCollection.ts`, `oneCursor.ts`, `cursorContext.ts`, `cursorMoveCommands.ts`)
-plus two genuine feature gaps — `cursorAtomicMoveOperations.ts` (`editor.useTabStops`: arrows and
-backspace stepping a whole indent unit through leading whitespace) and `cursorColumnSelection.ts`
-(box selection). Neither is implemented here.
+plus **one** remaining feature gap: `cursorAtomicMoveOperations.ts` — `editor.useTabStops` for *arrows*,
+where a left or right arrow steps a whole indent unit through leading whitespace. Backspace already does
+(`TypeOperations.backspaceFrom` counts visual columns), which is the half that was reported; the arrows
+still move by one character.
+
+> **Every column question in this package is a VISUAL one**, and that is the single most portable thing
+> about it. A box selection computed from character offsets is not a box — two rows whose indentation
+> differs in tabs have the same character column at different places, so the "rectangle" comes out as a
+> ragged edge following the text. The same rule is why Backspace takes one tab rather than an
+> indent's worth of characters, and why a paste is re-indented by columns rather than by string length.
 
 > This is not tidiness. The same logic first went in as private methods on `TextEditor`, which reached
 > **2556 lines, larger than the entire `com.crystalgui.text` package combined**, and could only be
@@ -1424,10 +1432,11 @@ com.crystalgui.text            Rope, TextBuffer, TextSummary, Change/ChangeSet, 
                                SelectionModel, TextPoint, TextRange, WordClassifier, WordOperations,
                                LineEnding — the document model, all headless
   .cursor                      CursorColumns, MoveOperations, TypeOperations, LineOperations,
-                               MouseSelection — VS Code's boundaries, but NOT file-for-file: the last
-                               two come from contrib/linesOperations/ and browser/controller/. See
-                               "Port the module boundaries too" for the full mapping and the two
-                               unimplemented gaps (atomic tab moves, column selection)
+                               MouseSelection, ColumnSelection — VS Code's boundaries, but NOT
+                               file-for-file: MouseSelection and LineOperations come from
+                               browser/controller/ and contrib/linesOperations/. See "Port the module
+                               boundaries too" for the full mapping and the ONE unimplemented gap left
+                               (atomic tab moves for the ARROW keys; Backspace already steps by column)
   .syntax                      Language, LanguageRegistry, SyntaxToken, SyntaxTokenizer (SPI),
                                KeywordTokenizer — the ENGINELESS tier, and what a dedicated server has
   .lang                        The semantic layer's contracts, INTERFACES ONLY: LanguageServices (the
