@@ -485,19 +485,16 @@ public class TextEditor extends ScrollerView implements UndoScope {
             quickFixBulbPart, viewCursorsPart);
 
     /**
-     * The problems reported about this document.
+     * The problems reported about this document — <b>the buffer's</b>, not this widget's.
      *
-     * <p>Owned by the editor for now, which is a <b>known compromise</b> and worth stating so it is not
-     * mistaken for the intended shape. Diagnostics describe a <em>document</em>, exactly as an undo stack
-     * does, so two views onto one file should share a set and a file with no view open should still have
-     * one — that is what a Problems panel listing errors in unopened files requires. Moving it out is a
-     * pure relocation once there is a document type to move it to; keeping it here in the meantime is what
-     * lets the rendering half exist at all.</p>
+     * <p>It used to be a field here, under a javadoc calling that a known compromise: a diagnostic
+     * describes a document exactly as an undo stack does, so two views onto one file would have had two
+     * sets, publishing two competing slices into one Problems panel. It now lives beside
+     * {@code TextBuffer.decorations()}, which is where the squiggles' own tracked ranges already were —
+     * the list and the marks it produces had different owners and different lifetimes.</p>
      */
-    private final DiagnosticSet diagnostics = new DiagnosticSet();
-
     public DiagnosticSet diagnostics() {
-        return diagnostics;
+        return buffer.diagnostics();
     }
 
     /** The decoration lane every diagnostic squiggle is tracked in. @see #installDiagnostics */
@@ -517,7 +514,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private void installDiagnostics(String owner, @Nullable Versioned<List<Diagnostic>> announced) {
         if (announced == null) return;
         if (!announced.isFresh(buffer.version())) return;
-        diagnostics.changeOne(owner, announced.orElse(List.of()));
+        diagnostics().changeOne(owner, announced.orElse(List.of()));
     }
 
     /**
@@ -542,7 +539,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * such thing as one diagnostic changing on its own — and a list is tens of entries.</p>
      */
     private void retrackDiagnostics() {
-        List<Diagnostic> problems = diagnostics.all();
+        List<Diagnostic> problems = diagnostics().all();
         List<DecorationSet.Entry> entries = new ArrayList<>(problems.size());
         for (Diagnostic problem : problems) {
             int from = offsetOfPoint(problem.start());
@@ -625,12 +622,12 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     /** Moves the caret to the next problem after it, wrapping. False when there are none. */
     public boolean goToNextProblem() {
-        return goToProblem(diagnostics.nextFrom(caretPoint()));
+        return goToProblem(diagnostics().nextFrom(caretPoint()));
     }
 
     /** The mirror of {@link #goToNextProblem}, wrapping to the last. */
     public boolean goToPreviousProblem() {
-        return goToProblem(diagnostics.previousFrom(caretPoint()));
+        return goToProblem(diagnostics().previousFrom(caretPoint()));
     }
 
     /**
@@ -850,7 +847,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         });
 
         // EVERY producer's problems get tracked ranges, not only the engine's. See retrackDiagnostics.
-        diagnostics.onChanged.connect(this::retrackDiagnostics);
+        diagnostics().onChanged.connect(this::retrackDiagnostics);
 
         // The one place the caret settles. A session must end on a plain arrow-key move, which changes no
         // text and would therefore never reach a buffer listener.

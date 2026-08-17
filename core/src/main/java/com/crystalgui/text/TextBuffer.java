@@ -4,6 +4,7 @@ import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.undo.Edit;
 import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.text.decoration.DecorationSet;
+import com.crystalgui.text.diagnostic.DiagnosticSet;
 import com.crystalgui.text.decoration.TrackedRange;
 
 import org.jetbrains.annotations.Nullable;
@@ -266,6 +267,24 @@ public final class TextBuffer {
     }
 
     private final DecorationSet decorations = new DecorationSet();
+
+    /**
+     * The problems reported about this document.
+     *
+     * <p>Here for the reason {@link #decorations} is, and it is the same reason: a diagnostic describes a
+     * <b>document</b>, exactly as an undo stack does. It lived on {@code TextEditor}, where its own
+     * javadoc called that a known compromise — two views onto one file would have had two sets, publishing
+     * two competing slices into one Problems panel and disagreeing about which version they described.</p>
+     *
+     * <p>It is also where the tracking already is: the squiggles are {@link TrackedRange}s in this
+     * buffer's decoration set, so keeping the list that produces them one layer up meant the list and its
+     * marks had different owners and different lifetimes.</p>
+     */
+    public DiagnosticSet diagnostics() {
+        return diagnostics;
+    }
+
+    private final DiagnosticSet diagnostics = new DiagnosticSet();
 
     /**
      * The document's current version — see the field note. Compare with {@code ==} against the version an
