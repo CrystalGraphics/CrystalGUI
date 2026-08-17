@@ -34,7 +34,7 @@ import java.util.TreeSet;
  * is what this relies on: the first segment starting with an upper-case letter is the top-level type,
  * that is what gets imported, and the rest is written dotted after it.</p>
  */
-final class ImportPlan {
+public final class ImportPlan {
 
     private final CompilationUnit unit;
     private final String source;
@@ -45,7 +45,7 @@ final class ImportPlan {
     private final Set<String> imported = new HashSet<>();
     private final TreeSet<String> needed = new TreeSet<>();
 
-    ImportPlan(CompilationUnit unit, String source) {
+    public ImportPlan(CompilationUnit unit, String source) {
         this.unit = unit;
         this.source = source;
         this.unitPackage = unit.getPackage() == null ? "" : unit.getPackage().getName().getFullyQualifiedName();
@@ -76,7 +76,7 @@ final class ImportPlan {
      * already imported or declared here, {@code java.awt.List} is written in full, because an import
      * that shadows a name in use is a fix that compiles and changes what the rest of the file means.</p>
      */
-    String nameFor(String qualifiedName) {
+    public String nameFor(String qualifiedName) {
         if (qualifiedName == null || qualifiedName.isEmpty()) return qualifiedName;
         int split = topLevelTypeStart(qualifiedName);
         if (split <= 0) return qualifiedName;                       // no package: already as short as it gets
@@ -98,7 +98,7 @@ final class ImportPlan {
     }
 
     /** The insertions the names handed out so far require — empty if none did. */
-    List<Change> changes() {
+    public List<Change> changes() {
         if (needed.isEmpty()) return List.of();
         StringBuilder text = new StringBuilder();
         for (String each : needed) text.append("import ").append(each).append(";\n");

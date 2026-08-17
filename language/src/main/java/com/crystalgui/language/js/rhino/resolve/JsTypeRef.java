@@ -22,7 +22,7 @@ import java.util.List;
  *       which is what {@link TypeRef} asks of it.</li>
  * </ul>
  */
-final class JsTypeRef implements TypeRef {
+public final class JsTypeRef implements TypeRef {
 
     /** What a JavaScript value's type is called when there is no Java class behind it. */
     static final String STRING = "string";

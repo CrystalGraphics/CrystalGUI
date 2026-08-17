@@ -1,4 +1,4 @@
-package com.crystalgui.language.run;
+package com.crystalgui.language.run.view;
 
 import com.crystalgui.language.run.view.TailFollow;
 import org.junit.Test;

@@ -31,7 +31,7 @@ import org.eclipse.jdt.core.dom.SimpleName;
  * away from a caret sitting somewhere perfectly reasonable. Being generous about where a fix can be asked
  * for costs a user nothing; being wrong about it costs them the fix.</p>
  */
-final class ProblemSpans {
+public final class ProblemSpans {
 
     private ProblemSpans() {
     }
@@ -91,7 +91,7 @@ final class ProblemSpans {
     }
 
     /** Whether a request over {@code [from, to)} should be answered for this problem. */
-    static boolean reaches(CompilationUnit unit, IProblem problem, int from, int to) {
+    public static boolean reaches(CompilationUnit unit, IProblem problem, int from, int to) {
         return overlaps(reported(problem), from, to) || overlaps(marked(unit, problem), from, to);
     }
 

@@ -1,6 +1,6 @@
 package com.crystalgui.language.java.fix.edit;
 
-import com.crystalgui.language.java.EcjOptions;
+import com.crystalgui.language.java.ecj.EcjOptions;
 import com.crystalgui.text.Change;
 import com.crystalgui.text.ChangeSet;
 
@@ -87,13 +87,13 @@ import java.util.Map;
  * corrupting the next. Verified rather than assumed: two rewrites taken off one unit produce two
  * independent results.</p>
  */
-final class Rewrites {
+public final class Rewrites {
 
     private Rewrites() {
     }
 
     /** A rewriter over {@code unit}'s tree. Records intent; never modifies the tree. */
-    static ASTRewrite on(CompilationUnit unit) {
+    public static ASTRewrite on(CompilationUnit unit) {
         return ASTRewrite.create(unit.getAST());
     }
 
@@ -110,7 +110,7 @@ final class Rewrites {
      * throw here would turn one bad fix into no fixes at all. The caller skips a null the same way it
      * skips a node it could not find.</p>
      */
-    static ChangeSet toChangeSet(ASTRewrite rewrite, CompilationUnit unit, String source) {
+    public static ChangeSet toChangeSet(ASTRewrite rewrite, CompilationUnit unit, String source) {
         try {
             TextEdit edit = rewrite.rewriteAST(new Document(source), formattingOptions(unit, source));
             List<Change> changes = new ArrayList<>();

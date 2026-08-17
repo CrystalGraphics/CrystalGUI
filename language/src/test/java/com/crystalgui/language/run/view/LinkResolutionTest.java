@@ -1,4 +1,4 @@
-package com.crystalgui.language.run;
+package com.crystalgui.language.run.view;
 
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
@@ -8,6 +8,8 @@ import com.crystalgui.language.run.console.RunLevel;
 import com.crystalgui.language.run.console.RunMessage;
 import com.crystalgui.language.run.view.RunPanels;
 import org.junit.Test;
+import com.crystalgui.language.run.RunSessions;
+import com.crystalgui.language.run.RunState;
 
 import static org.junit.Assert.*;
 

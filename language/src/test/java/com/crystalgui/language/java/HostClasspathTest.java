@@ -20,6 +20,7 @@ import java.util.List;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import com.crystalgui.language.engine.bridge.Analysis;
 
 /**
  * The classpath probe — what a script actually compiles against.

@@ -1,8 +1,9 @@
-package com.crystalgui.language.java;
+package com.crystalgui.language.java.fix.catalog;
 
 import com.crystalgui.language.java.fix.catalog.ValueCorrections;
 import org.eclipse.jdt.core.compiler.IProblem;
 import org.junit.Test;
+import com.crystalgui.language.java.FixFixture;
 
 /**
  * The four repairs for something that has no value, or no declaration.

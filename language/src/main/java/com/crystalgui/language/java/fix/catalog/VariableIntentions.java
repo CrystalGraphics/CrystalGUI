@@ -1,6 +1,5 @@
 package com.crystalgui.language.java.fix.catalog;
 
-import com.crystalgui.language.java.*;
 import com.crystalgui.language.java.fix.Correction;
 import com.crystalgui.language.java.fix.FixContext;
 import com.crystalgui.text.Change;
@@ -44,6 +43,13 @@ import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import com.crystalgui.language.java.fix.ast.Precedence;
+import com.crystalgui.language.java.fix.ast.Scopes;
+import com.crystalgui.language.java.fix.ast.SideEffects;
+import com.crystalgui.language.java.fix.edit.ImportPlan;
+import com.crystalgui.language.java.fix.edit.Indent;
+import com.crystalgui.language.java.fix.edit.Names;
+import com.crystalgui.language.java.fix.edit.TypeNames;
 
 /**
  * <b>Introduce variable ↔ inline variable</b> — the most-reached-for pair in any IDE, and a pair for the
@@ -72,7 +78,7 @@ import java.util.Set;
  * complete by construction. That is what makes inline a local-only intention and why §10 scopes it that
  * way: a field would need the whole program, which is the same wall every cross-file entry hits.</p>
  */
-final class VariableIntentions {
+public final class VariableIntentions {
 
     static final String INTRODUCE = "java.intention.introduceVariable";
     static final String INLINE = "java.intention.inlineVariable";
@@ -80,7 +86,7 @@ final class VariableIntentions {
     private VariableIntentions() {
     }
 
-    static List<Correction> all() {
+    public static List<Correction> all() {
         return List.of(new IntroduceVariable(), new InlineVariable());
     }
 

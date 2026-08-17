@@ -1,9 +1,9 @@
 package com.crystalgui.language.java.fix.catalog;
 
-import com.crystalgui.language.java.ImportPlan;
-import com.crystalgui.language.java.Names;
-import com.crystalgui.language.java.Scopes;
-import com.crystalgui.language.java.TypeNames;
+import com.crystalgui.language.java.fix.edit.ImportPlan;
+import com.crystalgui.language.java.fix.edit.Names;
+import com.crystalgui.language.java.fix.ast.Scopes;
+import com.crystalgui.language.java.fix.edit.TypeNames;
 import com.crystalgui.language.java.fix.Correction;
 import com.crystalgui.language.java.fix.FixContext;
 import com.crystalgui.text.Change;
@@ -56,14 +56,14 @@ import java.util.Set;
  * <p>Three text ranges at most: the header, and each fetch replaced by the new variable. The body's own
  * formatting and comments are untouched.</p>
  */
-final class LoopIntentions {
+public final class LoopIntentions {
 
     static final String ENHANCED_FOR = "java.intention.enhancedFor";
 
     private LoopIntentions() {
     }
 
-    static List<Correction> all() {
+    public static List<Correction> all() {
         return List.of(new ConvertToEnhancedFor());
     }
 

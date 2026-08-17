@@ -254,7 +254,7 @@ public final class RunConsole {
      *
      * @return the line, or null when the script was stopped while waiting
      */
-    @Nullable
+    public @Nullable
     String awaitInput(@Nullable String script) {
         awaitingScript = script;
         awaitingInput = true;

@@ -1,6 +1,6 @@
 package com.crystalgui.language.js.rhino;
 
-import com.crystalgui.language.js.LineIndex;
+import com.crystalgui.language.js.rhino.resolve.LineIndex;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.TextPoint;

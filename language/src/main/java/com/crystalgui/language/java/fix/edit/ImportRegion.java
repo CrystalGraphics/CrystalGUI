@@ -39,7 +39,7 @@ import java.util.List;
  * paragraph so that the boundary is somewhere you can stand, and anything tempted to fold it back into
  * {@code Rewrites} should reproduce those two results first.</p>
  */
-final class ImportRegion {
+public final class ImportRegion {
 
     private ImportRegion() {
     }
@@ -51,7 +51,7 @@ final class ImportRegion {
      * import empties its line rather than removing it and the file slowly fills with blanks. Widening only
      * when nothing else shares the line is what stops two declarations on one line losing the survivor.</p>
      */
-    static Change deletion(String source, ASTNode node) {
+    public static Change deletion(String source, ASTNode node) {
         int start = node.getStartPosition();
         int end = Math.min(source.length(), start + node.getLength());
         if (start < 0 || end <= start) return Change.delete(0, 0);
@@ -75,7 +75,7 @@ final class ImportRegion {
      * tree already knows all three and a text scan would have to cope with the comment forms it does
      * not.</p>
      */
-    static int insertOffset(CompilationUnit unit, String source) {
+    public static int insertOffset(CompilationUnit unit, String source) {
         List<?> imports = unit.imports();
         if (!imports.isEmpty()) {
             ImportDeclaration last = (ImportDeclaration) imports.get(imports.size() - 1);
@@ -94,7 +94,7 @@ final class ImportRegion {
      * <p>Whole lines at both ends, so replacing the region replaces exactly the import lines and nothing
      * of what surrounds them.</p>
      */
-    static int[] regionOf(CompilationUnit unit, String source) {
+    public static int[] regionOf(CompilationUnit unit, String source) {
         List<?> imports = unit.imports();
         if (imports.isEmpty()) return null;
         ImportDeclaration first = (ImportDeclaration) imports.get(0);
@@ -106,7 +106,7 @@ final class ImportRegion {
     }
 
     /** Whether {@code qualified} is already imported, so a fix is not offered for what is there. */
-    static boolean alreadyImported(CompilationUnit unit, String qualified) {
+    public static boolean alreadyImported(CompilationUnit unit, String qualified) {
         for (Object each : unit.imports()) {
             if (((ImportDeclaration) each).getName().getFullyQualifiedName().equals(qualified)) return true;
         }

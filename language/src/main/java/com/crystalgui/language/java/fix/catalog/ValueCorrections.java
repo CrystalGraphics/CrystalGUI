@@ -1,6 +1,5 @@
 package com.crystalgui.language.java.fix.catalog;
 
-import com.crystalgui.language.java.*;
 import com.crystalgui.text.Change;
 import com.crystalgui.text.ChangeSet;
 import com.crystalgui.text.lang.CodeAction;
@@ -31,6 +30,11 @@ import org.eclipse.jdt.core.dom.rewrite.ListRewrite;
 
 import java.util.ArrayList;
 import java.util.List;
+import com.crystalgui.language.java.fix.Correction;
+import com.crystalgui.language.java.fix.FixContext;
+import com.crystalgui.language.java.fix.ast.Scopes;
+import com.crystalgui.language.java.fix.edit.ImportPlan;
+import com.crystalgui.language.java.fix.edit.TypeNames;
 
 /**
  * <b>Something has no value, or has no declaration</b> — and the repair is to write the missing one.
@@ -56,7 +60,7 @@ import java.util.List;
  * for a lambda argument and for the same reason — a signature that looks finished and still does not fit is
  * worse than no offer.</p>
  */
-final class ValueCorrections {
+public final class ValueCorrections {
 
     static final String ADD_RETURN = "java.value.addReturn";
     static final String INITIALISE = "java.value.initialise";
@@ -67,7 +71,7 @@ final class ValueCorrections {
     private ValueCorrections() {
     }
 
-    static List<Correction> all() {
+    public static List<Correction> all() {
         return List.of(new AddReturnStatement(), new InitialiseVariable(),
                 new CreateLocalVariable(), new CreateField(), new InitialiseBlankFinalField());
     }

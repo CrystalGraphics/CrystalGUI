@@ -1,4 +1,4 @@
-package com.crystalgui.language.java;
+package com.crystalgui.language.java.fix.catalog;
 
 import com.crystalgui.language.engine.bridge.SourceAnalyzer;
 import com.crystalgui.language.java.fix.catalog.LambdaCorrections;
@@ -15,6 +15,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import com.crystalgui.language.engine.bridge.Analysis;
+import com.crystalgui.language.java.FixFixture;
 
 /**
  * Batch G — the last three: enhanced for, if-chain to switch, and the lambda inverse.

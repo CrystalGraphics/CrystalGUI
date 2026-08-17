@@ -1,10 +1,11 @@
-package com.crystalgui.language.java;
+package com.crystalgui.language.java.fix.catalog;
 
 import com.crystalgui.language.java.fix.catalog.CastCorrections;
 import com.crystalgui.language.java.fix.catalog.CreateCorrections;
 import com.crystalgui.language.java.fix.catalog.ValueCorrections;
 import org.eclipse.jdt.core.compiler.IProblem;
 import org.junit.Test;
+import com.crystalgui.language.java.FixFixture;
 
 /**
  * Batch E — the four errors left with no answer once the measured coverage was closed.

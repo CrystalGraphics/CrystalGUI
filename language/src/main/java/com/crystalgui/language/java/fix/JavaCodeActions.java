@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import com.crystalgui.language.engine.bridge.CodeActionContext;
 
 /**
  * The engine's half of {@link CodeActionProvider} — everything Java can offer about a problem.
@@ -30,7 +31,7 @@ import java.util.function.Supplier;
  * wait for. The callback is the contract rather than the mechanism, and keeping it means a future band
  * that has to cross a thread does not change this interface.</p>
  */
-final class JavaCodeActions implements CodeActionProvider,
+public final class JavaCodeActions implements CodeActionProvider,
         com.crystalgui.language.engine.bridge.CodeActionContext {
 
     private final Supplier<Analysis> analysis;
@@ -45,7 +46,7 @@ final class JavaCodeActions implements CodeActionProvider,
      */
     private final TypeIndex types;
 
-    JavaCodeActions(Supplier<Analysis> analysis, TypeIndex types) {
+    public JavaCodeActions(Supplier<Analysis> analysis, TypeIndex types) {
         this.analysis = analysis;
         this.types = types;
     }

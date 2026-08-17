@@ -1,4 +1,4 @@
-package com.crystalgui.language.java;
+package com.crystalgui.language.java.fix.catalog;
 
 import com.crystalgui.language.java.fix.catalog.ExceptionCorrections;
 import com.crystalgui.text.lang.CodeAction;
@@ -11,6 +11,7 @@ import java.util.List;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import com.crystalgui.language.java.FixFixture;
 
 /**
  * The unhandled-exception pair — the first corrections that generate code, so the first place the

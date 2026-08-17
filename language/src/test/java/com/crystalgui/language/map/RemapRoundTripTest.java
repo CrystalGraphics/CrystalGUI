@@ -25,6 +25,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import com.crystalgui.language.engine.bridge.Analysis;
 
 /**
  * <b>The remap round-trip — M6's last exit criterion.</b>

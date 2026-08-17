@@ -54,7 +54,7 @@ import java.util.function.Supplier;
  * the top of the file. Java's equivalent needs a second edit for the import and takes care to make the
  * pair atomic; this needs neither.</p>
  */
-final class JsCompletionProvider implements CompletionProvider {
+public final class JsCompletionProvider implements CompletionProvider {
 
     /** Past this the list is truncated and reported incomplete so the session re-asks. */
     private static final int MAX_ITEMS = 300;
@@ -110,7 +110,7 @@ final class JsCompletionProvider implements CompletionProvider {
      */
     private static final String COMPLETION_PROBE = "CrystalGuiCompletionProbe";
 
-    JsCompletionProvider(TextBuffer buffer, Supplier<Analysis> analysis,
+    public JsCompletionProvider(TextBuffer buffer, Supplier<Analysis> analysis,
                          Supplier<LiveScopeSnapshot> liveScope, Supplier<List<String>> keywords,
                          Supplier<List<String>> globals,
                          @Nullable TypeIndex types, Supplier<ScriptPolicy> policy,

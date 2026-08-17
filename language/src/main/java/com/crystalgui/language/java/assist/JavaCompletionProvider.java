@@ -38,7 +38,7 @@ import java.util.function.Supplier;
  * is what callers must not assume about — the day this waits on a compile that has not finished, no call
  * site changes. Same reasoning {@code AnalysisResolver} records.</p>
  */
-final class JavaCompletionProvider implements CompletionProvider {
+public final class JavaCompletionProvider implements CompletionProvider {
 
     /**
      * Offered in open code with no receiver.
@@ -85,7 +85,7 @@ final class JavaCompletionProvider implements CompletionProvider {
     /** Set by {@link #memberItems} when the receiver did not resolve — see the note there. */
     private boolean unresolvedReceiver;
 
-    JavaCompletionProvider(TextBuffer buffer, Supplier<Analysis> analysis, TypeIndex types,
+    public JavaCompletionProvider(TextBuffer buffer, Supplier<Analysis> analysis, TypeIndex types,
                            java.util.function.Function<String, Analysis> reanalyse) {
         this.buffer = buffer;
         this.analysis = analysis;

@@ -1,9 +1,9 @@
 package com.crystalgui.language.java.fix.catalog;
 
-import com.crystalgui.language.java.Correction;
-import com.crystalgui.language.java.FixContext;
-import com.crystalgui.language.java.ImportPlan;
-import com.crystalgui.language.java.Scopes;
+import com.crystalgui.language.java.fix.Correction;
+import com.crystalgui.language.java.fix.FixContext;
+import com.crystalgui.language.java.fix.edit.ImportPlan;
+import com.crystalgui.language.java.fix.ast.Scopes;
 import com.crystalgui.text.SimilarNames;
 
 import com.crystalgui.text.ChangeSet;
@@ -54,7 +54,7 @@ import java.util.Set;
  * call's arity ranks ahead of one that does not, because {@code s.lenght()} means {@code length()} and not
  * {@code lastIndexOf(int)}, whatever the distances say.</p>
  */
-final class DidYouMeanCorrections {
+public final class DidYouMeanCorrections {
 
     static final String CHANGE_TYPE = "java.didYouMean.type";
     static final String CHANGE_METHOD = "java.didYouMean.method";
@@ -63,7 +63,7 @@ final class DidYouMeanCorrections {
     private DidYouMeanCorrections() {
     }
 
-    static List<Correction> all() {
+    public static List<Correction> all() {
         return List.of(new ChangeToType(), new ChangeToMethod(), new ChangeToName());
     }
 

@@ -39,13 +39,13 @@ import java.util.function.Supplier;
  * run. Leaving an engine loader on a borrowed thread makes every later {@code ServiceLoader} in the
  * process resolve against the wrong classpath, which is the same class of bug pointing the other way.</p>
  */
-final class RhinoThread {
+public final class RhinoThread {
 
     private RhinoThread() {
     }
 
     /** Runs {@code body} with the engine loader installed, and puts back what was there. */
-    static <T> T with(Supplier<T> body) {
+    public static <T> T with(Supplier<T> body) {
         Thread thread = Thread.currentThread();
         ClassLoader previous = thread.getContextClassLoader();
         thread.setContextClassLoader(RhinoThread.class.getClassLoader());
@@ -57,12 +57,12 @@ final class RhinoThread {
     }
 
     /** A body that may throw anything — a script run, whose failure is the script's to report. */
-    interface ThrowingSupplier<T> {
+    public interface ThrowingSupplier<T> {
         T get() throws Throwable;
     }
 
     /** {@link #with}, for a body whose exceptions must reach the caller as themselves. */
-    static <T> T withThrowing(ThrowingSupplier<T> body) throws Throwable {
+    public static <T> T withThrowing(ThrowingSupplier<T> body) throws Throwable {
         return withLoader(RhinoThread.class.getClassLoader(), body);
     }
 
@@ -79,7 +79,7 @@ final class RhinoThread {
      * Rhino caches its regular-expression engine at class initialisation, and {@code initStandardObjects}
      * — which installs {@code RegExp} — has already run inside the outer scope. @see the class note</p>
      */
-    static <T> T withLoader(ClassLoader loader, ThrowingSupplier<T> body) throws Throwable {
+    public static <T> T withLoader(ClassLoader loader, ThrowingSupplier<T> body) throws Throwable {
         Thread thread = Thread.currentThread();
         ClassLoader previous = thread.getContextClassLoader();
         thread.setContextClassLoader(loader);

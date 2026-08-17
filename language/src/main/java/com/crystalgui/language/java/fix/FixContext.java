@@ -1,9 +1,9 @@
 package com.crystalgui.language.java.fix;
 
 import com.crystalgui.language.engine.bridge.CodeActionContext;
-import com.crystalgui.language.java.ImportPlan;
-import com.crystalgui.language.java.ImportRegion;
-import com.crystalgui.language.java.Rewrites;
+import com.crystalgui.language.java.fix.edit.ImportPlan;
+import com.crystalgui.language.java.fix.edit.ImportRegion;
+import com.crystalgui.language.java.fix.edit.Rewrites;
 import com.crystalgui.text.Change;
 import com.crystalgui.text.ChangeSet;
 import com.crystalgui.text.lang.CodeAction;
@@ -40,7 +40,7 @@ import java.util.function.Predicate;
  * {@link Rewrites} records: a rewrite describes intent against a tree it never modifies, so the shared
  * {@link #unit()} cannot be disturbed by one candidate action while another is being computed.</p>
  */
-final class FixContext {
+public final class FixContext {
 
     private final CompilationUnit unit;
     private final String source;
@@ -61,11 +61,11 @@ final class FixContext {
         this.to = to;
     }
 
-    CompilationUnit unit() {
+    public CompilationUnit unit() {
         return unit;
     }
 
-    String source() {
+    public String source() {
         return source;
     }
 
@@ -78,16 +78,16 @@ final class FixContext {
      * never taken from {@code AST.apiLevel()}, which describes the DOM's API generation and not the
      * source.</p>
      */
-    int releaseLevel() {
+    public int releaseLevel() {
         return releaseLevel;
     }
 
     /** Where the actions were asked for — the caret, or a selection. What an intention decides from. */
-    int from() {
+    public int from() {
         return from;
     }
 
-    int to() {
+    public int to() {
         return to;
     }
 
@@ -103,29 +103,29 @@ final class FixContext {
      * answers at all. So a correction claims the thing it is about — the statement, by position — and the
      * second problem to reach it finds it taken.</p>
      */
-    boolean claim(String key) {
+    public boolean claim(String key) {
         return claimed.add(key);
     }
 
     /** What the host knows and a correction cannot work out for itself. */
-    CodeActionContext host() {
+    public CodeActionContext host() {
         return host;
     }
 
     // ── Building an action ──────────────────────────────────────────────────────────────────────
 
     /** A fix that edits the document, stamped with the version its offsets address. */
-    CodeAction fix(String id, String title, ChangeSet edit) {
+    public CodeAction fix(String id, String title, ChangeSet edit) {
         return CodeAction.fix(id, title, edit, version);
     }
 
     /** As {@link #fix}, and marked as the one the popup shows without being asked. */
-    CodeAction preferredFix(String id, String title, ChangeSet edit) {
+    public CodeAction preferredFix(String id, String title, ChangeSet edit) {
         return CodeAction.preferredFix(id, title, edit, version);
     }
 
     /** An action of some other kind — a whole-file tidy rather than a fix for the problem at hand. */
-    CodeAction action(String id, String title, CodeActionKind kind, ChangeSet edit) {
+    public CodeAction action(String id, String title, CodeActionKind kind, ChangeSet edit) {
         return new CodeAction(id, title, kind, edit, null, false, version);
     }
 
@@ -137,7 +137,7 @@ final class FixContext {
      * that failed to load rather than as a message that does not exist. A quick fix leaves it null,
      * because the compiler already said the useful thing.</p>
      */
-    CodeAction intention(String id, String title, String description, ChangeSet edit) {
+    public CodeAction intention(String id, String title, String description, ChangeSet edit) {
         return intention(id, title, description, edit, CodeActionKind.REFACTOR, false);
     }
 
@@ -153,7 +153,7 @@ final class FixContext {
      * <p>{@code preferred} is the existing key for exactly this and needs no new tier: it means "this is
      * unambiguously THE answer", which is what matching a shape that tightly amounts to.</p>
      */
-    CodeAction preferredIntention(String id, String title, String description, ChangeSet edit) {
+    public CodeAction preferredIntention(String id, String title, String description, ChangeSet edit) {
         return intention(id, title, description, edit, CodeActionKind.REFACTOR, true);
     }
 
@@ -169,7 +169,7 @@ final class FixContext {
      * from every {@code if} and every loop, so an offer to move one would otherwise beat a real conversion
      * on nothing but which family was registered first.</p>
      */
-    CodeAction layoutIntention(String id, String title, String description, ChangeSet edit) {
+    public CodeAction layoutIntention(String id, String title, String description, ChangeSet edit) {
         return intention(id, title, description, edit, CodeActionKind.LAYOUT, false);
     }
 
@@ -179,19 +179,19 @@ final class FixContext {
      * <p>Separate because it must rank below every meaning-preserving offer. A default is applied by
      * somebody who has not read it carefully, and this is the only kind where that is not safe.</p>
      */
-    CodeAction alteringIntention(String id, String title, String description, ChangeSet edit) {
+    public CodeAction alteringIntention(String id, String title, String description, ChangeSet edit) {
         return intention(id, title, description, edit, CodeActionKind.ALTERING, false);
     }
 
     // ── Building an edit ────────────────────────────────────────────────────────────────────────
 
     /** A rewriter over this unit's tree. @see Rewrites */
-    ASTRewrite rewrite() {
+    public ASTRewrite rewrite() {
         return Rewrites.on(unit);
     }
 
     /** What {@code rewrite} amounts to, or null if it cannot be expressed. @see Rewrites#toChangeSet */
-    ChangeSet changesFrom(ASTRewrite rewrite) {
+    public ChangeSet changesFrom(ASTRewrite rewrite) {
         return Rewrites.toChangeSet(rewrite, unit, source);
     }
 
@@ -201,7 +201,7 @@ final class FixContext {
      * <p>Per action, never shared: two candidate fixes for the same problem import different things, and a
      * plan that had seen both would put the second candidate's import into the first one's edit.</p>
      */
-    ImportPlan importPlan() {
+    public ImportPlan importPlan() {
         return new ImportPlan(unit, source);
     }
 
@@ -214,7 +214,7 @@ final class FixContext {
      * They cannot overlap: an import insertion sits above the first type declaration and a rewrite of the
      * body sits inside one, so the merge is a sort and {@code ChangeSet.of} keeps checking that.</p>
      */
-    ChangeSet changesFrom(ASTRewrite rewrite, ImportPlan imports) {
+    public ChangeSet changesFrom(ASTRewrite rewrite, ImportPlan imports) {
         ChangeSet body = Rewrites.toChangeSet(rewrite, unit, source);
         if (body == null) return null;
         List<Change> extra = imports.changes();
@@ -226,12 +226,12 @@ final class FixContext {
     }
 
     /** One direct text change — for the import region, which the rewriter is not used on. */
-    ChangeSet changeSet(Change change) {
+    public ChangeSet changeSet(Change change) {
         return ChangeSet.of(source.length(), change);
     }
 
     /** Several, which must already be sorted and non-overlapping. @see ChangeSet#of */
-    ChangeSet changeSet(List<Change> changes) {
+    public ChangeSet changeSet(List<Change> changes) {
         return ChangeSet.of(source.length(), changes);
     }
 
@@ -245,7 +245,7 @@ final class FixContext {
      * The sort matters and is easy to leave out: {@code ChangeSet.of} refuses an unordered list, so
      * forgetting it turns a working fix into a null edit and no offer at all.</p>
      */
-    ChangeSet changeSet(List<Change> changes, ImportPlan imports) {
+    public ChangeSet changeSet(List<Change> changes, ImportPlan imports) {
         List<Change> extra = imports.changes();
         if (extra.isEmpty()) return changeSet(changes);
         List<Change> all = new ArrayList<>(changes);
@@ -255,7 +255,7 @@ final class FixContext {
     }
 
     /** The characters {@code node} actually occupies — never a regenerated form. */
-    String text(ASTNode node) {
+    public String text(ASTNode node) {
         return text(node, source);
     }
 
@@ -267,7 +267,7 @@ final class FixContext {
      * a {@code HashSet} and one with a {@code List} and {@code contains}. Ordered here because a caller
      * turning it into edits needs document order and {@code ChangeSet.of} refuses anything else.</p>
      */
-    Set<ImportDeclaration> unusedImports() {
+    public Set<ImportDeclaration> unusedImports() {
         Set<ImportDeclaration> unused = new LinkedHashSet<>();
         for (IProblem problem : unit.getProblems()) {
             if (problem.getID() != IProblem.UnusedImport) continue;
@@ -284,7 +284,7 @@ final class FixContext {
      * for its own static helpers — which is how {@code Negation}, of all places, came to own the
      * engine's only {@code textOf} and how a second one grew in {@code IntentionCorrections} beside it.</p>
      */
-    static String text(ASTNode node, String source) {
+    public static String text(ASTNode node, String source) {
         return source.substring(node.getStartPosition(), node.getStartPosition() + node.getLength());
     }
 
@@ -298,7 +298,7 @@ final class FixContext {
      * work. The field carve-out is because a {@code FieldDeclaration} is itself a body declaration and is
      * a legitimate target.</p>
      */
-    <T extends ASTNode> T enclosing(IProblem problem, Class<T> type) {
+    public <T extends ASTNode> T enclosing(IProblem problem, Class<T> type) {
         int start = problem.getSourceStart();
         int length = Math.max(0, problem.getSourceEnd() + 1 - start);
         if (start < 0) return null;
@@ -330,7 +330,7 @@ final class FixContext {
      * candidate is a CHILD, so walking outward passes it by forever. Every fixture line failed on exactly
      * this while every caret-driven test passed, twice, in two different families.</p>
      */
-    <T extends ASTNode> T at(Class<T> type, Predicate<T> triggered) {
+    public <T extends ASTNode> T at(Class<T> type, Predicate<T> triggered) {
         ASTNode node = NodeFinder.perform(unit, from, Math.max(0, to - from));
         if (node == null) return null;
         for (ASTNode walk = node; walk != null; walk = walk.getParent()) {
@@ -348,7 +348,7 @@ final class FixContext {
     }
 
     /** Whether the request touches {@code [start, end]} — the usual body of a {@code triggered}. */
-    boolean touches(int start, int end) {
+    public boolean touches(int start, int end) {
         return from <= end && start <= to;
     }
 
@@ -361,7 +361,7 @@ final class FixContext {
      * {@code count}. Use it where the problem is <em>about</em> a name that is not declared anywhere in
      * this file, which is the unresolved-type case, and read the tree everywhere else.</p>
      */
-    String reportedName(IProblem problem) {
+    public String reportedName(IProblem problem) {
         String[] arguments = problem.getArguments();
         return arguments == null || arguments.length == 0 ? null : arguments[0];
     }

@@ -1,8 +1,9 @@
-package com.crystalgui.language.java;
+package com.crystalgui.language.java.fix.catalog;
 
 import com.crystalgui.language.java.fix.catalog.IntentionCorrections;
 import com.crystalgui.language.java.fix.catalog.VariableIntentions;
 import org.junit.Test;
+import com.crystalgui.language.java.FixFixture;
 
 /**
  * Batch F — the condition pair and the variable pair.

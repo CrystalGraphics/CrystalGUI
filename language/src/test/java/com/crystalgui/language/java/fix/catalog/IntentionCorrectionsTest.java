@@ -1,9 +1,10 @@
-package com.crystalgui.language.java;
+package com.crystalgui.language.java.fix.catalog;
 
 import com.crystalgui.language.java.fix.catalog.IntentionCorrections;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import com.crystalgui.language.java.FixFixture;
 
 /**
  * The four intentions — where nothing is wrong and something could be different.

@@ -1,12 +1,16 @@
 package com.crystalgui.language.run;
 
-import com.crystalgui.language.run.console.*;
 import com.crystalgui.text.TextBuffer;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import org.junit.Test;
 
 import java.util.List;
+import com.crystalgui.language.run.console.ConsoleFilter;
+import com.crystalgui.language.run.console.JavaStackFrameFilter;
+import com.crystalgui.language.run.console.RunConsole;
+import com.crystalgui.language.run.console.RunLevel;
+import com.crystalgui.language.run.console.RunMessage;
 
 import static org.junit.Assert.*;
 

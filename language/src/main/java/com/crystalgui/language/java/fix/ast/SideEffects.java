@@ -23,18 +23,18 @@ import org.eclipse.jdt.core.dom.SuperMethodInvocation;
  * <p>So this offers both, named for what they are for. A constructor is on both lists: it can do anything,
  * including the thing the caller was about to delete.</p>
  */
-final class SideEffects {
+public final class SideEffects {
 
     private SideEffects() {
     }
 
     /** Whether removing this expression could change what the program does. */
-    static boolean lostByDeleting(Expression expression) {
+    public static boolean lostByDeleting(Expression expression) {
         return contains(expression, false);
     }
 
     /** Whether evaluating this expression twice could differ from evaluating it once. */
-    static boolean addedByRepeating(Expression expression) {
+    public static boolean addedByRepeating(Expression expression) {
         return contains(expression, true);
     }
 

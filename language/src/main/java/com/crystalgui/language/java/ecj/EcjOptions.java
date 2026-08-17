@@ -26,7 +26,7 @@ import java.util.Map;
  * what this class exists to prevent — {@code EcjSourceAnalyzer} and {@link AttachedSources} both parse,
  * and they had begun to answer the question separately.</p>
  */
-final class EcjOptions {
+public final class EcjOptions {
 
     private EcjOptions() {
     }
@@ -39,7 +39,7 @@ final class EcjOptions {
      * — and naming {@code JLS8} instead compiles against every band and silently caps the newest at Java
      * 8 syntax, which is worse, because it works.</p>
      */
-    static int jlsLevel() {
+    public static int jlsLevel() {
         int highest = 0;
         for (Field field : AST.class.getFields()) {
             String name = field.getName();
@@ -74,7 +74,7 @@ final class EcjOptions {
      * <p>All three, because setting fewer leaves JDT to reconcile them against its own defaults and it
      * reports the disagreement as errors in the user's file rather than as a configuration fault.</p>
      */
-    static Map<String, String> forLevel(int featureVersion) {
+    public static Map<String, String> forLevel(int featureVersion) {
         String level = levelName(featureVersion);
         Map<String, String> options = new HashMap<>();
         options.put("org.eclipse.jdt.core.compiler.source", level);

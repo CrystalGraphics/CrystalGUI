@@ -1,4 +1,4 @@
-package com.crystalgui.language.java;
+package com.crystalgui.language.java.fix.catalog;
 
 import com.crystalgui.language.java.fix.catalog.ImportCorrections;
 import com.crystalgui.language.java.fix.catalog.UnusedCorrections;
@@ -15,6 +15,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import com.crystalgui.language.java.FixFixture;
 
 /**
  * The error → fix table, asserted on the <b>text it produces</b> and on what the compiler says afterwards.

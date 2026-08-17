@@ -22,7 +22,7 @@ import java.util.regex.Pattern;
  * <p>Reading the declaration instead makes the two agree by construction, whatever the file says and
  * however the author changes it.</p>
  */
-final class SourcePackages {
+public final class SourcePackages {
 
     /**
      * A package declaration, anchored to a line start.
@@ -64,7 +64,7 @@ final class SourcePackages {
     }
 
     /** The binary name a compiled unit will have — what a loader must be asked for. */
-    static String binaryName(String className, String source) {
+    public static String binaryName(String className, String source) {
         String path = unitPath(className, source);
         return path.substring(0, path.length() - ".java".length()).replace('/', '.');
     }

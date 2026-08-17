@@ -1,11 +1,10 @@
 package com.crystalgui.language.java.fix;
 
 import com.crystalgui.language.engine.bridge.CodeActionContext;
-import com.crystalgui.language.java.LoopIntentions;
-import com.crystalgui.language.java.ProblemSpans;
-import com.crystalgui.language.java.SwitchIntentions;
-import com.crystalgui.language.java.VariableIntentions;
-import com.crystalgui.language.java.fix.catalog.*;
+import com.crystalgui.language.java.fix.catalog.LoopIntentions;
+import com.crystalgui.language.java.ecj.ProblemSpans;
+import com.crystalgui.language.java.fix.catalog.SwitchIntentions;
+import com.crystalgui.language.java.fix.catalog.VariableIntentions;
 import com.crystalgui.text.lang.CodeAction;
 
 import org.eclipse.jdt.core.compiler.IProblem;
@@ -15,6 +14,20 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import com.crystalgui.language.java.fix.catalog.AnnotationCorrections;
+import com.crystalgui.language.java.fix.catalog.CastCorrections;
+import com.crystalgui.language.java.fix.catalog.CreateCorrections;
+import com.crystalgui.language.java.fix.catalog.DeadCodeCorrections;
+import com.crystalgui.language.java.fix.catalog.DidYouMeanCorrections;
+import com.crystalgui.language.java.fix.catalog.ExceptionCorrections;
+import com.crystalgui.language.java.fix.catalog.ExpressionCorrections;
+import com.crystalgui.language.java.fix.catalog.ImplementCorrections;
+import com.crystalgui.language.java.fix.catalog.ImportCorrections;
+import com.crystalgui.language.java.fix.catalog.IntentionCorrections;
+import com.crystalgui.language.java.fix.catalog.LambdaCorrections;
+import com.crystalgui.language.java.fix.catalog.ModifierCorrections;
+import com.crystalgui.language.java.fix.catalog.UnusedCorrections;
+import com.crystalgui.language.java.fix.catalog.ValueCorrections;
 
 /**
  * The registry every {@link Correction} is reached through — the error → fix table, indexed rather than
@@ -47,7 +60,7 @@ import java.util.Map;
  * still shows the message and whatever the shape-derived contributors offer, and treating an empty result
  * as a hole to be filled is precisely how a table of (problems × fixes) gets built by accident.</p>
  */
-final class JavaQuickFixes {
+public final class JavaQuickFixes {
 
     /**
      * Every correction this engine has, named once.
@@ -91,7 +104,7 @@ final class JavaQuickFixes {
      * <p>In the unit's own coordinates. The caller stamps the answer with the analysis version and the
      * apply path refuses it if the buffer has moved, so these offsets are either exactly right or unused.</p>
      */
-    static List<CodeAction> in(CompilationUnit unit, String source, long version, int releaseLevel,
+    public static List<CodeAction> in(CompilationUnit unit, String source, long version, int releaseLevel,
                               int from, int to, CodeActionContext host) {
         if (unit == null || source == null) return List.of();
         FixContext context = new FixContext(unit, source, version, releaseLevel, host, from, to);

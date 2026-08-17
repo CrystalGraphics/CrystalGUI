@@ -1,4 +1,4 @@
-package com.crystalgui.language.java;
+package com.crystalgui.language.java.fix.catalog;
 
 import com.crystalgui.language.java.fix.catalog.LambdaCorrections;
 import com.crystalgui.text.diagnostic.Diagnostic;
@@ -13,6 +13,7 @@ import java.util.List;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import com.crystalgui.language.java.FixFixture;
 
 /**
  * "Replace with lambda", and the far longer list of things that must not be.

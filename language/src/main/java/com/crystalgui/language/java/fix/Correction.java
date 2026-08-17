@@ -29,7 +29,7 @@ import java.util.List;
  * unused import and tidying <em>every</em> unused import are different intentions rather than one with a
  * count, so they are separate entries keyed on the same problem. @see CodeAction#id()</p>
  */
-interface Correction {
+public interface Correction {
 
     /**
      * What {@link #problems()} returns for an intention — <b>the</b> empty array, not one per call.

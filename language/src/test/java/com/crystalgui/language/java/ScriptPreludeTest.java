@@ -19,6 +19,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import com.crystalgui.language.engine.bridge.Analysis;
 
 /**
  * The script wrapper, and the arithmetic that gets back out of it.

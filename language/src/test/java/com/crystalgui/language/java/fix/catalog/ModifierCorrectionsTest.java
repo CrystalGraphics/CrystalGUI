@@ -1,10 +1,11 @@
-package com.crystalgui.language.java;
+package com.crystalgui.language.java.fix.catalog;
 
 import com.crystalgui.language.java.fix.catalog.ModifierCorrections;
 import org.eclipse.jdt.core.compiler.IProblem;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import com.crystalgui.language.java.FixFixture;
 
 /**
  * One keyword added or taken away.

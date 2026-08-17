@@ -19,7 +19,7 @@ import org.eclipse.jdt.core.dom.WildcardType;
  * {@code java.util.List<java.lang.String>}, which compiles and is nobody's idea of source.</p>
  */
 @SuppressWarnings("unchecked")   // JDT's DOM lists are raw; every add below is to a list of the declared node type
-final class TypeNames {
+public final class TypeNames {
 
     private TypeNames() {
     }
@@ -42,7 +42,7 @@ final class TypeNames {
      *
      * @param at where the name will be written, which decides whether a nested type needs qualifying
      */
-    static String writtenName(ITypeBinding type, ImportPlan imports, ASTNode at) {
+    public static String writtenName(ITypeBinding type, ImportPlan imports, ASTNode at) {
         if (type == null) return null;
         // A RECOVERED BINDING IS A NAME THE COMPILER COULD NOT RESOLVE, and it still answers
         // getQualifiedName() — so writing it produces a declaration against a type that does not exist.
@@ -124,7 +124,7 @@ final class TypeNames {
      * one file so the recovered / type-variable / anonymous rules are stated once. This half lived in
      * {@code CreateCorrections} and had drifted: it was the copy without the recovered guard.</p>
      */
-    static Type typeNode(ITypeBinding binding, AST ast, ImportPlan imports) {
+    public static Type typeNode(ITypeBinding binding, AST ast, ImportPlan imports) {
         if (binding == null || binding.isNullType() || binding.isRecovered()
                 || binding.isAnonymous() || binding.isLocal()) {
             return ast.newSimpleType(ast.newSimpleName("Object"));
@@ -165,7 +165,7 @@ final class TypeNames {
      * <p>{@code 0} covers {@code byte}, {@code short} and {@code char} as well, because a constant
      * expression narrows in an assignment context and a {@code return} is one.</p>
      */
-    static String defaultValue(ITypeBinding type) {
+    public static String defaultValue(ITypeBinding type) {
         if (type == null) return null;
         return type.isPrimitive() ? defaultValueOfPrimitive(type.getName()) : "null";
     }
@@ -178,7 +178,7 @@ final class TypeNames {
      * otherwise be answered a second time, in a second shape, by whoever needed it that way. It is one
      * sentence of judgement and exactly the kind that drifts.</p>
      */
-    static String defaultValueOfPrimitive(String name) {
+    public static String defaultValueOfPrimitive(String name) {
         switch (name) {
             case "void":    return null;
             case "boolean": return "false";

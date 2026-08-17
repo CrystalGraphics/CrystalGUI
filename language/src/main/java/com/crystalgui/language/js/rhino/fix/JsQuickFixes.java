@@ -1,6 +1,6 @@
 package com.crystalgui.language.js.rhino.fix;
 
-import com.crystalgui.language.js.RhinoGlobals;
+import com.crystalgui.language.js.rhino.exec.RhinoGlobals;
 import com.crystalgui.language.js.rhino.RhinoScopes;
 import com.crystalgui.language.js.rhino.RhinoTokens;
 import com.crystalgui.language.js.rhino.resolve.RhinoInference;
@@ -58,7 +58,7 @@ import java.util.Set;
  * style opinions are worth showing is a policy decision, and a fix for a warning nobody emits is dead
  * code that reads as a feature.</p>
  */
-final class JsQuickFixes {
+public final class JsQuickFixes {
 
     /** Every action's id is prefixed, so a keymap or a test can name one unambiguously. */
     private static final String ID = "js.fix.";
@@ -68,7 +68,7 @@ final class JsQuickFixes {
     private final JsRewrites edits;
     private final RhinoResolution resolution;
 
-    JsQuickFixes(@Nullable AstRoot root, RhinoScopes scopes, JsRewrites edits,
+    public JsQuickFixes(@Nullable AstRoot root, RhinoScopes scopes, JsRewrites edits,
                  RhinoResolution resolution) {
         this.root = root;
         this.scopes = scopes;
@@ -82,7 +82,7 @@ final class JsQuickFixes {
      * <p>Ordered by {@link CodeAction#ORDER} at the consumer, so this appends in whatever order is
      * clearest to read rather than trying to rank as it goes.</p>
      */
-    List<CodeAction> actionsIn(int from, int to) {
+    public List<CodeAction> actionsIn(int from, int to) {
         if (root == null) return List.of();
         List<CodeAction> actions = new ArrayList<>();
         int caret = Math.max(0, from);

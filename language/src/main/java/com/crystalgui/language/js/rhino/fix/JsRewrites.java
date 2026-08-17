@@ -32,12 +32,12 @@ import java.util.List;
  * from the analysis the offsets were computed against; a document that has moved on refuses it rather than
  * applying an edit at coordinates that now mean something else.</p>
  */
-final class JsRewrites {
+public final class JsRewrites {
 
     private final String source;
     private final long version;
 
-    JsRewrites(String source, long version) {
+    public JsRewrites(String source, long version) {
         this.source = source == null ? "" : source;
         this.version = version;
     }

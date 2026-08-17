@@ -58,17 +58,17 @@ import java.util.Map;
  * it is <b>captured</b> by a nested function. Both are invisible to a grammar — nothing in the shape of
  * {@code total} says either — and both are what makes engine colouring worth having.</p>
  */
-final class RhinoScopes {
+public final class RhinoScopes {
 
     /** One declared name: where, what kind, and what is true of it across the whole file. */
-    static final class Declaration {
+    public static final class Declaration {
 
-        final String name;
-        final SymbolKind kind;
-        final int offset;
-        final int length;
+        public final String name;
+        public final SymbolKind kind;
+        public final int offset;
+        public final int length;
         /** The function the declaration is inside, or null at the top level. */
-        @Nullable final FunctionNode owner;
+        public @Nullable final FunctionNode owner;
 
         /**
          * The scope the name was introduced into — <b>where it is visible</b>, block and all.
@@ -86,7 +86,7 @@ final class RhinoScopes {
         @Nullable final Scope declaringScope;
 
         /** {@code let} rather than {@code var} — which is the only thing that tells the two apart. */
-        final boolean isLet;
+        public final boolean isLet;
 
         /**
          * The name node itself — where the JSDoc above it is looked for.
@@ -94,7 +94,7 @@ final class RhinoScopes {
          * <p>Held rather than re-found from the offset because the tree is already in hand and a second
          * walk to recover a node we had would be the shape this whole class exists to avoid.</p>
          */
-        @Nullable final AstNode declaringNode;
+        public @Nullable final AstNode declaringNode;
 
         /**
          * What it was declared equal to — the {@code InferenceTier}'s entire input.
@@ -103,9 +103,9 @@ final class RhinoScopes {
          * declaration keeps the {@link FunctionNode}; {@code var x;} keeps null, which is the honest
          * answer for a declaration that says nothing about its value.</p>
          */
-        @Nullable final AstNode initializer;
+        public @Nullable final AstNode initializer;
 
-        boolean reassigned;
+        public boolean reassigned;
         boolean captured;
         final List<int[]> references = new ArrayList<>();
 
@@ -141,7 +141,7 @@ final class RhinoScopes {
          * <b>top-level</b> declaration, because a script's top level <em>is</em> its surface: nothing in the
          * file needs to use {@code main} for the host to call it.</p>
          */
-        boolean isReportableUnused() {
+        public boolean isReportableUnused() {
             return isUnused() && offset >= 0 && kind != SymbolKind.PARAMETER && owner != null;
         }
     }
@@ -199,16 +199,16 @@ final class RhinoScopes {
         return scopes;
     }
 
-    List<Declaration> declarations() {
+    public List<Declaration> declarations() {
         return inOrder;
     }
 
-    List<Name> freeNames() {
+    public List<Name> freeNames() {
         return freeNames;
     }
 
     /** The declaration a name resolves to, or null when it is free. */
-    @Nullable
+    public @Nullable
     Declaration declarationOf(Name name) {
         String identifier = name.getIdentifier();
         if (identifier == null) return null;
@@ -388,7 +388,7 @@ final class RhinoScopes {
      * only for the temporal dead zone of a {@code let} — which is a runtime error rather than a
      * resolution question, and which no completion list has ever bothered to model.</p>
      */
-    List<Declaration> visibleAt(int offset) {
+    public List<Declaration> visibleAt(int offset) {
         List<Declaration> visible = new ArrayList<>();
         for (Declaration declared : inOrder) {
             if (containsOffset(declared.declaringScope, offset)) visible.add(declared);
@@ -398,7 +398,7 @@ final class RhinoScopes {
     }
 
     /** The declaration of {@code name} visible at {@code offset}, or null. */
-    @Nullable
+    public @Nullable
     Declaration visibleDeclaration(String name, int offset) {
         Declaration best = null;
         int bestDepth = -1;
@@ -437,7 +437,7 @@ final class RhinoScopes {
     }
 
     /** Whether any declaration anywhere in the file carries this name — the package-root shadow test. */
-    boolean declaresAnywhere(String name) {
+    public boolean declaresAnywhere(String name) {
         for (Declaration declared : inOrder) {
             if (declared.name.equals(name)) return true;
         }

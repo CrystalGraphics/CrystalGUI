@@ -1,13 +1,18 @@
 package com.crystalgui.language.run;
 
 import com.crystalgui.fs.Resource;
-import com.crystalgui.language.run.console.*;
 import com.crystalgui.text.TextBuffer;
 import org.junit.Test;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import com.crystalgui.language.run.console.ConsoleFilter;
+import com.crystalgui.language.run.console.ConsolePrefix;
+import com.crystalgui.language.run.console.JavaStackFrameFilter;
+import com.crystalgui.language.run.console.RunConsole;
+import com.crystalgui.language.run.console.RunLevel;
+import com.crystalgui.language.run.console.RunMessage;
 
 import static org.junit.Assert.*;
 

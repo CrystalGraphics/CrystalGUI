@@ -20,12 +20,12 @@ import java.util.List;
  * scan per position: a file with two hundred problems is exactly the file somebody is typing in, and a
  * scan would be quadratic in the thing that is already slowest.</p>
  */
-final class LineIndex {
+public final class LineIndex {
 
     private final int[] lineStarts;
     private final int length;
 
-    LineIndex(String text) {
+    public LineIndex(String text) {
         List<Integer> starts = new ArrayList<>();
         starts.add(0);
         for (int i = 0; i < text.length(); i++) {
@@ -36,7 +36,7 @@ final class LineIndex {
         this.length = text.length();
     }
 
-    TextPoint pointAt(int offset) {
+    public TextPoint pointAt(int offset) {
         int clamped = Math.max(0, Math.min(offset, length));
         int low = 0;
         int high = lineStarts.length - 1;

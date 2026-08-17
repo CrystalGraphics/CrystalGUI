@@ -31,7 +31,7 @@ import org.eclipse.jdt.core.dom.WhileStatement;
  * is the sharpest case: the lambda's return type is inferred from its target, so the enclosing method's is
  * simply not the answer, and walking past one would re-type a method from a value that was never its.</p>
  */
-final class Expected {
+public final class Expected {
 
     private Expected() {
     }
@@ -47,7 +47,7 @@ final class Expected {
      * the parameter it lands on is only knowable once the overload is, which is a different walk with a
      * different failure mode. {@code CastCorrections.mismatchedArguments} owns that.</p>
      */
-    static ITypeBinding typeOf(Expression expression) {
+    public static ITypeBinding typeOf(Expression expression) {
         ASTNode parent = expression.getParent();
         if (parent instanceof VariableDeclarationFragment) {
             VariableDeclarationFragment fragment = (VariableDeclarationFragment) parent;
@@ -74,7 +74,7 @@ final class Expected {
      * <p>Package-private and separate from {@link #typeOf} because one caller wants the answer as a
      * {@code Type} node rather than a binding, and had grown its own copy of this list to get it.</p>
      */
-    static boolean isCondition(Expression expression) {
+    public static boolean isCondition(Expression expression) {
         ASTNode parent = expression.getParent();
         if (parent instanceof IfStatement) return ((IfStatement) parent).getExpression() == expression;
         if (parent instanceof WhileStatement) return ((WhileStatement) parent).getExpression() == expression;

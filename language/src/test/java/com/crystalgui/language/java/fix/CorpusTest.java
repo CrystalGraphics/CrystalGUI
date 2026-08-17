@@ -1,4 +1,4 @@
-package com.crystalgui.language.java;
+package com.crystalgui.language.java.fix;
 
 import com.crystalgui.language.engine.bridge.SourceAnalyzer;
 import com.crystalgui.language.java.fix.JavaQuickFixes;
@@ -20,6 +20,8 @@ import java.util.List;
 import java.util.stream.Stream;
 
 import static org.junit.Assert.assertTrue;
+import com.crystalgui.language.engine.bridge.Analysis;
+import com.crystalgui.language.java.FixFixture;
 
 /**
  * Every correction over every {@code .java} file in this repository — the fixes against code they were

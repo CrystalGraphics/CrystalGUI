@@ -1,7 +1,7 @@
 package com.crystalgui.language.js.rhino.resolve;
 
 import com.crystalgui.language.engine.bridge.LiveScopeSnapshot;
-import com.crystalgui.language.js.RhinoGlobals;
+import com.crystalgui.language.js.rhino.exec.RhinoGlobals;
 import com.crystalgui.language.js.rhino.RhinoScopes;
 import com.crystalgui.text.lang.DeclarationSite;
 import com.crystalgui.text.lang.Signature;
@@ -54,7 +54,7 @@ import java.util.Set;
  * {@link SymbolInfo} across, which is what the bridge is <em>for</em>: the answer crosses, never the
  * tree.</p>
  */
-final class RhinoResolution {
+public final class RhinoResolution {
 
     /** What is written into the owner band when an answer's provenance is worth stating. */
     private static final String FROM_LAST_RUN = "from last run";
@@ -73,7 +73,7 @@ final class RhinoResolution {
     /** What the host put in scope, by name and declared Java type. @see JsSourceAnalyzer#useHostBindings */
     private final Map<String, String> hostBindings;
 
-    RhinoResolution(@Nullable AstRoot root, RhinoScopes scopes, String source, LineIndex lines,
+    public RhinoResolution(@Nullable AstRoot root, RhinoScopes scopes, String source, LineIndex lines,
                     LiveScopeSnapshot live, @Nullable InteropResolver interop, String sourceName,
                     List<String> keywords, Map<String, String> hostBindings) {
         this.keywords = keywords == null ? List.of() : keywords;
@@ -89,7 +89,7 @@ final class RhinoResolution {
 
     // ── resolveAt ───────────────────────────────────────────────────────────────────────────────
 
-    @Nullable
+    public @Nullable
     SymbolInfo resolveAt(int offset) {
         Name name = nameAt(offset);
         if (name != null) {
@@ -369,7 +369,7 @@ final class RhinoResolution {
     }
 
     /** Whether the host bound this name — what stops a fix catalog treating it as a mistake. */
-    boolean isHostBinding(@Nullable String identifier) {
+    public boolean isHostBinding(@Nullable String identifier) {
         return identifier != null && hostBindings.containsKey(identifier);
     }
 
@@ -427,18 +427,18 @@ final class RhinoResolution {
     }
 
     /** The names the last run left behind — what a "did you mean" must not offer to rename. */
-    Set<String> liveNames() {
+    public Set<String> liveNames() {
         return live.names();
     }
 
     /** What this band's parser accepts, measured. @see JsKeywords */
-    List<String> supportedKeywords() {
+    public List<String> supportedKeywords() {
         return keywords;
     }
 
     // ── membersOf ───────────────────────────────────────────────────────────────────────────────
 
-    List<SymbolInfo> membersOf(@Nullable TypeRef type, int contextOffset) {
+    public List<SymbolInfo> membersOf(@Nullable TypeRef type, int contextOffset) {
         String javaName = type == null ? null : JsTypeRef.javaNameOf(type);
         if (javaName != null && interop != null) {
             boolean staticSide = type instanceof JsTypeRef && ((JsTypeRef) type).isStaticSide();
@@ -483,7 +483,7 @@ final class RhinoResolution {
      * author is editing, and reporting a duplicate would put the same identifier in a completion list
      * twice.</p>
      */
-    List<SymbolInfo> symbolsInScope(int offset) {
+    public List<SymbolInfo> symbolsInScope(int offset) {
         List<SymbolInfo> out = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
         for (RhinoScopes.Declaration declared : scopes.visibleAt(offset)) {
@@ -514,7 +514,7 @@ final class RhinoResolution {
      * down. A Java callee's parameter type is knowable too and arrives with the completion work, where
      * it has a consumer; answering null until then is the honest state rather than a guess.</p>
      */
-    @Nullable
+    public @Nullable
     TypeRef expectedTypeAt(int offset) {
         FunctionCall call = enclosingCall(offset);
         if (call == null) return null;
@@ -637,7 +637,7 @@ final class RhinoResolution {
      * single gesture walked the whole tree six times over. It holds this object already; there is no
      * reason for it to hold a visitor too.</p>
      */
-    @Nullable
+    public @Nullable
     AstNode nodeCovering(int offset) {
         return nodeAt(offset, AstNode.class);
     }

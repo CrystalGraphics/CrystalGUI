@@ -1,9 +1,10 @@
-package com.crystalgui.language.java;
+package com.crystalgui.language.java.fix.catalog;
 
 import com.crystalgui.language.java.fix.catalog.DeadCodeCorrections;
 import com.crystalgui.language.java.fix.catalog.ExpressionCorrections;
 import org.eclipse.jdt.core.compiler.IProblem;
 import org.junit.Test;
+import com.crystalgui.language.java.FixFixture;
 
 /**
  * The three expressions ECJ has proved say nothing.

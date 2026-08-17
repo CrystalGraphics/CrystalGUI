@@ -7,6 +7,7 @@ import org.junit.Test;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import com.crystalgui.language.engine.bridge.Analysis;
 
 /**
  * A parse that JDT cannot complete must degrade, never take the service down.

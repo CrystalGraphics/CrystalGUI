@@ -1,4 +1,4 @@
-package com.crystalgui.language.js;
+package com.crystalgui.language.js.rhino.resolve;
 
 import com.crystalgui.language.engine.EngineHost;
 import com.crystalgui.language.engine.EngineSource;
@@ -26,6 +26,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import com.crystalgui.language.js.JsLanguage;
 
 /**
  * <b>M10.6 — the four resolution tiers, and the Java engine behind the interop one.</b>

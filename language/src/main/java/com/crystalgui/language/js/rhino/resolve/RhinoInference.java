@@ -47,7 +47,7 @@ import java.util.function.Predicate;
  * chain is only treated as one when its root is not a declared name, so a local called {@code com}
  * shadows the package root exactly as it does at run time.</p>
  */
-final class RhinoInference {
+public final class RhinoInference {
 
     /** @see RhinoGlobals#PACKAGE_ROOTS — one definition, because three of them had already drifted. */
     private static final Set<String> PACKAGE_ROOTS = RhinoGlobals.PACKAGE_ROOTS;
@@ -159,7 +159,7 @@ final class RhinoInference {
      * <p>{@code java.util.ArrayList} → {@code java.util.ArrayList}; {@code Packages.mymod.Thing} →
      * {@code mymod.Thing}, because {@code Packages} is the escape hatch and not part of the name.</p>
      */
-    @Nullable
+    public @Nullable
     static String javaNameOf(@Nullable AstNode node, Predicate<String> isDeclared) {
         AstNode at = unwrap(node);
         List<String> segments = new ArrayList<>();
@@ -185,7 +185,7 @@ final class RhinoInference {
     }
 
     /** The class name inside {@code Java.type("a.b.C")}, or null when this is any other call. */
-    @Nullable
+    public @Nullable
     static String javaTypeCall(@Nullable AstNode node) {
         AstNode at = unwrap(node);
         if (!(at instanceof FunctionCall)) return null;

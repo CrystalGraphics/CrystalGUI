@@ -7,7 +7,7 @@ package com.crystalgui.language.java.fix.edit;
  * <p>Extracted from the four copies of {@code indentAt} that had accumulated one per family. That much was
  * only tidiness; {@link #reindent} is not.</p>
  */
-final class Indent {
+public final class Indent {
 
     private Indent() {
     }
@@ -56,7 +56,7 @@ final class Indent {
     }
 
     /** The leading whitespace of the line {@code position} is on. */
-    static String at(String source, int position) {
+    public static String at(String source, int position) {
         int lineStart = source.lastIndexOf('\n', Math.max(0, position - 1)) + 1;
         int at = lineStart;
         while (at < source.length() && at < position
@@ -85,7 +85,7 @@ final class Indent {
      * <p>Trailing whitespace goes, which is why a blank line comes back empty rather than as {@code indent}.
      * That also drops the carriage returns a CRLF file would otherwise smuggle into generated source.</p>
      */
-    static String reindent(String text, String indent) {
+    public static String reindent(String text, String indent) {
         String[] lines = text.split("\n", -1);
         int shift = Integer.MAX_VALUE;
         for (int i = 1; i < lines.length; i++) {

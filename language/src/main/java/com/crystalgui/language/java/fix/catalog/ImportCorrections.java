@@ -1,8 +1,8 @@
 package com.crystalgui.language.java.fix.catalog;
 
-import com.crystalgui.language.java.Correction;
-import com.crystalgui.language.java.FixContext;
-import com.crystalgui.language.java.ImportRegion;
+import com.crystalgui.language.java.fix.Correction;
+import com.crystalgui.language.java.fix.FixContext;
+import com.crystalgui.language.java.fix.edit.ImportRegion;
 import com.crystalgui.text.Change;
 import com.crystalgui.text.ChangeSet;
 import com.crystalgui.text.lang.CodeAction;
@@ -26,7 +26,7 @@ import java.util.Set;
  * that will not resolve, and is where "did you mean" and the rest of the unresolved-reference corrections
  * belong when they land.</p>
  */
-final class ImportCorrections {
+public final class ImportCorrections {
 
     static final String ADD_IMPORT = "java.imports.add";
     static final String ORGANIZE = "java.imports.organize";
@@ -34,7 +34,7 @@ final class ImportCorrections {
     private ImportCorrections() {
     }
 
-    static List<Correction> all() {
+    public static List<Correction> all() {
         return List.of(new AddImport(), new OrganizeImports());
     }
 

@@ -30,7 +30,7 @@ import com.crystalgui.language.engine.bridge.JsExecutor;
  * resolves in one and not the other is reported as neither missing nor present — it simply behaves
  * differently in the popup and at run time.</p>
  */
-final class JsLoaders {
+public final class JsLoaders {
 
     private JsLoaders() {
     }
@@ -39,7 +39,7 @@ final class JsLoaders {
     static final ClassLoader HOST = JsExecutor.class.getClassLoader();
 
     /** The host's, plus Rhino's own package. @see the class note */
-    static final ClassLoader APPLICATION = new ClassLoader(HOST) {
+    public static final ClassLoader APPLICATION = new ClassLoader(HOST) {
         @Override
         protected Class<?> findClass(String name) throws ClassNotFoundException {
             if (name.startsWith("org.mozilla.")) return JsLoaders.class.getClassLoader().loadClass(name);
@@ -58,7 +58,7 @@ final class JsLoaders {
      * the editor threw "no such class" the moment it ran. Each dot is tried as a {@code $} from the right,
      * which is Nashorn's own rule for {@code Java.type}.</p>
      */
-    static Class<?> load(String binaryName) {
+    public static Class<?> load(String binaryName) {
         if (binaryName == null || binaryName.isEmpty()) return null;
         Class<?> direct = loadExactly(binaryName);
         if (direct != null) return direct;
