@@ -236,6 +236,7 @@ editor scheme's.
 | `--editor-indent-guide` | `#2B2D30` | dark-plus.css |
 | `--editor-indent-guide-active` | `#6E7A8A` | dark-plus.css |
 | `--editor-line-number` | `#6B6E76` | dark-plus.css |
+| `--editor-occurrence-bg` | `#3A3D41` | dark-plus.css |
 | `--editor-ruler` | `#2B2D30` | dark-plus.css |
 | `--editor-selection-bg` | `#2C5A8C` | dark-plus.css |
 | `--editor-whitespace` | `#454C57` | dark-plus.css |

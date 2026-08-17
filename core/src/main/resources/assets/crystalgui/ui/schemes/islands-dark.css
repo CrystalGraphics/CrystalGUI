@@ -62,6 +62,10 @@ theme {
     --find-match-fg: #1E1F22;
     --search-excluded-fg: #6F737A;
 
+    /* The word under the caret, wherever else it appears. A GROUND and no foreground, so a marked
+     * occurrence still reads as whatever kind of token it is — VS Code's editor.wordHighlightBackground. */
+    --editor-occurrence-bg: #2F3A44;
+
     /* ── Syntax ──
      *
      * The warm keyword is the single most recognisable thing about an IntelliJ window and the first thing
