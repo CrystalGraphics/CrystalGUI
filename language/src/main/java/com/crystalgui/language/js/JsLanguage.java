@@ -77,7 +77,15 @@ public final class JsLanguage {
      * degrade through.</p>
      */
     public static synchronized boolean register(JobScheduler jobs, EngineSource source) {
-        if (analyzer != null) return true;
+        if (analyzer != null) {
+            // ALREADY REGISTERED IS NOT ALREADY FINISHED. Registering JavaScript BEFORE Java leaves the
+            // interop tier unlent, and a second `register()` call -- which is exactly what a host or a test
+            // that opens both languages makes -- used to return here without ever retrying it. So the
+            // member list behind `new java.util.ArrayList().` silently fell back to reflection, or to
+            // nothing at all, depending only on which language registered first.
+            lendTheJavaEngine();
+            return true;
+        }
 
         EngineHost host = EngineHost.shared(source);
         if (host == null) return false;

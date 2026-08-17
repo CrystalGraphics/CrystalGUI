@@ -747,6 +747,19 @@ one edit, live-object completion, the probe re-parse for an unresolved receiver.
   are all syntax errors where they would land. Inside the literal every row is right and needs no second
   edit — the one place this interop is simpler than Java's, which has an import to bring.
 
+**10.7, after the harness found the rest of it** — three more, and one of them was Java's:
+
+- **A call is a receiver**, and neither engine handled it. `Files.emptyList().` and `list.get(0).` put a
+  `)` before the dot; JS looked only for a `Name` and Java walked up for a `SimpleName`. Both now resolve
+  the enclosing expression, whose type for a call is its callee's — so a chain composes to any depth. A
+  **function declaration's `type` is therefore its return type**, never the string `function`, which is
+  what a `SymbolInfo` already means for a Java method; a *variable* holding a function keeps `function`.
+- **`NodeFinder` with a zero-length range answers the node ending at the offset**, so the first Java fix
+  resolved `get(0)`'s `)` to `int` — and being non-null, it stopped the provider falling through to its
+  probe. Length 1, and the provider now probes on an empty member list as well as on a missing type.
+- **`JsLanguage.register` skipped the Java lend when already registered**, so registering JS before Java
+  left interop unlent forever. Test-order dependent, which is why the suite passed scoped and failed whole.
+
 **10.8 — Quick Documentation.** `JsSignatures`, tier provenance in the owner band, Java members quoted
 through `AttachedSources`. *Tests:* `DocumentationPopupTest` twin over JS symbols; a Java member from
 JS quotes `src.zip` when present; go-to-definition to a JS declaration and to a Java one.

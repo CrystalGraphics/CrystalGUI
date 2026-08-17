@@ -79,9 +79,33 @@ final class RhinoResolution {
     @Nullable
     SymbolInfo resolveAt(int offset) {
         Name name = nameAt(offset);
-        if (name == null) return null;
-        PropertyGet member = memberAccessOf(name);
-        return member != null ? resolveMember(member, name) : resolveName(name, offset);
+        if (name != null) {
+            PropertyGet member = memberAccessOf(name);
+            return member != null ? resolveMember(member, name) : resolveName(name, offset);
+        }
+        return resolveExpression(offset);
+    }
+
+    /**
+     * What the expression at {@code offset} evaluates to, when the offset is not on a name.
+     *
+     * <p>The case that matters is a <b>call</b>: {@code Files.emptyList().} puts a {@code )} immediately
+     * before the dot, so completion resolves at a character no identifier covers and gets nothing — an
+     * empty popup on a chain, which is one of the two most common shapes in Java interop code. Hovering
+     * the {@code )} answering with the call's type is right for the same reason.</p>
+     *
+     * <p>Named for the expression rather than for a symbol, because there is no declaration to point at:
+     * what {@code emptyList()} <em>is</em> is a value of its return type, and that is all this can say.</p>
+     */
+    @Nullable
+    private SymbolInfo resolveExpression(int offset) {
+        AstNode call = nodeAt(offset, FunctionCall.class);
+        if (call == null) return null;
+        TypeRef type = typeOf(call, offset);
+        if (type == null) return null;
+        // NO NAME, because a call has none — it is a value, not a declaration. The type is the whole
+        // answer, and it is what a member lookup and a hover each need.
+        return new SymbolInfo("", SymbolKind.UNKNOWN, type, null, null, Set.of(), null);
     }
 
     /** {@code receiver.name} — the {@code PropertyGet} this name is the property of, or null. */
@@ -128,7 +152,24 @@ final class RhinoResolution {
             SymbolInfo resolved = resolveName((Name) expression, offset);
             return resolved == null ? null : resolved.type();
         }
-        return RhinoInference.typeOf(expression, scopes::declaresAnywhere);
+        // THE SYNTACTIC ANSWER FIRST, because `Java.type("a.b.C")` and a bare `java.util.List` are both
+        // shapes inference reads directly and neither needs a member lookup.
+        TypeRef syntactic = RhinoInference.typeOf(expression, scopes::declaresAnywhere);
+        if (syntactic != null) return syntactic;
+
+        if (expression instanceof PropertyGet) {
+            // `a.b` as a receiver is the member b, and its type is what b holds.
+            PropertyGet get = (PropertyGet) expression;
+            SymbolInfo member = get.getProperty() == null ? null : resolveMember(get, get.getProperty());
+            return member == null ? null : member.type();
+        }
+        if (expression instanceof FunctionCall) {
+            // A CALL'S TYPE IS ITS CALLEE'S. A method's `type` is its RETURN type -- that is what a
+            // SymbolInfo means for anything invocable, in both engines -- so resolving the thing being
+            // called and taking its type is the whole of it, and it composes to any depth of chain.
+            return typeOf(((FunctionCall) expression).getTarget(), offset);
+        }
+        return null;
     }
 
     /** A plain name: the tiers, in order. */
@@ -180,7 +221,13 @@ final class RhinoResolution {
                     modifiersOf(declared, doc.isDeprecated()), site, parametersOf(declared, doc));
         }
 
-        TypeRef inferred = RhinoInference.typeOf(declared.initializer, scopes::declaresAnywhere);
+        // A FUNCTION DECLARATION'S TYPE IS WHAT IT RETURNS, never "function". That is what a `type` means
+        // for anything invocable -- Java's METHOD symbols carry their return type -- and it is what makes
+        // `add(1).` resolvable at all: a call's type is its callee's. Unknown unless JSDoc said, which is
+        // the honest answer for a language with no declared return types. A VARIABLE holding a function is
+        // the other case and keeps `function`, because there the value really is one.
+        TypeRef inferred = declared.kind == SymbolKind.FUNCTION
+                ? null : RhinoInference.typeOf(declared.initializer, scopes::declaresAnywhere);
         return new SymbolInfo(identifier, declared.kind, inferred, container,
                 emptyToNull(doc.description()), modifiersOf(declared, doc.isDeprecated()), site,
                 parametersOf(declared, doc));

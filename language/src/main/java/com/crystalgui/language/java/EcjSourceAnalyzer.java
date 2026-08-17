@@ -663,10 +663,43 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
             CompilationUnit resolved = unit;
             if (resolved == null) return null;
             SimpleName name = nameAt(resolved, offset);
-            if (name == null) return null;
-            IBinding binding = bindingFor(name);
-            if (binding == null) return null;
-            return describe(resolved, name, binding);
+            if (name != null) {
+                IBinding binding = bindingFor(name);
+                return binding == null ? null : describe(resolved, name, binding);
+            }
+            return expressionAt(resolved, offset);
+        }
+
+        /**
+         * An expression with no name of its own — most importantly, a <b>call</b>.
+         *
+         * <p>{@code list.get(0).} puts a {@code )} immediately before the dot, and completion resolves the
+         * character before the dot to find the receiver. {@link #nameAt} walks <em>up</em> looking for a
+         * {@code SimpleName} and a closing bracket has none above it, so this answered null and the popup
+         * opened empty on one of the commonest shapes in Java — a chained call. Nothing failed; the popup
+         * appeared, which is why it read as completion being unreliable in places.</p>
+         *
+         * <p>Found here because the JavaScript engine had the identical gap and a fixture caught it there
+         * first. The test that pins this one is a deliberate copy of that fixture: "it works in the other
+         * engine" is a claim, and this is what asking it of ECJ answered.</p>
+         *
+         * <p>No name and {@code UNKNOWN} kind, because a call is a value rather than a declaration — there
+         * is nothing to point go-to-definition at. The <em>type</em> is the whole answer, and it is what a
+         * member lookup and a hover each need.</p>
+         */
+        private SymbolInfo expressionAt(CompilationUnit resolved, int offset) {
+            // LENGTH 1, NOT 0, AND THAT IS THE WHOLE OF IT. A zero-length range at offset N is "covered"
+            // by any node whose extent ENDS at N -- JDT's own test is `start <= N && N <= end` -- so
+            // asking at the `)` of `list.get(0)` answered the `0` literal, and the receiver resolved to
+            // `int`. Worse than nothing: a non-null type made the caller stop falling through to its probe
+            // re-parse, so the case this method was added to fix stayed broken with a different cause.
+            // Asking about the character itself picks the node that CONTAINS it, which is the call.
+            ASTNode node = NodeFinder.perform(resolved, offset, 1);
+            while (node != null && !(node instanceof Expression)) node = node.getParent();
+            if (node == null) return null;
+            TypeRef type = typeRef(((Expression) node).resolveTypeBinding());
+            return type == null ? null
+                    : new SymbolInfo("", SymbolKind.UNKNOWN, type, null, null, Set.of(), null);
         }
 
         /**

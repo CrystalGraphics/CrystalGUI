@@ -241,6 +241,42 @@ public class JsResolutionTest {
         assertNull(resolve("var p = java.util;\n", "p").type());
     }
 
+    /**
+     * A call's type is its callee's return type — which is what makes a chain resolvable.
+     *
+     * <p>{@code C.emptyList()} has no name and no declaration; what it <em>is</em> is a value of the return
+     * type, and that is the only thing worth saying about it. Asked at the closing bracket, because that is
+     * where completion asks: the character before the dot in {@code emptyList().}</p>
+     */
+    @Test
+    public void aCallHasTheTypeItsCalleeReturns() {
+        Assume.assumeTrue(JavaLanguage.isAvailable());
+        String source = "var C = Java.type('java.util.Collections');\nvar n = C.emptyList();\n";
+        SymbolInfo call = analyse(source).resolveAt(source.indexOf("emptyList()") + "emptyList(".length());
+        assertNotNull("a call resolved to nothing", call);
+        assertNotNull("a call has no type, so nothing can be completed on it", call.type());
+        assertEquals("java.util.List", call.type().qualifiedName());
+    }
+
+    /**
+     * A function declaration's own type is what it RETURNS, never the string {@code function}.
+     *
+     * <p>The same thing a {@code SymbolInfo} means for a Java method, and the reason a call can be typed at
+     * all: a call's type is its callee's. A <em>variable</em> holding a function is the other case and keeps
+     * {@code function}, because there the value really is one.</p>
+     */
+    @Test
+    public void aFunctionsTypeIsItsReturnTypeAndAVariablesIsTheFunction() {
+        // `plain`, not `f`: `indexOf("f")` finds the 'f' of `function` and resolves inside the keyword.
+        assertNull("a function with no documented return type claims one",
+                resolve("function plain() { return 1; }\n", "plain").type());
+        assertEquals("number",
+                resolve("/** @returns {number} */\nfunction sized() { return 1; }\n", "sized")
+                        .type().displayName());
+        assertEquals("a variable holding a function is a function", "function",
+                resolve("var held = function () { return 1; };\n", "held").type().displayName());
+    }
+
     // ── The JSDoc tier ──────────────────────────────────────────────────────────────────────────
 
     @Test

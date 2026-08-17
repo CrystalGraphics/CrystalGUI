@@ -150,6 +150,34 @@ public class JsCompletionTest {
         assertFalse("an instance method was offered on the class object", offered.contains("intValue"));
     }
 
+    /**
+     * <b>A CALL is a receiver too</b> — reported from the harness as an empty popup.
+     *
+     * <p>{@code Files.emptyList().} is the shape half of all Java interop code is written in, and it put a
+     * {@code )} immediately before the dot: completion resolved at a character no identifier covers, got
+     * nothing, and opened an empty list. Nothing failed — the popup appeared, which is what made it read
+     * as "completion is flaky in places" rather than as one missing case.</p>
+     */
+    @Test
+    public void aCallIsAReceiver() {
+        Assume.assumeTrue(JavaLanguage.isAvailable());
+        List<String> offered = names(completeAt(
+                "var C = Java.type('java.util.Collections');\nvar n = C.emptyList().|\n"));
+        assertFalse("a call receiver offered nothing at all", offered.isEmpty());
+        assertTrue("the return type's members are missing from " + offered.size() + " rows: " + offered,
+                offered.contains("size") && offered.contains("isEmpty"));
+    }
+
+    /** And so is a chain of them, to any depth — a call's type is its callee's, recursively. */
+    @Test
+    public void aChainOfCallsResolvesThroughEveryLink() {
+        Assume.assumeTrue(JavaLanguage.isAvailable());
+        List<String> offered = names(completeAt(
+                "var s = new java.lang.StringBuilder();\nvar t = s.append('a').append('b').|\n"));
+        assertTrue("the second link in the chain did not resolve: " + offered,
+                offered.contains("append") && offered.contains("toString"));
+    }
+
     /** A dot after a decimal point is not a receiver. */
     @Test
     public void aDecimalPointDoesNotOpenAMemberList() {
