@@ -82,7 +82,12 @@ final class RhinoSemanticTokens {
             if (declared.offset < 0) continue;
             add(tokens, declared.offset, declared.length, captureFor(declared, false));
             for (int[] reference : declared.references) {
-                add(tokens, reference[0], reference[1], captureFor(declared, true));
+                String capture = captureFor(declared, true);
+                // NULL MEANS "THE GRAMMAR ALREADY KNOWS", and saying nothing is the point of this class:
+                // a redundant token is a chance to be wrong about something the grammar had right. The
+                // grammar can see whether `summarise` is being CALLED and the scopes cannot, so
+                // overwriting its `function.call` with a bare `function` could only ever lose.
+                if (capture != null) add(tokens, reference[0], reference[1], capture);
             }
         }
 
@@ -139,13 +144,33 @@ final class RhinoSemanticTokens {
      * it was introduced, not where it escaped — while being reassigned is a fact about the binding and
      * belongs on both.</p>
      */
+    @Nullable
     private static String captureFor(RhinoScopes.Declaration declared, boolean atUse) {
         String base = declared.kind.captureName();
+        // A FUNCTION'S DECLARATION TAKES THE DECLARATION NAME, which is what makes JavaScript agree with
+        // Java: `function.method` is the declaration and `function.call` is the call, and every reference
+        // scheme colours the two differently (Islands gives the declaration a blue and leaves the call at
+        // the default foreground). Bare `function` is what a producer says when it cannot tell them apart,
+        // so emitting it for a declaration we CAN identify threw the distinction away.
+        if (declared.kind == SymbolKind.FUNCTION) {
+            if (!atUse) return "function.method";
+            // AT A USE, the grammar is the better witness -- it distinguishes `summarise(…)` from a bare
+            // `summarise` passed as a value, which no amount of scope resolution can. Only the two facts
+            // it CANNOT see are worth a token here.
+            if (declared.reassigned) return base + ".reassigned";
+            if (declared.captured) return base + ".captured";
+            return null;
+        }
         // A CONST IS NEVER REASSIGNED and never captured-in-the-interesting-sense: it cannot change, so
         // neither refinement says anything a reader did not already know from the colour.
         if (declared.kind == SymbolKind.CONSTANT) return base;
         if (declared.reassigned) return base + ".reassigned";
-        if (atUse && declared.captured) return "variable.captured";
+        // THE STEM IS KEPT. This was a literal `"variable.captured"`, which silently retyped whatever it
+        // described: a captured FUNCTION came out as a variable, losing both its kind and its colour.
+        // `generalName()` folds the dotted form onto the stem, so a scheme that styles only
+        // `variable.captured` is unaffected and one that has nothing for `function.captured` still gets
+        // the function colour.
+        if (atUse && declared.captured) return base + ".captured";
         return base;
     }
 
@@ -182,8 +207,35 @@ final class RhinoSemanticTokens {
         for (AstNode at = name.getParent(); at instanceof PropertyGet; at = at.getParent()) {
             outermost = at;
         }
-        return outermost != null
-                && RhinoInference.javaNameOf(outermost, scopes::declaresAnywhere) != null;
+        return javaTypeChain(outermost, scopes) != null;
+    }
+
+    /**
+     * The longest prefix of this chain that names a Java <b>type</b>, or null when none does.
+     *
+     * <p><b>A chain does not have to END at the type.</b> {@code java.lang.String.join(', ', list)} is an
+     * ordinary way to reach a static, and the outermost {@code PropertyGet} there is
+     * {@code java.lang.String.join} — whose last segment is lower-case, so {@code javaNameOf} correctly
+     * answers null for it. Asking only the outermost therefore found no chain at all: nothing marked
+     * {@code java.lang.String}, and {@code java} fell through to the free-name pass and came out
+     * {@code variable.builtin}. So {@code new java.util.ArrayList()} drew as a package path and
+     * {@code java.lang.String.join(...)} drew as a builtin two lines below it — the same construct in two
+     * colours, which reads as the highlighter being unreliable rather than as one of them being wrong.</p>
+     *
+     * <p>Walking inward one segment at a time asks the same question of successively shorter chains and
+     * stops at the first that answers, which is the type. What follows it is a member, and the grammar
+     * already colours that as a call — the same division Java's own output makes, where
+     * {@code java.lang.String} is {@code module}/{@code module}/{@code type} and {@code join} is its own
+     * token.</p>
+     */
+    @Nullable
+    private static PropertyGet javaTypeChain(@Nullable AstNode outermost, RhinoScopes scopes) {
+        for (AstNode at = outermost; at instanceof PropertyGet; at = ((PropertyGet) at).getTarget()) {
+            if (RhinoInference.javaNameOf(at, scopes::declaresAnywhere) != null) {
+                return (PropertyGet) at;
+            }
+        }
+        return null;
     }
 
     /** Whether this name is the thing being called in {@code name(…)} — never {@code a.name(…)}. */
@@ -204,10 +256,13 @@ final class RhinoSemanticTokens {
             if (!(node instanceof PropertyGet)) return true;
             // NOT IF OUR PARENT IS ONE TOO -- that one is the outer chain and covers this.
             if (node.getParent() instanceof PropertyGet) return true;
-            if (RhinoInference.javaNameOf(node, scopes::declaresAnywhere) == null) return true;
+            // THE LONGEST TYPE PREFIX, not the whole chain: a trailing member access is not part of the
+            // name. See javaTypeChain -- asking only about the outermost node left every static call in
+            // the file uncoloured.
+            PropertyGet chain = javaTypeChain(node, scopes);
+            if (chain == null) return true;
 
             // THE LAST SEGMENT IS THE TYPE; everything before it is the package it lives in.
-            PropertyGet chain = (PropertyGet) node;
             Name type = chain.getProperty();
             if (type != null) add(tokens, type.getAbsolutePosition(), type.getLength(), "type");
             for (AstNode at = chain.getTarget(); at != null; ) {

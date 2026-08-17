@@ -333,12 +333,24 @@ texteditor .__indent-guide__ {
     font-weight: var(--syntax-keyword-weight, normal);
 }
 
+/* THE WEIGHT TRAVELS WITH THE KEYWORD COLOUR, everywhere the colour goes. Eclipse Dark draws ten
+ * captures in its keyword orange and bolds them as one gesture, and only two of the ten read the weight
+ * — so `console`, `null`, `true`, a GLSL `uniform` and an HTML tag were orange and thin beside a bold
+ * `var` on the same line. That is the defect `type.builtin` already records from the other direction
+ * ("the whole line was bold except its return type, which reads as the one word having failed"); it was
+ * fixed for the one capture that had been noticed rather than for the channel.
+ *
+ * Reading `--syntax-keyword-weight` rather than growing a key each is the same argument that file makes:
+ * a scheme bolds "the keyword family" as one decision, not nine. Every other shipped scheme sets the key
+ * to `normal`, so this is inert in all of them — the rule is "orange and bold, or neither". */
 .__syntax__::highlight(keyword.control) {
     color: var(--syntax-keyword-control, #C586C0);
+    font-weight: var(--syntax-keyword-weight, normal);
 }
 
 .__syntax__::highlight(keyword.operator) {
     color: var(--syntax-keyword-operator, #569CD6);
+    font-weight: var(--syntax-keyword-weight, normal);
 }
 
 /* A PACKAGE PATH — `java.util` in an import, `com.crystalgui.language` in a package declaration.
@@ -401,6 +413,7 @@ texteditor .__indent-guide__ {
  * guesses wrong. */
 .__syntax__::highlight(type.qualifier) {
     color: var(--syntax-type-qualifier, #569CD6);
+    font-weight: var(--syntax-keyword-weight, normal);
 }
 
 .__syntax__::highlight(function) {
@@ -457,6 +470,7 @@ texteditor .__indent-guide__ {
 
 .__syntax__::highlight(boolean) {
     color: var(--syntax-boolean, #569CD6);
+    font-weight: var(--syntax-keyword-weight, normal);
 }
 
 /* ITALIC, from the same mechanism the comment rules use. IntelliJ's exported scheme sets FONT_TYPE 2 on
@@ -472,6 +486,7 @@ texteditor .__indent-guide__ {
 
 .__syntax__::highlight(constant.builtin) {
     color: var(--syntax-constant-builtin, #569CD6);
+    font-weight: var(--syntax-keyword-weight, normal);
 }
 
 /* COMMENTS CARRY font-style, which every reference scheme sets and this engine refused until now.
@@ -499,6 +514,7 @@ texteditor .__indent-guide__ {
 
 .__syntax__::highlight(variable.builtin) {
     color: var(--syntax-variable-builtin, #569CD6);
+    font-weight: var(--syntax-keyword-weight, normal);
 }
 
 .__syntax__::highlight(variable.parameter) {
@@ -555,6 +571,7 @@ texteditor .__indent-guide__ {
 
 .__syntax__::highlight(tag) {
     color: var(--syntax-tag, #569CD6);
+    font-weight: var(--syntax-keyword-weight, normal);
 }
 
 /* From the CSS, JavaScript and HTML grammars, which name two things the Java one never needed.
@@ -574,6 +591,7 @@ texteditor .__indent-guide__ {
  * for where synonyms are folded and why this is not one. */
 .__syntax__::highlight(label) {
     color: var(--syntax-label, #C586C0);
+    font-weight: var(--syntax-keyword-weight, normal);
 }
 
 /* From XML. `markup` is document content as opposed to the tags around it — the text between elements,

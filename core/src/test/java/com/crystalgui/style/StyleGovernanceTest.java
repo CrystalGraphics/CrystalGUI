@@ -13,6 +13,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -419,6 +421,74 @@ public class StyleGovernanceTest {
             for (String token : read) {
                 if (!defined.contains(token)) {
                     offences.add(scheme + " never defines " + token + ", which the UA sheet reads");
+                }
+            }
+        }
+        assertTrue(String.join("\n", offences), offences.isEmpty());
+    }
+
+    /**
+     * <b>A capture drawn in the keyword colour is drawn at the keyword weight.</b>
+     *
+     * <p>A scheme bolds "the keyword family" as one gesture, not once per capture. Eclipse Dark paints
+     * ten captures in its keyword orange and sets {@code --syntax-keyword-weight: bold}; only
+     * {@code keyword} and {@code type.builtin} read that weight, so {@code console}, {@code null},
+     * {@code true}, a GLSL {@code uniform} and an HTML tag came out orange and thin beside a bold
+     * {@code var} on the same line — the palette looking half-applied rather than deliberate.</p>
+     *
+     * <p>That is the defect {@code type.builtin}'s own comment already records from the other direction
+     * ("the whole line was bold except its return type, which reads as the one word having failed"). It
+     * was fixed for the capture somebody noticed rather than for the channel, which is exactly the shape
+     * that comes back. Stated as a rule over the shipped schemes so the eleventh capture cannot be added
+     * without it: <b>orange and bold, or neither.</b></p>
+     *
+     * <p>Keyed on the resolved COLOUR rather than on a list of capture names, because the list is the
+     * thing that goes stale — a scheme that gives {@code function.builtin} a green of its own (Eclipse
+     * Dark does) is correctly silent here, and one that later repaints it keyword-orange is caught
+     * without anybody remembering to add a row.</p>
+     */
+    @Test
+    public void everyCaptureDrawnInTheKeywordColourAlsoReadsTheKeywordWeight() {
+        Pattern rule = Pattern.compile("::highlight\\(([a-z][a-z.]*)\\)\\s*\\{([^}]*)}", Pattern.DOTALL);
+        Pattern colour = Pattern.compile("color:\\s*var\\((--syntax-[a-z-]+)");
+
+        // capture name -> (colour token, does the rule read the weight)
+        Map<String, String> colourOf = new LinkedHashMap<>();
+        Set<String> readsWeight = new LinkedHashSet<>();
+        for (String part : userAgentParts()) {
+            Matcher rules = rule.matcher(stripComments(load(STYLES + part)));
+            while (rules.find()) {
+                String name = rules.group(1);
+                String body = rules.group(2);
+                Matcher paint = colour.matcher(body);
+                if (paint.find()) colourOf.putIfAbsent(name, paint.group(1));
+                if (body.contains("--syntax-keyword-weight")) readsWeight.add(name);
+            }
+        }
+        assertFalse("no ::highlight rules were parsed at all; the query is wrong", colourOf.isEmpty());
+        assertTrue("the keyword rule itself must read the weight -- otherwise this test is vacuous",
+                readsWeight.contains("keyword"));
+
+        List<String> offences = new ArrayList<>();
+        for (String scheme : shippedSchemes()) {
+            Map<String, String> defined = definitionsOf(load(SCHEMES + scheme));
+            String keywordColour = defined.get("--syntax-keyword");
+            if (keywordColour == null) continue;
+            // ONLY WHERE THE SCHEME ACTUALLY USES THE CHANNEL. A scheme that leaves the weight `normal`
+            // has no inconsistency to see, and enforcing there would legislate palette COINCIDENCE as
+            // family membership: Islands paints `string.escape` and `function.builtin` in the same warm
+            // orange as its keywords, which is a palette with few hues rather than a claim that an escape
+            // sequence is a keyword. Written the other way round this test demanded they bold together
+            // the moment anyone set the key.
+            String weight = defined.get("--syntax-keyword-weight");
+            if (weight == null || "normal".equalsIgnoreCase(weight.trim())) continue;
+            for (Map.Entry<String, String> entry : colourOf.entrySet()) {
+                String value = defined.get(entry.getValue());
+                if (value == null || !value.equalsIgnoreCase(keywordColour)) continue;
+                if (!readsWeight.contains(entry.getKey())) {
+                    offences.add(scheme + " draws ::highlight(" + entry.getKey() + ") in the keyword"
+                            + " colour " + keywordColour + " via " + entry.getValue()
+                            + ", but that rule does not read --syntax-keyword-weight");
                 }
             }
         }
