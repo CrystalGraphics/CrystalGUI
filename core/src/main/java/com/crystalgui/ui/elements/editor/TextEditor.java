@@ -41,6 +41,7 @@ import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSet;
 import com.crystalgui.text.diagnostic.DiagnosticTag;
 import com.crystalgui.text.fold.FoldingModel;
+import com.crystalgui.text.cursor.IndentationProvider;
 import com.crystalgui.text.fold.FoldingRangeProvider;
 import com.crystalgui.text.fold.FoldingRegions;
 import com.crystalgui.text.fold.IndentRangeProvider;
@@ -247,12 +248,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private float cachedPadLeft;
     private float cachedFoldWidth;
     private float cachedCodeLeftPad;
-
-    /**
-     * The {@code font-size} in effect the first time {@link #refreshGutterMetrics} ever ran for
-     * this editor — {@code -1} until then. See {@link #gutterMetric} for why this exists.
-     */
-    private float gutterMetricBaselineFontSize = -1f;
 
     /** Clips everything drawn in document coordinates — see {@link #textViewport()}. */
     private UIElement textViewport;
@@ -1690,6 +1685,21 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     /** Sets the language. Pass {@link SyntaxTokenizer#NONE} for plain text. */
+    /**
+     * Where an indent level comes from when Enter is pressed, or null for the syntactic rule.
+     *
+     * <p>Set beside the tokenizer, because the only implementation is one: a provider needs the parse
+     * tree, and the tokenizer is what owns one per document. @see IndentationProvider</p>
+     */
+    @Nullable
+    private IndentationProvider indentation;
+
+    /** @see #indentation */
+    public TextEditor setIndentationProvider(@Nullable IndentationProvider provider) {
+        this.indentation = provider;
+        return this;
+    }
+
     public TextEditor setTokenizer(SyntaxTokenizer newTokenizer) {
         if (this.tokenizer == newTokenizer) return this;
         // Detach the old one's listener before dropping it, or a tokenizer that is still finishing work
@@ -2561,7 +2571,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         int shift = 0;
         for (Selection selection : selections.all()) {
             TypeOperations.Enter enter = TypeOperations.enterAt(
-                    buffer.document(), selection.start(), indentStyle(), language);
+                    buffer.document(), selection.start(), indentStyle(), language, indentation);
             changes.add(new Change(selection.start(), selection.end(), enter.text()));
             // EACH CARET IS SHIFTED BY THE EDITS BEFORE IT. `enterAt` answers against the document as it
             // stands, and the changes are applied together, so the second caret's offset has to carry the
@@ -3404,14 +3414,20 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * <p>The values are pure CSS — no font, no layout — so one read per frame is always current.</p>
      */
     private void refreshGutterMetrics() {
+        // THE GUTTER GETS THE EDITOR'S FONT SIZE, and that is what makes the three `em` metrics below
+        // mean anything. font-size does NOT effectively inherit here -- ua/core.css opens with
+        // `* { font-size: 10 }`, which is a candidate on every element, and inheritance only applies
+        // where there is no candidate at any origin. So without this push the gutter's `em`s would
+        // resolve against 10 at every zoom level while the digits beside them grew, which is precisely
+        // the drift the old baseline-ratio hack existed to undo.
+        pushEditorFontTo(gutter);
         cachedPadLeft = gutterMetric(LayoutProperties.PADDING_LEFT);
         cachedFoldWidth = gutterMetric(LayoutProperties.PADDING_RIGHT);
         cachedCodeLeftPad = gutterMetric(LayoutProperties.MARGIN_RIGHT);
     }
 
     /**
-     * One of the gutter's metrics, as the cascade computed it, <b>scaled to the editor's current
-     * font size.</b>
+     * One of the gutter's metrics, as the cascade computed it.
      *
      * <p>Read from the <b>computed style</b> rather than from the laid-out box, because
      * {@code getTaffyLayout()} is protected and the gutter is a plain {@code UIElement} — Java's protected
@@ -3423,36 +3439,20 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * width, which is computed <em>from</em> these three values — so it would be circular, and silently
      * returning something plausible is worse than ignoring it.</p>
      *
-     * <h3>The scaling — a regression this restores, not a new feature</h3>
-     * <p>{@link #measureGutter}'s own doc already claims "derived from the font size rather than fixed,
-     * so the gutter stays proportionate when the editor is zoomed" — that used to be true when these
-     * three metrics were {@code max(6f, fontSize * 0.9f)}-shaped Java constants. Moving them into
-     * {@code default.css} (see {@link #gutterPadLeft}'s doc) fixed the real problem — a pixel value
-     * baked into a widget — but dropped the multiply that made the claim true: a bare CSS length has no
-     * way to say "relative to font size" at all (this engine has no {@code em} unit), so the number the
-     * sheet gives back is the same at every zoom level while {@link #lineHeight} and the digits'
-     * shaped width both grow. The numbers column kept pace with zoom because it is measured text; the
-     * padding around it did not, because it was never anything but a constant — so the gutter's
-     * proportions visibly drifted apart from the code the more the editor was zoomed.</p>
+     * <h3>The zoom scaling is gone, and the sheet does it now</h3>
      *
-     * <p>Re-deriving a fixed reference size would need a caller to say what font-size these constants
-     * were authored against, and nothing records that. Instead the font-size the FIRST call ever saw is
-     * cached as the baseline ({@link #gutterMetricBaselineFontSize}) and every value scales relative to
-     * it — so whatever the gutter looks like at whatever size an editor actually starts at is preserved
-     * exactly (ratio 1.0 there), and it stays proportionate as the size changes from that point, in
-     * either direction. A theme is still free to change the absolute numbers in the sheet; only the
-     * zoom-relative behaviour is decided here.</p>
+     * <p>This used to multiply by {@code fontSize / gutterMetricBaselineFontSize}, where the baseline was
+     * the font size the FIRST call ever saw. It existed for a real defect — {@code lineHeight} and the
+     * digits' shaped width both grow with zoom while a bare CSS length does not, so the gutter's
+     * proportions visibly came apart from the code — and it was an {@code em} with no name, no way for a
+     * sheet to opt out of, and a reference value that depended on when the editor happened to be created.
+     * The three metrics are authored in {@code em} now (see {@code ua/editor.css}) and the cascade
+     * resolves them per element, so this is a plain read again.</p>
      */
     private float gutterMetric(StyleProperty<LengthPercentageAuto> property) {
         LengthPercentageAuto value = gutter.getStyle().getLayoutGroup().getValueSave(property);
         if (value == null || value.getType() != LengthPercentageAuto.Type.LENGTH) return 0f;
-        float raw = Math.max(0f, value.getValue());
-
-        float fontSize = getStyle().getGeneralGroup().fontSize();
-        if (fontSize <= 0f) return raw;
-        if (gutterMetricBaselineFontSize <= 0f) gutterMetricBaselineFontSize = fontSize;
-
-        return raw * (fontSize / gutterMetricBaselineFontSize);
+        return Math.max(0f, value.getValue());
     }
 
     /**

@@ -2083,6 +2083,36 @@ public class UIElement implements SettingsScope, DataProvider {
         for (UIElement child : children) child.invalidateStyleMatch();
     }
 
+    /**
+     * Whether any rule matching this element was authored in {@code em}. Set by the cascade.
+     *
+     * @see com.crystalgui.style.property.FontRelative
+     */
+    private boolean hasFontRelativeStyles;
+
+    /** Told by {@code StyleEngine.rematch} whether this element's rules use {@code em}. */
+    public void setHasFontRelativeStyles(boolean value) {
+        this.hasFontRelativeStyles = value;
+    }
+
+    /**
+     * Re-matches this element because its {@code font-size} changed and an {@code em} depends on it.
+     *
+     * <p>Public because the {@code font-size} property's listener lives in the style package and this is
+     * the whole of what it needs; narrow enough that it cannot become a way to force a cascade for other
+     * reasons. It is a no-op for an element with no {@code em} in any matching rule — which is nearly
+     * every element, so the ordinary cost of a font-size change is one field read.</p>
+     *
+     * <p>Deliberately <b>not</b> recursive, unlike {@link #invalidateStyleMatch}. An {@code em} is
+     * relative to the element's <em>own</em> font size, and a descendant's own size is a candidate on
+     * that descendant — which the same listener will see if it changes. Recursing would re-match a
+     * subtree on every zoom for no gain.</p>
+     */
+    public void invalidateFontRelativeStyles() {
+        if (!hasFontRelativeStyles || attachedWindow == null) return;
+        attachedWindow.getStyleEngine().markDirty(this);
+    }
+
     // ── Paint ────────────────────────────────────────────────────────────────
 
     /**
