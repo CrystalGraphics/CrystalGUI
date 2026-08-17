@@ -519,6 +519,13 @@ final class RhinoResolution {
         int index = argumentIndexAt(call, offset);
         if (index < 0) return null;
         AstNode target = call.getTarget();
+
+        // A JAVA CALLEE KNOWS ITS PARAMETER TYPES, and it is the case that pays: `list.add(|)` in a
+        // script reaching Java is where an expected type is actually useful, and the tier that could
+        // answer it was left unbuilt with a note saying it would land "with 10.7". It did not.
+        TypeRef fromJava = javaParameterTypeAt(target, index);
+        if (fromJava != null) return fromJava;
+
         if (!(target instanceof Name)) return null;
         RhinoScopes.Declaration callee =
                 scopes.visibleDeclaration(((Name) target).getIdentifier(), target.getAbsolutePosition());
@@ -529,6 +536,32 @@ final class RhinoResolution {
         if (!(parameter instanceof Name)) return null;
         String declaredType = docFor(callee).paramType(((Name) parameter).getIdentifier());
         return declaredType == null ? null : typeNamed(declaredType);
+    }
+
+    /**
+     * The declared type of a Java method's {@code index}-th parameter, when the callee is one.
+     *
+     * <p>Through the same member list the completion popup and the hover read, so the answer cannot
+     * disagree with what either of them showed. An overload set is resolved the only way it can be
+     * without argument types: the first member of that name with enough parameters — which is exactly
+     * right for the overwhelmingly common case of one overload, and a defensible guess otherwise.</p>
+     */
+    @Nullable
+    private TypeRef javaParameterTypeAt(@Nullable AstNode target, int index) {
+        if (!(target instanceof PropertyGet) || interop == null) return null;
+        PropertyGet access = (PropertyGet) target;
+        Name method = access.getProperty();
+        if (method == null || method.getIdentifier() == null) return null;
+
+        TypeRef receiver = typeOf(access.getTarget(), access.getAbsolutePosition());
+        String javaName = receiver == null ? null : JsTypeRef.javaNameOf(receiver);
+        if (javaName == null) return null;
+        boolean staticSide = receiver instanceof JsTypeRef && ((JsTypeRef) receiver).isStaticSide();
+        for (SymbolInfo member : interop.membersOf(javaName, staticSide)) {
+            if (!method.getIdentifier().equals(member.name())) continue;
+            if (index < member.parameters().size()) return member.parameters().get(index);
+        }
+        return null;
     }
 
     @Nullable

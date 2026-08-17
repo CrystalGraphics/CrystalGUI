@@ -115,6 +115,12 @@ final class RhinoSemanticTokens {
         // and that is not known, leaving the grammar's answer alone everywhere else.
         markUnresolvedCalls(root, scopes, known, hostBindings, tokens);
 
+        // AND THE JAVA REACHED FROM HERE, which is the half of this file a grammar cannot begin to see:
+        // `java.util` is a PACKAGE and `java.util.ArrayList` is a TYPE, and the difference is a lookup
+        // rather than a shape. Drawn as `module` and `type`, the same captures the Java engine publishes,
+        // so one colour scheme answers for both languages.
+        markJavaChains(root, scopes, tokens);
+
         // SORTED BY START, because the editor merges these into one per-row bucket and a consumer that
         // binary-searches an unsorted list silently misses ranges. The walk produces declaration order,
         // which is not document order.
@@ -164,6 +170,40 @@ final class RhinoSemanticTokens {
     private static boolean isCallTarget(Name name) {
         AstNode parent = name.getParent();
         return parent instanceof FunctionCall && ((FunctionCall) parent).getTarget() == name;
+    }
+
+    /**
+     * The package segments and the type at the end of {@code java.util.ArrayList}.
+     *
+     * <p>Only the OUTERMOST chain in any expression: walking every {@code PropertyGet} would colour
+     * {@code java}, {@code java.util} and {@code java.util.ArrayList} as three overlapping ranges, and
+     * overlapping semantic tokens are decided by paint order rather than by intent.</p>
+     */
+    private static void markJavaChains(AstRoot root, RhinoScopes scopes, List<SyntaxToken> tokens) {
+        root.visit(node -> {
+            if (!(node instanceof PropertyGet)) return true;
+            // NOT IF OUR PARENT IS ONE TOO -- that one is the outer chain and covers this.
+            if (node.getParent() instanceof PropertyGet) return true;
+            if (RhinoInference.javaNameOf(node, scopes::declaresAnywhere) == null) return true;
+
+            // THE LAST SEGMENT IS THE TYPE; everything before it is the package it lives in.
+            PropertyGet chain = (PropertyGet) node;
+            Name type = chain.getProperty();
+            if (type != null) add(tokens, type.getAbsolutePosition(), type.getLength(), "type");
+            for (AstNode at = chain.getTarget(); at != null; ) {
+                if (at instanceof PropertyGet) {
+                    Name segment = ((PropertyGet) at).getProperty();
+                    if (segment != null) {
+                        add(tokens, segment.getAbsolutePosition(), segment.getLength(), "module");
+                    }
+                    at = ((PropertyGet) at).getTarget();
+                } else {
+                    if (at instanceof Name) add(tokens, at.getAbsolutePosition(), at.getLength(), "module");
+                    break;
+                }
+            }
+            return true;
+        });
     }
 
     private static void add(List<SyntaxToken> tokens, int offset, int length, String capture) {

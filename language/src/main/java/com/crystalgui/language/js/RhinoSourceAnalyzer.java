@@ -13,11 +13,16 @@ import com.crystalgui.text.lang.SymbolKind;
 import com.crystalgui.text.lang.TypeRef;
 import com.crystalgui.text.syntax.SyntaxToken;
 
+import javax.annotation.Nullable;
+
 import org.mozilla.javascript.CompilerEnvirons;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Parser;
+import org.mozilla.javascript.ast.AstNode;
 import org.mozilla.javascript.ast.AstRoot;
 import org.mozilla.javascript.ast.ErrorCollector;
+import org.mozilla.javascript.ast.IfStatement;
+import org.mozilla.javascript.ast.KeywordLiteral;
 import org.mozilla.javascript.ast.ParseProblem;
 
 import java.util.ArrayList;
@@ -190,7 +195,10 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
         // mid-edit and vanishes when you finish is worse than no warning. Same rule the Java engine
         // states as `optionalProblemsAnalysed`, arrived at from the same direction.
         boolean parsed = root != null && !hasError(reported);
-        if (parsed) reported = withUnusedWarnings(reported, scopes, lines);
+        if (parsed) {
+            reported = withUnusedWarnings(reported, scopes, lines);
+            reported = withConstantConditions(reported, root, text, lines);
+        }
 
         Map<String, String> bindings = hostBindings;
         RhinoResolution resolution = new RhinoResolution(root, scopes, text, lines, liveScope, interop,
@@ -293,6 +301,46 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
                     RhinoProblemPolicy.OWNER, null));
         }
         return out;
+    }
+
+    /**
+     * {@code if (false)} and {@code while (true)} — a branch whose condition cannot vary.
+     *
+     * <p>The JavaScript half of "unreachable code, dead branch": Rhino reports nothing about it, because a
+     * parser has no reason to. It is a small walk over literal conditions and it catches the one shape
+     * that is nearly always a mistake rather than a choice — a condition left behind after debugging.</p>
+     *
+     * <p><b>{@code while (true)} is exempt</b>, and that is the whole difficulty of the check: it is the
+     * idiomatic spelling of a deliberate loop in every language that has it, and warning about it would put
+     * a mark on correct code in every event loop ever written. {@code if (true)} is not exempt, because
+     * nobody writes one on purpose.</p>
+     */
+    private static List<Diagnostic> withConstantConditions(List<Diagnostic> problems, AstRoot root,
+                                                           String source, LineIndex lines) {
+        List<Diagnostic> out = new ArrayList<>(problems);
+        root.visit(node -> {
+            AstNode condition = constantConditionOf(node);
+            if (condition == null) return true;
+            String literal = RhinoTokens.keywordOf(condition);
+            int at = condition.getAbsolutePosition();
+            out.add(new Diagnostic(lines.pointAt(at),
+                    lines.pointAt(Math.min(source.length(), at + Math.max(1, condition.getLength()))),
+                    DiagnosticSeverity.WARNING,
+                    "'" + literal + "' is constant, so this branch is decided before it runs",
+                    RhinoProblemPolicy.OWNER, null));
+            return true;
+        });
+        return out;
+    }
+
+    /** The condition of an {@code if} whose test is a boolean literal, or null. */
+    @Nullable
+    private static AstNode constantConditionOf(AstNode node) {
+        if (!(node instanceof IfStatement)) return null;
+        AstNode condition = ((IfStatement) node).getCondition();
+        if (!(condition instanceof KeywordLiteral)) return null;
+        String literal = RhinoTokens.keywordOf(condition);
+        return "true".equals(literal) || "false".equals(literal) ? condition : null;
     }
 
     private static String messageOf(RuntimeException thrown) {

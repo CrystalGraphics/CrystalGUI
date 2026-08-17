@@ -174,9 +174,58 @@ public final class TypeIndex {
             return new Match(kept, all.truncated());
         }
 
+        /** As {@link TypeIndex#allUnder}, minus what the policy refuses. */
+        public Match allUnder(String qualifiedPrefix) {
+            Match all = index.allUnder(qualifiedPrefix);
+            if (allowsClass == null) return all;
+            List<Entry> kept = new ArrayList<>(all.entries().size());
+            for (Entry entry : all.entries()) {
+                if (allowsClass.test(entry.qualifiedName())) kept.add(entry);
+            }
+            return new Match(kept, all.truncated());
+        }
+
         public Kind kindOf(Entry entry) {
             return index.kindOf(entry);
         }
+    }
+
+    /**
+     * Every type whose <b>qualified</b> name begins with {@code qualifiedPrefix}.
+     *
+     * <p>A different question from {@link #matching}, which asks about a SIMPLE name and is what a
+     * completion prefix wants. This one answers "what is under this package", which is what a dot after
+     * {@code java.util} asks — and there is no way to phrase it as a simple-name query, because the thing
+     * being narrowed is the package rather than the class.</p>
+     *
+     * <p>Bounded like the other, and for the same reason: {@code java.} covers most of the JDK, and a
+     * consumer that took the whole answer would be building thirty thousand completion rows to show
+     * twenty. Truncation is reported so the session asks again as the query narrows.</p>
+     */
+    public Match allUnder(String qualifiedPrefix) {
+        if (qualifiedPrefix == null || qualifiedPrefix.isEmpty()) return new Match(List.of(), false);
+        ensureBuilt();
+        List<Entry> under = new ArrayList<>();
+        boolean truncated = false;
+        for (Entry entry : entries) {
+            // THE PACKAGE, NOT THE QUALIFIED NAME. `entry.packageName()` is shared between every entry of
+            // one package, so this is a prefix test on an interned string rather than a concatenation per
+            // entry -- which matters at fifty thousand of them, walked on a keystroke.
+            if (!startsUnder(entry.packageName(), qualifiedPrefix)) continue;
+            if (under.size() >= MAX_RESULTS) {
+                truncated = true;
+                break;
+            }
+            under.add(entry);
+        }
+        return new Match(under, truncated);
+    }
+
+    /** Whether {@code packageName} is at or under {@code prefix}, on a dot boundary. */
+    private static boolean startsUnder(String packageName, String prefix) {
+        String bare = prefix.endsWith(".") ? prefix.substring(0, prefix.length() - 1) : prefix;
+        if (!packageName.startsWith(bare)) return false;
+        return packageName.length() == bare.length() || packageName.charAt(bare.length()) == '.';
     }
 
     public Match matching(String prefix) {
