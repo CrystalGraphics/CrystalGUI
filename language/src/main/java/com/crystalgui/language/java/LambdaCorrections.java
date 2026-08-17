@@ -107,7 +107,7 @@ final class LambdaCorrections {
 
         /** Empty: nothing reports this, so it is asked about the range rather than about a problem. */
         @Override public int[] problems() {
-            return new int[0];
+            return Correction.NONE;
         }
 
         @Override public void contribute(FixContext context, IProblem none, List<CodeAction> out) {
@@ -555,7 +555,7 @@ final class LambdaCorrections {
         }
 
         @Override public int[] problems() {
-            return new int[0];
+            return Correction.NONE;
         }
 
         @Override public void contribute(FixContext context, IProblem problem, List<CodeAction> out) {
@@ -603,9 +603,7 @@ final class LambdaCorrections {
             List<Change> changes = new ArrayList<>();
             changes.add(new Change(lambda.getStartPosition(),
                     lambda.getStartPosition() + lambda.getLength(), built.toString()));
-            changes.addAll(imports.changes());
-            changes.sort(Comparator.comparingInt(Change::from));
-            ChangeSet edit = context.changeSet(changes);
+            ChangeSet edit = context.changeSet(changes, imports);
             if (edit == null) return;
             out.add(context.preferredIntention(TO_ANONYMOUS, "Replace with anonymous class",
                     "Writes the lambda out as the interface it implements.", edit));
@@ -615,8 +613,7 @@ final class LambdaCorrections {
         private static String bodyOf(LambdaExpression lambda, String source, boolean isVoid) {
             ASTNode body = lambda.getBody();
             if (body == null) return null;
-            String text = source.substring(body.getStartPosition(),
-                    body.getStartPosition() + body.getLength());
+            String text = FixContext.text(body, source);
             if (body instanceof Block) {
                 String inner = text.trim();
                 if (!inner.startsWith("{") || !inner.endsWith("}")) return null;

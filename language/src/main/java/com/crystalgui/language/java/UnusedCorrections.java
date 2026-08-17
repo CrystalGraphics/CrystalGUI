@@ -340,8 +340,7 @@ final class UnusedCorrections {
             ChangeSet edit = context.changesFrom(rewrite);
             if (edit == null) return;
 
-            String shown = context.source().substring(element.getStartPosition(),
-                    element.getStartPosition() + element.getLength()).trim();
+            String shown = context.text(element).trim();
             out.add(context.preferredFix(id, String.format(titleFormat, shown), edit));
         }
     }

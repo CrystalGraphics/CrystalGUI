@@ -66,7 +66,7 @@ final class ImportCorrections {
         }
 
         @Override public int[] problems() {
-            return new int[0];
+            return Correction.NONE;
         }
 
         @Override public void contribute(FixContext context, IProblem none, List<CodeAction> out) {

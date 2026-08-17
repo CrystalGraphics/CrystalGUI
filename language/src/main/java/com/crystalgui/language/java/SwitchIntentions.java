@@ -91,7 +91,7 @@ final class SwitchIntentions {
         }
 
         @Override public int[] problems() {
-            return new int[0];
+            return Correction.NONE;
         }
 
         @Override public void contribute(FixContext context, IProblem problem, List<CodeAction> out) {
@@ -160,7 +160,7 @@ final class SwitchIntentions {
 
         /** The branch's statements, without the braces the {@code if} wrote around them. */
         private static String interiorOf(Statement body, String source) {
-            String text = Negation.textOf(body, source).trim();
+            String text = FixContext.text(body, source).trim();
             if (!(body instanceof Block)) return text;
             return text.substring(1, text.length() - 1).trim();
         }
@@ -405,7 +405,7 @@ final class SwitchIntentions {
 
         @Override
         public int[] problems() {
-            return new int[0];
+            return Correction.NONE;
         }
 
         @Override
@@ -420,7 +420,7 @@ final class SwitchIntentions {
             String source = context.source();
             String indent = Indent.at(source, switched.getStartPosition());
             StringBuilder built = new StringBuilder("switch (")
-                    .append(Negation.textOf(switched.getExpression(), source)).append(") {\n");
+                    .append(FixContext.text(switched.getExpression(), source)).append(") {\n");
             for (Group group : groups) {
                 built.append(indent).append("    ").append(group.label).append(" -> ");
                 appendArrowBody(built, group, source, indent);
@@ -471,7 +471,7 @@ final class SwitchIntentions {
         private static void appendArrowBody(StringBuilder built, Group group, String source, String indent) {
             if (group.body.size() == 1) {
                 Statement only = group.body.get(0);
-                String text = Negation.textOf(only, source).trim();
+                String text = FixContext.text(only, source).trim();
                 if (bareArrowBodyAllowed(only)) {
                     built.append(text).append('\n');
                     return;
@@ -483,7 +483,7 @@ final class SwitchIntentions {
             }
             built.append("{\n");
             for (Statement statement : group.body) {
-                built.append(Indent.reindent(Negation.textOf(statement, source), indent + "        "))
+                built.append(Indent.reindent(FixContext.text(statement, source), indent + "        "))
                         .append('\n');
             }
             built.append(indent).append("    }\n");
@@ -567,7 +567,7 @@ final class SwitchIntentions {
      * runs. The characters are right on all of them, and they also keep {@code 0xFF} written as {@code 0xFF}.</p>
      */
     private static String labelTextOf(SwitchCase label, String source) {
-        String text = Negation.textOf(label, source).trim();
+        String text = FixContext.text(label, source).trim();
         return text.endsWith(":") ? text.substring(0, text.length() - 1).trim() : text;
     }
 

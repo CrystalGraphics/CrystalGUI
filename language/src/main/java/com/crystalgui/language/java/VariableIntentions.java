@@ -100,7 +100,7 @@ final class VariableIntentions {
         }
 
         @Override public int[] problems() {
-            return NONE;
+            return Correction.NONE;
         }
 
         @Override public void contribute(FixContext context, IProblem problem, List<CodeAction> out) {
@@ -142,18 +142,15 @@ final class VariableIntentions {
             String source = context.source();
             String name = freshName(expression, type, statement);
             String indent = Indent.at(source, statement.getStartPosition());
-            String value = source.substring(expression.getStartPosition(),
-                    expression.getStartPosition() + expression.getLength());
+            String value = FixContext.text(expression, source);
 
             List<Change> changes = new ArrayList<>();
             changes.add(new Change(statement.getStartPosition(), statement.getStartPosition(),
                     written + " " + name + " = " + value + ";\n" + indent));
             changes.add(new Change(expression.getStartPosition(),
                     expression.getStartPosition() + expression.getLength(), name));
-            changes.addAll(imports.changes());
-            changes.sort(Comparator.comparingInt(Change::from));
 
-            ChangeSet edit = context.changeSet(changes);
+            ChangeSet edit = context.changeSet(changes, imports);
             if (edit == null) return;
             out.add(context.intention(INTRODUCE, "Introduce variable '" + name + "'",
                     "Moves this expression into a local declared just above, and uses the local here.",
@@ -333,7 +330,7 @@ final class VariableIntentions {
         }
 
         @Override public int[] problems() {
-            return NONE;
+            return Correction.NONE;
         }
 
         @Override public void contribute(FixContext context, IProblem problem, List<CodeAction> out) {
@@ -366,7 +363,7 @@ final class VariableIntentions {
             if (uses.size() > 1 && SideEffects.addedByRepeating(value)) return;
 
             String source = context.source();
-            String text = Negation.textOf(value, source);
+            String text = FixContext.text(value, source);
             if (needsParentheses(value)) text = "(" + text + ")";
 
             List<Change> changes = new ArrayList<>();
@@ -491,6 +488,5 @@ final class VariableIntentions {
 
     // ── Shared ──────────────────────────────────────────────────────────────────────────────────
 
-    private static final int[] NONE = new int[0];
 
 }
