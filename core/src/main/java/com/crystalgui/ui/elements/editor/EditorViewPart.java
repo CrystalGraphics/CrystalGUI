@@ -17,39 +17,30 @@ package com.crystalgui.ui.elements.editor;
  * that only ever wraps a single editor is a layer to keep in step rather than a seam. What is genuinely
  * worth porting is the <b>decomposition and the render protocol</b>, and both are here.</p>
  *
- * <h3>{@code shouldRender} is defined but not yet driving anything</h3>
+ * <h3>There is no {@code shouldRender} gate, and that is now a decision rather than an omission</h3>
  * <p>Monaco renders a part only when an event has marked it dirty ({@code _getViewPartsToRender} in
- * {@code browser/view.ts}), which is what makes a settled frame cost nothing. This editor still renders
- * every part every frame, exactly as it did when they were methods — the extraction is deliberately a
- * <b>pure code move</b>, so the 226 widget tests are a real net under it.</p>
+ * {@code browser/view.ts}), and this class carried the flag — {@code setShouldRender}, {@code
+ * onDidRender}, the lot — from the day the parts were extracted. <b>Nothing ever called it.</b> Every
+ * part rendered every frame and the driver ignored the answer, which the class's own javadoc said
+ * outright.</p>
  *
- * <p>The flag lives here from the start because retrofitting it later means revisiting every part; wiring
- * it means giving each part its own invalidation, and getting that wrong shows up as a stale decoration
- * rather than as a failure, which is the kind of bug that wants its own change to bisect. Until then
- * {@link #shouldRender()} answers {@code true} and the driver ignores it.</p>
+ * <p>A protocol that exists and is not honoured is worse than none: the next author reads the flag, sets
+ * it, and gets no behaviour change — or worse, trusts that a part not setting it will not render. So it
+ * is gone. <b>If it is wanted, it has to be wired from the invalidation sites</b> — the scroll, the
+ * selection change, the diagnostic push, the fold toggle — and not from the parts, because a part cannot
+ * know that something it reads has changed. Getting that wrong shows up as a <em>stale decoration</em>
+ * rather than as a failure, which is the kind of bug that wants its own change to bisect.</p>
+ *
+ * <p>What made the gate worth having in Monaco is per-frame cost, and the two genuine costs here were
+ * text shapings that ran every frame regardless of dirtiness — both now cached at their source, which is
+ * where they belonged either way.</p>
  */
 abstract class EditorViewPart {
 
     protected final TextEditor editor;
 
-    /** Deliberately starts true: a part that has never rendered has everything to do. */
-    private boolean shouldRender = true;
-
     EditorViewPart(TextEditor editor) {
         this.editor = editor;
-    }
-
-    /** Marks this part as needing a pass. */
-    final void setShouldRender() {
-        shouldRender = true;
-    }
-
-    final boolean shouldRender() {
-        return shouldRender;
-    }
-
-    final void onDidRender() {
-        shouldRender = false;
     }
 
     /**
@@ -57,6 +48,17 @@ abstract class EditorViewPart {
      *
      * <p>The window is the editor's realised range, overscan included — the same {@code first}/{@code last}
      * the {@code layOut*} methods took. A part that is not per-line ignores it.</p>
+     *
+     * <p><b>An empty window means "hide what you have", never "return".</b> {@code lastViewLine <
+     * firstViewLine} happens between a document being replaced and the next {@code updateWindow}, and a
+     * part that returns early leaves its decorations where the old text was — pointing at rows that no
+     * longer exist. The pool-based parts called {@code hideAll()} and two of them returned; this is the
+     * rule they now share, and it lives here so a new part inherits it rather than choosing.</p>
      */
     abstract void render(int firstViewLine, int lastViewLine);
+
+    /** Whether this pass has any line to draw on. @see #render */
+    protected final boolean hasWindow(int firstViewLine, int lastViewLine) {
+        return lastViewLine >= firstViewLine;
+    }
 }

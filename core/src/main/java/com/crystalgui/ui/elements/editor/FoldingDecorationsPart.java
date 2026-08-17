@@ -161,7 +161,7 @@ final class FoldingDecorationsPart extends EditorViewPart {
             int opener = trailingOpenerIndex(rowText);
             String tail = editor.placeholderTextFor(region);
             glyph.setText(opener >= 0 ? rowText.charAt(opener) + tail : tail);
-            pushEditorFont(glyph);
+            editor.pushEditorFontTo(glyph);
 
             int endColumn = editor.projections().projectionOf(model.row()).maxColumn(model.viewLineInRow());
             // Back up over the opener and anything after it. Index-to-column is a constant shift on one
@@ -292,9 +292,4 @@ final class FoldingDecorationsPart extends EditorViewPart {
         return Math.min(editor.lineHeight() * 0.88f, Math.max(1f, editor.getFontSize() * 1.35f));
     }
 
-    private void pushEditorFont(UIText glyph) {
-        StyleGroup.importantPipeline(glyph.getStyle().getGeneralGroup(),
-                g -> g.fontSize(editor.getStyle().getGeneralGroup().fontSize())
-                        .fontFamily(editor.getStyle().getGeneralGroup().fontFamily()));
-    }
 }
