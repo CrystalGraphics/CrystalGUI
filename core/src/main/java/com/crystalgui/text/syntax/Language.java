@@ -153,6 +153,54 @@ public record Language(
         return null;
     }
 
+    /** The opening character for {@code closer}, or {@code null} if it does not close anything. */
+    @Nullable
+    public Character openerFor(char closer) {
+        for (BracketPair pair : brackets) {
+            if (pair.close() == closer) return pair.open();
+        }
+        return null;
+    }
+
+    /**
+     * The universal three, for a language that declares no pairs of its own.
+     *
+     * <p>{@link #PLAIN} is the case, and it is not a rare one — it is what an editor has before anybody
+     * tells it what it is looking at.</p>
+     */
+    private static final String FALLBACK_OPENERS = "([{";
+    private static final String FALLBACK_CLOSERS = ")]}";
+
+    /**
+     * As {@link #closerFor}, but <b>falling back to {@code ( [ &#123;</b>} when this language declares no
+     * pairs at all.
+     *
+     * <h3>Structural, and deliberately not what auto-closing asks</h3>
+     *
+     * <p>Two questions live on these pairs and they need different answers for a language that has not
+     * declared any. <b>Auto-closing puts a CHARACTER into the document</b> and must never guess — typing
+     * {@code (} in a file nobody has identified should produce {@code (}, not {@code ()}. <b>Matching and
+     * indenting are structural</b>: they draw a highlight and they insert whitespace, and every
+     * brace-shaped text on earth wants them whether or not the editor has been told what it is reading.</p>
+     *
+     * <p>A language that <em>does</em> declare pairs overrides the fallback entirely, so a Lisp with only
+     * parentheses correctly ignores a brace rather than inheriting one.</p>
+     */
+    @Nullable
+    public Character structuralCloserFor(char opener) {
+        if (!brackets.isEmpty()) return closerFor(opener);
+        int at = FALLBACK_OPENERS.indexOf(opener);
+        return at < 0 ? null : FALLBACK_CLOSERS.charAt(at);
+    }
+
+    /** The reverse of {@link #structuralCloserFor}, with the same fallback. */
+    @Nullable
+    public Character structuralOpenerFor(char closer) {
+        if (!brackets.isEmpty()) return openerFor(closer);
+        int at = FALLBACK_CLOSERS.indexOf(closer);
+        return at < 0 ? null : FALLBACK_OPENERS.charAt(at);
+    }
+
     /** Whether {@code c} closes a pair — including the quotes, which close themselves. */
     public boolean isCloser(char c) {
         for (BracketPair pair : brackets) {

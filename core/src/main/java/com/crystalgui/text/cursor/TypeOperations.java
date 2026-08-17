@@ -160,7 +160,7 @@ public final class TypeOperations {
 
         char before = beforeCaret(line, column);
         char after = column < line.length() ? line.charAt(column) : '\0';
-        Character closer = indentCloserFor(language, before);
+        Character closer = before == 0 ? null : language.structuralCloserFor(before);
 
         if (closer != null && after == closer) {
             String head = "\n" + carried + style.oneLevel();
@@ -172,28 +172,6 @@ public final class TypeOperations {
         }
         String inserted = "\n" + carried;
         return new Enter(inserted, at + inserted.length());
-    }
-
-    /**
-     * The closer indentation should answer to — the language's, or the universal three when it has none.
-     *
-     * <p><b>The fallback is deliberate and is not what {@code shouldAutoClose} does.</b> Auto-closing puts
-     * a character into the document and must never guess; indenting after an opener puts in whitespace,
-     * and every brace-shaped text wants it whether or not anybody has told the editor what language it is.
-     * {@code Language.PLAIN} declares no pairs, so without this a plain-text editor would silently stop
-     * indenting after {@code &#123;} — a behaviour it has always had, removed as a side effect of making
-     * the rule language-driven. A language that <em>does</em> declare pairs overrides it entirely, so a
-     * Lisp with only parentheses correctly ignores a brace.</p>
-     */
-    private static Character indentCloserFor(Language language, char opener) {
-        if (opener == '\0') return null;
-        if (!language.brackets().isEmpty()) return language.closerFor(opener);
-        switch (opener) {
-            case '{': return '}';
-            case '(': return ')';
-            case '[': return ']';
-            default:  return null;
-        }
     }
 
     /** The last non-space character before the caret on this line, or {@code '\0'}. */
