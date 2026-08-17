@@ -146,7 +146,7 @@ public record TextFileDocument(TextEditor editor, Resource resource)
         return ending == LineEnding.CRLF ? "CRLF (Windows)" : "LF (Unix and macOS)";
     }
 
-    /** The editor's own set — a text document's problems are the editor's to keep. */
+    /** The BUFFER's set, reached through the editor — a document's problems belong to its document. */
     @Override
     public DiagnosticSet diagnostics() {
         return editor.diagnostics();
