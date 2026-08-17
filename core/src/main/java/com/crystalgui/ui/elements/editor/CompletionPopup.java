@@ -293,6 +293,19 @@ public final class CompletionPopup extends Popover {
         StyleGroup.importantPipeline(widthProbe.getStyle().getLayoutGroup(),
                 l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE));
         widthProbe.generalStyle(g -> g.opacity(0f));
+        // NOTHING IN A PROBE MAY SHRINK. This asks "how wide does a row WANT to be", and a flex item with
+        // `flex-shrink: 1` contributes ZERO to its row's min-content width -- so every part the sheet
+        // allows to give is a part this measurement cannot see. The label and the params are both
+        // shrinkable on purpose (they are what gives when a name is too long for the box), which without
+        // this would leave the probe measuring an icon and a type and calling it a row: the popup would
+        // then open at MIN_WIDTH for every list and every name would ellipsise immediately.
+        //
+        // Applied to every child rather than to the two named ones, because the next part added to a row
+        // will be shrinkable too and nothing would report that this had stopped measuring it.
+        for (UIElement part : widthProbe.getChildren()) {
+            StyleGroup.importantPipeline(part.getStyle().getLayoutGroup(),
+                    l -> l.flexShrink(0f).minWidthAuto());
+        }
         addInternalChild(widthProbe);
 
         // ListView raises onRowActivated from ENTER, and the popup never holds focus, so it never fired

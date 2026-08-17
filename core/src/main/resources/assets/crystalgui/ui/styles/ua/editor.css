@@ -1036,10 +1036,20 @@ completionpopup {
  * nowrap could have gone on the row -- but `text-overflow` does NOT, and set on a wrapper it silently never
  * arrives and the row renders as plain clip. They are written together on each element so the pair cannot
  * drift apart, which is the trap AGENTS.md records against this exact property. */
+/* SHRINKABLE, and it is the row's last resort rather than its first.
+ *
+ * It carried `text-overflow: ellipsis` from the day it was written and could never once ellipsise, because
+ * flex-shrink defaults to 0 here. That is not a cosmetic loss: a flex row gives up space somewhere, and
+ * with the label rigid there was only one candidate left, so every tight row spent its whole squeeze on
+ * the type column at the far end. Making the name able to give is what leaves the type alone.
+ *
+ * Both references truncate a long name and keep the type pinned at the edge, in that order. */
 .__completion-label__ {
     font-size: 10px;
     font-weight: bold;
     color: var(--completion-label, #D4D4D4);
+    flex-shrink: 1;
+    min-width: 0;
     white-space: nowrap;
     text-overflow: ellipsis;
 }
@@ -1055,19 +1065,28 @@ completionpopup {
     text-overflow: ellipsis;
 }
 
-/* Dimmed and shrinkable: when the row is tight the detail is what gives, because the NAME is the part
- * that must stay whole -- a truncated identifier is unreadable and a truncated return type is merely
- * less informative. */
 /* The SAME size as the label, distinguished by colour alone -- which is what IntelliJ does. At 9px it read
  * as a footnote rather than as the type it is.
  *
- * Shrinkable, and it is the one thing in the row that gives: the NAME must stay whole, because a truncated
- * identifier is unreadable while a truncated return type is merely less informative. */
+ * RIGID, and this reverses what was here before.
+ *
+ * It used to be the one thing in the row that gave, on the reasoning that a truncated identifier is
+ * unreadable while a truncated return type is merely less informative. The reasoning is sound and the
+ * arrangement was not, because it was the ONLY thing that could give: the label was not shrinkable, so a
+ * tight row put the entire squeeze onto the type. Measured in a 140px row, `String` came out 26.5px on one
+ * row and 7.7px on another -- three characters, which is exactly the reported `Str`.
+ *
+ * So the choice was never between a short name and a short type. It was between a readable type and a
+ * type shaved to a stub, on rows picked by whichever name happened to be longest. The order is now:
+ * params give first (they are the tail, and IntelliJ dims them for that reason), then the label, and the
+ * type never.
+ *
+ * A column that is a different width on every row is worse than a narrow one -- the eye reads the right
+ * edge as a column, and this was not one. */
 .__completion-detail__ {
     font-size: 10px;
     color: var(--completion-detail, #808080);
-    flex-shrink: 1;
-    min-width: 0;
+    flex-shrink: 0;
     white-space: nowrap;
     text-overflow: ellipsis;
 }
