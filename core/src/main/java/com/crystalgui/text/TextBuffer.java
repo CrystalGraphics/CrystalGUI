@@ -6,6 +6,9 @@ import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.text.decoration.DecorationSet;
 import com.crystalgui.text.decoration.TrackedRange;
 
+import org.jetbrains.annotations.Nullable;
+
+import java.util.List;
 import java.util.function.LongSupplier;
 
 /**
@@ -15,6 +18,12 @@ import java.util.function.LongSupplier;
  * widget looking at it, and keeping them out is what lets two views share one document without
  * negotiating whose caret is whose. It is also the 6.1.9 boundary in its most concrete form: what is in
  * here is what undo restores.</p>
+ *
+ * <p><b>With one exception, which both references also make: an undo ENTRY records the carets its edit
+ * was made at</b> — see {@link #edit(ChangeSet, java.util.List)}. That is not a caret the buffer has;
+ * it is a pair of offsets stored with a change, in the same way the change itself is, and it exists
+ * because an undo that restores the text without restoring the caret has moved the text out from under
+ * the user's hands. Nothing reads it but the undo path, and a view that records none still undoes.</p>
  *
  * <h3>Undo stores changes, not snapshots</h3>
  * <p>Each entry keeps the edit and its inverse, both {@link ChangeSet}s — plain data, so the stack
@@ -162,6 +171,28 @@ public final class TextBuffer {
      * continuation of the same typing.
      */
     public void edit(ChangeSet change) {
+        edit(change, null);
+    }
+
+    /**
+     * The same, recording <b>where the carets were</b> so that undoing puts them back.
+     *
+     * <h3>Why the carets ride on the undo entry, when nothing else about the view does</h3>
+     *
+     * <p>The rule this codebase draws — document state through {@code Edit}s, view state mutated directly
+     * — is what keeps Ctrl+Z from undoing a scroll. A selection looks like view state and is the one
+     * exception both references make, because it is not the <em>view's</em>: it is a pair of offsets into
+     * this document, of exactly the kind a {@link ChangeSet} maps, and an undo that puts the text back
+     * without putting the caret back has moved the text out from under the user's hands. VS Code calls it
+     * {@code beforeCursorState} on its undo elements and Monaco the same.</p>
+     *
+     * <p>Redo does not need a second recording: re-applying the change to the carets that preceded it is
+     * where they ended up the first time, which is the same answer by construction rather than a
+     * remembered one that could disagree.</p>
+     *
+     * @param carets the selections as they stand <em>before</em> this edit, or null to record none
+     */
+    public void edit(ChangeSet change, List<Selection> carets) {
         if (change == null || change.isEmpty()) return;
         if (change.lengthBefore() != document.length()) {
             throw new IllegalArgumentException("edit applies to a document of length "
@@ -174,7 +205,8 @@ public final class TextBuffer {
         // unapplied edit would mean applying it twice. Push also clears the redo branch: keeping it
         // would let redo replay a change against a document it was never described against, which the
         // length check above would then reject at some arbitrary later point rather than here.
-        history.push(new ChangeSetEdit(this, change, inverse));
+        history.push(new ChangeSetEdit(this, change, inverse,
+                carets == null ? null : List.copyOf(carets)));
         applied(change);
     }
 
@@ -199,6 +231,27 @@ public final class TextBuffer {
         decorations.adjust(change);
         onChanged.emit(change);
     }
+
+    /**
+     * Announces the carets an undo or redo restores — <b>after</b> {@link #applied}, never instead of it.
+     *
+     * <p>After, because every listener on {@code onChanged} reconciles itself with the new text first, and
+     * one of them clamps selections to the document's length. Restoring before that would hand the clamp
+     * the answer to overwrite.</p>
+     */
+    private void restore(@Nullable List<Selection> carets) {
+        if (carets != null) onSelectionsRestored.emit(carets);
+    }
+
+    /**
+     * Emitted by an undo or a redo with the carets that belong to the state it just produced.
+     *
+     * <p>Separate from {@link #onChanged} rather than folded into its payload, because the two are not
+     * the same announcement: every edit changes text, and only an undo or a redo has a recorded answer
+     * about where the carets go. A listener that reads the text does not want to be told about carets it
+     * has already reconciled, and a widget with no history of its own has nothing to do here at all.</p>
+     */
+    public final Signal.Value<List<Selection>> onSelectionsRestored = new Signal.Value<>();
 
     /**
      * The ranges tracking this document — §17.1's primitive.
@@ -230,17 +283,23 @@ public final class TextBuffer {
      * run again because undo has put the document back to the state the change was described
      * against.</p>
      */
-    private record ChangeSetEdit(TextBuffer buffer, ChangeSet forward, ChangeSet inverse) implements Edit {
+    private record ChangeSetEdit(TextBuffer buffer, ChangeSet forward, ChangeSet inverse,
+                                 @Nullable List<Selection> caretsBefore) implements Edit {
         @Override
         public void apply() {
             buffer.document = forward.apply(buffer.document);
             buffer.applied(forward);
+            // WHERE THEY ENDED UP THE FIRST TIME, derived rather than remembered: carrying the carets
+            // that preceded the edit through the edit is the same answer, and cannot drift from it.
+            buffer.restore(caretsBefore == null ? null
+                    : SelectionModel.mapThrough(caretsBefore, forward));
         }
 
         @Override
         public void undo() {
             buffer.document = inverse.apply(buffer.document);
             buffer.applied(inverse);
+            buffer.restore(caretsBefore);
         }
 
         @Override
@@ -255,7 +314,11 @@ public final class TextBuffer {
             return new ChangeSetEdit(buffer, forward.compose(other.forward()),
                     // The inverse of "a then b" is "invert b, then invert a" — the new inverse runs
                     // first, because it is the one expressed against the document we are now in.
-                    other.inverse().compose(inverse));
+                    other.inverse().compose(inverse),
+                    // THE FIRST ONE'S CARETS. A merged step is one step, and undoing a run of typing puts
+                    // the caret where the run STARTED -- taking the later entry's would land it in the
+                    // middle of text this undo has just removed.
+                    caretsBefore);
         }
     }
 

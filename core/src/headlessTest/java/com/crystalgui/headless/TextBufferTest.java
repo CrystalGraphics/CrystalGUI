@@ -1,6 +1,7 @@
 package com.crystalgui.headless;
 
 import com.crystalgui.text.ChangeSet;
+import com.crystalgui.text.Selection;
 import com.crystalgui.text.TextBuffer;
 import org.junit.Test;
 
@@ -63,6 +64,62 @@ public class TextBufferTest {
 
         assertEquals("undo and redo are edits too, and a view must hear about them",
                 List.of(6, 3, 6), lengths);
+    }
+
+    // ── The carets an undo restores ─────────────────────────────────────────────────────────────
+
+    /**
+     * <b>Undo puts the carets back where the edit was made</b>, and redo puts them where it left them.
+     *
+     * <p>Reported from the harness as "undo/redo don't put the caret back". The redo half is derived
+     * rather than recorded — the same carets carried through the change — so the two cannot disagree.
+     */
+    @Test
+    public void undoAndRedoRestoreTheCaretsTheEditWasMadeAt() {
+        TextBuffer buffer = buffer("hello");
+        List<List<Selection>> restored = new ArrayList<>();
+        buffer.onSelectionsRestored.connect(restored::add);
+
+        buffer.edit(ChangeSet.replace(5, 5, 5, " world"), List.of(Selection.caret(5)));
+        buffer.undo();
+        assertEquals("undo answers with where the caret stood before the edit",
+                List.of(List.of(Selection.caret(5))), restored);
+
+        buffer.redo();
+        assertEquals("redo answers with where that caret ended up", 2, restored.size());
+        assertEquals(Selection.caret(11), restored.get(1).get(0));
+    }
+
+    /** A view that records none still undoes; nothing is announced, and nothing breaks. */
+    @Test
+    public void anEditWithNoRecordedCaretsAnnouncesNothing() {
+        TextBuffer buffer = buffer("hello");
+        List<List<Selection>> restored = new ArrayList<>();
+        buffer.onSelectionsRestored.connect(restored::add);
+
+        buffer.insert(5, "!");
+        buffer.undo();
+
+        assertEquals("hello", buffer.toString());
+        assertTrue(restored.isEmpty());
+    }
+
+    /**
+     * <b>A merged run of typing undoes to where the run STARTED.</b> Taking the later entry's carets
+     * would land the caret in the middle of text the undo has just removed.
+     */
+    @Test
+    public void aMergedRunKeepsTheFirstStepsCarets() {
+        TextBuffer buffer = buffer("");
+        List<List<Selection>> restored = new ArrayList<>();
+        buffer.onSelectionsRestored.connect(restored::add);
+
+        buffer.edit(ChangeSet.replace(0, 0, 0, "a"), List.of(Selection.caret(0)));
+        buffer.edit(ChangeSet.replace(1, 1, 1, "b"), List.of(Selection.caret(1)));
+        buffer.undo();
+
+        assertEquals("", buffer.toString());
+        assertEquals(List.of(List.of(Selection.caret(0))), restored);
     }
 
     // ── Undo ────────────────────────────────────────────────────────────────────────────────────
