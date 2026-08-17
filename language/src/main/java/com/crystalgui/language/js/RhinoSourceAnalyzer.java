@@ -2,6 +2,7 @@ package com.crystalgui.language.js;
 
 import com.crystalgui.language.engine.bridge.JsSourceAnalyzer;
 import com.crystalgui.language.engine.bridge.LiveScopeSnapshot;
+import com.crystalgui.language.engine.bridge.MemberNameMapper;
 import com.crystalgui.language.engine.bridge.SourceAnalyzer;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
@@ -98,12 +99,23 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
         InteropResolver previous = interop;
         InteropResolver opened = new InteropResolver(java, classpath, releaseLevel);
         opened.restrictTo(allowsClass);
+        opened.useMemberNames(memberNames);
         interop = opened;
         if (previous != null) previous.close();
     }
 
     /** What a script may reach, or null for everything. @see JsSourceAnalyzer#restrictTo */
     private volatile java.util.function.Predicate<String> allowsClass;
+
+    /** How member names are shown. @see JsSourceAnalyzer#useMemberNames */
+    private volatile MemberNameMapper memberNames = MemberNameMapper.IDENTITY;
+
+    @Override
+    public void useMemberNames(MemberNameMapper mapper) {
+        memberNames = mapper == null ? MemberNameMapper.IDENTITY : mapper;
+        InteropResolver current = interop;
+        if (current != null) current.useMemberNames(memberNames);
+    }
 
     @Override
     public void restrictTo(java.util.function.Predicate<String> policy) {

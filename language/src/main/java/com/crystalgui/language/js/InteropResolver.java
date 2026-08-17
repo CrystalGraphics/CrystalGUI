@@ -2,6 +2,7 @@ package com.crystalgui.language.js;
 
 import com.crystalgui.language.engine.bridge.Analysis;
 import com.crystalgui.language.engine.bridge.JsExecutor;
+import com.crystalgui.language.engine.bridge.MemberNameMapper;
 import com.crystalgui.language.engine.bridge.SourceAnalyzer;
 import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.text.lang.SymbolKind;
@@ -78,6 +79,35 @@ final class InteropResolver {
      */
     @Nullable private volatile Predicate<String> allowsClass;
 
+    /** How member names are shown — runtime → readable. @see MemberNameMapper */
+    @Nullable private volatile MemberNameMapper memberNames;
+
+    void useMemberNames(@Nullable MemberNameMapper mapper) {
+        this.memberNames = mapper == MemberNameMapper.IDENTITY ? null : mapper;
+        synchronized (this) {
+            members.clear();
+        }
+    }
+
+    /**
+     * The member under the name an author should write.
+     *
+     * <p>Renamed on the way <b>out</b>, like the policy filter and for the same reason: the Java engine's
+     * answer about a class does not depend on the mapping, so the cached analysis stays reusable and one
+     * place decides what a name looks like.</p>
+     */
+    private SymbolInfo asReadable(String binaryName, SymbolInfo member) {
+        MemberNameMapper mapper = memberNames;
+        if (mapper == null) return member;
+        // THE DECLARING CLASS, not the receiver: a mapping names the type that declares the member, and
+        // `container()` is what the Java engine reported that to be.
+        String owner = member.container() == null ? binaryName : member.container();
+        String internal = owner.replace('.', '/');
+        if (!mapper.mapsAnythingIn(internal)) return member;
+        String readable = mapper.readableName(internal, member.name());
+        return readable == null || readable.equals(member.name()) ? member : member.withName(readable);
+    }
+
     void restrictTo(@Nullable Predicate<String> policy) {
         this.allowsClass = policy;
         // THE MEMBER CACHE GOES, the analysis cache stays. A member list is what the policy filters, so a
@@ -135,7 +165,7 @@ final class InteropResolver {
             // AND A MEMBER WHOSE DECLARING CLASS IS REFUSED goes too, however reachable the receiver is:
             // `toString()` inherited from a refused type is still a call into it.
             if (!permits(member.container())) continue;
-            filtered.add(member);
+            filtered.add(asReadable(binaryName, member));
         }
         // A CLASS WITH NO STATICS STILL HAS SOME -- `class` itself, and anything inherited from Object is
         // instance-side -- so an empty static list is a real answer and not a reason to fall back to the

@@ -370,6 +370,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /** Whether one level is that many spaces, or a tab. @see #setInsertSpaces */
     private boolean insertSpaces = true;
 
+    /** Whether the gutter counts from the caret rather than from the top. @see #setRelativeLineNumbers */
+    private boolean relativeLineNumbers;
+
     /**
      * What the editor needs to know about the language in order to EDIT it — comment tokens, bracket
      * pairs, indent triggers. Separate from the tokenizer, which only knows how to colour it: a
@@ -2996,6 +2999,50 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private TypeOperations.IndentStyle indentStyle() {
         return new TypeOperations.IndentStyle(insertSpaces, indentWidth);
     }
+
+    /**
+     * Numbers the gutter by distance from the caret, keeping the caret's own row absolute.
+     *
+     * <p>Vim's {@code number relativenumber} pair and VS Code's {@code lineNumbers: "relative"}. Off by
+     * default: it is for people who type motions by count, and for everyone else it replaces a number
+     * they can read with arithmetic they cannot.</p>
+     */
+    public TextEditor setRelativeLineNumbers(boolean relative) {
+        if (this.relativeLineNumbers == relative) return this;
+        this.relativeLineNumbers = relative;
+        // EVERY NUMBER CHANGES WHEN THE CARET MOVES, so the gutter has to be redrawn on selection
+        // changes and not only when the window scrolls -- which `afterSelectionChange` already does by
+        // marking the tree dirty. Here it is the switch itself that moved.
+        markTreeDirty();
+        return this;
+    }
+
+    public boolean isRelativeLineNumbers() {
+        return relativeLineNumbers;
+    }
+
+    /**
+     * What the caret is drawn as.
+     *
+     * <p>The three every reference offers, and the only three that mean anything: a bar between two
+     * characters, a block over one, an underline beneath one. VS Code's {@code editor.cursorStyle} adds
+     * "thin" variants of the last two, which are the same shapes at a different width — and the width is
+     * already {@code caret-width} in the sheet, so they would be a second way to say one thing.</p>
+     */
+    public enum CaretStyle { LINE, BLOCK, UNDERLINE }
+
+    /** The caret's shape. Defaults to {@link CaretStyle#LINE}, which is what a text editor looks like. */
+    public TextEditor setCaretStyle(CaretStyle style) {
+        this.caretStyle = style == null ? CaretStyle.LINE : style;
+        markTreeDirty();
+        return this;
+    }
+
+    public CaretStyle getCaretStyle() {
+        return caretStyle;
+    }
+
+    private CaretStyle caretStyle = CaretStyle.LINE;
 
     public TextEditor setLanguage(Language newLanguage) {
         this.language = newLanguage == null ? Language.PLAIN : newLanguage;

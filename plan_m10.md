@@ -42,7 +42,7 @@ most visible thing to have early.
 | **10.8** Quick Documentation | `JsSignatures`, the per-member interop probe (`InteropResolver.describeMember`) so a Java member is quoted through `AttachedSources`, declaration sites both ways | Mod+Q shows `function join(name: string, count: number): string`, and `public boolean add(E e)` for a Java member | **done** — see "10.8 as built" |
 | **10.9** Quick fixes + intentions | `JsRewrites` (text edits over Rhino's absolute positions), `JsQuickFixes` — eleven families, `SimilarNames` shared with the Java catalog | Alt+Enter offers a repair for an unused name, a misspelt one, `var`→`let`/`const`, `==`→`===`, either `Java.type` spelling, a template literal, and try/catch | **done** — see "10.9 as built" |
 | **10.10** Sandbox | `ScriptPolicy` in `language.run`; the class shutter, `InteropResolver`, the completion list and `TypeIndex.filtered` all read it, through **one** entry point | a refused class is absent from `membersOf`, from the popup and from the index, and throws when called | **done** — see "10.10 as built" |
-| **10.11** Remap seam | `MemberNameMapper` hook, patched `JavaMembers`, resolver/completion reading the reverse | the round-trip fixture runs by readable name | not started |
+| **10.11** Remap seam | `MemberNameMapper` bridge hook; `RhinoRemapping` — a **membrane** over Rhino's own wrapper rather than a patched `JavaMembers`; `InteropResolver` renaming what it lists | a readable-name call runs against a renamed member, and the member list shows the readable name | **done** — see "10.11 as built" |
 | **10.12** Parity audit + docs | every matrix row tested or documented; AGENTS.md rows; `plan_syntax.md` §16.1/§20 updates | — | not started |
 
 Exit criteria (the row's four, plus what matching the Java engine adds):
@@ -850,6 +850,36 @@ from `membersOf`, from the completion list, from the index, and the call throws 
 **10.11 — Remap seam.** The `JavaMembers` patch behind a `MemberNameMapper` bridge hook;
 resolver/completion reading the reverse mapping. *Test:* the row's third criterion on the
 `RemapRoundTripTest` fixture — a readable-name call runs against a renamed member.
+
+**10.11 as built** — §11's mechanism is replaced, and the reason is worth reading:
+
+- **No patched `JavaMembers`, and no `NativeJavaObject` subclass either.** The plan proposed shading a
+  patched copy of an *internal* Rhino class into each band — a fork to re-derive whenever a band moves, with
+  KubeJS's Rhino fork named as the fallback. The obvious alternative, subclassing `NativeJavaObject` and
+  overriding `get`, was tried and **is not available**: its `(Scriptable, Object, Class)` constructor exists
+  on band 8 and not on the band we run against, so it compiles and throws `NoSuchMethodError` at the first
+  binding. That is the `ObjectProperty.getLeft()` divergence for the third time.
+- So it is a **membrane**: a `Scriptable` + `Wrapper` that holds whatever wrapper Rhino made and forwards to
+  it, translating the name on the way through. Those two are the interfaces the engine is built around and
+  cannot change shape. `Wrapper` is load-bearing rather than tidy — `NativeJavaMethod.call` unwraps its
+  receiver through it, so a membrane that was only a `Scriptable` is found by the lookup and rejected by the
+  call. And the membrane is **also a `Function`** when the delegate is one, or `new java.util.ArrayList()`
+  fails with "is not a function": a class object is callable.
+- **Overriding `wrapAsJavaObject` alone does nothing.** Rhino's own `wrap` on this band constructs the
+  wrapper directly rather than calling that hook, so the feature was silently inert with the factory
+  correctly installed and the mapping correctly non-identity. `wrap` is overridden and the *result* is
+  wrapped, which is right whichever hook a version calls. `NativeJavaArray` is excluded, since a membrane in
+  front of one would intercept its indexing to rename members an array does not have.
+- **The declared name is tried first**, so an unobfuscated build and a mapping that is stale in the harmless
+  direction both keep working — and it is the fast path for every unmapped lookup. The walk climbs the
+  hierarchy, because a mapping names the type that *declares* a member while a script holds whatever it
+  holds.
+- **Both directions or neither.** `InteropResolver` renames what it lists and `getIds` renames what
+  `for…in` enumerates, through the same mapper: a completion list offering `func_147439_a` beside a runtime
+  that accepts `getBlock` is an editor working against its user. One entry point
+  (`JsLanguage.useMemberNames`), for the reason the sandbox has one.
+- **`SymbolInfo.withName`** was added to core — language-neutral, since any engine with a mapping layer
+  between declared and written names needs exactly it.
 
 **10.12 — Parity audit + docs.** Every §2 matrix row: *Full*/*Partial* has a test, *Best-effort* has a
 fallback test, *No* is documented in the SPI javadoc. AGENTS.md: the `language/` row gains `.js`; new

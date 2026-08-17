@@ -7,6 +7,8 @@ import com.crystalgui.language.engine.EngineSource;
 import com.crystalgui.language.engine.JavaEngine;
 import com.crystalgui.language.engine.bridge.JsExecutor;
 import com.crystalgui.language.engine.bridge.JsSourceAnalyzer;
+import com.crystalgui.language.engine.bridge.MemberNameMapper;
+import com.crystalgui.language.map.MappingSet;
 import com.crystalgui.language.java.HostClasspath;
 import com.crystalgui.language.java.JavaLanguage;
 import com.crystalgui.language.java.JavaLanguageServices;
@@ -105,6 +107,11 @@ public final class JsLanguage {
         // THE POLICY REACHES A FRESHLY OPENED ANALYSER. A host that restricted before registering -- or
         // that registers twice -- must not end up with an analyser obeying allow-all.
         analyzer.restrictTo(policy::allowsClass);
+        // AND THE MAPPINGS REACH A FRESHLY OPENED ENGINE, for the reason the policy does: a host that
+        // installed them before registering must not end up with an engine mapping nothing.
+        MemberNameMapper mapper = mapperFor(mappings);
+        analyzer.useMemberNames(mapper);
+        executor.useMemberNames(mapper);
         lendTheJavaEngine();
 
         // THE EXISTING ENTRIES, WITH SERVICES ADDED -- not new ones. Every extension is read and
@@ -156,6 +163,65 @@ public final class JsLanguage {
     /** The policy every JavaScript surface obeys. */
     public static synchronized ScriptPolicy policy() {
         return policy;
+    }
+
+    /** How member names are written and shown. @see #useMemberNames */
+    private static MappingSet mappings = MappingSet.IDENTITY;
+
+    /**
+     * Installs the readable↔runtime member-name mapping, in <b>both</b> directions at once.
+     *
+     * <p>One entry point, for the reason the policy has one: the executor translates on the way out and the
+     * member lists rename on the way in, and a deployment that could set them separately would eventually
+     * set one — leaving a completion list offering names the runtime refuses, or a runtime accepting names
+     * the editor never showed.</p>
+     *
+     * <p>The {@code MappingSet} is adapted to the bridge's string interface here, because the engine side
+     * cannot see {@code language.map}. @see MemberNameMapper</p>
+     */
+    public static synchronized void useMemberNames(@Nullable MappingSet target) {
+        mappings = target == null ? MappingSet.IDENTITY : target;
+        MemberNameMapper mapper = mapperFor(mappings);
+        if (analyzer != null) analyzer.useMemberNames(mapper);
+        if (executor != null) executor.useMemberNames(mapper);
+    }
+
+    /** What member names are mapped through. */
+    public static synchronized MappingSet memberNames() {
+        return mappings;
+    }
+
+    /**
+     * A {@link MappingSet} as the bridge's string interface.
+     *
+     * <p>Identity maps to {@link MemberNameMapper#IDENTITY} by reference, which is what lets the executor
+     * leave Rhino's own wrap factory in place rather than wrapping every Java value for nothing.</p>
+     */
+    private static MemberNameMapper mapperFor(MappingSet set) {
+        if (set == null || set.isIdentity()) return MemberNameMapper.IDENTITY;
+        return new MemberNameMapper() {
+            @Override
+            public String runtimeName(String ownerInternalName, String readableName) {
+                String method = set.runtimeMethod(ownerInternalName, readableName);
+                // A METHOD FIRST, THEN A FIELD. A name is one or the other and the two tables are separate;
+                // asking both and preferring the method is what makes `world.getBlock` and `world.rand`
+                // both work without the caller having to know which it is.
+                return method.equals(readableName)
+                        ? set.runtimeField(ownerInternalName, readableName) : method;
+            }
+
+            @Override
+            public String readableName(String ownerInternalName, String runtimeName) {
+                String method = set.readableMethod(ownerInternalName, runtimeName);
+                return method.equals(runtimeName)
+                        ? set.readableField(ownerInternalName, runtimeName) : method;
+            }
+
+            @Override
+            public boolean mapsAnythingIn(String ownerInternalName) {
+                return set.mapsAnyMemberOf(ownerInternalName);
+            }
+        };
     }
 
     /**
@@ -258,6 +324,7 @@ public final class JsLanguage {
      */
     public static synchronized void shutdown() {
         javaLent = false;
+        mappings = MappingSet.IDENTITY;
         analyzer = null;
         executor = null;
         scheduler = null;

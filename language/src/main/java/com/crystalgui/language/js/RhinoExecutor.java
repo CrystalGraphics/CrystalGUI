@@ -2,6 +2,7 @@ package com.crystalgui.language.js;
 
 import com.crystalgui.language.engine.bridge.JsExecutor;
 import com.crystalgui.language.engine.bridge.LiveScopeSnapshot;
+import com.crystalgui.language.engine.bridge.MemberNameMapper;
 
 import org.mozilla.javascript.BaseFunction;
 import org.mozilla.javascript.Context;
@@ -115,6 +116,10 @@ public final class RhinoExecutor implements JsExecutor {
             // is a NativeJavaObject wrapping a String -- which compares unequal to 'one', prints as itself
             // and has no `.length`. Rhino's own shell sets exactly this.
             cx.getWrapFactory().setJavaPrimitiveWrap(false);
+            // AND THE MEMBER NAMES A SCRIPT WRITES. Identity by default, in which case Rhino's own factory
+            // is left in place -- an unmapped deployment runs the path it ran before remapping existed.
+            // @see RhinoRemapping, and why this is not a patched JavaMembers
+            cx.setWrapFactory(RhinoRemapping.factoryFor(memberNames, cx.getWrapFactory()));
             return cx;
         }
 
@@ -127,6 +132,19 @@ public final class RhinoExecutor implements JsExecutor {
 
     /** Public no-argument, because {@code EngineHost.adapter} instantiates this reflectively. */
     public RhinoExecutor() {
+    }
+
+    /**
+     * The readable↔runtime member-name mapping, or identity.
+     *
+     * <p>Static because the {@code ContextFactory} below is: one factory per process makes one context
+     * configuration, and a per-instance mapper would be read by a factory that could not see it.</p>
+     */
+    private static volatile MemberNameMapper memberNames = MemberNameMapper.IDENTITY;
+
+    @Override
+    public void useMemberNames(MemberNameMapper mapper) {
+        memberNames = mapper == null ? MemberNameMapper.IDENTITY : mapper;
     }
 
     // ── Compile ─────────────────────────────────────────────────────────────────────────────────
@@ -262,7 +280,12 @@ public final class RhinoExecutor implements JsExecutor {
      */
     private static Object wrap(Context cx, Scriptable scope, Object value) {
         if (value instanceof Class) return cx.getWrapFactory().wrapJavaClass(cx, scope, (Class<?>) value);
-        return Context.javaToJS(value, scope);
+        // THE CONTEXT'S OWN FACTORY, not `Context.javaToJS`. The static helper does not route through the
+        // factory this context was given on the band we run against, so a binding arrived as a plain
+        // NativeJavaObject and the member-name mapping never saw it -- the whole readable-name feature was
+        // silently inert for exactly the values a host puts in scope. Asking the factory directly cannot
+        // diverge from whichever factory is installed, which is the property that matters here.
+        return cx.getWrapFactory().wrap(cx, scope, value, null);
     }
 
     // ── The globals ─────────────────────────────────────────────────────────────────────────────

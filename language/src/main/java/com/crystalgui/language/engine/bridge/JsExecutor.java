@@ -81,6 +81,16 @@ public interface JsExecutor {
                Supplier<String> readLine, Predicate<String> allowsClass) throws Throwable;
 
     /**
+     * Installs the readable↔runtime member-name mapping every later run obeys.
+     *
+     * <p>On the executor rather than passed per run, because mappings are a property of the <b>deployment</b>
+     * — the same reasoning the sandbox uses — and because the resolver reads the same mapping in the other
+     * direction, so a per-run one could disagree with what the editor is showing.</p>
+     */
+    default void useMemberNames(MemberNameMapper mapper) {
+    }
+
+    /**
      * Asks the script running on {@code thread} to stop, and returns immediately.
      *
      * <p>Named by thread rather than "whatever is running", because one executor serves every host in the
