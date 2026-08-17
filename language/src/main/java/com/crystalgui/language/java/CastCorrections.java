@@ -25,10 +25,12 @@ import org.eclipse.jdt.core.dom.NodeFinder;
 import org.eclipse.jdt.core.dom.ParenthesizedExpression;
 import org.eclipse.jdt.core.dom.ReturnStatement;
 import org.eclipse.jdt.core.dom.SuperMethodInvocation;
+import org.eclipse.jdt.core.dom.Type;
 import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
 import org.eclipse.jdt.core.dom.VariableDeclarationStatement;
 import org.eclipse.jdt.core.dom.rewrite.ASTRewrite;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -91,7 +93,7 @@ final class CastCorrections {
             Expression expression = context.enclosing(problem, Expression.class);
             if (expression == null) return;
             ITypeBinding actual = expression.resolveTypeBinding();
-            ITypeBinding expected = expectedTypeOf(expression);
+            ITypeBinding expected = Expected.typeOf(expression);
             if (actual == null || expected == null) return;
             if (actual.isEqualTo(expected)) return;
             // THE GUARD, and the whole safety argument: the same problem id covers `Integer n = aString`,
@@ -102,58 +104,10 @@ final class CastCorrections {
             String written = TypeNames.writtenName(expected, imports, expression);
             if (written == null) return;
 
-            ASTRewrite rewrite = context.rewrite();
-            AST ast = context.unit().getAST();
-            CastExpression cast = ast.newCastExpression();
-            cast.setType((org.eclipse.jdt.core.dom.Type)
-                    rewrite.createStringPlaceholder(written, ASTNode.SIMPLE_TYPE));
-            // PARENTHESES WHERE THE OPERAND BINDS LOOSER, because a cast is a unary operator and ASTRewrite
-            // adds none of its own: `(Dog) a + b` casts `a` and leaves the sum alone, which compiles about
-            // half the time and means something else every time.
-            Expression operand = (Expression) rewrite.createMoveTarget(expression);
-            if (bindsLooserThanACast(expression)) {
-                ParenthesizedExpression wrapped = ast.newParenthesizedExpression();
-                wrapped.setExpression(operand);
-                operand = wrapped;
-            }
-            cast.setExpression(operand);
-            rewrite.replace(expression, cast, null);
-
-            ChangeSet edit = context.changesFrom(rewrite, imports);
+            ChangeSet edit = castInPlace(context, imports, expression, written);
             if (edit == null) return;
             out.add(context.preferredFix(ADD_CAST, "Cast expression to '" + written + "'", edit));
         }
-    }
-
-    /**
-     * What the expression is expected to be, from whatever it is being handed to.
-     *
-     * <p>Three shapes, and they are the three ECJ reports these two problems on: an initialiser, an
-     * assignment's right-hand side, and a {@code return}. Anything else answers null rather than guessing —
-     * an argument is the case that looks like a fourth and is not, and it is a different problem id
-     * entirely.</p>
-     */
-    private static ITypeBinding expectedTypeOf(Expression expression) {
-        ASTNode parent = expression.getParent();
-        if (parent instanceof VariableDeclarationFragment) {
-            VariableDeclarationFragment fragment = (VariableDeclarationFragment) parent;
-            return fragment.resolveBinding() == null ? null : fragment.resolveBinding().getType();
-        }
-        if (parent instanceof Assignment) {
-            Assignment assignment = (Assignment) parent;
-            return assignment.getRightHandSide() == expression
-                    ? assignment.getLeftHandSide().resolveTypeBinding() : null;
-        }
-        if (parent instanceof ReturnStatement) {
-            for (ASTNode walk = parent; walk != null; walk = walk.getParent()) {
-                if (walk instanceof LambdaExpression) return null;   // a lambda's return is inferred
-                if (walk instanceof MethodDeclaration) {
-                    MethodDeclaration method = (MethodDeclaration) walk;
-                    return method.resolveBinding() == null ? null : method.resolveBinding().getReturnType();
-                }
-            }
-        }
-        return null;
     }
 
     /** Operators that bind looser than a cast, so the whole of one has to be wrapped before it is cast. */
@@ -200,24 +154,63 @@ final class CastCorrections {
                     call.arguments().size());
             if (only == null) return;
 
-            ITypeBinding[] wanted = only.getParameterTypes();
-            for (int i = 0; i < wanted.length; i++) {
-                Expression argument = (Expression) call.arguments().get(i);
-                ITypeBinding actual = argument.resolveTypeBinding();
-                if (actual == null || wanted[i] == null) continue;
-                if (actual.isAssignmentCompatible(wanted[i])) continue;
+            for (Mismatch mismatch : mismatchedArguments(call)) {
                 // THE SAME GUARD as the assignment shape, and for the same reason: `take(aString)` against
                 // `take(Integer)` reports this very id, and a cast there is IllegalCast rather than help.
-                if (!actual.isCastCompatible(wanted[i])) continue;
+                if (!mismatch.actual.isCastCompatible(mismatch.wanted)) continue;
 
                 ImportPlan imports = context.importPlan();
-                String written = TypeNames.writtenName(wanted[i], imports, argument);
+                String written = TypeNames.writtenName(mismatch.wanted, imports, mismatch.argument);
                 if (written == null) continue;
-                ChangeSet edit = castInPlace(context, imports, argument, written);
+                ChangeSet edit = castInPlace(context, imports, mismatch.argument, written);
                 if (edit == null) continue;
                 out.add(context.preferredFix(CAST_ARGUMENT, "Cast argument to '" + written + "'", edit));
             }
         }
+    }
+
+    /** One argument that does not fit the parameter it is being passed to. */
+    private static final class Mismatch {
+        final Expression argument;
+        final ITypeBinding actual;
+        final ITypeBinding wanted;
+
+        Mismatch(Expression argument, ITypeBinding actual, ITypeBinding wanted) {
+            this.argument = argument;
+            this.actual = actual;
+            this.wanted = wanted;
+        }
+    }
+
+    /**
+     * Every argument of {@code call} that does not fit its parameter, in order.
+     *
+     * <p>The <b>one</b> walk: find the single method of that name and arity, then compare each argument's
+     * binding against the parameter it lands on. It was written twice — once to offer the casts and once
+     * to decide what to underline — and those two must not be able to disagree about which argument is
+     * wrong, or the squiggle points at one thing and the fix repairs another.</p>
+     *
+     * <p>Castability is deliberately <em>not</em> filtered here: an argument that cannot be cast is still
+     * the argument that is wrong, and still the one to underline. Only the fix cares whether a cast is the
+     * answer.</p>
+     */
+    private static List<Mismatch> mismatchedArguments(MethodInvocation call) {
+        ITypeBinding receiver = receiverOf(call);
+        if (receiver == null) return List.of();
+        IMethodBinding only = soleCandidate(receiver, call.getName().getIdentifier(),
+                call.arguments().size());
+        if (only == null) return List.of();
+
+        List<Mismatch> found = new ArrayList<>();
+        ITypeBinding[] wanted = only.getParameterTypes();
+        for (int i = 0; i < wanted.length; i++) {
+            Expression argument = (Expression) call.arguments().get(i);
+            ITypeBinding actual = argument.resolveTypeBinding();
+            if (actual == null || wanted[i] == null) continue;
+            if (actual.isAssignmentCompatible(wanted[i])) continue;
+            found.add(new Mismatch(argument, actual, wanted[i]));
+        }
+        return found;
     }
 
     /**
@@ -233,19 +226,9 @@ final class CastCorrections {
         ASTNode node = NodeFinder.perform(unit, reported[0], reported[1] - reported[0]);
         while (node != null && !(node instanceof MethodInvocation)) node = node.getParent();
         if (node == null) return null;
-        MethodInvocation call = (MethodInvocation) node;
-        ITypeBinding receiver = receiverOf(call);
-        if (receiver == null) return null;
-        IMethodBinding only = soleCandidate(receiver, call.getName().getIdentifier(),
-                call.arguments().size());
-        if (only == null) return null;
 
-        ITypeBinding[] wanted = only.getParameterTypes();
-        for (int i = 0; i < wanted.length; i++) {
-            Expression argument = (Expression) call.arguments().get(i);
-            ITypeBinding actual = argument.resolveTypeBinding();
-            if (actual == null || wanted[i] == null) continue;
-            if (actual.isAssignmentCompatible(wanted[i])) continue;
+        for (Mismatch mismatch : mismatchedArguments((MethodInvocation) node)) {
+            Expression argument = mismatch.argument;
             if (argument.getStartPosition() < 0 || argument.getLength() <= 0) return null;
             return new int[] {argument.getStartPosition(),
                     argument.getStartPosition() + argument.getLength()};
@@ -255,13 +238,8 @@ final class CastCorrections {
 
     /** What the call is being made on — the written receiver, or the type the call sits inside. */
     private static ITypeBinding receiverOf(MethodInvocation call) {
-        if (call.getExpression() != null) return call.getExpression().resolveTypeBinding();
-        for (ASTNode walk = call; walk != null; walk = walk.getParent()) {
-            if (walk instanceof AbstractTypeDeclaration) {
-                return ((AbstractTypeDeclaration) walk).resolveBinding();
-            }
-        }
-        return null;
+        return call.getExpression() != null
+                ? call.getExpression().resolveTypeBinding() : Scopes.enclosingTypeBinding(call);
     }
 
     /**
@@ -284,14 +262,20 @@ final class CastCorrections {
         return found;
     }
 
-    /** {@code (Type) expr} in place, wrapped where the operand binds looser than a cast. */
+    /**
+     * {@code (Type) expr} in place, wrapped where the operand binds looser than a cast.
+     *
+     * <p>PARENTHESES WHERE THE OPERAND BINDS LOOSER, because a cast is a unary operator and
+     * {@code ASTRewrite} adds none of its own: {@code (Dog) a + b} casts {@code a} and leaves the sum
+     * alone, which compiles about half the time and means something else every time. Both cast
+     * corrections come through here, having previously agreed about that by copy.</p>
+     */
     private static ChangeSet castInPlace(FixContext context, ImportPlan imports, Expression expression,
                                          String written) {
         ASTRewrite rewrite = context.rewrite();
         AST ast = context.unit().getAST();
         CastExpression cast = ast.newCastExpression();
-        cast.setType((org.eclipse.jdt.core.dom.Type)
-                rewrite.createStringPlaceholder(written, ASTNode.SIMPLE_TYPE));
+        cast.setType((Type) rewrite.createStringPlaceholder(written, ASTNode.SIMPLE_TYPE));
         Expression operand = (Expression) rewrite.createMoveTarget(expression);
         if (bindsLooserThanACast(expression)) {
             ParenthesizedExpression wrapped = ast.newParenthesizedExpression();
