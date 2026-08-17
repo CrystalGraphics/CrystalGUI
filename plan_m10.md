@@ -209,7 +209,7 @@ Rhino), and **anything the shell holds must be defined by the host loader** (`Sc
 `ScriptRef`, `RunSessions`, `ScriptOutput` all live in `language.run`, which is *not* in
 `EngineClassLoader.PARENT_FIRST` and must not be added — see 3.3). So `JsHost` is host-side and
 implements `ScriptRuntime`; `RhinoExecutor` is child-side and implements a **bridge** interface; the
-two meet through `EngineHost.adapter("com.crystalgui.language.js.RhinoExecutor", JsExecutor.class)`,
+two meet through `EngineHost.adapter("com.crystalgui.language.js.rhino.exec.RhinoExecutor", JsExecutor.class)`,
 exactly as `JavaEngine.over(host)` reaches `EcjScriptCompiler`. Getting this wrong fails with
 `ClassCastException: ScriptRuntime cannot be cast to ScriptRuntime` — the same message the bridge note
 in `EngineClassLoader` already predicts.

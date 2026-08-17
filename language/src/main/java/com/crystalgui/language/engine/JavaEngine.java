@@ -27,8 +27,8 @@ import java.io.IOException;
 public final class JavaEngine implements Closeable {
 
     /** The adapters, by name. Reached reflectively because the host cannot see their types. */
-    private static final String COMPILER = "com.crystalgui.language.java.EcjScriptCompiler";
-    private static final String ANALYZER = "com.crystalgui.language.java.EcjSourceAnalyzer";
+    private static final String COMPILER = "com.crystalgui.language.java.ecj.EcjScriptCompiler";
+    private static final String ANALYZER = "com.crystalgui.language.java.ecj.EcjSourceAnalyzer";
 
     private final EngineHost host;
     private final boolean ownsHost;

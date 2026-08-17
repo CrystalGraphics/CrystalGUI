@@ -1,13 +1,13 @@
 package com.crystalgui.language.run;
 
-import com.crystalgui.language.java.ScriptHost;
+import com.crystalgui.language.java.exec.ScriptHost;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.language.engine.EngineBand;
 import com.crystalgui.language.engine.EngineSource;
 import com.crystalgui.language.engine.JavaEngine;
-import com.crystalgui.language.java.ScriptPrelude;
+import com.crystalgui.language.java.exec.ScriptPrelude;
 
 import org.junit.After;
 import org.junit.Assume;

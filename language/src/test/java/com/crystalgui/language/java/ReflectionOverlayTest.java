@@ -6,6 +6,8 @@ import com.crystalgui.language.engine.JavaEngine;
 import com.crystalgui.language.engine.ScriptClassLoader;
 import com.crystalgui.language.engine.bridge.ScriptCompiler;
 import com.crystalgui.language.engine.bridge.SourceAnalyzer;
+import com.crystalgui.language.java.classpath.HostClasspath;
+import com.crystalgui.language.java.classpath.ReflectionOverlay;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.lang.SymbolInfo;

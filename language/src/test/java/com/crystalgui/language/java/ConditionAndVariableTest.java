@@ -1,5 +1,7 @@
 package com.crystalgui.language.java;
 
+import com.crystalgui.language.java.fix.catalog.IntentionCorrections;
+import com.crystalgui.language.java.fix.catalog.VariableIntentions;
 import org.junit.Test;
 
 /**

@@ -2,6 +2,11 @@ package com.crystalgui.language.run;
 
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
+import com.crystalgui.language.run.console.ConsoleFilter;
+import com.crystalgui.language.run.console.RunConsole;
+import com.crystalgui.language.run.console.RunLevel;
+import com.crystalgui.language.run.console.RunMessage;
+import com.crystalgui.language.run.view.RunPanels;
 import org.junit.Test;
 
 import static org.junit.Assert.*;

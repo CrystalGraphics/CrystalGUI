@@ -4,6 +4,8 @@ import com.crystalgui.language.engine.EngineHost;
 import com.crystalgui.language.engine.EngineSource;
 import com.crystalgui.language.engine.bridge.Analysis;
 import com.crystalgui.language.java.JavaLanguage;
+import com.crystalgui.language.java.classpath.TypeIndex;
+import com.crystalgui.language.js.host.JsHost;
 import com.crystalgui.language.run.ScriptPolicy;
 import com.crystalgui.language.run.ScriptRuntime;
 import com.crystalgui.text.TextBuffer;
@@ -170,7 +172,7 @@ public class JsSandboxTest {
     @Test
     public void theFilteredIndexHidesARefusedTypeAndTheSharedOneDoesNot() {
         Assume.assumeTrue(JavaLanguage.isAvailable());
-        com.crystalgui.language.java.TypeIndex index = JsLanguage.typeIndexForTesting();
+        TypeIndex index = JsLanguage.typeIndexForTesting();
         assertNotNull(index);
         ScriptPolicy policy = ScriptPolicy.of(List.of("java.util"));
 
@@ -271,9 +273,9 @@ public class JsSandboxTest {
         }
     }
 
-    private static List<String> qualifiedNames(com.crystalgui.language.java.TypeIndex.Match match) {
+    private static List<String> qualifiedNames(TypeIndex.Match match) {
         List<String> names = new ArrayList<>();
-        for (com.crystalgui.language.java.TypeIndex.Entry entry : match.entries()) {
+        for (TypeIndex.Entry entry : match.entries()) {
             names.add(entry.qualifiedName());
         }
         return names;

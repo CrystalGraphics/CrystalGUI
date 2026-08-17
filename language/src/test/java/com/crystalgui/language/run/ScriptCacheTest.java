@@ -1,5 +1,7 @@
 package com.crystalgui.language.run;
 
+import com.crystalgui.language.run.exec.ScriptCache;
+import com.crystalgui.language.run.exec.ScriptCacheKey;
 import org.junit.Test;
 
 import java.io.IOException;

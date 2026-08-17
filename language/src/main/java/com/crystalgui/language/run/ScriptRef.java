@@ -1,6 +1,7 @@
 package com.crystalgui.language.run;
 
 import com.crystalgui.fs.Resource;
+import com.crystalgui.language.run.exec.ScriptOutput;
 
 import java.util.Optional;
 

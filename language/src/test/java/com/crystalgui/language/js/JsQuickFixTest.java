@@ -1,7 +1,5 @@
 package com.crystalgui.language.js;
 
-import com.crystalgui.text.SimilarNames;
-
 import com.crystalgui.language.engine.EngineHost;
 import com.crystalgui.language.engine.EngineSource;
 import com.crystalgui.text.Change;

@@ -1,5 +1,8 @@
 package com.crystalgui.language.run;
 
+import com.crystalgui.language.run.exec.Safepoints;
+import com.crystalgui.language.run.exec.ScriptControl;
+import com.crystalgui.language.run.exec.ScriptStoppedException;
 import org.junit.Test;
 
 import org.objectweb.asm.ClassWriter;

@@ -1,5 +1,6 @@
 package com.crystalgui.language.java;
 
+import com.crystalgui.language.java.fix.catalog.IntentionCorrections;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;

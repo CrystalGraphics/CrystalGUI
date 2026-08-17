@@ -4,6 +4,7 @@ import com.crystalgui.fs.Resource;
 import com.crystalgui.language.engine.AnalysedLanguageServices;
 import com.crystalgui.language.engine.EngineHost;
 import com.crystalgui.language.engine.EngineSource;
+import com.crystalgui.language.js.host.JsHost;
 import com.crystalgui.language.run.ScriptRuntime;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.diagnostic.Diagnostic;

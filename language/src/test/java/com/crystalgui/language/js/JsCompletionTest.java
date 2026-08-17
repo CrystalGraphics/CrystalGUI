@@ -3,7 +3,7 @@ package com.crystalgui.language.js;
 import com.crystalgui.language.engine.EngineHost;
 import com.crystalgui.language.engine.EngineSource;
 import com.crystalgui.language.java.JavaLanguage;
-import com.crystalgui.language.run.ScriptRuntime;
+import com.crystalgui.language.js.host.JsHost;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.lang.CompletionItem;
 import com.crystalgui.text.lang.CompletionList;
@@ -12,7 +12,6 @@ import com.crystalgui.text.lang.SymbolKind;
 
 import org.junit.After;
 import org.junit.Assume;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 

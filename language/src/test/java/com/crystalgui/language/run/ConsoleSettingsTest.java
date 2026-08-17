@@ -4,6 +4,8 @@ import com.crystalgui.core.settings.Setting;
 import com.crystalgui.core.settings.SettingsCategory;
 import com.crystalgui.core.settings.SettingsRegistry;
 
+import com.crystalgui.language.run.console.ConsoleSettings;
+import com.crystalgui.language.run.console.RunConsole;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;

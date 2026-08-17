@@ -1,5 +1,6 @@
 package com.crystalgui.language.java;
 
+import com.crystalgui.language.java.assist.SourceArchives;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;

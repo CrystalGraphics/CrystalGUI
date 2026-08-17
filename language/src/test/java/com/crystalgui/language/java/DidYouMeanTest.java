@@ -1,5 +1,6 @@
 package com.crystalgui.language.java;
 
+import com.crystalgui.language.java.fix.catalog.DidYouMeanCorrections;
 import com.crystalgui.text.SimilarNames;
 
 import com.crystalgui.text.lang.CodeAction;

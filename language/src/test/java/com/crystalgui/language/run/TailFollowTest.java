@@ -1,5 +1,6 @@
 package com.crystalgui.language.run;
 
+import com.crystalgui.language.run.view.TailFollow;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;

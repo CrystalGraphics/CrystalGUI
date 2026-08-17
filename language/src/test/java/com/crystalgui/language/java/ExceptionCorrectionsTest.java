@@ -1,5 +1,6 @@
 package com.crystalgui.language.java;
 
+import com.crystalgui.language.java.fix.catalog.ExceptionCorrections;
 import com.crystalgui.text.lang.CodeAction;
 
 import org.eclipse.jdt.core.compiler.IProblem;
