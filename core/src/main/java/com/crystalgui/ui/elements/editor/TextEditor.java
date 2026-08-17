@@ -3408,21 +3408,22 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     private int nextUnselectedOccurrence(String needle, int from, boolean wholeWords) {
-        // Through the whole document as a String, which is the copy §3.3 of the review is about; the
-        // search here is a correctness fix and deliberately does not pretend to be the performance one.
-        String haystack = buffer.toString();
-        for (int at = haystack.indexOf(needle, from); at >= 0; at = haystack.indexOf(needle, at + 1)) {
-            if (accepts(haystack, at, needle.length(), wholeWords)) return at;
+        // THROUGH `TextSearch`, which is the one definition of what a match is -- the hand-rolled
+        // `indexOf` walk here had to grow its own whole-word test the moment Ctrl+D needed one, which is
+        // the second copy of a rule the search already owned. It also copied the whole document to do it.
+        List<TextRange> all = TextSearch.findAll(buffer.document(),
+                SearchQuery.of(needle, new SearchQuery.Options(true, wholeWords, false)));
+        for (TextRange match : all) {
+            if (match.start() >= from && !alreadySelected(match.start(), needle.length())) {
+                return match.start();
+            }
         }
-        for (int at = haystack.indexOf(needle); at >= 0 && at < from; at = haystack.indexOf(needle, at + 1)) {
-            if (accepts(haystack, at, needle.length(), wholeWords)) return at;
+        for (TextRange match : all) {
+            if (match.start() < from && !alreadySelected(match.start(), needle.length())) {
+                return match.start();
+            }
         }
         return -1;
-    }
-
-    private boolean accepts(String haystack, int at, int length, boolean wholeWords) {
-        if (alreadySelected(at, length)) return false;
-        return !wholeWords || isWholeWordIn(haystack, at, at + length);
     }
 
     /**
@@ -3440,12 +3441,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return word != null && word[0] == selection.start() && word[1] == selection.end();
     }
 
-    /** Whether {@code [from, to)} has a non-word character on each side of it. */
-    private boolean isWholeWordIn(String haystack, int from, int to) {
-        if (from > 0 && wordClassifier.isWordPart(haystack.charAt(from - 1))) return false;
-        return to >= haystack.length() || !wordClassifier.isWordPart(haystack.charAt(to));
-    }
-
     private boolean alreadySelected(int start, int length) {
         for (Selection existing : selections.all()) {
             if (existing.start() == start && existing.end() == start + length) return true;
@@ -3461,12 +3456,10 @@ public class TextEditor extends ScrollerView implements UndoScope {
         String needle = buffer.document().slice(primary.start(), primary.end()).toString();
         if (needle.isEmpty()) return 0;
 
-        String haystack = buffer.toString();
         List<Selection> found = new ArrayList<>();
-        int at = haystack.indexOf(needle);
-        while (at >= 0) {
-            found.add(new Selection(at, at + needle.length()));
-            at = haystack.indexOf(needle, at + needle.length());
+        for (TextRange match : TextSearch.findAll(buffer.document(),
+                SearchQuery.of(needle, new SearchQuery.Options(true, false, false)))) {
+            found.add(new Selection(match.start(), match.end()));
         }
         if (found.isEmpty()) return 0;
         selections.setAll(found, found.size() - 1);
@@ -3675,7 +3668,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     /** Every occurrence of {@code needle}, or nothing when it is its own only one. */
     private List<TextRange> matchesOf(String needle, boolean wholeWords) {
-        List<TextRange> found = TextSearch.findAll(buffer.toString(),
+        List<TextRange> found = TextSearch.findAll(buffer.document(),
                 SearchQuery.of(needle, new SearchQuery.Options(true, wholeWords, false)));
         // ONE IS NONE -- see the note on updateOccurrences.
         return found.size() < 2 ? List.of() : found;
@@ -3792,7 +3785,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         lastSearch = query == null || query.isEmpty() ? null : query;
         // THE SCAN IS THE DOCUMENT'S, not this widget's -- see TextSearch. What stays here is what a view
         // owns: which match is selected, what to paint, and where the caret goes.
-        results = results.withMatches(TextSearch.findAll(buffer.toString(), lastSearch));
+        results = results.withMatches(TextSearch.findAll(buffer.document(), lastSearch));
         highlightsDirty = true;
         return results.size();
     }
@@ -3872,10 +3865,12 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     /** The document text a match covers — what Preserve case reads to decide the replacement's shape. */
     private String textIn(TextRange range) {
-        String all = buffer.toString();
-        int from = Math.max(0, Math.min(range.start(), all.length()));
-        int to = Math.max(from, Math.min(range.end(), all.length()));
-        return all.substring(from, to);
+        // SLICED, not substringed out of a copy of the file. `replaceAll` calls this once PER MATCH, so
+        // a document copy here made replacing n things cost n documents.
+        int length = buffer.length();
+        int from = Math.max(0, Math.min(range.start(), length));
+        int to = Math.max(from, Math.min(range.end(), length));
+        return buffer.document().slice(from, to).toString();
     }
 
     @Nullable
