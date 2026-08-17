@@ -43,7 +43,7 @@ most visible thing to have early.
 | **10.9** Quick fixes + intentions | `JsRewrites` (text edits over Rhino's absolute positions), `JsQuickFixes` — eleven families, `SimilarNames` shared with the Java catalog | Alt+Enter offers a repair for an unused name, a misspelt one, `var`→`let`/`const`, `==`→`===`, either `Java.type` spelling, a template literal, and try/catch | **done** — see "10.9 as built" |
 | **10.10** Sandbox | `ScriptPolicy` in `language.run`; the class shutter, `InteropResolver`, the completion list and `TypeIndex.filtered` all read it, through **one** entry point | a refused class is absent from `membersOf`, from the popup and from the index, and throws when called | **done** — see "10.10 as built" |
 | **10.11** Remap seam | `MemberNameMapper` bridge hook; `RhinoRemapping` — a **membrane** over Rhino's own wrapper rather than a patched `JavaMembers`; `InteropResolver` renaming what it lists | a readable-name call runs against a renamed member, and the member list shows the readable name | **done** — see "10.11 as built" |
-| **10.12** Parity audit + docs | every matrix row tested or documented; AGENTS.md rows; `plan_syntax.md` §16.1/§20 updates | — | **review done, fixes pending** — §12a is the full audit of 10.1–10.11 (56 findings, five tiers, ranked); the fixes it names come before the parity pass, since several matrix rows must be re-marked first (R-20) |
+| **10.12** Parity audit + docs | every matrix row tested or documented; AGENTS.md rows; `plan_syntax.md` §16.1/§20 updates | `RunTest.js` beside `Main.js` — a transcript of what the engine executes, where `Main.js` is what the editor knows | **done** — §12a is the audit of 10.1–10.11 (56 findings) and every one of them is closed; see "12a as built" below for what the fixes turned up in turn |
 
 Exit criteria (the row's four, plus what matching the Java engine adds):
 
@@ -906,9 +906,9 @@ the engine's own rules (`AGENTS.md`, `RhinoTokens`, the loader law) — the 26 f
 bridge additions (`JsSourceAnalyzer`, `JsExecutor`, `LiveScopeSnapshot`, `MemberNameMapper`),
 `AnalysedLanguageServices`' new lane, `ScriptPolicy`, the `TypeIndex`/`SimilarNames`/`ScriptRuntimes`
 changes, the twelve JS test classes, `RhinoCapabilityProbeTest`, `HarnessWorkspace` and `Main.js`.
-**Nothing here has been fixed.** Each item has an id so a fix commit can name what it closes; the tiers are
-in the order they should be worked, and within a tier the items are in the order they were found rather than
-ranked further. Size is a guess: S = under an hour, M = a session, L = a day.
+**Every finding below is now closed** — the list is kept verbatim as the record of what was wrong, because
+half of these were invisible in a green suite and the reasoning is worth more than the diff. Each item has an
+id the fix commits cite. What the fixing itself turned up is in *12a as built*, after the list.
 
 The one-line summary, for a reader deciding whether to read on: the machinery is sound and the tests are real,
 but (A) two of the four resolution tiers quietly break each other after a run, host bindings are invisible to
@@ -1214,9 +1214,44 @@ name only JDK/`text.*`/bridge types, and a shared utility is moved rather than i
 *a `Rhino` prefix means child-side* (R-24); and fix the plan's own three inconsistencies (R-36, R-37, and
 §1.2's `finally` row).
 
-Suggested order: A (R-01…R-18) as one commit per two or three related items with their fixtures; then R-32/33/
-34/35 (the one-definition items) and R-50…R-58 in a single cleanliness commit; then B's decisions and builds;
-C after measuring; E's probe rows alongside whichever A-item they pin.
+Delivered in five commits, in that order: `a8fc16f` (the live tier and scopes), `8797c03` (the executor, the
+membrane, the interop caches), `392fc7e` (host bindings, the prototypes, the shared-utility move),
+`297cacf` (three more band divergences the new tests found), `b1d42f2` (the matrix rows, the AGENTS
+invariants, `RunTest.js`).
+
+### 12a as built — what fixing it turned up
+
+Four things worth recording, because each was found *by* a fix rather than by the review:
+
+- **Three more band divergences, and one of them answers null rather than throwing.** `CatchClause.getVarName()`
+  is on band 8 and not on the band we run against — the `ObjectProperty` shape for the third time. Reaching for
+  the obvious structural alternative, `getFirstChild()`, then found the fourth and nastiest: on this band a
+  node's parts are **fields** rather than entries in the generic child list, so it answers **null** with nothing
+  thrown. It took the object literals with it — `leftOf` had just been switched to it for the same good reason,
+  found no key for any property in any file, and `o.` silently offered the prototype's members and none of the
+  object's own. **`visit` is the one reading true on both bands**: overridden per node type, reaches the fields
+  however they are stored, and goes in source order.
+- **R-16 reintroduced the `NodeFinder` trap in Rhino's spelling.** Answering `resolveAt` for *any* expression
+  rather than only a call is right, but the inclusive containment test also matches every node that merely
+  **ends** at the offset — so `s.append('a').append('b').` resolved to `string`, off the argument. Strict
+  containment for a receiver; inclusive for a hover, which legitimately means "the identifier I am just past".
+  Caught by the chain test, which is exactly why that test exists.
+- **Fixing an overlap created another one, one pass further along.** The free-name pass was made to stand aside
+  for `markUnresolvedCalls`; then the new package-chain colouring gave `java` a second token, because the
+  "is it a builtin" test ran *first* and claimed it. The rule is not "skip calls" but **stand aside for any more
+  specific pass, before deciding what kind of free name this is**.
+- **`Integer.MAX_VALUE` is a value, not a sentinel.** `Diagnostic.onRow` spells "to the end of this line" that
+  way, so the new offset conversion overflowed and every runtime mark collapsed to a point. `Rope.pointToOffset`
+  has a test named for this; the runtime lane became its second reader and repeated it verbatim.
+
+And two things the review recommended were **not** done, deliberately:
+
+- **Rhino's own warnings stay off.** The matrix row is re-marked rather than built: they are strict-mode output,
+  and which style opinions are worth showing is a policy decision nobody has made. Turning them on wholesale
+  would decide it by accident, in the wrong file.
+- **`property`/`function.call` on a resolved Java member is still not a semantic token.** It needs a per-node
+  interop lookup during the token walk — a bridge crossing per member access, on every keystroke — and the same
+  information is already on the hover and in the completion list, where it is asked for deliberately.
 
 ---
 
