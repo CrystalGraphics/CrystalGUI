@@ -1,56 +1,30 @@
 package com.crystalgui.ui.elements.editor;
 
-import java.util.function.IntUnaryOperator;
-import java.util.function.IntFunction;
-import com.crystalgui.ui.UIWindow;
-import com.crystalgui.text.search.TextSearch;
-import com.crystalgui.text.search.SearchResults;
-import com.crystalgui.core.search.SearchQuery;
-import com.crystalgui.core.search.SearchMatcher;
-import com.crystalgui.ui.ClipboardActions;
 import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.api.text.CgShapedRun;
 import com.crystalgraphics.api.text.CgTextLayout;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
+
+import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.data.DataKey;
+import com.crystalgui.core.search.SearchMatcher;
+import com.crystalgui.core.search.SearchQuery;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.core.undo.UndoScope;
+import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.layout.LayoutProperties;
-import com.crystalgui.text.decoration.DecorationSet;
-import com.crystalgui.text.decoration.Stickiness;
-import com.crystalgui.text.decoration.TrackedRange;
-import com.crystalgui.text.diagnostic.Diagnostic;
-import com.crystalgui.text.diagnostic.DiagnosticSet;
-import com.crystalgui.text.diagnostic.DiagnosticTag;
-import dev.vfyjxf.taffy.style.LengthPercentageAuto;
-import com.crystalgui.core.undo.UndoScope;
-import com.crystalgui.core.undo.UndoStack;
-import com.crystalgui.text.ChangeSet;
 import com.crystalgui.text.Change;
+import com.crystalgui.text.ChangeSet;
+import com.crystalgui.text.LineEnding;
 import com.crystalgui.text.Rope;
-import org.joml.Matrix4f;
-import org.joml.Vector3f;
 import com.crystalgui.text.Selection;
 import com.crystalgui.text.SelectionModel;
-import com.crystalgui.text.LineEnding;
 import com.crystalgui.text.TextBuffer;
-import com.crystalgui.text.syntax.SyntaxToken;
-import com.crystalgui.text.lang.CompletionItem;
-import com.crystalgui.text.lang.CompletionProvider;
-import com.crystalgui.text.lang.DeclarationSite;
-import com.crystalgui.text.lang.LanguageServices;
-import com.crystalgui.text.lang.CodeAction;
-import com.crystalgui.text.lang.CodeActionProvider;
-import com.crystalgui.text.lang.SymbolInfo;
-import com.crystalgui.text.lang.SemanticTokenProvider;
-import com.crystalgui.text.lang.Versioned;
-import com.crystalgui.text.syntax.Language;
-import com.crystalgui.text.syntax.SyntaxTokenizer;
-import com.crystalgui.ui.text.HighlightRegistry;
-import com.crystalgui.ui.text.TextRange;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.WordClassifier;
 import com.crystalgui.text.WordOperations;
@@ -60,38 +34,66 @@ import com.crystalgui.text.cursor.LineOperations;
 import com.crystalgui.text.cursor.MouseSelection;
 import com.crystalgui.text.cursor.MoveOperations;
 import com.crystalgui.text.cursor.TypeOperations;
-import com.crystalgui.text.wrap.LineBreaksComputer;
-import com.crystalgui.text.wrap.LineProjection;
-import com.crystalgui.text.view.IndentLevels;
-import com.crystalgui.text.view.RenderWhitespace;
-import com.crystalgui.text.view.WhitespaceMarkers;
+import com.crystalgui.text.decoration.DecorationSet;
+import com.crystalgui.text.decoration.Stickiness;
+import com.crystalgui.text.decoration.TrackedRange;
+import com.crystalgui.text.diagnostic.Diagnostic;
+import com.crystalgui.text.diagnostic.DiagnosticSet;
+import com.crystalgui.text.diagnostic.DiagnosticTag;
 import com.crystalgui.text.fold.FoldingModel;
 import com.crystalgui.text.fold.FoldingRangeProvider;
 import com.crystalgui.text.fold.FoldingRegions;
 import com.crystalgui.text.fold.IndentRangeProvider;
-import javax.annotation.Nullable;
+import com.crystalgui.text.lang.CodeAction;
+import com.crystalgui.text.lang.CodeActionProvider;
+import com.crystalgui.text.lang.CompletionItem;
+import com.crystalgui.text.lang.CompletionProvider;
+import com.crystalgui.text.lang.DeclarationSite;
+import com.crystalgui.text.lang.LanguageServices;
+import com.crystalgui.text.lang.SemanticTokenProvider;
+import com.crystalgui.text.lang.SymbolInfo;
+import com.crystalgui.text.lang.Versioned;
+import com.crystalgui.text.search.SearchResults;
+import com.crystalgui.text.search.TextSearch;
+import com.crystalgui.text.syntax.Language;
+import com.crystalgui.text.syntax.SyntaxToken;
+import com.crystalgui.text.syntax.SyntaxTokenizer;
+import com.crystalgui.text.view.IndentLevels;
+import com.crystalgui.text.view.RenderWhitespace;
+import com.crystalgui.text.view.WhitespaceMarkers;
+import com.crystalgui.text.wrap.LineBreaksComputer;
+import com.crystalgui.text.wrap.LineProjection;
 import com.crystalgui.text.wrap.ProjectedLines;
 import com.crystalgui.text.wrap.ShapedLineBreaks;
 import com.crystalgui.text.wrap.WrapIndent;
+import com.crystalgui.ui.ClipboardActions;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.UiDataKeys;
-import com.crystalgui.core.data.DataKey;
 import com.crystalgui.ui.elements.ScrollerView;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
+import com.crystalgui.ui.text.HighlightRegistry;
+import com.crystalgui.ui.text.TextRange;
+
+import dev.vfyjxf.taffy.style.LengthPercentageAuto;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 import lombok.Getter;
+import org.joml.Matrix4f;
+import org.joml.Vector3f;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
-import java.util.List;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
-import com.crystalgui.core.command.CommandRegistry;
+import java.util.function.IntFunction;
+import java.util.function.IntUnaryOperator;
+import javax.annotation.Nullable;
 
 /**
  * A multi-line plain-text editor over a {@link TextBuffer}.
@@ -357,10 +359,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /** The engine's diagnostics subscription, dropped when the services are replaced or disposed. */
     @Nullable
     private com.crystalgui.core.signal.Connection languageDiagnostics;
-
-    /** Search hits, in document offsets. Published under {@code ::highlight(search)}. */
-    private final List<TextRange> searchMatches = new ArrayList<>();
-    private int currentMatch = -1;
 
     /** The two bracket positions when the caret is on a bracket, or {@code null}. */
     private int[] bracketPair;
@@ -2650,7 +2648,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             addDocumentRanges(byName, "selection-occurrence", selectionOccurrences, lineStart, lineEnd);
             // AFTER the occurrences, so a search hit wins the character where the two overlap. A search
             // is something you asked for; occurrences are something the caret happened to be standing in.
-            addDocumentRanges(byName, "search", searchMatches, lineStart, lineEnd);
+            addDocumentRanges(byName, "search", results.matches(), lineStart, lineEnd);
             // A SECOND NAME rather than a second mechanism: `::highlight()` already carries
             // `text-decoration-line`, so an excluded span is struck through by the sheet.
             addDocumentRanges(byName, "search-excluded", results.excludedRanges(), lineStart, lineEnd);
@@ -3759,11 +3757,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // THE SCAN IS THE DOCUMENT'S, not this widget's -- see TextSearch. What stays here is what a view
         // owns: which match is selected, what to paint, and where the caret goes.
         results = results.withMatches(TextSearch.findAll(buffer.toString(), lastSearch));
-        searchMatches.clear();
-        searchMatches.addAll(results.matches());
-        currentMatch = results.current();
         highlightsDirty = true;
-        return searchMatches.size();
+        return results.size();
     }
 
     /** The occurrences, the cursor and the exclusions. @see SearchResults */
@@ -3867,21 +3862,21 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     public int matchCount() {
-        return searchMatches.size();
+        return results.size();
     }
 
     /** Which match is selected, 1-based for display, or 0 when none is. */
     public int currentMatchNumber() {
-        return currentMatch < 0 ? 0 : currentMatch + 1;
+        return results.currentNumber();
     }
 
     /** Selects the next match after the caret, wrapping. */
     public boolean findNext() {
-        if (searchMatches.isEmpty()) return false;
+        if (results.isEmpty()) return false;
         int caret = getCaret();
         int next = 0;
-        for (int i = 0; i < searchMatches.size(); i++) {
-            if (searchMatches.get(i).start() > caret) {
+        for (int i = 0; i < results.size(); i++) {
+            if (results.matches().get(i).start() > caret) {
                 next = i;
                 break;
             }
@@ -3893,11 +3888,11 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     /** Selects the previous match before the caret, wrapping. */
     public boolean findPrevious() {
-        if (searchMatches.isEmpty()) return false;
+        if (results.isEmpty()) return false;
         int caret = getSelectionStart();
-        int previous = searchMatches.size() - 1;
-        for (int i = searchMatches.size() - 1; i >= 0; i--) {
-            if (searchMatches.get(i).start() < caret) {
+        int previous = results.size() - 1;
+        for (int i = results.size() - 1; i >= 0; i--) {
+            if (results.matches().get(i).start() < caret) {
                 previous = i;
                 break;
             }
@@ -3930,7 +3925,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * nearest one from here", and a match on the first visible line is the nearest one.</p>
      */
     public boolean findFrom(int offset) {
-        if (searchMatches.isEmpty()) return false;
+        if (results.isEmpty()) return false;
         if (!results.moveToFirstAtOrAfter(offset)) return false;
         // NOT CENTRED. This runs on every keystroke in the find box, and centring there would scroll the
         // document on each one -- exactly what anchoring on the viewport exists to prevent.
@@ -3948,12 +3943,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
      *               document under the reader — see {@code SearchReplaceBar.runSearch})
      */
     private boolean selectMatch(int index, boolean centre) {
-        if (index < 0 || index >= searchMatches.size()) return false;
-        currentMatch = index;
-        while (results.current() != index && results.next()) {
-            if (results.current() == index) break;
-        }
-        TextRange match = searchMatches.get(index);
+        if (!results.moveTo(index)) return false;
+        TextRange match = results.currentMatch();
+        if (match == null) return false;
         setSelection(match.start(), match.end());
         // CENTRED, AND ONLY WHEN IT HAS TO MOVE AT ALL -- IntelliJ's ScrollType.CENTER, and the argument
         // revealCaretCentred already makes: stepping to a match is arriving somewhere new, so it wants
@@ -3970,8 +3962,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     /** Replaces the selected match and finds the next. */
     public boolean replaceCurrent(String replacement) {
-        if (currentMatch < 0 || currentMatch >= searchMatches.size()) return false;
-        TextRange match = searchMatches.get(currentMatch);
+        TextRange match = results.currentMatch();
+        if (match == null) return false;
         String text = replacement == null ? "" : replacement;
         buffer.replace(match.start(), match.end(),
                 preserveCase ? TextSearch.preserveCase(textIn(match), text) : text);
