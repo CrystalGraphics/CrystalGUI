@@ -153,6 +153,22 @@ final class Utf8Offsets {
      * {@code ArrayIndexOutOfBoundsException} inside text layout on opening an HTML file, which says
      * nothing about offsets at all.</p>
      */
+    /**
+     * The text between two <b>byte</b> offsets, as a String.
+     *
+     * <p>Here rather than at the caller because the conversion is this class's whole job, and a caller
+     * doing {@code document.slice(toUtf16(a), toUtf16(b))} would be reaching for the document it does not
+     * have — the tree describes the text this object was built from, and after an edit that is not the
+     * buffer's text any more. Reading it here means a name resolved from the tree is the name the tree
+     * saw.</p>
+     */
+    String textBetween(int fromByte, int toByte) {
+        int start = toUtf16(fromByte);
+        int end = toUtf16(toByte);
+        if (start >= end || start < 0 || end > text.length()) return "";
+        return text.substring(start, end);
+    }
+
     int toUtf16(int byteOffset) {
         int limit = clamp(byteOffset, utf8Length);
         if (ascii) return limit;

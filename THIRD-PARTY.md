@@ -17,6 +17,7 @@ Per-directory detail lives beside the assets it covers; this is the index.
 | LDLib2 | `research_repos/LDLib2/` | — | In-repo checkout, read for pattern prior art. **Not** a dependency and nothing is copied from it |
 | Minecraft 1.20.1 sources | `research_repos/mc1201_sources/` | Proprietary | Decompiled reference. Not redistributed, not built |
 | tree-sitter binding + six grammars | `lib/tree-sitter/` | MIT | See [lib/tree-sitter/README.md](lib/tree-sitter/README.md) for per-jar provenance |
+| tree-sitter query families (`folds.scm`, `indents.scm`, `locals.scm`) | `language/src/main/resources/assets/crystalgui/syntax/*/` | **Apache 2.0** | © nvim-treesitter contributors. Six languages × three families. **Modified**: each file's upstream `; inherits:` chain is resolved at vendoring time by concatenation, since this engine implements no query inheritance; the resolved sources are named in every file's header. One pattern is added at load time (`Queries.captureJavaScriptParameters`) and is marked as ours in the query text. See [Query families](#query-families-folds-indents-and-scopes) |
 | Eclipse JDT (`org.eclipse.jdt.core` + the platform closure) | `language/build.gradle.kts`, bands 8/11/17 | **EPL-2.0** | The Java engine. See [Engine bands](#engine-bands-ecj-and-rhino) |
 | Rhino | `language/build.gradle.kts`, bands 8/11/17 | **MPL-2.0** | The JavaScript engine. See [Engine bands](#engine-bands-ecj-and-rhino) |
 | ASM (`asm`, `asm-commons`, `asm-tree`) | `language/build.gradle.kts` | **BSD-3-Clause** | © INRIA, France Télécom. The bytecode reader/writer behind the readable↔runtime mapping boundary. 0.24 MB, no transitive dependencies, real classes at class-file major 49 so it runs on every band |
@@ -108,3 +109,44 @@ This matters for what we *ship*, not for what we test against. The IntelliJ Plat
 **is** a mark, and lives in `core/src/test/resources/` for that reason — it is the SVG renderer's torture
 test (nested groups, four `userSpaceOnUse` gradients, entirely filled polygons) and is deliberately not in
 the jar.
+
+
+## Query families: folds, indents and scopes
+
+`highlights.scm` and `injections.scm` come from **the grammar author's own** `queries/` directory, which
+is the rule `lib/tree-sitter/README.md` records and the reason those are not listed separately here: they
+travel under their grammar's own licence.
+
+The other three do not exist upstream. `tree-sitter/tree-sitter-java` ships `highlights.scm` and
+`tags.scm`; `tree-sitter-grammars/tree-sitter-glsl` ships `highlights.scm` alone. The pattern is general —
+a *grammar* repo ships highlights and tags, and the richer families live in editor **runtime** repos — so
+for `folds.scm`, `indents.scm` and `locals.scm` there is no author's file to match, and the choice was a
+licence one:
+
+| Source | Licence | What it would cost |
+|---|---|---|
+| **nvim-treesitter** ✅ | Apache-2.0 | Licence, notice, and a statement of modifications — the terms the IntelliJ file icons already ship under |
+| Helix runtime | MPL-2.0 | File-level copyleft: each `.scm` stays MPL and carries its own notice |
+| Write our own | — | Eighteen files, ours, no notice — and a maintenance line nobody would keep up |
+
+**nvim-treesitter, under Apache-2.0.** Not because the vocabulary is nicer — Helix's indent dialect is
+smaller and is the one actually written down as a specification — but because it is the only source of
+maintained files for all six of our languages under terms this repository already satisfies.
+
+### The statement of modifications Apache-2.0 § 4(b) asks for
+
+1. **The `; inherits:` chain is resolved by concatenation.** nvim-treesitter's loader reads
+   `; inherits: ecma,jsx` at runtime and loads those files ahead of the language's own. This engine has no
+   such mechanism, and adding one to read eighteen files would be machinery for a feature nobody asked
+   for — so the inherited files are concatenated ahead of the language's own, in inheritance order, at
+   vendoring time. Every file's header names exactly which upstream sources it was built from. No pattern
+   is edited, removed or reordered.
+2. **One pattern is added, at load rather than in the file.** Upstream's ECMAScript `locals.scm` captures
+   `var` declarations, imports, functions and methods and **no parameters at all**, so every JavaScript
+   argument resolves to nothing and renders as an ordinary local — which is the one distinction that
+   family exists to draw. Three patterns are appended by `Queries.captureJavaScriptParameters`, marked in
+   the query text as ours. The vendored resource is untouched.
+3. **`css/locals.scm` is absent** because upstream ships none. CSS keeps the grammar's own colouring.
+
+`@indent.align` is the one capture of the dialect that is read and ignored: it needs a *column* rather
+than a level, which is not what `IndentationProvider` answers in. `TreeIndents` says so in its own header.

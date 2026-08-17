@@ -1,5 +1,7 @@
 package com.crystalgui.language.grammar;
 
+import javax.annotation.Nullable;
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -399,6 +401,72 @@ final class Queries {
                 "(?s)(field:\\s*\\(field_identifier\\)\\s*)@function\\b",
                 "$1@function.call");
         return out;
+    }
+
+    /**
+     * A query family for a grammar, or {@code null} when this language ships none.
+     *
+     * <p>Null is the ordinary answer and is <b>not</b> a degradation: {@code folds.scm} and
+     * {@code indents.scm} are editor conventions rather than parts of tree-sitter, and every consumer of
+     * them already has a working fallback — indentation-based folding, and the "line ends in an opening
+     * brace" indent rule. A language with no file keeps exactly the behaviour it had, which is what makes
+     * these three additive rather than a migration.</p>
+     *
+     * <p>Deviations are applied the same way {@link #loadForHighlighting} applies them — at load, as one
+     * reviewable table, never by editing the vendored resource. There is only one, and it is a <b>gap</b>
+     * rather than a dialect disagreement: unlike a capture rename, which is two names for one idea, a
+     * missing pattern is a colour nobody gets.</p>
+     */
+    @Nullable
+    static String loadFamily(String language, String family) {
+        String query = loadIfPresent("assets/crystalgui/syntax/" + language + "/" + family + ".scm");
+        return query == null ? null : captureJavaScriptParameters(query);
+    }
+
+    /**
+     * Adds the parameter definitions the ECMAScript {@code locals.scm} omits entirely.
+     *
+     * <p>Upstream captures {@code var} declarations, imports, functions and methods — and <b>no
+     * parameters</b>. So a JavaScript function's arguments resolve to nothing, fall through to the
+     * highlight query's blanket {@code @variable}, and render identically to the locals beside them,
+     * which is precisely the distinction this whole family exists to draw. Java's file captures them and
+     * the C family's captures them; ECMAScript's is the outlier.</p>
+     *
+     * <p><b>It matters most where there is no engine.</b> A {@code .js} file in an application that
+     * called {@code JsLanguage.register()} gets {@code variable.parameter} from Rhino's own scopes, and a
+     * semantic token outranks a grammar one — so this changes nothing there. It is the other case that is
+     * the point: a build with no engines, or a dedicated server, where the grammar tier is all there is.
+     * That is the tier §24.5 was justified by.</p>
+     *
+     * <p>Appended rather than spliced, for the reason the highlight deviations are: a new pattern takes
+     * the highest index and nothing above it is rewritten.</p>
+     */
+    private static String captureJavaScriptParameters(String query) {
+        if (!query.contains("(arrow_function)") || query.contains("@local.definition.parameter")) {
+            return query;
+        }
+        return query
+                + System.lineSeparator()
+                + "; Added by CrystalGUI: upstream's ECMAScript locals query defines no parameters at"
+                + System.lineSeparator()
+                + "; all, so every argument renders as an ordinary local."
+                + System.lineSeparator()
+                + "(formal_parameters (identifier) @local.definition.parameter)"
+                + System.lineSeparator()
+                + "(formal_parameters (rest_pattern (identifier) @local.definition.parameter))"
+                + System.lineSeparator()
+                + "(arrow_function parameter: (identifier) @local.definition.parameter)"
+                + System.lineSeparator();
+    }
+
+    @Nullable
+    private static String loadIfPresent(String resourcePath) {
+        try (InputStream in = Queries.class.getClassLoader().getResourceAsStream(resourcePath)) {
+            if (in == null) return null;
+        } catch (IOException unreadable) {
+            return null;
+        }
+        return load(resourcePath);
     }
 
     static String load(String resourcePath) {

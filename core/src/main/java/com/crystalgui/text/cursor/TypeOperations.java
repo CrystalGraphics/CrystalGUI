@@ -2,6 +2,8 @@ package com.crystalgui.text.cursor;
 
 import com.crystalgui.text.Change;
 import com.crystalgui.text.Rope;
+
+import javax.annotation.Nullable;
 import com.crystalgui.text.Selection;
 import com.crystalgui.text.WordClassifier;
 import com.crystalgui.text.syntax.Language;
@@ -145,6 +147,22 @@ public final class TypeOperations {
      * this for free and no bracket is written down here.</p>
      */
     public static Enter enterAt(Rope document, int at, IndentStyle style, Language language) {
+        return enterAt(document, at, style, language, null);
+    }
+
+    /**
+     * The same, asking a parser first.
+     *
+     * <p>The syntactic rule below is kept in full and is <b>not</b> a fallback in the pejorative sense: it
+     * answers for every language with no grammar behind it, which is most of them, and it answers for a
+     * document whose tree has not been built yet. What a provider adds is the cases a line's last
+     * character cannot express — a wrapped expression continuing, a {@code case} arm, a nested CSS rule —
+     * and it adds them by replacing the <em>level</em> while leaving the bracket-pair handling alone,
+     * because where the caret lands between {@code {} } is a fact about the edit rather than about the
+     * grammar.</p>
+     */
+    public static Enter enterAt(Rope document, int at, IndentStyle style, Language language,
+                                @Nullable IndentationProvider indentation) {
         int row = document.offsetToPoint(at).row();
         int lineStart = document.lineStartOffset(row);
         String line = document.line(row);
@@ -303,6 +321,21 @@ public final class TypeOperations {
         /** The text of one level. */
         public String oneLevel() {
             return insertSpaces ? TypeOperations.spaces(Math.max(1, width)) : "\t";
+        }
+
+        /**
+         * The text of {@code count} levels — what an {@link IndentationProvider}'s answer becomes.
+         *
+         * <p>A provider answers in levels precisely so that it does not have to know any of this: whether
+         * this file uses tabs, how wide they are drawn, or what the settings say. Turning that number
+         * into characters is the one place that knows, and it is already this record's whole job.</p>
+         */
+        public String levels(int count) {
+            if (count <= 0) return "";
+            String one = oneLevel();
+            StringBuilder out = new StringBuilder(one.length() * count);
+            for (int i = 0; i < count; i++) out.append(one);
+            return out.toString();
         }
     }
 }

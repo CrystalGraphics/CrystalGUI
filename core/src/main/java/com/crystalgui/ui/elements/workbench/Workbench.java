@@ -13,7 +13,10 @@ import com.crystalgui.fs.WorkingCopies;
 import com.crystalgui.fs.WorkspaceFileService;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.diagnostic.DiagnosticSet;
+import com.crystalgui.text.cursor.IndentationProvider;
+import com.crystalgui.text.fold.FoldingRangeProvider;
 import com.crystalgui.text.syntax.LanguageRegistry;
+import com.crystalgui.text.syntax.SyntaxTokenizer;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.chrome.Breadcrumbs;
 import com.crystalgui.ui.elements.chrome.StatusBarView;
@@ -434,7 +437,22 @@ public class Workbench extends UIElement {
             created.setLanguage(entry.language());
             // A FRESH tokenizer per document -- the interface exists for implementations holding a parse
             // tree per file, and sharing one would cross-contaminate them.
-            created.setTokenizer(entry.newTokenizer());
+            SyntaxTokenizer tokenizer = entry.newTokenizer();
+            created.setTokenizer(tokenizer);
+            // AND IF IT CAN FOLD, IT FOLDS. A tokenizer holding a parse tree already knows where a block
+            // begins and ends, which is strictly better than guessing from indentation -- and asking it
+            // costs no second parse, which a separate provider would. The indentation provider stays the
+            // default and answers for every language with no grammar behind it, which is most of them.
+            if (tokenizer instanceof FoldingRangeProvider) {
+                created.setFoldingProvider((FoldingRangeProvider) tokenizer);
+            }
+            // AND IF IT CAN SAY HOW DEEP A LINE IS, Enter asks it rather than reading the last character
+            // of the line -- which is right for a brace language and silently wrong for a `case` arm, a
+            // wrapped expression, or a nested CSS rule. Same seam, same fallback: a language with no
+            // indent query keeps the rule it had.
+            if (tokenizer instanceof IndentationProvider) {
+                created.setIndentationProvider((IndentationProvider) tokenizer);
+            }
             // Fresh services per document too, and for the same reason one level up: they hold a compile
             // result about THIS text. Null unless a language module registered an engine, which is the
             // whole feature flag -- see LanguageServices. Released by TextFileDocument.dispose().
