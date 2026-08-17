@@ -201,35 +201,44 @@ final class CreateCorrections {
         // ── Types ───────────────────────────────────────────────────────────────────────────────
 
         private static Type returnTypeFor(MethodInvocation call, AST ast, ASTRewrite rewrite, ImportPlan imports) {
+            if (call.getParent() instanceof ExpressionStatement) {
+                return ast.newPrimitiveType(PrimitiveType.VOID);
+            }
+            // A TYPE SOMEBODY WROTE IS COPIED, never re-derived from its binding: `List<String>` keeps its
+            // own spelling, its own imports and its own formatting, where rendering the binding would
+            // produce a second opinion about all three.
+            Type written = writtenTypeAt(call);
+            if (written != null) return (Type) rewrite.createCopyTarget(written);
+            if (Expected.isCondition(call)) return ast.newPrimitiveType(PrimitiveType.BOOLEAN);
+            ITypeBinding wanted = Expected.typeOf(call);
+            return wanted == null
+                    ? ast.newSimpleType(ast.newSimpleName("Object"))
+                    : TypeNames.typeNode(wanted, ast, imports);
+        }
+
+        /** The declared type this call is being handed to, where somebody wrote one down. */
+        private static Type writtenTypeAt(MethodInvocation call) {
             ASTNode parent = call.getParent();
-            if (parent instanceof ExpressionStatement) return ast.newPrimitiveType(PrimitiveType.VOID);
-            if (parent instanceof VariableDeclarationFragment && ((VariableDeclarationFragment) parent).getInitializer() == call) {
+            if (parent instanceof VariableDeclarationFragment
+                    && ((VariableDeclarationFragment) parent).getInitializer() == call) {
                 ASTNode declaration = parent.getParent();
                 Type declared = declaration instanceof VariableDeclarationStatement
                         ? ((VariableDeclarationStatement) declaration).getType()
-                        : declaration instanceof FieldDeclaration ? ((FieldDeclaration) declaration).getType() : null;
-                if (declared != null && !declared.isVar()) return (Type) rewrite.createCopyTarget(declared);
+                        : declaration instanceof FieldDeclaration
+                                ? ((FieldDeclaration) declaration).getType() : null;
+                // `var` WROTE NOTHING DOWN. It is the initialiser's type, and the initialiser is the call
+                // that does not exist yet -- so there is nothing here to copy.
+                return declared != null && !declared.isVar() ? declared : null;
             }
-            if (parent instanceof Assignment && ((Assignment) parent).getRightHandSide() == call) {
-                return TypeNames.typeNode(((Assignment) parent).getLeftHandSide().resolveTypeBinding(), ast, imports);
-            }
+            if (parent instanceof CastExpression) return ((CastExpression) parent).getType();
             if (parent instanceof ReturnStatement) {
-                for (ASTNode at = parent; at != null; at = at.getParent()) {
-                    if (at instanceof MethodDeclaration) {
-                        Type declared = ((MethodDeclaration) at).getReturnType2();
-                        if (declared != null) return (Type) rewrite.createCopyTarget(declared);
-                        break;
-                    }
-                }
+                // STOPPING AT A LAMBDA, as `Expected` does and as this did not: a lambda body's `return` is
+                // the lambda's, so the surrounding method's return type is a type this value was never
+                // required to have.
+                MethodDeclaration method = Scopes.enclosingMethod(parent, Scopes.Stop.LAMBDA);
+                return method == null ? null : method.getReturnType2();
             }
-            if (parent instanceof CastExpression) return (Type) rewrite.createCopyTarget(((CastExpression) parent).getType());
-            if (parent instanceof IfStatement || parent instanceof WhileStatement || parent instanceof DoStatement
-                    || (parent instanceof ConditionalExpression && ((ConditionalExpression) parent).getExpression() == call)
-                    || (parent instanceof PrefixExpression
-                        && ((PrefixExpression) parent).getOperator() == PrefixExpression.Operator.NOT)) {
-                return ast.newPrimitiveType(PrimitiveType.BOOLEAN);
-            }
-            return ast.newSimpleType(ast.newSimpleName("Object"));
+            return null;
         }
 
         /** The literal that makes a body of {@code return …;} compile — null for {@code void}. */
