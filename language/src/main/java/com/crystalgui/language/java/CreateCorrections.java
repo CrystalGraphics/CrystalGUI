@@ -8,7 +8,6 @@ import org.eclipse.jdt.core.dom.AST;
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTVisitor;
 import org.eclipse.jdt.core.dom.AbstractTypeDeclaration;
-import org.eclipse.jdt.core.dom.ArrayType;
 import org.eclipse.jdt.core.dom.Assignment;
 import org.eclipse.jdt.core.dom.Block;
 import org.eclipse.jdt.core.dom.BodyDeclaration;
@@ -27,7 +26,6 @@ import org.eclipse.jdt.core.dom.MethodInvocation;
 import org.eclipse.jdt.core.dom.MethodReference;
 import org.eclipse.jdt.core.dom.Modifier;
 import org.eclipse.jdt.core.dom.Name;
-import org.eclipse.jdt.core.dom.ParameterizedType;
 import org.eclipse.jdt.core.dom.PrefixExpression;
 import org.eclipse.jdt.core.dom.PrimitiveType;
 import org.eclipse.jdt.core.dom.ReturnStatement;
@@ -38,7 +36,6 @@ import org.eclipse.jdt.core.dom.TypeDeclaration;
 import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
 import org.eclipse.jdt.core.dom.VariableDeclarationStatement;
 import org.eclipse.jdt.core.dom.WhileStatement;
-import org.eclipse.jdt.core.dom.WildcardType;
 import org.eclipse.jdt.core.dom.rewrite.ASTRewrite;
 import org.eclipse.jdt.core.dom.rewrite.ListRewrite;
 
@@ -145,7 +142,7 @@ final class CreateCorrections {
                 Expression argument = (Expression) each;
                 ITypeBinding argumentType = argument.resolveTypeBinding();
                 SingleVariableDeclaration parameter = ast.newSingleVariableDeclaration();
-                Type type = typeFor(argumentType, ast, imports);
+                Type type = TypeNames.typeNode(argumentType, ast, imports);
                 parameter.setType(type);
                 parameter.setName(ast.newSimpleName(parameterName(argument, argumentType, taken)));
                 method.parameters().add(parameter);
@@ -203,50 +200,6 @@ final class CreateCorrections {
 
         // ── Types ───────────────────────────────────────────────────────────────────────────────
 
-        /**
-         * A {@link Type} node spelling {@code binding}, importing what it needs.
-         *
-         * <p>Type variables and captures become their erasure — the calling method's {@code T} is not in
-         * scope in the new method — and anonymous or local types become {@code Object}, which is the
-         * honest name for something the new method cannot name.</p>
-         *
-         * <p><b>So does a recovered one</b>, and that is the same rule rather than a new one. A recovered
-         * binding is a name the compiler could not resolve, and it still answers {@code getQualifiedName()}
-         * — so the parallel spelling here would generate a parameter typed after something that does not
-         * exist, which is the fault {@link TypeNames#writtenName} was given its own guard for. {@code
-         * Object} always compiles; a made-up name never does. Dormant so far only because an unresolvable
-         * argument stops {@code UndefinedMethod} being reported at all.</p>
-         */
-        private static Type typeFor(ITypeBinding binding, AST ast, ImportPlan imports) {
-            if (binding == null || binding.isNullType() || binding.isRecovered()
-                    || binding.isAnonymous() || binding.isLocal()) {
-                return ast.newSimpleType(ast.newSimpleName("Object"));
-            }
-            if (binding.isPrimitive()) return ast.newPrimitiveType(PrimitiveType.toCode(binding.getName()));
-            if (binding.isArray()) {
-                return ast.newArrayType(typeFor(binding.getElementType(), ast, imports), binding.getDimensions());
-            }
-            if (binding.isTypeVariable() || binding.isCapture()) {
-                return typeFor(binding.getErasure(), ast, imports);
-            }
-            if (binding.isWildcardType()) {
-                WildcardType wildcard = ast.newWildcardType();
-                ITypeBinding bound = binding.getBound();
-                if (bound != null) {
-                    wildcard.setBound(typeFor(bound, ast, imports), binding.isUpperbound());
-                }
-                return wildcard;
-            }
-            if (binding.isParameterizedType()) {
-                ParameterizedType parameterized = ast.newParameterizedType(typeFor(binding.getErasure(), ast, imports));
-                for (ITypeBinding argument : binding.getTypeArguments()) {
-                    parameterized.typeArguments().add(typeFor(argument, ast, imports));
-                }
-                return parameterized;
-            }
-            return ast.newSimpleType(ast.newName(imports.nameFor(binding.getErasure().getQualifiedName())));
-        }
-
         private static Type returnTypeFor(MethodInvocation call, AST ast, ASTRewrite rewrite, ImportPlan imports) {
             ASTNode parent = call.getParent();
             if (parent instanceof ExpressionStatement) return ast.newPrimitiveType(PrimitiveType.VOID);
@@ -258,7 +211,7 @@ final class CreateCorrections {
                 if (declared != null && !declared.isVar()) return (Type) rewrite.createCopyTarget(declared);
             }
             if (parent instanceof Assignment && ((Assignment) parent).getRightHandSide() == call) {
-                return typeFor(((Assignment) parent).getLeftHandSide().resolveTypeBinding(), ast, imports);
+                return TypeNames.typeNode(((Assignment) parent).getLeftHandSide().resolveTypeBinding(), ast, imports);
             }
             if (parent instanceof ReturnStatement) {
                 for (ASTNode at = parent; at != null; at = at.getParent()) {
@@ -281,14 +234,15 @@ final class CreateCorrections {
 
         /** The literal that makes a body of {@code return …;} compile — null for {@code void}. */
         private static Expression zeroOf(Type type, AST ast) {
-            if (type instanceof PrimitiveType) {
-                PrimitiveType.Code code = ((PrimitiveType) type).getPrimitiveTypeCode();
-                if (code == PrimitiveType.VOID) return null;
-                if (code == PrimitiveType.BOOLEAN) return ast.newBooleanLiteral(false);
-                if (code == PrimitiveType.CHAR) return ast.newNumberLiteral("0");
-                return ast.newNumberLiteral("0");
-            }
-            return ast.newNullLiteral();
+            // THE SAME RULE AS `TypeNames.defaultValue`, reached by name rather than by binding: a Type
+            // produced by `createCopyTarget` carries no binding, which is why this asks the primitive's
+            // code for its name instead of resolving one.
+            if (!(type instanceof PrimitiveType)) return ast.newNullLiteral();
+            String value = TypeNames.defaultValueOfPrimitive(
+                    ((PrimitiveType) type).getPrimitiveTypeCode().toString());
+            if (value == null) return null;                                   // void
+            if ("false".equals(value)) return ast.newBooleanLiteral(false);
+            return ast.newNumberLiteral(value);
         }
 
         // ── Names ───────────────────────────────────────────────────────────────────────────────
@@ -376,7 +330,7 @@ final class CreateCorrections {
                 Expression argument = (Expression) each;
                 ITypeBinding argumentType = argument.resolveTypeBinding();
                 SingleVariableDeclaration parameter = ast.newSingleVariableDeclaration();
-                parameter.setType(CreateMethod.typeFor(argumentType, ast, imports));
+                parameter.setType(TypeNames.typeNode(argumentType, ast, imports));
                 parameter.setName(ast.newSimpleName(CreateMethod.parameterName(argument, argumentType, taken)));
                 made.parameters().add(parameter);
                 shownTypes.add(argumentType == null ? "Object" : argumentType.getErasure().getName());

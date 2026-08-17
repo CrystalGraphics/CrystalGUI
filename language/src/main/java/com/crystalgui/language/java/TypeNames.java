@@ -1,8 +1,13 @@
 package com.crystalgui.language.java;
 
+import org.eclipse.jdt.core.dom.AST;
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.AbstractTypeDeclaration;
 import org.eclipse.jdt.core.dom.ITypeBinding;
+import org.eclipse.jdt.core.dom.ParameterizedType;
+import org.eclipse.jdt.core.dom.PrimitiveType;
+import org.eclipse.jdt.core.dom.Type;
+import org.eclipse.jdt.core.dom.WildcardType;
 
 /**
  * <b>How this file would have written that type</b> — the one answer every correction that puts a type
@@ -13,6 +18,7 @@ import org.eclipse.jdt.core.dom.ITypeBinding;
  * wrong answers to be worth having once: {@code getQualifiedName()} renders a parameterized type as
  * {@code java.util.List<java.lang.String>}, which compiles and is nobody's idea of source.</p>
  */
+@SuppressWarnings("unchecked")   // JDT's DOM lists are raw; every add below is to a list of the declared node type
 final class TypeNames {
 
     private TypeNames() {
@@ -98,6 +104,58 @@ final class TypeNames {
     }
 
     /**
+     * The same type as a {@link Type} <b>node</b>, for a declaration being generated <em>elsewhere</em> —
+     * and <b>never null</b>.
+     *
+     * <h3>The two answers differ, and both are right for their caller</h3>
+     *
+     * <p>{@link #writtenName} answers for a cast or a declaration written <em>here</em>, where a name that
+     * is not in scope is a new error, so it refuses — null. This one answers for a method being generated
+     * into some other type, where refusing means offering nothing at all, and where a <b>degraded but
+     * legal</b> name is the useful answer: a type variable becomes its erasure, because the calling
+     * method's {@code T} is not in scope in the new one, and anything unnameable becomes {@code Object},
+     * which is the honest name for something the new method cannot say.</p>
+     *
+     * <p>A <b>recovered</b> binding is on that second list, and that is the same rule rather than a new
+     * one: it still answers {@code getQualifiedName()}, so spelling it out would type a parameter after
+     * something that does not exist. {@code Object} always compiles; a made-up name never does.</p>
+     *
+     * <p>They are two methods rather than a flag because the callers are asking different questions, and
+     * one file so the recovered / type-variable / anonymous rules are stated once. This half lived in
+     * {@code CreateCorrections} and had drifted: it was the copy without the recovered guard.</p>
+     */
+    static Type typeNode(ITypeBinding binding, AST ast, ImportPlan imports) {
+        if (binding == null || binding.isNullType() || binding.isRecovered()
+                || binding.isAnonymous() || binding.isLocal()) {
+            return ast.newSimpleType(ast.newSimpleName("Object"));
+        }
+        if (binding.isPrimitive()) return ast.newPrimitiveType(PrimitiveType.toCode(binding.getName()));
+        if (binding.isArray()) {
+            return ast.newArrayType(typeNode(binding.getElementType(), ast, imports), binding.getDimensions());
+        }
+        if (binding.isTypeVariable() || binding.isCapture()) {
+            return typeNode(binding.getErasure(), ast, imports);
+        }
+        if (binding.isWildcardType()) {
+            WildcardType wildcard = ast.newWildcardType();
+            ITypeBinding bound = binding.getBound();
+            if (bound != null) {
+                wildcard.setBound(typeNode(bound, ast, imports), binding.isUpperbound());
+            }
+            return wildcard;
+        }
+        if (binding.isParameterizedType()) {
+            ParameterizedType parameterized =
+                    ast.newParameterizedType(typeNode(binding.getErasure(), ast, imports));
+            for (ITypeBinding argument : binding.getTypeArguments()) {
+                parameterized.typeArguments().add(typeNode(argument, ast, imports));
+            }
+            return parameterized;
+        }
+        return ast.newSimpleType(ast.newName(imports.nameFor(binding.getErasure().getQualifiedName())));
+    }
+
+    /**
      * A value of {@code type} that is always legal to write — {@code 0}, {@code false}, {@code null}.
      *
      * <p>What "add a return statement" and "initialise this variable" both need, and the reason they are
@@ -108,9 +166,21 @@ final class TypeNames {
      * expression narrows in an assignment context and a {@code return} is one.</p>
      */
     static String defaultValue(ITypeBinding type) {
-        if (type == null || "void".equals(type.getName())) return null;
-        if (!type.isPrimitive()) return "null";
-        switch (type.getName()) {
+        if (type == null) return null;
+        return type.isPrimitive() ? defaultValueOfPrimitive(type.getName()) : "null";
+    }
+
+    /**
+     * The same rule keyed on the primitive's <b>name</b> — {@code null} for {@code void}.
+     *
+     * <p>Here because a caller building DOM nodes has a {@code PrimitiveType.Code} and no binding: a
+     * {@code Type} produced by {@code createCopyTarget} carries none, so "what is the zero of this" would
+     * otherwise be answered a second time, in a second shape, by whoever needed it that way. It is one
+     * sentence of judgement and exactly the kind that drifts.</p>
+     */
+    static String defaultValueOfPrimitive(String name) {
+        switch (name) {
+            case "void":    return null;
             case "boolean": return "false";
             case "long":    return "0L";
             case "float":   return "0.0f";
