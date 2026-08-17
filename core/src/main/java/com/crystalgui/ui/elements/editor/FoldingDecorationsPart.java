@@ -61,6 +61,7 @@ final class FoldingDecorationsPart extends EditorViewPart {
             for (UIElement arrow : arrows) DecorationPool.hide(arrow);
             return;
         }
+        DecorationPool.show(column);
         final float columnLeft = editor.paddingLeft() + editor.gutterNumberWidth();
         final float columnWidth = editor.gutterFoldWidth();
         final float columnHeight = editor.getClientHeight();
@@ -118,7 +119,9 @@ final class FoldingDecorationsPart extends EditorViewPart {
             arrows.add(arrow);
             arrowRows.add(-1);
         }
-        return arrows.get(index);
+        // BACK INTO LAYOUT. Retirement is `display: none` at IMPORTANT -- see DecorationPool.hide
+        // -- so every path that shows one of these again has to undo it.
+        return DecorationPool.show(arrows.get(index));
     }
 
     // ── Collapsed-region chips ──────────────────────────────────────────────────────────────────
@@ -245,7 +248,9 @@ final class FoldingDecorationsPart extends EditorViewPart {
             chips.add(marker);
             chipRows.add(-1);
         }
-        return chips.get(index);
+        // BACK INTO LAYOUT. Retirement is `display: none` at IMPORTANT -- see DecorationPool.hide
+        // -- so every path that shows one of these again has to undo it.
+        return DecorationPool.show(chips.get(index));
     }
 
     /**

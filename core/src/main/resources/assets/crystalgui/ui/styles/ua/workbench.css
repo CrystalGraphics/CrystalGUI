@@ -617,7 +617,12 @@ quickpick ::highlight(quickpick-match) {
  * HINT is absent on purpose: it draws no band at all, so a style suggestion cannot be mistaken for a
  * compile error. See DiagnosticSeverity.
  */
+/* THE THICKNESS IS READ BACK, not merely applied. SquigglesPart asks for this value and uses it for the
+ * band's height AND for its top, because the band sits at the bottom of the line box. It was a Java
+ * constant under a note saying the sheet must not own it for exactly that reason -- which was true only
+ * while the part WROTE it. One read, two uses, and they cannot disagree. */
 .__squiggle__ {
+    height: 1px;
     z-index: -1;
 }
 
@@ -640,7 +645,11 @@ quickpick ::highlight(quickpick-match) {
  * are hidden -- observed with only two of four visible. IntelliJ dodges this by giving the stripe its own
  * lane beside the scrollbar; VS Code draws the ruler over a translucent slider. A 1.2%-tall mark over a
  * solid thumb is the cheaper version of the second and costs the thumb nothing readable. */
+/* A PERCENTAGE, so it stays proportionate at any uiScale and the groove's own height is the only
+ * geometry the part needs. Read back like the squiggle above: the mark's TOP is clamped against its
+ * height so the last problem in a file cannot hang off the end, so the two must be one number. */
 .__error-stripe__ {
+    height: 1.2%;
     z-index: 1;
     opacity: 0.85;
 }
@@ -658,7 +667,23 @@ quickpick ::highlight(quickpick-match) {
 }
 
 /* The inspection widget — the problem readout in the editor's top-right corner.
- * Position is written from Java (right/top insets, content-sized); everything else is here.
+ *
+ * THE INSETS ARE HERE, and the part writes only `position: absolute`. Nothing is computed from either
+ * one, so unlike the squiggle and the stripe above there is nothing to read back — the part simply stops
+ * writing them. They answer two different questions and stay two declarations: `right` is "clear the
+ * scrollbar", which is a widget's width, and `top` is "sit just under the tab strip", which is a
+ * hairline. One number for both would make either wrong the first time the other changed.
+ *
+ * `right` IS A FIXED LENGTH AND MUST STAY ONE. It was tempting to derive it from the vertical bar's own
+ * thickness; that term is 0 or 8 depending on whether the content currently overflows, so a widget
+ * positioned by it jumps sideways the moment a document grows past one screenful — the same flick
+ * ZoomIndicatorPart records chasing. 8px clears the bar outright and sits the readout AGAINST the groove;
+ * it was 14 once, which left the widget floating in the middle of nothing with the scrollbar visibly
+ * beyond it, unmissable now that there is no panel edge behind it to explain the gap.
+ *
+ * Content-sized on purpose: insets only, no width. Taffy shrink-to-fits an absolutely positioned box
+ * with no definite size, so the panel never measures its own text and the readout cannot be clipped by a
+ * width computed against the wrong font.
  *
  * NO SURFACE OF ITS OWN. It sits over the editor's own background with nothing between, which is what
  * IntelliJ's does: the readout is a handful of coloured glyphs and a number, and a panel behind them
@@ -668,6 +693,8 @@ quickpick ::highlight(quickpick-match) {
  * The padding stays: it is the clearance between the arrows and the scrollbar beside them, not the
  * inset of a box that no longer exists. */
 .__inspection__ {
+    top: 2px;
+    right: 8px;
     flex-direction: row;
     align-items: center;
     padding-left: 6px;

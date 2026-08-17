@@ -54,6 +54,7 @@ final class LineNumbersPart extends EditorViewPart {
         // bar's left end -- and that left the corner between the two uncovered, which scrolled text showed
         // through. The bars now sit ABOVE the gutter in z, so there is nothing left to paint over: the
         // gutter can run the whole height and the bar draws on top of its bottom edge.
+        DecorationPool.show(gutter);
         final float width = editor.paddingLeft() + editor.gutterWidth();
         final float gutterHeight = editor.getClientHeight();
         StyleGroup.defaultPipeline(gutter.getStyle().getLayoutGroup(),

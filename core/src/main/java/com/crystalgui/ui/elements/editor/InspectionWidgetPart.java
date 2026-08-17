@@ -48,30 +48,9 @@ final class InspectionWidgetPart extends EditorViewPart {
     static final String HAS_ERRORS_CLASS = "__inspection-errors__";
     static final String HAS_WARNINGS_CLASS = "__inspection-warnings__";
 
-    /**
-     * Logical px of clearance from the editor's top-right corner.
-     *
-     * <p>A <b>constant</b>, and never {@code verticalBarThickness()}. That term is zero or eight depending
-     * on whether the content currently overflows, so a widget positioned by it jumps sideways the moment a
-     * document grows past one screenful — which is the flick {@link ZoomIndicatorPart} records chasing for
-     * the same reason. Sized to clear the bar outright instead.</p>
-     *
-     * <p>Exactly the bar's own width, so the readout sits <em>against</em> the groove rather than a
-     * further six px inside it. It was 14, which left the widget floating in the middle of nothing with
-     * the scrollbar visibly beyond it — noticeable now that the panel behind it is gone and there is no
-     * box edge to explain the gap.</p>
-     */
-    private static final float CLEARANCE = 8f;
-
-    /**
-     * Logical px between the widget and the editor's top edge — i.e. the separator above it.
-     *
-     * <p>Its own constant rather than {@link #CLEARANCE}, because the two answer different questions: the
-     * horizontal one is "clear the scrollbar", which is a widget's width, and this one is "sit just under
-     * the tab strip", which is a hairline. Sharing a number would have made either of them wrong the first
-     * time the other changed.</p>
-     */
-    private static final float TOP_GAP = 2f;
+    // THE INSETS ARE IN ua/workbench.css, on `.__inspection__`, and the note that used to sit here about
+    // never deriving the right-hand one from verticalBarThickness() went with them -- it is a rule about
+    // what the number may be, so it belongs where the number is.
 
     private UIElement panel;
     private UIElement errorCount;
@@ -108,11 +87,11 @@ final class InspectionWidgetPart extends EditorViewPart {
         previous.setEnabled(navigable);
         next.setEnabled(navigable);
 
-        // Content-sized: right/top insets only, no width. Taffy shrink-to-fits an absolutely positioned
-        // box with no definite size, which means the panel never needs to measure its own text -- and so
-        // the readout cannot be clipped by a width computed against the wrong font.
+        // OUT OF FLOW, and that is all this writes. The insets themselves are `.__inspection__`'s in
+        // ua/workbench.css: nothing here is computed from either one, so unlike the squiggle's height or
+        // the stripe mark's, there is nothing to read back -- the part simply stops writing them.
         StyleGroup.defaultPipeline(panel.getStyle().getLayoutGroup(),
-                l -> l.positionType(TaffyPosition.ABSOLUTE).top(TOP_GAP).right(CLEARANCE));
+                l -> l.positionType(TaffyPosition.ABSOLUTE));
     }
 
     /**
