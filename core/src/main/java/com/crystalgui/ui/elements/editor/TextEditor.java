@@ -494,6 +494,19 @@ public class TextEditor extends ScrollerView implements UndoScope {
             zoomIndicatorPart, lineNumbersPart, currentLinePart, selectionsPart, squigglesPart, errorStripePart, inspectionWidgetPart,
             quickFixBulbPart, viewCursorsPart);
 
+    // ── Diagnostics ────────────────────────────────────────────────────────────────────────────
+    //
+    // The subsystem is EditorDiagnostics. The SET is the buffer's -- a diagnostic describes a document as
+    // an undo stack does -- and what moved out is everything that has to happen around it: the version
+    // gate, the tracked ranges, and the navigation.
+
+    private final EditorDiagnostics problems = new EditorDiagnostics(this);
+
+    /** Filing, tracking and navigating problems. */
+    EditorDiagnostics problems() {
+        return problems;
+    }
+
     /**
      * The problems reported about this document — <b>the buffer's</b>, not this widget's.
      *
@@ -507,83 +520,26 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return buffer.diagnostics();
     }
 
-    /** The decoration lane every diagnostic squiggle is tracked in. @see #installDiagnostics */
+    /** The decoration lane every diagnostic squiggle is tracked in. @see EditorDiagnostics */
     public static final String DIAGNOSTIC_LANE = "diagnostic";
 
     /**
-     * Files an announced list under its engine's owner key, if it still describes this document.
+     * The problems covering {@code offset} <b>right now</b>, nearest-first.
      *
-     * <h3>The version gate decides whether a list is shown at all</h3>
-     *
-     * <p>Deliberately here rather than at the tracking below, because it is not really a question about
-     * offsets — it is a question about whether these problems are <em>about</em> the text on screen. A list
-     * computed against three keystrokes ago is as wrong in the Problems panel as it is under the text, so
-     * gating at the point of entry means one rule covers both. The list is dropped rather than reconciled;
-     * the job is debounced and keyed, so a fresh one is already queued.</p>
+     * @see EditorDiagnostics#at(int)
      */
-    private void installDiagnostics(String owner, @Nullable Versioned<List<Diagnostic>> announced) {
-        if (announced == null) return;
-        if (!announced.isFresh(buffer.version())) return;
-        diagnostics().changeOne(owner, announced.orElse(List.of()));
-    }
-
-    /**
-     * Rebuilds the tracked range behind every diagnostic — §17.1's primitive, applied.
-     *
-     * <h3>Driven by the SET, not by the engine that announced</h3>
-     *
-     * <p>Subscribing to the engine's push instead would track only engine-reported problems, and this
-     * document has other producers: the shader graph writes four owners of its own on every compile, and a
-     * future linter will write a fifth. Every one of them wants its marks to stay under their words, and
-     * none of them has a version to offer. Keying the tracking to the set means one path covers all of
-     * them and there is no producer that silently gets the untracked behaviour.</p>
-     *
-     * <h3>What the tracking buys, concretely</h3>
-     *
-     * <p>Between one compile and the next the user keeps typing, and each edit moves the text a mark sits
-     * on. The range moves with it — synchronously, inside the buffer's own change signal — so the squiggle
-     * stays under its word for the whole 300ms the recompile takes rather than sliding off it. Before this,
-     * every mark below the caret pointed at whatever had shifted into its offsets.</p>
-     *
-     * <p>Rebuilt wholesale rather than diffed. The set replaces per owner and announces once, so there is no
-     * such thing as one diagnostic changing on its own — and a list is tens of entries.</p>
-     */
-    private void retrackDiagnostics() {
-        List<Diagnostic> problems = diagnostics().all();
-        List<DecorationSet.Entry> entries = new ArrayList<>(problems.size());
-        for (Diagnostic problem : problems) {
-            int from = offsetOfPoint(problem.start());
-            int to = Math.max(from, offsetOfPoint(problem.end()));
-            entries.add(DecorationSet.Entry.of(pastIndentIfWholeRow(from, to), to, problem));
-        }
-        // ALWAYS_GROWS: type at the start or the end of an underlined word and the new character is part of
-        // the same mistake -- the mark should cover it, not sit beside it. Every other stickiness makes the
-        // squiggle drift off the token it is about as the token is extended.
-        buffer.decorations().replaceLane(DIAGNOSTIC_LANE,
-                Stickiness.ALWAYS_GROWS_WHEN_TYPING_AT_EDGES, entries);
-        // AND THE HIGHLIGHTS, because a diagnostic now changes the TEXT and not only the marks under it.
-        // The two consumers of this lane cache differently: SquigglesPart re-reads it every frame, while
-        // refreshHighlights answers from a cache keyed on the visible range and would happily keep
-        // publishing the previous analysis's fades until something else happened to scroll or type.
-        // @see #addTagRanges
-        highlightsDirty = true;
+    public List<Diagnostic> diagnosticsAt(int offset) {
+        return problems.at(offset);
     }
 
     /**
      * Where {@code problem} is <b>now</b>, or null when nothing is tracking it.
      *
-     * <p>The round-trip a Problems row needs: the row holds a diagnostic reported at some past version, and
-     * this answers where that text has since moved to. Null is a real answer — a diagnostic can be handed
-     * in from outside the set — and a caller falls back to the reported row/column, which is what it would
-     * have used anyway.</p>
+     * @see EditorDiagnostics#trackedRangeFor(Diagnostic)
      */
     @Nullable
     public TrackedRange trackedRangeFor(@Nullable Diagnostic problem) {
-        if (problem == null) return null;
-        for (TrackedRange range : buffer.decorations().inLane(DIAGNOSTIC_LANE)) {
-            if (range.payload() == problem) return range;
-        }
-        return null;
+        return problems.trackedRangeFor(problem);
     }
 
     /**
@@ -605,79 +561,19 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return buffer.pointToOffset(point);
     }
 
-    /**
-     * A mark that covers a whole row starts at that row's first non-whitespace character.
-     *
-     * <p>A producer that says "this row" — {@code Diagnostic.onRow}, which is what a compiler reporting
-     * only a line number produces, and what a runtime error out of a script engine produces — is pointing
-     * at the <em>statement</em>. Underlining the indentation in front of it marks text nobody claimed is
-     * wrong, and on a deeply nested line most of the squiggle is empty space, which reads as the mark
-     * being misaligned. IntelliJ trims to the first non-whitespace character for exactly this; VS Code
-     * draws the column-0 range literally, and its line-only producers are the ones people complain look
-     * off.</p>
-     *
-     * <p><b>Gated on the range covering the entire row</b>, so an explicit range that genuinely begins at
-     * column 0 — a producer that measured its own span and found it starts there — is left alone. A row
-     * that is nothing but whitespace is left alone too: there is no content to move onto, and collapsing
-     * the range would hide the mark completely.</p>
-     */
-    private int pastIndentIfWholeRow(int from, int to) {
-        Rope document = buffer.document();
-        int row = document.offsetToPoint(from).row();
-        if (from != document.lineStartOffset(row) || to != document.lineEndOffset(row)) return from;
-        int at = from;
-        while (at < to && Character.isWhitespace(document.charAt(at))) at++;
-        return at == to ? from : at;
-    }
-
     /** Moves the caret to the next problem after it, wrapping. False when there are none. */
     public boolean goToNextProblem() {
-        return goToProblem(diagnostics().nextFrom(caretPoint()));
+        return problems.goToNext(caretPoint());
     }
 
     /** The mirror of {@link #goToNextProblem}, wrapping to the last. */
     public boolean goToPreviousProblem() {
-        return goToProblem(diagnostics().previousFrom(caretPoint()));
+        return problems.goToPrevious(caretPoint());
     }
 
-    /**
-     * Puts the caret on a diagnostic, revealing it first.
-     *
-     * <p><b>The unfold is not a convenience.</b> A row inside a collapsed region has no view line, so a
-     * caret placed on it cannot be painted, scrolled to or typed at — the same reason folding a block the
-     * caret is in has to move the caret to the block's header. Jumping to a problem hidden inside a fold
-     * without opening it leaves the editor looking focused and doing nothing, which is the worst possible
-     * answer to "take me to the error".</p>
-     *
-     * <p>The row is clamped to the live document because diagnostics are inherently stale: the set on
-     * screen describes whatever was last compiled, and the buffer may since have shrunk.</p>
-     */
+    /** Puts the caret on a diagnostic, revealing it first. @see EditorDiagnostics#goTo */
     private boolean goToProblem(@Nullable Diagnostic target) {
-        if (target == null) return false;
-        // THE TRACKED RANGE FIRST -- it is where the text went, and the reported row/column is where it was
-        // when the compiler last looked. They differ by exactly the edits made since, so "take me to the
-        // error" landed a few lines off during the 300ms before a recompile, which is the moment somebody is
-        // most likely to be using it.
-        TrackedRange tracked = trackedRangeFor(target);
-        if (tracked != null && !tracked.isRemoved()) {
-            int offset = Math.min(tracked.from(), buffer.length());
-            revealRow(buffer.offsetToPoint(offset).row());
-            setCaret(offset);
-            revealCaretCentred();
-            return true;
-        }
-        int row = Math.max(0, Math.min(target.start().row(), buffer.lineCount() - 1));
-        revealRow(row);
-        int rowStart = buffer.document().lineStartOffset(row);
-        int rowEnd = buffer.document().lineEndOffset(row);
-        setCaret(Math.min(rowEnd, rowStart + Math.max(0, target.start().column())));
-        // AND SCROLLED TO. `revealRow` only UNFOLDS -- its whole job is making the row exist as a view line
-        // -- and `setCaret` deliberately never scrolls, so between them this moved the caret to a problem
-        // and left the viewport exactly where it was. Reported as "the up/down arrows do nothing", which is
-        // precisely what a jump you cannot see looks like. Centred, because this is navigation: see
-        // revealCaretCentred on why that is a different question from following a caret.
-        revealCaretCentred();
-        return true;
+        return problems.goTo(target);
     }
 
     /**
@@ -694,7 +590,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     /** Opens every collapsed region hiding {@code row}. A no-op when the row is already visible, so this
      * does not disturb the fold state of a file whose problems are all in the open. */
-    private void revealRow(int row) {
+    void revealRow(int row) {
         folds.revealRow(row);
     }
 
@@ -821,7 +717,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         });
 
         // EVERY producer's problems get tracked ranges, not only the engine's. See retrackDiagnostics.
-        diagnostics().onChanged.connect(this::retrackDiagnostics);
+        diagnostics().onChanged.connect(problems::retrack);
 
         // The one place the caret settles. A session must end on a plain arrow-key move, which changes no
         // text and would therefore never reach a buffer listener.
@@ -1857,7 +1753,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // which is the whole reason DiagnosticSet is keyed by owner. From here the Problems panel,
             // the inspection widget and the status bar all light up through paths that already work.
             languageDiagnostics = services.onDiagnostics(
-                    announced -> installDiagnostics(services.id(), announced));
+                    announced -> problems.install(services.id(), announced));
         }
         rowSyntax.clear();
         highlightsDirty = true;
@@ -1918,29 +1814,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /** Resolve, documentation, code actions, go-to-definition. */
     EditorLanguageFeatures langFeatures() {
         return langFeatures;
-    }
-
-    /**
-     * The problems covering {@code offset} <b>right now</b>, nearest-first.
-     *
-     * <p>Read from the decoration lane rather than from {@link DiagnosticSet}, and that is the whole
-     * point: a diagnostic's own row/column describe the document that was compiled, while the tracked
-     * range has been carried through every edit since. Asking the set would put the hover on a problem
-     * whose text has moved, which is the failure the tracking was built to end.</p>
-     *
-     * <p>Zero-width diagnostics are widened by one before the test — "expected ';'" points <em>between</em>
-     * two characters, and a range that contains nothing contains no offset either.</p>
-     */
-    public List<Diagnostic> diagnosticsAt(int offset) {
-        List<Diagnostic> found = new ArrayList<>();
-        for (TrackedRange range : buffer.decorations().inLane(DIAGNOSTIC_LANE)) {
-            int from = range.from();
-            int to = Math.max(range.to(), from + 1);
-            if (offset >= from && offset <= to && range.payload() instanceof Diagnostic) {
-                found.add((Diagnostic) range.payload());
-            }
-        }
-        return found;
     }
 
     /**
