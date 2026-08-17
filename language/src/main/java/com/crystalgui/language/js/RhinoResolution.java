@@ -349,9 +349,22 @@ final class RhinoResolution {
 
     List<SymbolInfo> membersOf(@Nullable TypeRef type, int contextOffset) {
         String javaName = type == null ? null : JsTypeRef.javaNameOf(type);
-        if (javaName == null || interop == null) return List.of();
-        boolean staticSide = type instanceof JsTypeRef && ((JsTypeRef) type).isStaticSide();
-        return interop.membersOf(javaName, staticSide);
+        if (javaName != null && interop != null) {
+            boolean staticSide = type instanceof JsTypeRef && ((JsTypeRef) type).isStaticSide();
+            return interop.membersOf(javaName, staticSide);
+        }
+        // AN OBJECT LITERAL'S OWN PROPERTIES, which is the one JavaScript shape whose members are written
+        // down in the file rather than discovered by running it. Without this, `var o = { a: 1 }; o.` had
+        // nothing to offer until the file had been run once -- and it is the commonest object in a script.
+        if (type instanceof JsTypeRef && !((JsTypeRef) type).keys().isEmpty()) {
+            List<SymbolInfo> members = new ArrayList<>();
+            for (String key : ((JsTypeRef) type).keys()) {
+                members.add(new SymbolInfo(key, SymbolKind.PROPERTY, null, type.displayName(), null,
+                        Set.of(), null));
+            }
+            return members;
+        }
+        return List.of();
     }
 
     // ── symbolsInScope ──────────────────────────────────────────────────────────────────────────

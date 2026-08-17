@@ -2,6 +2,8 @@ package com.crystalgui.language.js;
 
 import com.crystalgui.text.lang.TypeRef;
 
+import java.util.List;
+
 /**
  * A JavaScript type as this engine can know one — a name, and whether a Java class is behind it.
  *
@@ -35,6 +37,7 @@ final class JsTypeRef implements TypeRef {
     private final String qualified;
     private final boolean java;
     private final boolean staticSide;
+    private List<String> keys = List.of();
 
     private JsTypeRef(String display, String qualified, boolean java, boolean staticSide) {
         this.display = display;
@@ -46,6 +49,24 @@ final class JsTypeRef implements TypeRef {
     /** A JavaScript type that is only a name. */
     static JsTypeRef js(String name) {
         return new JsTypeRef(name, name, false, false);
+    }
+
+    /**
+     * An object literal, carrying the property names it declares.
+     *
+     * <p>The names travel on the type because that is the only place they can: {@code membersOf} is handed a
+     * {@code TypeRef} and an offset, and re-deriving "which literal was this" from the offset would mean the
+     * resolver answering the same question twice — once to type the receiver and once to list it.</p>
+     */
+    static JsTypeRef object(List<String> keys) {
+        JsTypeRef type = new JsTypeRef(OBJECT, OBJECT, false, false);
+        type.keys = keys == null || keys.isEmpty() ? List.of() : List.copyOf(keys);
+        return type;
+    }
+
+    /** The properties an object literal declared, or empty. */
+    List<String> keys() {
+        return keys;
     }
 
     /** An instance of a Java class — its instance members are what it offers. */
