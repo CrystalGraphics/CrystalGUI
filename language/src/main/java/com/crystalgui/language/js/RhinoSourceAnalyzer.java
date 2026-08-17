@@ -5,6 +5,7 @@ import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.lang.SymbolInfo;
+import com.crystalgui.text.lang.SymbolKind;
 import com.crystalgui.text.lang.TypeRef;
 import com.crystalgui.text.syntax.SyntaxToken;
 
@@ -18,6 +19,7 @@ import org.mozilla.javascript.ast.ParseProblem;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Rhino's parser, driven — the JavaScript engine's side of the analysis bridge.
@@ -36,12 +38,13 @@ import java.util.List;
  * same argument {@code Resolver} makes about ECJ's binding recovery, and the reason both engines are
  * driven this way.</p>
  *
- * <h3>What is here at M10.2, and what is not</h3>
+ * <h3>What is here, and what is not</h3>
  *
- * <p>The parse, the problems, and the tree held for later. Semantic tokens, scopes and resolution are
- * M10.3 and M10.4 and answer empty until then — which is not a stub in the pejorative sense: it is
- * exactly what {@link com.crystalgui.language.engine.bridge.Analysis} promises an engine may say, and
- * every consumer above already treats an empty answer as ordinary rather than as a failure.</p>
+ * <p>The parse, the problems ({@link RhinoProblemPolicy}), the scopes ({@link RhinoScopes}) and the
+ * colours they justify ({@link RhinoSemanticTokens}). Resolution and completion are M10.6 and M10.7 and
+ * answer empty until then — which is not a stub in the pejorative sense: it is exactly what
+ * {@link com.crystalgui.language.engine.bridge.Analysis} promises an engine may say, and every consumer
+ * above already treats an empty answer as ordinary rather than as a failure.</p>
  */
 public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
 
@@ -87,78 +90,103 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
             problems.getErrors().add(new ParseProblem(ParseProblem.Type.Error,
                     messageOf(fatal), name, 0, Math.max(0, text.length())));
         }
-        return new ParsedScript(version, text, root, diagnosticsOf(problems.getErrors(), text));
+
+        LineIndex lines = new LineIndex(text);
+        RhinoScopes scopes = RhinoScopes.of(root);
+        List<Diagnostic> reported = policy().apply(problems.getErrors(), text, lines);
+
+        // UNUSED NAMES ARE THE ANALYSER'S, NOT THE PARSER'S. Rhino reports nothing about them -- it has
+        // no reason to -- so this is the first problem in the file that came from having resolved the
+        // scopes rather than from having read the syntax. It is also the one warning a JavaScript author
+        // gets before running anything, which in a language with no compiler is worth a good deal.
+        //
+        // ONLY WHEN THE FILE PARSED. A broken file has half a tree, so a name whose only use is inside
+        // the part that failed to parse looks unused -- and a warning that appears while you are
+        // mid-edit and vanishes when you finish is worse than no warning. Same rule the Java engine
+        // states as `optionalProblemsAnalysed`, arrived at from the same direction.
+        boolean parsed = root != null && !hasError(reported);
+        if (parsed) reported = withUnusedWarnings(reported, scopes, lines);
+
+        return new ParsedScript(version, text, root, scopes, reported, parsed);
+    }
+
+    /**
+     * One policy for the process: it holds only the engine's name, which cannot change.
+     *
+     * <p>Built lazily because the name has to be <em>asked</em> of a live context —
+     * {@code getImplementationVersion} is an instance method, which is Rhino saying the version belongs
+     * to a context rather than to the jar. Naming the band's pinned version from our own build file
+     * instead would be a second source of truth for the one fact a user is most likely to quote back
+     * when something does not work.</p>
+     */
+    private static volatile RhinoProblemPolicy policy;
+
+    private static RhinoProblemPolicy policy() {
+        RhinoProblemPolicy cached = policy;
+        if (cached != null) return cached;
+        synchronized (RhinoSourceAnalyzer.class) {
+            if (policy == null) policy = RhinoProblemPolicy.of(engineName());
+            return policy;
+        }
+    }
+
+    private static String engineName() {
+        return RhinoThread.with(() -> {
+            Context cx = Context.enter();
+            try {
+                String version = cx.getImplementationVersion();
+                return version == null || version.isEmpty() ? "this engine" : version;
+            } catch (RuntimeException unavailable) {
+                return "this engine";
+            } finally {
+                Context.exit();
+            }
+        });
+    }
+
+    private static boolean hasError(List<Diagnostic> problems) {
+        for (Diagnostic problem : problems) {
+            if (problem.severity() == DiagnosticSeverity.ERROR) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Declared and never mentioned again.
+     *
+     * <p>Two exclusions, and neither is laziness.</p>
+     *
+     * <p><b>Parameters</b>, because a callback's signature is fixed by whoever calls it:
+     * {@code function (err, data)} that ignores {@code err} is idiomatic rather than wrong, and marking
+     * it would put a warning on most event handlers ever written. Both reference editors default to the
+     * same exclusion for the same reason.</p>
+     *
+     * <p><b>Top-level declarations</b>, because a script's top level <em>is</em> its surface. Nothing in
+     * the file needs to use {@code main} for the host to call it, and a binding a mod reads is written
+     * once and referenced never. Warning there put "'main' is declared but never used" on the entry
+     * point of the fixture this milestone is traced in — which is the clearest possible demonstration
+     * that the rule was wrong. A declaration inside a function has no such excuse: nothing outside can
+     * see it, so unused means unused.</p>
+     */
+    private static List<Diagnostic> withUnusedWarnings(List<Diagnostic> problems, RhinoScopes scopes,
+                                                       LineIndex lines) {
+        List<Diagnostic> out = new ArrayList<>(problems);
+        for (RhinoScopes.Declaration declared : scopes.declarations()) {
+            if (!declared.isUnused() || declared.offset < 0) continue;
+            if (declared.kind == SymbolKind.PARAMETER) continue;
+            if (declared.owner == null) continue;
+            out.add(new Diagnostic(lines.pointAt(declared.offset),
+                    lines.pointAt(declared.offset + declared.length),
+                    DiagnosticSeverity.WARNING,
+                    "'" + declared.name + "' is declared but never used",
+                    RhinoProblemPolicy.OWNER, null));
+        }
+        return out;
     }
 
     private static String messageOf(RuntimeException thrown) {
         String message = thrown.getMessage();
         return message == null || message.isEmpty() ? thrown.toString() : message;
-    }
-
-    /**
-     * Rhino's problems as the editor's, converted once.
-     *
-     * <h4>Offsets in, row/column out — and the conversion belongs here</h4>
-     *
-     * <p>{@link ParseProblem} reports an absolute file offset and a length, which is better than what
-     * JDT gives and worse than what {@link Diagnostic} takes: a diagnostic names a <b>row and column</b>,
-     * deliberately, because that is what survives an edit somewhere else in the file. Converting needs
-     * the exact text the parse saw, and this is the only place that still has it — the buffer will have
-     * moved on by the time anything downstream looks.</p>
-     */
-    private static List<Diagnostic> diagnosticsOf(List<ParseProblem> problems, String text) {
-        if (problems.isEmpty()) return Collections.emptyList();
-        LineIndex lines = new LineIndex(text);
-        List<Diagnostic> out = new ArrayList<>(problems.size());
-        for (ParseProblem problem : problems) {
-            int from = Math.max(0, Math.min(problem.getFileOffset(), text.length()));
-            // A ZERO-LENGTH PROBLEM IS REAL AND IS WIDENED BY ONE. "missing ; before statement" points
-            // BETWEEN two characters, and a mark with no width cannot be seen -- the same rule the
-            // editor's own diagnostic lane already applies, stated here so the range arrives usable.
-            int length = Math.max(1, problem.getLength());
-            int to = Math.min(text.length(), from + length);
-            out.add(new Diagnostic(lines.pointAt(from), lines.pointAt(to),
-                    problem.getType() == ParseProblem.Type.Error
-                            ? DiagnosticSeverity.ERROR : DiagnosticSeverity.WARNING,
-                    problem.getMessage(), OWNER, null));
-        }
-        return out;
-    }
-
-    /** Where a problem says it came from, in the Problems panel's source column. */
-    private static final String OWNER = "rhino";
-
-    /**
-     * Offset → row/column over one immutable snapshot.
-     *
-     * <p>Built once per analysis and thrown away with it. A binary search over line starts rather than a
-     * scan per problem: a file with two hundred problems is exactly the file being typed in, and the
-     * scan would be quadratic in the thing that is already slowest.</p>
-     */
-    private static final class LineIndex {
-
-        private final int[] lineStarts;
-
-        LineIndex(String text) {
-            List<Integer> starts = new ArrayList<>();
-            starts.add(0);
-            for (int i = 0; i < text.length(); i++) {
-                if (text.charAt(i) == '\n') starts.add(i + 1);
-            }
-            this.lineStarts = new int[starts.size()];
-            for (int i = 0; i < starts.size(); i++) lineStarts[i] = starts.get(i);
-        }
-
-        TextPoint pointAt(int offset) {
-            int low = 0;
-            int high = lineStarts.length - 1;
-            while (low < high) {
-                int mid = (low + high + 1) >>> 1;
-                if (lineStarts[mid] <= offset) low = mid;
-                else high = mid - 1;
-            }
-            return new TextPoint(low, offset - lineStarts[low]);
-        }
     }
 
     /**
@@ -173,13 +201,19 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
         private final long version;
         private final String source;
         private final List<Diagnostic> diagnostics;
+        private final boolean parsed;
         private AstRoot root;
+        private RhinoScopes scopes;
+        private List<SyntaxToken> tokens;
 
-        ParsedScript(long version, String source, AstRoot root, List<Diagnostic> diagnostics) {
+        ParsedScript(long version, String source, AstRoot root, RhinoScopes scopes,
+                     List<Diagnostic> diagnostics, boolean parsed) {
             this.version = version;
             this.source = source;
             this.root = root;
+            this.scopes = scopes;
             this.diagnostics = diagnostics;
+            this.parsed = parsed;
         }
 
         @Override
@@ -202,16 +236,25 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
          */
         @Override
         public boolean optionalProblemsAnalysed() {
-            if (root == null) return false;
-            for (Diagnostic problem : diagnostics) {
-                if (problem.severity() == DiagnosticSeverity.ERROR) return false;
-            }
-            return true;
+            return parsed;
         }
 
+        /**
+         * Built on first ask and kept, not built during the parse.
+         *
+         * <p>An analysis is scheduled on every keystroke and its tokens are read only when a view asks
+         * — so a document nobody is looking at, or one whose editor was closed while the job was in
+         * flight, pays a walk it never uses. The list is small and the walk is over a tree already in
+         * memory, so holding it is cheaper than recomputing per viewport query, which is the shape the
+         * editor's per-row cache expects.</p>
+         */
         @Override
         public List<SyntaxToken> semanticTokens() {
-            return Collections.emptyList();
+            if (tokens == null) {
+                tokens = root == null ? Collections.<SyntaxToken>emptyList()
+                        : RhinoSemanticTokens.of(root, scopes, Set.<String>of());
+            }
+            return tokens;
         }
 
         @Override
@@ -239,6 +282,8 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
             // The tree is ordinary heap, so dropping the reference is the whole of it -- there is no
             // native handle here, unlike the grammar tier's parse trees. Idempotent by construction.
             root = null;
+            scopes = null;
+            tokens = null;
         }
 
         /** What was parsed. For the questions above that need the text as the parse saw it. */
