@@ -223,6 +223,28 @@ public class TextEditorTest extends EditorTestBase {
         assertEquals("ab", editor.getText());
     }
 
+    /**
+     * <b>One press on an auto-indented blank line, and the caret is on the line above.</b>
+     *
+     * <p>The end-to-end half of {@code CursorOperationsTest}'s blank-line rule, and the shape it was
+     * reported in: press Enter twice inside a method and the caret sits on indentation nobody typed, so
+     * walking it by tab stops costs two presses before the one that was meant. The model test pins the
+     * offset; this pins that {@code KEY_BACK} reaches it and that the caret ends up where the user
+     * looked for it.</p>
+     */
+    @Test
+    public void backspaceOnABlankIndentedLineLandsOnTheLineAbove() {
+        build("void f() {" + NL + NL + "        " + NL + "}");
+        editor.setCaret(editor.getText().indexOf("        ") + 8);
+
+        key(CgKeyCodes.KEY_BACK);
+
+        assertEquals("the indent and the break go together",
+                "void f() {" + NL + NL + "}", editor.getText());
+        assertEquals("and the caret is on the blank line above", 1,
+                editor.buffer().offsetToPoint(editor.getCaret()).row());
+    }
+
     /** Home goes to the first non-blank, and only to column 0 when already there. */
     @Test
     public void homeTogglesBetweenTheIndentAndColumnZero() {

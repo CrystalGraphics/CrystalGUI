@@ -101,6 +101,20 @@ public final class TypeOperations {
      * <p>Reaching column zero then falls through to the line join above, so backspacing out of an indent
      * ends at the previous line rather than sitting at the left margin. Both halves were reported as one
      * bug.</p>
+     *
+     * <h3>A line that is ENTIRELY whitespace goes straight up, and does not walk its stops</h3>
+     *
+     * <p>The tab-stop walk exists to unindent <em>something</em>. On a blank line there is nothing to
+     * unindent — the whitespace is auto-indent the editor put there on Enter and the user never typed —
+     * so walking it is two or three presses of ceremony before the press that actually does what was
+     * wanted. IntelliJ's smart backspace removes the indent and the line break together; VS Code steps
+     * the stops, and this is a place the two genuinely disagree.</p>
+     *
+     * <p><b>Gated on the caret being at the end of the blank line</b>, which is where it is after Enter
+     * and after any Down/Up onto one. A caret parked mid-whitespace on a blank line still walks the
+     * stops, because jumping from there would carry the whitespace <em>after</em> the caret up onto the
+     * previous line as trailing space — a surprise nobody asked for, in the one case reachable only by
+     * clicking into the middle of an empty line.</p>
      */
     public static int backspaceFrom(Rope document, int head, int indentWidth) {
         int row = document.offsetToPoint(head).row();
@@ -109,6 +123,11 @@ public final class TypeOperations {
         if (column == 0) return Math.max(0, head - 1);
 
         String text = document.line(row);
+        // THE WHOLE LINE, not just what is behind the caret -- see the note above. `column == length` is
+        // what keeps this off a caret sitting inside the whitespace rather than at the end of it.
+        if (row > 0 && column == text.length() && text.isBlank()) {
+            return document.lineEndOffset(row - 1);
+        }
         if (!text.substring(0, column).isBlank()) return head - 1;
 
         int stops = Math.max(1, indentWidth);

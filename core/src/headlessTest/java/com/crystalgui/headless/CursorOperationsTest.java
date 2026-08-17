@@ -209,6 +209,76 @@ public class CursorOperationsTest {
         assertEquals(1, TypeOperations.backspaceFrom(document, 2, 4));
     }
 
+    /**
+     * <b>A blank line goes straight up.</b> Reported from the harness as "backspace here should take me
+     * up and it doesn't" — the second time that sentence has been said about this method, and a different
+     * cause each time: the first was counting characters instead of columns
+     * ({@link #backspaceTakesOneTabAtATime}), this one is the indent walk running on a line with nothing
+     * to unindent.
+     *
+     * <p>Press Enter twice inside a method and the caret sits on eight spaces the user never typed.
+     * Walking them costs two presses before the one that does the intended thing. IntelliJ removes the
+     * indent and the break together; this is that.</p>
+     */
+    @Test
+    public void backspaceOnAWhollyBlankLineJumpsToTheEndOfThePreviousLine() {
+        Rope document = Rope.of("    void f() {\n\n        \n    }");
+        // The caret at the end of the blank third line -- one press, and it lands after the empty second.
+        int caret = document.lineStartOffset(2) + 8;
+        assertEquals(document.lineEndOffset(1), TypeOperations.backspaceFrom(document, caret, 4));
+    }
+
+    /**
+     * And the line it lands on keeps whatever is on it — the join is a join, not a jump to column zero.
+     */
+    @Test
+    public void theJumpLandsAfterThePreviousLinesContent() {
+        Rope document = Rope.of("a();\n        ");
+        int caret = document.length();
+        assertEquals(4, TypeOperations.backspaceFrom(document, caret, 4));
+    }
+
+    /**
+     * <b>The distinction is CONTENT AFTER THE CARET, not "is the caret in indentation".</b>
+     *
+     * <p>Both lines here start with eight spaces and both have the caret at column eight. The one with a
+     * statement after it unindents by a level, because there is something to unindent; the empty one goes
+     * up. Merging them either makes the tab-stop walk unreachable or makes every blank line take three
+     * presses.</p>
+     */
+    @Test
+    public void anIndentWithCodeAfterItStillWalksItsStops() {
+        Rope withCode = Rope.of("x;\n        y;");
+        int caretInIndent = withCode.lineStartOffset(1) + 8;
+        assertEquals("a level, not a jump", caretInIndent - 4,
+                TypeOperations.backspaceFrom(withCode, caretInIndent, 4));
+
+        Rope blank = Rope.of("x;\n        ");
+        assertEquals("the same column, the other answer", 2,
+                TypeOperations.backspaceFrom(blank, blank.length(), 4));
+    }
+
+    /**
+     * A caret parked inside a blank line's whitespace walks the stops instead of jumping.
+     *
+     * <p>Jumping would carry the spaces <em>after</em> the caret up onto the previous line as trailing
+     * whitespace. Only reachable by clicking into the middle of an empty line, which is exactly why it
+     * would never have been noticed.</p>
+     */
+    @Test
+    public void aCaretInsideABlankLinesWhitespaceStillWalksTheStops() {
+        Rope document = Rope.of("x;\n        ");
+        int midway = document.lineStartOffset(1) + 4;
+        assertEquals(document.lineStartOffset(1), TypeOperations.backspaceFrom(document, midway, 4));
+    }
+
+    /** Nothing above to join to — the first line of a file falls back to the walk. */
+    @Test
+    public void aBlankFirstLineHasNowhereToGoUpTo() {
+        Rope document = Rope.of("        \nx;");
+        assertEquals(4, TypeOperations.backspaceFrom(document, 8, 4));
+    }
+
     // ── Enter ───────────────────────────────────────────────────────────────────────────────────
 
     /**
