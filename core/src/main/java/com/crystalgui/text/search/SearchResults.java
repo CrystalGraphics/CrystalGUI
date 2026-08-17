@@ -89,6 +89,20 @@ public final class SearchResults {
         return current < 0 || current >= matches.size() ? null : matches.get(current);
     }
 
+    /**
+     * Selects a match by index. False when there is no such match.
+     *
+     * <p>Here because the alternative is what the editor was doing: {@code while (current() != index &&
+     * next())} — stepping the cursor round the ring to land where it was already being told to go, in
+     * order to keep a second copy of this index in sync with this one. A model with a cursor should be
+     * askable to put the cursor somewhere.</p>
+     */
+    public boolean moveTo(int index) {
+        if (index < 0 || index >= matches.size()) return false;
+        current = index;
+        return true;
+    }
+
     /** Moves to the next match, wrapping. False when there are none. */
     public boolean next() {
         if (matches.isEmpty()) return false;
