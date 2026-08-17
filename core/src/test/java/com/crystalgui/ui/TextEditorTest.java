@@ -7,6 +7,7 @@ import com.crystalgraphics.platform.service.CgInputService;
 import com.crystalgui.testsupport.TestPlatformService;
 import com.crystalgui.testsupport.UiTestBase;
 import org.junit.Before;
+import com.crystalgui.text.Selection;
 import com.crystalgui.text.syntax.Language;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.ui.elements.UIText;
@@ -405,6 +406,26 @@ public class TextEditorTest extends UiTestBase {
         key(CgKeyCodes.KEY_RETURN);
 
         assertEquals("  if (x) {" + NL + "      ", editor.getText());
+    }
+
+    /**
+     * <b>A selection that started as a word keeps looking for that word.</b> VS Code's rule: pressing
+     * Ctrl+D on `count` must not go on to select the `count` inside `counter`. A selection dragged out by
+     * hand is a request about those characters instead, and matches them anywhere.
+     */
+    @Test
+    public void addingCaretsFromAWordDoesNotMatchInsideALongerOne() {
+        build("count counter count");
+        editor.setCaret(0);
+
+        assertTrue("first press selects the word", editor.addCaretAtNextOccurrence());
+        assertTrue("second finds the other whole one", editor.addCaretAtNextOccurrence());
+        assertEquals(2, editor.caretCount());
+        for (Selection selection : editor.selections().all()) {
+            assertEquals("never the one inside `counter`", "count",
+                    editor.getText().substring(selection.start(), selection.end()));
+            assertNotEquals(6, selection.start());
+        }
     }
 
     /**
