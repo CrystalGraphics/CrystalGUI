@@ -19,7 +19,8 @@ large structural work (R1, R3) and the four heaviest features.
 | Item | State | Commit |
 |---|---|---|
 | §3.5 — the four reported symptoms | **done** | `f15e608`, `b93243d`, `56a4623` |
-| §3.2 — dead members, the per-frame shapings | **done** | `0950cc1` |
+| §3.2 — dead members, the per-frame shapings | **four of nine** | `0950cc1` |
+| §3.1 — five orphaned javadocs · §3.3 — three whole-document copies · §3.4 — eight nits | **open** | — |
 | R2 — the view-line formula, and the NaN guard | **done** (not the whole object — see below) | `7192ee0` |
 | R7.1 — occurrence highlight | **done**, and found a dead one | `352994f` |
 | R7.3 — tabs/tab-stop Tab, Enter-between-braces, paste re-indent | **done** | `f15e608`, `bddcaa4` |
@@ -199,21 +200,22 @@ across panes (IntelliJ shares them; VS Code does not — either is defensible, b
 | ~3828 | "The vertical equivalent, for the same reason." | a section-divider comment |
 | ~5281 | "Routes UiDataKeys.UNDO_STACK …" | the `clipboardActions` field |
 
-### 3.2 Dead or duplicated members — **DONE** (`0950cc1`)
-- `lastQuery`, `lastQueryCaseSensitive` — written in `find`, read nowhere.
-- `selectWordAt(int)` — private, unused (`MouseSelection.unitAt` replaced it).
-- `hide(UIElement)` at ~5141 — unused; `DecorationPool.hide` is the live copy.
-- `searchMatches` + `currentMatch` duplicate `results.matches()` / `results.current()`;
+### 3.2 Dead or duplicated members — **four of nine done** (`0950cc1`)
+- ✅ `lastQuery`, `lastQueryCaseSensitive` — written in `find`, read nowhere.
+- ✅ `selectWordAt(int)` — private, unused (`MouseSelection.unitAt` replaced it).
+- ✅ `hide(UIElement)` at ~5141 — unused; `DecorationPool.hide` is the live copy.
+- ⬜ `searchMatches` + `currentMatch` duplicate `results.matches()` / `results.current()`;
   `selectMatch`'s `while (results.current() != index && results.next()) { if (…) break; }` steps one
   model to keep the other in sync. Six fields for one piece of state.
-- `OPENERS`/`CLOSERS` in bracket matching, and `{([` literals in `insertNewlineWithIndent`, beside a
-  `Language` that already knows `closerFor`/`isCloser`. Two definitions of "a bracket".
-- Empty sections: `// ── Helpers ──` with nothing under it; five blank lines at ~3167.
-- Import block: `java.util.function.*` first, `com.crystalgraphics` before `com.crystalgui`, `org.joml`
+- 🔸 `OPENERS`/`CLOSERS` in bracket matching, beside a `Language` that already knows
+  `closerFor`/`isCloser`. Two definitions of "a bracket". **Half done**: `insertNewlineWithIndent` asks
+  the `Language` now; the bracket-MATCH scan still uses the literals.
+- ⬜ Empty sections: `// ── Helpers ──` with nothing under it; five blank lines at ~3167.
+- ⬜ Import block: `java.util.function.*` first, `com.crystalgraphics` before `com.crystalgui`, `org.joml`
   in the middle, `java.util` at the end — no order at all.
-- `RulersPart`/`IndentGuidesPart` call `editor.spaceAdvance()` **every frame**, and it shapes `" "`
+- ✅ `RulersPart`/`IndentGuidesPart` call `editor.spaceAdvance()` **every frame**, and it shapes `" "`
   each time — the same trap `gutterDigitsWidth` documents and fixed for the digit. Cache by font key.
-- `ZoomIndicatorPart.render` shapes both label strings **every frame** for as long as the panel
+- ✅ `ZoomIndicatorPart.render` shapes both label strings **every frame** for as long as the panel
   exists (it renders while hidden too).
 
 ### 3.3 Whole-document materialisation on hot paths
@@ -505,7 +507,7 @@ R7, because the reported symptoms came first and the rest followed what they tou
 6. R7 as product priorities decide. — 1, 3, 4 and 6 ✅; 2, 5, 7, 8 open.
 
 Two things I would do first regardless: delete the dead members and re-home the four orphaned
-javadocs (an hour, no risk) — **done in `0950cc1`** — and stop materialising the document in `find`,
+javadocs (an hour, no risk) -- the dead members are gone in `0950cc1`, THE JAVADOCS ARE NOT -- and stop materialising the document in `find`,
 which is the one item here that gets *worse* with every line the file grows and is **still open**. Three
 whole-document `toString()` calls now sit on caret-driven paths rather than one, since the occurrence
 scan reads it too; it is bounded by a document-size limit, which is a floor rather than a fix.
