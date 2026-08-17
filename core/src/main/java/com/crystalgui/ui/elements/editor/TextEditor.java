@@ -4231,6 +4231,47 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return measuredFontKey;
     }
 
+    /**
+     * Gives {@code element} the font the editor <b>measures</b> with — the one seam for it.
+     *
+     * <p>Four places wrote this pair out: the line renderer, the line numbers, the whitespace markers and
+     * the fold decorations. It is cheap, because {@code replaceOrPutCandidate} no-ops on an unchanged
+     * value — but a font disagreement between a decoration and the text it sits on is a <b>scale error
+     * that grows across the row</b>, so four independent statements of "the editor's font" is four places
+     * for one of them to be edited alone.</p>
+     *
+     * <p>At {@code IMPORTANT}, because the sheet's own rule for these classes would otherwise win and the
+     * decoration would size itself independently of the text it is describing.</p>
+     */
+    void pushEditorFontTo(UIElement element) {
+        var general = getStyle().getGeneralGroup();
+        StyleGroup.importantPipeline(element.getStyle().getGeneralGroup(),
+                g -> g.fontSize(general.fontSize()).fontFamily(general.fontFamily()));
+    }
+
+    /**
+     * Starts the horizontal scrollbar after the gutter rather than under it.
+     *
+     * <p>The gutter is pinned and does not scroll horizontally, so a bar running beneath it offers to
+     * scroll something that will not move.</p>
+     *
+     * <p>Written at {@code IMPORTANT} origin because {@code ScrollerView} rewrites the bar's geometry
+     * every frame from {@code refreshScrollers}; a lower-origin write would simply lose to it.</p>
+     *
+     * <p><b>The editor's own layout, and it used to live in {@code LineNumbersPart}.</b> A view part places
+     * its own decorations; the scrollbar is neither its decoration nor its business, and finding this
+     * inside the line-number renderer is exactly the surprise the review named. The editor already owns
+     * {@code setTopChromeInset} for the vertical bar.</p>
+     */
+    void insetHorizontalBarPastGutter() {
+        if (!gutterVisible) return;
+        UIElement bar = horizontalScrollerElement();
+        if (bar == null) return;
+        final float left = paddingLeft() + gutterWidth();
+        final float width = Math.max(0f, getClientWidth() - left - verticalBarThickness());
+        StyleGroup.importantPipeline(bar.getStyle().getLayoutGroup(), l -> l.left(left).width(width));
+    }
+
     float textOriginY() {
         return getTaffyLayout().padding().top;
     }
@@ -5199,12 +5240,13 @@ public class TextEditor extends ScrollerView implements UndoScope {
         syncLineFonts();
         refreshHighlights(first, last);
         layOutTextViewport();
-        // Every extracted part, in one pass. Monaco skips the ones whose shouldRender() is false;
-        // this renders all of them, which is what the methods it replaced did.
+        // Every extracted part, in one pass. Monaco gates each on a dirty flag; this does not, and that is
+        // now stated where the flag used to be rather than implied by a field nobody set. See
+        // EditorViewPart.
         for (EditorViewPart part : viewParts) {
             part.render(first, last);
-            part.onDidRender();
         }
+        insetHorizontalBarPastGutter();
         // THE POPUP RE-ANCHORS HERE, once a frame, and not only when the caret moves.
         //
         // The anchor is derived from measured row widths, and those are computed in this very method --
@@ -5234,12 +5276,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * self-correcting once the cascade settles.</p>
      */
     private void syncLineFonts() {
-        var general = getStyle().getGeneralGroup();
-        final float size = general.fontSize();
-        final var family = general.fontFamily();
         for (UIElement line : realisedLines.values()) {
-            StyleGroup.importantPipeline(line.getChildren().get(0).getStyle().getGeneralGroup(),
-                    g -> g.fontSize(size).fontFamily(family));
+            pushEditorFontTo(line.getChildren().get(0));
         }
     }
 

@@ -26,18 +26,23 @@ import java.util.List;
 final class LineNumbersPart extends EditorViewPart {
 
     private final UIElement gutter;
-    private final List<UIElement> numbers = new ArrayList<>();
+    /**
+     * The numbers, pooled — {@link DecorationPool} is this idiom, and this part hand-rolled it beside
+     * the class that names it.
+     */
+    private final DecorationPool numbers;
 
     LineNumbersPart(TextEditor editor, UIElement gutter) {
         super(editor);
         this.gutter = gutter;
+        this.numbers = new DecorationPool(() -> gutter, TextEditor.LINE_NUMBER_CLASS, true);
     }
 
     @Override
     void render(int firstViewLine, int lastViewLine) {
         if (!editor.isGutterVisible()) {
             DecorationPool.hide(gutter);
-            for (UIElement number : numbers) DecorationPool.hide(number);
+            numbers.hideAll();
             return;
         }
         // FROM THE EDITOR'S EDGE, not from past its padding. The editor's own padding-left is a strip the
@@ -56,7 +61,7 @@ final class LineNumbersPart extends EditorViewPart {
                         .left(0f).top(0f).width(width).height(gutterHeight));
 
         float height = editor.lineHeight();
-        int used = 0;
+        numbers.beginPass();
         int last = Math.min(lastViewLine, editor.viewLineCount() - 1);
         for (int viewLine = Math.max(0, firstViewLine); viewLine <= last; viewLine++) {
             // ONE NUMBER PER DOCUMENT ROW, on the row's first view line. Numbering every view line would
@@ -65,11 +70,9 @@ final class LineNumbersPart extends EditorViewPart {
             ProjectedLines.ModelPosition model = editor.modelAt(viewLine);
             if (model.viewLineInRow() != 0) continue;
             int row = model.row();
-            UIElement number = numberAt(used++);
+            UIElement number = numbers.next();
             ((UIText) number.getChildren().get(0)).setText(numberFor(row));
-            StyleGroup.importantPipeline(number.getChildren().get(0).getStyle().getGeneralGroup(),
-                    g -> g.fontSize(editor.getStyle().getGeneralGroup().fontSize())
-                            .fontFamily(editor.getStyle().getGeneralGroup().fontFamily()));
+            editor.pushEditorFontTo(number.getChildren().get(0));
             // Scroll-exempt, so the offset has to be subtracted by hand -- see the class note.
             final float top = editor.topOfViewLine(viewLine);
             // The NUMBERS' column, not the whole gutter. Spanning the full width right-aligns the digits
@@ -91,8 +94,7 @@ final class LineNumbersPart extends EditorViewPart {
                     l -> l.positionType(TaffyPosition.ABSOLUTE)
                             .left(numberLeft).top(top).width(numberWidth).height(height));
         }
-        for (int i = used; i < numbers.size(); i++) DecorationPool.hide(numbers.get(i));
-        insetHorizontalBarPastGutter();
+        numbers.endPass();
     }
 
     /**
@@ -114,35 +116,4 @@ final class LineNumbersPart extends EditorViewPart {
         return row == caretRow ? String.valueOf(row + 1) : String.valueOf(Math.abs(row - caretRow));
     }
 
-    private UIElement numberAt(int index) {
-        while (numbers.size() <= index) {
-            UIElement number = new UIElement();
-            number.addClass(TextEditor.LINE_NUMBER_CLASS);
-            number.setHitTest(false);
-            number.markAsInternal();
-            number.addChild(new UIText(""));
-            gutter.addInternalChild(number);
-            numbers.add(number);
-        }
-        return numbers.get(index);
-    }
-
-    /**
-     * Starts the horizontal scrollbar after the gutter rather than under it.
-     *
-     * <p>The gutter is pinned and does not scroll horizontally, so a bar running beneath it offers to
-     * scroll something that will not move.</p>
-     *
-     * <p>Written at {@code IMPORTANT} origin because {@code ScrollerView} rewrites the bar's geometry
-     * every frame from {@code refreshScrollers}; a lower-origin write would simply lose to it.</p>
-     */
-    private void insetHorizontalBarPastGutter() {
-        UIElement bar = editor.horizontalScrollerElement();
-        if (bar == null) return;
-        final float left = editor.paddingLeft() + editor.gutterWidth();
-        final float width = Math.max(0f,
-                editor.getClientWidth() - left - editor.verticalBarThickness());
-        StyleGroup.importantPipeline(bar.getStyle().getLayoutGroup(),
-                l -> l.left(left).width(width));
-    }
 }

@@ -80,9 +80,7 @@ final class WhitespacePart extends EditorViewPart {
                 // can be hundreds of markers and the pipeline is not free; a line number pays this
                 // because there are ~25 of them, a marker cannot.
                 if (markerFontKey == null || !markerFontKey.equals(fontKey)) {
-                    StyleGroup.importantPipeline(label.getStyle().getGeneralGroup(),
-                            g -> g.fontSize(editor.getStyle().getGeneralGroup().fontSize())
-                                    .fontFamily(editor.getStyle().getGeneralGroup().fontFamily()));
+                    editor.pushEditorFontTo(label);
                 }
                 StyleGroup.defaultPipeline(mark.getStyle().getLayoutGroup(),
                         l -> l.positionType(TaffyPosition.ABSOLUTE)
