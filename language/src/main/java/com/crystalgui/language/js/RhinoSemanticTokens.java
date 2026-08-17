@@ -99,6 +99,12 @@ final class RhinoSemanticTokens {
                 // BUILTIN, and the distinction from a host binding is worth drawing: one is JavaScript
                 // and travels everywhere, the other is this application's and does not.
                 capture = "variable.builtin";
+            } else if (isCallTarget(free)) {
+                // LEFT TO markUnresolvedCalls, which marks the same span `function.unresolved`. Emitting
+                // both put two tokens on one range under unrelated names, and which one painted was left
+                // to order -- the exact overlap the engine's own rule says never to create, and it reads
+                // as a colour-scheme bug rather than an ordering one because both names resolve.
+                continue;
             } else {
                 capture = "variable.unresolved";
             }
@@ -153,6 +159,12 @@ final class RhinoSemanticTokens {
             add(tokens, callee.getAbsolutePosition(), callee.getLength(), "function.unresolved");
             return true;
         });
+    }
+
+    /** Whether this name is the thing being called in {@code name(…)} — never {@code a.name(…)}. */
+    private static boolean isCallTarget(Name name) {
+        AstNode parent = name.getParent();
+        return parent instanceof FunctionCall && ((FunctionCall) parent).getTarget() == name;
     }
 
     private static void add(List<SyntaxToken> tokens, int offset, int length, String capture) {

@@ -3188,6 +3188,10 @@ public class TextEditor extends ScrollerView implements UndoScope {
         ChangeSet edit = ChangeSet.of(buffer.length(), changes);
         buffer.edit(edit, selections.all());
         selections.mapThrough(edit);
+        // THE GOAL COLUMN IS STALE ONCE THE TEXT MOVES, exactly as it is in `applyEdit`, which clears it.
+        // Without this, Tab-indenting a line and then pressing Up aimed at the column the caret had
+        // BEFORE the indent -- so the caret drifted left by one indent, once, and then behaved.
+        clearGoalColumns();
         viewCursorsPart.restartBlink();
         ensureCaretVisible();
         onSelectionChanged.emit();
@@ -3370,7 +3374,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // position one still at the bottom, so every further press resumed from the end, found the match
         // it had already taken, and refused. Multi-caret simply stopped responding, which is what was
         // reported.
-        int at = nextUnselectedOccurrence(needle, primary.end());
+        int at = nextUnselectedOccurrence(needle, primary.end(), isWholeWordAt(primary));
         if (at < 0) return false;
         selections.add(new Selection(at, at + needle.length()));
         afterSelectionChange();
@@ -3403,17 +3407,43 @@ public class TextEditor extends ScrollerView implements UndoScope {
         ensureCaretVisible();
     }
 
-    private int nextUnselectedOccurrence(String needle, int from) {
+    private int nextUnselectedOccurrence(String needle, int from, boolean wholeWords) {
         // Through the whole document as a String, which is the copy §3.3 of the review is about; the
         // search here is a correctness fix and deliberately does not pretend to be the performance one.
         String haystack = buffer.toString();
         for (int at = haystack.indexOf(needle, from); at >= 0; at = haystack.indexOf(needle, at + 1)) {
-            if (!alreadySelected(at, needle.length())) return at;
+            if (accepts(haystack, at, needle.length(), wholeWords)) return at;
         }
         for (int at = haystack.indexOf(needle); at >= 0 && at < from; at = haystack.indexOf(needle, at + 1)) {
-            if (!alreadySelected(at, needle.length())) return at;
+            if (accepts(haystack, at, needle.length(), wholeWords)) return at;
         }
         return -1;
+    }
+
+    private boolean accepts(String haystack, int at, int length, boolean wholeWords) {
+        if (alreadySelected(at, length)) return false;
+        return !wholeWords || isWholeWordIn(haystack, at, at + length);
+    }
+
+    /**
+     * Whether a selection covers <b>exactly</b> a word — which is what decides Ctrl+D's matching rule.
+     *
+     * <p>VS Code's {@code addSelectionToNextFindMatch}: a selection that <em>started</em> as a word keeps
+     * looking for that word, so {@code count} does not go on to select the {@code count} inside
+     * {@code counter}. A selection somebody dragged out by hand is a request about those characters and
+     * matches them anywhere — the gesture says which question is being asked, and the difference only
+     * shows up on the second press.</p>
+     */
+    private boolean isWholeWordAt(Selection selection) {
+        if (selection.isEmpty()) return false;
+        int[] word = WordOperations.wordAt(buffer.document(), selection.start(), wordClassifier);
+        return word != null && word[0] == selection.start() && word[1] == selection.end();
+    }
+
+    /** Whether {@code [from, to)} has a non-word character on each side of it. */
+    private boolean isWholeWordIn(String haystack, int from, int to) {
+        if (from > 0 && wordClassifier.isWordPart(haystack.charAt(from - 1))) return false;
+        return to >= haystack.length() || !wordClassifier.isWordPart(haystack.charAt(to));
     }
 
     private boolean alreadySelected(int start, int length) {
@@ -3500,11 +3530,17 @@ public class TextEditor extends ScrollerView implements UndoScope {
         LineOperations.Move move = LineOperations.move(buffer.document(), touchedRows(), direction);
         if (move == null) return;
 
+        if (readOnly || move.change().isEmpty()) return;
         List<Selection> moved = new ArrayList<>();
         for (Selection selection : selections.all()) {
             moved.add(new Selection(selection.anchor() + move.shift(), selection.head() + move.shift()));
         }
-        applyEditKeepingSelection(new ArrayList<>(List.of(move.change())));
+        // APPLIED WITHOUT LETTING THE EDIT PLACE THE CARETS. Every touched row moves by the same known
+        // amount, so this already has the answer -- going through `applyEditKeepingSelection` mapped the
+        // carets through the change, emitted `onSelectionChanged`, and then had that answer overwritten
+        // and emitted again. Two emissions per Alt+Up, one of them describing selections nobody kept.
+        ChangeSet edit = ChangeSet.of(buffer.length(), List.of(move.change()));
+        buffer.edit(edit, selections.all());
         selections.setAll(moved, selections.primaryIndex());
         afterSelectionChange();
         ensureCaretVisible();
@@ -4922,12 +4958,55 @@ public class TextEditor extends ScrollerView implements UndoScope {
             if (top < getScrollTop()) setScrollImmediate(getScrollLeft(), top);
             else setScrollImmediate(getScrollLeft(), top + height + origin - viewport);
         }
+        revealCaretHorizontally();
         // NOT invalidateWindow(). Scrolling changes which rows are on screen, and updateWindow already
         // recomputes that range every frame -- realising what has come into view and recycling what has
         // left. Tearing the whole window down here recycled every line on every keystroke, which clears
         // their highlights and is the other half of the colour flicker.
         markTreeDirty();
     }
+
+    /**
+     * Scrolls sideways so the caret is inside the text viewport — <b>the other axis</b>.
+     *
+     * <h3>Half a reveal is not a reveal</h3>
+     *
+     * <p>This scrolled vertically only, so pressing End on a line wider than the viewport put the caret
+     * somewhere off to the right and left it there: the row was on screen, the caret was not, and the
+     * next character typed appeared somewhere nobody was looking. Both references reveal on both axes.</p>
+     *
+     * <h3>A margin, not the edge</h3>
+     *
+     * <p>Revealed with a few characters of context either side, because a caret pinned exactly to the
+     * right edge has nothing after it to read and jumps again on the very next keystroke. Monaco's
+     * {@code cursorSurroundingLines} is the vertical form of the same idea.</p>
+     *
+     * <p>Soft wrap makes this a no-op by construction — there is nothing to scroll to — and the guard is
+     * the horizontal scroll range itself rather than a flag, so the two cannot disagree.</p>
+     */
+    private void revealCaretHorizontally() {
+        float maximum = getMaxScrollLeft();
+        if (!Float.isFinite(maximum) || maximum <= 0f) return;
+
+        ProjectedLines.ViewPosition view = projections().toViewPosition(
+                buffer.document(), getCaret(), LineProjection.Affinity.LEFT);
+        float caretX = xOfView(view.viewLine(), view.column());
+        if (!Float.isFinite(caretX)) return;
+
+        float margin = Math.max(1f, spaceAdvance()) * HORIZONTAL_REVEAL_MARGIN;
+        float left = finiteOrZero(getScrollLeft());
+        float width = textViewportWidth();
+        if (width <= 0f) return;
+
+        float wanted = left;
+        if (caretX - margin < left) wanted = caretX - margin;
+        else if (caretX + margin > left + width) wanted = caretX + margin - width;
+        wanted = Math.max(0f, Math.min(wanted, maximum));
+        if (wanted != left) setScrollImmediate(wanted, getScrollTop());
+    }
+
+    /** Characters of context kept either side of a caret revealed sideways. */
+    private static final float HORIZONTAL_REVEAL_MARGIN = 4f;
 
     // ── Virtualised rendering ───────────────────────────────────────────────────────────────────
 

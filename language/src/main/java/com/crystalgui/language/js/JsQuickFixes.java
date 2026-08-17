@@ -96,7 +96,7 @@ final class JsQuickFixes {
         tightenEquality(actions, caret);
         switchJavaTypeSpelling(actions, caret);
         concatenationToTemplate(actions, caret);
-        wrapInTryCatch(actions, caret, to);
+        wrapInTryCatch(actions, caret);
         return actions;
     }
 
@@ -124,8 +124,19 @@ final class JsQuickFixes {
                 if (mine == null) return;
                 int start = mine.getAbsolutePosition();
                 int end = start + mine.getLength();
-                int comma = edits.textIn(0, start).lastIndexOf(',');
-                if (comma >= 0) start = comma;
+                // THE COMMA GOES WITH IT, and it must be one of THIS statement's. Searching the whole text
+                // before the initializer found the last comma ANYWHERE ABOVE -- an argument list, an array,
+                // a previous statement -- so removing the FIRST of several names deleted everything from
+                // that comma down. The statement's own start is the bound; and when this is the first name
+                // there is no comma before it, so the one AFTER it is what separates it from the next.
+                if (mine == variables.get(0)) {
+                    int next = variables.get(1).getAbsolutePosition();
+                    int comma = edits.textIn(end, next).indexOf(',');
+                    if (comma >= 0) end = next;
+                } else {
+                    int comma = edits.textIn(from, start).lastIndexOf(',');
+                    if (comma >= 0) start = from + comma;
+                }
                 actions.add(fix("remove-unused", "Remove '" + declared.name + "'",
                         edits.replace(start, end, "")));
                 return;
@@ -133,10 +144,7 @@ final class JsQuickFixes {
             // A `var` STATEMENT'S OWN LENGTH EXCLUDES ITS SEMICOLON in Rhino's tree, so deleting the node
             // alone leaves a bare `;` behind. Taken here rather than in `deleteStatement`, which is also
             // used for shapes that have none.
-            if (to < edits.textIn(0, Integer.MAX_VALUE).length()
-                    && ';' == charAt(to)) {
-                to++;
-            }
+            if (to < length() && ';' == charAt(to)) to++;
         }
         actions.add(fix("remove-unused", "Remove '" + declared.name + "'",
                 edits.deleteStatement(from, to)));
@@ -272,24 +280,28 @@ final class JsQuickFixes {
         List<AstNode> parts = new ArrayList<>();
         if (!flattenConcatenation(chain, parts) || parts.size() < 2) return;
 
+        // THE FIRST `+` HAS TO BE CONCATENATION ALREADY, which means one of the two leftmost parts is a
+        // string. "the chain contains a string somewhere" is NOT the rule and changes what the program
+        // computes: `1 + 2 + 'a'` is "3a", because the leftmost `+` is arithmetic -- and as a template it
+        // becomes "12a". Every later operand is concatenated once the running value is a string, so only
+        // the leftmost pair decides.
+        if (!(parts.get(0) instanceof StringLiteral) && !(parts.get(1) instanceof StringLiteral)) return;
+
         StringBuilder out = new StringBuilder("`");
-        boolean anyString = false;
         for (AstNode part : parts) {
             if (part instanceof StringLiteral) {
-                anyString = true;
                 out.append(escapeForTemplate(((StringLiteral) part).getValue()));
             } else {
                 out.append("${").append(edits.textOf(part)).append('}');
             }
         }
-        if (!anyString) return;
         out.append('`');
         actions.add(refactor("to-template", "Change to a template literal",
                 edits.replaceNode(chain, out.toString())));
     }
 
     /** "Surround with try/catch" — the twin of {@code ExceptionCorrections}' second half. */
-    private void wrapInTryCatch(List<CodeAction> actions, int caret, int to) {
+    private void wrapInTryCatch(List<CodeAction> actions, int caret) {
         AstNode statement = enclosingStatement(nodeCovering(caret));
         if (statement == null) return;
         int from = statement.getAbsolutePosition();
@@ -315,8 +327,10 @@ final class JsQuickFixes {
     @Nullable
     private RhinoScopes.Declaration unusedDeclarationAt(int from, int to) {
         for (RhinoScopes.Declaration declared : scopes.declarations()) {
-            if (!declared.isUnused() || declared.offset < 0) continue;
-            if (declared.kind == SymbolKind.PARAMETER || declared.owner == null) continue;
+            // THE ANALYSER'S OWN PREDICATE, not a second copy of it: a fix offered on a name carrying no
+            // warning -- or missing on one that does -- is what two spellings of this rule produce the
+            // first time either changes. @see RhinoScopes.Declaration#isReportableUnused
+            if (!declared.isReportableUnused()) continue;
             int end = declared.offset + declared.length;
             if (from <= end && to >= declared.offset) return declared;
         }
@@ -475,17 +489,25 @@ final class JsQuickFixes {
         return true;
     }
 
+    /**
+     * The innermost node covering {@code offset} — the resolver's walk, not a second copy of it.
+     *
+     * <p>This class held its own visitor and called it five times per Alt+Enter, so one gesture walked the
+     * whole tree six times. Cached per invocation because every caller in {@link #actionsIn} asks about the
+     * same caret.</p>
+     */
     @Nullable
     private AstNode nodeCovering(int offset) {
         if (root == null) return null;
-        AstNode[] best = new AstNode[1];
-        root.visit(node -> {
-            int start = node.getAbsolutePosition();
-            if (offset >= start && offset <= start + node.getLength()) best[0] = node;
-            return true;
-        });
-        return best[0];
+        if (offset != coveringOffset) {
+            coveringOffset = offset;
+            covering = resolution.nodeCovering(offset);
+        }
+        return covering;
     }
+
+    @Nullable private AstNode covering;
+    private int coveringOffset = Integer.MIN_VALUE;
 
     private boolean isNullLiteral(@Nullable AstNode node) {
         return "null".equals(RhinoTokens.keywordOf(node));
@@ -502,12 +524,11 @@ final class JsQuickFixes {
     }
 
     private char charAt(int offset) {
-        String text = edits.textIn(offset, offset + 1);
-        return text.isEmpty() ? '\0' : text.charAt(0);
+        return edits.charAt(offset);
     }
 
     private int length() {
-        return edits.textIn(0, Integer.MAX_VALUE).length();
+        return edits.length();
     }
 
     private CodeAction fix(String id, String title, ChangeSet edit) {
