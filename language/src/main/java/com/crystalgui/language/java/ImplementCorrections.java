@@ -191,11 +191,10 @@ final class ImplementCorrections {
         // built from one is written against a type that does not exist, turning "must implement" into one
         // unresolvable reference per parameter. The corpus is what found it: five files, each gaining
         // between six and sixteen errors from a fix that looked right in every fixture.
-        if (isRecovered(method.getReturnType())) return null;
-        for (ITypeBinding parameter : method.getParameterTypes()) {
-            if (isRecovered(parameter)) return null;
-        }
-
+        //
+        // ASKED BY `writtenName`, below, and no longer here: it refuses a recovered binding and recurses
+        // through arrays and type arguments doing it, so `List<Missing>` is refused as surely as `Missing`.
+        // The private copy that used to stand here said so in its own comment and was left in place anyway.
         String returns = TypeNames.writtenName(method.getReturnType(), imports, at);
         if (returns == null && !"void".equals(method.getReturnType().getName())) return null;
         boolean isVoid = "void".equals(method.getReturnType().getName());
@@ -219,21 +218,6 @@ final class ImplementCorrections {
         // trailing `\n` creates is indented too — which lands in the file as a line of pure whitespace
         // after each generated method.
         return built.append("}").toString();
-    }
-
-    /**
-     * Whether this type — or anything inside it — is a name the compiler failed to resolve.
-     *
-     * <p>Recursive through arrays and type arguments, because {@code List<Missing>} resolves perfectly
-     * well as a {@code List} and is no more writable than {@code Missing} itself.</p>
-     */
-    private static boolean isRecovered(ITypeBinding type) {
-        if (type == null || type.isRecovered()) return true;
-        if (type.isArray()) return isRecovered(type.getComponentType());
-        for (ITypeBinding argument : type.getTypeArguments()) {
-            if (isRecovered(argument)) return true;
-        }
-        return false;
     }
 
     /**
