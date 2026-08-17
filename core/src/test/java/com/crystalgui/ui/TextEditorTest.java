@@ -4968,4 +4968,69 @@ public class TextEditorTest extends UiTestBase {
         }
         assertTrue("no ranges were checked, so this proves nothing", checked > 0);
     }
+
+    // -- Line endings ---------------------------------------------------------------------------
+
+    /**
+     * A file loaded with CRLF must not keep its carriage returns in the document.
+     *
+     * <h4>What this cost, because nothing about the symptom said "line endings"</h4>
+     *
+     * <p>{@code setText} replaced the buffer's contents <em>raw</em>, where the constructor and
+     * {@code TextBuffer.load} both normalise -- and {@code setText} is the path every opened file
+     * arrives through. So a CRLF file kept a carriage return on the end of every row.</p>
+     *
+     * <p>It surfaced as a <b>rendering</b> bug: the shaper treats a carriage return as a paragraph
+     * break, exactly as it should, so each single-line row shaped as two paragraphs and reported double
+     * height. The row box stayed one line tall and {@code .__line__} centres its text, so every line of
+     * code sat half a row above its own line number while the numbers -- which never carry one -- were
+     * exactly right. It was reported as "the gutter drifts, but only in JavaScript", and the only reason
+     * it looked like a language was that the CRLF file happened to be a {@code .js} one.</p>
+     *
+     * <p>Asserted on the document rather than on geometry: the pixels are a consequence, and a test that
+     * measured them would pass the moment somebody centred the text differently while the buffer stayed
+     * wrong.</p>
+     */
+    @Test
+    public void loadingACrlfFileLeavesNoCarriageReturnsInTheDocument() {
+        build("");
+        editor.setText("first\r\nsecond\r\nthird\r\n");
+        // FOUR, not three: the text ends with a terminator, so there is an empty last line — which is
+        // what every editor shows and what the buffer has to agree with.
+        assertEquals(4, editor.buffer().lineCount());
+        for (int row = 0; row < editor.buffer().lineCount(); row++) {
+            String line = editor.buffer().line(row);
+            assertFalse("row " + row + " kept its carriage return: [" + line + "]",
+                    line.indexOf('\r') >= 0);
+        }
+        assertEquals("first", editor.buffer().line(0));
+        assertEquals("third", editor.buffer().line(2));
+    }
+
+    /** And the original ending is remembered, so saving does not silently convert the file. */
+    @Test
+    public void theOriginalLineEndingSurvivesForTheSave() {
+        build("");
+        editor.setText("first\r\nsecond\r\n");
+        assertEquals("first\r\nsecond\r\n", editor.buffer().textWithOriginalLineEndings());
+        editor.setText("first\nsecond\n");
+        assertEquals("first\nsecond\n", editor.buffer().textWithOriginalLineEndings());
+    }
+
+    /**
+     * Re-reading an unchanged CRLF file is still not an edit.
+     *
+     * <p>The early-out compares the incoming text against what the buffer holds, and the buffer holds
+     * LF -- so before the fix a CRLF file never matched and every re-read replaced the whole document,
+     * resetting the caret and discarding the widest measured line. That is the flicker the early-out
+     * exists to prevent, and it was defeated for exactly the files that needed it.</p>
+     */
+    @Test
+    public void reReadingTheSameCrlfTextDoesNotDisturbTheCaret() {
+        build("");
+        editor.setText("first\r\nsecond\r\nthird\r\n");
+        editor.setCaret(8);
+        editor.setText("first\r\nsecond\r\nthird\r\n");
+        assertEquals("an identical re-read moved the caret", 8, editor.getCaret());
+    }
 }

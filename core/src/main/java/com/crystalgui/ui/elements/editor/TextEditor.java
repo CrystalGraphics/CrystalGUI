@@ -35,6 +35,7 @@ import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import com.crystalgui.text.Selection;
 import com.crystalgui.text.SelectionModel;
+import com.crystalgui.text.LineEnding;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.syntax.SyntaxToken;
 import com.crystalgui.text.lang.CompletionItem;
@@ -835,7 +836,26 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     public TextEditor setText(String text) {
-        String next = text == null ? "" : text;
+        // NORMALISED FIRST, and through the buffer's own loader — which is what makes this "load a file"
+        // rather than "paste a string".
+        //
+        // This did `buffer.replace(0, length, text)` raw, so a CRLF file kept its carriage returns in the
+        // document. `TextBuffer`'s constructor normalises and `load` normalises; only this path did not,
+        // and it is the one every opened file arrives through.
+        //
+        // What that looked like is worth writing down, because nothing about it says "line endings". A
+        // `\r` left on the end of a row reaches the shaper, which treats it as a PARAGRAPH BREAK exactly
+        // as it should — so every single-line row shaped as two paragraphs and reported double height.
+        // The row box stayed one line tall, `.__line__` centres its text, and centring a 26.4-tall child
+        // in a 14-tall box lifts it by 6.2px. The result was that every line of text in the file sat
+        // half a row above its own line number, while the numbers — which never carry a `\r` — were
+        // exactly right. It was reported as "the gutter drifts, but only in JavaScript", and the only
+        // reason it looked like a language was that the file which happened to be CRLF was a `.js` one.
+        //
+        // `load` also detects the ending and remembers it, so saving the file writes back what it came
+        // with instead of silently converting it — which is the other half of why this is the right call
+        // rather than a `replace` with a `normalise` in front of it.
+        String next = LineEnding.normalise(text == null ? "" : text);
         // UNCHANGED TEXT IS NOT AN EDIT, and this engine suppresses equal writes everywhere else for the
         // same reason -- Property.set, ObservableList.set and replaceOrPutCandidate all no-op on an equal
         // value, and each of them documents a feedback loop that stops settling without it.
@@ -849,9 +869,22 @@ public class TextEditor extends ScrollerView implements UndoScope {
         //
         // Compared BEFORE touching the buffer, so nothing above has already happened by the time the
         // comparison says there was nothing to do.
-        if (buffer.length() == next.length() && next.contentEquals(getText())) return this;
-        buffer.replace(0, buffer.length(), next);
-        buffer.breakUndoCoalescing();
+        // COMPARED AFTER NORMALISING, which the raw version could not do: the incoming text is what the
+        // file holds and `getText()` is what the buffer holds, so on a CRLF file they never matched and
+        // every re-read replaced the whole document -- resetting the caret and throwing away the widest
+        // measured line, which is the flicker this early-out exists to prevent.
+        //
+        // AND THE ENDING IS PART OF "unchanged". Normalising makes a CRLF document and an LF one the
+        // same TEXT, which is the point -- but they are not the same FILE, so returning early would keep
+        // the ending the buffer already had and a save would write back the wrong one. A test caught it
+        // immediately, which is the argument for having written the save half of this down at all.
+        if (buffer.length() == next.length() && next.contentEquals(getText())
+                && buffer.lineEnding() == LineEnding.detect(text == null ? "" : text)) {
+            return this;
+        }
+        // `load`, not `replace`: it normalises AND remembers the ending, so a save writes back what the
+        // file came with. It breaks undo coalescing itself.
+        buffer.load(text == null ? "" : text);
         setSelection(0, 0);
         return this;
     }
@@ -4220,6 +4253,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
                 l -> l.positionType(TaffyPosition.ABSOLUTE)
                         .left(left).top(0f).width(width).height(height));
     }
+
 
     /**
      * Starts the vertical scrollbar below whatever chrome is floating at the editor's top edge.
