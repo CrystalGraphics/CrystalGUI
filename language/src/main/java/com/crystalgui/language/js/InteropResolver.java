@@ -113,6 +113,116 @@ final class InteropResolver {
         return filtered;
     }
 
+    /**
+     * One member, described by the <b>Java</b> engine — signature quoted from source when there is any.
+     *
+     * <h3>Why this needs a second, member-shaped probe</h3>
+     *
+     * <p>{@code membersOf} deliberately leaves the signature off: it answers with hundreds for a completion
+     * list, which draws a label and a detail column and would never read one. Quoting a declaration out of
+     * {@code src.zip} needs the member's <em>binding key</em>, and a {@code SymbolInfo} carries no binding —
+     * that is the whole point of the bridge. So the only way to get the Java engine's own answer about one
+     * member is to hand it a unit in which that member is <em>named</em>, and ask it to resolve there.</p>
+     *
+     * <p>The unit declares a parameter of each of the member's own declared types and passes them at the
+     * call, which makes overload resolution <b>exact</b> rather than a guess:</p>
+     *
+     * <pre>
+     *   class $Probe {
+     *       java.util.ArrayList $x;
+     *       void $m(java.lang.Object $p0) { $x.add($p0); }
+     *   }
+     * </pre>
+     *
+     * <p>Parameters rather than casts, because a cast of {@code null} is ambiguous for a primitive and a
+     * cast to a type variable does not parse. Asked only on a <b>hover</b> — one deliberate gesture on one
+     * member — and cached, so the cost is a parse the user waited for.</p>
+     *
+     * <p>Guarded end to end: if the probe does not compile, or resolves to a member of another name, or the
+     * class has no source beside it, the answer is null and the caller assembles what it already knows. A
+     * signature is a nicety; being wrong about one is not.</p>
+     */
+    @Nullable
+    synchronized SymbolInfo describeMember(String binaryName, SymbolInfo member, boolean staticSide) {
+        if (java == null || binaryName == null || member == null || member.name().isEmpty()) return null;
+        String key = binaryName + (staticSide ? "#" : ".") + member.name() + "/" + member.parameters().size();
+        SymbolInfo cached = members.get(key);
+        if (cached != null) return cached == ABSENT ? null : cached;
+
+        SymbolInfo described = probeMember(binaryName, member, staticSide);
+        members.put(key, described == null ? ABSENT : described);
+        return described;
+    }
+
+    /** A sentinel, so a member with no quotable declaration is not re-probed on every hover. */
+    private static final SymbolInfo ABSENT = SymbolInfo.of("", SymbolKind.UNKNOWN);
+
+    /** Bounded for the reason the analysis cache is: a hover is cheap to repeat and memory is not free. */
+    private final LinkedHashMap<String, SymbolInfo> members = new LinkedHashMap<>(16, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, SymbolInfo> eldest) {
+            return size() > MAX_CACHED_MEMBERS;
+        }
+    };
+
+    private static final int MAX_CACHED_MEMBERS = 64;
+
+    @Nullable
+    private SymbolInfo probeMember(String binaryName, SymbolInfo member, boolean staticSide) {
+        StringBuilder unit = new StringBuilder("class ").append(PROBE_CLASS).append(" {\n");
+        if (!staticSide) unit.append("    ").append(binaryName).append(' ').append(PROBE_FIELD).append(";\n");
+        unit.append("    void $m(");
+        List<TypeRef> parameters = member.parameters();
+        for (int i = 0; i < parameters.size(); i++) {
+            String type = parameters.get(i).qualifiedName();
+            // A TYPE VARIABLE IS NOT A TYPE NAME. A raw receiver erases them, but a member reported from a
+            // parameterised binding can still name one -- and `void $m(E $p0)` does not compile, so the
+            // whole probe would resolve to nothing rather than to the wrong thing.
+            if (type == null || type.isEmpty() || type.indexOf('.') < 0 && !isPrimitive(type)) return null;
+            if (i > 0) unit.append(", ");
+            unit.append(type).append(" $p").append(i);
+        }
+        unit.append(") {\n        ");
+        String receiver = staticSide ? binaryName : PROBE_FIELD;
+        int callAt = unit.length() + receiver.length() + 1;
+        unit.append(receiver).append('.').append(member.name());
+        if (member.isInvocable()) {
+            unit.append('(');
+            for (int i = 0; i < parameters.size(); i++) {
+                if (i > 0) unit.append(", ");
+                unit.append("$p").append(i);
+            }
+            unit.append(')');
+        }
+        unit.append(";\n    }\n}\n");
+
+        Analysis analysis;
+        try {
+            analysis = java.analyze(PROBE_CLASS, unit.toString(), classpath, releaseLevel, -1L);
+        } catch (RuntimeException unavailable) {
+            return null;
+        }
+        if (analysis == null) return null;
+        try {
+            SymbolInfo resolved = analysis.resolveAt(callAt);
+            // THE NAME HAS TO MATCH. A probe the compiler recovered differently can resolve to something
+            // else entirely, and a signature quoted for the wrong member is worse than none at all.
+            return resolved != null && member.name().equals(resolved.name()) ? resolved : null;
+        } finally {
+            analysis.close();
+        }
+    }
+
+    private static boolean isPrimitive(String type) {
+        switch (type) {
+            case "boolean": case "byte": case "char": case "short":
+            case "int": case "long": case "float": case "double": case "void":
+                return true;
+            default:
+                return false;
+        }
+    }
+
     /** What the class itself is, for a hover over {@code java.util.ArrayList}. */
     @Nullable
     synchronized SymbolInfo describe(String binaryName, boolean staticSide) {
@@ -146,6 +256,7 @@ final class InteropResolver {
     synchronized void close() {
         for (Probe probe : cache.values()) probe.close();
         cache.clear();
+        members.clear();
     }
 
     // ── The probe unit ──────────────────────────────────────────────────────────────────────────

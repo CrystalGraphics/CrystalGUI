@@ -2,6 +2,8 @@ package com.crystalgui.language.java;
 
 import com.crystalgui.text.Change;
 import com.crystalgui.text.ChangeSet;
+import com.crystalgui.text.diagnostic.DiagnosticSeverity;
+import com.crystalgui.text.diagnostic.DiagnosticTag;
 import com.crystalgui.text.lang.CodeAction;
 import com.crystalgui.text.lang.CodeActionKind;
 
@@ -235,6 +237,33 @@ final class LambdaCorrections {
 
     /** What the reported problem says, and the code it carries. */
     static final String REPORT_CODE = "cgui.lambda.fromAnonymous";
+
+    /** This family's half of {@link Inspection} — the finding the correction above answers. */
+    static Inspection anonymousCanBeLambda() {
+        return new Inspection() {
+            @Override public String code() {
+                return REPORT_CODE;
+            }
+
+            @Override public List<Finding> reportIn(CompilationUnit unit, String source) {
+                List<Finding> found = new ArrayList<>();
+                for (int[] span : LambdaCorrections.reportIn(unit, source)) {
+                    found.add(new Finding(span[0], span[1],
+                            "Anonymous " + source.substring(span[0], span[1]).trim()
+                                    + " can be replaced with lambda",
+                            DiagnosticSeverity.WARNING,
+                            // FADED, NOT UNDERLINED -- the same drawing the unused family gets, and
+                            // IntelliJ's own for this inspection. The tag is about how text is DRAWN
+                            // rather than how bad it is, and `new Comparator<String>()` is ceremony the
+                            // lambda does without: unnecessary in exactly the sense the tag names. A
+                            // yellow squiggle under every anonymous class in a file would also be the
+                            // loudest thing on screen for something nobody has to act on.
+                            Set.of(DiagnosticTag.UNNECESSARY)));
+                }
+                return found;
+            }
+        };
+    }
 
     /** The single method to become the lambda, or null when any condition refuses. */
     private static MethodDeclaration convertibleMethod(ClassInstanceCreation creation,
