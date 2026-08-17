@@ -386,9 +386,24 @@ the per-part scroll subtraction, and gives `anchorInWindow`/`offsetAtLocal` one 
 - Parts read the editor's resolved font from one seam instead of pushing IMPORTANT writes.
 
 ### R4 — Model-side correctness
-- **R4-A / R4-B from §3.5 first** — selection mapping in the change listener + view memento on the
-  undo entry + Alt+click without a drag; `TypeOperations` Enter/Backspace/Tab in visual columns
-  against `Language`'s brackets. These are the user-reported ones.
+- ✅ **R4-A / R4-B — the four reported symptoms are fixed**, in `f15e608` (Enter/Backspace/Tab),
+  `b93243d` (the undo memento) and `56a4623` (Alt-drag and Ctrl+D). What each turned out to be:
+  - **Enter between braces** — the rule asked whether the LINE ended in an opener; with the caret
+    between the pair it ends in the closer. Now Monaco's `_enter` over the two characters around the
+    caret, with `IndentOutdent` as the shape that had no spelling at all. `insertNewlineWithIndent`
+    places its own carets, because mapping an insertion puts the caret after *both* new lines.
+  - **Backspace at an indent** — counted characters, so two tabs were `2 % 4` and one press took the
+    whole indent to column zero. Counted in visual columns it takes one tab, and reaching column zero
+    then falls through to the line join, which is the half that was reported.
+  - **Undo/redo carets** — recorded on the undo entry (`beforeCursorState`, as both references do) and
+    handed back through a new `TextBuffer.onSelectionsRestored`. Redo is *derived* by carrying those
+    carets through the change, so the two cannot drift; a merged typing run keeps the first step's.
+  - **Multi-caret** — two bugs. Alt+click armed an ordinary drag, so one pixel of movement collapsed
+    every caret via `setSelection`; and Ctrl+D resumed from the last selection *by position*, which
+    stops being the newest one the moment the search wraps, after which it refused forever.
+- Selection *mapping* stayed in `applyEdit` rather than moving wholesale into the change listener: the
+  listener already clamps, the undo path now answers separately, and moving the rest would have been a
+  refactor without a symptom behind it. Recorded here so the deviation is not mistaken for an oversight.
 - `find`, `textIn`, `addCaretAtNextOccurrence`, `selectAllOccurrences` search the `Rope` (it is a
   `CharSequence`) — no `toString()`; Ctrl+D goes through `TextSearch` with whole-word when started
   from a word (VS Code's rule).
