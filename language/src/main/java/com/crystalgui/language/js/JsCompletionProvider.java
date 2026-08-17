@@ -171,6 +171,13 @@ final class JsCompletionProvider implements CompletionProvider {
 
     private List<CompletionItem> memberItems(Analysis current, int dotOffset, int caret) {
         String text = buffer.toString();
+
+        // A PACKAGE CHAIN IS NOT AN OBJECT. `java.util.` has no members and never resolves to a type, so
+        // it fell through to the live-names sample and offered whatever the last run had left. What it
+        // wants is the INDEX -- the sub-packages and classes under that prefix -- which is the other half
+        // of the row that only ever served `Java.type("`.
+        List<CompletionItem> underPackage = packageMembersAt(text, dotOffset);
+        if (underPackage != null) return underPackage;
         int nameEnd = dotOffset;
         while (nameEnd > 0 && Character.isWhitespace(text.charAt(nameEnd - 1))) nameEnd--;
         // Mid-identifier, so resolveAt lands on the receiver's own name rather than between two tokens.
@@ -227,6 +234,80 @@ final class JsCompletionProvider implements CompletionProvider {
             if (seen.add(name)) items.add(globalItem(name));
         }
         return items;
+    }
+
+    /**
+     * What lives directly under the package chain ending at {@code dotOffset}, or null when it is not one.
+     *
+     * <p>One level only, which is what a dot asks for: {@code java.} offers {@code util} and {@code lang},
+     * not fifty thousand qualified names. A class is offered beside them, since {@code java.util.List} is
+     * as legal a continuation as {@code java.util.concurrent}.</p>
+     */
+    @Nullable
+    private List<CompletionItem> packageMembersAt(String text, int dotOffset) {
+        if (types == null) return null;
+        String chain = packageChainEndingAt(text, dotOffset);
+        if (chain == null) return null;
+
+        ScriptPolicy current = policy.get();
+        if (!current.allowsPackage(chain)) return List.of();
+
+        // THE SIMPLE NAME OF EVERY CLASS UNDER THE PREFIX, and the next segment of every package under it.
+        // Asked of the index by the LAST segment, because that is the only thing it is keyed by -- the
+        // qualified name is then filtered here, which is one pass over a bounded answer.
+        List<CompletionItem> items = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
+        String prefix = chain + ".";
+        for (TypeIndex.Entry entry : types.filtered(current::allowsClass).allUnder(prefix).entries()) {
+            String rest = entry.qualifiedName().substring(prefix.length());
+            int dot = rest.indexOf('.');
+            if (dot < 0) {
+                if (seen.add(rest)) {
+                    items.add(CompletionItem.builder(rest, SymbolKind.CLASS)
+                            .detail(chain).filterText(rest).insertText(rest).build());
+                }
+            } else {
+                String segment = rest.substring(0, dot);
+                if (seen.add(segment)) {
+                    items.add(CompletionItem.builder(segment, SymbolKind.PACKAGE)
+                            .detail(chain).filterText(segment).insertText(segment)
+                            .sortText("~" + segment).build());
+                }
+            }
+        }
+        // AN INDEX-BACKED LIST IS A SAMPLE, so the session must ask again as the query narrows.
+        sampled = true;
+        return items;
+    }
+
+    /** {@code java.util} in {@code java.util.|}, or null when what precedes the dot is not a package. */
+    @Nullable
+    private String packageChainEndingAt(String text, int dotOffset) {
+        int start = dotOffset;
+        while (start > 0) {
+            char c = text.charAt(start - 1);
+            if (Character.isJavaIdentifierPart(c) || c == '.') start--;
+            else break;
+        }
+        if (start >= dotOffset) return null;
+        String chain = text.substring(start, dotOffset);
+        if (chain.isEmpty() || chain.endsWith(".")) return null;
+        int firstDot = chain.indexOf('.');
+        String root = firstDot < 0 ? chain : chain.substring(0, firstDot);
+        boolean isRoot = false;
+        for (String known : PACKAGE_ROOTS) isRoot |= known.equals(root);
+        if (!isRoot) return null;
+        // `Packages` IS THE ESCAPE HATCH AND NOT PART OF THE NAME, exactly as the inference tier reads it.
+        if ("Packages".equals(root)) {
+            chain = firstDot < 0 ? "" : chain.substring(firstDot + 1);
+            if (chain.isEmpty()) return null;
+        }
+        // A SEGMENT STARTING UPPER CASE IS A CLASS, and a class's members are the Java engine's to list --
+        // not this method's. `java.util.ArrayList.` must never come back as a package listing.
+        int lastDot = chain.lastIndexOf('.');
+        String last = lastDot < 0 ? chain : chain.substring(lastDot + 1);
+        if (last.isEmpty() || Character.isUpperCase(last.charAt(0))) return null;
+        return chain;
     }
 
     /**

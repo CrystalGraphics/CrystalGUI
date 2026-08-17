@@ -5,6 +5,7 @@ import com.crystalgui.language.engine.EngineSource;
 import com.crystalgui.language.engine.bridge.Analysis;
 import com.crystalgui.language.engine.bridge.LiveScopeSnapshot;
 import com.crystalgui.language.java.JavaLanguage;
+import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.text.lang.SymbolKind;
 import com.crystalgui.text.lang.TypeRef;
@@ -353,6 +354,54 @@ public class JsReviewFixesTest {
         assertNotNull(declared.signature());
         assertTrue("a `let` renders as `var`: " + declared.signature().text(),
                 declared.signature().text().startsWith("let "));
+    }
+
+    // ── R-20 · the matrix rows that claimed more than shipped ──────────────────────
+
+    /** A branch whose condition cannot vary is a warning. */
+    @Test
+    public void aConstantConditionIsAWarning() {
+        String source = "function f() {\n  if (false) { print('never'); }\n}\n";
+        boolean warned = false;
+        for (Diagnostic problem : analyse(source).diagnostics()) {
+            warned |= problem.message().contains("constant");
+        }
+        assertTrue("a dead branch is not reported at all", warned);
+    }
+
+    /** ...and `while (true)` deliberately is not, because that is how a forever loop is spelled. */
+    @Test
+    public void aDeliberateForeverLoopIsNotAWarning() {
+        String source = "function f() {\n  while (true) { break; }\n}\n";
+        for (Diagnostic problem : analyse(source).diagnostics()) {
+            assertFalse("the idiomatic forever loop is marked: " + problem.message(),
+                    problem.message().contains("constant"));
+        }
+    }
+
+    /** A package chain is drawn as packages and a type — a distinction no grammar can make. */
+    @Test
+    public void aPackageChainIsColouredAsPackagesAndAType() {
+        String source = "var list = new java.util.ArrayList();\n";
+        boolean module = false;
+        boolean type = false;
+        for (SyntaxToken token : analyse(source).semanticTokens()) {
+            String text = source.substring(token.start(), token.end());
+            module |= "module".equals(token.name()) && "util".equals(text);
+            type |= "type".equals(token.name()) && "ArrayList".equals(text);
+        }
+        assertTrue("a package segment is not drawn as one", module);
+        assertTrue("the type at the end of the chain is not drawn as one", type);
+    }
+
+    /** `list.add(|)` knows what belongs there, which is what an expected type is actually for. */
+    @Test
+    public void aJavaCalleeSaysWhatTypeBelongsInItsArgument() {
+        Assume.assumeTrue(JavaLanguage.isAvailable());
+        String source = "var list = new java.util.ArrayList();\nlist.add(x);\n";
+        TypeRef expected = analyse(source).expectedTypeAt(source.indexOf("(x)") + 1);
+        assertNotNull("a Java callee's parameter type is still unanswered", expected);
+        assertEquals("java.lang.Object", expected.qualifiedName());
     }
 
     // ── R-11 · a nested class, in the spelling a script writes ───────────────────────────────────
