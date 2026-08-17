@@ -204,6 +204,28 @@ public abstract class FixFixture {
     }
 
     /**
+     * <b>Applying it leaves the file no more broken than it was</b> — the oracle for an intention.
+     *
+     * <p>{@link #assertResolves} is the same idea for a fix and cannot stand in here: an intention answers
+     * no problem, so there is nothing for its error count to fall <em>from</em>. What is left is the half
+     * that matters most — a conversion offered on code that compiles must produce code that compiles.</p>
+     *
+     * <p>Both of the errors this would have caught were shapes nobody would have written a fixture for, and
+     * both were found by a probe: two branches of a chain each declaring {@code int a} (legal as two
+     * {@code if} bodies, a duplicate as one switch scope), and a chain on a {@code long} (a comparison the
+     * chain does fine and {@code switch} cannot take at all). Neither changes the text in a way an
+     * expected-output test would have looked twice at.</p>
+     */
+    protected static void assertSameSemantics(String source, String needle, String id) {
+        String after = applied(source, require(source, needle, id));
+        int was = errors(diagnosticsOf(source));
+        List<Diagnostic> now = diagnosticsOf(after);
+        assertTrue("applying <" + id + "> introduced errors — " + was + " before, " + errors(now)
+                        + " after:\n" + codesOf(now) + "\n" + after,
+                errors(now) <= was);
+    }
+
+    /**
      * <b>The fix is offered over the range the diagnostic marks</b> — for any family whose mark is not
      * ECJ's own.
      *

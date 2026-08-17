@@ -104,12 +104,12 @@ final class SwitchIntentions {
             String indent = Indent.at(source, chain.getStartPosition());
             StringBuilder built = new StringBuilder("switch (").append(parsed.subject).append(") {\n");
             for (Branch branch : parsed.branches) {
-                built.append(indent).append("    case ").append(branch.label).append(":\n");
-                appendBody(built, branch.body, source, indent + "        ");
+                built.append(indent).append("    case ").append(branch.label).append(':');
+                appendBody(built, branch.body, source, indent + "    ");
             }
             if (parsed.otherwise != null) {
-                built.append(indent).append("    default:\n");
-                appendBody(built, parsed.otherwise, source, indent + "        ");
+                built.append(indent).append("    default:");
+                appendBody(built, parsed.otherwise, source, indent + "    ");
             }
             built.append(indent).append('}');
 
@@ -145,14 +145,17 @@ final class SwitchIntentions {
          * <p>Only a declaration <b>directly</b> in the branch matters. One inside a nested {@code if} or
          * block is already scoped by that, and wrapping for it would put braces around most branches.</p>
          */
-        private static void appendBody(StringBuilder built, Statement body, String source, String indent) {
+        private static void appendBody(StringBuilder built, Statement body, String source, String label) {
             boolean scoped = declaresAVariable(body);
-            String inner = scoped ? indent + "    " : indent;
-            if (scoped) built.append(indent).append("{\n");
+            String inner = label + "    ";
+            // The brace opens on the LABEL'S OWN LINE, which is why this writes the newline the caller
+            // would otherwise have written: `case 1: {` costs no line, and a case that needs a scope is
+            // already the longest branch in the switch.
+            built.append(scoped ? " {\n" : "\n");
             String text = interiorOf(body, source);
             if (!text.isEmpty()) built.append(Indent.reindent(text, inner)).append('\n');
             if (!leaves(body)) built.append(inner).append("break;\n");
-            if (scoped) built.append(indent).append("}\n");
+            if (scoped) built.append(label).append("}\n");
         }
 
         /** The branch's statements, without the braces the {@code if} wrote around them. */

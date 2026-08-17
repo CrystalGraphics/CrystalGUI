@@ -595,15 +595,13 @@ final class LambdaCorrections {
 
             String body = bodyOf(lambda, source, isVoid);
             if (body == null) return;
-            String indent = indentAt(source, statementStartOf(lambda, source));
+            String indent = Indent.at(source, statementStartOf(lambda, source));
             StringBuilder built = new StringBuilder("new ").append(type).append("() {\n")
                     .append(indent).append("    @Override\n")
                     .append(indent).append("    public ").append(isVoid ? "void" : returns)
                     .append(' ').append(method.getName()).append('(')
                     .append(String.join(", ", parameters)).append(") {\n");
-            for (String line : body.split("\n", -1)) {
-                built.append(indent).append("        ").append(line.trim()).append('\n');
-            }
+            if (!body.isEmpty()) built.append(Indent.reindent(body, indent + "        ")).append('\n');
             built.append(indent).append("    }\n").append(indent).append('}');
 
             List<Change> changes = new ArrayList<>();
@@ -654,16 +652,6 @@ final class LambdaCorrections {
                 if (walk instanceof Statement) return walk.getStartPosition();
             }
             return lambda.getStartPosition();
-        }
-
-        private static String indentAt(String source, int position) {
-            int lineStart = source.lastIndexOf('\n', Math.max(0, position - 1)) + 1;
-            int at = lineStart;
-            while (at < source.length() && at < position
-                    && (source.charAt(at) == ' ' || source.charAt(at) == '\t')) {
-                at++;
-            }
-            return source.substring(lineStart, at);
         }
     }
 }
