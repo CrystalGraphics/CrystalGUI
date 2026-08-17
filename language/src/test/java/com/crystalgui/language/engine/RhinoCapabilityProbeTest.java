@@ -263,12 +263,22 @@ public class RhinoCapabilityProbeTest {
                 requireMethod(function, "getFunctionName");
 
                 require(loader, "org.mozilla.javascript.ast.VariableDeclaration");
-                require(loader, "org.mozilla.javascript.ast.PropertyGet");
-                require(loader, "org.mozilla.javascript.ast.FunctionCall");
                 require(loader, "org.mozilla.javascript.ast.ObjectLiteral");
                 require(loader, "org.mozilla.javascript.ast.NewExpression");
                 require(loader, "org.mozilla.javascript.ast.StringLiteral");
                 require(loader, "org.mozilla.javascript.ast.NodeVisitor");
+
+                // THE ACCESSORS THE SCOPE WALK CALLS, resolved through `getMethod` so the hierarchy is
+                // walked -- which is the whole point. See the test below for what this caught.
+                requireMethod(require(loader, "org.mozilla.javascript.ast.PropertyGet"), "getTarget");
+                requireMethod(require(loader, "org.mozilla.javascript.ast.PropertyGet"), "getProperty");
+                requireMethod(require(loader, "org.mozilla.javascript.ast.Assignment"), "getLeft");
+                Class<?> unary = require(loader, "org.mozilla.javascript.ast.UnaryExpression");
+                requireMethod(unary, "getOperator");
+                requireMethod(require(loader, "org.mozilla.javascript.ast.FunctionCall"), "getTarget");
+                requireMethod(symbol, "getNode");
+                requireMethod(scope, "getSymbol", String.class);
+                requireMethod(node, "getParent");
 
                 // Interop: what the resolver unwraps, and what the remap seam will patch.
                 Class<?> javaObject = require(loader, "org.mozilla.javascript.NativeJavaObject");
@@ -293,6 +303,57 @@ public class RhinoCapabilityProbeTest {
                 loader.close();
             }
         }
+    }
+
+    /**
+     * <b>The bands are not source-compatible everywhere, and this is the one place they are not.</b>
+     *
+     * <p>{@code ObjectProperty} extends {@code InfixExpression} on band 8 — so it has
+     * {@code getLeft()}/{@code getRight()} — and extends {@code AbstractObjectProperty} on 1.9.1, where
+     * it has {@code getKey()}/{@code getValue()} instead. The adapter must therefore use <em>neither</em>
+     * pair, and asks by position instead.</p>
+     *
+     * <h4>Why the compile-against-the-oldest-band rule did not catch it</h4>
+     *
+     * <p>That rule guarantees an API <b>exists</b> in band 8, which is what stops the adapter using
+     * something newer. It says nothing about whether the call <b>resolves on a newer band</b>: javac
+     * records the static type as the invocation's owner, so {@code ObjectProperty.getLeft()} compiled
+     * perfectly against 1.7.15.1 and died at runtime with {@code NoSuchMethodError} on bands 11 and 17
+     * only. A developer on Java 8 would never see it — the same failure shape as the regular-expression
+     * one, and the second time this milestone has met it.</p>
+     *
+     * <p>So this test asserts the divergence rather than the compatibility: if a future Rhino restores
+     * {@code getLeft} on both, this fails and the comment in {@code RhinoScopes} can be retired. Pinning
+     * it the other way round — asserting both bands agree — is what the accessor list above does for
+     * every method the adapter <em>does</em> call.</p>
+     */
+    @Test
+    public void objectPropertyIsTheOneTypeTheBandsDisagreeAbout() throws IOException {
+        boolean anyHasLeft = false;
+        boolean anyLacksLeft = false;
+        for (EngineBand band : EngineBand.values()) {
+            EngineClassLoader loader = loaderFor(band);
+            try {
+                Class<?> property = require(loader, "org.mozilla.javascript.ast.ObjectProperty");
+                boolean hasLeft = true;
+                try {
+                    property.getMethod("getLeft");
+                } catch (NoSuchMethodException absent) {
+                    hasLeft = false;
+                }
+                anyHasLeft |= hasLeft;
+                anyLacksLeft |= !hasLeft;
+                System.out.println(band + ": ObjectProperty.getLeft is "
+                        + (hasLeft ? "present" : "ABSENT") + " (super "
+                        + property.getSuperclass().getSimpleName() + ")");
+            } finally {
+                loader.close();
+            }
+        }
+        assertTrue("no band has ObjectProperty.getLeft — the divergence this documents is gone in the "
+                + "other direction, and RhinoScopes' comment needs revising", anyHasLeft);
+        assertTrue("every band now has ObjectProperty.getLeft — the divergence is over and RhinoScopes "
+                + "may use it again", anyLacksLeft);
     }
 
     /**
