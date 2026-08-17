@@ -88,6 +88,17 @@ public final class TypeOperations {
      * <p>Inside leading indentation it takes a whole level, so a file indented four spaces does not need
      * four presses per level. Anywhere else it is one character — including inside a line's text, where
      * eating four would be alarming.</p>
+     *
+     * <h3>In VISUAL columns, which is the whole of what was wrong with it</h3>
+     *
+     * <p>It counted characters. On a tab-indented file two tabs are two <em>characters</em>, so
+     * {@code 2 % 4} said "take two" and one press deleted the entire indent and landed the caret at column
+     * zero. Counted the way the line is drawn, two tabs are eight columns, the previous stop is four, and
+     * one press takes one tab — which is what every editor does and what the tab was for.</p>
+     *
+     * <p>Reaching column zero then falls through to the line join above, so backspacing out of an indent
+     * ends at the previous line rather than sitting at the left margin. Both halves were reported as one
+     * bug.</p>
      */
     public static int backspaceFrom(Rope document, int head, int indentWidth) {
         int row = document.offsetToPoint(head).row();
@@ -97,8 +108,149 @@ public final class TypeOperations {
 
         String text = document.line(row);
         if (!text.substring(0, column).isBlank()) return head - 1;
-        int back = column % Math.max(1, indentWidth);
-        if (back == 0) back = Math.max(1, indentWidth);
-        return Math.max(lineStart, head - back);
+
+        int stops = Math.max(1, indentWidth);
+        CursorColumns.Line drawn = CursorColumns.expand(text, stops);
+        int visible = drawn.displayIndexOf(column);
+        // THE PREVIOUS STOP, and never a whole level from a column that is not on one: an indent of six
+        // spaces backspaces to four before it backspaces to zero.
+        int wanted = visible % stops == 0 ? visible - stops : visible - (visible % stops);
+        if (wanted < 0) wanted = 0;
+        int target = drawn.columnOf(wanted);
+        // A tab is one character occupying several columns, so landing INSIDE one means taking it whole.
+        if (target >= column) target = column - 1;
+        return Math.max(lineStart, lineStart + target);
+    }
+
+    /**
+     * What Enter inserts at {@code at}, and where the caret ends up.
+     *
+     * <h3>The two characters AROUND the caret decide it, not the line</h3>
+     *
+     * <p>Ported from Monaco's {@code _enter} and its {@code IndentAction}. The rule this replaces asked
+     * whether the line's last character was an opener, which is a different question and answers wrongly
+     * for the shape people press Enter in most: with the caret between {@code &#123;} and {@code &#125;}
+     * the line <em>ends</em> in the closer, so nothing indented and the closing brace came along onto the
+     * new line beside the caret. Asking what is immediately before and immediately after gives the three
+     * answers Monaco names:</p>
+     *
+     * <ul>
+     *   <li><b>IndentOutdent</b> — an opener behind and its own closer ahead. Two lines: the caret's, one
+     *       level in, and the closer's, back out. This is the one that was missing.</li>
+     *   <li><b>Indent</b> — an opener behind and something else ahead. One line, one level in.</li>
+     *   <li><b>None</b> — carry the indentation across and nothing more.</li>
+     * </ul>
+     *
+     * <p>The pairs come from the {@link Language}, so a language that spells its blocks differently gets
+     * this for free and no bracket is written down here.</p>
+     */
+    public static Enter enterAt(Rope document, int at, IndentStyle style, Language language) {
+        int row = document.offsetToPoint(at).row();
+        int lineStart = document.lineStartOffset(row);
+        String line = document.line(row);
+        int column = Math.max(0, Math.min(at - lineStart, line.length()));
+
+        int indent = 0;
+        while (indent < line.length() && (line.charAt(indent) == ' ' || line.charAt(indent) == '\t')) {
+            indent++;
+        }
+        // NEVER PAST THE CARET. Splitting a line inside its own indentation carries only what is behind
+        // the caret, or the new line would be indented by whitespace still sitting on the old one.
+        String carried = line.substring(0, Math.min(indent, column));
+
+        char before = beforeCaret(line, column);
+        char after = column < line.length() ? line.charAt(column) : '\0';
+        Character closer = indentCloserFor(language, before);
+
+        if (closer != null && after == closer) {
+            String head = "\n" + carried + style.oneLevel();
+            return new Enter(head + "\n" + carried, at + head.length());
+        }
+        if (closer != null) {
+            String inserted = "\n" + carried + style.oneLevel();
+            return new Enter(inserted, at + inserted.length());
+        }
+        String inserted = "\n" + carried;
+        return new Enter(inserted, at + inserted.length());
+    }
+
+    /**
+     * The closer indentation should answer to — the language's, or the universal three when it has none.
+     *
+     * <p><b>The fallback is deliberate and is not what {@code shouldAutoClose} does.</b> Auto-closing puts
+     * a character into the document and must never guess; indenting after an opener puts in whitespace,
+     * and every brace-shaped text wants it whether or not anybody has told the editor what language it is.
+     * {@code Language.PLAIN} declares no pairs, so without this a plain-text editor would silently stop
+     * indenting after {@code &#123;} — a behaviour it has always had, removed as a side effect of making
+     * the rule language-driven. A language that <em>does</em> declare pairs overrides it entirely, so a
+     * Lisp with only parentheses correctly ignores a brace.</p>
+     */
+    private static Character indentCloserFor(Language language, char opener) {
+        if (opener == '\0') return null;
+        if (!language.brackets().isEmpty()) return language.closerFor(opener);
+        switch (opener) {
+            case '{': return '}';
+            case '(': return ')';
+            case '[': return ']';
+            default:  return null;
+        }
+    }
+
+    /** The last non-space character before the caret on this line, or {@code '\0'}. */
+    private static char beforeCaret(String line, int column) {
+        for (int at = Math.min(column, line.length()) - 1; at >= 0; at--) {
+            char c = line.charAt(at);
+            if (c != ' ' && c != '\t') return c;
+        }
+        return '\0';
+    }
+
+    /**
+     * What Tab inserts at {@code at} — <b>to the next stop</b>, not a fixed number of spaces.
+     *
+     * <p>A tab from column six with a width of four inserts two spaces and lands on eight; the version
+     * this replaces inserted four and landed on ten, which is not a stop and is why a Tab-indented block
+     * drifted. In tabs mode it is one tab, which is a stop by construction.</p>
+     */
+    public static String tabAt(Rope document, int at, IndentStyle style) {
+        if (!style.insertSpaces()) return "\t";
+        int row = document.offsetToPoint(at).row();
+        int column = at - document.lineStartOffset(row);
+        int stops = Math.max(1, style.width());
+        int visible = CursorColumns.visibleColumn(document.line(row), Math.max(0, column), stops);
+        return spaces(stops - (visible % stops));
+    }
+
+    private static String spaces(int howMany) {
+        StringBuilder out = new StringBuilder(Math.max(0, howMany));
+        for (int i = 0; i < howMany; i++) out.append(' ');
+        return out.toString();
+    }
+
+    /** What Enter produces: the text to insert, and the absolute offset the caret lands on. */
+    public record Enter(String text, int caret) {
+    }
+
+    /**
+     * How a document indents — what one level is, and how wide it is drawn.
+     *
+     * <p>Two fields because they are two questions: a file indented with tabs still needs a width to know
+     * where the stops are, and one indented with spaces needs the width to know how many. Keeping them
+     * together is what stops a caller answering one and assuming the other.</p>
+     */
+    public record IndentStyle(boolean insertSpaces, int width) {
+
+        public static IndentStyle spaces(int width) {
+            return new IndentStyle(true, width);
+        }
+
+        public static IndentStyle tabs(int width) {
+            return new IndentStyle(false, width);
+        }
+
+        /** The text of one level. */
+        public String oneLevel() {
+            return insertSpaces ? TypeOperations.spaces(Math.max(1, width)) : "\t";
+        }
     }
 }

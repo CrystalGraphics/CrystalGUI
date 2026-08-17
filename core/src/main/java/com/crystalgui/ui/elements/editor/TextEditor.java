@@ -369,6 +369,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /** One indent level, in spaces. */
     private int indentWidth = 4;
 
+    /** Whether one level is that many spaces, or a tab. @see #setInsertSpaces */
+    private boolean insertSpaces = true;
+
     /**
      * What the editor needs to know about the language in order to EDIT it — comment tokens, bracket
      * pairs, indent triggers. Separate from the tokenizer, which only knows how to colour it: a
@@ -1357,7 +1360,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             case CgKeyCodes.KEY_TAB:
                 if (shift) outdentSelectedLines();
                 else if (selections.hasSelection()) indentSelectedLines();
-                else insertAtCaret(spaces(indentWidth));
+                else insertTabAtCarets();
                 return true;
             default:
                 return false;
@@ -2962,6 +2965,27 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return indentWidth;
     }
 
+    /**
+     * Whether one indent level is spaces or a tab.
+     *
+     * <p>Separate from {@link #setIndentWidth} because a tab-indented file still needs a width — it is
+     * where the stops are, and Backspace and Tab both ask. VS Code's pair is {@code insertSpaces} and
+     * {@code tabSize} for exactly this reason.</p>
+     */
+    public TextEditor setInsertSpaces(boolean spaces) {
+        this.insertSpaces = spaces;
+        return this;
+    }
+
+    public boolean isInsertSpaces() {
+        return insertSpaces;
+    }
+
+    /** The pair, as the cursor operations want it. */
+    private TypeOperations.IndentStyle indentStyle() {
+        return new TypeOperations.IndentStyle(insertSpaces, indentWidth);
+    }
+
     public TextEditor setLanguage(Language newLanguage) {
         this.language = newLanguage == null ? Language.PLAIN : newLanguage;
         return this;
@@ -3015,19 +3039,42 @@ public class TextEditor extends ScrollerView implements UndoScope {
      */
     private void insertNewlineWithIndent() {
         List<Change> changes = new ArrayList<>(selections.count());
+        List<Integer> carets = new ArrayList<>(selections.count());
+        int shift = 0;
         for (Selection selection : selections.all()) {
-            int row = buffer.offsetToPoint(selection.start()).row();
-            String line = buffer.line(row);
-            int indent = 0;
-            while (indent < line.length() && (line.charAt(indent) == ' ' || line.charAt(indent) == '\t')) {
-                indent++;
-            }
-            String carried = line.substring(0, Math.min(indent, Math.max(0,
-                    selection.start() - buffer.document().lineStartOffset(row))));
-            String trimmed = line.trim();
-            boolean opens = trimmed.endsWith("{") || trimmed.endsWith("(") || trimmed.endsWith("[");
-            String insert = "\n" + carried + (opens ? spaces(indentWidth) : "");
-            changes.add(new Change(selection.start(), selection.end(), insert));
+            TypeOperations.Enter enter = TypeOperations.enterAt(
+                    buffer.document(), selection.start(), indentStyle(), language);
+            changes.add(new Change(selection.start(), selection.end(), enter.text()));
+            // EACH CARET IS SHIFTED BY THE EDITS BEFORE IT. `enterAt` answers against the document as it
+            // stands, and the changes are applied together, so the second caret's offset has to carry the
+            // first change's growth.
+            carets.add(enter.caret() + shift);
+            shift += enter.text().length() - (selection.end() - selection.start());
+        }
+        applyEdit(changes);
+
+        // AND THE CARET IS NOT ALWAYS AT THE END OF WHAT WAS INSERTED, which is why this cannot leave the
+        // placement to `mapThrough`: pressing Enter between a brace pair writes TWO lines and belongs on
+        // the first of them. Mapping an insertion puts it after both.
+        List<Selection> placed = new ArrayList<>(carets.size());
+        for (int caret : carets) placed.add(Selection.caret(clampToDocument(caret)));
+        selections.setAll(placed, selections.primaryIndex());
+        afterSelectionChange();
+        ensureCaretVisible();
+    }
+
+    /**
+     * Tab with no selection — <b>to the next stop</b>, computed per caret.
+     *
+     * <p>Inserting {@code indentWidth} spaces regardless of where the caret stood is what this replaces:
+     * from column six with a width of four it produced column ten, which is not a stop, so a block indented
+     * by Tab drifted one character further out per press.</p>
+     */
+    private void insertTabAtCarets() {
+        List<Change> changes = new ArrayList<>(selections.count());
+        for (Selection selection : selections.all()) {
+            changes.add(new Change(selection.start(), selection.end(),
+                    TypeOperations.tabAt(buffer.document(), selection.start(), indentStyle())));
         }
         applyEdit(changes);
     }
