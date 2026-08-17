@@ -46,7 +46,7 @@ final class Negation {
         }
         if (condition instanceof PrefixExpression
                 && ((PrefixExpression) condition).getOperator() == PrefixExpression.Operator.NOT) {
-            return textOf(((PrefixExpression) condition).getOperand(), source);
+            return FixContext.text(((PrefixExpression) condition).getOperand(), source);
         }
         if (condition instanceof BooleanLiteral) {
             return ((BooleanLiteral) condition).booleanValue() ? "false" : "true";
@@ -57,8 +57,8 @@ final class Negation {
             // ONLY A TWO-OPERAND COMPARISON. `a < b < c` does not parse, but `a + b + c` gives one infix
             // node with an extended operand list, and flipping an operator there would rewrite a chain.
             if (flipped != null && !infix.hasExtendedOperands()) {
-                return textOf(infix.getLeftOperand(), source) + " " + flipped.toString() + " "
-                        + textOf(infix.getRightOperand(), source);
+                return FixContext.text(infix.getLeftOperand(), source) + " " + flipped.toString() + " "
+                        + FixContext.text(infix.getRightOperand(), source);
             }
         }
         return "!" + parenthesised(condition, source);
@@ -83,18 +83,9 @@ final class Negation {
      * what makes getting this wrong expensive.</p>
      */
     private static String parenthesised(Expression expression, String source) {
-        String text = textOf(expression, source);
+        String text = FixContext.text(expression, source);
         return Precedence.bindsTighterThanUnary(expression) ? text : "(" + text + ")";
     }
 
-    /**
-     * What this node's own characters are — never a regenerated form.
-     *
-     * <p>Takes any {@code ASTNode} rather than an {@code Expression}: it reads a range, and every intention
-     * that carries a body across untouched wants it for statements too. Widened at the third caller.</p>
-     */
-    static String textOf(ASTNode node, String source) {
-        int start = node.getStartPosition();
-        return source.substring(start, start + node.getLength());
-    }
+
 }

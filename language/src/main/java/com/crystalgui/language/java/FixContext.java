@@ -230,6 +230,41 @@ final class FixContext {
         return ChangeSet.of(source.length(), changes);
     }
 
+    /**
+     * Direct changes and {@code imports}' insertions as one edit — the text-edit twin of
+     * {@link #changesFrom(ASTRewrite, ImportPlan)}.
+     *
+     * <p>Four families had written this merge out by hand, because the rewriter overload was the only one
+     * that existed and half the corrections here deliberately do not use a rewriter — a text edit keeps
+     * the author's formatting and comments, which is the whole argument in {@code IntentionCorrections}.
+     * The sort matters and is easy to leave out: {@code ChangeSet.of} refuses an unordered list, so
+     * forgetting it turns a working fix into a null edit and no offer at all.</p>
+     */
+    ChangeSet changeSet(List<Change> changes, ImportPlan imports) {
+        List<Change> extra = imports.changes();
+        if (extra.isEmpty()) return changeSet(changes);
+        List<Change> all = new ArrayList<>(changes);
+        all.addAll(extra);
+        all.sort(Comparator.comparingInt(Change::from));
+        return ChangeSet.of(source.length(), all);
+    }
+
+    /** The characters {@code node} actually occupies — never a regenerated form. */
+    String text(ASTNode node) {
+        return text(node, source);
+    }
+
+    /**
+     * The same, for a helper that was handed the source rather than the context.
+     *
+     * <p>Static so that the one implementation serves both, rather than a family keeping a private copy
+     * for its own static helpers — which is how {@code Negation}, of all places, came to own the
+     * engine's only {@code textOf} and how a second one grew in {@code IntentionCorrections} beside it.</p>
+     */
+    static String text(ASTNode node, String source) {
+        return source.substring(node.getStartPosition(), node.getStartPosition() + node.getLength());
+    }
+
     // ── Finding the node ────────────────────────────────────────────────────────────────────────
 
     /**

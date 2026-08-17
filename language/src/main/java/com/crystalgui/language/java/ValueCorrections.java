@@ -202,9 +202,7 @@ final class ValueCorrections {
 
             List<Change> changes = new ArrayList<>();
             changes.add(new Change(name.getStartPosition(), name.getStartPosition(), written + " "));
-            changes.addAll(imports.changes());
-            changes.sort(Comparator.comparingInt(Change::from));
-            ChangeSet edit = context.changeSet(changes);
+            ChangeSet edit = context.changeSet(changes, imports);
             if (edit == null) return;
             out.add(context.preferredFix(CREATE_LOCAL,
                     "Create local variable '" + name.getIdentifier() + "'", edit));

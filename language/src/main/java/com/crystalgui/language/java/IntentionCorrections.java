@@ -83,7 +83,7 @@ final class IntentionCorrections {
         }
 
         @Override public int[] problems() {
-            return NONE;
+            return Correction.NONE;
         }
 
         @Override public void contribute(FixContext context, IProblem problem, List<CodeAction> out) {
@@ -141,7 +141,7 @@ final class IntentionCorrections {
         }
 
         @Override public int[] problems() {
-            return NONE;
+            return Correction.NONE;
         }
 
         @Override public void contribute(FixContext context, IProblem problem, List<CodeAction> out) {
@@ -198,7 +198,7 @@ final class IntentionCorrections {
         }
 
         @Override public int[] problems() {
-            return NONE;
+            return Correction.NONE;
         }
 
         @Override public void contribute(FixContext context, IProblem problem, List<CodeAction> out) {
@@ -256,7 +256,7 @@ final class IntentionCorrections {
         }
 
         @Override public int[] problems() {
-            return NONE;
+            return Correction.NONE;
         }
 
         @Override public void contribute(FixContext context, IProblem problem, List<CodeAction> out) {
@@ -312,7 +312,6 @@ final class IntentionCorrections {
     // ── Shared ──────────────────────────────────────────────────────────────────────────────────
 
     /** An intention answers for no problem. Named so the four declarations say what they mean. */
-    private static final int[] NONE = new int[0];
 
     /** A body that braces could go around or come off, and where its header starts. */
     private static final class Branch {
@@ -395,7 +394,7 @@ final class IntentionCorrections {
         }
 
         @Override public int[] problems() {
-            return NONE;
+            return Correction.NONE;
         }
 
         @Override public void contribute(FixContext context, IProblem problem, List<CodeAction> out) {
@@ -410,9 +409,9 @@ final class IntentionCorrections {
             changes.add(new Change(condition.getStartPosition(),
                     condition.getStartPosition() + condition.getLength(), Negation.of(condition, source)));
             changes.add(new Change(then.getStartPosition(), then.getStartPosition() + then.getLength(),
-                    textOf(otherwise, source)));
+                    FixContext.text(otherwise, source)));
             changes.add(new Change(otherwise.getStartPosition(),
-                    otherwise.getStartPosition() + otherwise.getLength(), textOf(then, source)));
+                    otherwise.getStartPosition() + otherwise.getLength(), FixContext.text(then, source)));
             changes.sort(Comparator.comparingInt(Change::from));
 
             ChangeSet edit = context.changeSet(changes);
@@ -448,7 +447,7 @@ final class IntentionCorrections {
         }
 
         @Override public int[] problems() {
-            return NONE;
+            return Correction.NONE;
         }
 
         @Override public void contribute(FixContext context, IProblem problem, List<CodeAction> out) {
@@ -503,9 +502,5 @@ final class IntentionCorrections {
         return at;
     }
 
-    /** What a node's own characters are — never a regenerated form. */
-    private static String textOf(Statement statement, String source) {
-        int start = statement.getStartPosition();
-        return source.substring(start, start + statement.getLength());
-    }
+
 }

@@ -70,7 +70,7 @@ final class LoopIntentions {
         }
 
         @Override public int[] problems() {
-            return new int[0];
+            return Correction.NONE;
         }
 
         @Override public void contribute(FixContext context, IProblem problem, List<CodeAction> out) {
@@ -105,10 +105,8 @@ final class LoopIntentions {
                 changes.add(new Change(fetch.getStartPosition(),
                         fetch.getStartPosition() + fetch.getLength(), name));
             }
-            changes.addAll(imports.changes());
-            changes.sort(Comparator.comparingInt(Change::from));
 
-            ChangeSet edit = context.changeSet(changes);
+            ChangeSet edit = context.changeSet(changes, imports);
             if (edit == null) return;
             out.add(context.preferredIntention(ENHANCED_FOR, "Convert to enhanced for",
                     "Replaces the index with the element it was only ever used to fetch.", edit));

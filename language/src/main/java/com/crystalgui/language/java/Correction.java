@@ -31,6 +31,16 @@ import java.util.List;
  */
 interface Correction {
 
+    /**
+     * What {@link #problems()} returns for an intention — <b>the</b> empty array, not one per call.
+     *
+     * <p>Eight spellings of {@code new int[0]} had accumulated, two of them private constants named
+     * {@code NONE} in a family file. Sharing it is safe in the way nothing else about a mutable array
+     * would be: an array of length zero has nothing to write into, so the usual objection does not
+     * arise.</p>
+     */
+    int[] NONE = new int[0];
+
     /** Stable, dotted, never displayed — {@code "java.unused.removeImport"}. */
     String id();
 
