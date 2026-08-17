@@ -56,14 +56,6 @@ final class RhinoThread {
         }
     }
 
-    /** The same, for a body with nothing to return. */
-    static void run(Runnable body) {
-        with(() -> {
-            body.run();
-            return null;
-        });
-    }
-
     /** A body that may throw anything — a script run, whose failure is the script's to report. */
     interface ThrowingSupplier<T> {
         T get() throws Throwable;

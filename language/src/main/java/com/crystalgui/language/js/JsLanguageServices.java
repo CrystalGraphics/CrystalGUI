@@ -8,6 +8,7 @@ import com.crystalgui.language.engine.bridge.JsSourceAnalyzer;
 import com.crystalgui.language.engine.bridge.CodeActionContext;
 import com.crystalgui.language.engine.bridge.LiveScopeSnapshot;
 import com.crystalgui.language.java.TypeIndex;
+import com.crystalgui.language.run.ScriptBindings;
 import com.crystalgui.language.run.ScriptPolicy;
 import com.crystalgui.text.lang.CodeAction;
 import com.crystalgui.text.lang.CodeActionProvider;
@@ -18,6 +19,7 @@ import com.crystalgui.text.TextBuffer;
 import javax.annotation.Nullable;
 
 import java.util.List;
+import java.util.function.Supplier;
 
 /**
  * The JavaScript engine, attached to one document.
@@ -108,18 +110,23 @@ public final class JsLanguageServices extends AnalysedLanguageServices {
     public JsLanguageServices(TextBuffer buffer, JsSourceAnalyzer analyzer,
                               @Nullable JobScheduler scheduler, String sourceName,
                               @Nullable Resource file, @Nullable TypeIndex types,
-                              java.util.function.Supplier<ScriptPolicy> policy) {
+                              Supplier<ScriptPolicy> policy) {
         super(ID, buffer, scheduler, file);
         this.analyzer = analyzer;
         this.sourceName = sourceName == null || sourceName.isEmpty() ? "script.js" : sourceName;
         this.completion = new JsCompletionProvider(buffer, this::current, this::liveScope,
-                analyzer::keywords, types, policy == null ? ScriptPolicy::allowAll : policy,
-                this::analyseText);
+                analyzer::keywords, analyzer::globals, types,
+                policy == null ? ScriptPolicy::allowAll : policy, this::analyseText);
         start();
     }
 
     @Override
     protected Analysis analyse(String source, long version) {
+        // WHAT THE HOST HAS BOUND, read fresh. A contributor can register at any time — a mod loading, a
+        // world opening — and the analyser is process-wide, so the alternative to reading it here is an
+        // editor that colours `world` as a mistake until it is reopened. The registry is a copy-on-write
+        // list of one or two contributors, so this is cheaper than the parse it precedes.
+        analyzer.useHostBindings(ScriptBindings.types());
         return analyzer.analyze(sourceName, source, version, liveScope);
     }
 

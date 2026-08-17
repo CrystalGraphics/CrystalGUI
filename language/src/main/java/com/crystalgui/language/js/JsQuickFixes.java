@@ -1,6 +1,6 @@
 package com.crystalgui.language.js;
 
-import com.crystalgui.language.java.SimilarNames;
+import com.crystalgui.text.SimilarNames;
 import com.crystalgui.text.ChangeSet;
 import com.crystalgui.text.lang.CodeAction;
 import com.crystalgui.text.lang.CodeActionKind;
@@ -169,6 +169,10 @@ final class JsQuickFixes {
             candidates.add(declared.name);
         }
         candidates.addAll(resolution.liveNames());
+        // AND THE ENGINE'S OWN NAMES. `consle.log` is the commonest typo in the language and was offered
+        // nothing at all, because the candidates were declarations and live globals only -- so the one
+        // suggestion a JavaScript author most needs was the one case this could not make.
+        candidates.addAll(RhinoGlobals.names());
         for (String similar : SimilarNames.rank(typed, candidates)) {
             actions.add(new CodeAction(ID + "rename-to-" + similar, "Change to '" + similar + "'",
                     CodeActionKind.QUICK_FIX, edits.replaceNode(free, similar), null,
@@ -348,6 +352,9 @@ final class JsQuickFixes {
             // package root all resolve to nothing in the scopes and to something at run time -- offering
             // to rename or declare one would be offering to break working code.
             if (RhinoGlobals.isBuiltin(name) || resolution.liveNames().contains(name)) continue;
+            // NOR IS A HOST BINDING. `world` is put in scope by the application; offering to declare it
+            // as a local shadows the thing the script exists to reach.
+            if (resolution.isHostBinding(name)) continue;
             if (RhinoInference.javaNameOf(free.getParent(), scopes::declaresAnywhere) != null) continue;
             return free;
         }

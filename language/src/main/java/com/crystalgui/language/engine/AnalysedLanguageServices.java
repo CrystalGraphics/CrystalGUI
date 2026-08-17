@@ -139,7 +139,6 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
         this.analysisKey = JobKey.of(this, id + "-analysis");
         this.retainedLane = id + "-retained-warnings";
         this.runtimeLane = id + "-runtime-problems";
-        if (file != null) ATTACHED.put(file, this);
     }
 
     // ── Which services a file has ───────────────────────────────────────────────────────────────
@@ -171,6 +170,11 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
     protected final void start() {
         if (started || closed) return;
         started = true;
+        // FINDABLE ONLY ONCE IT IS BUILT. Registering from the constructor publishes `this` before the
+        // subclass's own constructor body has run, so a runtime thread calling `attachedTo(file)` in that
+        // window gets a half-built object -- and this is the one class whose whole purpose is to be found
+        // from another thread. `start()` is the subclass's last line, by contract.
+        if (file != null) ATTACHED.put(file, this);
         bufferSubscription = buffer.onChanged.connect(change -> schedule());
         analyzeNow();
     }
@@ -325,13 +329,46 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
      * problems with it when it lands. Nothing is lost; nothing is announced against the wrong text.</p>
      */
     public final void reportRuntimeProblems(List<Diagnostic> problems) {
+        reportRuntimeProblems(problems, null);
+    }
+
+    /**
+     * @param sourceAsRun the exact text the runtime executed, when it still has it — so a report that
+     *                    describes a document the buffer has moved on from is <b>dropped</b> rather than
+     *                    drawn somewhere plausible and wrong.
+     *
+     *                    <p>A run takes time, and a file is edited while it runs. The row and column a
+     *                    runtime reports are only meaningful against the text it compiled, so converting
+     *                    them against the buffer as it is now puts the squiggle one row off for every line
+     *                    typed above — the same "the conversion is only legal against the document the
+     *                    analysis saw" rule the diagnostic lane is built on, broken by the one lane added
+     *                    after it was written. With the source in hand the offsets are computed against it
+     *                    and then checked: if the text at those offsets has changed, the evidence is about
+     *                    something that no longer exists and the next run will speak for itself.</p>
+     */
+    public final void reportRuntimeProblems(List<Diagnostic> problems, @Nullable String sourceAsRun) {
         if (closed) return;
         List<DecorationSet.Entry> entries = new ArrayList<>();
         if (problems != null) {
             for (Diagnostic problem : problems) {
                 if (!problem.hasPosition()) continue;
-                int from = offsetOf(problem.start());
-                int to = Math.max(from, offsetOf(problem.end()));
+                int from;
+                int to;
+                if (sourceAsRun == null) {
+                    from = offsetOf(problem.start());
+                    to = Math.max(from, offsetOf(problem.end()));
+                } else {
+                    from = offsetIn(sourceAsRun, problem.start());
+                    to = Math.max(from, offsetIn(sourceAsRun, problem.end()));
+                    // THE SAME TEXT, OR NOTHING. `stillTrue` already withdraws a mark whose text changes
+                    // under it; this is the same test applied at the moment of arrival, for the edits that
+                    // happened while the script was running and which no lane was tracking yet.
+                    if (to > buffer.length()
+                            || !sourceAsRun.substring(from, Math.min(to, sourceAsRun.length()))
+                                    .equals(textIn(from, to))) {
+                        continue;
+                    }
+                }
                 entries.add(DecorationSet.Entry.of(from, to,
                         new RuntimeProblem(problem, textIn(from, to))));
             }
@@ -442,6 +479,21 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
 
     private int offsetOf(TextPoint point) {
         return buffer.pointToOffset(point);
+    }
+
+    /** Row/column → offset in an arbitrary snapshot, clamped exactly as the buffer's own conversion is. */
+    private static int offsetIn(String text, TextPoint point) {
+        int row = 0;
+        int at = 0;
+        while (row < point.row() && at < text.length()) {
+            int newline = text.indexOf('\n', at);
+            if (newline < 0) break;
+            at = newline + 1;
+            row++;
+        }
+        int lineEnd = text.indexOf('\n', at);
+        if (lineEnd < 0) lineEnd = text.length();
+        return Math.min(lineEnd, at + Math.max(0, point.column()));
     }
 
     private TextPoint pointOf(int offset) {

@@ -4,8 +4,12 @@ import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -40,6 +44,89 @@ final class RhinoGlobals {
     /** Whether the engine has this name without anybody declaring it. */
     static boolean isBuiltin(String name) {
         return name != null && !name.isEmpty() && names().contains(name);
+    }
+
+    /**
+     * What every value of a built-in type has — {@code String.prototype}'s members and the rest.
+     *
+     * <p>Read from the engine for the same reason the global names are, and it is the missing half of the
+     * member list: {@code 'abc'.}, {@code [1, 2].} and {@code settings.label.} all resolved to a type and
+     * then offered <b>nothing</b>, because {@code membersOf} only ever knew how to ask the Java engine.
+     * Worse than nothing, in fact — an empty answer sent the completion provider to its "I cannot type this
+     * receiver" fallback, which offers every global the last run left as though they were members of a
+     * string.</p>
+     *
+     * <p>Keyed by the same names {@code JsTypeRef} uses for those types, so a resolved type is a lookup.</p>
+     */
+    static List<String> membersOfPrototype(String typeName) {
+        return prototypes().getOrDefault(typeName, List.of());
+    }
+
+    private static volatile Map<String, List<String>> prototypes;
+
+    private static Map<String, List<String>> prototypes() {
+        Map<String, List<String>> cached = prototypes;
+        if (cached != null) return cached;
+        synchronized (RhinoGlobals.class) {
+            if (prototypes == null) prototypes = readPrototypes();
+            return prototypes;
+        }
+    }
+
+    /**
+     * One scope, walked once for every prototype we can name.
+     *
+     * <p>{@code getAllIds} rather than {@code getIds}, which is the trap the completion list already paid
+     * for once: every prototype member is <b>non-enumerable</b> by specification, so the obvious accessor
+     * reports {@code String.prototype} as having no members at all.</p>
+     */
+    private static Map<String, List<String>> readPrototypes() {
+        return RhinoThread.with(() -> {
+            Map<String, List<String>> found = new LinkedHashMap<>();
+            Context cx = Context.enter();
+            try {
+                cx.setLanguageVersion(Context.VERSION_ES6);
+                cx.setOptimizationLevel(-1);
+                Scriptable scope = cx.initStandardObjects();
+                for (Map.Entry<String, String> pair : PROTOTYPE_HOLDERS.entrySet()) {
+                    List<String> ids = idsOfPrototype(scope, pair.getValue());
+                    if (!ids.isEmpty()) found.put(pair.getKey(), ids);
+                }
+            } catch (RuntimeException unavailable) {
+                // An engine that cannot build a scope offers no member lists, which is what it offered
+                // before this existed.
+            } finally {
+                Context.exit();
+            }
+            return Collections.unmodifiableMap(found);
+        });
+    }
+
+    /** {@code JsTypeRef}'s name for a type → the constructor whose {@code prototype} holds its members. */
+    private static final Map<String, String> PROTOTYPE_HOLDERS = new LinkedHashMap<>();
+
+    static {
+        PROTOTYPE_HOLDERS.put("string", "String");
+        PROTOTYPE_HOLDERS.put("number", "Number");
+        PROTOTYPE_HOLDERS.put("boolean", "Boolean");
+        PROTOTYPE_HOLDERS.put("Array", "Array");
+        PROTOTYPE_HOLDERS.put("function", "Function");
+        PROTOTYPE_HOLDERS.put("RegExp", "RegExp");
+        PROTOTYPE_HOLDERS.put("Object", "Object");
+    }
+
+    private static List<String> idsOfPrototype(Scriptable scope, String constructorName) {
+        Object constructor = ScriptableObject.getProperty(scope, constructorName);
+        if (!(constructor instanceof Scriptable)) return List.of();
+        Object prototype = ScriptableObject.getProperty((Scriptable) constructor, "prototype");
+        if (!(prototype instanceof ScriptableObject)) return List.of();
+        List<String> ids = new ArrayList<>();
+        // EVERY ID, INCLUDING THE NON-ENUMERABLE ONES -- which is what a prototype's members all are.
+        for (Object id : ((ScriptableObject) prototype).getAllIds()) {
+            if (id instanceof String && !"constructor".equals(id)) ids.add((String) id);
+        }
+        Collections.sort(ids);
+        return List.copyOf(ids);
     }
 
     static Set<String> names() {

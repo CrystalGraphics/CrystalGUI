@@ -43,20 +43,18 @@ public final class RhinoStackFrameFilter implements ConsoleFilter {
         if (text.indexOf(".js") < 0 && text.indexOf(".mjs") < 0 && text.indexOf(".cjs") < 0) {
             return List.of();
         }
-        List<Link> links = null;
-        links = collect(FRAME.matcher(text), links);
-        links = collect(ORIGIN.matcher(text), links);
-        return links == null ? List.of() : links;
+        List<Link> links = new ArrayList<>(2);
+        collect(FRAME.matcher(text), links);
+        collect(ORIGIN.matcher(text), links);
+        return links;
     }
 
-    private static List<Link> collect(Matcher matcher, List<Link> links) {
+    private static void collect(Matcher matcher, List<Link> links) {
         while (matcher.find()) {
             int line = parseLine(matcher.group(2));
             if (line <= 0) continue;
-            if (links == null) links = new ArrayList<>(2);
             links.add(new Link(matcher.start(1), matcher.end(2), matcher.group(1), line));
         }
-        return links;
     }
 
     private static int parseLine(String digits) {

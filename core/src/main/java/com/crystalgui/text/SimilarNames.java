@@ -1,4 +1,4 @@
-package com.crystalgui.language.java;
+package com.crystalgui.text;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -31,12 +31,18 @@ import java.util.Locale;
  */
 public final class SimilarNames {
 
-    // ── VISIBILITY NOTE ────────────────────────────────────────────────────────────────────────
+    // ── WHY THIS IS IN core/, NOT BESIDE AN ENGINE ─────────────────────────────────────────────
     //
-    // Public because the JavaScript catalog offers "did you mean" too, and nothing in here was ever
-    // Java's: it takes strings and returns strings. Two implementations of "how close is close enough"
-    // would drift, and the first divergence reads as one engine being broken rather than as two
-    // tolerances -- so the ranking is shared and the CANDIDATES are each language's to supply.
+    // It began in `language.java` and the JavaScript catalog imported it -- which quietly defined a
+    // SECOND copy of the class, because the band loader is child-first over `com.crystalgui.language.*`
+    // and `JsQuickFixes` lives on the far side of the bridge. Two classes with one name, one per loader,
+    // for a utility that is nothing but strings in and strings out.
+    //
+    // `com.crystalgui.text.*` is parent-first and shared with every engine by construction, which is
+    // where a language-neutral utility belongs: it sits beside WordClassifier and WordOperations, which
+    // are the same kind of thing. Two implementations of "how close is close enough" would drift, and the
+    // first divergence reads as one engine being broken rather than as two tolerances -- so the ranking is
+    // shared and the CANDIDATES are each language's to supply.
 
     private static final int MAX_RESULTS = 5;
 
@@ -106,8 +112,12 @@ public final class SimilarNames {
      *
      * <p>The cut-off is what makes walking a fifty-thousand-entry index affordable: a row whose minimum
      * already exceeds the limit cannot come back down, so the rest of the table is never filled in.</p>
+     *
+     * <p>Public only because {@code DidYouMeanTest} pins the metric itself — the transposition case is the
+     * one thing about it that is a choice rather than a formula, and asserting it through {@link #rank}
+     * would be asserting it through the tolerance and the ordering as well.</p>
      */
-    static int distance(String a, String b, int limit) {
+    public static int distance(String a, String b, int limit) {
         int n = a.length(), m = b.length();
         if (n == 0) return m;
         if (m == 0) return n;

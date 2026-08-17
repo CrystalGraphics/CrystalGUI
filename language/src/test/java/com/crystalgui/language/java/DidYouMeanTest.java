@@ -1,5 +1,7 @@
 package com.crystalgui.language.java;
 
+import com.crystalgui.text.SimilarNames;
+
 import com.crystalgui.text.lang.CodeAction;
 
 import org.eclipse.jdt.core.compiler.IProblem;

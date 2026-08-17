@@ -1,5 +1,7 @@
 package com.crystalgui.language.java;
 
+import com.crystalgui.text.SimilarNames;
+
 import com.crystalgui.language.engine.EngineBand;
 import com.crystalgui.language.engine.EngineSource;
 import com.crystalgui.language.engine.JavaEngine;

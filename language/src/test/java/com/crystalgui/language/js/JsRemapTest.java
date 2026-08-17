@@ -85,7 +85,9 @@ public class JsRemapTest {
     public void forgetTheMappings() {
         // PROCESS-WIDE, like the policy, so a test that left one installed would rename members in every
         // later test in the JVM -- and that failure reads as resolution breaking rather than as a leak.
-        JsLanguage.useMemberNames(MappingSet.IDENTITY);
+        // BOTH POSTURES AT ONCE, through the one call that restores them: restoring half is how a later
+        // class comes to see an allowlist nothing in it installed.
+        JsLanguage.resetPosturesForTesting();
         ObfuscatedWorld.CALLS.clear();
     }
 

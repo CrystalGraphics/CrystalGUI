@@ -12,7 +12,6 @@ import org.mozilla.javascript.ast.PropertyGet;
 import javax.annotation.Nullable;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
@@ -73,7 +72,7 @@ final class RhinoSemanticTokens {
      *                     so without them every binding a mod offers would be marked unresolved
      */
     static List<SyntaxToken> of(@Nullable AstRoot root, RhinoScopes scopes, Set<String> hostBindings) {
-        if (root == null) return Collections.emptyList();
+        if (root == null) return List.of();
         List<SyntaxToken> tokens = new ArrayList<>();
 
         // DECLARATIONS FIRST, so a name is coloured where it is introduced as well as where it is used.

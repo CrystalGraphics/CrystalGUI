@@ -57,6 +57,7 @@ final class RhinoResolution {
     /** What is written into the owner band when an answer's provenance is worth stating. */
     private static final String FROM_LAST_RUN = "from last run";
     private static final String FROM_JSDOC = "from JSDoc";
+    private static final String FROM_HOST = "host binding";
 
     private final AstRoot root;
     private final RhinoScopes scopes;
@@ -67,10 +68,14 @@ final class RhinoResolution {
     private final String sourceName;
     private final List<String> keywords;
 
+    /** What the host put in scope, by name and declared Java type. @see JsSourceAnalyzer#useHostBindings */
+    private final Map<String, String> hostBindings;
+
     RhinoResolution(@Nullable AstRoot root, RhinoScopes scopes, String source, LineIndex lines,
                     LiveScopeSnapshot live, @Nullable InteropResolver interop, String sourceName,
-                    List<String> keywords) {
-        this.keywords = keywords == null ? List.<String>of() : keywords;
+                    List<String> keywords, Map<String, String> hostBindings) {
+        this.keywords = keywords == null ? List.of() : keywords;
+        this.hostBindings = hostBindings == null ? Map.of() : hostBindings;
         this.root = root;
         this.scopes = scopes;
         this.source = source;
@@ -153,7 +158,7 @@ final class RhinoResolution {
                 SymbolInfo described = interop.describeMember(javaName, candidate, staticSide);
                 Signature quoted = described == null ? null : described.signature();
                 if (quoted == null) {
-                    return candidate.withSignature(JsSignatures.of(candidate, List.<String>of()));
+                    return candidate.withSignature(JsSignatures.of(candidate, List.of()));
                 }
                 // THE SIGNATURE AND THE DECLARATION SITE ONLY -- never the whole description. The probe
                 // resolves against the GENERIC declaration, so it reports the container as
@@ -219,10 +224,13 @@ final class RhinoResolution {
         if (declared == null) declared = scopes.visibleDeclaration(identifier, offset);
         if (declared != null) return fromDeclaration(declared, identifier);
 
-        // NOT DECLARED HERE. A run may have made it a global, or it may be a Java package root, or it
-        // may genuinely be nothing -- and those are three different things to say.
+        // NOT DECLARED HERE. A run may have made it a global, the host may have bound it, it may be a
+        // Java package root, or it may genuinely be nothing -- and those are four different things to say.
         SymbolInfo fromRun = fromLiveScope(identifier);
         if (fromRun != null) return fromRun;
+
+        SymbolInfo bound = fromHostBinding(identifier);
+        if (bound != null) return bound;
 
         String javaName = RhinoInference.javaNameOf(name.getParent(), scopes::declaresAnywhere);
         if (javaName != null && interop != null && interop.exists(javaName)) {
@@ -334,6 +342,30 @@ final class RhinoResolution {
         return names;
     }
 
+    /**
+     * A name the host put in scope — typed by its declared Java class, before anything has run.
+     *
+     * <p>The one tier that does not need the file or a run: the host says {@code world : net.minecraft…},
+     * so {@code world.} can list the Java engine's own members for that class from the first keystroke.
+     * Without it a binding was a free name — unresolved colouring, a "did you mean", an offer to declare
+     * it as a local, and nothing at all behind the dot.</p>
+     */
+    @Nullable
+    private SymbolInfo fromHostBinding(String identifier) {
+        String typeName = hostBindings.get(identifier);
+        if (typeName == null || typeName.isEmpty()) return null;
+        TypeRef type = typeName.indexOf('.') > 0 ? JsTypeRef.javaInstance(typeName)
+                : JsTypeRef.js(typeName);
+        SymbolInfo binding = new SymbolInfo(identifier, SymbolKind.PROPERTY, type, FROM_HOST, null,
+                Set.of(), null);
+        return binding.withSignature(JsSignatures.of(binding, List.of()));
+    }
+
+    /** Whether the host bound this name — what stops a fix catalog treating it as a mistake. */
+    boolean isHostBinding(@Nullable String identifier) {
+        return identifier != null && hostBindings.containsKey(identifier);
+    }
+
     /** A global the last run left behind. */
     @Nullable
     private SymbolInfo fromLiveScope(String identifier) {
@@ -347,7 +379,7 @@ final class RhinoResolution {
         }
         SymbolInfo global = new SymbolInfo(identifier, kindOf(entry), typeOfLive(entry),
                 FROM_LAST_RUN, null, Set.of(), null, parameters);
-        return global.withSignature(JsSignatures.of(global, List.<String>of()));
+        return global.withSignature(JsSignatures.of(global, List.of()));
     }
 
     private static SymbolKind kindOf(LiveScopeSnapshot.Entry entry) {
@@ -405,18 +437,33 @@ final class RhinoResolution {
             boolean staticSide = type instanceof JsTypeRef && ((JsTypeRef) type).isStaticSide();
             return interop.membersOf(javaName, staticSide);
         }
-        // AN OBJECT LITERAL'S OWN PROPERTIES, which is the one JavaScript shape whose members are written
-        // down in the file rather than discovered by running it. Without this, `var o = { a: 1 }; o.` had
-        // nothing to offer until the file had been run once -- and it is the commonest object in a script.
-        if (type instanceof JsTypeRef && !((JsTypeRef) type).keys().isEmpty()) {
-            List<SymbolInfo> members = new ArrayList<>();
+        List<SymbolInfo> members = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
+
+        // AN OBJECT'S OWN PROPERTIES: an object literal's, written down in the file, or a live object's,
+        // seen by the last run. Without this, `var o = { a: 1 }; o.` had nothing to offer until the file
+        // had been run once -- and it is the commonest object in a script.
+        if (type instanceof JsTypeRef) {
             for (String key : ((JsTypeRef) type).keys()) {
-                members.add(new SymbolInfo(key, SymbolKind.PROPERTY, null, type.displayName(), null,
-                        Set.of(), null));
+                if (seen.add(key)) {
+                    members.add(new SymbolInfo(key, SymbolKind.PROPERTY, null, type.displayName(), null,
+                            Set.of(), null));
+                }
             }
-            return members;
         }
-        return List.of();
+
+        // AND WHAT ITS PROTOTYPE GIVES IT, read from the engine. `'abc'.`, `[1, 2].` and any typed
+        // JavaScript receiver resolved perfectly well and then offered NOTHING, because this only ever
+        // knew how to ask the Java engine -- and an empty answer is worse than none, since it sent the
+        // completion provider to its "I cannot type this" fallback, which offers the run's globals as
+        // though they were members of a string.
+        String prototype = type == null ? null : type.qualifiedName();
+        for (String id : RhinoGlobals.membersOfPrototype(prototype == null ? "" : prototype)) {
+            if (!seen.add(id)) continue;
+            members.add(new SymbolInfo(id, SymbolKind.PROPERTY, null, prototype + ".prototype", null,
+                    Set.of(), null));
+        }
+        return members;
     }
 
     // ── symbolsInScope ──────────────────────────────────────────────────────────────────────────
@@ -440,6 +487,13 @@ final class RhinoResolution {
             if (!seen.add(name)) continue;
             SymbolInfo global = fromLiveScope(name);
             if (global != null) out.add(global);
+        }
+        // AND WHAT THE HOST BOUND, which is in scope before anything is declared or run and is the whole
+        // reason a scripting host is worth having.
+        for (String name : hostBindings.keySet()) {
+            if (!seen.add(name)) continue;
+            SymbolInfo bound = fromHostBinding(name);
+            if (bound != null) out.add(bound);
         }
         return out;
     }

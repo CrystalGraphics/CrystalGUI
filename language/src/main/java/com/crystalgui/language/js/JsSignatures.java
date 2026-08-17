@@ -57,7 +57,7 @@ final class JsSignatures {
     @Nullable
     static Signature of(SymbolInfo symbol, List<String> parameterNames) {
         if (symbol == null || symbol.name().isEmpty()) return null;
-        List<String> names = parameterNames == null ? List.<String>of() : parameterNames;
+        List<String> names = parameterNames == null ? List.of() : parameterNames;
         Signature flat = render(symbol, names, false);
         if (flat == null) return null;
         // TRIED FLAT FIRST and kept if it fits, exactly as the Java side does: breaking unconditionally

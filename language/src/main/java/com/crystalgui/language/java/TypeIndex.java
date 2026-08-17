@@ -1,5 +1,7 @@
 package com.crystalgui.language.java;
 
+import com.crystalgui.text.SimilarNames;
+
 import com.crystalgui.text.lang.SymbolKind;
 
 import java.io.File;
@@ -17,6 +19,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -140,7 +143,7 @@ public final class TypeIndex {
      * <p>A {@link Predicate} rather than the policy type, so this package stays free of {@code language.run}
      * — the same reason every crossing into an engine is a JDK type.</p>
      */
-    public Filtered filtered(java.util.function.Predicate<String> allowsClass) {
+    public Filtered filtered(Predicate<String> allowsClass) {
         return new Filtered(this, allowsClass);
     }
 
@@ -148,9 +151,9 @@ public final class TypeIndex {
     public static final class Filtered {
 
         private final TypeIndex index;
-        private final java.util.function.Predicate<String> allowsClass;
+        private final Predicate<String> allowsClass;
 
-        private Filtered(TypeIndex index, java.util.function.Predicate<String> allowsClass) {
+        private Filtered(TypeIndex index, Predicate<String> allowsClass) {
             this.index = index;
             this.allowsClass = allowsClass;
         }

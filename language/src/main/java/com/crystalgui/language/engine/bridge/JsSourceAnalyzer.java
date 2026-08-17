@@ -1,6 +1,7 @@
 package com.crystalgui.language.engine.bridge;
 
 import java.util.List;
+import java.util.Map;
 import java.util.function.Predicate;
 
 /**
@@ -64,6 +65,41 @@ public interface JsSourceAnalyzer {
      */
     default List<String> keywords() {
         return List.of();
+    }
+
+    /**
+     * The names a script may use without declaring them — the engine's own answer.
+     *
+     * <p>Asked here for the reason {@link #keywords()} is: which globals exist is a property of the loaded
+     * engine and differs per band (1.9.1 has {@code Proxy} and {@code Reflect}; 1.7.15.1 has neither), and
+     * the host cannot know. A list on the host side is a list that is wrong on one of the two shipped
+     * engines — and wrong in the direction that hurts, since a completion row for a name the engine lacks
+     * is a promise it cannot keep, while a missing one hides something that works.</p>
+     *
+     * <p>It had grown a host-side twin regardless, and the twin had already drifted: no {@code Map}, no
+     * {@code Set}, no {@code Symbol}, no {@code Promise}, no {@code Packages}.</p>
+     */
+    default List<String> globals() {
+        return List.of();
+    }
+
+    /**
+     * What the host puts in every script's scope, by name and declared type.
+     *
+     * <p>Without this the analyser cannot tell a binding a mod offers from a typo: it is declared nowhere in
+     * the file and is not one of JavaScript's own, so every one of them was drawn {@code variable.unresolved},
+     * offered "Declare 'world' as a local" and a "did you mean", and hovered as nothing. The whole
+     * {@code variable.global} capture the semantic-token vocabulary reserves for exactly this was dead.</p>
+     *
+     * <p>The <b>type name</b> comes with it because the host has it — a binding is declared to the Java
+     * compiler as {@code name : Type}, so the same registry that names it names its class — and it is what
+     * lets the interop tier answer {@code world.} with the Java engine's own member list, statically, before
+     * anything has run.</p>
+     *
+     * <p>A property of the deployment rather than of a document, like the sandbox and the mappings, so it is
+     * set rather than passed per analysis.</p>
+     */
+    default void useHostBindings(Map<String, String> nameToTypeName) {
     }
 
     /**

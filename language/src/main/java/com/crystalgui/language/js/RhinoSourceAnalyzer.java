@@ -21,9 +21,10 @@ import org.mozilla.javascript.ast.ErrorCollector;
 import org.mozilla.javascript.ast.ParseProblem;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * Rhino's parser, driven — the JavaScript engine's side of the analysis bridge.
@@ -93,6 +94,21 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
         });
     }
 
+    /** The engine's own global names — @see JsSourceAnalyzer#globals */
+    @Override
+    public List<String> globals() {
+        return List.copyOf(RhinoGlobals.names());
+    }
+
+    /** What the host puts in scope, by name and declared type. @see JsSourceAnalyzer#useHostBindings */
+    @Override
+    public void useHostBindings(Map<String, String> nameToTypeName) {
+        hostBindings = nameToTypeName == null || nameToTypeName.isEmpty()
+                ? Map.of() : Map.copyOf(nameToTypeName);
+    }
+
+    private volatile Map<String, String> hostBindings = Map.of();
+
     @Override
     public void useJavaEngine(SourceAnalyzer java, List<String> classpath, int releaseLevel) {
         InteropResolver previous = interop;
@@ -104,7 +120,7 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
     }
 
     /** What a script may reach, or null for everything. @see JsSourceAnalyzer#restrictTo */
-    private volatile java.util.function.Predicate<String> allowsClass;
+    private volatile Predicate<String> allowsClass;
 
     /** How member names are shown. @see JsSourceAnalyzer#useMemberNames */
     private volatile MemberNameMapper memberNames = MemberNameMapper.IDENTITY;
@@ -117,7 +133,7 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
     }
 
     @Override
-    public void restrictTo(java.util.function.Predicate<String> policy) {
+    public void restrictTo(Predicate<String> policy) {
         this.allowsClass = policy;
         InteropResolver current = interop;
         if (current != null) current.restrictTo(policy);
@@ -176,10 +192,12 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
         boolean parsed = root != null && !hasError(reported);
         if (parsed) reported = withUnusedWarnings(reported, scopes, lines);
 
+        Map<String, String> bindings = hostBindings;
         RhinoResolution resolution = new RhinoResolution(root, scopes, text, lines, liveScope, interop,
-                name, JsKeywords.measuredBy(RhinoSourceAnalyzer::parses));
+                name, JsKeywords.measuredBy(RhinoSourceAnalyzer::parses), bindings);
         return new ParsedScript(version, text, root, scopes, reported, parsed, resolution,
-                new JsQuickFixes(root, scopes, new JsRewrites(text, version), resolution));
+                new JsQuickFixes(root, scopes, new JsRewrites(text, version), resolution),
+                bindings.keySet());
     }
 
     /**
@@ -300,11 +318,11 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
         private List<SyntaxToken> tokens;
         private RhinoResolution resolution;
         private JsQuickFixes fixes;
+        private final Set<String> hostBindings;
 
         ParsedScript(long version, String source, AstRoot root, RhinoScopes scopes,
                      List<Diagnostic> diagnostics, boolean parsed, RhinoResolution resolution,
-                     JsQuickFixes fixes) {
-            this.fixes = fixes;
+                     JsQuickFixes fixes, Set<String> hostBindings) {
             this.version = version;
             this.source = source;
             this.root = root;
@@ -312,6 +330,8 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
             this.diagnostics = diagnostics;
             this.parsed = parsed;
             this.resolution = resolution;
+            this.fixes = fixes;
+            this.hostBindings = hostBindings;
         }
 
         @Override
@@ -349,8 +369,11 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
         @Override
         public List<SyntaxToken> semanticTokens() {
             if (tokens == null) {
-                tokens = root == null ? Collections.<SyntaxToken>emptyList()
-                        : RhinoSemanticTokens.of(root, scopes, Set.<String>of());
+                // WITH THE HOST'S BINDINGS, which is what `variable.global` is for. It was always handed
+                // the empty set, so the capture was dead and every binding a mod offers was drawn as an
+                // unresolved name -- in the one editor whose own runtime provides it.
+                tokens = root == null ? List.of()
+                        : RhinoSemanticTokens.of(root, scopes, hostBindings);
             }
             return tokens;
         }
@@ -367,14 +390,12 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
 
         @Override
         public List<SymbolInfo> membersOf(TypeRef type, int contextOffset) {
-            return resolution == null ? Collections.<SymbolInfo>emptyList()
-                    : resolution.membersOf(type, contextOffset);
+            return resolution == null ? List.of() : resolution.membersOf(type, contextOffset);
         }
 
         @Override
         public List<SymbolInfo> symbolsInScope(int offset) {
-            return resolution == null ? Collections.<SymbolInfo>emptyList()
-                    : resolution.symbolsInScope(offset);
+            return resolution == null ? List.of() : resolution.symbolsInScope(offset);
         }
 
         /**
@@ -387,7 +408,7 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
          */
         @Override
         public List<CodeAction> codeActionsIn(int from, int to, CodeActionContext context) {
-            return fixes == null ? Collections.<CodeAction>emptyList() : fixes.actionsIn(from, to);
+            return fixes == null ? List.of() : fixes.actionsIn(from, to);
         }
 
         @Override
@@ -402,11 +423,6 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
             // edited, which is a re-analysis of every Java class the next keystroke mentions.
             resolution = null;
             fixes = null;
-        }
-
-        /** What was parsed. For the questions above that need the text as the parse saw it. */
-        String source() {
-            return source;
         }
     }
 }

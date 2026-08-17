@@ -299,6 +299,23 @@ public final class JsLanguage {
         return EngineHost.defaultSource();
     }
 
+    /**
+     * Puts every process-wide posture back to its default — <b>for a test</b>.
+     *
+     * <p>The policy and the member-name mapping are deployment decisions and are therefore static, which
+     * makes them the two things a test can leak into every test that runs after it in the same JVM. Both
+     * {@code JsSandboxTest} and {@code JsRemapTest} restore their own in an {@code @After} and say so; a
+     * test that fails before its {@code @After} runs restores neither, and the next class to run sees an
+     * allowlist or a rename nothing in it installed — reported as resolution being broken.</p>
+     *
+     * <p>One call, so a new test cannot restore half of it. Deliberately not part of {@link #shutdown()},
+     * which a host calls and which must not silently widen a policy a deployment set.</p>
+     */
+    public static synchronized void resetPosturesForTesting() {
+        restrictTo(null);
+        useMemberNames(null);
+    }
+
     /** The analyser, or null when no engine opened. */
     public static synchronized JsSourceAnalyzer analyzer() {
         return analyzer;
@@ -324,7 +341,11 @@ public final class JsLanguage {
      */
     public static synchronized void shutdown() {
         javaLent = false;
+        // BOTH POSTURES, not one. The mapping was restored and the policy was not, so a host or a test
+        // that restricted and then shut down left every later JavaScript surface in the process obeying
+        // an allowlist nothing could see -- which reads as resolution being broken rather than as a leak.
         mappings = MappingSet.IDENTITY;
+        policy = ScriptPolicy.allowAll();
         analyzer = null;
         executor = null;
         scheduler = null;
