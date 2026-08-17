@@ -78,7 +78,10 @@ final class RhinoInference {
         if (node instanceof NumberLiteral) return JsTypeRef.js(JsTypeRef.NUMBER);
         if (node instanceof RegExpLiteral) return JsTypeRef.js(JsTypeRef.REGEXP);
         if (node instanceof ArrayLiteral) return JsTypeRef.js(JsTypeRef.ARRAY);
-        if (node instanceof ObjectLiteral) return JsTypeRef.js(JsTypeRef.OBJECT);
+        // AN OBJECT LITERAL CARRIES ITS KEYS, so `var o = { a: 1 }; o.` can list them without a run.
+        // Statically that is everything knowable about the object, and it is the one JS shape whose members
+        // are written down in the file.
+        if (node instanceof ObjectLiteral) return JsTypeRef.object(keysOf(node));
         if (node instanceof FunctionNode) return JsTypeRef.js(JsTypeRef.FUNCTION);
 
         if (node instanceof KeywordLiteral) {
