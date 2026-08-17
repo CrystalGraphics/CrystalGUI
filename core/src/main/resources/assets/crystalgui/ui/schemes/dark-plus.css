@@ -64,6 +64,10 @@ theme {
      * and dim for the same reason: it marks something you did not ask for. */
     --editor-occurrence-bg: #3A3D41;
 
+    /* The same for the SELECTED text -- fainter still, since the selection band is already saying
+     * where the thing you picked is. VS Code's editor.selectionHighlightBackground. */
+    --editor-selection-occurrence-bg: #2E3236;
+
     /* ── Syntax — the full capture vocabulary ──
      *
      * Six general names used to be here, on the reasoning that generalName() folds every specialisation

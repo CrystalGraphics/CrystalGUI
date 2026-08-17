@@ -58,6 +58,10 @@ theme {
      * occurrence still reads as whatever kind of token it is — VS Code's editor.wordHighlightBackground. */
     --editor-occurrence-bg: #DCE6F0;
 
+    /* The same for the SELECTED text -- fainter still, since the selection band is already saying
+     * where the thing you picked is. VS Code's editor.selectionHighlightBackground. */
+    --editor-selection-occurrence-bg: #E8EEF4;
+
     /* ── Syntax ── */
     --syntax-keyword: #0033B3;
     --syntax-keyword-control: #0033B3;

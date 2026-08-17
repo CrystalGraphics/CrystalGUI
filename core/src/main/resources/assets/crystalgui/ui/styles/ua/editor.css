@@ -260,6 +260,15 @@ texteditor .__indent-guide__ {
     background-color: var(--editor-occurrence-bg, #3A3D41);
 }
 
+/* SELECTION HIGHLIGHT, and a separate name on purpose. The rule above marks where the symbol the caret
+ * is standing in also lives; this marks where the CHARACTERS you chose also appear, which is by
+ * definition not a whole-word question -- selecting `ell` is a request about three letters. VS Code
+ * keeps `wordHighlight` and `selectionHighlight` apart for the same reason, and fainter still, because
+ * the selection band is already saying where the thing you picked is. */
+.__syntax__::highlight(selection-occurrence) {
+    background-color: var(--editor-selection-occurrence-bg, #2E3236);
+}
+
 /* ── Dead weight, faded rather than underlined ───────────────────────────────────────────────────
  *
  * DiagnosticTag.UNNECESSARY, published from the diagnostic lane. A tag is not a severity: "this import is

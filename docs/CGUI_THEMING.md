@@ -239,6 +239,7 @@ editor scheme's.
 | `--editor-occurrence-bg` | `#3A3D41` | dark-plus.css |
 | `--editor-ruler` | `#2B2D30` | dark-plus.css |
 | `--editor-selection-bg` | `#2C5A8C` | dark-plus.css |
+| `--editor-selection-occurrence-bg` | `#2E3236` | dark-plus.css |
 | `--editor-whitespace` | `#454C57` | dark-plus.css |
 | `--editor-zoom-bg` | `#2B303B` | dark-plus.css |
 | `--editor-zoom-fg` | `#C8CDD4` | dark-plus.css |
