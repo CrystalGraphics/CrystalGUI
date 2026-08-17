@@ -233,9 +233,66 @@ public class CursorOperationsTest {
      */
     @Test
     public void theJumpLandsAfterThePreviousLinesContent() {
-        Rope document = Rope.of("a();\n        ");
+        // Four spaces under a line that opens a block, so the caret IS at the block's own indent and the
+        // press is the jump rather than a step back to it.
+        Rope document = Rope.of("f() {\n    ");
+        assertEquals(document.lineEndOffset(0),
+                TypeOperations.backspaceFrom(document, document.length(), 4));
+    }
+
+    /**
+     * <b>Deeper than the block wants is a step back to it, not a jump.</b>
+     *
+     * <p>Reported from the harness after the jump went in: it fired wherever the caret was, so a blank
+     * line the user had pushed further in — by Tab, or by a paste landing deep — lost the line on the
+     * first press instead of coming back a level. IntelliJ's <em>Smart Backspace: to proper indent
+     * position</em> is the distinction, and "proper" is the block's depth rather than the nearest stop.</p>
+     */
+    @Test
+    public void aBlankLineDeeperThanItsBlockComesBackToTheBlockFirst() {
+        // The block wants four; the caret is at twelve.
+        Rope document = Rope.of("f() {\n            \n}");
+        int caret = document.lineStartOffset(1) + 12;
+        assertEquals("back to the block's indent, and the line stays",
+                document.lineStartOffset(1) + 4, TypeOperations.backspaceFrom(document, caret, 4));
+
+        // And from there, the jump -- asked of the document the first press LEAVES BEHIND, which is a
+        // line of four spaces. Asking the original again is asking about a caret mid-whitespace, which is
+        // a different case with a different answer and was how this test first failed.
+        Rope after = Rope.of("f() {\n    \n}");
+        assertEquals("and only then does the line go", after.lineEndOffset(0),
+                TypeOperations.backspaceFrom(after, after.lineStartOffset(1) + 4, 4));
+    }
+
+    /**
+     * The scope is read from the previous <b>non-blank</b> line — a run of empty lines says nothing about
+     * depth, so the answer comes from whatever last wrote something.
+     */
+    @Test
+    public void theBlocksIndentIsReadPastAnyBlankLinesAbove() {
+        Rope document = Rope.of("f() {\n\n\n        ");
         int caret = document.length();
-        assertEquals(4, TypeOperations.backspaceFrom(document, caret, 4));
+        assertEquals("eight is deeper than the block's four", document.lineStartOffset(3) + 4,
+                TypeOperations.backspaceFrom(document, caret, 4));
+    }
+
+    /**
+     * A closing line does not open a block, so the line under it belongs at the closer's own depth.
+     *
+     * <p>The shape the report came in: a caret one level in from a {@code }} that had just closed a
+     * method. The block there is the one the brace closed <em>into</em>, so the indent to stop at is the
+     * brace's own — and a press deeper than it comes back to it rather than deleting the line.</p>
+     */
+    @Test
+    public void aLineUnderAClosingBraceBelongsAtTheBracesOwnDepth() {
+        Rope document = Rope.of("    void f() {\n    }\n        ");
+        int caret = document.length();
+        assertEquals("eight is deeper than the brace's four", document.lineStartOffset(2) + 4,
+                TypeOperations.backspaceFrom(document, caret, 4));
+
+        Rope after = Rope.of("    void f() {\n    }\n    ");
+        assertEquals("and at four it is the jump", after.lineEndOffset(1),
+                TypeOperations.backspaceFrom(after, after.length(), 4));
     }
 
     /**
@@ -253,8 +310,11 @@ public class CursorOperationsTest {
         assertEquals("a level, not a jump", caretInIndent - 4,
                 TypeOperations.backspaceFrom(withCode, caretInIndent, 4));
 
+        // The blank line's block is column zero -- `x;` opens nothing -- so eight is over-indented and the
+        // press comes back to zero rather than taking the line. The answers still differ at the same
+        // column, which is the point: one unindents by a level, the other by the whole indent.
         Rope blank = Rope.of("x;\n        ");
-        assertEquals("the same column, the other answer", 2,
+        assertEquals("the same column, the other answer", blank.lineStartOffset(1),
                 TypeOperations.backspaceFrom(blank, blank.length(), 4));
     }
 

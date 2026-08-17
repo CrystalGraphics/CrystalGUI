@@ -234,8 +234,8 @@ public class TextEditorTest extends EditorTestBase {
      */
     @Test
     public void backspaceOnABlankIndentedLineLandsOnTheLineAbove() {
-        build("void f() {" + NL + NL + "        " + NL + "}");
-        editor.setCaret(editor.getText().indexOf("        ") + 8);
+        build("void f() {" + NL + NL + "    " + NL + "}");
+        editor.setCaret(editor.getText().indexOf(NL + "    " + NL) + 1 + 4);
 
         key(CgKeyCodes.KEY_BACK);
 
@@ -243,6 +243,32 @@ public class TextEditorTest extends EditorTestBase {
                 "void f() {" + NL + NL + "}", editor.getText());
         assertEquals("and the caret is on the blank line above", 1,
                 editor.buffer().offsetToPoint(editor.getCaret()).row());
+    }
+
+    /**
+     * <b>Deeper than the block wants is a step back, not a jump.</b>
+     *
+     * <p>The correction to the rule above, reported from the harness once it shipped: the jump fired
+     * wherever the caret happened to be, so a blank line pushed further in — by Tab, or by a paste
+     * landing deep — lost the line on the first press instead of coming back a level. Both presses are
+     * here rather than in two tests because it is the <em>sequence</em> that is the behaviour.</p>
+     */
+    @Test
+    public void backspaceOnAnOverIndentedBlankLineComesBackToTheBlockFirst() {
+        build("void f() {" + NL + "            " + NL + "}");
+        editor.setCaret(editor.getText().indexOf(NL + "            ") + 1 + 12);
+
+        key(CgKeyCodes.KEY_BACK);
+
+        assertEquals("back to the block's own indent, with the line intact",
+                "void f() {" + NL + "    " + NL + "}", editor.getText());
+        assertEquals("still on its own line", 1,
+                editor.buffer().offsetToPoint(editor.getCaret()).row());
+
+        key(CgKeyCodes.KEY_BACK);
+
+        assertEquals("and only the second press takes the line",
+                "void f() {" + NL + "}", editor.getText());
     }
 
     /** Home goes to the first non-blank, and only to column 0 when already there. */
