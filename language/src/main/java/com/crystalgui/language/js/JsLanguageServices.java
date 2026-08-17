@@ -1,6 +1,7 @@
 package com.crystalgui.language.js;
 
 import com.crystalgui.core.async.JobScheduler;
+import com.crystalgui.fs.Resource;
 import com.crystalgui.language.engine.AnalysedLanguageServices;
 import com.crystalgui.language.engine.bridge.Analysis;
 import com.crystalgui.language.engine.bridge.JsSourceAnalyzer;
@@ -49,7 +50,18 @@ public final class JsLanguageServices extends AnalysedLanguageServices {
 
     public JsLanguageServices(TextBuffer buffer, JsSourceAnalyzer analyzer,
                               @Nullable JobScheduler scheduler, String sourceName) {
-        super(ID, buffer, scheduler);
+        this(buffer, analyzer, scheduler, sourceName, null);
+    }
+
+    /**
+     * @param file the document's file, so the <b>runtime</b> can find these services after a run and
+     *             put a thrown exception on its line — {@code AnalysedLanguageServices.attachedTo}. Null
+     *             for a buffer with no file, which cannot be run
+     */
+    public JsLanguageServices(TextBuffer buffer, JsSourceAnalyzer analyzer,
+                              @Nullable JobScheduler scheduler, String sourceName,
+                              @Nullable Resource file) {
+        super(ID, buffer, scheduler, file);
         this.analyzer = analyzer;
         this.sourceName = sourceName == null || sourceName.isEmpty() ? "script.js" : sourceName;
         start();

@@ -36,7 +36,7 @@ most visible thing to have early.
 | **10.3** Diagnostics | IDE-mode parse errors, `RhinoProblemPolicy` (cascade suppression + refusal re-titling), unused-name warnings, retention through errors | one squiggle per problem, not five; `class`/`import`/`async` each say why | **done** — `77adc82`. **Compatibility band deferred to 10.3b** (see below) |
 | **10.4** Semantic tokens + scopes | `RhinoScopes`, `RhinoSemanticTokens`, `RhinoGlobals` | parameter / local / const / reassigned / captured / builtin / unresolved, each drawn as itself | **done** — `77adc82`. JSDoc recording moves to 10.6, where the tiers read it |
 | **10.3b** Compatibility band | ship band 8's probe file as a resource; detect the six constructs 1.9.1 accepts and 1.7.15.1 refuses (default params, spread, computed properties, destructuring defaults, `?.`, `??`) from the AST; warn when the target band is older than the host | an author on Java 17 is told what a Java 8 player cannot load | **deferred** — needs a per-construct AST detector, which is a different kind of work from a message policy and is worth its own step |
-| **10.5** Execution | `JsHost`, `RhinoExecutor.run/stop/currentLine/snapshotScope`, console/prompt/`Java` globals, `RhinoOrigin`, `RhinoStackFrameFilter`, runtime errors as `js-runtime` diagnostics | Shift+F10 runs it; output attributed by line; Stop works; a thrown error squiggles its line | not started |
+| **10.5** Execution | `JsHost`, `RhinoExecutor.run/stop/currentLine/describe`, console/`print`/`readLine`/`Java.type` globals, `RhinoConsoleFormat`, `RhinoOrigin`, `RhinoStackFrameFilter`, runtime errors as `js-runtime` diagnostics through a new engine-neutral `AnalysedLanguageServices.reportRuntimeProblems` lane | Shift+F10 runs it; output attributed by line; Stop works; a thrown error squiggles its line | **done** — see "10.5 as built" below. `snapshotScope` moves to 10.6, beside its only consumer |
 | **10.6** Resolution + interop | the four tiers, `InteropResolver` over the Java probe unit, reflection fallback | (feeds 10.7/10.8) | not started |
 | **10.7** Completion | `JsCompletionProvider`, `JsKeywords` (band-filtered), `Java.type` insertion, live-object completion | `.` after a Java object lists its members; after a run, `w.` on a global works | not started |
 | **10.8** Quick Documentation | `JsSignatures`, tier provenance in the owner band, Java members quoted through `AttachedSources` | Mod+Q / hover shows `function add(a, b)` with JSDoc, or the Java popup for a Java member | not started |
@@ -652,6 +652,38 @@ twin (runs, replaces, stops a spinning loop **and** a blocked `readLine`, 100 ru
 scope must be collectable), `ScriptConsoleTest` twin (a line lands with its origin), `ScriptCommandsTest`
 unchanged against `ScriptRuntimes.of(javaHost, jsHost)` picking the right runtime per file;
 `RunShellIsEngineNeutralTest` green throughout.
+
+**10.5 as built** — five things differ from the sketch above, each for a reason found by running it:
+
+- **`stop(Thread)`, not `stop()`.** One `RhinoExecutor` serves every `JsHost` in the process (it is the
+  shared band adapter), so a stop has to name its run; the thread is the JDK-typed handle the host
+  already holds. The observer reads a per-run flag filed on the `Context`, **and** the thread is
+  interrupted — the flag rather than the interrupt status alone because `Thread.sleep` clears the status
+  when it throws, so a script that swallowed the resulting exception would otherwise run on unstoppable.
+- **A stopped run ends in `InterruptedException` at the bridge**, the JDK's own type for it; the child
+  cannot name `ScriptStoppedException` and `JsHost` translates. Rhino's interpreter refuses a script's
+  `catch` an `Error` thrown from Java, which is what makes the stop uncatchable — asserted by
+  `aStopCannotBeCaughtByTheScript`. (It also skips `finally`; the sketch's "finally still runs" was wrong
+  and nothing depends on it.)
+- **The application loader is the host's loader plus `org.mozilla.*` from the band.** Rhino refuses an
+  application loader that cannot resolve Rhino's own classes (`"Loader can not resolve Rhino classes"`),
+  and the host by design cannot; the child loader would define its own copy of every host class. So
+  `RhinoExecutor.APPLICATION_LOADER` is parent-first over the *bridge interface's* loader (which is the
+  host's, by parent-first construction) and answers only Rhino's package itself.
+- **A `Class` handed to a script — a binding, `Java.type`'s answer — is wrapped as `NativeJavaClass`**,
+  never through `Context.javaToJS`, which wraps it as an ordinary object whose members are `getName()`
+  and friends: `Sink.write(...)` was "Cannot find function write" until it went through
+  `WrapFactory.wrapJavaClass`.
+- **The runtime's verdict reaches the document through a second tracked lane on
+  `AnalysedLanguageServices`** (`reportRuntimeProblems`, engine-neutral — Java's host can use it the day
+  it wants to), keyed to the file through `AnalysedLanguageServices.attachedTo(Resource)`, hopped through
+  the scheduler `JsHost` is given at registration. Announced at the current analysis's version, so a
+  stale editor refuses it and the pending analysis carries it instead — never against the wrong text. The
+  diagnostic's *source* is `js-runtime`; the *owner* stays `javascript`, because the editor files one
+  owner per services object and a second owner would need a second channel through core's SPI.
+- `console.warn` goes to the error consumer, as Node sends it to stderr — the bridge keeps two consumers.
+  `readLine()`/`prompt()` read `System.in`, which `ScriptInput` routes to the console's input row by the
+  same marker; a stop while waiting ends the script at the read rather than ten thousand instructions later.
 
 **10.6 — Resolution + interop.** `JsResolver` with the four tiers; `InteropResolver` over the Java
 probe unit with a small LRU; the reflection fallback when the Java engine is absent. *Tests:*

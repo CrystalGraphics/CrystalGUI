@@ -2,14 +2,24 @@ package com.crystalgui.language.js;
 
 import com.crystalgui.language.engine.bridge.JsExecutor;
 
+import org.mozilla.javascript.BaseFunction;
 import org.mozilla.javascript.Context;
+import org.mozilla.javascript.ContextFactory;
 import org.mozilla.javascript.EvaluatorException;
+import org.mozilla.javascript.NativeObject;
+import org.mozilla.javascript.RhinoException;
 import org.mozilla.javascript.Script;
+import org.mozilla.javascript.ScriptStackElement;
+import org.mozilla.javascript.Scriptable;
+import org.mozilla.javascript.ScriptableObject;
+import org.mozilla.javascript.Undefined;
+import org.mozilla.javascript.WrappedException;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -32,29 +42,95 @@ import java.util.function.Supplier;
  * that wants the compiler is a per-script opt-in worth measuring later, not a default worth guessing
  * now.</p>
  *
- * <h3>What is here at M10.2</h3>
+ * <h3>The stop, in three parts</h3>
  *
- * <p>Compiling, which is what the Run command needs to refuse a broken script, and what proves the
- * bridge carries traffic. {@link #run}, {@link #stop} and {@link #currentLine} arrive at M10.5 with the
- * scope, the console globals and the instruction observer; until then running throws rather than
- * pretending, because a Run that silently did nothing is worse than one that says it is not built.</p>
+ * <p>{@link #stop(Thread)} sets a flag on the run that thread is executing and interrupts the thread. A
+ * <b>spinning</b> script meets the flag at the next instruction-count observation and an {@link Error}
+ * is thrown from inside the interpreter loop — an {@code Error} because Rhino's interpreter refuses to
+ * let a script's own {@code catch} take one, so no {@code try} in the script can swallow the stop. A
+ * <b>blocked</b> script — {@code Thread.sleep} through {@code Java.type}, a {@code readLine()} waiting on
+ * the console — is reached by the interrupt, exactly as a Java script is. And at the boundary of
+ * {@link #run} both arrive as one thing, {@link InterruptedException}, which the host reads as "stopped"
+ * rather than "failed". The flag rather than the interrupt status alone, because {@code Thread.sleep}
+ * <em>clears</em> the status when it throws: a script that swallowed the resulting exception would
+ * otherwise run on with nothing left to say it had been asked to stop.</p>
+ *
+ * <h3>The application class loader is the host's — plus Rhino</h3>
+ *
+ * <p>A class the script names through {@code Java.type} must resolve to the <b>host's</b> definition, or
+ * a binding the host handed over and a class the script looked up are two different types with one name.
+ * This class cannot simply hand Rhino its own loader: it is defined by the band loader, child-first so that
+ * it can see Rhino, and that loader would define its <em>own</em> copy of every host class. Nor can it hand
+ * over the host's loader alone — Rhino refuses an application loader that cannot resolve Rhino's own
+ * classes ({@code "Loader can not resolve Rhino classes"}), and the host by design cannot. So
+ * {@link #APPLICATION_LOADER} is the host's loader with exactly one addition: {@code org.mozilla.*} from
+ * the band. The host is found from the <em>bridge</em> interface, which is parent-first by construction
+ * and therefore defined by whoever the host is — in a test that puts Rhino on the plain classpath, the
+ * two loaders are one and the same, which is also right.</p>
  */
 public final class RhinoExecutor implements JsExecutor {
+
+    /** How many interpreted instructions between two looks at the stop flag. */
+    private static final int OBSERVER_THRESHOLD = 10_000;
+
+    /** The key the run's stop flag is filed under on its {@code Context}. */
+    private static final Object RUN_KEY = new Object();
+
+    /**
+     * Every run that is executing, by the thread it is on. @see #stop(Thread)
+     */
+    private static final ConcurrentHashMap<Thread, Run> RUNS = new ConcurrentHashMap<>();
+
+    /**
+     * Host classes from the host, Rhino's from the band. See the class note.
+     *
+     * <p>Parent-first over the host's loader, so every name the host has is the host's; {@code findClass}
+     * is reached only for what the host lacks, and answers only Rhino's own package — a script must not be
+     * able to name a class that exists solely on the engine's side of the bridge.</p>
+     */
+    private static final ClassLoader APPLICATION_LOADER = new ClassLoader(JsExecutor.class.getClassLoader()) {
+        @Override
+        protected Class<?> findClass(String name) throws ClassNotFoundException {
+            if (name.startsWith("org.mozilla.")) return RhinoExecutor.class.getClassLoader().loadClass(name);
+            throw new ClassNotFoundException(name);
+        }
+    };
+
+    /** One context factory for every run — its only job is to route the observer to the run's flag. */
+    private static final ContextFactory FACTORY = new ContextFactory() {
+        @Override
+        protected Context makeContext() {
+            Context cx = super.makeContext();
+            cx.setLanguageVersion(Context.VERSION_ES6);
+            cx.setOptimizationLevel(-1);
+            cx.setInstructionObserverThreshold(OBSERVER_THRESHOLD);
+            // JAVA STRINGS COME BACK AS JAVASCRIPT STRINGS. Without this, `list.get(0)` from a Java list
+            // is a NativeJavaObject wrapping a String -- which compares unequal to 'one', prints as itself
+            // and has no `.length`. Rhino's own shell sets exactly this.
+            cx.getWrapFactory().setJavaPrimitiveWrap(false);
+            return cx;
+        }
+
+        @Override
+        protected void observeInstructionCount(Context cx, int instructionCount) {
+            Object run = cx.getThreadLocal(RUN_KEY);
+            if (run instanceof Run && ((Run) run).stopRequested) throw new Stopped();
+        }
+    };
 
     /** Public no-argument, because {@code EngineHost.adapter} instantiates this reflectively. */
     public RhinoExecutor() {
     }
+
+    // ── Compile ─────────────────────────────────────────────────────────────────────────────────
 
     @Override
     public Compiled compile(String sourceName, String source) {
         String name = sourceName == null || sourceName.isEmpty() ? "script.js" : sourceName;
         String text = source == null ? "" : source;
         return RhinoThread.with(() -> {
-            Context cx = Context.enter();
+            Context cx = FACTORY.enterContext();
             try {
-                cx.setLanguageVersion(Context.VERSION_ES6);
-                cx.setOptimizationLevel(-1);
-                cx.setApplicationClassLoader(RhinoExecutor.class.getClassLoader());
                 return new CompiledScript(cx.compileString(text, name, 1, null),
                         Collections.<String>emptyList());
             } catch (EvaluatorException refused) {
@@ -78,24 +154,249 @@ public final class RhinoExecutor implements JsExecutor {
         return messages;
     }
 
+    // ── Run ─────────────────────────────────────────────────────────────────────────────────────
+
     @Override
     public Object run(Compiled script, Map<String, Object> bindings,
                       Consumer<String> out, Consumer<String> err,
-                      Supplier<String> readLine, Predicate<String> allowsClass) {
-        throw new UnsupportedOperationException(
-                "the JavaScript runtime lands at M10.5; this build compiles but does not run scripts");
+                      Supplier<String> readLine, Predicate<String> allowsClass) throws Throwable {
+        if (!(script instanceof CompiledScript) || !script.successful()) {
+            throw new IllegalStateException("cannot run a script that did not compile: "
+                    + (script == null ? "null" : script.messages()));
+        }
+        // A CONTEXT ALREADY ENTERED on this thread would be reused by enterContext, and its shutter --
+        // which may be set exactly once -- would already be somebody else's. Refusing is the honest
+        // answer; nothing of ours nests runs.
+        if (Context.getCurrentContext() != null) {
+            throw new IllegalStateException("a script is already running on this thread");
+        }
+        Script compiled = ((CompiledScript) script).script();
+        Thread thread = Thread.currentThread();
+        Run run = new Run();
+        RUNS.put(thread, run);
+        try {
+            return RhinoThread.withThrowing(() -> {
+                Context cx = FACTORY.enterContext();
+                try {
+                    cx.putThreadLocal(RUN_KEY, run);
+                    cx.setApplicationClassLoader(APPLICATION_LOADER);
+                    if (allowsClass != null) cx.setClassShutter(allowsClass::test);
+                    // FRESH, every time. Nothing the previous run defined is reachable from here, which
+                    // is what "replace" means in a language with no classloader to drop.
+                    ScriptableObject scope = cx.initStandardObjects(null, false);
+                    installGlobals(cx, scope, run, out, err, readLine, allowsClass);
+                    bind(cx, scope, bindings, allowsClass);
+                    return compiled.exec(cx, scope);
+                } catch (Stopped stopped) {
+                    throw interrupted();
+                } catch (WrappedException wrapped) {
+                    // THE BLOCKED HALF OF THE SAME STOP: the interrupt reached a Java call the script was
+                    // waiting in. Only when we asked -- an InterruptedException from anywhere else is the
+                    // script's own failure and is reported as one.
+                    if (run.stopRequested && wrapped.getWrappedException() instanceof InterruptedException) {
+                        throw interrupted();
+                    }
+                    throw wrapped;
+                } finally {
+                    Context.exit();
+                }
+            });
+        } finally {
+            RUNS.remove(thread, run);
+        }
     }
 
+    private static InterruptedException interrupted() {
+        // THE STATUS IS RE-ARMED before the run ends, so the host that asked to stop can see it either
+        // way -- and cleared by whoever reads it, which is the JDK's own contract for the flag.
+        Thread.currentThread().interrupt();
+        return new InterruptedException("script stopped");
+    }
+
+    /**
+     * The host's objects, in scope by name.
+     *
+     * <p>Wrapped through {@code javaToJS} so a Java {@code String} is a JavaScript string and a Java object
+     * is a live proxy the script can call methods on. A binding whose class the sandbox refuses is not put
+     * in scope at all: putting it there and letting the shutter refuse each call would be a name that
+     * exists and cannot be used, which is worse than one that does not exist.</p>
+     */
+    private static void bind(Context cx, Scriptable scope, Map<String, Object> bindings,
+                             Predicate<String> allowsClass) {
+        if (bindings == null || bindings.isEmpty()) return;
+        for (Map.Entry<String, Object> binding : bindings.entrySet()) {
+            Object value = binding.getValue();
+            if (value != null && allowsClass != null && !allowsClass.test(value.getClass().getName())) {
+                continue;
+            }
+            ScriptableObject.putProperty(scope, binding.getKey(), wrap(cx, scope, value));
+        }
+    }
+
+    /**
+     * A Java value as the script sees it.
+     *
+     * <p>{@code Context.javaToJS} wraps a {@code Class} as an ordinary object — its members are
+     * {@code getName()} and friends, and {@code Sink.write(...)} is "Cannot find function write". A class
+     * handed to a script means its <em>statics</em>, which is {@code NativeJavaClass} and is what
+     * {@code Packages.a.b.C} would have produced; so a class goes through the wrap factory's class path
+     * and everything else through the ordinary one.</p>
+     */
+    private static Object wrap(Context cx, Scriptable scope, Object value) {
+        if (value instanceof Class) return cx.getWrapFactory().wrapJavaClass(cx, scope, (Class<?>) value);
+        return Context.javaToJS(value, scope);
+    }
+
+    // ── The globals ─────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * {@code console}, {@code print}, {@code readLine}/{@code prompt}, {@code Java}.
+     *
+     * <p>Host functions rather than a prelude, so nothing shifts an offset: every line the engine reports
+     * is the file's own line, which is what makes a runtime error land on the right row without a mapping
+     * pass. Rhino's bare {@code initStandardObjects} installs none of these — {@code console} is the
+     * shell's, and {@code Java} is Nashorn's, adopted here because {@code Java.type('a.b.C')} is one
+     * expression the completion list can insert while {@code Packages.a.b.C} is a chain of four.</p>
+     */
+    private static void installGlobals(Context cx, ScriptableObject scope, Run run,
+                                       Consumer<String> out, Consumer<String> err,
+                                       Supplier<String> readLine, Predicate<String> allowsClass) {
+        Consumer<String> toOut = out == null ? text -> { } : out;
+        Consumer<String> toErr = err == null ? text -> { } : err;
+
+        NativeObject console = new NativeObject();
+        console.setPrototype(ScriptableObject.getObjectPrototype(scope));
+        console.setParentScope(scope);
+        for (String name : new String[]{"log", "info", "debug"}) {
+            define(console, scope, name, args -> emit(toOut, args));
+        }
+        // WARN AND ERROR BOTH GO TO THE ERROR CONSUMER. That is Node's own routing -- both write to
+        // stderr -- and the console shows them at the level the host chose for that stream.
+        define(console, scope, "warn", args -> emit(toErr, args));
+        define(console, scope, "error", args -> emit(toErr, args));
+        ScriptableObject.putProperty(scope, "console", console);
+
+        define(scope, scope, "print", args -> emit(toOut, args));
+
+        HostBody read = args -> {
+            // A PROMPT IS PRINTED, THEN THE READ BLOCKS. `readLine('Name? ')` is the shape every
+            // shell offers, and it lands as a row of its own because the console deals in rows.
+            if (args.length > 0 && args[0] != null && !Undefined.isUndefined(args[0])) {
+                toOut.accept(RhinoConsoleFormat.topLevel(args[0]));
+            }
+            String line = readLine == null ? null : readLine.get();
+            // A STOP THAT LANDED WHILE WAITING ends the script here, not ten thousand instructions
+            // later. The console answered null and restored the interrupt; without this the script
+            // would go on with a null in hand until the observer next looked.
+            if (run.stopRequested) throw new Stopped();
+            return line;
+        };
+        define(scope, scope, "readLine", read);
+        define(scope, scope, "prompt", read);
+
+        NativeObject java = new NativeObject();
+        java.setPrototype(ScriptableObject.getObjectPrototype(scope));
+        java.setParentScope(scope);
+        define(java, scope, "type", args -> {
+            String name = args.length == 0 || args[0] == null ? "" : Context.toString(args[0]);
+            if (name.isEmpty()) throw new IllegalArgumentException("Java.type: a class name is required");
+            // ASKED HERE AS WELL AS AT THE SHUTTER, so a refused class is never even loaded and the
+            // message names the class rather than the member the script went on to call.
+            if (allowsClass != null && !allowsClass.test(name)) {
+                throw new SecurityException("Java.type: access to " + name + " is not permitted");
+            }
+            try {
+                return wrap(cx, scope, Class.forName(name, true, cx.getApplicationClassLoader()));
+            } catch (ClassNotFoundException absent) {
+                throw new IllegalArgumentException("Java.type: no such class " + name);
+            }
+        });
+        ScriptableObject.putProperty(scope, "Java", java);
+    }
+
+    private static Object emit(Consumer<String> sink, Object[] args) {
+        sink.accept(RhinoConsoleFormat.line(args));
+        return Undefined.instance;
+    }
+
+    /** What a host function does, given the script's arguments. */
+    private interface HostBody {
+        Object call(Object[] args);
+    }
+
+    /** Defines {@code name} on {@code owner} as a function the script can call. */
+    private static void define(Scriptable owner, Scriptable scope, String name, HostBody body) {
+        BaseFunction function = new BaseFunction(scope, ScriptableObject.getFunctionPrototype(scope)) {
+            @Override
+            public Object call(Context cx, Scriptable callScope, Scriptable thisObj, Object[] args) {
+                return body.call(args == null ? new Object[0] : args);
+            }
+
+            @Override
+            public String getFunctionName() {
+                return name;
+            }
+        };
+        ScriptableObject.putProperty(owner, name, function);
+    }
+
+    // ── Stop, origin, failure ───────────────────────────────────────────────────────────────────
+
     @Override
-    public void stop() {
-        // Nothing runs yet, so there is nothing to stop -- and answering rather than throwing is right:
-        // `ScriptRuntimes.stopAll()` asks every runtime unconditionally, and one that threw would take
-        // down a Stop that was about somebody else's script.
+    public void stop(Thread thread) {
+        if (thread == null) return;
+        Run run = RUNS.get(thread);
+        // THE FLAG FIRST, THEN THE INTERRUPT. A blocked script wakes on the interrupt and asks the flag;
+        // the other order has a window where it wakes, sees no request, and goes back to waiting.
+        if (run != null) run.stopRequested = true;
+        if (thread.isAlive()) thread.interrupt();
     }
 
     @Override
     public int currentLine() {
-        return -1;
+        Context cx = Context.getCurrentContext();
+        if (cx == null) return -1;
+        try {
+            // AN EXCEPTION IS THE PUBLIC ROUTE. Constructing one captures the interpreter's frame chain
+            // (a linked list, not a Java stack walk), and its first element is the innermost script frame
+            // -- the line the current statement began on, which is what "the line that printed" means.
+            ScriptStackElement[] stack = new EvaluatorException("origin").getScriptStack();
+            return stack.length == 0 ? -1 : stack[0].lineNumber;
+        } catch (RuntimeException unavailable) {
+            return -1;
+        }
+    }
+
+    @Override
+    public Failure describe(Throwable thrown) {
+        if (!(thrown instanceof RhinoException)) return null;
+        RhinoException error = (RhinoException) thrown;
+        String message = error.details();
+        if (message == null || message.isEmpty()) message = thrown.toString();
+        return new Failure(error.sourceName(), error.lineNumber(), error.columnNumber(), message);
+    }
+
+    // ── Types ───────────────────────────────────────────────────────────────────────────────────
+
+    /** One run's stop flag. Filed on the {@code Context}, found by thread. */
+    private static final class Run {
+        volatile boolean stopRequested;
+    }
+
+    /**
+     * Thrown from inside the interpreter loop to end a script.
+     *
+     * <p>An {@code Error} because Rhino refuses a script's {@code catch} an {@code Error} thrown from Java
+     * — the same property {@code ScriptStoppedException} has on the Java side, for the same reason. No
+     * stack trace: it names an arbitrary loop iteration and costs more than every observation that led to
+     * it. Never leaves {@link #run}, which translates it.</p>
+     */
+    private static final class Stopped extends Error {
+        private static final long serialVersionUID = 1L;
+
+        Stopped() {
+            super("script stopped", null, false, false);
+        }
     }
 
     /** A compiled script, or the reasons there is not one. */
@@ -119,7 +420,7 @@ public final class RhinoExecutor implements JsExecutor {
             return messages;
         }
 
-        /** The Rhino handle, for {@link RhinoExecutor#run} when it lands. Never leaves this package. */
+        /** The Rhino handle. Never leaves this package. */
         Script script() {
             return script;
         }

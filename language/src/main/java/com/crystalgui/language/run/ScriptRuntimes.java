@@ -9,9 +9,11 @@ import java.io.Closeable;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
@@ -154,10 +156,23 @@ public final class ScriptRuntimes implements Closeable {
         return stopped;
     }
 
-    /** Every runtime's console filters, in registration order. */
+    /**
+     * Every runtime's console filters, in registration order — <b>one of each kind</b>.
+     *
+     * <p>Two runtimes may legitimately name the same filter: a JavaScript exception has JVM frames under
+     * it, so its runtime offers the JVM frame filter beside its own, and the Java runtime offers the same
+     * one. The console's chain is additive, so letting both through would put two links on every
+     * {@code (Foo.java:12)} — a doubled underline and two identical destinations. A frame is a frame
+     * whoever threw it; the class of the filter is what says which kind it is.</p>
+     */
     public List<ConsoleFilter> consoleFilters() {
         List<ConsoleFilter> filters = new ArrayList<>();
-        for (ScriptRuntime runtime : byLanguage.values()) filters.addAll(runtime.consoleFilters());
+        Set<Class<?>> kinds = new HashSet<>();
+        for (ScriptRuntime runtime : byLanguage.values()) {
+            for (ConsoleFilter filter : runtime.consoleFilters()) {
+                if (kinds.add(filter.getClass())) filters.add(filter);
+            }
+        }
         return filters;
     }
 

@@ -4,6 +4,7 @@ import com.crystalgui.core.async.JobKey;
 import com.crystalgui.core.async.JobLane;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.signal.Connection;
+import com.crystalgui.fs.Resource;
 import com.crystalgui.language.engine.bridge.Analysis;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.TextPoint;
@@ -26,6 +27,7 @@ import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 /**
@@ -101,6 +103,8 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
     @Nullable private final JobScheduler scheduler;
     private final JobKey analysisKey;
     private final String retainedLane;
+    private final String runtimeLane;
+    @Nullable private final Resource file;
 
     private Connection bufferSubscription = Connection.DISCONNECTED;
     private final List<Consumer<Versioned<List<Diagnostic>>>> diagnosticListeners = new ArrayList<>();
@@ -119,11 +123,43 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
      * @param scheduler where analyses run, or null to analyse synchronously on every change (tests)
      */
     protected AnalysedLanguageServices(String id, TextBuffer buffer, @Nullable JobScheduler scheduler) {
+        this(id, buffer, scheduler, null);
+    }
+
+    /**
+     * @param file the document this is attached to, so a <em>runtime</em> can find it —
+     *             {@link #attachedTo}. Null for a document with no file, which nothing can run
+     */
+    protected AnalysedLanguageServices(String id, TextBuffer buffer, @Nullable JobScheduler scheduler,
+                                       @Nullable Resource file) {
         this.id = id;
         this.buffer = buffer;
         this.scheduler = scheduler;
+        this.file = file;
         this.analysisKey = JobKey.of(this, id + "-analysis");
         this.retainedLane = id + "-retained-warnings";
+        this.runtimeLane = id + "-runtime-problems";
+        if (file != null) ATTACHED.put(file, this);
+    }
+
+    // ── Which services a file has ───────────────────────────────────────────────────────────────
+
+    /**
+     * Every attached services object with a file, by that file.
+     *
+     * <p>Exists for one caller: a <b>runtime</b> that has just run the file and has something to say
+     * about it — a thrown exception at a line — and holds nothing but the file's {@code Resource}. The
+     * services belong to the document ({@code TextFileDocument} owns them), and there is exactly one per
+     * open file, so the file is a valid key. Concurrent because a run reports from its own thread; the
+     * lookup is thread-safe and what it answers is then only ever <em>called</em> on the UI thread.</p>
+     */
+    private static final ConcurrentHashMap<Resource, AnalysedLanguageServices> ATTACHED =
+            new ConcurrentHashMap<>();
+
+    /** The services attached to {@code file}, or null when it is not open with an engine behind it. */
+    @Nullable
+    public static AnalysedLanguageServices attachedTo(@Nullable Resource file) {
+        return file == null ? null : ATTACHED.get(file);
     }
 
     /**
@@ -216,6 +252,7 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
     public final void close() {
         if (closed) return;
         closed = true;
+        if (file != null) ATTACHED.remove(file, this);
         bufferSubscription.disconnect();
         if (scheduler != null) scheduler.cancel(analysisKey);
         diagnosticListeners.clear();
@@ -237,14 +274,62 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
      * stamp exists to measure — reading it here would make every list look fresh and the gate a no-op.</p>
      */
     private Versioned<List<Diagnostic>> announcement(Analysis analysis) {
-        List<Diagnostic> reported = analysis.diagnostics();
-        if (analysis.optionalProblemsAnalysed()) {
-            remember(reported);
-            return Versioned.of(analysis.version(), reported);
-        }
-        List<Diagnostic> merged = new ArrayList<>(reported);
-        merged.addAll(recalled());
+        if (analysis.optionalProblemsAnalysed()) remember(analysis.diagnostics());
+        return compose(analysis);
+    }
+
+    /**
+     * The list an announcement carries: the analysis's own problems, the retained warnings when the
+     * analysis could not produce them, and whatever the runtime last reported.
+     *
+     * <p>Split from {@link #announcement} because this half is safe to run again — it reads tracked
+     * lanes, which say where their text is <em>now</em> — while that half writes one from positions
+     * that are only meaningful against the document the analysis saw.</p>
+     */
+    private Versioned<List<Diagnostic>> compose(Analysis analysis) {
+        List<Diagnostic> merged = new ArrayList<>(analysis.diagnostics());
+        if (!analysis.optionalProblemsAnalysed()) merged.addAll(recalled(retainedLane));
+        merged.addAll(recalled(runtimeLane));
         return Versioned.of(analysis.version(), merged);
+    }
+
+    // ── What the runtime says ───────────────────────────────────────────────────────────────────
+
+    /**
+     * Problems the language's <b>runtime</b> reported against this document — a thrown exception, at
+     * the line it was thrown from. Replaces what it reported before; empty clears.
+     *
+     * <p>A run says "line 12 is broken" and the console shows it, but a console row is not a squiggle,
+     * and the author is looking at the editor. So the runtime hands its verdict here and it rides the
+     * same channel every listener already reads — filed under this engine's id, beside the analysis's
+     * own problems, tracked through edits by the same lane machinery the retained warnings use, and
+     * gone the moment the file is run again. VS Code's debugger draws its exception decoration the same
+     * way and clears it on the next launch.</p>
+     *
+     * <p><b>UI thread.</b> A runtime reports from its own thread and must hop first — the lanes and the
+     * listeners are the document's. Announced at the <em>current analysis's</em> version, because the
+     * analysis's rows are part of the list: an editor whose buffer has moved on refuses the announcement
+     * as stale, exactly as it should, and the analysis already pending for that edit carries the runtime
+     * problems with it when it lands. Nothing is lost; nothing is announced against the wrong text.</p>
+     */
+    public final void reportRuntimeProblems(List<Diagnostic> problems) {
+        if (closed) return;
+        List<DecorationSet.Entry> entries = new ArrayList<>();
+        if (problems != null) {
+            for (Diagnostic problem : problems) {
+                if (!problem.hasPosition()) continue;
+                int from = offsetOf(problem.start());
+                int to = Math.max(from, offsetOf(problem.end()));
+                entries.add(DecorationSet.Entry.of(from, to, problem));
+            }
+        }
+        buffer.decorations().replaceLane(runtimeLane,
+                Stickiness.ALWAYS_GROWS_WHEN_TYPING_AT_EDGES, entries);
+        if (current == null) return;
+        lastAnnouncement = compose(current);
+        for (Consumer<Versioned<List<Diagnostic>>> listener : new ArrayList<>(diagnosticListeners)) {
+            listener.accept(lastAnnouncement);
+        }
     }
 
     // ── Warnings survive a syntax error ─────────────────────────────────────────────────────────
@@ -289,9 +374,9 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
      * retaining a problem and retaining a claim about text that is gone — and {@code collapsedByEdit} is
      * the distinction, since a diagnostic can legitimately be born empty.</p>
      */
-    private List<Diagnostic> recalled() {
+    private List<Diagnostic> recalled(String lane) {
         List<Diagnostic> out = new ArrayList<>();
-        for (TrackedRange range : buffer.decorations().inLane(retainedLane)) {
+        for (TrackedRange range : buffer.decorations().inLane(lane)) {
             if (range.isRemoved() || range.collapsedByEdit()) continue;
             Diagnostic original = range.payload(Diagnostic.class);
             if (original == null) continue;

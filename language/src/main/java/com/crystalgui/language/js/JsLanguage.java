@@ -103,12 +103,15 @@ public final class JsLanguage {
         // runtimes here rather than by asking this class, so the panel is not edited for a second
         // language. The cache root is the workbench's to choose and Rhino has nothing to cache, so it
         // is accepted and ignored -- see JsHost.
-        ScriptRuntimes.contribute(Language.JAVASCRIPT, cacheRoot -> new JsHost(executor));
+        // THE SCHEDULER TRAVELS WITH THE HOST: a run reports its outcome from the script's own thread,
+        // and putting a thrown exception on the document's line means reaching the document, which is
+        // UI-thread work. The host hops through the same scheduler the analyser uses.
+        ScriptRuntimes.contribute(Language.JAVASCRIPT, cacheRoot -> new JsHost(executor, jobs));
         return true;
     }
 
     private static LanguageServices servicesFor(TextBuffer buffer, @Nullable Resource resource) {
-        return new JsLanguageServices(buffer, analyzer, scheduler, sourceNameFor(resource));
+        return new JsLanguageServices(buffer, analyzer, scheduler, sourceNameFor(resource), resource);
     }
 
     /**
@@ -134,6 +137,11 @@ public final class JsLanguage {
     /** The analyser, or null when no engine opened. */
     public static synchronized JsSourceAnalyzer analyzer() {
         return analyzer;
+    }
+
+    /** The executor, or null when no engine opened — for a caller building its own {@link JsHost}. */
+    public static synchronized JsExecutor executor() {
+        return executor;
     }
 
     public static synchronized boolean isAvailable() {

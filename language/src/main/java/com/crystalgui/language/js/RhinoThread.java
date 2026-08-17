@@ -63,4 +63,21 @@ final class RhinoThread {
             return null;
         });
     }
+
+    /** A body that may throw anything — a script run, whose failure is the script's to report. */
+    interface ThrowingSupplier<T> {
+        T get() throws Throwable;
+    }
+
+    /** {@link #with}, for a body whose exceptions must reach the caller as themselves. */
+    static <T> T withThrowing(ThrowingSupplier<T> body) throws Throwable {
+        Thread thread = Thread.currentThread();
+        ClassLoader previous = thread.getContextClassLoader();
+        thread.setContextClassLoader(RhinoThread.class.getClassLoader());
+        try {
+            return body.get();
+        } finally {
+            thread.setContextClassLoader(previous);
+        }
+    }
 }
