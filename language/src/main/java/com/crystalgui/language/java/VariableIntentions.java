@@ -141,7 +141,7 @@ final class VariableIntentions {
 
             String source = context.source();
             String name = freshName(expression, type, statement);
-            String indent = indentAt(source, statement.getStartPosition());
+            String indent = Indent.at(source, statement.getStartPosition());
             String value = source.substring(expression.getStartPosition(),
                     expression.getStartPosition() + expression.getLength());
 
@@ -352,12 +352,14 @@ final class VariableIntentions {
 
             List<SimpleName> uses = usesOf(statement, variable, fragment.getName());
             if (uses.isEmpty()) return;
-            // WRITTEN THROUGH IS STILL WRITTEN. `double[] xPos = new double[n];` followed by
-            // `xPos[i] = …` never reassigns xPos, so the reassignment guard passes — and inlining turns
-            // the target into `new double[n][i] = …`, which is a two-dimensional array creation and does
-            // not parse. The variable's IDENTITY is what those uses depend on, which is exactly what
-            // substituting its initialiser destroys. Four real files, none of them a shape anyone would
-            // have written a fixture for.
+            // AN ASSIGNED VARIABLE'S INITIALISER IS NOT ITS VALUE, and WRITTEN THROUGH IS STILL WRITTEN.
+            // The plain reassignment is the zero-hop case of the same question: `x = 5` has the use as an
+            // assignment's left-hand side, and `xPos[i] = …` has it one array access out. That second one
+            // never reassigns xPos, so a reassignment-only guard passes it — and inlining turns the target
+            // into `new double[n][i] = …`, which is a two-dimensional array creation and does not parse.
+            // The variable's IDENTITY is what those uses depend on, which is exactly what substituting its
+            // initialiser destroys. Four real files, none of them a shape anyone would have written a
+            // fixture for.
             for (SimpleName use : uses) {
                 if (mutatedThrough(use)) return;
             }
@@ -397,9 +399,8 @@ final class VariableIntentions {
                     (VariableDeclarationFragment) statement.fragments().get(0);
             if (fragment.getInitializer() == null || fragment.resolveBinding() == null) return false;
             if (!(statement.getParent() instanceof Block)) return false;
-            // AN ASSIGNED VARIABLE'S INITIALISER IS NOT ITS VALUE. Substituting one for the other is not a
-            // near-miss, it is simply a different program.
-            if (assignedAfter(statement, fragment.getName().getIdentifier())) return false;
+            // WHETHER IT IS WRITTEN TO IS ASKED IN `contribute`, over the resolved uses, because that is
+            // where the bindings are. This predicate only has to find the declaration the caret is on.
             return context.touches(statement.getStartPosition(),
                     fragment.getName().getStartPosition() + fragment.getName().getLength());
         }
@@ -423,43 +424,6 @@ final class VariableIntentions {
                 }
             });
             return uses;
-        }
-
-        private static boolean assignedAfter(VariableDeclarationStatement declaration, String name) {
-            ASTNode method = declaration.getParent();
-            while (method.getParent() != null
-                    && !(method instanceof MethodDeclaration)) {
-                method = method.getParent();
-            }
-            boolean[] found = {false};
-            method.accept(new ASTVisitor() {
-                @Override public boolean visit(Assignment assignment) {
-                    if (isNamed(assignment.getLeftHandSide())) found[0] = true;
-                    return !found[0];
-                }
-
-                // `++` AND `--` ARE WRITES. The corpus found this on eight real files: `int crlf = 0;`
-                // followed by `crlf++` read as never reassigned, so every use was replaced by the
-                // initialiser and `crlf++` became `0++`, which does not parse. An assignment is the
-                // obvious shape of a write and is not the only one.
-                @Override public boolean visit(PostfixExpression postfix) {
-                    if (isNamed(postfix.getOperand())) found[0] = true;
-                    return !found[0];
-                }
-
-                @Override public boolean visit(PrefixExpression prefix) {
-                    boolean mutating = prefix.getOperator() == PrefixExpression.Operator.INCREMENT
-                            || prefix.getOperator() == PrefixExpression.Operator.DECREMENT;
-                    if (mutating && isNamed(prefix.getOperand())) found[0] = true;
-                    return !found[0];
-                }
-
-                private boolean isNamed(Expression target) {
-                    return target instanceof SimpleName
-                            && name.equals(((SimpleName) target).getIdentifier());
-                }
-            });
-            return found[0];
         }
 
         /**
@@ -493,13 +457,17 @@ final class VariableIntentions {
             return next + 1;
         }
 
-        /** The line's first character, when everything before {@code at} on it is whitespace. */
         /**
-         * Whether this use is a write to something reached <em>through</em> the variable.
+         * Whether this use is a write — to the variable, or to something reached <em>through</em> it.
          *
          * <p>Walks out through array indexes and field selections — {@code xPos[i]}, {@code node.left} —
          * and asks whether what it arrives at is being assigned or stepped. Those uses depend on the
          * variable naming <b>one</b> object, and inlining its initialiser gives each of them their own.</p>
+         *
+         * <p><b>Zero hops is the plain reassignment</b>, which is why this is the only mechanism now. The
+         * one beside it asked the same question by NAME over the whole method, so a same-named local in a
+         * sibling block or a lambda refused an inline that was perfectly safe — and it could not see a
+         * write through an index at all, which is the case that actually broke files.</p>
          */
         private static boolean mutatedThrough(SimpleName use) {
             ASTNode at = use;
@@ -520,6 +488,7 @@ final class VariableIntentions {
             return false;
         }
 
+        /** The line's first character, when everything before {@code at} on it is whitespace. */
         private static int startOfLine(String source, int at) {
             int lineStart = source.lastIndexOf('\n', Math.max(0, at - 1)) + 1;
             for (int i = lineStart; i < at; i++) {
@@ -555,14 +524,4 @@ final class VariableIntentions {
         return null;
     }
 
-    /** The leading whitespace of the line {@code position} is on. */
-    private static String indentAt(String source, int position) {
-        int lineStart = source.lastIndexOf('\n', Math.max(0, position - 1)) + 1;
-        int at = lineStart;
-        while (at < source.length() && at < position
-                && (source.charAt(at) == ' ' || source.charAt(at) == '\t')) {
-            at++;
-        }
-        return source.substring(lineStart, at);
-    }
 }
