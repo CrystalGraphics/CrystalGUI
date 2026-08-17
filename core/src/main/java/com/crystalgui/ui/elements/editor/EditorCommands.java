@@ -207,6 +207,12 @@ public final class EditorCommands {
                 .run(on(editor -> editor.showCodeActionsAt(editor.getCaret()))));
 
         // ── Multi-caret ─────────────────────────────────────────────────────────────────────────
+        // THE ONE CHORD THAT WAS NOT A COMMAND. Ctrl+Space was matched inside `handleCompletionKey`, so
+        // it could not be rebound, could not be listed in the palette, and did not appear in a keymap
+        // anybody read -- the single exception in a widget whose section header says its named actions
+        // are commands. It is one now, and the handler asks the keymap like every other binding.
+        registry.register(Command.of(PREFIX + "triggerSuggest", "Trigger Suggest")
+                .run(on(TextEditor::triggerSuggest)));
         registry.register(Command.of(PREFIX + "addCaretAtNextOccurrence", "Add Caret At Next Occurrence")
                 .run(on(TextEditor::addCaretAtNextOccurrence)));
         registry.register(Command.of(PREFIX + "selectAllOccurrences", "Select All Occurrences")
@@ -384,6 +390,7 @@ public final class EditorCommands {
      * <p>Chords are VS Code's, and {@code Mod} resolves to Ctrl or Cmd per platform.</p>
      */
     public static void bindDefaults(Keymap keymap) {
+        keymap.bind("Mod+Space", PREFIX + "triggerSuggest");
         keymap.bind("Mod+D", PREFIX + "addCaretAtNextOccurrence");
         keymap.bind("Mod+Shift+L", PREFIX + "selectAllOccurrences");
         keymap.bind("Mod+Alt+Up", PREFIX + "addCaretAbove");

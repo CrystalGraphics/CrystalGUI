@@ -2433,14 +2433,19 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * <p><b>Tab accepts, like Enter.</b> Both references do it and the reason is that Tab is what a person
      * reaches for when the intent is "finish this word" rather than "and now a new line".</p>
      */
+    /**
+     * Asks for completions here, whether or not a list is already open.
+     *
+     * <p>Re-asking is how you get a full list after a trigger character gave you a narrow one, which is
+     * why this is not a toggle. Bound to {@code Mod+Space} through the keymap like every other named
+     * action — it used to be matched inside {@link #handleCompletionKey}, which made it the one chord in
+     * the widget that could not be rebound or listed.</p>
+     */
+    public void triggerSuggest() {
+        openCompletion(CompletionProvider.TriggerKind.EXPLICIT, null);
+    }
+
     private boolean handleCompletionKey(int key, int modifiers) {
-        // Ctrl+Space opens, whether or not one is already open -- re-asking is how you get a full list after
-        // a trigger character gave you a narrow one.
-        if (key == CgKeyCodes.KEY_SPACE
-                && (CgModifiers.hasCtrl(modifiers) || CgModifiers.hasSuper(modifiers))) {
-            openCompletion(CompletionProvider.TriggerKind.EXPLICIT, null);
-            return true;
-        }
         if (completion == null || completion.isClosed()) return false;
 
         if (key == CgKeyCodes.KEY_DOWN) {
