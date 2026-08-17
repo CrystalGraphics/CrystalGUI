@@ -124,6 +124,25 @@ public class IntentionCorrectionsTest extends FixFixture {
                 "one type node serves both fragments");
     }
 
+    /**
+     * <b>An array initialiser cannot stand on its own.</b> The braces are part of a declaration's syntax,
+     * not an expression, so {@code int[] a = {1, 2};} splits into {@code a = {1, 2};}, which does not
+     * parse. The same fault as {@code var} approached from the other side — and the corpus is what found
+     * it, on {@code boolean[] found = {false};}, a line this codebase writes in every visitor it has.
+     */
+    @Test
+    public void anArrayInitialiserIsRefused() {
+        assertNoFix(""
+                        + "public class Script {\n"
+                        + "    void go() {\n"
+                        + "        boolean[] found = {false};\n"
+                        + "        System.out.println(found[0]);\n"
+                        + "    }\n"
+                        + "}\n",
+                "boolean[] found", IntentionCorrections.SPLIT_DECLARATION,
+                "an array initialiser is only legal inside a declaration");
+    }
+
     // ── The pairs round-trip, which is why none of them is a diagnostic ─────────────────────────
 
     /**

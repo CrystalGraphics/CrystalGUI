@@ -5,6 +5,7 @@ import com.crystalgui.text.ChangeSet;
 import com.crystalgui.text.lang.CodeAction;
 
 import org.eclipse.jdt.core.compiler.IProblem;
+import org.eclipse.jdt.core.dom.ArrayInitializer;
 import org.eclipse.jdt.core.dom.Assignment;
 import org.eclipse.jdt.core.dom.Block;
 import org.eclipse.jdt.core.dom.DoStatement;
@@ -94,6 +95,12 @@ final class IntentionCorrections {
             // `var` CARRIES NO TYPE OF ITS OWN. Splitting it leaves `var a;`, which is not legal Java at
             // any level -- the initialiser IS the declaration's type.
             if (statement.getType().isVar()) return;
+            // AND AN ARRAY INITIALISER CANNOT STAND ALONE. `int[] a = {1, 2};` splits to `a = {1, 2};`,
+            // which does not parse: the braces are part of the DECLARATION's syntax, not an expression --
+            // outside one it has to be `new int[] {1, 2}`. The same fault as `var` from the other side, and
+            // the corpus is what found it, on `boolean[] found = {false};` -- a line this codebase writes
+            // in every visitor it has.
+            if (fragment.getInitializer() instanceof ArrayInitializer) return;
 
             SimpleName name = fragment.getName();
             int after = name.getStartPosition() + name.getLength();

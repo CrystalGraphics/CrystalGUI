@@ -363,7 +363,7 @@ final class VariableIntentions {
             // one call into several, which is a performance change at best and a behaviour change the
             // moment it does anything. IntelliJ warns and offers to continue -- a popup with no dialog
             // cannot ask, so it refuses.
-            if (uses.size() > 1 && hasCall(value)) return;
+            if (uses.size() > 1 && SideEffects.addedByRepeating(value)) return;
 
             String source = context.source();
             String text = Negation.textOf(value, source);
@@ -425,9 +425,7 @@ final class VariableIntentions {
          * occasionally redundant, which is the right way round for an edit nobody re-reads.</p>
          */
         private static boolean needsParentheses(Expression value) {
-            return value instanceof InfixExpression || value instanceof ConditionalExpression
-                    || value instanceof Assignment || value instanceof InstanceofExpression
-                    || value instanceof LambdaExpression;
+            return Precedence.needsParenthesesWhenWrapped(value);
         }
 
         /**
@@ -494,18 +492,5 @@ final class VariableIntentions {
     // ── Shared ──────────────────────────────────────────────────────────────────────────────────
 
     private static final int[] NONE = new int[0];
-
-    private static boolean hasCall(Expression expression) {
-        boolean[] found = {false};
-        expression.accept(new ASTVisitor() {
-            @Override public void preVisit(ASTNode node) {
-                if (node instanceof MethodInvocation || node instanceof ClassInstanceCreation
-                        || node instanceof SuperMethodInvocation || node instanceof ArrayCreation) {
-                    found[0] = true;
-                }
-            }
-        });
-        return found[0];
-    }
 
 }

@@ -158,11 +158,7 @@ final class CastCorrections {
 
     /** Operators that bind looser than a cast, so the whole of one has to be wrapped before it is cast. */
     private static boolean bindsLooserThanACast(Expression expression) {
-        return expression instanceof InfixExpression
-                || expression instanceof ConditionalExpression
-                || expression instanceof Assignment
-                || expression instanceof InstanceofExpression
-                || expression instanceof LambdaExpression;
+        return Precedence.needsParenthesesWhenWrapped(expression);
     }
 
     // ── The argument shape, which is a different problem entirely ───────────────────────────────
@@ -441,7 +437,7 @@ final class CastCorrections {
             // A CALL IS NOT A VALUE TO THROW AWAY. `return compute();` discards the RESULT and keeps the
             // work; `return count;` discards nothing at all. Deleting an invocation deletes its side
             // effect, which is the same rule the unused-assignment fix is refused under.
-            if (hasCall(returned.getExpression())) return;
+            if (SideEffects.lostByDeleting(returned.getExpression())) return;
 
             ASTRewrite rewrite = context.rewrite();
             rewrite.remove(returned.getExpression(), null);
@@ -450,18 +446,6 @@ final class CastCorrections {
             out.add(context.fix(DROP_RETURNED_VALUE, "Remove returned value", edit));
         }
 
-        private static boolean hasCall(Expression expression) {
-            boolean[] found = {false};
-            expression.accept(new ASTVisitor() {
-                @Override public void preVisit(ASTNode node) {
-                    if (node instanceof MethodInvocation || node instanceof ClassInstanceCreation
-                            || node instanceof SuperMethodInvocation) {
-                        found[0] = true;
-                    }
-                }
-            });
-            return found[0];
-        }
     }
 
     /**
