@@ -140,6 +140,11 @@ public enum Grammar {
     public TreeSitterTokenizer newTokenizer(JobScheduler scheduler) {
         TreeSitterTokenizer tokenizer = new TreeSitterTokenizer(newParser(),
                 Queries.loadForHighlighting(queryPath("highlights.scm")), scheduler);
+        // AND WHERE ITS OPTIONAL FAMILIES LIVE. `folds.scm`, `indents.scm` and `locals.scm` are loaded
+        // on first use rather than here, so a document that is never folded pays nothing for them --
+        // but only this table knows which directory to read, and a tokenizer built from a bare query
+        // string (every test, and every injected child) has no directory and simply has no families.
+        tokenizer.readFamiliesFrom(this);
         if (hasInjections()) tokenizer.withInjections(this, scheduler);
         return tokenizer;
     }

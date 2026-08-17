@@ -6,6 +6,9 @@ import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.text.Change;
 import com.crystalgui.text.ChangeSet;
 import com.crystalgui.text.Rope;
+import com.crystalgui.text.cursor.IndentationProvider;
+import com.crystalgui.text.fold.FoldingRangeProvider;
+import com.crystalgui.text.fold.FoldingRegions;
 import com.crystalgui.text.syntax.SyntaxToken;
 import com.crystalgui.text.syntax.SyntaxTokenizer;
 import org.treesitter.TSInputEdit;
@@ -20,6 +23,8 @@ import org.treesitter.TSQueryMatch;
 import org.treesitter.TSQueryPredicate;
 import org.treesitter.TSRange;
 import org.treesitter.TSTree;
+
+import javax.annotation.Nullable;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -57,7 +62,8 @@ import java.util.regex.Pattern;
  * question the caller already knew the answer to. The document announces its changes through
  * {@link #edited}; a query now trusts that and re-parses only when something said so.</p>
  */
-public final class TreeSitterTokenizer implements SyntaxTokenizer {
+public final class TreeSitterTokenizer
+        implements SyntaxTokenizer, FoldingRangeProvider, IndentationProvider {
 
     /**
      * How much text a single query may cover.
@@ -205,6 +211,161 @@ public final class TreeSitterTokenizer implements SyntaxTokenizer {
         }
     }
 
+    // ── Folding ───────────────────────────────────────────────────────────────
+
+    /**
+     * {@code folds.scm}, or null for a grammar that ships none.
+     *
+     * <p>Built on the first fold query rather than in the constructor, because most tokenizers are made
+     * for highlighting and never asked: a {@code TSQuery} is a native compile of a text file, and paying
+     * for it per document to answer a question nobody asks is the kind of cost that only shows up as a
+     * slow open.</p>
+     */
+    private TSQuery foldQuery;
+    private boolean foldQueryBuilt;
+
+    /**
+     * Foldable regions from the parse tree, replacing the indentation guess.
+     *
+     * <h3>Why this is on the tokenizer rather than beside it</h3>
+     *
+     * <p>Folding needs the same tree highlighting needs, and this class already owns one: it is parsed
+     * on open, interpolated on every keystroke and reparsed off the UI thread. A separate provider would
+     * mean a second parser, a second tree and a second reparse per keystroke for the same document — and
+     * the two would disagree for the handful of frames between them, which is the window a fold arrow is
+     * most likely to be clicked in.</p>
+     *
+     * <p>The convention is the simple one and is agreed across Neovim, Helix and Pulsar: a single
+     * {@code @fold} capture on a node, and the region is that node's own extent. Nothing here decides
+     * <em>how</em> a fold is shown — a collapsed region keeping its first row visible, and the
+     * prefix-sum walk that must not binary-search over hidden rows, are both {@code FoldingRegions}'
+     * and were already true of the indentation provider.</p>
+     */
+    @Override
+    public FoldingRegions compute(Rope document, int tabSize) {
+        TSQuery folds = foldQuery();
+        if (folds == null) return FoldingRegions.empty();
+        if (tree == null || (stale && scheduler == null)) reparse(document.toString());
+        if (tree == null) return FoldingRegions.empty();
+
+        // THE WHOLE DOCUMENT, unlike highlighting. A fold arrow is drawn in the gutter for a region that
+        // may start above the viewport and end below it, and the outline a reader folds against is the
+        // file's rather than the screen's -- so the byte cap that bounds a per-viewport highlight query
+        // would silently truncate the outline of any file longer than 16KB.
+        cursor.setByteRange(0, Integer.MAX_VALUE);
+        cursor.exec(folds, tree.getRootNode());
+
+        List<int[]> ranges = new ArrayList<>();
+        TSQueryMatch match = new TSQueryMatch();
+        while (cursor.nextMatch(match)) {
+            for (TSQueryCapture capture : match.getCaptures()) {
+                TSNode node = capture.getNode();
+                if (node == null || node.isNull()) continue;
+                int startRow = node.getStartPoint().getRow();
+                int endRow = node.getEndPoint().getRow();
+                // A NODE THAT ENDS ON ITS OWN LINE IS NOT FOLDABLE, whatever the query says: there is
+                // nothing to hide, and an arrow beside it is an affordance that does nothing when clicked.
+                if (endRow <= startRow) continue;
+                ranges.add(new int[]{startRow, endRow});
+            }
+        }
+        return foldingRegionsOf(ranges, document.lineCount());
+    }
+
+    /**
+     * The captured ranges as {@link FoldingRegions} wants them: sorted by start row and strictly nested.
+     *
+     * <p>Both properties are load-bearing rather than tidy — {@code FoldingRegions} binary searches the
+     * list and packs parent indices on the assumption, so an out-of-order provider produces wrong answers
+     * instead of an exception. A query yields matches in the cursor's own order, which is neither.</p>
+     *
+     * <p><b>One region per start row.</b> Several nodes routinely begin on one line — a method
+     * declaration and its body block, a rule set and its block — and they would be two arrows in one
+     * gutter cell and two entries claiming the same handle. The widest wins, which is the outer construct
+     * and the one a reader means.</p>
+     */
+    private static FoldingRegions foldingRegionsOf(List<int[]> ranges, int lineCount) {
+        ranges.sort((a, b) -> a[0] != b[0] ? Integer.compare(a[0], b[0]) : Integer.compare(b[1], a[1]));
+
+        List<int[]> kept = new ArrayList<>(ranges.size());
+        int lastStart = -1;
+        // The end rows of the regions still open above this one, so nesting can be enforced by construction
+        // rather than checked afterwards.
+        List<Integer> openEnds = new ArrayList<>();
+        for (int[] range : ranges) {
+            int start = range[0];
+            int end = Math.min(range[1], Math.max(0, lineCount - 1));
+            if (start == lastStart || end <= start) continue;
+
+            while (!openEnds.isEmpty() && openEnds.get(openEnds.size() - 1) < start) {
+                openEnds.remove(openEnds.size() - 1);
+            }
+            // A REGION THAT ESCAPES ITS PARENT IS DROPPED, not clamped. Overlapping-but-not-nested ranges
+            // are what a query produces when two patterns describe the same construct differently, and
+            // clamping one to fit invents a region the grammar never claimed.
+            if (!openEnds.isEmpty() && end > openEnds.get(openEnds.size() - 1)) continue;
+
+            kept.add(new int[]{start, end});
+            openEnds.add(end);
+            lastStart = start;
+        }
+
+        int[] starts = new int[kept.size()];
+        int[] ends = new int[kept.size()];
+        for (int i = 0; i < kept.size(); i++) {
+            starts[i] = kept.get(i)[0];
+            ends[i] = kept.get(i)[1];
+        }
+        return new FoldingRegions(starts, ends);
+    }
+
+    @Nullable
+    private TSQuery foldQuery() {
+        if (foldQueryBuilt) return foldQuery;
+        foldQueryBuilt = true;
+        foldQuery = compileFamily("folds");
+        return foldQuery;
+    }
+
+    /**
+     * A query family for this grammar, or null.
+     *
+     * <p>Quiet on failure, deliberately: a grammar that ships no {@code folds.scm}, or one whose file
+     * names a node this parser version does not have, keeps the fallback it already had. The alternative
+     * is a language that fails to open because one of its optional queries did not compile.</p>
+     */
+    /** For the test that asserts every vendored family compiles against the grammar it was written for. */
+    @Nullable
+    TSQuery compileFamilyForTesting(String family) {
+        return compileFamily(family);
+    }
+
+    @Nullable
+    private TSQuery compileFamily(String family) {
+        if (grammarDirectory == null) return null;
+        String text = Queries.loadFamily(grammarDirectory, family);
+        if (text == null || text.isBlank()) return null;
+        try {
+            return new TSQuery(language, text);
+        } catch (RuntimeException unusable) {
+            return null;
+        }
+    }
+
+    /**
+     * Which vendored query directory this tokenizer reads its optional families from, or null.
+     *
+     * <p>Null for a tokenizer built straight from a query string — every test that passes its own query,
+     * and the injected children, which are built for one embedded region and never asked to fold.</p>
+     */
+    @Nullable
+    private String grammarDirectory;
+
+    /** Called by {@link Grammar#newTokenizer}, which is the only place that knows the directory. */
+    void readFamiliesFrom(Grammar grammar) {
+        this.grammarDirectory = grammar.directory();
+    }
+
     @Override
     public void setInvalidationListener(InvalidationListener listener) {
         this.invalidationListener = listener;
@@ -288,8 +449,145 @@ public final class TreeSitterTokenizer implements SyntaxTokenizer {
         // host captures the whole <script> body as raw text; the injected language then says what is
         // actually in it, and that is the more specific answer.
         appendInjected(sorted, startByte, endByte);
+
+        // AND WHAT THE SCOPES SAY, LAST, so it wins over the blanket `@variable` a highlight query gives
+        // every identifier. That is the whole point of the family: `count` the parameter and `count` the
+        // field are one shape and three colours, and only a resolution answer separates them.
+        //
+        // Still GRAMMAR-tier, though, which is what putting it here rather than in a SemanticTokenProvider
+        // means: the editor clears every grammar token under a semantic one before adding any, so an
+        // engine's answer still outranks this by construction. Getting that backwards would read as a
+        // colour-scheme bug rather than an ordering one, because both names resolve to real colours.
+        appendLocals(sorted, startByte, endByte);
         return sorted;
     }
+
+    // ── Indentation ─────────────────────────────────────────────────────────────────────────────
+
+    /** {@code indents.scm}, or null for a grammar that ships none. @see #foldQuery */
+    private TSQuery indentQuery;
+    private boolean indentQueryBuilt;
+    private String[] indentCaptureNames;
+
+    @Override
+    public int levelsAfterRow(Rope document, int row) {
+        if (!prepareIndents(document) || row < 0 || row >= document.lineCount()) return -1;
+        int lineStart = document.lineStartOffset(row);
+        int endOfRow = lineStart + document.line(row).length();
+        return TreeIndents.levelsAfterRow(tree, indentQuery, indentCaptureNames, row,
+                offsets.toUtf8(Math.max(lineStart, endOfRow - 1)));
+    }
+
+    @Override
+    public int levelsAtRow(Rope document, int row) {
+        if (!prepareIndents(document) || row < 0 || row >= document.lineCount()) return -1;
+        return TreeIndents.levelsAtRow(tree, indentQuery, indentCaptureNames, row,
+                offsets.toUtf8(document.lineStartOffset(row)));
+    }
+
+    /** Whether there is a tree and an indent query to ask. Builds both on first use. */
+    private boolean prepareIndents(Rope document) {
+        if (!indentQueryBuilt) {
+            indentQueryBuilt = true;
+            indentQuery = compileFamily("indents");
+            if (indentQuery != null) {
+                indentCaptureNames = new String[indentQuery.getCaptureCount()];
+                for (int i = 0; i < indentCaptureNames.length; i++) {
+                    String name = indentQuery.getCaptureNameForId(i);
+                    indentCaptureNames[i] = name == null ? null : name.intern();
+                }
+            }
+        }
+        if (indentQuery == null) return false;
+        // A STALE TREE IS NOT GOOD ENOUGH HERE, unlike for highlighting. Enter is pressed once and the
+        // answer is written into the document, where a wrong indent stays until somebody fixes it by
+        // hand -- so this is the one query that waits for the parse rather than showing a frame of
+        // slightly-behind colour.
+        if (tree == null || stale) reparse(document.toString());
+        return tree != null;
+    }
+
+    /** {@code locals.scm}, or null for a grammar that ships none. @see #foldQuery */
+    private TSQuery localsQuery;
+    private boolean localsQueryBuilt;
+
+    /**
+     * Adds the scope-resolved colours, when this grammar ships a {@code locals.scm}.
+     *
+     * <p>A cursor of its own, because the shared one is mid-walk: this runs from inside {@code tokenize},
+     * which has just finished with it, but the query underneath is executed over the WHOLE tree rather
+     * than the queried span (a reference is defined by a declaration that is usually off screen) — so
+     * reusing it would leave the byte range set to the file for whoever asked next.</p>
+     */
+    private void appendLocals(List<SyntaxToken> tokens, int startByte, int endByte) {
+        if (localsCaptureNames == null) {
+            if (localsQueryBuilt) return;
+            localsQueryBuilt = true;
+            localsQuery = compileFamily("locals");
+            if (localsQuery == null) return;
+            localsCaptureNames = new String[localsQuery.getCaptureCount()];
+            for (int i = 0; i < localsCaptureNames.length; i++) {
+                String name = localsQuery.getCaptureNameForId(i);
+                localsCaptureNames[i] = name == null ? null : name.intern();
+            }
+        }
+        if (localsQuery == null || tree == null) return;
+
+        for (SyntaxToken local : localsForTree()) {
+            if (local.end() <= startByteToUtf16(startByte) || local.start() >= startByteToUtf16(endByte)) {
+                continue;
+            }
+            // ONLY WHERE THE GRAMMAR HAD NOTHING BETTER TO SAY. A scope answer is "which KIND of variable
+            // this is", which is a refinement of the blanket `@variable` and NOT a second opinion about
+            // whether something is a constant or a method: `PI` is captured `@constant` by a rule that
+            // tested its spelling, and `@local.definition.var` would overwrite that with `variable` purely
+            // by arriving later. The catch-all is the one answer this may improve on -- which is the same
+            // rule the pattern-index sort already encodes for the highlight query itself.
+            if (!coveredOnlyByCatchAll(tokens, local)) continue;
+            tokens.add(local);
+        }
+    }
+
+    /**
+     * Whether every token already covering {@code local}'s span is a catch-all.
+     *
+     * <p>Asked of the SPAN rather than of an exact range match, because a highlight query and a locals
+     * query need not agree about node boundaries — one may capture the identifier and the other the
+     * declarator around it.</p>
+     */
+    private static boolean coveredOnlyByCatchAll(List<SyntaxToken> tokens, SyntaxToken local) {
+        for (SyntaxToken existing : tokens) {
+            if (existing.end() <= local.start() || existing.start() >= local.end()) continue;
+            if (!isCatchAll(existing.name())) return false;
+        }
+        return true;
+    }
+
+    /**
+     * The scope-derived tokens for the current tree, computed once per parse.
+     *
+     * <p><b>Cached, and that is not an optimisation.</b> The locals query runs over the WHOLE file by
+     * necessity — a reference in the viewport is declared somewhere that usually is not — while
+     * {@code tokenize} is called per viewport repaint. Running it per call put a whole-document query on
+     * every paint: measured at 1000 repeat queries taking 87 seconds against a first query of 137ms,
+     * which is the shape of the reparse-per-query bug this class already has a test for.</p>
+     */
+    private List<SyntaxToken> localsForTree() {
+        if (localsTokens != null) return localsTokens;
+        TSQueryCursor localsCursor = new TSQueryCursor();
+        localsTokens = LocalScopes.tokensIn(tree, localsQuery, localsCaptureNames, localsCursor, offsets,
+                0, Integer.MAX_VALUE);
+        return localsTokens;
+    }
+
+    /** Cleared whenever the tree is replaced. @see #localsForTree */
+    private List<SyntaxToken> localsTokens;
+
+    private int startByteToUtf16(int byteOffset) {
+        return byteOffset == Integer.MAX_VALUE ? Integer.MAX_VALUE : offsets.toUtf16(byteOffset);
+    }
+
+    private String[] localsCaptureNames;
 
     /**
      * Runs each injected region through its own grammar and adds the result, rebased onto this document.
@@ -451,6 +749,7 @@ public final class TreeSitterTokenizer implements SyntaxTokenizer {
             if (result == null) return;
             TSTree replaced = this.tree;
             this.tree = result.tree();
+            this.localsTokens = null;   // a new tree means new scopes
             this.offsets = result.offsets();
             this.stale = false;
             // Nothing about the DOCUMENT changed, so no existing signal would tell the view to re-query --
@@ -504,6 +803,7 @@ public final class TreeSitterTokenizer implements SyntaxTokenizer {
     }
 
     private void reparse(String text) {
+        this.localsTokens = null;   // @see #localsForTree -- the cache belongs to one tree
         TSTree previous = tree;
         this.tree = previous == null
                 ? parser.parseString(null, text)
