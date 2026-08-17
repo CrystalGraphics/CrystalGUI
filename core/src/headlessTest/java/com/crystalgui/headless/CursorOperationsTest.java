@@ -265,6 +265,60 @@ public class CursorOperationsTest {
         assertEquals("\n\t\t", enter.text());
     }
 
+    // ── Paste ───────────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * <b>A block arrives at the depth it is dropped into</b>, keeping its own shape. The shift is
+     * measured from the minimum indent of the lines after the first, so nothing inside the block moves
+     * relative to anything else — a nested statement stays nested.
+     */
+    @Test
+    public void pastedLinesAreShiftedToWhereTheyLand() {
+        Rope document = Rope.of("class A {\n    void go() {\n        \n    }\n}");
+        int at = document.lineStartOffset(2) + 8;                     // inside the 8-space indent
+        String pasted = "if (x) {\n    call();\n}";
+
+        assertEquals("if (x) {\n            call();\n        }",
+                TypeOperations.reindentForPaste(document, at, pasted,
+                        TypeOperations.IndentStyle.spaces(4)));
+    }
+
+    /** The first line is being typed at the caret, so it goes in exactly as it was cut. */
+    @Test
+    public void theFirstPastedLineIsNeverTouched() {
+        Rope document = Rope.of("        ");
+        String pasted = "    already indented\n    second";
+        String out = TypeOperations.reindentForPaste(document, 8, pasted,
+                TypeOperations.IndentStyle.spaces(4));
+        assertTrue(out.startsWith("    already indented\n"));
+    }
+
+    /** Into the middle of a line, what the rest should line up with is genuinely ambiguous. */
+    @Test
+    public void pastingIntoTextLeavesTheBlockAlone() {
+        Rope document = Rope.of("    int x = 1;");
+        String pasted = "a\n        b";
+        assertEquals(pasted, TypeOperations.reindentForPaste(document, 10, pasted,
+                TypeOperations.IndentStyle.spaces(4)));
+    }
+
+    /** A single line has no shape to preserve and no lines below it to shift. */
+    @Test
+    public void aSingleLinePasteIsUnchanged() {
+        Rope document = Rope.of("        ");
+        assertEquals("value", TypeOperations.reindentForPaste(document, 8, "value",
+                TypeOperations.IndentStyle.spaces(4)));
+    }
+
+    /** In tabs mode the shift is written as tabs, because that is how the document indents. */
+    @Test
+    public void aShiftInTabsModeIsWrittenWithTabs() {
+        Rope document = Rope.of("\t\t");
+        String out = TypeOperations.reindentForPaste(document, 2, "a\nb",
+                TypeOperations.IndentStyle.tabs(4));
+        assertEquals("a\n\t\tb", out);
+    }
+
     // ── Tab ─────────────────────────────────────────────────────────────────────────────────────
 
     /** To the next stop, so a Tab-indented block does not drift one character further out per press. */

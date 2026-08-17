@@ -206,6 +206,80 @@ public final class TypeOperations {
     }
 
     /**
+     * Pasted text re-indented to where it is landing.
+     *
+     * <h3>What gets moved, and what deliberately does not</h3>
+     *
+     * <p>The <b>first line goes in untouched</b> — it is being typed at the caret, and the caret is
+     * already where the user put it. Every line after it is shifted by the difference between the block's
+     * own base indent and the indent it is arriving at, so a method copied out of one class and dropped
+     * into another arrives at the new class's depth with its internal shape intact.</p>
+     *
+     * <p>The shift is measured from the <b>minimum</b> indent of the lines after the first, which is what
+     * makes it a shift rather than a reformat: nothing inside the block moves relative to anything else,
+     * so a nested {@code if} stays nested and a continuation line stays hanging. That is also the
+     * difference between this and "format on paste", which is a separate feature and is off by default in
+     * both references for the good reason that it changes code you did not write.</p>
+     *
+     * <h3>Only into indentation</h3>
+     *
+     * <p>Pasting into the middle of a line joins the first pasted line onto existing text, and what the
+     * rest of the block should line up with is then genuinely ambiguous — so the text goes in as it was
+     * cut. Monaco draws the same line.</p>
+     */
+    public static String reindentForPaste(Rope document, int at, String pasted, IndentStyle style) {
+        if (pasted == null || pasted.indexOf('\n') < 0) return pasted;
+        int row = document.offsetToPoint(at).row();
+        int lineStart = document.lineStartOffset(row);
+        String line = document.line(row);
+        int column = Math.max(0, Math.min(at - lineStart, line.length()));
+        if (!line.substring(0, column).trim().isEmpty()) return pasted;
+
+        String[] lines = pasted.split("\n", -1);
+        int base = Integer.MAX_VALUE;
+        for (int i = 1; i < lines.length; i++) {
+            String each = lines[i];
+            if (each.trim().isEmpty()) continue;
+            base = Math.min(base, visualIndentOf(each, style.width()));
+        }
+        if (base == Integer.MAX_VALUE) return pasted;
+
+        int target = visualIndentOf(line.substring(0, column) + "x", style.width());
+        int shift = target - base;
+        if (shift == 0) return pasted;
+
+        StringBuilder built = new StringBuilder(pasted.length()).append(lines[0]);
+        for (int i = 1; i < lines.length; i++) {
+            built.append('\n');
+            String each = lines[i];
+            if (each.trim().isEmpty()) continue;                     // no trailing indent on a blank line
+            int want = Math.max(0, visualIndentOf(each, style.width()) + shift);
+            built.append(indentOf(want, style)).append(each.substring(leadingWhitespace(each)));
+        }
+        return built.toString();
+    }
+
+    /** Where a line's text begins, counted in the columns it is drawn at. */
+    private static int visualIndentOf(String line, int tabSize) {
+        return CursorColumns.visibleColumn(line, leadingWhitespace(line), Math.max(1, tabSize));
+    }
+
+    private static int leadingWhitespace(String line) {
+        int at = 0;
+        while (at < line.length() && (line.charAt(at) == ' ' || line.charAt(at) == '\t')) at++;
+        return at;
+    }
+
+    /** {@code columns} worth of indentation, written the way this document indents. */
+    private static String indentOf(int columns, IndentStyle style) {
+        if (style.insertSpaces()) return spaces(columns);
+        int width = Math.max(1, style.width());
+        StringBuilder built = new StringBuilder();
+        for (int at = 0; at + width <= columns; at += width) built.append('\t');
+        return built.append(spaces(columns % width)).toString();
+    }
+
+    /**
      * What Tab inserts at {@code at} — <b>to the next stop</b>, not a fixed number of spaces.
      *
      * <p>A tab from column six with a width of four inserts two spaces and lands on eight; the version
