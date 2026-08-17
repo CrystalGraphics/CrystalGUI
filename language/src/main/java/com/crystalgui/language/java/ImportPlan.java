@@ -3,6 +3,7 @@ package com.crystalgui.language.java;
 import com.crystalgui.text.Change;
 
 import org.eclipse.jdt.core.dom.ASTVisitor;
+import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.AbstractTypeDeclaration;
 import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.dom.ImportDeclaration;
@@ -60,7 +61,7 @@ final class ImportPlan {
             }
         }
         unit.accept(new ASTVisitor() {
-            @Override public void preVisit(org.eclipse.jdt.core.dom.ASTNode node) {
+            @Override public void preVisit(ASTNode node) {
                 if (node instanceof AbstractTypeDeclaration) {
                     taken.add(((AbstractTypeDeclaration) node).getName().getIdentifier());
                 }
