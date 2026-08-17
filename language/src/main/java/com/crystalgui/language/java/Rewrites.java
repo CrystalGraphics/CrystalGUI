@@ -51,7 +51,7 @@ import java.util.Map;
  *       hand-rolled version had to special-case.</li>
  *   <li><b>Indentation of generated code comes from the options map</b>, honoured for multi-line output.
  *       Irrelevant while every correction is a removal; load-bearing the moment one generates a
- *       statement. @see #formattingOptions</li>
+ *       statement. @see Indent#detect</li>
  *   <li><b>{@code ImportRewrite} is unusable</b> — it throws
  *       {@code IllegalArgumentException: AST must have been constructed from a Java element}. That is why
  *       {@code JavaQuickFixes} still handles the import region itself.</li>
@@ -111,7 +111,7 @@ final class Rewrites {
      */
     static ChangeSet toChangeSet(ASTRewrite rewrite, CompilationUnit unit, String source) {
         try {
-            TextEdit edit = rewrite.rewriteAST(new Document(source), formattingOptions(unit));
+            TextEdit edit = rewrite.rewriteAST(new Document(source), formattingOptions(unit, source));
             List<Change> changes = new ArrayList<>();
             collect(edit, source, changes);
             if (changes.isEmpty()) return null;
@@ -225,17 +225,19 @@ final class Rewrites {
      * a workspace preference lookup, in a process that has no workspace.</p>
      *
      * <p>The compliance comes from the tree's own API level so that generated nodes are rendered for the
-     * language the file was parsed as. The indent is <b>spaces, four</b>, which is this codebase's own and
-     * is a placeholder in exactly one sense: it is the editor's setting that should decide, and that
-     * arrives with the host-side context described in {@code plan_quickfix_catalog.md} §14-A. Until a
-     * correction generates a line, no output is reachable from these two keys at all.</p>
+     * language the file was parsed as. The indent comes from {@link Indent#detect} — <b>the file's own</b>.
+     * It used to be four spaces with a note promising that the editor's setting would arrive with a
+     * host-side context; it did not, and meanwhile every correction that generates a line put spaces into
+     * a tab-indented script. The document is the answer that needs no seam, and is what both references
+     * fall back to.</p>
      */
-    private static Map<String, String> formattingOptions(CompilationUnit unit) {
+    private static Map<String, String> formattingOptions(CompilationUnit unit, String source) {
         // JLS2/3/4 are api levels that are not feature versions; anything this engine parses is >= 8.
         int level = unit == null ? 8 : Math.max(8, unit.getAST().apiLevel());
         Map<String, String> options = EcjOptions.forLevel(level);
-        options.put("org.eclipse.jdt.core.formatter.tabulation.char", "space");
-        options.put("org.eclipse.jdt.core.formatter.tabulation.size", "4");
+        Indent.Style style = Indent.detect(source);
+        options.put("org.eclipse.jdt.core.formatter.tabulation.char", style.tabs() ? "tab" : "space");
+        options.put("org.eclipse.jdt.core.formatter.tabulation.size", Integer.toString(style.size()));
         return options;
     }
 }

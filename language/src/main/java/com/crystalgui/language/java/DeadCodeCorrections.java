@@ -168,4 +168,31 @@ final class DeadCodeCorrections {
             return "'" + text + "'";
         }
     }
+
+    /**
+     * "Replace 'if' with its 'then'" — an {@code if} whose condition is constant, so one branch cannot run.
+     *
+     * <p>The same problem as {@link SimplifyConstantCondition} one shape up, and a separate correction for
+     * the reason recorded there. The collapse itself is {@link #collapseIf}, which the redundant-null-check
+     * fix also reaches from the opposite end.</p>
+     */
+    private static final class RemoveDeadBranch implements Correction {
+
+        @Override public String id() {
+            return REMOVE_BRANCH;
+        }
+
+        @Override public int[] problems() {
+            return new int[] {IProblem.DeadCode};
+        }
+
+        @Override public void contribute(FixContext context, IProblem problem, List<CodeAction> out) {
+            ASTNode dead = deadStatementAt(context, problem);
+            if (dead == null || !(dead.getParent() instanceof IfStatement)) return;
+            // Which branch is dead IS what the condition evaluates to: a dead `else` means it is always
+            // true, a dead `then` means always false.
+            collapseIf(context, (IfStatement) dead.getParent(),
+                    dead.getLocationInParent() == IfStatement.ELSE_STATEMENT_PROPERTY, REMOVE_BRANCH, out);
+        }
+    }
 }

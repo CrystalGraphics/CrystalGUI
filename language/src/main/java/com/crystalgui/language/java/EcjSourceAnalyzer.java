@@ -17,6 +17,7 @@ import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTParser;
 import org.eclipse.jdt.core.dom.ASTVisitor;
 import org.eclipse.jdt.core.dom.Annotation;
+import org.eclipse.jdt.core.dom.AbstractTypeDeclaration;
 import org.eclipse.jdt.core.dom.AnonymousClassDeclaration;
 import org.eclipse.jdt.core.dom.Assignment;
 import org.eclipse.jdt.core.dom.Block;
@@ -1094,15 +1095,15 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
             ASTNode node = NodeFinder.perform(resolved, Math.max(0, Math.min(offset, resolved.getLength())), 0);
             for (ASTNode walk = node; walk != null; walk = walk.getParent()) {
                 collectLocalsDeclaredIn(walk, offset, seen, found);
-                if (walk instanceof org.eclipse.jdt.core.dom.MethodDeclaration) {
-                    org.eclipse.jdt.core.dom.MethodDeclaration method =
-                            (org.eclipse.jdt.core.dom.MethodDeclaration) walk;
+                if (walk instanceof MethodDeclaration) {
+                    MethodDeclaration method =
+                            (MethodDeclaration) walk;
                     for (Object parameter : method.parameters()) {
                         addVariable((SingleVariableDeclaration) parameter, SymbolKind.PARAMETER, seen, found);
                     }
                 }
-                if (walk instanceof org.eclipse.jdt.core.dom.AbstractTypeDeclaration) {
-                    ITypeBinding type = ((org.eclipse.jdt.core.dom.AbstractTypeDeclaration) walk).resolveBinding();
+                if (walk instanceof AbstractTypeDeclaration) {
+                    ITypeBinding type = ((AbstractTypeDeclaration) walk).resolveBinding();
                     // THE SAME collector the dot path uses, so a field is described identically whether it
                     // was reached by name or through a receiver. Two describers is two answers to what a
                     // member's detail column says.
@@ -1147,8 +1148,8 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                         addFragment((VariableDeclarationFragment) fragment, seen, into);
                     }
                 }
-            } else if (scope instanceof org.eclipse.jdt.core.dom.LambdaExpression) {
-                for (Object parameter : ((org.eclipse.jdt.core.dom.LambdaExpression) scope).parameters()) {
+            } else if (scope instanceof LambdaExpression) {
+                for (Object parameter : ((LambdaExpression) scope).parameters()) {
                     if (parameter instanceof SingleVariableDeclaration) {
                         addVariable((SingleVariableDeclaration) parameter, SymbolKind.PARAMETER, seen, into);
                     } else if (parameter instanceof VariableDeclarationFragment) {

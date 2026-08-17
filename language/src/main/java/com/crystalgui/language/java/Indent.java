@@ -12,6 +12,49 @@ final class Indent {
     private Indent() {
     }
 
+    /** What one level of indentation looks like in a file: a tab, or some number of spaces. */
+    record Style(boolean tabs, int size) {
+    }
+
+    /** Four spaces — what a file with nothing indented in it is assumed to want. */
+    private static final Style DEFAULT_STYLE = new Style(false, 4);
+
+    /** Nobody indents by more than this; a line further in is continuation, not a level. */
+    private static final int WIDEST_LEVEL = 8;
+
+    /**
+     * The indentation <b>this file already uses</b>, read off its own text.
+     *
+     * <p>Replaces a hard-coded four spaces that carried a note promising the editor's setting would arrive
+     * "with the host-side context". It did not, and meanwhile a tab-indented script had spaces generated
+     * into it by every correction that writes a line. Asking the document is what both references do as
+     * their fallback — VS Code calls it {@code editor.detectIndentation} and it is on by default — and it
+     * needs no new seam, which is why it beat waiting for one.</p>
+     *
+     * <p>The <b>first indented line wins</b>, deliberately: a whole-file histogram is the better answer for
+     * a file with mixed indentation, and a file with mixed indentation has no answer worth computing
+     * carefully. A leading tab means tabs; otherwise the count of spaces, ignoring anything past
+     * {@value #WIDEST_LEVEL}, which is a wrapped continuation rather than a level.</p>
+     */
+    static Style detect(String source) {
+        for (int at = 0; at < source.length(); ) {
+            int end = source.indexOf('\n', at);
+            if (end < 0) end = source.length();
+            if (at < end) {
+                if (source.charAt(at) == '\t') return new Style(true, 4);
+                int spaces = 0;
+                while (at + spaces < end && source.charAt(at + spaces) == ' ') spaces++;
+                // A LINE THAT IS ONLY WHITESPACE says nothing about indentation, and blank-but-spaced
+                // lines are common enough that taking one would answer with the previous level's width.
+                if (spaces > 0 && at + spaces < end && spaces <= WIDEST_LEVEL) {
+                    return new Style(false, spaces);
+                }
+            }
+            at = end + 1;
+        }
+        return DEFAULT_STYLE;
+    }
+
     /** The leading whitespace of the line {@code position} is on. */
     static String at(String source, int position) {
         int lineStart = source.lastIndexOf('\n', Math.max(0, position - 1)) + 1;
