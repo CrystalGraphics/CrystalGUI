@@ -185,4 +185,32 @@ public class ConstructAndReturnTest extends FixFixture {
                 "Script() {", ValueCorrections.INITIALISE_FIELD,
                 "the other constructor already assigns it exactly once");
     }
+
+    /**
+     * <b>And a LOCAL of the same name is not that constructor.</b> The refusal above was asked by name over
+     * the whole type, so any method with a variable spelled like the field answered for it — and the fix
+     * went missing for a field nothing had ever assigned. The name is the one thing the two have in common
+     * and is exactly what does not identify a field.
+     */
+    @Test
+    public void aLocalSharingTheFieldsNameDoesNotCountAsAssigningIt() {
+        assertFix(""
+                        + "public class Script {\n"
+                        + "    final int size;\n"
+                        + "    Script() { }\n"
+                        + "    void go() {\n"
+                        + "        int size = 3;\n"
+                        + "        System.out.println(size);\n"
+                        + "    }\n"
+                        + "}\n",
+                "Script()", ValueCorrections.INITIALISE_FIELD, ""
+                        + "public class Script {\n"
+                        + "    final int size = 0;\n"
+                        + "    Script() { }\n"
+                        + "    void go() {\n"
+                        + "        int size = 3;\n"
+                        + "        System.out.println(size);\n"
+                        + "    }\n"
+                        + "}\n");
+    }
 }

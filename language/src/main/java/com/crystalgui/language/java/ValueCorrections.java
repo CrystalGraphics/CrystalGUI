@@ -11,14 +11,18 @@ import org.eclipse.jdt.core.dom.AbstractTypeDeclaration;
 import org.eclipse.jdt.core.dom.Assignment;
 import org.eclipse.jdt.core.dom.Block;
 import org.eclipse.jdt.core.dom.BodyDeclaration;
+import org.eclipse.jdt.core.dom.Expression;
 import org.eclipse.jdt.core.dom.ExpressionStatement;
 import org.eclipse.jdt.core.dom.FieldAccess;
 import org.eclipse.jdt.core.dom.FieldDeclaration;
+import org.eclipse.jdt.core.dom.IBinding;
 import org.eclipse.jdt.core.dom.IVariableBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
 import org.eclipse.jdt.core.dom.MethodDeclaration;
 import org.eclipse.jdt.core.dom.Modifier;
+import org.eclipse.jdt.core.dom.Name;
 import org.eclipse.jdt.core.dom.SimpleName;
+import org.eclipse.jdt.core.dom.SuperFieldAccess;
 import org.eclipse.jdt.core.dom.TypeDeclaration;
 import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
 import org.eclipse.jdt.core.dom.rewrite.ASTRewrite;
@@ -352,10 +356,10 @@ final class ValueCorrections {
                 VariableDeclarationFragment fragment =
                         (VariableDeclarationFragment) field.fragments().get(0);
                 if (fragment.getInitializer() != null) continue;
-                if (assignedAnywhereIn(owner, fragment.getName().getIdentifier())) continue;
+                IVariableBinding declared = fragment.resolveBinding();
+                if (declared == null || assignedAnywhereIn(owner, declared)) continue;
 
-                String value = TypeNames.defaultValue(
-                        fragment.resolveBinding() == null ? null : fragment.resolveBinding().getType());
+                String value = TypeNames.defaultValue(declared.getType());
                 if (value == null) continue;
                 if (!context.claim(INITIALISE_FIELD + "@" + fragment.getStartPosition())) continue;
 
@@ -370,21 +374,30 @@ final class ValueCorrections {
             }
         }
 
-        /** Whether any constructor or initialiser in this type assigns {@code name}. */
-        private static boolean assignedAnywhereIn(AbstractTypeDeclaration owner, String name) {
+        /**
+         * Whether any constructor or initialiser in this type assigns <b>this field</b>.
+         *
+         * <p>By binding, and that is the whole of it: asked by NAME, a local called {@code total} in any
+         * method of the type answered yes, so "Initialize field 'total'" was refused for a field nothing
+         * had ever assigned. The name is what the two spellings have in common and is exactly what does
+         * not identify the field.</p>
+         */
+        private static boolean assignedAnywhereIn(AbstractTypeDeclaration owner, IVariableBinding field) {
             boolean[] found = {false};
             owner.accept(new ASTVisitor() {
                 @Override public boolean visit(Assignment assignment) {
-                    if (assignment.getLeftHandSide() instanceof SimpleName
-                            && name.equals(((SimpleName) assignment.getLeftHandSide()).getIdentifier())) {
-                        found[0] = true;
-                    }
-                    if (assignment.getLeftHandSide() instanceof FieldAccess
-                            && name.equals(((FieldAccess) assignment.getLeftHandSide())
-                            .getName().getIdentifier())) {
-                        found[0] = true;
-                    }
+                    if (isTheField(assignment.getLeftHandSide())) found[0] = true;
                     return !found[0];
+                }
+
+                private boolean isTheField(Expression target) {
+                    IBinding bound = null;
+                    if (target instanceof Name) bound = ((Name) target).resolveBinding();
+                    if (target instanceof FieldAccess) bound = ((FieldAccess) target).resolveFieldBinding();
+                    if (target instanceof SuperFieldAccess) {
+                        bound = ((SuperFieldAccess) target).resolveFieldBinding();
+                    }
+                    return bound instanceof IVariableBinding && ((IVariableBinding) bound).isEqualTo(field);
                 }
             });
             return found[0];

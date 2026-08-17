@@ -274,6 +274,44 @@ public class ConditionAndVariableTest extends FixFixture {
                 "its initialiser stopped being its value at the next line");
     }
 
+    /**
+     * <b>A same-named local in another scope is another variable.</b> The refusal above used to be asked
+     * by NAME over the whole method, so an unrelated {@code n} being assigned in a sibling block refused an
+     * inline that was perfectly safe — while missing the write it was really there to catch, since
+     * {@code xs[i] = …} never assigns {@code xs} by name at all. One question, asked by binding, at the one
+     * place the bindings are.
+     */
+    @Test
+    public void aSameNamedLocalInAnotherScopeIsNotThisOne() {
+        assertFix(""
+                        + "public class Script {\n"
+                        + "    void go(int a) {\n"
+                        + "        if (a > 0) {\n"
+                        + "            int n = a;\n"
+                        + "            System.out.println(n);\n"
+                        + "        }\n"
+                        + "        if (a < 0) {\n"
+                        + "            int n = 2;\n"
+                        + "            n = 3;\n"
+                        + "            System.out.println(n);\n"
+                        + "        }\n"
+                        + "    }\n"
+                        + "}\n",
+                "int n = a", VariableIntentions.INLINE, ""
+                        + "public class Script {\n"
+                        + "    void go(int a) {\n"
+                        + "        if (a > 0) {\n"
+                        + "            System.out.println(a);\n"
+                        + "        }\n"
+                        + "        if (a < 0) {\n"
+                        + "            int n = 2;\n"
+                        + "            n = 3;\n"
+                        + "            System.out.println(n);\n"
+                        + "        }\n"
+                        + "    }\n"
+                        + "}\n");
+    }
+
     /** <b>The pair round-trips</b>, which is what makes each worth having beside the other. */
     @Test
     public void introduceAndInlineAreInverses() {

@@ -93,14 +93,14 @@ final class IntentionCorrections {
             if (fragment == null || fragment.getInitializer() == null) return;
             // `var` CARRIES NO TYPE OF ITS OWN. Splitting it leaves `var a;`, which is not legal Java at
             // any level -- the initialiser IS the declaration's type.
-            if ("var".equals(statement.getType().toString())) return;
+            if (statement.getType().isVar()) return;
 
             SimpleName name = fragment.getName();
             int after = name.getStartPosition() + name.getLength();
             int value = fragment.getInitializer().getStartPosition();
             if (value <= after) return;
 
-            String indent = indentAt(context.source(), statement.getStartPosition());
+            String indent = Indent.at(context.source(), statement.getStartPosition());
             ChangeSet edit = context.changeSet(new Change(after, value,
                     ";\n" + indent + name.getIdentifier() + " = "));
             if (edit == null) return;
@@ -200,7 +200,7 @@ final class IntentionCorrections {
             Statement body = branchToBrace(context, owner);
             if (body == null) return;
 
-            String indent = indentAt(context.source(), owner.getStartPosition());
+            String indent = Indent.at(context.source(), owner.getStartPosition());
             int gap = backOverWhitespace(context.source(), body.getStartPosition());
             int end = body.getStartPosition() + body.getLength();
 
@@ -259,7 +259,7 @@ final class IntentionCorrections {
             if (branch == null) return;
             Statement only = (Statement) ((Block) branch.body).statements().get(0);
 
-            String indent = indentAt(context.source(), owner.getStartPosition());
+            String indent = Indent.at(context.source(), owner.getStartPosition());
             int gap = backOverWhitespace(context.source(), branch.body.getStartPosition());
             int blockEnd = branch.body.getStartPosition() + branch.body.getLength();
             int innerEnd = only.getStartPosition() + only.getLength();
@@ -356,16 +356,6 @@ final class IntentionCorrections {
         // would silently rewrite the fragment the caret was never on.
         return statement.fragments().size() == 1
                 ? (VariableDeclarationFragment) statement.fragments().get(0) : null;
-    }
-
-    /** The leading whitespace of the line {@code position} is on. */
-    private static String indentAt(String source, int position) {
-        int lineStart = source.lastIndexOf('\n', Math.max(0, position - 1)) + 1;
-        int at = lineStart;
-        while (at < source.length() && at < position && (source.charAt(at) == ' ' || source.charAt(at) == '\t')) {
-            at++;
-        }
-        return source.substring(lineStart, at);
     }
 
     /** Back up over the whitespace before {@code position} — the gap after {@code )} or {@code else}. */

@@ -226,9 +226,17 @@ final class CreateCorrections {
          * <p>Type variables and captures become their erasure — the calling method's {@code T} is not in
          * scope in the new method — and anonymous or local types become {@code Object}, which is the
          * honest name for something the new method cannot name.</p>
+         *
+         * <p><b>So does a recovered one</b>, and that is the same rule rather than a new one. A recovered
+         * binding is a name the compiler could not resolve, and it still answers {@code getQualifiedName()}
+         * — so the parallel spelling here would generate a parameter typed after something that does not
+         * exist, which is the fault {@link TypeNames#writtenName} was given its own guard for. {@code
+         * Object} always compiles; a made-up name never does. Dormant so far only because an unresolvable
+         * argument stops {@code UndefinedMethod} being reported at all.</p>
          */
         private static Type typeFor(ITypeBinding binding, AST ast, ImportPlan imports) {
-            if (binding == null || binding.isNullType() || binding.isAnonymous() || binding.isLocal()) {
+            if (binding == null || binding.isNullType() || binding.isRecovered()
+                    || binding.isAnonymous() || binding.isLocal()) {
                 return ast.newSimpleType(ast.newSimpleName("Object"));
             }
             if (binding.isPrimitive()) return ast.newPrimitiveType(PrimitiveType.toCode(binding.getName()));
