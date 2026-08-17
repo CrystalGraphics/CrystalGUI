@@ -40,7 +40,7 @@ most visible thing to have early.
 | **10.6** Resolution + interop | the four tiers (`RhinoResolution`), `RhinoJsDoc`, `RhinoInference`, `InteropResolver` over the Java probe unit + reflection fallback, `LiveScopeSnapshot` from `snapshotScope`, `JsTypeRef`, **`RhinoTokens`** | hover says what a name is and which tier said so; a Java receiver's members are the Java engine's; after a run a global is typed by what it became | **done** — see "10.6 as built" |
 | **10.7** Completion | `JsCompletionProvider`, `JsKeywords` (measured per band), the probe re-parse, `Java.type("…")` names from the shared `TypeIndex`, live-object completion with the inherited half | `.` after a Java object lists its members; after a run, `settings.` lists what it has; no refused keyword offered | **done** — see "10.7 as built" |
 | **10.8** Quick Documentation | `JsSignatures`, the per-member interop probe (`InteropResolver.describeMember`) so a Java member is quoted through `AttachedSources`, declaration sites both ways | Mod+Q shows `function join(name: string, count: number): string`, and `public boolean add(E e)` for a Java member | **done** — see "10.8 as built" |
-| **10.9** Quick fixes + intentions | `JsRewrites`, `JsQuickFixes`, the §8 catalog, `fixtures/js/` | Alt+Enter offers the catalog | not started |
+| **10.9** Quick fixes + intentions | `JsRewrites` (text edits over Rhino's absolute positions), `JsQuickFixes` — eleven families, `SimilarNames` shared with the Java catalog | Alt+Enter offers a repair for an unused name, a misspelt one, `var`→`let`/`const`, `==`→`===`, either `Java.type` spelling, a template literal, and try/catch | **done** — see "10.9 as built" |
 | **10.10** Sandbox | `ScriptPolicy` in `language.run`, four consumers | a refused type is absent everywhere, one test | not started |
 | **10.11** Remap seam | `MemberNameMapper` hook, patched `JavaMembers`, resolver/completion reading the reverse | the round-trip fixture runs by readable name | not started |
 | **10.12** Parity audit + docs | every matrix row tested or documented; AGENTS.md rows; `plan_syntax.md` §16.1/§20 updates | — | not started |
@@ -790,6 +790,33 @@ JS quotes `src.zip` when present; go-to-definition to a JS declaration and to a 
 `fixtures/js/`; `plan_quickfix_catalog.md` gains a JS column. *Tests:* one fixture per family through
 the `FixFixture` shape; `Negation`, `Names`, `SimilarNames`, `SwitchIntentions`' rule reused rather
 than copied — a test asserting the JS intention and the Java one agree on the same shape.
+
+**10.9 as built** — the families delivered, and the four the sketch listed that are not:
+
+*Corrections:* remove an unused local (whole statement and its line; one of several names loses only its
+own initializer), "did you mean" over what is in scope plus the live globals, declare a free name as a
+local. *Intentions:* `var`→`let`, `var`→`const` when nothing reassigns it, `==`→`===` and `!=`→`!==`,
+`Packages.a.b.C` ↔ `Java.type("a.b.C")` both ways, string concatenation → template literal, surround with
+try/catch. Each with a fixture asserting the **text the edit produces**, which is the only assertion that
+cannot pass against an edit at the wrong offsets.
+
+- **`JsRewrites` is a hundred lines where `Rewrites` drives `ASTRewrite`**, and that is the language rather
+  than a shortcut: Rhino reports an absolute position for every node, so a JavaScript fix is a substring
+  replacement at coordinates the parser already gave. It also means no round trip through a printer that
+  would re-format code the author wrote — the one thing an unasked-for edit must never do.
+- **`Negation` could not be shared** as §8 claimed. Its `of(Expression, String)` takes a *JDT node*, so
+  "its edit is textual" was true of the output and not of the input. `SimilarNames` genuinely is string-only
+  and is now shared (made public, with a visibility note): two tolerances for "close enough" would drift
+  until one engine suggested a name the other would not.
+- **A template literal is measured but never offered.** `JsKeywords` gained a `template` probe so the
+  intention is not offered on a band that would refuse the result — and it is filtered out of the completion
+  list, because it is punctuation and a row there is a promise that accepting it produces something.
+- **Deferred, with reasons:** function expression → arrow, index `for` → `for…of`, `if`-chain → `switch`
+  (each needs a use-analysis the scopes do not yet expose — whether `this`/`arguments` appear, whether an
+  index is used only to index, whether every arm tests one variable), and extract-to-local (needs `Names`,
+  whose deriving half takes a JDT binding). None is blocked; each is a day's work with its own fixture.
+- **A refused keyword still gets no fix**, which is the one catalog entry that is an absence: `class` cannot
+  be rewritten as a function honestly, and a repair that silently changed semantics is worse than none.
 
 **10.10 — Sandbox.** `ScriptPolicy` in `language.run`, consulted by the shutter, the bindings, the
 resolver and `TypeIndex.filtered`. *Test:* the row's fourth criterion — one test, refused class absent

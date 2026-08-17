@@ -37,6 +37,11 @@ final class RhinoGlobals {
     private static volatile Set<String> names;
 
     /** Every global a fresh standard scope defines, plus Rhino's own Java bridge roots. */
+    /** Whether the engine has this name without anybody declaring it. */
+    static boolean isBuiltin(String name) {
+        return name != null && !name.isEmpty() && names().contains(name);
+    }
+
     static Set<String> names() {
         Set<String> cached = names;
         if (cached != null) return cached;

@@ -63,9 +63,12 @@ final class RhinoResolution {
     private final LiveScopeSnapshot live;
     @Nullable private final InteropResolver interop;
     private final String sourceName;
+    private final List<String> keywords;
 
     RhinoResolution(@Nullable AstRoot root, RhinoScopes scopes, String source, LineIndex lines,
-                    LiveScopeSnapshot live, @Nullable InteropResolver interop, String sourceName) {
+                    LiveScopeSnapshot live, @Nullable InteropResolver interop, String sourceName,
+                    List<String> keywords) {
+        this.keywords = keywords == null ? List.<String>of() : keywords;
         this.root = root;
         this.scopes = scopes;
         this.source = source;
@@ -330,6 +333,16 @@ final class RhinoResolution {
             case NULL: return JsTypeRef.js(JsTypeRef.NULL);
             default: return null;
         }
+    }
+
+    /** The names the last run left behind — what a "did you mean" must not offer to rename. */
+    Set<String> liveNames() {
+        return live.names();
+    }
+
+    /** What this band's parser accepts, measured. @see JsKeywords */
+    List<String> supportedKeywords() {
+        return keywords;
     }
 
     // ── membersOf ───────────────────────────────────────────────────────────────────────────────

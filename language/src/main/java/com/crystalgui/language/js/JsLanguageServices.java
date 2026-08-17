@@ -5,12 +5,18 @@ import com.crystalgui.fs.Resource;
 import com.crystalgui.language.engine.AnalysedLanguageServices;
 import com.crystalgui.language.engine.bridge.Analysis;
 import com.crystalgui.language.engine.bridge.JsSourceAnalyzer;
+import com.crystalgui.language.engine.bridge.CodeActionContext;
 import com.crystalgui.language.engine.bridge.LiveScopeSnapshot;
 import com.crystalgui.language.java.TypeIndex;
+import com.crystalgui.text.lang.CodeAction;
+import com.crystalgui.text.lang.CodeActionProvider;
 import com.crystalgui.text.lang.CompletionProvider;
+import com.crystalgui.text.lang.Versioned;
 import com.crystalgui.text.TextBuffer;
 
 import javax.annotation.Nullable;
+
+import java.util.List;
 
 /**
  * The JavaScript engine, attached to one document.
@@ -130,4 +136,39 @@ public final class JsLanguageServices extends AnalysedLanguageServices {
     public CompletionProvider completion() {
         return completion;
     }
+
+    /**
+     * What Alt+Enter offers — a thin pass-through to the analysis, exactly as the Java one is.
+     *
+     * <p>The catalog lives beside the tree; this only supplies the version gate and the callback shape.
+     * {@code CodeActionContext} is accepted and unused: its two methods answer "which types could be
+     * imported" and "which type names are similar", and JavaScript has no imports and reaches a Java class
+     * by writing its whole name — so there is nothing for a host to contribute. Passing null would work and
+     * says less than passing an object that answers nothing.</p>
+     */
+    @Override
+    public CodeActionProvider codeActions() {
+        return (request, answer) -> {
+            Analysis current = current();
+            if (current == null) {
+                answer.accept(Versioned.of(request.version(), List.<CodeAction>of()));
+                return;
+            }
+            answer.accept(Versioned.of(current.version(),
+                    current.codeActionsIn(request.from(), request.to(), NO_HOST_CONTEXT)));
+        };
+    }
+
+    /** @see #codeActions() for why both answers are empty. */
+    private static final CodeActionContext NO_HOST_CONTEXT = new CodeActionContext() {
+        @Override
+        public List<String> importCandidates(String simpleName) {
+            return List.of();
+        }
+
+        @Override
+        public List<String> similarTypeNames(String simpleName) {
+            return List.of();
+        }
+    };
 }
