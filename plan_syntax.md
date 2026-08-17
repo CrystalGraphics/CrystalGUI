@@ -23,6 +23,11 @@ what was learned; milestone rows in §20 carry ✅ / ◐ / (blank).
 
 ## 1. What exists — audited 2026-08-12, against code, not against v1's memory
 
+> **Re-checked 2026-08-17**, at the end of M10 and most of M11. The table below is the state at the
+> audit date and is left as written; what has landed since is recorded in each section's own ✅ marks
+> and in §20's milestone rows, which are the live record. Rewriting the audit in place would destroy
+> the thing it is for — a snapshot of what was believed before the work began.
+
 v1 listed "multiple cursors" and "read-only regions" as Tier-1 gaps. Both **already exist**. An
 inventory that is wrong in the optimistic direction wastes design; wrong in the pessimistic
 direction it wastes a milestone. Re-audited:
@@ -39,7 +44,7 @@ direction it wastes a milestone. Re-audited:
 | `Language` / `LanguageRegistry` | ✅ | comments, bracket pairs, extension→entry |
 | `KeywordTokenizer` | ✅ keep | the no-natives fallback; `core/` must load on a dedicated server |
 | `TreeSitterTokenizer` | ⚠️ **works, does not scale** | four concrete defects, §9.1 |
-| Grammars | ✅ **six: java, css, javascript, html, glsl, xml** (M3) | `lib/tree-sitter/`, 5 platform/arch pairs each; injections wired; `locals.scm` deferred to M11 (§13) |
+| Grammars | ✅ **six: java, css, javascript, html, glsl, xml** (M3) | `lib/tree-sitter/`, 5 platform/arch pairs each; injections wired. `folds.scm`, `indents.scm` and `locals.scm` landed at M11 (§13) |
 | Schemes | ✅ **Islands Dark/Light** (M2), default | authored from the exported `ij-scheme/`; Dark+/Light+ still shipped and selectable |
 | Paint path | ✅ | captures → `::highlight(name)` → `CgStyleSpan`; per-view-line clipping in `refreshHighlights` |
 | **Background work model** | ✅ **M0** | `com.crystalgui.core.async` — lanes, keyed single-flight, debounce, cancellation, drain-on-tick |
@@ -185,11 +190,19 @@ extension it claims; no two rows claim one extension; an injecting row names gra
 | `CompletionProvider` | `(request) → CompletionList{items, incomplete}` + `resolveItem(item)` | ✅ M4 |
 | `CompletionItem` | the LSP field set (§18.2) including `additionalTextEdits` | ✅ M4 |
 | `LanguageServices` | per-**document** façade bundling the above; lifecycle follows the document, not the editor — two tabs share it, closing the document drops it | ✅ M4 |
+| `CodeActionProvider` | `(range) → List<CodeAction>`, each a `ChangeSet` stamped with the version its offsets were computed against | ✅ M9.5-era, consumed by Alt+Enter |
+| `IndentationProvider` | `levelsAfterRow(document, row)` → an indent **level**, or `-1` for no opinion | ✅ M11 §24.4. Levels rather than characters, so a provider need not know whether this file uses tabs — that is `IndentStyle`'s question and it already owns it |
+| `SourceChecker` | `(name, source) → List<Diagnostic>` — a producer that is **not** a language engine | ✅ M11 §24.6. The shader compiler answers one question and is none of the other things `LanguageServices` is; `core/` may hold this because it names nothing |
 
 `TextEditor` consumes `LanguageServices` if present and behaves exactly as today if absent. That
 absence *is* the dedicated-server story and the feature flag; there is no other flag.
 
-**Three corrections from building it**, each of which removed something the plan had budgeted for:
+**Three corrections from building it**, each of which removed something the plan had budgeted for.
+*(A fourth, from M11: a producer that is not a language is a **fourth** shape beside the two async ones
+below — it neither pushes per-line colours nor answers a caret question, it checks a whole document
+slowly and files the result. `SourceChecker` is that shape, and the reason it is not a
+`LanguageServices` is that a shader compiler cannot answer any of the rest: it cannot tell a parameter
+from a local, and a `.glsl` include fragment is not a translation unit it can be handed at all.)*
 
 1. **`Diagnostic` was already there**, and so was the per-owner `DiagnosticSet` that independent
    engines need. An engine publishes with `set.changeOne(services.id(), list)` and the Problems
@@ -664,9 +677,19 @@ A grammar directory is a folder of queries, loaded uniformly — plan the loader
 |---|---|---|
 | `highlights.scm` | §9–10 | ✅ M3 |
 | `injections.scm` | §12 | ✅ M3 |
-| `locals.scm` | within-file scope colouring — `variable.parameter` vs `variable.member` with **no engine at all**; most of what makes IntelliJ's colouring look richer | **M11** — superseded per-language when semantic tokens (§14) land, so its lasting value is the engineless languages (glsl, css, xml), which is also why it moved *behind* M6 rather than ahead of it |
-| `folds.scm` | syntax-aware folding, upgrading `IndentRangeProvider` behind the existing `FoldingRangeProvider` SPI | M11 |
-| `indents.scm` | a real indent engine replacing the "line ends in `{`" rule (`TextEditor.insertNewlineWithIndent` names this plan as its successor) | M11 |
+| `locals.scm` | within-file scope colouring — `variable.parameter` vs `variable.member` with **no engine at all** | ✅ **M11** — `LocalScopes`. Grammar-tier, so an engine still outranks it; and within that tier it refines only the **catch-all**, since `PI` is `@constant` because a rule tested its spelling and a `@local.definition.var` arriving later would overwrite it with `variable` purely by being last |
+| `folds.scm` | syntax-aware folding, behind the existing `FoldingRangeProvider` SPI | ✅ **M11** — on `TreeSitterTokenizer`, which already owns a tree; a separate provider would mean a second parser and a second reparse per keystroke for one document |
+| `indents.scm` | a real indent engine replacing the "line ends in `{`" rule (`TextEditor.insertNewlineWithIndent` named this plan as its successor) | ✅ **M11** — `IndentationProvider` + `TreeIndents`, Neovim's dialect. `@indent.align` is read and **ignored**: it needs a column rather than a level, so wrapped argument lists indent one level in rather than aligning under the bracket |
+
+> **All three are vendored from nvim-treesitter under Apache-2.0, and the loader rule above does not
+> answer for them.** "Take the grammar author's own file" is right for `highlights.scm` and
+> `injections.scm` and applies to none of these: upstream grammar repos ship highlights and tags, and the
+> richer families live in editor *runtime* repos. So it was a licence choice rather than a provenance one
+> — Helix's indent dialect is smaller and better specified, and nvim-treesitter is the only source of
+> maintained files for all six languages under terms this repository already satisfies. `THIRD-PARTY.md`
+> carries the notice and the statement of modifications. Two deviations are recorded there: the
+> `; inherits:` chain is resolved by concatenation at vendoring time, and upstream's ECMAScript
+> `locals.scm` captures **no parameters at all**, so three patterns are added at load.
 
 ---
 
@@ -678,9 +701,19 @@ A grammar directory is a folder of queries, loaded uniformly — plan the loader
 
 `Diagnostic(range, severity, message, source, code?)`. Producers: ECJ (Java), Rhino's parser (JS —
 authoritative for "will this engine accept it", which is the *answer* to the grammar-ahead-of-engine
-gap), the shader compiler (GLSL — it already reports; same seam, no new machinery; wired at M11). Consumers: the
-squiggle pass, the gutter, the Problems panel — **which already exists and already renders
-severities; it is wired, not built.**
+gap), Rhino's **runtime** (JS — a thrown exception, on its own line, ✅ M10.5), and the shader compiler
+(GLSL, ✅ M11 §24.6). Consumers: the squiggle pass, the gutter, the Problems panel — **which already
+exists and already renders severities; it is wired, not built.**
+
+> **"Same seam, no new machinery" was true of this side and false of the other.**
+> `CgShaderParseException` named the *file* and nothing else, with no line field and none of its sixty-odd
+> throw sites carrying one — so an adapter could only report everything at line 1, which points a squiggle
+> at innocent text. The backend gained a position first (placed once, on the way out of `parse`, by
+> locating the token the message already quotes). Two further corrections: the parser throws on the
+> **first** violation and has no collecting mode — `--mode=shader-compile-audit` collects across *files*,
+> not within one — and real driver errors arrive on the GL thread and are not available to a background
+> check at all, so what is checked is the `.shader` **format**. `SourceChecker` is the seam and
+> `CheckedDocument` the debounce and version gate; `core/` names no CrystalGraphics type.
 
 ### 14.2 Semantic tokens
 
@@ -689,8 +722,15 @@ Same value shape as `SyntaxToken`, same vocabulary (§10.1), produced per line b
 one merge path, and an LSP could slot into it unchanged later. Staleness: keep-per-line (§8).
 With ECJ bindings behind it, Java gets what v1's §3.3 marked unreachable: field vs local vs
 parameter, unresolved symbol, deprecated (struck through — `text-decoration-line` is already
-allowed in highlights). The honest-subset note in the scheme header shrinks to: *engineless
-languages colour what the grammar and `locals.scm` can see.*
+allowed in highlights). ✅ And since M11 the engineless half is real too: `locals.scm` separates
+parameter from local from field with no engine anywhere, which is what the scheme header's
+honest-subset note was waiting for.
+
+> **The merge rule has a third tier now, and the order is load-bearing.** Grammar tokens, then
+> `locals.scm` refining *only* the catch-all among them, then semantic tokens replacing whatever they
+> overlap. Getting the middle one wrong is invisible in the worst way: both names resolve to real
+> colours, so a scope answer overwriting a `@constant` reads as a colour-scheme bug rather than an
+> ordering one.
 
 ### 14.3 Resolver
 
@@ -1098,8 +1138,8 @@ user-visible value lands early.
 | **M8** ✅ | **Decorations + diagnostics UI (§17).** `text/decoration/` — `Stickiness` (Monaco's four modes, each a pair of `ChangeSet.mapPos` assoc values), `TrackedRange` (mutable, identified by reference, recording collapse separately from emptiness), `DecorationSet` (sorted array + binary search, lanes that replace). Adjusted **inside `TextBuffer.applied`**, before any listener runs. `LanguageServices.onDiagnostics` now carries `Versioned`, and the editor gates on it. `SquigglesPart` reads tracked offsets instead of re-resolving row/column each frame | M0; M6 for real input | ✅ 16 stickiness cases incl. both asymmetric modes and the re-sort trap; ✅ a mark stays on its word when a line is inserted above it, and grows when its word is extended; ✅ Problems navigation lands on the word as it is **now**; ✅ a stale announcement is refused outright; ✅ every producer is tracked, not only the engine — the tracking hangs off `DiagnosticSet.onChanged` |
 | **M9** ✅ | **Completion (§18).** `SearchMatcher` gains an **opt-in** `SUBSEQUENCE` tier (a bounded DP, so the banded characters are the ones a reader would say matched) rather than a second matcher; `CompletionSession` is the whole state machine with no widget in it; `CompletionRanking` is the weigher **chain**; `CompletionPopup` draws IntelliJ's anatomy (kind icon, banded label, right-aligned detail); `JavaCompletionProvider` + `Analysis.symbolsInScope` + `TypeIndex` (classpath names from paths, never loaded) | M6, M8 | ✅ 14 session cases: local filtering without a round trip, `isIncomplete` re-query, a late answer from a superseded request ignored, a keystroke before the first answer not killing the session; ✅ `fMS` → `fooMethodStuff` while a prefix hit still outranks it; ✅ auto-import accepted as **one** undo step; ✅ verified in the harness by capture **and** log — which is where the ranking bug was found |
 | **M9.5** ✅ | **Designed in detail in [`plan_m9_5.md`](plan_m9_5.md)** — read that, not this row, for what shipped. **The Run panel**: a dock panel beside Problems carrying running scripts' output, plus the indicator saying which files are live. **IntelliJ's Run window is the wrong reference and the section says why** — it assumes a process boundary, a termination and one run at a time, and only the third is true here. Unity's Console is the right one: one process, many live scripts, per-frame execution, no exit codes. So: one **workspace** console filtered by script rather than a tab per run; a rail of live scripts in states (`Live (3 handlers)`, never an exit code) where `Running` is reserved for one-shots so a tick script does not strobe; ~~collapse by call site~~ (**cut** — collapsing is a list affordance and the console became a `TextEditor`, because a console needs character-level selection across lines, drag-select and copy-exactly-what-was-dragged, none of which a row list can offer; the ring bounds the transcript instead); and output captured through a **thread-local marker `ScriptHost` sets around every invocation**, which is the only construction that makes `System.out.println` work in a one-shot *and* in a tick handler on the game thread without swallowing Minecraft's logging. Output **survives a stop but is bounded** — a cycle buffer sized in KB, which is IntelliJ's own answer and whose docs warn about "chatty processes", our normal case rather than an edge one. The running indicator is a `FileDecorationProvider` — free in the tree, plus a dot on the Run stripe button; **the editor-tab mark is cut** (three statements of one fact, in the place with the least room, and IntelliJ does not mark tabs because it is run-configuration based). **Neither reference marks a file**, so the mark means "this file's compiled instance is live" and never "this text is running" | M7 (execution + §19.3 kill flag), M9 (UI vocabulary) — both ✅ | `println` from a one-shot **and** from a game-thread tick handler both reach the console and MC's logging reaches neither; a per-tick script does not flood, and an overflow is reported rather than dropped; a tick script shows `Live` without strobing; a stopped script **keeps** its transcript; a stack frame opens the file at the line; a live script is marked on its tree row and on the Run stripe button, with the folder taking the colour and not the badge; a runtime exception raises **no** Problems row |
-| **M10** | **Designed in detail in [`plan_m10.md`](plan_m10.md)** — read that before starting; it matches every Java feature to its Rhino counterpart with an honest fidelity, settles the bridge/loader split, interpreted mode, `Java.type`, and revises §16.1's static-structure source. JS + sandbox (§16, §19): Rhino execution service (reusing M7's lifecycle/commands), parse diagnostics, runtime-introspection completion, member-lookup remapping (§16.1), policy object at all four layers | M5, M7 (execution substrate), M6 (Java resolver for interop), M9 (UI) | `class` syntax gets an engine diagnostic; post-run completion on a live object; a readable-name member call links in a fake-obfuscated fixture; refused type absent from execution *and* completion, one test proving both |
-| **M11** | **Designed in detail in [`plan_m11.md`](plan_m11.md)** — read that before starting; it settles the popup's anatomy, the two async gates, and the `indents.scm` dialect/licence fork. Resolver affordances + query-family tail: hover popup (`resolveAt` → the `Tooltip`/`Popover` substrate), go-to-definition (declaration site → open at range), `folds.scm` behind the existing `FoldingRangeProvider` SPI, `indents.scm` replacing the "line ends in `{`" rule (`insertNewlineWithIndent` already names its successor), **`locals.scm`** (§13 — scope colouring for the engineless languages), GLSL diagnostics adapter over the shader compiler's existing error output | M3, M6, M8 | hover shows type + **declaration** for a Java symbol (**not** doc — the body is M13's, and §24.1 says so deliberately: `SymbolInfo.documentation` has never been populated by any engine, so "type + doc" was this row overreaching its own detail file); go-to jumps within the script; Java/GLSL fixture folds match the tree, not the indent; a GLSL parameter and a member colour differently with no engine loaded; a GLSL error appears as a squiggle with no new machinery |
+| **M10** ✅ | **Designed in detail in [`plan_m10.md`](plan_m10.md)** — read that, not this row. Every Java feature matched to its Rhino counterpart at an honest fidelity, the bridge/loader split, interpreted mode, `Java.type` (which **Rhino does not have** — we install it), and the revision of §16.1's static-structure source. Delivered as 10.1–10.12: plumbing + the per-band capability probe, the bridge and registration, diagnostics with the engine's own refusals re-titled, semantic tokens over Rhino's scopes, **execution** (`JsHost` ↔ `RhinoExecutor`, console, stop, runtime errors as diagnostics), four-tier resolution with the **Java engine** behind the interop one, completion, Quick Documentation, eleven quick-fix families, the sandbox at four layers, and the readable↔runtime **membrane**. §12a of that file is the review of all eleven and the fifty-six findings it closed | M5, M7 (execution substrate), M6 (Java resolver for interop), M9 (UI) | ✅ all four: `class` gets an engine diagnostic with the engine's own message; post-run completion on a live object; a readable-name call links in a fake-obfuscated fixture; a refused type is absent from execution *and* completion. 201 JavaScript tests |
+| **M11** ◐ | **Designed in detail in [`plan_m11.md`](plan_m11.md)** — read that, not this row. ✅ Quick Documentation (`Mod+Q` + hover, engine-rendered `Signature`, and **source attachment**: a classpath symbol is quoted from its `-sources.jar` or the JDK's `src.zip`); ✅ go-to-definition (`Mod+B`, Ctrl+Click); ✅ the navigation primitive, Go To Line, and clicking a problem; ✅ **`folds.scm`**, **`indents.scm`** and **`locals.scm`**, vendored from nvim-treesitter under Apache-2.0 (§13 records why the "author's own file" rule answers none of them); ✅ **GLSL diagnostics**, which needed a position on `CgShaderParseException` first — §14.1 records why "no new machinery" was true of this side only. ❌ remaining: the documentation popup's **footer** band | M3, M6, M8 | ✅ hover shows type + **declaration** for a Java symbol (**not** doc — the body is M13's, and §24.1 says so deliberately: `SymbolInfo.documentation` has never been populated by any engine, so "type + doc" was this row overreaching its own detail file); ✅ go-to jumps within the script; ✅ Java and GLSL fixtures fold at their blocks rather than their indentation; ✅ a GLSL parameter and a local colour differently with no engine loaded; ✅ a shader error appears as a squiggle and a Problems row |
 | **M12** | **Platform integration** — the one thing every milestone above deliberately stopped short of. Bring `mc1710/` into the build (it has no `settings.gradle` today and is commented out of the root one), then wire what the plan has been building against a stand-in: §15.5 A's **live name environment** reading post-transform bytes from `LaunchClassLoader` through the transformer chain, §15.5 C's **mapping data** (1.7.10 SRG↔MCP CSVs, `params.csv` for parameter names) with sourcing and licences settled, and the platform's `LanguageServices`/`ScriptHost` wiring. Then the same for `mc1201/` | M7, M11 | a script written in readable names compiles, runs and links **inside a real 1.7.10 client**, against MC classes and a mixin-added member; completion never shows `func_147439_a`; the same script runs unchanged in dev and prod |
 
 | **M13** | **Designed in detail in [`plan_m13.md`](plan_m13.md)** — read that before starting. **Documentation and names in production**, which is where every milestone above is quietly weakest: the popup is correct in a dev environment and mostly absent in a shipped one. Two halves priced completely differently. **Parameter names survive compilation** — `ArrayList.add` carries `e` and our own `core.jar` carries its names today, so a class-file reader over `MethodParameters`/`LocalVariableTable` (ASM is already an `api` dependency) needs no shipped artifact at all; `-parameters` on `core`/`platform`/`language` adds the interface methods it cannot reach. **Javadoc does not survive compilation and no attribute carries it**, so prose is ship-or-fetch: one build-time header transform (built from `quotedHeaderOf`'s cut and `isValue`'s rule, output still valid Java so `SourceArchives` is unchanged) feeding four producers — our own sources bundled as loose `.java` under `assets/`, the JDK **fetched** rather than bundled on GPL-derivation grounds, Minecraft's arriving with M12's mappings, third-party best-effort. Plus the one-line ECJ flag that makes `getJavadoc()` answer at all | M11; M12 for the loader packaging and for Minecraft's half | a **concrete** classpath method names its parameters with `src.zip` deliberately out of reach; one of our own **interface** methods does too; the transform's output quotes identically to the source it came from for a record, a sealed interface and a bounded generic; our sources resolve out of the mod jar through the same chain, with a real `-sources.jar` still winning; a javadoc body renders, including for an `@Override` with none via `{@inheritDoc}` |
