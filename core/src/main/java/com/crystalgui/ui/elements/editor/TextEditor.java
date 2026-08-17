@@ -5620,7 +5620,11 @@ public class TextEditor extends ScrollerView implements UndoScope {
         @Override
         public void paste() {
             String pending = CgPlatform.input().getClipboard();
-            if (pending != null && !pending.isEmpty()) insertAtCaret(pending);
+            if (pending == null || pending.isEmpty()) return;
+            // RE-INDENTED TO WHERE IT LANDS, so a method copied out of one class arrives at the new
+            // one's depth. A shift and not a reformat -- see TypeOperations.reindentForPaste.
+            insertAtCaret(TypeOperations.reindentForPaste(
+                    buffer.document(), selections.primary().start(), pending, indentStyle()));
         }
     };
 
