@@ -241,6 +241,25 @@ texteditor .__indent-guide__ {
     font-weight: var(--syntax-bracket-weight, normal);
 }
 
+/* ── Every other place this name appears ─────────────────────────────────────────────────────────
+ *
+ * The word under the caret, marked wherever else it occurs. Both references do it and it is the most
+ * visible thing an editor without it is missing: "where else is this" gets answered by standing still
+ * rather than by typing the name into a find box.
+ *
+ * A BACKGROUND AND NOT A COLOUR, unlike everything above it. The syntax rules say what a token IS, so
+ * they own its colour; this says where the caret's word also appears, which is a different statement
+ * and must not overwrite the first -- recolouring an occurrence would make a variable stop looking like
+ * a variable for as long as the caret sat in one of them. IntelliJ and VS Code both use a ground for
+ * exactly this reason.
+ *
+ * Deliberately fainter than a find match: a search is something you asked for, an occurrence is
+ * something the caret happened to be standing in. TextEditor publishes them in that order so a find hit
+ * wins the character where the two overlap. */
+.__syntax__::highlight(occurrence) {
+    background-color: var(--editor-occurrence-bg, #3A3D41);
+}
+
 /* ── Dead weight, faded rather than underlined ───────────────────────────────────────────────────
  *
  * DiagnosticTag.UNNECESSARY, published from the diagnostic lane. A tag is not a severity: "this import is

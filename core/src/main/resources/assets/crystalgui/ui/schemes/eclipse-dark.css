@@ -90,6 +90,10 @@ theme {
     --find-match-fg: #232323;
     --search-excluded-fg: #6F737A;
 
+    /* The word under the caret, wherever else it appears. A GROUND and no foreground, so a marked
+     * occurrence still reads as whatever kind of token it is — VS Code's editor.wordHighlightBackground. */
+    --editor-occurrence-bg: #2F3A44;
+
     /* ── Syntax ──
      *
      * DEFAULT_KEYWORD cc6c1d. Bolder and browner than Darcula's own orange, and the one row that makes

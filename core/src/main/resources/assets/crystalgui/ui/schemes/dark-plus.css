@@ -59,6 +59,11 @@ theme {
     --find-match-fg: #1B1B1B;
     --search-excluded-fg: #7A7A7A;
 
+    /* The word under the caret, wherever else it appears. A GROUND and no foreground, so a marked
+     * occurrence still reads as whatever kind of token it is — VS Code's editor.wordHighlightBackground,
+     * and dim for the same reason: it marks something you did not ask for. */
+    --editor-occurrence-bg: #3A3D41;
+
     /* ── Syntax — the full capture vocabulary ──
      *
      * Six general names used to be here, on the reasoning that generalName() folds every specialisation

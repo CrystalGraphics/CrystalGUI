@@ -1092,6 +1092,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private void afterSelectionChange() {
         buffer.breakUndoCoalescing();
         updateBracketMatch();
+        updateOccurrences();
         highlightsDirty = true;
         viewCursorsPart.restartBlink();
         // These two EAGERLY, ahead of the frame's own pass. A caret that only moved on the next
@@ -2626,6 +2627,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
             int rowStart = buffer.document().lineStartOffset(modelRow);
 
             Map<String, List<TextRange>> byName = new LinkedHashMap<>();
+            addDocumentRanges(byName, "occurrence", occurrences, lineStart, lineEnd);
+            // AFTER the occurrences, so a search hit wins the character where the two overlap. A search
+            // is something you asked for; occurrences are something the caret happened to be standing in.
             addDocumentRanges(byName, "search", searchMatches, lineStart, lineEnd);
             // A SECOND NAME rather than a second mechanism: `::highlight()` already carries
             // `text-decoration-line`, so an excluded span is struck through by the sheet.
@@ -3485,6 +3489,62 @@ public class TextEditor extends ScrollerView implements UndoScope {
         if (found >= 0) bracketPair = new int[] { found, matchingBracket(found) };
         if (bracketPair != null && bracketPair[1] < 0) bracketPair = null;
     }
+
+    /**
+     * <b>Every other place the word under the caret appears</b>, published as {@code ::highlight(occurrence)}.
+     *
+     * <h3>What it is for, and why it is not a search</h3>
+     *
+     * <p>Both references do this and it is the most visible thing an editor without it is missing: put the
+     * caret in a name and every use of that name is marked, so "where else is this" is answered by
+     * standing still rather than by typing it into a find box. IntelliJ calls it identifier highlighting,
+     * VS Code occurrence highlighting.</p>
+     *
+     * <h3>Three refusals, and each of them is what keeps it quiet</h3>
+     *
+     * <ul>
+     *   <li><b>Only from a bare caret inside a word.</b> With a selection the user has already said what
+     *       they are interested in, and marking something else competes with it; between two words there
+     *       is no question being asked.</li>
+     *   <li><b>Whole words, matching case.</b> Without both, putting the caret in {@code i} marks every
+     *       letter i in the file — which is not a highlight, it is noise with a colour.</li>
+     *   <li><b>Nothing at all when there is only one.</b> A word that appears once is marked as its own
+     *       only occurrence otherwise: a box drawn round the thing you are already looking at, on every
+     *       caret move, saying nothing.</li>
+     * </ul>
+     *
+     * <p>Recomputed on selection change rather than per frame, which is the same beat the bracket match
+     * runs on. It is a whole-document scan, so it is bounded: past {@link #OCCURRENCE_SCAN_LIMIT}
+     * characters nothing is marked at all, on the same reasoning {@link #BRACKET_SCAN_LIMIT} records —
+     * a scan long enough to be felt on a keystroke is worse than the feature is good.</p>
+     */
+    private void updateOccurrences() {
+        occurrences.clear();
+        if (buffer.length() > OCCURRENCE_SCAN_LIMIT) return;
+        if (selections.isMultiple() || selections.hasSelection()) return;
+
+        int[] word = WordOperations.wordAt(buffer.document(), getCaret(), wordClassifier);
+        if (word == null || word[1] <= word[0]) return;
+        String needle = buffer.document().slice(word[0], word[1]).toString();
+        if (needle.isEmpty() || !wordClassifier.isWordPart(needle.charAt(0))) return;
+
+        List<TextRange> found = TextSearch.findAll(buffer.toString(),
+                SearchQuery.of(needle, new SearchQuery.Options(true, true, false)));
+        // ONE IS NONE -- see the class note above.
+        if (found.size() < 2) return;
+        occurrences.addAll(found);
+    }
+
+    /** Occurrences of the word under the caret. Published under {@code ::highlight(occurrence)}. */
+    private final List<TextRange> occurrences = new ArrayList<>();
+
+    /**
+     * Past this many characters the occurrence scan is skipped outright.
+     *
+     * <p>It runs on every caret move and reads the whole document, so on a large file it would be felt as
+     * the arrow keys becoming sticky — which is a worse thing to have than the highlight is a good one.</p>
+     */
+    private static final int OCCURRENCE_SCAN_LIMIT = 2_000_000;
 
     private int matchAt(int offset) {
         if (offset < 0 || offset >= buffer.length()) return -1;

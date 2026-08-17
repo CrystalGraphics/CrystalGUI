@@ -50,6 +50,10 @@ theme {
     --find-match-fg: #1F1F22;
     --search-excluded-fg: #8C8D93;
 
+    /* The word under the caret, wherever else it appears. A GROUND and no foreground, so a marked
+     * occurrence still reads as whatever kind of token it is — VS Code's editor.wordHighlightBackground. */
+    --editor-occurrence-bg: #E4E9EE;
+
     /* ── Syntax — the six general names every tokenizer falls back to ── */
     --syntax-keyword: #0000FF;
     --syntax-keyword-control: #AF00DB;

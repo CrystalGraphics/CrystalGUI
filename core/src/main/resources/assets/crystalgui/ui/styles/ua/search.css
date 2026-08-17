@@ -650,6 +650,21 @@ problemspanel > .__find-bar__ {
 
 .__option-preserve-case__ { overlay: icon("crystalgui:general/search/preserveCase"); }
 
+/* ── The editor's own find matches ───────────────────────────────────────────────────────────────
+ *
+ * `TextEditor` has published its matches under this name since find went in, and NOTHING STYLED IT --
+ * the ranges resolved, the count was right, the arrows stepped through them, and not one character
+ * changed colour. That is the failure mode `HighlightStyle` splits ALLOWED from NOT_YET_PAINTABLE to
+ * avoid, arrived at from the other side: here the property was paintable and the NAME had no rule, so
+ * there was nothing to search for and nothing to see.
+ *
+ * The tokens are the editor scheme's `--find-match-*`, which is what they were named for -- Monaco's
+ * `editor.findMatchBackground`. The tree's own row highlight uses them too, under `find-match`. */
+::highlight(search) {
+    background-color: var(--find-match-bg, #C8873C);
+    color: var(--find-match-fg, #1B1B1B);
+}
+
 /* AN EXCLUDED MATCH IS STRUCK THROUGH, not hidden and not un-highlighted: it is still one of the matches
  * and still counted, and the strike is the whole of what "excluded" looks like. A second `::highlight()`
  * name rather than a second mechanism -- highlights already carry text-decoration-line. */
