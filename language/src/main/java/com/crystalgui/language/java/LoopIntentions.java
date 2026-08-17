@@ -8,6 +8,7 @@ import org.eclipse.jdt.core.compiler.IProblem;
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTVisitor;
 import org.eclipse.jdt.core.dom.ArrayAccess;
+import org.eclipse.jdt.core.dom.Assignment;
 import org.eclipse.jdt.core.dom.Expression;
 import org.eclipse.jdt.core.dom.ForStatement;
 import org.eclipse.jdt.core.dom.IVariableBinding;
@@ -26,6 +27,7 @@ import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
 
 /**
  * "Convert to enhanced for" — an index loop whose index is only ever used to fetch the element.
@@ -37,6 +39,10 @@ import java.util.List;
  * (an arithmetic, a nested index, a call taking it) and the enhanced form cannot express the loop at all,
  * because it has no index to offer. That single check is what makes this safe; without it the conversion
  * produces code that does not compile and looks like it should.</p>
+ *
+ * <p><b>And {@code xs[i]} on the left of an {@code =} is not a fetch at all</b> — see
+ * {@link #writtenThrough}, which is the one shape here that compiled afterwards and meant something
+ * else.</p>
  *
  * <h3>And the sequence has to be repeatable</h3>
  *
@@ -83,7 +89,12 @@ final class LoopIntentions {
             if (written == null) return;
 
             String source = context.source();
-            String name = Names.derive(null, element, Names.declaredIn(enclosingMethodOf(loop)));
+            // THE INDEX IS NOT TAKEN -- the conversion is what deletes it. Leaving it in the set made the
+            // derived name collide with the very declaration being removed, so every `int` loop over an
+            // `int[]` produced `for (int i1 : xs)` beside no `i` at all.
+            Set<String> taken = Names.declaredIn(enclosingMethodOf(loop));
+            taken.remove(counted.index.getName());
+            String name = Names.derive(null, element, taken);
             String sequence = source.substring(counted.sequence.getStartPosition(),
                     counted.sequence.getStartPosition() + counted.sequence.getLength());
 

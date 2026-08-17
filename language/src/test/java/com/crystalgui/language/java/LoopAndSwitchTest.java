@@ -119,6 +119,65 @@ public class LoopAndSwitchTest extends FixFixture {
     }
 
     /**
+     * <b>A store through the index is not a fetch.</b> The element variable is a copy, so
+     * {@code xs[i] = 0} would become {@code i = 0} — which compiles, is offered as the preferred action,
+     * and produces a loop that does nothing at all. The enhanced form has no way to say "store here".
+     */
+    @Test
+    public void anIndexWrittenThroughIsRefused() {
+        assertNoFix(""
+                        + "public class Script {\n"
+                        + "    void go(int[] xs) {\n"
+                        + "        for (int i = 0; i < xs.length; i++) {\n"
+                        + "            xs[i] = 0;\n"
+                        + "        }\n"
+                        + "    }\n"
+                        + "}\n",
+                "for (int i", LoopIntentions.ENHANCED_FOR,
+                "the element is a copy, so the store would go nowhere");
+    }
+
+    /** {@code xs[i]++} is the same write wearing a different operator. */
+    @Test
+    public void anIndexSteppedThroughIsRefused() {
+        assertNoFix(""
+                        + "public class Script {\n"
+                        + "    void go(int[] xs) {\n"
+                        + "        for (int i = 0; i < xs.length; i++) {\n"
+                        + "            xs[i]++;\n"
+                        + "        }\n"
+                        + "    }\n"
+                        + "}\n",
+                "for (int i", LoopIntentions.ENHANCED_FOR,
+                "the element is a copy, so the increment would go nowhere");
+    }
+
+    /**
+     * <b>The index's own name is free, because the conversion is what deletes it.</b> Counting it as taken
+     * made the derived name collide with the declaration being removed, so every {@code int} loop over an
+     * {@code int[]} came out as {@code for (int i1 : xs)} with no {@code i} anywhere in the method.
+     */
+    @Test
+    public void theIndexNameIsFreeOnceTheIndexIsGone() {
+        assertFix(""
+                        + "public class Script {\n"
+                        + "    void go(int[] xs) {\n"
+                        + "        for (int i = 0; i < xs.length; i++) {\n"
+                        + "            System.out.println(xs[i]);\n"
+                        + "        }\n"
+                        + "    }\n"
+                        + "}\n",
+                "for (int i", LoopIntentions.ENHANCED_FOR, ""
+                        + "public class Script {\n"
+                        + "    void go(int[] xs) {\n"
+                        + "        for (int i : xs) {\n"
+                        + "            System.out.println(i);\n"
+                        + "        }\n"
+                        + "    }\n"
+                        + "}\n");
+    }
+
+    /**
      * <b>A real conversion outranks moving a brace.</b> Both apply to the same braced loop, and they used
      * to compete on <em>insertion order</em> — which family happened to be registered first in
      * {@code JavaQuickFixes} — so the popup offered "Remove braces" as the thing to press. Braces can be
@@ -275,6 +334,160 @@ public class LoopAndSwitchTest extends FixFixture {
                         + "}\n",
                 "if (c == Colour.RED)", SwitchIntentions.TO_SWITCH,
                 "a case label may not carry the qualifier the condition does");
+    }
+
+    /**
+     * <b>A {@code break} in a branch stops meaning what it meant.</b> Inside a loop it ends the loop;
+     * inside the switch it would become, it ends the switch and the loop runs on. It compiles, and it is a
+     * different program — and the reading that hid it is the reasonable one, since a branch ending in
+     * {@code break} was taken as a branch that already leaves.
+     */
+    @Test
+    public void aBranchBreakingTheLoopIsRefused() {
+        assertNoFix(""
+                        + "public class Script {\n"
+                        + "    void go(int n) {\n"
+                        + "        while (n > 0) {\n"
+                        + "            if (n == 1) {\n"
+                        + "                System.out.println(1);\n"
+                        + "            } else if (n == 2) {\n"
+                        + "                break;\n"
+                        + "            } else if (n == 3) {\n"
+                        + "                System.out.println(3);\n"
+                        + "            }\n"
+                        + "            n--;\n"
+                        + "        }\n"
+                        + "    }\n"
+                        + "}\n",
+                "if (n == 1)", SwitchIntentions.TO_SWITCH,
+                "the break would start breaking the switch instead of the loop");
+    }
+
+    /**
+     * <b>A switch body is one scope.</b> Two branches each declaring {@code a} were two blocks as a chain
+     * and would be one block as a switch, so unwrapping both produced a duplicate-variable error out of
+     * code that had none. Keeping the braces gives the branch back the scope the {@code if} gave it.
+     */
+    @Test
+    public void aBranchDeclaringAVariableKeepsItsBraces() {
+        String source = ""
+                + "public class Script {\n"
+                + "    void go(int n) {\n"
+                + "        if (n == 1) {\n"
+                + "            int a = 1;\n"
+                + "            System.out.println(a);\n"
+                + "        } else if (n == 2) {\n"
+                + "            int a = 2;\n"
+                + "            System.out.println(a);\n"
+                + "        } else if (n == 3) {\n"
+                + "            System.out.println(3);\n"
+                + "        }\n"
+                + "    }\n"
+                + "}\n";
+        assertFix(source, "if (n == 1)", SwitchIntentions.TO_SWITCH, ""
+                + "public class Script {\n"
+                + "    void go(int n) {\n"
+                + "        switch (n) {\n"
+                + "            case 1: {\n"
+                + "                int a = 1;\n"
+                + "                System.out.println(a);\n"
+                + "                break;\n"
+                + "            }\n"
+                + "            case 2: {\n"
+                + "                int a = 2;\n"
+                + "                System.out.println(a);\n"
+                + "                break;\n"
+                + "            }\n"
+                + "            case 3:\n"
+                + "                System.out.println(3);\n"
+                + "                break;\n"
+                + "        }\n"
+                + "    }\n"
+                + "}\n");
+        assertSameSemantics(source, "if (n == 1)", SwitchIntentions.TO_SWITCH);
+    }
+
+    /**
+     * <b>A nested block keeps its shape.</b> Every carried body used to be re-indented by trimming each
+     * line, which does not move text — it flattens it, putting an {@code if}, its contents and its closing
+     * brace at one column. The three intentions that do this all argue that they preserve the body as
+     * written.
+     */
+    @Test
+    public void aNestedBlockIsNotFlattened() {
+        assertFix(""
+                        + "public class Script {\n"
+                        + "    void go(int n, boolean x) {\n"
+                        + "        if (n == 1) {\n"
+                        + "            if (x) {\n"
+                        + "                System.out.println(1);\n"
+                        + "            }\n"
+                        + "        } else if (n == 2) {\n"
+                        + "            System.out.println(2);\n"
+                        + "        } else if (n == 3) {\n"
+                        + "            System.out.println(3);\n"
+                        + "        }\n"
+                        + "    }\n"
+                        + "}\n",
+                "if (n == 1)", SwitchIntentions.TO_SWITCH, ""
+                        + "public class Script {\n"
+                        + "    void go(int n, boolean x) {\n"
+                        + "        switch (n) {\n"
+                        + "            case 1:\n"
+                        + "                if (x) {\n"
+                        + "                    System.out.println(1);\n"
+                        + "                }\n"
+                        + "                break;\n"
+                        + "            case 2:\n"
+                        + "                System.out.println(2);\n"
+                        + "                break;\n"
+                        + "            case 3:\n"
+                        + "                System.out.println(3);\n"
+                        + "                break;\n"
+                        + "        }\n"
+                        + "    }\n"
+                        + "}\n");
+    }
+
+    /**
+     * <b>{@code switch} cannot take a {@code long}</b>, and the chain it came from was fine. The literal
+     * says nothing about the type of what it is compared against, so the subject's own binding decides.
+     */
+    @Test
+    public void aChainOnALongIsRefused() {
+        assertNoFix(""
+                        + "public class Script {\n"
+                        + "    void go(long n) {\n"
+                        + "        if (n == 1) {\n"
+                        + "            System.out.println(1);\n"
+                        + "        } else if (n == 2) {\n"
+                        + "            System.out.println(2);\n"
+                        + "        } else if (n == 3) {\n"
+                        + "            System.out.println(3);\n"
+                        + "        }\n"
+                        + "    }\n"
+                        + "}\n",
+                "if (n == 1)", SwitchIntentions.TO_SWITCH,
+                "switch does not take a long");
+    }
+
+    /** Two branches on one constant are merely unreachable as a chain and do not compile as a switch. */
+    @Test
+    public void aRepeatedConstantIsRefused() {
+        assertNoFix(""
+                        + "public class Script {\n"
+                        + "    void go(int n) {\n"
+                        + "        if (n == 1) {\n"
+                        + "            System.out.println(1);\n"
+                        + "        } else if (n == 2) {\n"
+                        + "            System.out.println(2);\n"
+                        + "        } else if (n == 1) {\n"
+                        + "            System.out.println(3);\n"
+                        + "        }\n"
+                        + "    }\n"
+                        + "}\n",
+                "if (n == 1)", SwitchIntentions.TO_SWITCH,
+                "two cases on 1 is a duplicate label");
     }
 
     /** Two branches are not worth a switch — the result is longer than what it replaces. */
@@ -531,5 +744,35 @@ public class LoopAndSwitchTest extends FixFixture {
                         + "}\n",
                 "() ->", LambdaCorrections.TO_ANONYMOUS,
                 "`this` would stop meaning the enclosing instance");
+    }
+
+    /** The third site of the same flattening: a lambda body's nested block, carried into the method. */
+    @Test
+    public void aLambdaBodyKeepsItsNesting() {
+        assertFix(""
+                        + "public class Script {\n"
+                        + "    void go(boolean x) {\n"
+                        + "        Runnable r = () -> {\n"
+                        + "            if (x) {\n"
+                        + "                System.out.println(1);\n"
+                        + "            }\n"
+                        + "        };\n"
+                        + "        r.run();\n"
+                        + "    }\n"
+                        + "}\n",
+                "() ->", LambdaCorrections.TO_ANONYMOUS, ""
+                        + "public class Script {\n"
+                        + "    void go(boolean x) {\n"
+                        + "        Runnable r = new Runnable() {\n"
+                        + "            @Override\n"
+                        + "            public void run() {\n"
+                        + "                if (x) {\n"
+                        + "                    System.out.println(1);\n"
+                        + "                }\n"
+                        + "            }\n"
+                        + "        };\n"
+                        + "        r.run();\n"
+                        + "    }\n"
+                        + "}\n");
     }
 }
