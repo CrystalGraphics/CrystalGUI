@@ -1,9 +1,9 @@
 package com.crystalgui.language.java.fix.catalog;
 
-import com.crystalgui.language.java.Correction;
-import com.crystalgui.language.java.FixContext;
-import com.crystalgui.language.java.Indent;
-import com.crystalgui.language.java.Negation;
+import com.crystalgui.language.java.fix.Correction;
+import com.crystalgui.language.java.fix.FixContext;
+import com.crystalgui.language.java.fix.edit.Indent;
+import com.crystalgui.language.java.fix.edit.Negation;
 import com.crystalgui.text.Change;
 import com.crystalgui.text.ChangeSet;
 import com.crystalgui.text.lang.CodeAction;
@@ -54,7 +54,7 @@ import java.util.List;
  * moved parts survive because nothing regenerates them. {@code LambdaCorrections} records the same finding
  * from the other end, where {@code ASTRewrite} garbled a nested rename and silently dropped comments.</p>
  */
-final class IntentionCorrections {
+public final class IntentionCorrections {
 
     static final String SPLIT_DECLARATION = "java.intention.splitDeclaration";
     static final String JOIN_DECLARATION = "java.intention.joinDeclaration";
@@ -66,7 +66,7 @@ final class IntentionCorrections {
     private IntentionCorrections() {
     }
 
-    static List<Correction> all() {
+    public static List<Correction> all() {
         return List.of(new SplitDeclaration(), new JoinDeclaration(), new AddBraces(), new RemoveBraces(),
                 new FlipIfElse(), new NegateComparison());
     }

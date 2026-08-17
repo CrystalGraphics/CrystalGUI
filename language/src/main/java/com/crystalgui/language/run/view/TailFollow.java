@@ -33,7 +33,7 @@ package com.crystalgui.language.run.view;
  * is genuinely not at the tail, so a position-only rule disarms permanently on the one console nobody has
  * touched. That was the reported bug: the Run panel opened at the top and stayed there.</p>
  */
-final class TailFollow {
+public final class TailFollow {
 
     /** Armed by default: a console nobody has scrolled follows its output. */
     private boolean following = true;

@@ -43,7 +43,7 @@ import java.util.zip.ZipFile;
  *       {@code jre} home on 8. The one that matters most, since most hovers are {@code java.*}.</li>
  * </ul>
  */
-final class SourceArchives {
+public final class SourceArchives {
 
     private final List<Archive> archives;
     /** Decoded source by top-level type name; a null value means "looked, and there is none". */

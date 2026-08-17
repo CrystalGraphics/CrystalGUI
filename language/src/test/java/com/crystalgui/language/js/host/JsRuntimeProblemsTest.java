@@ -1,4 +1,4 @@
-package com.crystalgui.language.js;
+package com.crystalgui.language.js.host;
 
 import com.crystalgui.fs.Resource;
 import com.crystalgui.language.engine.AnalysedLanguageServices;
@@ -26,6 +26,8 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import com.crystalgui.language.js.JsLanguage;
+import com.crystalgui.language.js.JsLanguageServices;
 
 /**
  * <b>A thrown exception squiggles its line</b> — the M10.5 criterion the console alone cannot meet.

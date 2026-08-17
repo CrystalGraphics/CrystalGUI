@@ -1,7 +1,7 @@
 package com.crystalgui.language.js.rhino;
 
-import com.crystalgui.language.js.RhinoGlobals;
-import com.crystalgui.language.js.RhinoInference;
+import com.crystalgui.language.js.rhino.exec.RhinoGlobals;
+import com.crystalgui.language.js.rhino.resolve.RhinoInference;
 import com.crystalgui.text.lang.SymbolKind;
 import com.crystalgui.text.syntax.SyntaxToken;
 

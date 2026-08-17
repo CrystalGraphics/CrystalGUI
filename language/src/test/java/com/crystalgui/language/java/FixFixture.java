@@ -22,6 +22,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import com.crystalgui.language.engine.bridge.Analysis;
 
 /**
  * The base every correction's tests are written on — so that adding a quick fix costs three lines.

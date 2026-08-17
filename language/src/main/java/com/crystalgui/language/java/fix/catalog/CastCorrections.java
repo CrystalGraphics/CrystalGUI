@@ -1,6 +1,5 @@
 package com.crystalgui.language.java.fix.catalog;
 
-import com.crystalgui.language.java.*;
 import com.crystalgui.text.ChangeSet;
 import com.crystalgui.text.lang.CodeAction;
 
@@ -24,6 +23,14 @@ import org.eclipse.jdt.core.dom.rewrite.ASTRewrite;
 
 import java.util.ArrayList;
 import java.util.List;
+import com.crystalgui.language.java.fix.Correction;
+import com.crystalgui.language.java.fix.FixContext;
+import com.crystalgui.language.java.fix.ast.Expected;
+import com.crystalgui.language.java.fix.ast.Precedence;
+import com.crystalgui.language.java.fix.ast.Scopes;
+import com.crystalgui.language.java.fix.ast.SideEffects;
+import com.crystalgui.language.java.fix.edit.ImportPlan;
+import com.crystalgui.language.java.fix.edit.TypeNames;
 
 /**
  * "Cast expression to 'Dog'" — the value is the right thing and the compiler cannot prove it.
@@ -55,7 +62,7 @@ import java.util.List;
  * <p>What stays out is the <b>constructor</b> argument, which is a third id again
  * ({@code UndefinedConstructor}).</p>
  */
-final class CastCorrections {
+public final class CastCorrections {
 
     static final String ADD_CAST = "java.cast.toExpectedType";
     static final String CAST_ARGUMENT = "java.cast.argument";
@@ -66,7 +73,7 @@ final class CastCorrections {
     private CastCorrections() {
     }
 
-    static List<Correction> all() {
+    public static List<Correction> all() {
         return List.of(new CastToExpectedType(), new CastArgument(), new ChangeVariableType(),
                 new ChangeReturnType(), new DropReturnedValue());
     }
@@ -213,7 +220,7 @@ final class CastCorrections {
      * of that name and arity, then the first argument that does not fit — so the underline and the cast can
      * never disagree about which argument they mean.</p>
      */
-    static int[] mismatchedArgumentSpan(CompilationUnit unit, int[] reported) {
+    public static int[] mismatchedArgumentSpan(CompilationUnit unit, int[] reported) {
         if (reported[0] < 0 || reported[1] <= reported[0]) return null;
         ASTNode node = NodeFinder.perform(unit, reported[0], reported[1] - reported[0]);
         while (node != null && !(node instanceof MethodInvocation)) node = node.getParent();

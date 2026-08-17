@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
+import com.crystalgui.language.engine.bridge.Analysis;
 
 /**
  * <b>What the engine reports and cannot answer</b> — the catalogue's next entries, measured rather than

@@ -1,4 +1,4 @@
-package com.crystalgui.language.java;
+package com.crystalgui.language.java.fix.catalog;
 
 import com.crystalgui.language.java.fix.catalog.ImplementCorrections;
 import com.crystalgui.text.lang.CodeAction;
@@ -7,6 +7,7 @@ import org.eclipse.jdt.core.compiler.IProblem;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import com.crystalgui.language.java.FixFixture;
 
 /**
  * "Implement methods" — the gap the coverage probe promoted by growing when the classpath resolved.

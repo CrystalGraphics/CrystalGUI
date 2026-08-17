@@ -16,6 +16,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import com.crystalgui.language.engine.ScriptClassLoader;
 
 /**
  * The safepoint pass, on bytecode built by hand so the shapes are exactly the ones under test.

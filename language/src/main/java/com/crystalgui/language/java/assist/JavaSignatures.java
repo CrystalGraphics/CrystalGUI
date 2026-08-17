@@ -73,7 +73,7 @@ import java.util.function.Function;
  * @see Signature for why the seam carries structure rather than a marked-up string
  * @see AttachedSources for where a classpath symbol's source is found
  */
-final class JavaSignatures {
+public final class JavaSignatures {
 
     private final CompilationUnit unit;
     private final String source;
@@ -92,11 +92,11 @@ final class JavaSignatures {
      */
     private final AttachedSources attached;
 
-    JavaSignatures(CompilationUnit unit, String source, Function<SimpleName, String> nameCaptures) {
+    public JavaSignatures(CompilationUnit unit, String source, Function<SimpleName, String> nameCaptures) {
         this(unit, source, nameCaptures, null);
     }
 
-    JavaSignatures(CompilationUnit unit, String source, Function<SimpleName, String> nameCaptures,
+    public JavaSignatures(CompilationUnit unit, String source, Function<SimpleName, String> nameCaptures,
                    AttachedSources attached) {
         this.unit = unit;
         this.source = source == null ? "" : source;
@@ -126,7 +126,7 @@ final class JavaSignatures {
      */
     private static final int MAX_SIGNATURE_LINE = 72;
 
-    Signature of(IBinding binding, SymbolKind kind, String name) {
+    public Signature of(IBinding binding, SymbolKind kind, String name) {
         // QUOTED FIRST, AND NEVER RE-WRAPPED. The author chose that layout; MAX_SIGNATURE_LINE is a rule
         // for text this class invents, not for text it copies, and applying it to a quote would only
         // re-render the identical slice. Hoisted out of the three branches below when quoting learned to
@@ -1327,7 +1327,7 @@ final class JavaSignatures {
      * impossible. {@code EcjSourceAnalyzer} calls this rather than deciding again, for the same
      * reason it hands its {@code captureFor} in rather than having this file reimplement it.</p>
      */
-    static String typeCapture(ITypeBinding type) {
+    public static String typeCapture(ITypeBinding type) {
         if (type == null) return "type";
         if (type.isPrimitive()) return "type.builtin";
         return kindOf(type).captureName();
@@ -1347,7 +1347,7 @@ final class JavaSignatures {
      * the {@code E} of a return type are the same thing, and colouring one and not the other is worse
      * than colouring neither -- it reads as the highlighter losing track halfway along the line.</p>
      */
-    static SymbolKind kindOf(ITypeBinding type) {
+    public static SymbolKind kindOf(ITypeBinding type) {
         if (type.isTypeVariable()) return SymbolKind.TYPE_PARAMETER;
         if (type.isEnum()) return SymbolKind.ENUM;
         if (type.isAnnotation()) return SymbolKind.CLASS;

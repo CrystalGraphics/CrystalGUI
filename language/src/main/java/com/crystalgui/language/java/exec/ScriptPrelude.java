@@ -1,6 +1,6 @@
 package com.crystalgui.language.java.exec;
 
-import com.crystalgui.language.java.SourcePackages;
+import com.crystalgui.language.java.ecj.SourcePackages;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.diagnostic.Diagnostic;
 

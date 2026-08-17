@@ -1,4 +1,4 @@
-package com.crystalgui.language.java;
+package com.crystalgui.language.java.fix.catalog;
 
 import com.crystalgui.language.java.fix.catalog.DidYouMeanCorrections;
 import com.crystalgui.text.SimilarNames;
@@ -15,6 +15,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import com.crystalgui.language.java.FixFixture;
 
 /**
  * "Change to 'String'" — the near-miss corrections, and the ranking under them.

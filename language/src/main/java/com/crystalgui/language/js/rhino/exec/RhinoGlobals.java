@@ -43,7 +43,7 @@ public final class RhinoGlobals {
 
     /** Every global a fresh standard scope defines, plus Rhino's own Java bridge roots. */
     /** Whether the engine has this name without anybody declaring it. */
-    static boolean isBuiltin(String name) {
+    public static boolean isBuiltin(String name) {
         return name != null && !name.isEmpty() && names().contains(name);
     }
 
@@ -59,7 +59,7 @@ public final class RhinoGlobals {
      *
      * <p>Keyed by the same names {@code JsTypeRef} uses for those types, so a resolved type is a lookup.</p>
      */
-    static List<String> membersOfPrototype(String typeName) {
+    public static List<String> membersOfPrototype(String typeName) {
         return prototypes().getOrDefault(typeName, List.of());
     }
 
@@ -130,7 +130,7 @@ public final class RhinoGlobals {
         return List.copyOf(ids);
     }
 
-    static Set<String> names() {
+    public static Set<String> names() {
         Set<String> cached = names;
         if (cached != null) return cached;
         synchronized (RhinoGlobals.class) {

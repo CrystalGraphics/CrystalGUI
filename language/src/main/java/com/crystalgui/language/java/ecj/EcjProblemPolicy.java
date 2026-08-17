@@ -43,7 +43,7 @@ import java.util.Set;
  * real feature and is recorded in {@code plan_quickfix_catalog.md} §18.6; it belongs with the editor's
  * gutter parts and needs nothing from this file.</p>
  */
-final class EcjProblemPolicy {
+public final class EcjProblemPolicy {
 
     private EcjProblemPolicy() {
     }

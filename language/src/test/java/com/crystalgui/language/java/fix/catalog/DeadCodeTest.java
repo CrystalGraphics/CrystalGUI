@@ -1,4 +1,4 @@
-package com.crystalgui.language.java;
+package com.crystalgui.language.java.fix.catalog;
 
 import com.crystalgui.language.java.fix.catalog.DeadCodeCorrections;
 import org.eclipse.jdt.core.compiler.IProblem;
@@ -6,6 +6,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import com.crystalgui.language.java.FixFixture;
 
 /**
  * A branch that can never run — three shapes, three different repairs.

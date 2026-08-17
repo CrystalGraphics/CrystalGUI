@@ -1,4 +1,4 @@
-package com.crystalgui.language.java;
+package com.crystalgui.language.java.assist;
 
 import com.crystalgui.language.java.assist.SourceArchives;
 import org.junit.Rule;

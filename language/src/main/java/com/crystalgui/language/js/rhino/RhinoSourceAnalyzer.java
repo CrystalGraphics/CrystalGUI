@@ -4,7 +4,6 @@ import com.crystalgui.language.engine.bridge.JsSourceAnalyzer;
 import com.crystalgui.language.engine.bridge.LiveScopeSnapshot;
 import com.crystalgui.language.engine.bridge.MemberNameMapper;
 import com.crystalgui.language.engine.bridge.SourceAnalyzer;
-import com.crystalgui.language.js.*;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.language.engine.bridge.CodeActionContext;
@@ -30,6 +29,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
+import com.crystalgui.language.engine.bridge.Analysis;
+import com.crystalgui.language.js.rhino.exec.RhinoGlobals;
+import com.crystalgui.language.js.rhino.fix.JsQuickFixes;
+import com.crystalgui.language.js.rhino.fix.JsRewrites;
+import com.crystalgui.language.js.rhino.resolve.InteropResolver;
+import com.crystalgui.language.js.rhino.resolve.LineIndex;
+import com.crystalgui.language.js.rhino.resolve.RhinoResolution;
 
 /**
  * Rhino's parser, driven — the JavaScript engine's side of the analysis bridge.

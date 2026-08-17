@@ -1,4 +1,4 @@
-package com.crystalgui.language.js;
+package com.crystalgui.language.js.rhino.resolve;
 
 import com.crystalgui.language.engine.EngineHost;
 import com.crystalgui.language.engine.EngineSource;
@@ -24,6 +24,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import com.crystalgui.language.js.JsLanguage;
 
 /**
  * <b>M10.11 — a script written in readable names, running against a class that declares obfuscated ones.</b>

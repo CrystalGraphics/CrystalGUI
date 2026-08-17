@@ -1,6 +1,6 @@
 package com.crystalgui.language.java.assist;
 
-import com.crystalgui.language.java.EcjOptions;
+import com.crystalgui.language.java.ecj.EcjOptions;
 import org.eclipse.jdt.core.dom.ASTParser;
 import org.eclipse.jdt.core.dom.CompilationUnit;
 
@@ -40,7 +40,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>Failures are cached too. A classpath with no sources attached is the ordinary case rather than an
  * error, and re-deriving "still nothing" on every hover costs the same as succeeding.</p>
  */
-final class AttachedSources {
+public final class AttachedSources {
 
     /**
      * Keyed by the classpath, because that is what the answer depends on.
@@ -73,7 +73,7 @@ final class AttachedSources {
     }
 
     /** One instance per classpath, built on first use. */
-    static AttachedSources forClasspath(List<String> classpath) {
+    public static AttachedSources forClasspath(List<String> classpath) {
         List<String> entries = classpath == null ? new ArrayList<>() : new ArrayList<>(classpath);
         AttachedSources found = INSTANCES.get(entries);
         if (found != null) return found;

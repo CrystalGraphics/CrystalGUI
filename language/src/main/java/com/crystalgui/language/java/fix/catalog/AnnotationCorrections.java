@@ -1,8 +1,8 @@
 package com.crystalgui.language.java.fix.catalog;
 
-import com.crystalgui.language.java.Correction;
-import com.crystalgui.language.java.FixContext;
-import com.crystalgui.language.java.ProblemSpans;
+import com.crystalgui.language.java.fix.Correction;
+import com.crystalgui.language.java.fix.FixContext;
+import com.crystalgui.language.java.ecj.ProblemSpans;
 import com.crystalgui.text.ChangeSet;
 import com.crystalgui.text.lang.CodeAction;
 
@@ -45,7 +45,7 @@ import java.util.List;
  * offer exactly this one action and leave the diagnosis to the reader. Eclipse titles it "Remove
  * '@Override' annotation"; IntelliJ, "Remove annotation".</p>
  */
-final class AnnotationCorrections {
+public final class AnnotationCorrections {
 
     static final String REMOVE_OVERRIDE = "java.annotation.removeOverride";
     static final String REMOVE_SAFE_VARARGS = "java.annotation.removeSafeVarargs";
@@ -66,7 +66,7 @@ final class AnnotationCorrections {
     private AnnotationCorrections() {
     }
 
-    static List<Correction> all() {
+    public static List<Correction> all() {
         return List.of(
                 new RemoveAnnotation(REMOVE_OVERRIDE, OVERRIDE, OVERRIDE_PROBLEMS),
                 new RemoveAnnotation(REMOVE_SAFE_VARARGS, SAFE_VARARGS, SAFE_VARARGS_PROBLEMS));
@@ -87,7 +87,7 @@ final class AnnotationCorrections {
      *
      * @return the annotation's own range, or null when this is not an annotation problem
      */
-    static int[] markedSpan(CompilationUnit unit, IProblem problem, int[] reported) {
+    public static int[] markedSpan(CompilationUnit unit, IProblem problem, int[] reported) {
         String wanted = annotationFor(problem.getID());
         if (wanted == null) return null;
         if (reported[0] < 0 || reported[1] <= reported[0]) return null;

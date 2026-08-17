@@ -94,7 +94,7 @@ public final class TypeIndex {
     /** Qualified name to entry, so the hierarchy walk can find an ancestor outside its own container. */
     private final java.util.Map<String, Entry> byName = new java.util.HashMap<>();
 
-    TypeIndex(List<String> classpath) {
+    public TypeIndex(List<String> classpath) {
         this.classpath = classpath == null ? List.of() : List.copyOf(classpath);
     }
 
@@ -291,7 +291,7 @@ public final class TypeIndex {
      * can offer each and say which is which; ranking is by simple name and the qualified names then follow
      * their simple name's rank.</p>
      */
-    List<String> similar(String simpleName) {
+    public List<String> similar(String simpleName) {
         if (simpleName == null || simpleName.isEmpty()) return List.of();
         ensureBuilt();
         Set<String> simple = new LinkedHashSet<>();

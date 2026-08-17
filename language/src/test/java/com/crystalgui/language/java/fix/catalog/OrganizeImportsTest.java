@@ -1,4 +1,4 @@
-package com.crystalgui.language.java;
+package com.crystalgui.language.java.fix.catalog;
 
 import com.crystalgui.language.java.fix.catalog.ImportCorrections;
 import com.crystalgui.text.lang.CodeAction;
@@ -10,6 +10,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import com.crystalgui.language.java.FixFixture;
 
 /**
  * "Organize imports" — the first intention: offered by where the caret is, not by what is wrong.

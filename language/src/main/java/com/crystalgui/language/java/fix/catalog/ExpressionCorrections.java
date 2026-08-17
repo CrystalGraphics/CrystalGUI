@@ -1,9 +1,9 @@
 package com.crystalgui.language.java.fix.catalog;
 
-import com.crystalgui.language.java.Correction;
-import com.crystalgui.language.java.EcjProblemPolicy;
-import com.crystalgui.language.java.FixContext;
-import com.crystalgui.language.java.Precedence;
+import com.crystalgui.language.java.fix.Correction;
+import com.crystalgui.language.java.ecj.EcjProblemPolicy;
+import com.crystalgui.language.java.fix.FixContext;
+import com.crystalgui.language.java.fix.ast.Precedence;
 import com.crystalgui.text.ChangeSet;
 import com.crystalgui.text.lang.CodeAction;
 
@@ -45,7 +45,7 @@ import java.util.List;
  * pass then reports the result and the second step is offered by the correction below — which is the two
  * fixes composing rather than either of them guessing.</p>
  */
-final class ExpressionCorrections {
+public final class ExpressionCorrections {
 
     static final String REMOVE_CAST = "java.expression.removeCast";
     static final String REPLACE_INSTANCEOF = "java.expression.replaceInstanceof";
@@ -54,7 +54,7 @@ final class ExpressionCorrections {
     private ExpressionCorrections() {
     }
 
-    static List<Correction> all() {
+    public static List<Correction> all() {
         return List.of(new RemoveUnnecessaryCast(), new ReplaceRedundantInstanceof(),
                 new SimplifyRedundantNullCheck());
     }

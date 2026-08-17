@@ -30,7 +30,7 @@ import org.eclipse.jdt.core.dom.Statement;
  * other "which declaration may I add a member to". Collapsing those loses a distinction the compiler
  * makes.</p>
  */
-final class Scopes {
+public final class Scopes {
 
     private Scopes() {
     }
@@ -42,10 +42,10 @@ final class Scopes {
      * {@code return} is the lambda's, an initialiser's {@code throws} has nowhere to go, and an anonymous
      * class's method is a different method entirely.</p>
      */
-    enum Stop { LAMBDA, INITIALIZER, ANONYMOUS }
+    public enum Stop { LAMBDA, INITIALIZER, ANONYMOUS }
 
     /** The method or constructor declaring {@code at}, or null — stopping at any of {@code stops}. */
-    static MethodDeclaration enclosingMethod(ASTNode at, Stop... stops) {
+    public static MethodDeclaration enclosingMethod(ASTNode at, Stop... stops) {
         for (ASTNode walk = at; walk != null; walk = walk.getParent()) {
             if (walk instanceof MethodDeclaration) return (MethodDeclaration) walk;
             if (stopsAt(walk, stops)) return null;
@@ -54,7 +54,7 @@ final class Scopes {
     }
 
     /** The same, resolved — for the analyzer, which wants the binding rather than the declaration. */
-    static IMethodBinding enclosingMethodBinding(ASTNode at) {
+    public static IMethodBinding enclosingMethodBinding(ASTNode at) {
         MethodDeclaration method = enclosingMethod(at);
         return method == null ? null : method.resolveBinding();
     }
@@ -68,7 +68,7 @@ final class Scopes {
      * method around one may not be shadowed inside it — so the method is the honest scope and the lambda
      * would be an under-count that produces code the compiler rejects.</p>
      */
-    static ASTNode enclosingMethodOrRoot(ASTNode at) {
+    public static ASTNode enclosingMethodOrRoot(ASTNode at) {
         ASTNode walk = at;
         while (walk.getParent() != null && !(walk instanceof MethodDeclaration)) {
             walk = walk.getParent();
@@ -85,7 +85,7 @@ final class Scopes {
      * This one stops there, because it is asked what names are <em>already declared</em> around a point,
      * and a lambda body is its own body of declarations.</p>
      */
-    static ASTNode enclosingNameScope(ASTNode at) {
+    public static ASTNode enclosingNameScope(ASTNode at) {
         for (ASTNode walk = at; walk != null; walk = walk.getParent()) {
             if (walk instanceof MethodDeclaration || walk instanceof LambdaExpression
                     || walk instanceof Initializer) {
@@ -96,7 +96,7 @@ final class Scopes {
     }
 
     /** The innermost statement containing {@code at}, or null. */
-    static Statement enclosingStatement(ASTNode at) {
+    public static Statement enclosingStatement(ASTNode at) {
         for (ASTNode walk = at; walk != null; walk = walk.getParent()) {
             if (walk instanceof Statement) return (Statement) walk;
         }
@@ -111,7 +111,7 @@ final class Scopes {
      * question. Three copies disagreed about this and one of them was the analyzer's, so a caret inside an
      * anonymous class judged what it could see from the outer type.</p>
      */
-    static ITypeBinding enclosingTypeBinding(ASTNode at) {
+    public static ITypeBinding enclosingTypeBinding(ASTNode at) {
         for (ASTNode walk = at; walk != null; walk = walk.getParent()) {
             if (walk instanceof AbstractTypeDeclaration) {
                 return ((AbstractTypeDeclaration) walk).resolveBinding();
@@ -130,7 +130,7 @@ final class Scopes {
      * something with a body to insert into and a name to report, which an anonymous class declaration is
      * only half of.</p>
      */
-    static AbstractTypeDeclaration enclosingTypeDeclaration(ASTNode at) {
+    public static AbstractTypeDeclaration enclosingTypeDeclaration(ASTNode at) {
         for (ASTNode walk = at; walk != null; walk = walk.getParent()) {
             if (walk instanceof AbstractTypeDeclaration) return (AbstractTypeDeclaration) walk;
         }
@@ -146,7 +146,7 @@ final class Scopes {
      * one. Stopping at any other body declaration is what keeps the walk from leaving the member it
      * started in.</p>
      */
-    static boolean isStaticContext(ASTNode at) {
+    public static boolean isStaticContext(ASTNode at) {
         for (ASTNode walk = at; walk != null; walk = walk.getParent()) {
             if (walk instanceof MethodDeclaration) {
                 return Modifier.isStatic(((MethodDeclaration) walk).getModifiers());

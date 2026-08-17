@@ -36,7 +36,7 @@ import java.util.Set;
  * place that turns an offset into a position, and no way for an inspection to answer against a document
  * that has since been edited.</p>
  */
-interface Inspection {
+public interface Inspection {
 
     /**
      * Stable, <b>non-numeric</b>, never displayed — {@code "cgui.lambda.fromAnonymous"}.

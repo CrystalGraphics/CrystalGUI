@@ -63,6 +63,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import com.crystalgui.language.engine.bridge.Analysis;
+import com.crystalgui.language.engine.bridge.CodeActionContext;
 
 /**
  * The JDT DOM, driven — diagnostics, semantic colouring and name resolution from real bindings.

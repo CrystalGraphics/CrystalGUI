@@ -1,6 +1,5 @@
 package com.crystalgui.language.java.fix.catalog;
 
-import com.crystalgui.language.java.*;
 import com.crystalgui.text.Change;
 import com.crystalgui.text.ChangeSet;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
@@ -49,6 +48,13 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import com.crystalgui.language.java.fix.Correction;
+import com.crystalgui.language.java.fix.FixContext;
+import com.crystalgui.language.java.fix.Inspection;
+import com.crystalgui.language.java.fix.edit.ImportPlan;
+import com.crystalgui.language.java.fix.edit.Indent;
+import com.crystalgui.language.java.fix.edit.Names;
+import com.crystalgui.language.java.fix.edit.TypeNames;
 
 /**
  * "Replace with lambda" — an anonymous class that is really a function, written as one.
@@ -88,7 +94,7 @@ import java.util.Set;
  * <p>Qualified {@code Outer.this} converts fine and is deliberately allowed — it is only the
  * <em>unqualified</em> form that means something different inside a lambda.</p>
  */
-final class LambdaCorrections {
+public final class LambdaCorrections {
 
     static final String FROM_ANONYMOUS = "java.lambda.fromAnonymous";
     static final String TO_ANONYMOUS = "java.lambda.toAnonymous";
@@ -96,7 +102,7 @@ final class LambdaCorrections {
     private LambdaCorrections() {
     }
 
-    static List<Correction> all() {
+    public static List<Correction> all() {
         return List.of(new ReplaceAnonymousWithLambda(), new ToAnonymousClass());
     }
 
@@ -238,7 +244,7 @@ final class LambdaCorrections {
     static final String REPORT_CODE = "cgui.lambda.fromAnonymous";
 
     /** This family's half of {@link Inspection} — the finding the correction above answers. */
-    static Inspection anonymousCanBeLambda() {
+    public static Inspection anonymousCanBeLambda() {
         return new Inspection() {
             @Override public String code() {
                 return REPORT_CODE;

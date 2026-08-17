@@ -56,7 +56,7 @@ import java.util.function.Predicate;
  * itself does at call time</em>: the list is what the script can really call, with erased types and no
  * documentation.</p>
  */
-final class InteropResolver {
+public final class InteropResolver {
 
     /** Analyses held at once. Each is an AST; a script touches a handful of Java classes in a sitting. */
     private static final int MAX_CACHED = 12;
@@ -83,7 +83,7 @@ final class InteropResolver {
     /** How member names are shown — runtime → readable. @see MemberNameMapper */
     @Nullable private volatile MemberNameMapper memberNames;
 
-    void useMemberNames(@Nullable MemberNameMapper mapper) {
+    public void useMemberNames(@Nullable MemberNameMapper mapper) {
         this.memberNames = mapper == MemberNameMapper.IDENTITY ? null : mapper;
         synchronized (this) {
             members.clear();
@@ -112,7 +112,7 @@ final class InteropResolver {
         return readable == null || readable.equals(member.name()) ? member : member.withName(readable);
     }
 
-    void restrictTo(@Nullable Predicate<String> policy) {
+    public void restrictTo(@Nullable Predicate<String> policy) {
         this.allowsClass = policy;
         // THE MEMBER CACHES GO, the analysis cache stays. A member list is what the policy filters, so a
         // cached one describes the old posture; an Analysis describes the class and is policy-free.
@@ -139,7 +139,7 @@ final class InteropResolver {
         }
     };
 
-    InteropResolver(@Nullable SourceAnalyzer java, @Nullable List<String> classpath, int releaseLevel) {
+    public InteropResolver(@Nullable SourceAnalyzer java, @Nullable List<String> classpath, int releaseLevel) {
         this.java = java;
         this.classpath = classpath == null ? List.of() : List.copyOf(classpath);
         this.releaseLevel = releaseLevel <= 0 ? 8 : releaseLevel;
@@ -365,7 +365,7 @@ final class InteropResolver {
     /** Whether a name is a class, unbounded — a boolean per name asked about. @see #exists */
     private final Map<String, Boolean> existence = new HashMap<>();
 
-    synchronized void close() {
+    public synchronized void close() {
         for (Probe probe : cache.values()) probe.close();
         cache.clear();
         members.clear();
@@ -434,7 +434,7 @@ final class InteropResolver {
             return members;
         }
 
-        void close() {
+        public void close() {
             if (closed) return;
             closed = true;
             members = List.of();

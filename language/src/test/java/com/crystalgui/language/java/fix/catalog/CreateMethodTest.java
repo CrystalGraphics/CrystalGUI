@@ -1,4 +1,4 @@
-package com.crystalgui.language.java;
+package com.crystalgui.language.java.fix.catalog;
 
 import com.crystalgui.language.java.fix.catalog.CreateCorrections;
 import org.eclipse.jdt.core.compiler.IProblem;
@@ -6,6 +6,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import com.crystalgui.language.java.FixFixture;
 
 /**
  * "Create method" — a declaration generated from the shape of a use.

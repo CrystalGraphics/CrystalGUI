@@ -26,6 +26,7 @@ import java.util.Map;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import com.crystalgui.language.engine.bridge.Analysis;
 
 /**
  * The shipped run-testing fixture compiles, analyses clean, and actually runs.

@@ -32,13 +32,13 @@ import org.eclipse.jdt.core.dom.PrefixExpression;
  * <p>Text rather than a rewritten node, so an operand's own formatting and any comment inside it survive
  * — the finding {@code IntentionCorrections} records for the whole family.</p>
  */
-final class Negation {
+public final class Negation {
 
     private Negation() {
     }
 
     /** {@code condition}'s opposite, as source. Never null. */
-    static String of(Expression condition, String source) {
+    public static String of(Expression condition, String source) {
         if (condition instanceof ParenthesizedExpression) {
             // LOOKED THROUGH, NOT UNWRAPPED. `(a && b)` negates to `!(a && b)` -- dropping the parentheses
             // here and re-adding them below would be the same string by luck rather than by rule, and for
@@ -71,7 +71,7 @@ final class Negation {
      * <p>Asked rather than re-listed: "Negate comparison" carried its own copy of the same six, and a
      * seventh added to one and not the other is an intention offered on something it cannot negate.</p>
      */
-    static boolean isComparison(InfixExpression.Operator operator) {
+    public static boolean isComparison(InfixExpression.Operator operator) {
         return opposite(operator) != null;
     }
 

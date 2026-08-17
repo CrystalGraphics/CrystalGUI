@@ -1,10 +1,11 @@
-package com.crystalgui.language.java;
+package com.crystalgui.language.java.fix.catalog;
 
 import com.crystalgui.language.java.fix.catalog.AnnotationCorrections;
 import org.eclipse.jdt.core.compiler.IProblem;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import com.crystalgui.language.java.FixFixture;
 
 /**
  * "Remove '@Override'" and "Remove '@SafeVarargs'" — the annotation that is on a declaration and should

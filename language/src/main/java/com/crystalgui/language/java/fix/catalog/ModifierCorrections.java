@@ -1,7 +1,7 @@
 package com.crystalgui.language.java.fix.catalog;
 
-import com.crystalgui.language.java.Correction;
-import com.crystalgui.language.java.FixContext;
+import com.crystalgui.language.java.fix.Correction;
+import com.crystalgui.language.java.fix.FixContext;
 import com.crystalgui.text.ChangeSet;
 import com.crystalgui.text.lang.CodeAction;
 
@@ -47,7 +47,7 @@ import java.util.List;
  * <p>The three below are all reported as <b>errors</b> with no configuration, which is the other half of
  * why they are worth having: they are on code that does not compile, so the fix is not a tidy.</p>
  */
-final class ModifierCorrections {
+public final class ModifierCorrections {
 
     static final String REMOVE_FINAL = "java.modifier.removeFinal";
     static final String MAKE_ABSTRACT = "java.modifier.makeAbstract";
@@ -56,7 +56,7 @@ final class ModifierCorrections {
     private ModifierCorrections() {
     }
 
-    static List<Correction> all() {
+    public static List<Correction> all() {
         return List.of(new RemoveFinal(), new MakeTypeAbstract(), new RemoveAbstract());
     }
 

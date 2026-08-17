@@ -42,7 +42,7 @@ import org.eclipse.jdt.core.dom.TypeLiteral;
  * list is the JLS's <b>primary</b> expressions, and the unary question adds to it rather than the
  * paren-dropping question subtracting from it.</p>
  */
-final class Precedence {
+public final class Precedence {
 
     private Precedence() {
     }
@@ -55,7 +55,7 @@ final class Precedence {
      * {@code instanceof} and a lambda. Wrapping anything not on it is redundant rather than wrong, which is
      * the right way round for an edit nobody re-reads.</p>
      */
-    static boolean needsParenthesesWhenWrapped(Expression expression) {
+    public static boolean needsParenthesesWhenWrapped(Expression expression) {
         return expression instanceof InfixExpression
                 || expression instanceof ConditionalExpression
                 || expression instanceof Assignment
@@ -72,7 +72,7 @@ final class Precedence {
      * something a selector may follow. It is reachable here — {@code ((int[]) new int[0]).length} is an
      * unnecessary cast, and dropping its brackets would leave a file that does not parse.</p>
      */
-    static boolean isPrimary(Expression expression) {
+    public static boolean isPrimary(Expression expression) {
         return expression instanceof Name
                 || expression instanceof ThisExpression
                 || expression instanceof FieldAccess
@@ -91,7 +91,7 @@ final class Precedence {
      * <p>{@code !!flag} and {@code !-count} both parse and both mean what they say. This is deliberately
      * <em>not</em> the same set as {@link #isPrimary}: see the class note on {@code -(-a)}.</p>
      */
-    static boolean bindsTighterThanUnary(Expression expression) {
+    public static boolean bindsTighterThanUnary(Expression expression) {
         return isPrimary(expression) || expression instanceof PrefixExpression;
     }
 

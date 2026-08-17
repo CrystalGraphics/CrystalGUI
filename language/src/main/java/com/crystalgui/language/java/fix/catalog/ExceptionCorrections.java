@@ -1,6 +1,5 @@
 package com.crystalgui.language.java.fix.catalog;
 
-import com.crystalgui.language.java.*;
 import com.crystalgui.text.ChangeSet;
 import com.crystalgui.text.lang.CodeAction;
 
@@ -41,6 +40,11 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import com.crystalgui.language.java.fix.Correction;
+import com.crystalgui.language.java.fix.FixContext;
+import com.crystalgui.language.java.fix.ast.Scopes;
+import com.crystalgui.language.java.fix.edit.ImportPlan;
+import com.crystalgui.language.java.fix.edit.Names;
 
 /**
  * "Add 'IOException' to throws" and "Surround with try/catch" — the pair every unhandled checked
@@ -72,7 +76,7 @@ import java.util.Set;
  * which cannot be split because {@code var} needs its initialiser.</p>
  */
 @SuppressWarnings("unchecked")   // JDT's DOM lists are raw; every add below is to a list of the declared node type
-final class ExceptionCorrections {
+public final class ExceptionCorrections {
 
     static final String ADD_THROWS = "java.exceptions.addThrows";
     static final String SURROUND_TRY_CATCH = "java.exceptions.surroundWithTryCatch";
@@ -80,7 +84,7 @@ final class ExceptionCorrections {
     private ExceptionCorrections() {
     }
 
-    static List<Correction> all() {
+    public static List<Correction> all() {
         return List.of(new AddThrows(), new SurroundWithTryCatch());
     }
 

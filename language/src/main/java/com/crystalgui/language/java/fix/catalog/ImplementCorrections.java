@@ -1,9 +1,9 @@
 package com.crystalgui.language.java.fix.catalog;
 
-import com.crystalgui.language.java.Correction;
-import com.crystalgui.language.java.FixContext;
-import com.crystalgui.language.java.ImportPlan;
-import com.crystalgui.language.java.TypeNames;
+import com.crystalgui.language.java.fix.Correction;
+import com.crystalgui.language.java.fix.FixContext;
+import com.crystalgui.language.java.fix.edit.ImportPlan;
+import com.crystalgui.language.java.fix.edit.TypeNames;
 import com.crystalgui.text.ChangeSet;
 import com.crystalgui.text.lang.CodeAction;
 
@@ -54,14 +54,14 @@ import java.util.Set;
  * refuses to spell; a generic <em>supertype</em> is fine, because {@code Comparator<String>} hands over a
  * method binding whose types are already substituted.</p>
  */
-final class ImplementCorrections {
+public final class ImplementCorrections {
 
     static final String IMPLEMENT = "java.create.implementMethods";
 
     private ImplementCorrections() {
     }
 
-    static List<Correction> all() {
+    public static List<Correction> all() {
         return List.of(new ImplementInheritedMethods());
     }
 

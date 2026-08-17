@@ -1,6 +1,5 @@
 package com.crystalgui.language.java.fix.catalog;
 
-import com.crystalgui.language.java.*;
 import com.crystalgui.text.ChangeSet;
 import com.crystalgui.text.lang.CodeAction;
 
@@ -38,6 +37,13 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import com.crystalgui.language.java.fix.Correction;
+import com.crystalgui.language.java.fix.FixContext;
+import com.crystalgui.language.java.fix.ast.Expected;
+import com.crystalgui.language.java.fix.ast.Scopes;
+import com.crystalgui.language.java.fix.edit.ImportPlan;
+import com.crystalgui.language.java.fix.edit.Names;
+import com.crystalgui.language.java.fix.edit.TypeNames;
 
 /**
  * "Create method 'compute(int, String)'" — the first correction that generates a <em>declaration</em>
@@ -70,7 +76,7 @@ import java.util.Set;
  * which is right depends on whether the name was a typo or an intention.</p>
  */
 @SuppressWarnings("unchecked")   // JDT's DOM lists are raw; every add below is to a list of the declared node type
-final class CreateCorrections {
+public final class CreateCorrections {
 
     static final String CREATE_METHOD = "java.create.method";
     static final String CREATE_CONSTRUCTOR = "java.create.constructor";
@@ -78,7 +84,7 @@ final class CreateCorrections {
     private CreateCorrections() {
     }
 
-    static List<Correction> all() {
+    public static List<Correction> all() {
         return List.of(new CreateMethod(), new CreateConstructor());
     }
 

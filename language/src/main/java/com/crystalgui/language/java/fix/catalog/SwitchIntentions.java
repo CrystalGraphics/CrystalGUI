@@ -1,6 +1,6 @@
 package com.crystalgui.language.java.fix.catalog;
 
-import com.crystalgui.language.java.Indent;
+import com.crystalgui.language.java.fix.edit.Indent;
 import com.crystalgui.language.java.fix.Correction;
 import com.crystalgui.language.java.fix.FixContext;
 import com.crystalgui.text.Change;
@@ -72,7 +72,7 @@ import java.util.Set;
  * <p>Bodies are copied as written and re-indented one level through {@link Indent#reindent}. Nothing
  * regenerates them, so comments and formatting inside a branch survive.</p>
  */
-final class SwitchIntentions {
+public final class SwitchIntentions {
 
     static final String TO_SWITCH = "java.intention.ifChainToSwitch";
     static final String TO_ARROW = "java.intention.arrowSwitch";
@@ -83,7 +83,7 @@ final class SwitchIntentions {
     private SwitchIntentions() {
     }
 
-    static List<Correction> all() {
+    public static List<Correction> all() {
         return List.of(new IfChainToSwitch(), new ToArrowSwitch());
     }
 
