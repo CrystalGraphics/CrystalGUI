@@ -11,6 +11,53 @@ this project has already chosen for the feature in question.
 
 ---
 
+## 0a. Where this stands (2026-08-17)
+
+**All four harness-reported symptoms are fixed**, and six of R7's features are in. What is left is the
+large structural work (R1, R3) and the four heaviest features.
+
+| Item | State | Commit |
+|---|---|---|
+| §3.5 — the four reported symptoms | **done** | `f15e608`, `b93243d`, `56a4623` |
+| §3.2 — dead members, the per-frame shapings | **done** | `0950cc1` |
+| R2 — the view-line formula, and the NaN guard | **done** (not the whole object — see below) | `7192ee0` |
+| R7.1 — occurrence highlight | **done**, and found a dead one | `352994f` |
+| R7.3 — tabs/tab-stop Tab, Enter-between-braces, paste re-indent | **done** | `f15e608`, `bddcaa4` |
+| R7.4 — column selection | **done** | `42c9caa` |
+| R7.6 — selection highlight, relative line numbers, caret styles | **done** | `042656d`, `bbe3559`† |
+| R1 — extract find / folding / language features / diagnostics | not started | — |
+| R3 — finish the view-part contract | not started | — |
+| R5 — an `em` unit · R6 — split the 5,036-line test | not started | — |
+| R7.2 — IME · R7.5 — signature help · R7.7 — rename · R7.8 — sticky scroll, minimap | not started | — |
+
+† Swept into a concurrent session's commit by a broad `git add` in this shared worktree; the code is
+correct and only the attribution is wrong. It happened four times over this run.
+
+**Three things were found by doing the work rather than by the review:**
+
+- **`::highlight(search)` was never painted.** The editor has published its find matches under that name
+  since find went in and no stylesheet defines it — the ranges resolved, the count was right, the arrows
+  stepped, and not one character ever changed colour. Fixed alongside R7.1.
+- **The NaN scroll-top of §3.4 had ten unguarded call sites.** Exactly one of the eleven copies of the
+  view-line formula wrapped it in `finiteOrZero`; consolidating gave that guard one home.
+- **`Language.PLAIN` declares no brackets**, so making the Enter rule language-driven silently stopped a
+  plain-text editor indenting after `{`. There is now an explicit fallback for indentation *only* —
+  auto-closing gets none, because it puts a character into the document and must never guess.
+
+**Deviations, recorded rather than skipped:**
+
+- **R2 is the rule, not the object.** The plan asks for a `ViewGeometry` computed once per `updateWindow`
+  and read by every part. The duplication and the per-part scroll subtraction are what hurt, and both are
+  gone; a cached geometry object adds a staleness question to a widget that already has an open bug about
+  a value going non-finite mid-layout.
+- **Selection mapping stayed in `applyEdit`** rather than moving wholesale into the change listener. The
+  listener already clamps and the undo path now answers separately, so moving the rest would have been a
+  refactor with no symptom behind it.
+- **R7.2 (IME) needs a composition seam in `CgSystemInput`**, which is CrystalGraphics' SPI rather than
+  this project's, and cannot be verified without a real IME. Left for a decision rather than guessed at.
+
+---
+
 ## 0. Verdict in one paragraph
 
 The **model half is genuinely good** and would not embarrass either reference: rope-backed buffer, one
@@ -152,7 +199,7 @@ across panes (IntelliJ shares them; VS Code does not — either is defensible, b
 | ~3828 | "The vertical equivalent, for the same reason." | a section-divider comment |
 | ~5281 | "Routes UiDataKeys.UNDO_STACK …" | the `clipboardActions` field |
 
-### 3.2 Dead or duplicated members
+### 3.2 Dead or duplicated members — **DONE** (`0950cc1`)
 - `lastQuery`, `lastQueryCaseSensitive` — written in `find`, read nowhere.
 - `selectWordAt(int)` — private, unused (`MouseSelection.unitAt` replaced it).
 - `hide(UIElement)` at ~5141 — unused; `DecorationPool.hide` is the live copy.
@@ -368,7 +415,7 @@ Ordered so each step is a pure move covered by the existing tests before any beh
 Each is a class given the `TextEditor` (as `SearchReplaceBar` and `HoverDocumentation` already are).
 Fields go with their methods; the four orphaned javadocs get their subjects back for free.
 
-### R2 — `ViewGeometry`
+### R2 — `ViewGeometry` — **DONE as the rule, not the object** (`7192ee0`; see §0a)
 One package-private object owning `lineHeight()`, `textOriginX/Y()`, `viewportHeight/Width()`,
 `topOfViewLine(int)`, `xOf(viewLine, column)`, `localToOffset`, `offsetToLocal`, `localToWindow`.
 `TextEditor` computes it once per `updateWindow`; every part reads it. Kills the 13 formula copies,
@@ -426,15 +473,18 @@ Split `TextEditorTest` by feature (movement, editing, multi-caret, wrap, fold, z
 matching the R1 boundaries so each contribution's tests sit beside it.
 
 ### R7 — Feature gaps, in the order they earn their keep
-1. Occurrence highlight under caret (one `::highlight(occurrence)` name; the word-under-caret and
-   `TextSearch` already exist) — the most visible thing missing from every screenshot.
+1. ✅ Occurrence highlight under caret (`352994f`) — and `::highlight(search)` turned out to have no
+   rule at all, so the editor's find highlight had never painted a single character.
 2. IME composition — the editor cannot be used for CJK or dead-key layouts at all; needs a
-   composition seam in `CgSystemInput`.
-3. Tabs-vs-spaces + tab-stop Tab; Enter-between-braces; paste re-indent (copy indent of target line).
-4. Column selection (Monaco's `cursorColumnSelection.ts`, the documented gap).
+   composition seam in `CgSystemInput`. **Not started, and it is CrystalGraphics' SPI rather than this
+   project's** — a seam nobody can verify without a real IME is a guess with an interface on it.
+3. ✅ Tabs-vs-spaces + tab-stop Tab; Enter-between-braces (`f15e608`); paste re-indent (`bddcaa4`).
+4. ✅ Column selection (`42c9caa`) — `ColumnSelection`, and AGENTS.md no longer lists it as a gap.
 5. Signature help (the resolver already answers `SymbolInfo` with a signature; it is a popup and a
    trigger on `(` and `,`).
-6. Selection highlight; relative line numbers; caret styles.
+6. ✅ Selection highlight (`042656d`) under its own `::highlight()` name — a selection is a request about
+   CHARACTERS, not about a symbol, so it must not wear the word highlight's colour. Relative line numbers
+   and the three caret styles with it, both keyed off measurements rather than constants.
 7. Rename in file (multi-caret already does 90% of it — `selectAllOccurrences` by binding rather than
    text is rename's engine).
 8. Sticky scroll (needs the folding regions, which exist); bracket-pair colours; minimap last.
@@ -443,14 +493,19 @@ matching the R1 boundaries so each contribution's tests sit beside it.
 
 ## 6. Order
 
-1. R1 + fix §3.1/§3.2 (moves and deletions only; whole editor test set is the net).
+*The order below is the original plan's. What actually happened is in §0a, and it went R4 → §3.2 → R2 →
+R7, because the reported symptoms came first and the rest followed what they touched.*
+
+1. R1 + fix §3.1/§3.2 (moves and deletions only; whole editor test set is the net). — §3.2 ✅, R1 open.
 2. R2 + R3 (geometry object, parts finished; the harness `cgui-text-stress` and `EditorFrameCostTest`
-   guard the per-frame cost).
-3. R4 (behaviour changes, each with a fixture).
+   guard the per-frame cost). — R2 ✅ as the rule, R3 open.
+3. R4 (behaviour changes, each with a fixture). — ✅
 4. R5 (engine change; touches `LengthPercent` parsing and the cascade — separate commit, own tests).
 5. R6 alongside 1–3 as each cluster moves.
-6. R7 as product priorities decide.
+6. R7 as product priorities decide. — 1, 3, 4 and 6 ✅; 2, 5, 7, 8 open.
 
 Two things I would do first regardless: delete the dead members and re-home the four orphaned
-javadocs (an hour, no risk), and stop materialising the document in `find` — it is the one item here
-that gets *worse* with every line the file grows.
+javadocs (an hour, no risk) — **done in `0950cc1`** — and stop materialising the document in `find`,
+which is the one item here that gets *worse* with every line the file grows and is **still open**. Three
+whole-document `toString()` calls now sit on caret-driven paths rather than one, since the occurrence
+scan reads it too; it is bounded by a document-size limit, which is a floor rather than a fix.

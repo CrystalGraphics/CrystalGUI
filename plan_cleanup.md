@@ -21,9 +21,15 @@ sections 1 and 3.
 | §6.3 — the guards | **done**, folded into §1 | see above |
 | §6.4 — `Inspection` SPI + stale docs | **done** | `0cb5135`, and `acaecad` for §2's small rows |
 
-Everything §2 lists is closed except the two rows recorded below as deliberately left. Three defects were
+Everything §2 lists is closed except the one row recorded below as deliberately left. Three defects were
 found *by doing the work* rather than by the audit: the array-initialiser split (§1's note), the
 `ArrayCreation` bracket trap, and the lambda-`return` type in `Create`. Each is written up in its commit.
+
+**Nothing here is outstanding.** `plan_texteditor_review.md` is the live one; its §0a has that half's
+state. The two share one lesson worth carrying between them: in both files the rows that looked like
+duplication most often were **two questions wearing one name**, and the cost of merging them wrongly is
+paid in silence — `-(-a)` becoming `--a`, a fix typed against a lambda's target, a box selection that
+follows the text instead of the screen.
 
 † Two chunks were swept into a *concurrent session's* commits by a broad `git add` in this shared
 worktree — `Indent.java` plus most of the `LoopIntentions`/`SwitchIntentions` edits into `a8df75e`
