@@ -1200,7 +1200,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
                 // construction rather than by two rules that have to be kept in step.
                 deleteEach(head -> new int[] {
                         ctrl ? previousWordBoundary(head)
-                             : TypeOperations.backspaceFrom(buffer.document(), head, indentWidth),
+                             : TypeOperations.backspaceFrom(
+                                     buffer.document(), head, indentWidth, language),
                         head });
                 return true;
             case CgKeyCodes.KEY_DELETE:

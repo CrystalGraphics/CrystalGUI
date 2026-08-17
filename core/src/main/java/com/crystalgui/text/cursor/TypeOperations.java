@@ -102,13 +102,20 @@ public final class TypeOperations {
      * ends at the previous line rather than sitting at the left margin. Both halves were reported as one
      * bug.</p>
      *
-     * <h3>A line that is ENTIRELY whitespace goes straight up, and does not walk its stops</h3>
+     * <h3>A blank line goes up — but only once the caret is at the indent its scope wants</h3>
      *
      * <p>The tab-stop walk exists to unindent <em>something</em>. On a blank line there is nothing to
-     * unindent — the whitespace is auto-indent the editor put there on Enter and the user never typed —
-     * so walking it is two or three presses of ceremony before the press that actually does what was
-     * wanted. IntelliJ's smart backspace removes the indent and the line break together; VS Code steps
-     * the stops, and this is a place the two genuinely disagree.</p>
+     * unindent, so once the caret is where the block would have put it the walk is ceremony: two or three
+     * presses before the one that does what was wanted. IntelliJ's <b>Smart Backspace: to proper indent
+     * position</b> is exactly this; VS Code steps the stops all the way down, and the two genuinely
+     * disagree.</p>
+     *
+     * <p><b>"Proper" is the scope's own indent, not zero and not the nearest stop.</b> A caret sitting
+     * deeper than the block wants — dragged there by a paste, or by pressing Tab a few times — is over-
+     * indented against text that exists, so the first press takes it back to the block's depth and only
+     * the next one removes the line. Jumping from there deletes a line the user was still positioning.
+     * {@link #properIndentColumns} is the rule, and it is the one {@link #enterAt} already applies when it
+     * decides where a new line starts, so the position Enter creates is the position Backspace stops at.</p>
      *
      * <p><b>Gated on the caret being at the end of the blank line</b>, which is where it is after Enter
      * and after any Down/Up onto one. A caret parked mid-whitespace on a blank line still walks the
@@ -117,20 +124,38 @@ public final class TypeOperations {
      * clicking into the middle of an empty line.</p>
      */
     public static int backspaceFrom(Rope document, int head, int indentWidth) {
+        return backspaceFrom(document, head, indentWidth, Language.PLAIN);
+    }
+
+    /**
+     * The same, asking {@code language} where a block begins.
+     *
+     * @param language decides which characters open a scope, for {@link #properIndentColumns}
+     */
+    public static int backspaceFrom(Rope document, int head, int indentWidth, Language language) {
         int row = document.offsetToPoint(head).row();
         int lineStart = document.lineStartOffset(row);
         int column = head - lineStart;
         if (column == 0) return Math.max(0, head - 1);
 
         String text = document.line(row);
+        int stops = Math.max(1, indentWidth);
         // THE WHOLE LINE, not just what is behind the caret -- see the note above. `column == length` is
         // what keeps this off a caret sitting inside the whitespace rather than at the end of it.
         if (row > 0 && column == text.length() && text.isBlank()) {
+            CursorColumns.Line blank = CursorColumns.expand(text, stops);
+            int at = blank.displayIndexOf(column);
+            int proper = properIndentColumns(document, row, stops, language);
+            // DEEPER THAN THE BLOCK WANTS: come back to it first, in one press, and leave the line alone.
+            if (at > proper) {
+                int target = blank.columnOf(proper);
+                if (target >= column) target = column - 1;
+                return Math.max(lineStart, lineStart + target);
+            }
             return document.lineEndOffset(row - 1);
         }
         if (!text.substring(0, column).isBlank()) return head - 1;
 
-        int stops = Math.max(1, indentWidth);
         CursorColumns.Line drawn = CursorColumns.expand(text, stops);
         int visible = drawn.displayIndexOf(column);
         // THE PREVIOUS STOP, and never a whole level from a column that is not on one: an indent of six
@@ -141,6 +166,54 @@ public final class TypeOperations {
         // A tab is one character occupying several columns, so landing INSIDE one means taking it whole.
         if (target >= column) target = column - 1;
         return Math.max(lineStart, lineStart + target);
+    }
+
+    /**
+     * How deep the block containing {@code row} wants a line to be, in <b>visual columns</b>.
+     *
+     * <h3>The same rule {@link #enterAt} applies, so Enter and Backspace agree</h3>
+     *
+     * <p>Enter carries the previous line's indentation across and adds a level when that line opens a
+     * block. This asks the same question from the other end, which is what makes the two meet: the column
+     * Enter puts a caret in is the column Backspace stops at, and neither had to be told about the
+     * other.</p>
+     *
+     * <p>The <b>previous non-blank</b> line, because a run of empty lines says nothing about depth — the
+     * scope is whatever last wrote something. A blank document above answers zero, which is right: there
+     * is no block, so any indentation on the line is the user's own and there is nothing to stop at.</p>
+     *
+     * <p><b>Not asked of {@link IndentationProvider} yet.</b> {@code levelsAtRow} is the better answer and
+     * is exactly this question — it will know that a {@code case} arm and a wrapped expression are deeper
+     * than a brace-counting rule can see. It is declared and answers {@code -1} for every language today,
+     * so wiring it here would be a call that changes nothing while reading as though it decided
+     * something; this is where it goes when it has an opinion.</p>
+     */
+    private static int properIndentColumns(Rope document, int row, int stops, Language language) {
+        int previous = row - 1;
+        while (previous >= 0 && document.line(previous).isBlank()) previous--;
+        if (previous < 0) return 0;
+
+        String line = document.line(previous);
+        int indent = 0;
+        while (indent < line.length() && (line.charAt(indent) == ' ' || line.charAt(indent) == '\t')) {
+            indent++;
+        }
+        int columns = CursorColumns.expand(line, stops).displayIndexOf(indent);
+        // OPENS A BLOCK, so the line under it belongs one level in. Asked of the LANGUAGE rather than of a
+        // literal `{`, exactly as enterAt does -- and `structuralCloserFor` is the structural question,
+        // which carries a universal fallback so a language declaring no pairs still indents sensibly.
+        char last = lastNonSpace(line);
+        if (last != '\0' && language.structuralCloserFor(last) != null) columns += stops;
+        return columns;
+    }
+
+    /** The last non-whitespace character on a line, or {@code '\0'} for a blank one. */
+    private static char lastNonSpace(String line) {
+        for (int at = line.length() - 1; at >= 0; at--) {
+            char c = line.charAt(at);
+            if (c != ' ' && c != '\t') return c;
+        }
+        return '\0';
     }
 
     /**
