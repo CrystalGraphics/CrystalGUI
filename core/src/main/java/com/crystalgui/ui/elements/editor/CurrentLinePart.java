@@ -48,8 +48,7 @@ final class CurrentLinePart extends EditorViewPart {
         // THE WHOLE WRAPPED ROW, not the one view line the caret is on. The band answers "which line am I
         // editing", and a line that wraps is still one line -- highlighting a third of it would make the
         // band look like it had come unstuck from the caret whenever the caret moved along a long row.
-        final float top = editor.textOriginY()
-                + editor.projections().firstViewLineOfRow(row) * height - editor.getScrollTop();
+        final float top = editor.topOfViewLine(editor.projections().firstViewLineOfRow(row));
         final float bandHeight = height * editor.projections().projectionOf(row).viewLineCount();
         // Spans the viewport and does NOT move with horizontal scroll: it marks which row is being edited,
         // which is true of the whole visible width however far sideways the text has gone.

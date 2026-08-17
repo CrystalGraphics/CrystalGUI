@@ -114,8 +114,7 @@ final class ViewCursorsPart extends EditorViewPart {
                 editor.buffer().document(), selection.head(), LineProjection.Affinity.LEFT);
         final float left = editor.codeLeftPad() + editor.xOfView(view.viewLine(), view.column())
                 - caretWidth - editor.getScrollLeft();
-        final float top = editor.textOriginY() + view.viewLine() * height + (height - ink) / 2f
-                - editor.getScrollTop();
+        final float top = editor.topOfViewLine(view.viewLine()) + (height - ink) / 2f;
 
         UIElement caret = caretAt(index);
         StyleGroup.importantPipeline(caret.getStyle().getLayoutGroup(),

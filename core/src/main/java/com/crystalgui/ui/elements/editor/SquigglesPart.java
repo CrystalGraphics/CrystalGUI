@@ -118,8 +118,7 @@ final class SquigglesPart extends EditorViewPart {
             float width = Math.max(1f, right - left);
             // Under the text rather than through it: the band sits at the bottom of the line box, so it
             // never overlaps a glyph and never fights the selection band drawn behind the same characters.
-            float top = editor.textOriginY() + viewLine * height + height - SQUIGGLE_HEIGHT
-                    - editor.getScrollTop();
+            float top = editor.topOfViewLine(viewLine) + height - SQUIGGLE_HEIGHT;
 
             UIElement band = bandAt(index++);
             applySeverity(band, diagnostic.severity());

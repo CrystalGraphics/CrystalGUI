@@ -71,7 +71,7 @@ final class LineNumbersPart extends EditorViewPart {
                     g -> g.fontSize(editor.getStyle().getGeneralGroup().fontSize())
                             .fontFamily(editor.getStyle().getGeneralGroup().fontFamily()));
             // Scroll-exempt, so the offset has to be subtracted by hand -- see the class note.
-            final float top = editor.textOriginY() + viewLine * height - editor.getScrollTop();
+            final float top = editor.topOfViewLine(viewLine);
             // The NUMBERS' column, not the whole gutter. Spanning the full width right-aligns the digits
             // against the code instead of against the fold column, which is what put them a few pixels
             // from the first glyph.

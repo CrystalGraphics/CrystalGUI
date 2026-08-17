@@ -64,8 +64,7 @@ final class WhitespacePart extends EditorViewPart {
             boolean continues = model.viewLineInRow() < projection.viewLineCount() - 1;
             boolean[] marked = WhitespaceMarkers.shouldMark(row, mode, editor.getTabSize(), continues);
 
-            final float top = editor.textOriginY() + viewLine * height + (height - ink) / 2f
-                    - editor.getScrollTop();
+            final float top = editor.topOfViewLine(viewLine) + (height - ink) / 2f;
             for (int column = from; column < to && pool.used() < MAX_MARKS; column++) {
                 if (!marked[column]) continue;
                 char marker = WhitespaceMarkers.markerFor(row.charAt(column));

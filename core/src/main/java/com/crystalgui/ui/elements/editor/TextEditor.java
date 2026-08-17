@@ -2541,7 +2541,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // "scrolled by an unknown amount" and "not scrolled" are the same picture for a document that has
         // not been scrolled, and the alternative is a popup nobody can find.
         float localX = textOriginX() + xOfView(viewLine, view.column()) - finiteOrZero(getScrollLeft());
-        float localY = textOriginY() + viewLine * lineHeight() - finiteOrZero(getScrollTop());
+        float localY = topOfViewLine(viewLine);
         if (!Float.isFinite(localX) || !Float.isFinite(localY)) return null;
         return new float[] { getWindowX() + localX, getWindowY() + localY, lineHeight() };
     }
@@ -4017,6 +4017,27 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     /**
+     * <b>Where a view line's top edge is drawn</b>, in this element's own space — the one statement of it.
+     *
+     * <h3>Eleven copies, and only one of them guarded the scroll offset</h3>
+     *
+     * <p>{@code textOriginY() + viewLine * lineHeight() - getScrollTop()} was written out in eight view
+     * parts and three more places here. That is a formula every part has to agree on exactly, and the
+     * disagreement was already there: {@code getScrollTop()} <b>can be NaN</b> — §3.4 of the review has it
+     * open, with {@code getMaxScrollTop} reading an unmeasured viewport as the likeliest source — and NaN
+     * minus anything is NaN, so every row lands at the same y and the whole editor draws as one stacked
+     * line. One call site had a {@code finiteOrZero} around it. The other ten did not, and could not have
+     * been fixed without finding them all.</p>
+     *
+     * <p>So the guard lives here, once, and the parts ask rather than compute. That does not make the NaN
+     * correct — it makes it survivable in the one place it can be, which is what the review asks for:
+     * anything consuming the offset should treat a non-finite value as zero.</p>
+     */
+    float topOfViewLine(int viewLine) {
+        return textOriginY() + viewLine * lineHeight() - finiteOrZero(getScrollTop());
+    }
+
+    /**
      * Cumulative x of every caret position on a row.
      *
      * <p>Measured from substrings, the same way {@code TextField} does, and with the same known
@@ -4976,7 +4997,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * One routine means a line cannot be positioned two different ways depending on how it got here.</p>
      */
     private void layOutLine(int viewLine, UIElement line) {
-        final float top = textOriginY() + viewLine * lineHeight() - getScrollTop();
+        final float top = topOfViewLine(viewLine);
         final float left = codeLeftPad() + carriedIndentPx(viewLine) - getScrollLeft();
         // A DEFINITE WIDTH IS REQUIRED. An absolutely-positioned box with no width resolves to zero, and
         // a zero-width line lays its text out as though it had no extent -- which shaved the first
