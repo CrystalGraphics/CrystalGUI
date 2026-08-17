@@ -127,11 +127,15 @@ final class ZoomIndicatorPart extends EditorViewPart {
                 + ' ' + editor.getClientWidth();
         if (key.equals(placedKey)) return;
         placedKey = key;
-        // THE THREE MULTIPLIERS BELOW ARE `em`s, AND THAT IS WHY THEY ARE STILL HERE. Every other pixel
-        // value in the view parts has moved into ua/workbench.css, read back through
-        // EditorViewPart.styleSize. These cannot: they are deliberately RELATIVE to the label's own font
-        // size, and a bare CSS length in this engine has no way to say that -- the same gap gutterMetric
-        // works around with a cached baseline font size and a ratio. An `em` unit retires both at once.
+        // THE THREE MULTIPLIERS BELOW STAY IN JAVA, and `em` does not retire them -- which is worth
+        // saying, because at first look they are exactly what `em` is for.
+        //
+        // They are multiples of the LABEL's font size, and the panel's `em` would resolve against the
+        // PANEL's -- two different elements, since font-size does not effectively inherit here. They
+        // happen to be the same number today (the sheet pins the label at 10 and ua/core.css gives the
+        // panel 10), so an `em` here would be right by coincidence and would quietly stop being right
+        // the first time a theme restyled the label. And the width they contribute to is measured
+        // shaped text, which no sheet can compute at all.
         //
         // THE INDICATOR'S OWN SIZE, from the sheet -- never the editor's. It is chrome describing the
         // text, not part of it, so scaling it with the zoom made it unreadable at 4px and oversized at 40.

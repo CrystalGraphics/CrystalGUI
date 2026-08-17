@@ -161,12 +161,24 @@ texteditor .__selection__ {
  *                  only reason the level-0 indent guide can sit in it without the gutter painting over it.
  *
  * The line numbers are positioned with left: 0, and an absolute inset is padding-box relative — so
- * padding-left places them and must not be added again in Java. */
+ * padding-left places them and must not be added again in Java.
+ *
+ * ALL THREE ARE `em`, AND THAT IS THE WHOLE POINT. The digits between them are measured text and grow
+ * with zoom; a bare CSS length does not, so the gutter's proportions came apart from the code the more
+ * the editor was zoomed. TextEditor used to paper over it by caching the font size it FIRST ever saw and
+ * scaling these three by the ratio since — an em with no name, no way for a sheet to opt out of, and a
+ * reference value that depended on when the editor happened to be constructed. They are 0.4/1.4/0.7 of
+ * 10px, which is what they were before, and now they say so.
+ *
+ * The editor pushes its own font-size onto the gutter each frame (refreshGutterMetrics) because
+ * font-size does NOT effectively inherit here — ua/core.css's `* { font-size: 10 }` is a candidate on
+ * every element, and inheritance only applies where there is none at any origin. Without that push these
+ * would resolve against 10 forever and the em would buy nothing. */
 texteditor .__gutter__ {
     z-index: 6;
-    padding-left: 4px;
-    padding-right: 14px;
-    margin-right: 7px;
+    padding-left: 0.4em;
+    padding-right: 1.4em;
+    margin-right: 0.7em;
     background-color: var(--editor-gutter-bg, var(--panel-bg, #191A1C));
     /* Clips its own numbers. The gutter stops above the horizontal scrollbar, but the numbers inside it
      * are positioned by hand from the scroll offset, so without this the one at the boundary is drawn

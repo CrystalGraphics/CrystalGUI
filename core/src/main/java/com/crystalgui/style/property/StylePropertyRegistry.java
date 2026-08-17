@@ -74,7 +74,24 @@ public class StylePropertyRegistry {
     // Matches real CSS: font-size/font-family both inherit by default. Default font-family points
     // at the same default font CgUiPaintContext already loads, so an element with no font-family
     // anywhere in its ancestor chain still resolves to something that works.
+    /**
+     * The size every {@code em} on this element is a multiple of.
+     *
+     * <p>The listener is what makes the unit <b>live</b> rather than resolved-once. An {@code em} is
+     * turned into pixels during {@code StyleEngine.rematch}, and nothing else re-runs that — so a font
+     * size arriving afterwards, from a widget writing its own at INLINE or IMPORTANT, would leave every
+     * {@code em} on the element at the size it had when its rules last matched. {@code TextEditor} does
+     * exactly that to its gutter on every zoom, which is the case this was found on.</p>
+     *
+     * <p>Costs one predicate per font-size change on elements that use no {@code em} at all, which is
+     * nearly all of them: {@code invalidateFontRelativeStyles} checks a flag the engine sets during the
+     * match and returns.</p>
+     */
     public static final StyleProperty<Float> FONT_SIZE = create("font-size", 16f).setInheritable(true);
+
+    static {
+        FONT_SIZE.addListener((el, property, oldValue, newValue) -> el.invalidateFontRelativeStyles());
+    }
     /**
      * The UI's default face — <b>proportional</b>, and monospace is applied to code surfaces instead.
      *
