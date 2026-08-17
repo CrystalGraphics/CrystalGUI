@@ -96,8 +96,20 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
     @Override
     public void useJavaEngine(SourceAnalyzer java, List<String> classpath, int releaseLevel) {
         InteropResolver previous = interop;
-        interop = new InteropResolver(java, classpath, releaseLevel);
+        InteropResolver opened = new InteropResolver(java, classpath, releaseLevel);
+        opened.restrictTo(allowsClass);
+        interop = opened;
         if (previous != null) previous.close();
+    }
+
+    /** What a script may reach, or null for everything. @see JsSourceAnalyzer#restrictTo */
+    private volatile java.util.function.Predicate<String> allowsClass;
+
+    @Override
+    public void restrictTo(java.util.function.Predicate<String> policy) {
+        this.allowsClass = policy;
+        InteropResolver current = interop;
+        if (current != null) current.restrictTo(policy);
     }
 
     @Override

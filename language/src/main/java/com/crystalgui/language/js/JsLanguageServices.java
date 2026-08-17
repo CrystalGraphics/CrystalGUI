@@ -8,6 +8,7 @@ import com.crystalgui.language.engine.bridge.JsSourceAnalyzer;
 import com.crystalgui.language.engine.bridge.CodeActionContext;
 import com.crystalgui.language.engine.bridge.LiveScopeSnapshot;
 import com.crystalgui.language.java.TypeIndex;
+import com.crystalgui.language.run.ScriptPolicy;
 import com.crystalgui.text.lang.CodeAction;
 import com.crystalgui.text.lang.CodeActionProvider;
 import com.crystalgui.text.lang.CompletionProvider;
@@ -97,11 +98,23 @@ public final class JsLanguageServices extends AnalysedLanguageServices {
     public JsLanguageServices(TextBuffer buffer, JsSourceAnalyzer analyzer,
                               @Nullable JobScheduler scheduler, String sourceName,
                               @Nullable Resource file, @Nullable TypeIndex types) {
+        this(buffer, analyzer, scheduler, sourceName, file, types, ScriptPolicy::allowAll);
+    }
+
+    /**
+     * @param policy read per query rather than captured, so a host that restricts after a document is open
+     *               does not leave that document obeying the old posture
+     */
+    public JsLanguageServices(TextBuffer buffer, JsSourceAnalyzer analyzer,
+                              @Nullable JobScheduler scheduler, String sourceName,
+                              @Nullable Resource file, @Nullable TypeIndex types,
+                              java.util.function.Supplier<ScriptPolicy> policy) {
         super(ID, buffer, scheduler, file);
         this.analyzer = analyzer;
         this.sourceName = sourceName == null || sourceName.isEmpty() ? "script.js" : sourceName;
         this.completion = new JsCompletionProvider(buffer, this::current, this::liveScope,
-                analyzer::keywords, types, this::analyseText);
+                analyzer::keywords, types, policy == null ? ScriptPolicy::allowAll : policy,
+                this::analyseText);
         start();
     }
 

@@ -1,6 +1,7 @@
 package com.crystalgui.language.engine.bridge;
 
 import java.util.List;
+import java.util.function.Predicate;
 
 /**
  * What the <b>JavaScript</b> engine can say about a source file — the analysis half of the JS bridge.
@@ -84,6 +85,17 @@ public interface JsSourceAnalyzer {
      * the Java language's to open and to close, and this analyser must never close it.</p>
      */
     default void useJavaEngine(SourceAnalyzer java, List<String> classpath, int releaseLevel) {
+    }
+
+    /**
+     * Restricts which Java classes resolution and completion may describe.
+     *
+     * <p>A {@code Predicate<String>} rather than the host's policy object, for the reason every other
+     * crossing here is a JDK type: the child may not see {@code language.run}. Passed to the <b>analyser</b>
+     * as well as to the executor because the two must agree — a class absent from the completion list and
+     * callable at run time, or offered and then refused, is a worse failure than either restriction alone.</p>
+     */
+    default void restrictTo(Predicate<String> allowsClass) {
     }
 
     /**

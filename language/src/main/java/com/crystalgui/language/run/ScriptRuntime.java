@@ -80,6 +80,18 @@ public interface ScriptRuntime extends Closeable {
     Compiled compileScript(String scriptName, String source, Map<String, String> bindingTypes);
 
     /**
+     * Restricts which Java classes a script may reach. Ignored by a runtime with nothing to restrict.
+     *
+     * <p>On the runtime rather than passed per run, because the policy is a property of the <b>deployment</b>
+     * and every run in it obeys the same one — and because it is also consulted where there is no run at all:
+     * a completion list and a hover ask the same question before anything has executed. A default of
+     * {@link ScriptPolicy#allowAll} is the harness's posture and a test's; M12's platform sets the real one.</p>
+     */
+    default ScriptRuntime restrictTo(ScriptPolicy policy) {
+        return this;
+    }
+
+    /**
      * Runs a compiled script on a fresh daemon thread and returns it, replacing whatever was running.
      *
      * <p>Daemon, because a script that will not die must never be the reason the game cannot exit. That

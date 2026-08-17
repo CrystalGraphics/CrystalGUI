@@ -3,6 +3,7 @@ package com.crystalgui.language.js;
 import com.crystalgui.language.engine.bridge.Analysis;
 import com.crystalgui.language.engine.bridge.LiveScopeSnapshot;
 import com.crystalgui.language.java.TypeIndex;
+import com.crystalgui.language.run.ScriptPolicy;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.lang.CompletionItem;
 import com.crystalgui.text.lang.CompletionList;
@@ -81,6 +82,9 @@ final class JsCompletionProvider implements CompletionProvider {
     private final Supplier<List<String>> keywords;
     @Nullable private final TypeIndex types;
 
+    /** What a script may reach — so a refused type is never offered inside {@code Java.type("…")}. */
+    private final Supplier<ScriptPolicy> policy;
+
     /**
      * Analyses arbitrary text — only for the probe parse, and only when the ordinary analysis could not
      * resolve a receiver, so the common case where a prefix has been typed pays nothing for it.
@@ -101,13 +105,14 @@ final class JsCompletionProvider implements CompletionProvider {
 
     JsCompletionProvider(TextBuffer buffer, Supplier<Analysis> analysis,
                          Supplier<LiveScopeSnapshot> liveScope, Supplier<List<String>> keywords,
-                         @Nullable TypeIndex types,
+                         @Nullable TypeIndex types, Supplier<ScriptPolicy> policy,
                          @Nullable java.util.function.Function<String, Analysis> reanalyse) {
         this.buffer = buffer;
         this.analysis = analysis;
         this.liveScope = liveScope;
         this.keywords = keywords;
         this.types = types;
+        this.policy = policy == null ? ScriptPolicy::allowAll : policy;
         this.reanalyse = reanalyse;
     }
 
@@ -303,6 +308,9 @@ final class JsCompletionProvider implements CompletionProvider {
         }
         for (String root : PACKAGE_ROOTS) {
             if (!seen.add(root)) continue;
+            // A ROOT NOTHING IS REACHABLE THROUGH IS NOT A ROOT. Offering `java` under a policy that admits
+            // nothing in it is offering a path to an empty list.
+            if (!policy.get().allowsPackage(root) && !"Packages".equals(root)) continue;
             items.add(CompletionItem.builder(root, SymbolKind.PACKAGE)
                     .detail("Java packages")
                     .sortText("~~" + root)
@@ -333,7 +341,10 @@ final class JsCompletionProvider implements CompletionProvider {
         int lastDot = query.lastIndexOf('.');
         String simple = lastDot < 0 ? query : query.substring(lastDot + 1);
         if (simple.isEmpty()) return List.of();
-        TypeIndex.Match matched = types.matching(simple);
+        // THE FILTERED VIEW, so a refused type is absent from the list rather than offered and then
+        // refused when the script runs. The index itself stays shared and unfiltered -- the policy belongs
+        // to the asker, not to the classpath.
+        TypeIndex.Match matched = types.filtered(policy.get()::allowsClass).matching(simple);
         List<String> names = new ArrayList<>(matched.entries().size());
         for (TypeIndex.Entry entry : matched.entries()) names.add(entry.qualifiedName());
         // ANY index-backed list is a SAMPLE -- the cap is on the answer, not on the question -- so the
