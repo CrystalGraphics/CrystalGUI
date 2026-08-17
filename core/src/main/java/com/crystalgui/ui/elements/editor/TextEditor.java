@@ -54,6 +54,7 @@ import com.crystalgui.ui.text.TextRange;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.WordClassifier;
 import com.crystalgui.text.WordOperations;
+import com.crystalgui.text.cursor.ColumnSelection;
 import com.crystalgui.text.cursor.CursorColumns;
 import com.crystalgui.text.cursor.LineOperations;
 import com.crystalgui.text.cursor.MouseSelection;
@@ -439,6 +440,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     /** Whether this drag belongs to a caret Alt+click added. @see #extendDragTo */
     private boolean draggingAddedCaret;
+
+    /** Where a box selection was started, or -1. @see #applyColumnSelection */
+    private int columnAnchor = -1;
 
     /** Last pointer position in this element's space, for autoscroll while dragging. */
     private float pointerX, pointerY;
@@ -1217,14 +1221,25 @@ public class TextEditor extends ScrollerView implements UndoScope {
                 return;
             }
 
-            if (addCaret && clicks == 1) {
+            if (addCaret && extend && clicks == 1) {
+                // ALT+SHIFT+DRAG IS A BOX, which is VS Code's gesture for it and IntelliJ's too. Checked
+                // before the plain Alt branch below, because Alt is in both and the one with more
+                // modifiers has to win -- the other order makes this unreachable.
+                columnAnchor = offset;
+                draggingAddedCaret = false;
+                dragGranularity = 1;
+                dragAnchor = new int[] { offset, offset };
+                applyColumnSelection(offset);
+            } else if (addCaret && clicks == 1) {
                 // Alt+Click adds a caret, as in VS Code. Ctrl is left alone because Ctrl+Click is
                 // "go to definition" everywhere it appears.
                 addCaret(offset);
                 dragGranularity = 1;
                 dragAnchor = new int[] { offset, offset };
                 draggingAddedCaret = true;
+                columnAnchor = -1;
             } else {
+                columnAnchor = -1;
                 draggingAddedCaret = false;
                 dragGranularity = clicks;
                 dragAnchor = unitAt(offset, clicks);
@@ -1263,6 +1278,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
         events.getGroup(MouseEvent.Up.class).attachListener((el, event) -> {
             selecting = false;
+            columnAnchor = -1;
             dragGranularity = 1;
             dragAnchor = null;
             draggingAddedCaret = false;
@@ -3186,6 +3202,10 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     private void extendDragTo(int offset) {
+        if (columnAnchor >= 0) {
+            applyColumnSelection(offset);
+            return;
+        }
         if (dragAnchor == null) {
             setSelection(getAnchor(), offset);
             return;
@@ -3368,6 +3388,23 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * selected is a reason to keep looking, not a reason to stop. Refusing left the next unselected one
      * unreachable whenever an earlier match happened to lie in the way.</p>
      */
+    /**
+     * Replaces the selection with the box between the column anchor and {@code offset}.
+     *
+     * <p>The last entry is made primary, because {@link ColumnSelection#between} puts the head's row
+     * there — so the blinking caret stays on the row the pointer is over rather than jumping to whichever
+     * row happens to sort first.</p>
+     */
+    private void applyColumnSelection(int offset) {
+        if (columnAnchor < 0) return;
+        List<Selection> box = ColumnSelection.between(
+                buffer.document(), clampToDocument(columnAnchor), clampToDocument(offset), getTabSize());
+        if (box.isEmpty()) return;
+        selections.setAll(box, box.size() - 1);
+        afterSelectionChange();
+        ensureCaretVisible();
+    }
+
     private int nextUnselectedOccurrence(String needle, int from) {
         // Through the whole document as a String, which is the copy §3.3 of the review is about; the
         // search here is a correctness fix and deliberately does not pretend to be the performance one.
