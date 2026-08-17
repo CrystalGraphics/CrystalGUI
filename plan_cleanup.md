@@ -26,10 +26,16 @@ found *by doing the work* rather than by the audit: the array-initialiser split 
 `ArrayCreation` bracket trap, and the lambda-`return` type in `Create`. Each is written up in its commit.
 
 **Nothing here is outstanding.** `plan_texteditor_review.md` is the live one; its §0a has that half's
-state. The two share one lesson worth carrying between them: in both files the rows that looked like
-duplication most often were **two questions wearing one name**, and the cost of merging them wrongly is
-paid in silence — `-(-a)` becoming `--a`, a fix typed against a lambda's target, a box selection that
-follows the text instead of the screen.
+state — **everything up to and including R6 is now done there too**, leaving only R7's four heaviest
+features and two small structural items.
+
+The two files share one lesson worth carrying between them: the rows that looked like duplication most
+often were **two questions wearing one name**, and the cost of merging them wrongly is paid in silence —
+`-(-a)` becoming `--a`, a fix typed against a lambda's target, a box selection that follows the text
+instead of the screen. R1 hit it again from the other side, twice: hover/actions/navigation genuinely
+*are* one question (they share the request-serial lanes, and four copies of a silent-to-omit rule drift),
+while `hide()` and `closeQuickDocumentation()` are two — the comment above the call site said so, and
+nothing would have failed if they had been merged.
 
 † Two chunks were swept into a *concurrent session's* commits by a broad `git add` in this shared
 worktree — `Indent.java` plus most of the `LoopIntentions`/`SwitchIntentions` edits into `a8df75e`

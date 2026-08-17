@@ -1,9 +1,9 @@
 # TextEditor — full review against IntelliJ, VS Code and Monaco
 
-Scope: `core/src/main/java/com/crystalgui/ui/elements/editor/` — `TextEditor.java` (5,338 lines) and its
-25 companions (11,520 lines in the package), plus the model it sits on in `com.crystalgui.text`. Read in
-full on 2026-08-17; every "dead" claim below was confirmed with a reference search, not assumed. The
-quick-fix layer has its own file, `plan_cleanup.md`.
+Scope: `core/src/main/java/com/crystalgui/ui/elements/editor/` — `TextEditor.java` (5,338 lines when this
+was written, **4,960 now**) and its 25 companions (11,520 lines in the package, now 30 files), plus the
+model it sits on in `com.crystalgui.text`. Read in full on 2026-08-17; every "dead" claim below was
+confirmed with a reference search, not assumed. The quick-fix layer has its own file, `plan_cleanup.md`.
 
 The reference frame is the three editors this codebase already ports from: **Monaco/VS Code**
 (`src/vs/editor/`), **IntelliJ** (`EditorImpl` + its handlers) and, where they disagree, whichever one
@@ -13,8 +13,11 @@ this project has already chosen for the feature in question.
 
 ## 0a. Where this stands (2026-08-17)
 
-**All four harness-reported symptoms are fixed**, and six of R7's features are in. What is left is the
-large structural work (R1, R3) and the four heaviest features.
+**Everything up to and including R6 is done.** All four harness-reported symptoms are fixed, six of R7's
+features are in, `TextEditor` has gone 5,800 → 4,960 lines across five extracted subsystems, the view
+parts' pixel values are in the sheet, `em` is a real unit and the 5,162-line test file is four files.
+What is left is R7's four heaviest features — IME, signature help, rename, and sticky scroll/minimap —
+which were deliberately not started.
 
 | Item | State | Commit |
 |---|---|---|
@@ -26,15 +29,19 @@ large structural work (R1, R3) and the four heaviest features.
 | R7.3 — tabs/tab-stop Tab, Enter-between-braces, paste re-indent | **done** | `f15e608`, `bddcaa4` |
 | R7.4 — column selection | **done** | `42c9caa` |
 | R7.6 — selection highlight, relative line numbers, caret styles | **done** | `042656d`, `bbe3559`† |
-| R1 — extract find / folding / language features / diagnostics | not started | — |
-| R3 — finish the view-part contract | not started | — |
-| R5 — an `em` unit · R6 — split the 5,036-line test | not started | — |
-| R7.2 — IME · R7.5 — signature help · R7.7 — rename · R7.8 — sticky scroll, minimap | not started | — |
+| R1 — extract find / folding / suggest / language features / diagnostics | **done** | `f9599c7`, `45abc18`, `c24fea0` |
+| R3 — finish the view-part contract | **done** | `bcdb2d3` |
+| §2.2 — the view parts' pixel values move to CSS | **done** | `a983308` |
+| R5 — an `em` unit, and the `gutterMetric` baseline hack retired | **done** | `ae1c823` |
+| R6 — split the 5,162-line test | **done** | `9ea7cdb` |
+| §2.3 — one coordinate-conversion class | **open** | — |
+| §3.4 remainder — `showCodeActionsAt` FQNs, the three popup wirings, Home-under-wrap | **open** | — |
+| R7.2 — IME · R7.5 — signature help · R7.7 — rename · R7.8 — sticky scroll, minimap | **not started, by instruction** | — |
 
 † Swept into a concurrent session's commit by a broad `git add` in this shared worktree; the code is
 correct and only the attribution is wrong. It happened four times over this run.
 
-**Three things were found by doing the work rather than by the review:**
+**Six things were found by doing the work rather than by the review:**
 
 - **`::highlight(search)` was never painted.** The editor has published its find matches under that name
   since find went in and no stylesheet defines it — the ranges resolved, the count was right, the arrows
@@ -44,6 +51,19 @@ correct and only the attribution is wrong. It happened four times over this run.
 - **`Language.PLAIN` declares no brackets**, so making the Enter rule language-driven silently stopped a
   plain-text editor indenting after `{`. There is now an explicit fallback for indentation *only* —
   auto-closing gets none, because it puts a character into the document and must never guess.
+- **`DecorationPool.hide` could not survive a sheet that sizes a decoration.** It collapses the box at
+  DEFAULT origin, *below* the user-agent sheet — so the moment §2.2 gave `.__squiggle__` a height in
+  CSS, retirement silently stopped working and a retired band went on measuring its styled height. That
+  is not a squiggle in the wrong place, it is a squiggle under text with no problem; and a retired error
+  stripe mark is still hit-testable, so it would have answered a press about a problem it no longer
+  marks. Hiding now goes through `setDisplayed(false)`, which writes at IMPORTANT.
+- **An `em` written after the rules matched needs a listener, not just a resolver.** An `em` becomes
+  pixels in `StyleEngine.rematch` and nothing else re-runs that pass, so a widget imposing its own
+  `font-size` at IMPORTANT — which is exactly what zoom does to the gutter — would leave every `em` on
+  the element at the pixels it had when the sheet last matched. Found while writing the test that now
+  pins it.
+- **A raw NUL byte sat in a char literal in `ZoomIndicatorPart`**, left by a `perl` edit some sessions
+  ago. Valid Java, so it compiled and ran; it made the file binary to `grep` and every other text tool.
 
 **Deviations, recorded rather than skipped:**
 
@@ -56,6 +76,17 @@ correct and only the attribution is wrong. It happened four times over this run.
   refactor with no symptom behind it.
 - **R7.2 (IME) needs a composition seam in `CgSystemInput`**, which is CrystalGraphics' SPI rather than
   this project's, and cannot be verified without a real IME. Left for a decision rather than guessed at.
+- **The language features are ONE class, not the four R1 offered.** `EditorHover`/`EditorCodeActions`/
+  `EditorNavigation` share the request-serial lanes and the two discards every callback applies (version,
+  and request identity). Split apart, each would carry its own copy of a rule that is one line and silent
+  to omit — and four copies drift on precisely the rule that must not.
+- **`firstVisibleOffset()` stayed on `TextEditor`**, against R1's own listing of `EditorFind`'s members.
+  It names no find state at all; it is a question about the scroll. Moving it would mean the next
+  viewport-anchored feature reaches into the find subsystem to ask about the viewport.
+- **`ZoomIndicatorPart`'s three multipliers deliberately did NOT become `em`**, and the first commit of
+  §2.2 said the opposite before this was checked. They are multiples of the *label's* font size while an
+  `em` on the panel resolves against the *panel's*; both are 10 today, so it would be right by
+  coincidence and quietly wrong the first time a theme restyled the label.
 
 ---
 
@@ -401,7 +432,7 @@ monolith is where the next regression hides.
 
 Ordered so each step is a pure move covered by the existing tests before any behaviour changes.
 
-### R1 — Extract the four subsystems into contributions
+### R1 — Extract the four subsystems into contributions — **DONE** (`f9599c7`, `45abc18`, `c24fea0`)
 - `EditorFind` (state: `results`, `lastSearch`, `preserveCase`, `reentrantFind`, `searchBar`; methods:
   `find*`, `replace*`, `selectMatch`, `firstVisibleOffset`, `toggleExclude*`). `SearchReplaceBar` talks
   to it. Delete `searchMatches`, `currentMatch`, `lastQuery`, `lastQueryCaseSensitive`.
@@ -417,13 +448,34 @@ Ordered so each step is a pure move covered by the existing tests before any beh
 Each is a class given the `TextEditor` (as `SearchReplaceBar` and `HoverDocumentation` already are).
 Fields go with their methods; the four orphaned javadocs get their subjects back for free.
 
+**What shipped, and where it differs from the list above.** Five classes, not four: `EditorFind` (312),
+`EditorFolding` (338), `EditorSuggest` (201), `EditorLanguageFeatures` (393), `EditorDiagnostics` (233).
+`TextEditor` 5,800 → 4,960.
+
+- **Hover, code actions and navigation are one class, not three.** They share the request-serial lanes
+  and the two discards every callback applies — version, and request identity. Split apart, each would
+  hold its own copy of a rule that is one line and silent to omit. `EditorSuggest` *is* separate: it has
+  its own session and popup and touches no lane.
+- **`firstVisibleOffset` stayed on `TextEditor`.** It names no find state; it is a question about the
+  scroll, and moving it means the next viewport-anchored feature reaches into find to ask about the
+  viewport.
+- **Folding is not the thin wrapper it looks like.** Each of its eight commands needs the same six-step
+  sequence — capture the viewport, recompute regions that are a frame stale, lift every caret off rows
+  about to stop existing, re-push the hidden set, drop what is realised, restore the viewport — which is
+  why the class is 338 lines for a model it does not own.
+- **`diagnosticsAt` reads the decoration lane, not the set**, which is why `EditorDiagnostics` and
+  `EditorLanguageFeatures` are separate: one owns the tracking, the other consults it.
+- Three access widenings and three named forwarders, no more. `invalidateStyleMatch` is `protected` on
+  `UIElement` deliberately — nothing outside a widget may force its cascade — so it is forwarded once
+  rather than widened.
+
 ### R2 — `ViewGeometry` — **DONE as the rule, not the object** (`7192ee0`; see §0a)
 One package-private object owning `lineHeight()`, `textOriginX/Y()`, `viewportHeight/Width()`,
 `topOfViewLine(int)`, `xOf(viewLine, column)`, `localToOffset`, `offsetToLocal`, `localToWindow`.
 `TextEditor` computes it once per `updateWindow`; every part reads it. Kills the 13 formula copies,
 the per-part scroll subtraction, and gives `anchorInWindow`/`offsetAtLocal` one home.
 
-### R3 — Finish the view-part contract
+### R3 — Finish the view-part contract — **DONE** (`bcdb2d3`; `shouldRender` deleted, see `EditorViewPart`)
 - `DecorationPool` in `LineNumbersPart`, `SelectionsPart`, `ViewCursorsPart`, `SquigglesPart`,
   `ErrorStripePart`, `FoldingDecorationsPart`.
 - Wire `shouldRender` or delete it (recommend wire: `EditorViewPart.onScroll/onSelection/
@@ -465,14 +517,37 @@ the per-part scroll subtraction, and gives `anchorInWindow`/`offsetAtLocal` one 
 - `insertSpaces` setting + tab-stop insertion (Monaco's `TypeOperations.tab`), which the ported
   `CursorColumns` already makes cheap.
 
-### R5 — `em` unit (engine), retire the `gutterMetric` baseline hack
+### R5 — `em` unit (engine), retire the `gutterMetric` baseline hack — **DONE** (`ae1c823`)
 Add a font-relative length to the style engine (`em`, resolved against the element's computed
 `font-size`). Then the gutter metrics, the chip padding/height, the zoom panel and the completion
 popup can all be authored in CSS as multiples of the font, and the "first-seen font size" baseline goes.
 
-### R6 — Tests
+**Three things the plan did not anticipate.**
+
+- **It cannot live in `StyleValue`.** A parsed value is cached and shared by every element its rule
+  matches — that sharing is what makes a stylesheet cheap — and an `em` is a different number of pixels
+  on each of them. Resolution is in `StyleEngine.rematch`, the first place a declaration and an element
+  are both in hand. `FontRelative` is the seam.
+- **Two passes, gated on the element actually using `em`.** Picking the winning `font-size` *declaration*
+  out of the sheets is not enough: a widget writing its own at INLINE or IMPORTANT beats every sheet and
+  appears in no rule at all. Bounded at two rather than looped — a `font-size` authored in `em` is the
+  one case that might not terminate.
+- **And a listener on `FONT_SIZE`,** because nothing else re-runs `rematch`. Without it, zoom leaves
+  every `em` at the pixels it had when the sheet last matched.
+
+**Only the gutter converted.** The zoom panel's multipliers are of the *label's* font size while an `em`
+on the panel resolves against the *panel's*; both are 10 today, so it would be right by coincidence.
+That is recorded in `ZoomIndicatorPart` rather than done.
+
+### R6 — Tests — **DONE** (`9ea7cdb`)
 Split `TextEditorTest` by feature (movement, editing, multi-caret, wrap, fold, zoom, geometry, input),
 matching the R1 boundaries so each contribution's tests sit beside it.
+
+5,162 lines and 244 tests → `EditorTestBase` plus `TextEditorTest` (106), `EditorViewTest` (88),
+`EditorFoldingTest` (40) and `EditorFindTest` (10). **All 47 helpers went to the base**, none travelled
+with the tests that use them most: they read realised elements and nearly every one now has callers in
+more than one class, so distributing them by usage is how a second `allWithClass` appears in a later
+file. Verified by name — 244 before, 244 after, nothing missing or duplicated.
 
 ### R7 — Feature gaps, in the order they earn their keep
 1. ✅ Occurrence highlight under caret (`352994f`) — and `::highlight(search)` turned out to have no
@@ -498,13 +573,25 @@ matching the R1 boundaries so each contribution's tests sit beside it.
 *The order below is the original plan's. What actually happened is in §0a, and it went R4 → §3.2 → R2 →
 R7, because the reported symptoms came first and the rest followed what they touched.*
 
-1. R1 + fix §3.1/§3.2 (moves and deletions only; whole editor test set is the net). — §3.2 ✅, R1 open.
+1. R1 + fix §3.1/§3.2 (moves and deletions only; whole editor test set is the net). — §3.2 ✅, R1 ✅.
 2. R2 + R3 (geometry object, parts finished; the harness `cgui-text-stress` and `EditorFrameCostTest`
-   guard the per-frame cost). — R2 ✅ as the rule, R3 open.
+   guard the per-frame cost). — R2 ✅ as the rule, R3 ✅.
 3. R4 (behaviour changes, each with a fixture). — ✅
-4. R5 (engine change; touches `LengthPercent` parsing and the cascade — separate commit, own tests).
-5. R6 alongside 1–3 as each cluster moves.
-6. R7 as product priorities decide. — 1, 3, 4 and 6 ✅; 2, 5, 7, 8 open.
+4. R5 (engine change; touches `LengthPercent` parsing and the cascade — separate commit, own tests). — ✅
+5. R6 alongside 1–3 as each cluster moves. — ✅
+6. R7 as product priorities decide. — 1, 3, 4 and 6 ✅; **2, 5, 7 and 8 deliberately not started**, on
+   instruction to report back at R6 before opening any new R7 feature.
+
+**What is left, smallest first.**
+
+| Item | Size | Note |
+|---|---|---|
+| §3.4 remainder — `showCodeActionsAt`'s inline FQNs, the three near-identical popup wirings, Home-under-wrap's second stop | small | The FQNs are gone from the moved copy in `EditorLanguageFeatures`; the popup wirings and the wrap stop are not |
+| §2.3 — one coordinate-conversion class | medium | `anchorInWindow` and `offsetAtLocal` are the two ends of it; R2 already gave the view-line formula one home |
+| R7.5 — signature help | medium | The resolver already answers a `SymbolInfo` with a signature; it is a popup and a trigger on `(` and `,` |
+| R7.7 — rename in file | medium | Multi-caret does most of it; the engine is `selectAllOccurrences` by *binding* rather than by text |
+| R7.8 — sticky scroll, bracket-pair colours, minimap | large | Sticky scroll needs the folding regions, which now exist and have an owner |
+| R7.2 — IME | blocked | Needs a composition seam in `CgSystemInput`, which is CrystalGraphics' SPI, and cannot be verified without a real IME |
 
 Two things I would do first regardless: delete the dead members and re-home the four orphaned
 javadocs (an hour, no risk) -- the dead members are gone in `0950cc1`, THE JAVADOCS ARE NOT -- and stop materialising the document in `find`,
