@@ -189,8 +189,7 @@ final class SwitchIntentions {
                 if (statements.isEmpty()) return false;
                 last = (Statement) statements.get(statements.size() - 1);
             }
-            return last instanceof ReturnStatement || last instanceof ThrowStatement
-                    || last instanceof BreakStatement || last instanceof ContinueStatement;
+            return transfersControl(last);
         }
     }
 
@@ -523,7 +522,7 @@ final class SwitchIntentions {
                 if (!body.isEmpty()) {
                     // STATEMENTS, THEN ANOTHER LABEL, AND NOTHING LEFT THE GROUP. That is a fall-through,
                     // which the arrow form cannot express -- and which is the defect it exists to prevent.
-                    if (!leaves(body.get(body.size() - 1))) return null;
+                    if (!transfersControl(body.get(body.size() - 1))) return null;
                     groups.add(new Group(joined(pending), stripTrailingBreak(body)));
                     pending = new ArrayList<>();
                     body = new ArrayList<>();
@@ -581,8 +580,15 @@ final class SwitchIntentions {
         return body;
     }
 
-    private static boolean leaves(Statement last) {
-        return last instanceof BreakStatement || last instanceof ReturnStatement
-                || last instanceof ThrowStatement || last instanceof ContinueStatement;
+    /**
+     * Whether this statement transfers control away rather than falling out of the bottom.
+     *
+     * <p>One list, asked two ways: the arrow conversion asks it of a group's last statement, and the chain
+     * conversion asks it of a <em>branch</em>, which may be a block and then means its last statement. Both
+     * spellings existed in this file, seventy lines apart, and neither said it was the other's.</p>
+     */
+    private static boolean transfersControl(Statement statement) {
+        return statement instanceof BreakStatement || statement instanceof ReturnStatement
+                || statement instanceof ThrowStatement || statement instanceof ContinueStatement;
     }
 }

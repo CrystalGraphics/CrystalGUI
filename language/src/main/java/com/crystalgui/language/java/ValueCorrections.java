@@ -153,20 +153,18 @@ final class ValueCorrections {
                     "Initialize variable '" + variable.getName() + "'", edit));
         }
 
-        /** The fragment declaring {@code variable}, found by binding rather than by position. */
+        /**
+         * The fragment declaring {@code variable}, found by binding rather than by position.
+         *
+         * <p>Through JDT's own {@code findDeclaringNode}, which is what {@code ModifierCorrections} had
+         * always used. The hand-rolled visitor beside it walked the whole unit to answer the same
+         * question, and would keep walking it as the file grew.</p>
+         */
         private static VariableDeclarationFragment declarationOf(FixContext context,
                                                                  IVariableBinding variable) {
-            VariableDeclarationFragment[] found = {null};
-            context.unit().accept(new ASTVisitor() {
-                @Override public boolean visit(VariableDeclarationFragment candidate) {
-                    IVariableBinding declared = candidate.resolveBinding();
-                    if (found[0] == null && declared != null && declared.isEqualTo(variable)) {
-                        found[0] = candidate;
-                    }
-                    return found[0] == null;
-                }
-            });
-            return found[0];
+            ASTNode declared = context.unit().findDeclaringNode(variable);
+            return declared instanceof VariableDeclarationFragment
+                    ? (VariableDeclarationFragment) declared : null;
         }
     }
 

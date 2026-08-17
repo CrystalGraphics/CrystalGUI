@@ -465,15 +465,9 @@ final class IntentionCorrections {
 
         private static boolean negatable(FixContext context, InfixExpression candidate) {
             if (candidate.hasExtendedOperands()) return false;
-            InfixExpression.Operator operator = candidate.getOperator();
-            boolean comparison = operator == InfixExpression.Operator.EQUALS
-                    || operator == InfixExpression.Operator.NOT_EQUALS
-                    || operator == InfixExpression.Operator.LESS
-                    || operator == InfixExpression.Operator.LESS_EQUALS
-                    || operator == InfixExpression.Operator.GREATER
-                    || operator == InfixExpression.Operator.GREATER_EQUALS;
-            return comparison && context.touches(candidate.getStartPosition(),
-                    candidate.getStartPosition() + candidate.getLength());
+            return Negation.isComparison(candidate.getOperator())
+                    && context.touches(candidate.getStartPosition(),
+                            candidate.getStartPosition() + candidate.getLength());
         }
     }
 
