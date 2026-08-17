@@ -101,7 +101,7 @@ final class QuickFixBulbPart extends EditorViewPart {
         if (caret != askedFor) {
             askedFor = caret;
             intentionHere = false;
-            editor.requestCodeActions(TextEditor.LANE_BULB, caret, actions -> {
+            editor.langFeatures().requestCodeActions(EditorLanguageFeatures.LANE_BULB, caret, actions -> {
                 if (caret == askedFor) intentionHere = !actions.isEmpty();
             });
         }

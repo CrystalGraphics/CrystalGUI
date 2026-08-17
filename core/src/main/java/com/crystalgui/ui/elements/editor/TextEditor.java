@@ -601,7 +601,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * because a collapsed band is widened to one character to be visible and its width still looked
      * plausible. @see Rope#pointToOffset, which had the same defect and is now the one definition</p>
      */
-    private int offsetOfPoint(TextPoint point) {
+    int offsetOfPoint(TextPoint point) {
         return buffer.pointToOffset(point);
     }
 
@@ -804,7 +804,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // because what is on screen is now about a position that has shifted underneath it and the
             // pointer has not asked about wherever the text ended up. A Ctrl+Q popup is left alone: it was
             // asked for deliberately, and hideHoverDocumentation is what tells the two apart.
-            hover.hide();
+            langFeatures.hover().hide();
             onChanged.emit(buffer.toString());
         });
 
@@ -825,7 +825,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
         // The one place the caret settles. A session must end on a plain arrow-key move, which changes no
         // text and would therefore never reach a buffer listener.
-        onSelectionChanged.connect(this::notifyCompletionOfCaret);
+        onSelectionChanged.connect(suggest::caretMoved);
 
         previousLineCount = buffer.lineCount();
         projections.rebuild(buffer.document());
@@ -1135,7 +1135,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // something different while a list is open, and the editor's own handler would consume them
             // before any listener downstream could -- so the interception has to be here rather than on the
             // popup, which never holds focus and therefore never receives a key at all.
-            if (handleCompletionKey(event.getKeyCode(), event.getModifiers())) {
+            if (suggest.handleKey(event.getKeyCode(), event.getModifiers())) {
                 event.stopPropagation();
                 return;
             }
@@ -1235,7 +1235,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
         events.getGroup(MouseEvent.Move.class).attachListener((el, event) -> {
             rememberPointer(event.getPosition().x(), event.getPosition().y());
-            hover.pointerMoved();
+            langFeatures.hover().pointerMoved();
             if (!selecting) return;
             extendDragTo(offsetAt(event.getPosition().x(), event.getPosition().y()));
         }, false, false);
@@ -1243,7 +1243,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // THE POINTER LEFT THE TEXT, which is not the same as it having left the popup -- the box sits
         // below the token, so reaching for it fires this immediately. The grace in the ticker is what
         // makes that survivable; hiding here would make the popup unreachable.
-        onMouseLeave.attachListener((el, event) -> hover.cancel(), false, false);
+        onMouseLeave.attachListener((el, event) -> langFeatures.hover().cancel(), false, false);
 
         events.getGroup(MouseEvent.Up.class).attachListener((el, event) -> {
             selecting = false;
@@ -1850,7 +1850,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
                 // than it did, and a completion list opened against the previous one may have been unable
                 // to resolve its receiver at all. Asking again here is what stops an empty popup sitting on
                 // screen until the next keystroke.
-                if (completion != null && !completion.isClosed()) completion.retrigger();
+                suggest.retrigger();
             });
             // THE ENGINE ANNOUNCES, THIS DOCUMENT'S SET OWNS. Filed under the engine's own id so a
             // second producer -- the shader compiler on a .glsl, a future linter -- cannot erase it,
@@ -1906,25 +1906,19 @@ public class TextEditor extends ScrollerView implements UndoScope {
         revealCaretCentred();
     }
 
-    /** Documentation — {@code Ctrl+Q} and hover, which write to the same popup. */
-    private static final int LANE_DOC = 0;
-    /** Go-to-definition, which writes to the caret. */
-    private static final int LANE_DEFINITION = 1;
+    // ── Language features ────────────────────────────────────────────────────────────────────
+    //
+    // The subsystem is EditorLanguageFeatures: resolve, documentation, code actions and go-to-definition,
+    // which share the request-serial machinery that makes an asynchronous answer safe to act on. They are
+    // one class for that reason and not four -- four copies of the two discards would drift on exactly the
+    // rule that must not.
 
-    /** Code actions get a lane of their own, so a hover's request cannot cancel the palette's. */
-    private static final int LANE_ACTIONS = 2;
+    private final EditorLanguageFeatures langFeatures = new EditorLanguageFeatures(this);
 
-    /**
-     * The gutter bulb's own poll — and it must not share {@link #LANE_ACTIONS}.
-     *
-     * <p>A lane keeps only its newest request: the callback compares its serial against the lane's and
-     * drops itself if anything asked later. The bulb asks whenever the caret moves, so on one lane it
-     * would cancel the request Alt+Enter had in flight and the menu would simply never open — worst on a
-     * slow answer, which is the case the whole asynchronous path exists for.</p>
-     */
-    static final int LANE_BULB = 3;
-
-    private final int[] resolveSerials = new int[4];
+    /** Resolve, documentation, code actions, go-to-definition. */
+    EditorLanguageFeatures langFeatures() {
+        return langFeatures;
+    }
 
     /**
      * The problems covering {@code offset} <b>right now</b>, nearest-first.
@@ -1952,130 +1946,35 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /**
      * Asks every contributor what can be done about the problems at {@code offset}.
      *
-     * <p>The engine's answers and the ones that need no engine are <b>merged here</b>, because this is the
-     * only place that can see both — a provider answers for itself and never for the list. See
-     * {@link CodeActionProvider} for why nothing is asked to enumerate the whole set.</p>
-     *
-     * <p>Reports whether it <em>asked</em>, never whether anything arrived, for the reason
-     * {@code goToDefinition} sets out at length: the callback may legitimately never fire.</p>
+     * @see EditorLanguageFeatures#requestCodeActions(int, java.util.function.Consumer)
      */
     public boolean requestCodeActions(int offset, java.util.function.Consumer<List<CodeAction>> answer) {
-        return requestCodeActions(LANE_ACTIONS, offset, answer);
+        return langFeatures.requestCodeActions(offset, answer);
     }
 
-    /** @see #LANE_BULB for why the gutter bulb asks on a lane of its own. */
-    boolean requestCodeActions(int lane, int offset, java.util.function.Consumer<List<CodeAction>> answer) {
-        List<Diagnostic> problems = diagnosticsAt(offset);
-        List<CodeAction> shapeDerived = DiagnosticActions.forProblems(problems);
-        if (languageServices == null) {
-            if (!shapeDerived.isEmpty()) answer.accept(shapeDerived);
-            return false;
-        }
-        final int serial = ++resolveSerials[lane];
-        CodeActionProvider.Request request =
-                CodeActionProvider.Request.at(offset, problems, buffer.version());
-        languageServices.codeActions().actionsAt(request, reply -> {
-            if (serial != resolveSerials[lane] || reply == null) return;
-            List<CodeAction> merged = new ArrayList<>();
-            // ONLY THE ENGINE'S HALF IS GATED. Its actions carry offsets from a parse that may have been
-            // superseded; the shape-derived ones carry no edit at all and cannot go stale.
-            if (reply.isFresh(buffer.version()) && reply.value() != null) merged.addAll(reply.value());
-            merged.addAll(shapeDerived);
-            merged.sort(CodeAction.ORDER);
-            answer.accept(merged);
-        });
-        return true;
-    }
-
-    /**
-     * Applies one action — the only path, and the only place the version is re-checked.
-     *
-     * <p><b>Re-checked here rather than trusted from the request</b>, because an action is shown in a
-     * popup and applied when the user gets round to pressing the key. An edit is a set of offsets, and
-     * offsets into a document that has since been typed in still resolve — they name different text. So a
-     * stale action does not fail, it silently edits the wrong place, and the gate is the difference
-     * between a quick fix and a corruption.</p>
-     *
-     * <p>Bracketed by {@code breakUndoCoalescing} on both sides so the fix is exactly one entry in the
-     * history: without the leading break it merges into the typing run before it, and without the trailing
-     * one the next keystroke merges into the fix. Either way Ctrl+Z takes back half a fix.</p>
-     *
-     * @return false when the action could not be applied, which a caller should treat as "ask again"
-     */
+    /** Applies one action — the only path. @see EditorLanguageFeatures#applyCodeAction */
     public boolean applyCodeAction(@Nullable CodeAction action) {
-        if (action == null || isReadOnly()) return false;
-        if (!action.isApplicableTo(buffer.version())) return false;
-        if (action.commandId() != null && !DiagnosticActions.run(this, action)) return false;
-        ChangeSet edit = action.edit();
-        if (edit == null) return action.commandId() != null;
-        buffer.breakUndoCoalescing();
-        buffer.edit(edit, selections.all());
-        buffer.breakUndoCoalescing();
-        return true;
+        return langFeatures.applyCodeAction(action);
     }
-
-    /**
-     * Resolve the name at {@code offset} and hand the answer over, or report that nothing was asked.
-     *
-     * <h3>A serial per DESTINATION, not per feature and not one for everything</h3>
-     *
-     * <p>The serial exists to drop an answer for a request the user has replaced — so two requests
-     * supersede each other exactly when they would write to the same place. {@code Ctrl+Q} and hover share
-     * a lane because they fill one popup and the later one genuinely replaces the earlier;
-     * go-to-definition has its own because it moves the caret instead, and nothing about asking for
-     * documentation means you stopped wanting the jump.</p>
-     *
-     * <p>This was <b>one</b> shared serial until hover arrived, on the reasoning that the user's last
-     * action should win. Hover is what makes that wrong: it is ambient rather than an action, so a single
-     * lane let a stray mouse movement one pixel after {@code Ctrl+B} silently eat the jump — and only
-     * sometimes, depending on which resolve finished first.</p>
-     *
-     * <p>Both discards live here rather than at each call site because they are one line each and silent
-     * to omit: neither produces an error, both produce a confident answer about a position the user has
-     * left.</p>
-     *
-     * @return whether a request was issued — false means no engine, which is the ordinary case
-     */
-    private boolean resolveAt(int lane, int offset, java.util.function.Consumer<SymbolInfo> onResolved) {
-        if (languageServices == null) return false;
-        final int serial = ++resolveSerials[lane];
-        languageServices.resolver().resolveAt(offset, answer -> {
-            // AGAINST THE VERSION THE ANSWER ARRIVED AT, not the one it was asked at -- isFresh is an
-            // equality, so comparing with the ask-time stamp would accept every answer it ever got and
-            // the gate would read as present while doing nothing.
-            if (serial != resolveSerials[lane] || answer == null || !answer.isFresh(buffer.version())) {
-                return;
-            }
-            SymbolInfo symbol = answer.value();
-            if (symbol != null) onResolved.accept(symbol);
-        });
-        return true;
-    }
-
-    @Nullable
-    private DocumentationPopup docPopup;
-
-    /** When the popup opens and closes. @see HoverDocumentation */
-    private final HoverDocumentation hover = new HoverDocumentation(this);
 
     /** {@code Show on Mouse Move} — IntelliJ's own name for this, and on by default as it is there. */
     public TextEditor setHoverDocumentationEnabled(boolean enabled) {
-        hover.setEnabled(enabled);
+        langFeatures.setHoverEnabled(enabled);
         return this;
     }
 
     public boolean isHoverDocumentationEnabled() {
-        return hover.isEnabled();
+        return langFeatures.isHoverEnabled();
     }
 
     /** Test seam — @see HoverDocumentation#pointerForTest */
     public void hoverPointerForTest(int offset) {
-        hover.pointerForTest(offset);
+        langFeatures.hover().pointerForTest(offset);
     }
 
     /** Test seam — @see HoverDocumentation#hoverAnchorAtForTest */
     public int hoverWordStartAtForTest(float localX, float localY) {
-        return hover.hoverAnchorAtForTest(localX, localY);
+        return langFeatures.hover().hoverAnchorAtForTest(localX, localY);
     }
 
     boolean isSelecting() {
@@ -2097,180 +1996,26 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /** The live Quick Documentation popup, or null. Exposed so a test can read it without pixels. */
     @Nullable
     public DocumentationPopup documentationPopup() {
-        return docPopup;
+        return langFeatures.documentationPopup();
     }
 
     /**
      * Resolve at the caret and show the Quick Documentation popup — {@code Ctrl+Q}.
      *
-     * <p>Opens on the answer rather than on the keystroke: an empty box that fills in 300ms later is worse
-     * than one that appears once there is something in it, and a resolve that produces nothing should
-     * produce nothing on screen too. The two discards in {@link #resolveAtCaret} mean the box that opens
-     * describes the caret it was asked about and no other.</p>
-     *
-     * @return whether a request was issued — false means no engine, the ordinary case for most languages
+     * @see EditorLanguageFeatures#showQuickDocumentation()
      */
     public boolean showQuickDocumentation() {
-        return showDocumentationAt(getCaret());
+        return langFeatures.showQuickDocumentation();
     }
 
-    /**
-     * The popup for what is at {@code offset} — the symbol if one resolves, the problems if any, or both.
-     *
-     * <h3>The problems do not wait for the resolve, and must not</h3>
-     *
-     * <p>This used to open only from inside the resolve callback, which fires <b>only when a symbol came
-     * back</b>. So the one case where a problem popup is worth most — a name that resolves to nothing —
-     * was the one case that showed nothing at all: hovering an unresolved {@code lenght()} gave a red
-     * squiggle, a lightbulb in the gutter, a working Alt+Enter, and no hover popup, because the resolve
-     * that never succeeded was gating the band that had nothing to do with it.</p>
-     *
-     * <p>They are independent sources and are now treated as such. Diagnostics are tracked ranges in the
-     * buffer, known synchronously; a symbol comes from an engine and arrives whenever it arrives. So the
-     * problem-only box opens immediately if there is a problem, and the resolve upgrades it in place when
-     * it lands — which is also the right order for the slow case, since the message is the part you were
-     * hovering for.</p>
-     *
-     * @return whether anything was shown or asked for
-     */
-    boolean showDocumentationAt(int offset) {
-        UIWindow window = getAttachedWindow();
-        if (window == null) return false;
-        float[] anchor = anchorInWindow(offset);
-        if (anchor == null) return false;
-
-        List<Diagnostic> problems = diagnosticsAt(offset);
-        if (!problems.isEmpty()) {
-            if (docPopup == null) docPopup = new DocumentationPopup();
-            docPopup.showProblemsAt(window, problems, anchor[0], anchor[1], anchor[2]);
-            fillProblemSection(offset);
-        }
-
-        boolean asked = resolveAt(LANE_DOC, offset, symbol -> {
-            UIWindow live = getAttachedWindow();
-            if (live == null) return;
-            if (docPopup == null) docPopup = new DocumentationPopup();
-            float[] at = anchorInWindow(offset);
-            if (at == null) return;
-            docPopup.show(live, symbol, at[0], at[1], at[2]);
-            fillProblemSection(offset);
-        });
-        return asked || !problems.isEmpty();
-    }
-
-    /**
-     * Fills the popup's problem band, and connects what it offers to what applies it.
-     *
-     * <p>Two passes on purpose. The problems are known synchronously — they are tracked ranges in the
-     * buffer — so the band appears with the popup; the actions come from an engine and grow in when they
-     * arrive. A hover that waited for the compiler would feel broken on exactly the file slow enough for
-     * anyone to notice.</p>
-     *
-     * <p>The signals are re-connected per show, and disconnected first: the popup outlives any one symbol,
-     * so a listener added per hover and never removed would apply the fix for a problem three hovers ago.</p>
-     */
-    private void fillProblemSection(int offset) {
-        if (docPopup == null) return;
-        List<Diagnostic> problems = diagnosticsAt(offset);
-        docPopup.setProblem(problems, List.of());
-        // NO LONGER GATED ON A PROBLEM. It was, and that made an INTENTION unreachable from here: there
-        // is no diagnostic behind "Replace with lambda", so the request was never made and the popup for
-        // a convertible anonymous class showed a signature and nothing to do — while the gutter bulb two
-        // inches away said there was something. The same rule that had to change for the bulb, in the one
-        // other place it was written down.
-        popupActions.disconnectAll();
-        popupActions.add(docPopup.onActionChosen.connect(action -> {
-            if (applyCodeAction(action)) closeQuickDocumentation();
-        }));
-        popupActions.add(docPopup.onMoreActions.connect(() -> {
-            closeQuickDocumentation();
-            showCodeActionsAt(offset);
-        }));
-        requestCodeActions(offset, available -> {
-            if (docPopup != null && docPopup.isOpen()) docPopup.setProblem(problems, available);
-        });
-    }
-
-    private final com.crystalgui.core.signal.ConnectionGroup popupActions =
-            new com.crystalgui.core.signal.ConnectionGroup();
-
-    /**
-     * The full action list at an offset — Alt+Enter, and the popup's "More actions…".
-     *
-     * <p>A {@code Menu} rather than a list of its own, because that is what it is: rows with titles, an
-     * accelerator column and a keyboard walk, all of which {@code MenuBuilder} and {@code Menu} already
-     * do. A second list widget here would be a second set of the six rules {@code MenuBuilder} records,
-     * and they were each learned from a bug.</p>
-     *
-     * @return whether anything was offered
-     */
+    /** The full action list at an offset — Alt+Enter. @see EditorLanguageFeatures#showCodeActionsAt */
     public boolean showCodeActionsAt(int offset) {
-        UIWindow window = getAttachedWindow();
-        if (window == null) return false;
-        float[] anchor = anchorInWindow(offset);
-        if (anchor == null) return false;
-        requestCodeActions(offset, available -> {
-            if (available.isEmpty()) return;
-            com.crystalgui.ui.elements.Menu menu = new com.crystalgui.ui.elements.Menu();
-            menu.addClass(CODE_ACTIONS_CLASS);
-            for (CodeAction action : available) {
-                com.crystalgui.ui.elements.MenuItem row = new com.crystalgui.ui.elements.MenuItem(action.title());
-                if (action.preferred()) row.addClass(PREFERRED_ACTION_CLASS);
-                row.onPressed.connect(() -> {
-                    applyCodeAction(action);
-                    menu.hide();
-                });
-                menu.addItem(row);
-            }
-            // PRESENTED THROUGH MenuBuilder, which is what attaches it and what drops it again when the
-            // root closes by any route -- light dismiss, Escape, or choosing a row. Attaching it here
-            // instead leaves one display:none menu in the tree per press.
-            java.util.List<com.crystalgui.ui.elements.Menu> live = new ArrayList<>(
-                    com.crystalgui.ui.elements.chrome.MenuBuilder.present(menu, this, window));
-            menu.onClosed.connect(() -> com.crystalgui.ui.elements.chrome.MenuBuilder.discard(live));
-            menu.showAt(anchor[0], anchor[1] + anchor[2], null);
-        });
-        return true;
+        return langFeatures.showCodeActionsAt(offset);
     }
 
     /** The overflow menu, and the lightbulb row inside it. */
     public static final String CODE_ACTIONS_CLASS = "__code-actions__";
     public static final String PREFERRED_ACTION_CLASS = "__preferred-action__";
-
-    /**
-     * The problem popup for one diagnostic, anchored at a point in the window — what a stripe mark shows.
-     *
-     * <p>Anchored where the pointer is rather than at the problem's text, because the text is by
-     * definition somewhere else: the whole value of the stripe is that it marks problems off screen.</p>
-     */
-    void showProblemPopupAt(Diagnostic problem, UIElement anchor) {
-        UIWindow window = getAttachedWindow();
-        if (window == null || problem == null || anchor == null) return;
-        if (docPopup == null) docPopup = new DocumentationPopup();
-        List<Diagnostic> problems = List.of(problem);
-        docPopup.showProblems(window, problems, anchor);
-
-        popupActions.disconnectAll();
-        TrackedRange tracked = trackedRangeFor(problem);
-        int offset = tracked != null && !tracked.isRemoved()
-                ? Math.min(tracked.from(), buffer.length())
-                : offsetOfPoint(problem.start());
-        popupActions.add(docPopup.onActionChosen.connect(action -> {
-            if (applyCodeAction(action)) closeQuickDocumentation();
-        }));
-        popupActions.add(docPopup.onMoreActions.connect(() -> {
-            closeQuickDocumentation();
-            showCodeActionsAt(offset);
-        }));
-        requestCodeActions(offset, available -> {
-            if (docPopup == null || !docPopup.isOpen()) return;
-            docPopup.setProblem(problems, available);
-            // RE-PLACED, because the actions row changes the box's width and the anchor is its RIGHT
-            // edge. Without this the message alone is positioned and the fix row then grows off to the
-            // left of where it was measured.
-            docPopup.reposition();
-        });
-    }
 
     /** Moves the caret to {@code problem} and centres it — what clicking a stripe mark does. */
     public boolean goToDiagnostic(@Nullable Diagnostic problem) {
@@ -2279,52 +2024,27 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     /** Closes the documentation popup if it is open. */
     public void closeQuickDocumentation() {
-        hover.forget();
-        if (docPopup != null && docPopup.isOpen()) docPopup.hide();
+        langFeatures.closeQuickDocumentation();
     }
-
 
     /**
      * Resolve the name at the caret and go to where it is declared — {@code Ctrl+B}, and Ctrl+Click.
      *
-     * <h3>Three ways this legitimately does nothing, and none of them is a failure</h3>
-     *
-     * <p>No engine ({@code languageServices == null}) is the three-tier absence rule and the ordinary case
-     * for a language that will never have one. A null {@link SymbolInfo#declaration()} is
-     * {@link DeclarationSite}'s own documented ordinary case — a member of a compiled class with no source
-     * attached, which is most of the JDK. And the callback may simply never fire, which
-     * {@link com.crystalgui.text.lang.Resolver} states as its contract for a superseded request. So this
-     * reports whether it <em>asked</em>, never whether it arrived: anything keyed on an answer coming back
-     * would hang open on the one path designed to produce silence.</p>
-     *
-     * <h3>Two independent discards, and dropping either produces a confidently wrong jump</h3>
-     *
-     * <p><b>Version</b> — an answer computed against text that has since been edited names a row that now
-     * holds something else, so it is discarded exactly as a stale diagnostic list is. <b>Request
-     * identity</b> — the caret moves, and an answer for the <em>previous</em> caret would jump somewhere
-     * the user stopped asking about. The serial is {@code CompletionSession}'s own guard, for the same
-     * reason and in the same shape.</p>
-     *
      * @return whether a request was issued at all
+     * @see EditorLanguageFeatures#goToDefinition()
      */
     public boolean goToDefinition() {
-        return resolveAt(LANE_DEFINITION, getCaret(), symbol -> {
-            DeclarationSite site = symbol.declaration();
-            if (site == null) return;
-            if (site.isSameDocument()) {
-                revealAt(site.start());
-            } else {
-                onDefinitionChosen.emit(site);
-            }
-        });
+        return langFeatures.goToDefinition();
     }
 
     // ── Completion ──────────────────────────────────────────────────────────────────────────────
+    //
+    // The subsystem is EditorSuggest. anchorInWindow and isInCommentOrString stay here: the first is
+    // shared with the documentation popup and the second with bracket matching, and both are seams where
+    // being asked twice is how two answers appear.
 
-    @Nullable
-    private CompletionSession completion;
-    @Nullable
-    private CompletionPopup completionPopup;
+    private final EditorSuggest suggest = new EditorSuggest(this);
+
     private static float finiteOrZero(float value) {
         return Float.isFinite(value) ? value : 0f;
     }
@@ -2332,149 +2052,41 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /** The live session, or null. Exposed so a test can assert on the model without going through pixels. */
     @Nullable
     public CompletionSession completionSession() {
-        return completion;
+        return suggest.session();
     }
 
     /**
      * Opens a completion session at the caret — Ctrl+Space, or a trigger character.
      *
-     * <h3>Grammar-level suppression first (§18.1)</h3>
-     *
-     * <p>No session inside a comment or a string. It is one tokenizer query and it is the cheapest
-     * wrong-popup filter there is: without it, typing a {@code .} in a javadoc sentence or a file path opens
-     * a member list over prose. Asked of the <em>grammar</em> rather than the engine because the engine is
-     * 300ms behind and this has to answer on the keystroke.</p>
-     *
      * @return false when nothing opened — no engine, or the caret is somewhere completion has no business
+     * @see EditorSuggest#open
      */
     public boolean openCompletion(CompletionProvider.TriggerKind trigger, @Nullable String triggerCharacter) {
-        if (languageServices == null) return false;
-        if (isInCommentOrString(getCaret())) return false;
-
-        closeCompletion();
-        CompletionSession opened = CompletionSession.open(buffer, languageServices.completion(),
-                getCaret(), trigger, triggerCharacter);
-        if (opened == null) return false;
-        completion = opened;
-        opened.caretMoved(getCaret());
-        opened.onClosed.connect(() -> {
-            if (completion == opened) completion = null;
-        });
-
-        UIWindow window = getAttachedWindow();
-        if (window != null) {
-            if (completionPopup == null) {
-                completionPopup = new CompletionPopup();
-                completionPopup.onRowClicked.connect(index -> {
-                    if (completion == null) return;
-                    completion.setSelectedIndex(index);
-                    acceptCompletion(false);
-                    // FOCUS BACK, on the mouse-DOWN this arrived from. emitMouseDown blurs before it
-                    // dispatches, so without this the editor is left unfocused after a click-accept and the
-                    // next keystroke goes nowhere -- the caret is still drawn, which makes it look like the
-                    // editor simply stopped responding.
-                    UIWindow attached = getAttachedWindow();
-                    if (attached != null) attached.getInputHandler().requestPointerFocus(this);
-                });
-            }
-            updateCompletionAnchor();
-            completionPopup.attach(window, opened);
-        }
-        return true;
+        return suggest.open(trigger, triggerCharacter);
     }
 
     public void closeCompletion() {
-        if (completion != null) completion.close();
-        if (completionPopup != null) completionPopup.detach();
+        suggest.close();
     }
 
     /** The popup, built on first use. Null until a session has opened in an attached window. */
     @Nullable
     public CompletionPopup completionPopup() {
-        return completionPopup;
+        return suggest.popup();
     }
 
-    /**
-     * The four keys a live list owns, and no others.
-     *
-     * <p>Deliberately short. Every key taken here is a key that stops doing its normal job while a popup is
-     * open, and the popup is open more often than the user is thinking about it — the same reasoning that
-     * keeps a search box from taking Left, Right, Home and End.</p>
-     *
-     * <p><b>Tab accepts, like Enter.</b> Both references do it and the reason is that Tab is what a person
-     * reaches for when the intent is "finish this word" rather than "and now a new line".</p>
-     */
-    /**
-     * Asks for completions here, whether or not a list is already open.
-     *
-     * <p>Re-asking is how you get a full list after a trigger character gave you a narrow one, which is
-     * why this is not a toggle. Bound to {@code Mod+Space} through the keymap like every other named
-     * action — it used to be matched inside {@link #handleCompletionKey}, which made it the one chord in
-     * the widget that could not be rebound or listed.</p>
-     */
+    /** Asks for completions here, whether or not a list is already open. @see EditorSuggest#trigger */
     public void triggerSuggest() {
-        openCompletion(CompletionProvider.TriggerKind.EXPLICIT, null);
-    }
-
-    private boolean handleCompletionKey(int key, int modifiers) {
-        if (completion == null || completion.isClosed()) return false;
-
-        if (key == CgKeyCodes.KEY_DOWN) {
-            completion.moveSelection(1);
-            return true;
-        }
-        if (key == CgKeyCodes.KEY_UP) {
-            completion.moveSelection(-1);
-            return true;
-        }
-        // FROM THE POPUP'S OWN TABLE, so the strip at its foot cannot promise a key this does not take.
-        for (CompletionPopup.AcceptKey accept : CompletionPopup.ACCEPT_KEYS) {
-            if (key == accept.keyCode()) return acceptCompletion(accept.replaces());
-        }
-        if (key == CgKeyCodes.KEY_ESCAPE) {
-            closeCompletion();
-            return true;
-        }
-        return false;
-    }
-
-    /** Applies the selected item and puts the caret after what was inserted. */
-    private boolean acceptCompletion(boolean replace) {
-        if (completion == null) return false;
-        CompletionItem item = completion.selectedItem();
-        if (item == null) {
-            closeCompletion();
-            return false;
-        }
-        int caretAfter = completion.caretAfterAccept(item, getCaret());
-        // The accept is ONE ChangeSet, so this is one undo step -- the name and the import it brought go
-        // together on Ctrl+Z. See CompletionSession.accept.
-        completion.accept(replace);
-        setCaret(Math.max(0, Math.min(caretAfter, buffer.length())));
-        closeCompletion();
-        return true;
+        suggest.trigger();
     }
 
     /**
-     * Keeps a live session in step with the caret, and re-anchors the popup.
+     * Where {@code offset} sits in the window's coordinate space, as {@code {x, y, lineHeight}}.
      *
-     * <p>Called from the one place the caret settles rather than subscribed to the buffer: a session must
-     * end on a plain arrow-key move, which changes no text and would therefore never reach a buffer
-     * listener.</p>
-     */
-    private void notifyCompletionOfCaret() {
-        if (completion == null || completion.isClosed()) return;
-        completion.caretMoved(getCaret());
-        updateCompletionAnchor();
-    }
-
-    /**
-     * Points the popup at the <b>word being completed</b>, in window coordinates.
-     *
-     * <p>The word, not the caret — anchored to the caret the list steps right one character per keystroke,
-     * which reads as the popup running away from the word it is completing. Converted through the element's
-     * own transform rather than by adding up offsets, because that chain is the single definition of where
-     * this editor is on screen and a second one drifts by exactly {@code uiScale}.</p>
+     * <p>Shared by both popups because it is the seam where two coordinate spaces meet, and a popup placed
+     * from the wrong one looks deliberately positioned while being wrong by exactly {@code uiScale}. Two
+     * copies of this would be two chances to reach for the transform chain, which is in surface pixels and
+     * is only populated once the element has painted.</p>
      *
      * <h3>Summed from the LAYOUT chain, not from the transform chain</h3>
      *
@@ -2491,23 +2103,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * painted. The cost is that it ignores {@code transform:} — which is correct rather than a limitation,
      * because a transformed editor's popup should follow its layout box, not its visual one.</p>
      */
-    private void updateCompletionAnchor() {
-        if (completionPopup == null || completion == null) return;
-        float[] anchor = anchorInWindow(completion.replacementStart());
-        if (anchor == null) return;
-        completionPopup.setAnchor(anchor[0], anchor[1], anchor[2]);
-    }
-
-    /**
-     * Where {@code offset} sits in the window's coordinate space, as {@code {x, y, lineHeight}}.
-     *
-     * <p>Shared by both popups because it is the seam where two coordinate spaces meet, and a popup placed
-     * from the wrong one looks deliberately positioned while being wrong by exactly {@code uiScale}. Two
-     * copies of this would be two chances to reach for the transform chain, which is in surface pixels and
-     * is only populated once the element has painted.</p>
-     */
     @Nullable
-    private float[] anchorInWindow(int at) {
+    float[] anchorInWindow(int at) {
         int anchorOffset = Math.max(0, Math.min(at, buffer.length()));
         int viewLine = viewLineOf(anchorOffset, LineProjection.Affinity.RIGHT);
         ProjectedLines.ModelPosition model = modelAt(viewLine);
@@ -2536,7 +2133,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * tokenizer answers false, which is the right default: it means the popup opens, and an unwanted popup
      * is recoverable in a way that a popup that refuses to open is not.</p>
      */
-    private boolean isInCommentOrString(int offset) {
+    boolean isInCommentOrString(int offset) {
         int from = Math.max(0, offset - 1);
         for (SyntaxToken token : tokenizer.tokenize(buffer.document(), from, offset + 1)) {
             if (token.start() > offset || token.end() < offset) continue;
@@ -3303,7 +2900,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
         // The autopopup half still defers: every character of a word would otherwise restart the session and
         // throw away the list it is narrowing.
-        if (completion != null && !completion.isClosed()) return;
+        if (suggest.isLive()) return;
         // TYPING A NAME OPENS THE LIST TOO -- IntelliJ's autopopup, and without it the only way in was
         // Ctrl+Space, which is a thing you have to remember rather than a thing that helps.
         //
@@ -4975,7 +4572,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         autoScrollDuringDrag(deltaSeconds);
         // A REST TIMER, so it belongs on the heartbeat rather than on the move event: what it measures is
         // the pointer NOT moving, and the last move is the one event that will not be followed by another.
-        hover.tick(deltaSeconds);
+        langFeatures.hover().tick(deltaSeconds);
         return true;
     }
 
@@ -5086,7 +4683,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // origin, and it drew neatly over the editor's top-left corner: plausible enough to look like a
         // placement policy rather than an unmeasured read. Re-anchoring per frame also keeps it correct
         // through a scroll, which no caret-driven update would have caught either.
-        updateCompletionAnchor();
+        suggest.updateAnchor();
     }
 
     /**
