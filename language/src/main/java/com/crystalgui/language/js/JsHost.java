@@ -6,6 +6,7 @@ import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.language.engine.AnalysedLanguageServices;
 import com.crystalgui.language.engine.bridge.JsExecutor;
+import com.crystalgui.language.engine.bridge.LiveScopeSnapshot;
 import com.crystalgui.language.run.ConsoleFilter;
 import com.crystalgui.language.run.JavaStackFrameFilter;
 import com.crystalgui.language.run.RunLevel;
@@ -323,6 +324,10 @@ public final class JsHost implements ScriptRuntime {
                 publishFailure(failed);
                 throw failed;
             } finally {
+                // ON THIS THREAD, BEFORE ANYTHING ELSE RUNS ON IT. The snapshot is the engine's answer
+                // about the scope its Context owns, and that Context is this thread's -- asking later,
+                // or from the UI thread, is asking about an object nobody may read from there.
+                publishLiveScope(executor.snapshotScope());
                 if (ref != null) ScriptOutput.exit(previous);
             }
         }
@@ -373,6 +378,29 @@ public final class JsHost implements ScriptRuntime {
             TextPoint end = new TextPoint(row, Integer.MAX_VALUE);
             publishRuntimeProblems(List.of(new Diagnostic(start, end, DiagnosticSeverity.ERROR,
                     where.message(), RUNTIME_SOURCE, null)));
+        }
+
+        /**
+         * Hands what the run left in scope to the document's services, on the UI thread.
+         *
+         * <p>Only to a JavaScript document's services, and that is not a missing abstraction: a live
+         * scope is this language's own idea of what running a file leaves behind, and Java's runtime has
+         * no counterpart to offer. The runtime that produced it and the services that consume it are the
+         * same language's, which is where a language-specific channel belongs.</p>
+         */
+        private void publishLiveScope(LiveScopeSnapshot snapshot) {
+            if (ref == null || snapshot == null) return;
+            AnalysedLanguageServices services = AnalysedLanguageServices.attachedTo(ref.file());
+            if (!(services instanceof JsLanguageServices)) return;
+            JsLanguageServices js = (JsLanguageServices) services;
+            if (scheduler == null) {
+                js.setLiveScope(snapshot);
+                return;
+            }
+            scheduler.<LiveScopeSnapshot>job(JobKey.of(JsHost.this, "js-live-scope"),
+                            JobLane.LATENCY, context -> snapshot)
+                    .onDone(js::setLiveScope)
+                    .submit();
         }
 
         /**

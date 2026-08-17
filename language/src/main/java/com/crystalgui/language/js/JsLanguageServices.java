@@ -5,6 +5,7 @@ import com.crystalgui.fs.Resource;
 import com.crystalgui.language.engine.AnalysedLanguageServices;
 import com.crystalgui.language.engine.bridge.Analysis;
 import com.crystalgui.language.engine.bridge.JsSourceAnalyzer;
+import com.crystalgui.language.engine.bridge.LiveScopeSnapshot;
 import com.crystalgui.text.TextBuffer;
 
 import javax.annotation.Nullable;
@@ -48,6 +49,15 @@ public final class JsLanguageServices extends AnalysedLanguageServices {
     private final JsSourceAnalyzer analyzer;
     private final String sourceName;
 
+    /**
+     * What the last run of <em>this document</em> left in scope — the top resolution tier.
+     *
+     * <p>Volatile because it is written on the UI thread when a run reports and read on whichever thread
+     * the analysis job happens to be on. Per document rather than on the analyser, which is one object
+     * shared by every open file: a global belongs to the script that defined it.</p>
+     */
+    private volatile LiveScopeSnapshot liveScope = LiveScopeSnapshot.EMPTY;
+
     public JsLanguageServices(TextBuffer buffer, JsSourceAnalyzer analyzer,
                               @Nullable JobScheduler scheduler, String sourceName) {
         this(buffer, analyzer, scheduler, sourceName, null);
@@ -69,6 +79,28 @@ public final class JsLanguageServices extends AnalysedLanguageServices {
 
     @Override
     protected Analysis analyse(String source, long version) {
-        return analyzer.analyze(sourceName, source, version);
+        return analyzer.analyze(sourceName, source, version, liveScope);
+    }
+
+    /**
+     * Takes what a run left behind, and re-analyses so the file is read against it.
+     *
+     * <p><b>UI thread</b> — {@code JsHost} hops through the scheduler to get here, because a run reports
+     * from the script's own thread and everything below this call is the document's.</p>
+     *
+     * <p>The re-analysis is the visible half: a name a previous run defined stops being drawn as
+     * unresolved, and a hover over it starts saying what it actually is. Without it the snapshot would be
+     * held and consulted by nothing until the next keystroke.</p>
+     */
+    public void setLiveScope(@Nullable LiveScopeSnapshot snapshot) {
+        LiveScopeSnapshot next = snapshot == null ? LiveScopeSnapshot.EMPTY : snapshot;
+        if (next == liveScope) return;
+        liveScope = next;
+        reanalyse();
+    }
+
+    /** What the last run left in scope, or empty. */
+    public LiveScopeSnapshot liveScope() {
+        return liveScope;
     }
 }

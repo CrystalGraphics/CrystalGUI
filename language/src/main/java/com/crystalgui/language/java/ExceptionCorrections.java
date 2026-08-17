@@ -18,7 +18,6 @@ import org.eclipse.jdt.core.dom.ExpressionStatement;
 import org.eclipse.jdt.core.dom.IMethodBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
 import org.eclipse.jdt.core.dom.IVariableBinding;
-import org.eclipse.jdt.core.dom.Initializer;
 import org.eclipse.jdt.core.dom.LambdaExpression;
 import org.eclipse.jdt.core.dom.MethodDeclaration;
 import org.eclipse.jdt.core.dom.MethodInvocation;
@@ -31,7 +30,6 @@ import org.eclipse.jdt.core.dom.ThrowStatement;
 import org.eclipse.jdt.core.dom.TryStatement;
 import org.eclipse.jdt.core.dom.Type;
 import org.eclipse.jdt.core.dom.UnionType;
-import org.eclipse.jdt.core.dom.VariableDeclaration;
 import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
 import org.eclipse.jdt.core.dom.VariableDeclarationStatement;
 import org.eclipse.jdt.core.dom.rewrite.ASTRewrite;
@@ -332,28 +330,10 @@ final class ExceptionCorrections {
             return used[0] ? fragment : null;
         }
 
-        /** {@code e}, unless something in the enclosing method is already called that; then {@code ex}, then {@code e2}… */
+        /** {@code e}, unless something in the enclosing method is already called that; then {@code ex}, then {@code e1}… */
         private static String freeExceptionName(Statement statement) {
-            ASTNode scope = statement;
-            while (scope != null && !(scope instanceof MethodDeclaration) && !(scope instanceof LambdaExpression)
-                    && !(scope instanceof Initializer)) {
-                scope = scope.getParent();
-            }
-            Set<String> taken = new LinkedHashSet<>();
-            if (scope != null) {
-                scope.accept(new ASTVisitor() {
-                    @Override public void preVisit(ASTNode node) {
-                        if (node instanceof VariableDeclaration) {
-                            taken.add(((VariableDeclaration) node).getName().getIdentifier());
-                        }
-                    }
-                });
-            }
-            if (!taken.contains("e")) return "e";
-            if (!taken.contains("ex")) return "ex";
-            for (int i = 2; ; i++) {
-                if (!taken.contains("e" + i)) return "e" + i;
-            }
+            ASTNode scope = Scopes.enclosingNameScope(statement);
+            return Names.free(scope == null ? Set.of() : Names.declaredIn(scope), "e", "ex");
         }
     }
 }

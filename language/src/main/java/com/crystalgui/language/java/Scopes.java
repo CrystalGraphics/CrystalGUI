@@ -76,6 +76,25 @@ final class Scopes {
         return walk;
     }
 
+    /**
+     * The innermost method, lambda or initialiser containing {@code at} — <b>the scope a local name lives
+     * in</b>, which is a third question again.
+     *
+     * <p>{@link #enclosingMethodOrRoot} deliberately walks past a lambda because a name declared outside
+     * one may not be shadowed inside it, so the method is the honest scope for <em>choosing</em> a name.
+     * This one stops there, because it is asked what names are <em>already declared</em> around a point,
+     * and a lambda body is its own body of declarations.</p>
+     */
+    static ASTNode enclosingNameScope(ASTNode at) {
+        for (ASTNode walk = at; walk != null; walk = walk.getParent()) {
+            if (walk instanceof MethodDeclaration || walk instanceof LambdaExpression
+                    || walk instanceof Initializer) {
+                return walk;
+            }
+        }
+        return null;
+    }
+
     /** The innermost statement containing {@code at}, or null. */
     static Statement enclosingStatement(ASTNode at) {
         for (ASTNode walk = at; walk != null; walk = walk.getParent()) {

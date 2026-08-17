@@ -37,7 +37,7 @@ most visible thing to have early.
 | **10.4** Semantic tokens + scopes | `RhinoScopes`, `RhinoSemanticTokens`, `RhinoGlobals` | parameter / local / const / reassigned / captured / builtin / unresolved, each drawn as itself | **done** — `77adc82`. JSDoc recording moves to 10.6, where the tiers read it |
 | **10.3b** Compatibility band | ship band 8's probe file as a resource; detect the six constructs 1.9.1 accepts and 1.7.15.1 refuses (default params, spread, computed properties, destructuring defaults, `?.`, `??`) from the AST; warn when the target band is older than the host | an author on Java 17 is told what a Java 8 player cannot load | **deferred** — needs a per-construct AST detector, which is a different kind of work from a message policy and is worth its own step |
 | **10.5** Execution | `JsHost`, `RhinoExecutor.run/stop/currentLine/describe`, console/`print`/`readLine`/`Java.type` globals, `RhinoConsoleFormat`, `RhinoOrigin`, `RhinoStackFrameFilter`, runtime errors as `js-runtime` diagnostics through a new engine-neutral `AnalysedLanguageServices.reportRuntimeProblems` lane | Shift+F10 runs it; output attributed by line; Stop works; a thrown error squiggles its line | **done** — see "10.5 as built" below. `snapshotScope` moves to 10.6, beside its only consumer |
-| **10.6** Resolution + interop | the four tiers, `InteropResolver` over the Java probe unit, reflection fallback | (feeds 10.7/10.8) | not started |
+| **10.6** Resolution + interop | the four tiers (`RhinoResolution`), `RhinoJsDoc`, `RhinoInference`, `InteropResolver` over the Java probe unit + reflection fallback, `LiveScopeSnapshot` from `snapshotScope`, `JsTypeRef`, **`RhinoTokens`** | hover says what a name is and which tier said so; a Java receiver's members are the Java engine's; after a run a global is typed by what it became | **done** — see "10.6 as built" |
 | **10.7** Completion | `JsCompletionProvider`, `JsKeywords` (band-filtered), `Java.type` insertion, live-object completion | `.` after a Java object lists its members; after a run, `w.` on a global works | not started |
 | **10.8** Quick Documentation | `JsSignatures`, tier provenance in the owner band, Java members quoted through `AttachedSources` | Mod+Q / hover shows `function add(a, b)` with JSDoc, or the Java popup for a Java member | not started |
 | **10.9** Quick fixes + intentions | `JsRewrites`, `JsQuickFixes`, the §8 catalog, `fixtures/js/` | Alt+Enter offers the catalog | not started |
@@ -690,6 +690,30 @@ probe unit with a small LRU; the reflection fallback when the Java engine is abs
 `new java.util.ArrayList()` → `membersOf` equals the Java analyser's for `ArrayList` (same list, same
 order); JSDoc `@param {string}` types a parameter; the live scope types a global after a run; the tier
 that answered is on the `SymbolInfo`.
+
+**10.6 as built** — the tiers, and four corrections found by measuring:
+
+- **The tiers are child-side**, in `RhinoResolution`, not host-side over a `JsAstView` as §3.1 sketched.
+  Three of the four read the tree, so the sketch means a bridge crossing per node walked on every hover;
+  the Java engine answers `resolveAt` on its own side and sends one `SymbolInfo` over, which is what the
+  bridge is for. `JsAstView` is still the right shape for the 10.9 **fix catalog**, which is host-side.
+- **A `Token` constant cannot be compared across bands** — they are inlined by javac and the bands
+  renumbered them, so `getType() == Token.TRUE` matches a *number literal* on band 11+. This had already
+  shipped in `RhinoScopes.isAssignmentTarget` (`count++` stopped being a reassignment). `RhinoTokens` is
+  the named home for the rule; `anIncrementIsAReassignmentToo` is the net that was missing.
+- **Provenance rides the owner band's text** (`summarise — from JSDoc`, `count — from last run`) rather
+  than a new field on core's `SymbolInfo`. §7 already specified that rendering; doing it this way keeps
+  the language-neutral SPI unchanged, and inference deliberately carries no label because it is the
+  ordinary answer — labelling it would put a note on nearly every symbol and hide the two that matter.
+- **`Java.type("a.b.C")` is the class object and `new a.b.C()` an instance**, carried as a flag on
+  `JsTypeRef` rather than as two names, so `qualifiedName()` stays the thing a cache is keyed on. The
+  member sets are then filtered by `STATIC` — offering the wrong one is worse than offering none, since
+  every row would be something the script cannot call there.
+- The live scope is a **difference against a baseline** taken after the globals are installed: the
+  standard library lives on the same scope object the script's `var`s land on, so a plain listing would
+  report `Math`, `parseInt` and `console` as things the run had just created.
+- `expectedTypeAt` answers only the JSDoc `@param` case. The Java-callee case is knowable and lands with
+  10.7, where it has a consumer.
 
 **10.7 — Completion.** `JsCompletionProvider`, `JsKeywords` (band-filtered), `Java.type` insertion as
 one edit, live-object completion, the probe re-parse for an unresolved receiver. *Tests:* the

@@ -1,6 +1,8 @@
 package com.crystalgui.language.js;
 
 import com.crystalgui.language.engine.bridge.JsSourceAnalyzer;
+import com.crystalgui.language.engine.bridge.LiveScopeSnapshot;
+import com.crystalgui.language.engine.bridge.SourceAnalyzer;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.TextPoint;
@@ -52,17 +54,41 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
     public RhinoSourceAnalyzer() {
     }
 
+    /**
+     * The Java engine behind the interop tier, or null when this build has none.
+     *
+     * <p>One per process, like the analyser itself: the probe cache is keyed by class name and a Java
+     * class means the same thing in every open document, so sharing it is what makes the second file to
+     * mention {@code java.util.ArrayList} free.</p>
+     */
+    private volatile InteropResolver interop;
+
+    @Override
+    public void useJavaEngine(SourceAnalyzer java, List<String> classpath, int releaseLevel) {
+        InteropResolver previous = interop;
+        interop = new InteropResolver(java, classpath, releaseLevel);
+        if (previous != null) previous.close();
+    }
+
     @Override
     public Analysis analyze(String sourceName, String source, long version) {
+        return analyze(sourceName, source, version, LiveScopeSnapshot.EMPTY);
+    }
+
+    @Override
+    public Analysis analyze(String sourceName, String source, long version,
+                            LiveScopeSnapshot liveScope) {
         // THE ENGINE LOADER, ON THE THREAD, BEFORE ANY RHINO CLASS IS TOUCHED. This is not the class
         // that evaluates regular expressions and it is still the one that usually initialises `Context`
         // first -- an editor analyses on every keystroke and runs a script rarely -- so whichever
         // adapter gets there first decides whether regexes work for the life of the loader.
         // @see RhinoThread, which is where that whole argument lives.
-        return RhinoThread.with(() -> parse(sourceName, source, version));
+        return RhinoThread.with(() -> parse(sourceName, source, version,
+                liveScope == null ? LiveScopeSnapshot.EMPTY : liveScope));
     }
 
-    private Analysis parse(String sourceName, String source, long version) {
+    private Analysis parse(String sourceName, String source, long version,
+                           LiveScopeSnapshot liveScope) {
         String text = source == null ? "" : source;
         String name = sourceName == null || sourceName.isEmpty() ? "script.js" : sourceName;
 
@@ -107,7 +133,8 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
         boolean parsed = root != null && !hasError(reported);
         if (parsed) reported = withUnusedWarnings(reported, scopes, lines);
 
-        return new ParsedScript(version, text, root, scopes, reported, parsed);
+        return new ParsedScript(version, text, root, scopes, reported, parsed,
+                new RhinoResolution(root, scopes, text, lines, liveScope, interop, name));
     }
 
     /**
@@ -205,15 +232,17 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
         private AstRoot root;
         private RhinoScopes scopes;
         private List<SyntaxToken> tokens;
+        private RhinoResolution resolution;
 
         ParsedScript(long version, String source, AstRoot root, RhinoScopes scopes,
-                     List<Diagnostic> diagnostics, boolean parsed) {
+                     List<Diagnostic> diagnostics, boolean parsed, RhinoResolution resolution) {
             this.version = version;
             this.source = source;
             this.root = root;
             this.scopes = scopes;
             this.diagnostics = diagnostics;
             this.parsed = parsed;
+            this.resolution = resolution;
         }
 
         @Override
@@ -259,22 +288,24 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
 
         @Override
         public SymbolInfo resolveAt(int offset) {
-            return null;
+            return resolution == null ? null : resolution.resolveAt(offset);
         }
 
         @Override
         public TypeRef expectedTypeAt(int offset) {
-            return null;
+            return resolution == null ? null : resolution.expectedTypeAt(offset);
         }
 
         @Override
         public List<SymbolInfo> membersOf(TypeRef type, int contextOffset) {
-            return Collections.emptyList();
+            return resolution == null ? Collections.<SymbolInfo>emptyList()
+                    : resolution.membersOf(type, contextOffset);
         }
 
         @Override
         public List<SymbolInfo> symbolsInScope(int offset) {
-            return Collections.emptyList();
+            return resolution == null ? Collections.<SymbolInfo>emptyList()
+                    : resolution.symbolsInScope(offset);
         }
 
         @Override
@@ -284,6 +315,10 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
             root = null;
             scopes = null;
             tokens = null;
+            // THE RESOLUTION GOES, THE INTEROP CACHE STAYS. That cache belongs to the analyser and is
+            // shared by every open document -- closing it here would empty it whenever any one file was
+            // edited, which is a re-analysis of every Java class the next keystroke mentions.
+            resolution = null;
         }
 
         /** What was parsed. For the questions above that need the text as the parse saw it. */

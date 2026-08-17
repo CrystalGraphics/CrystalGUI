@@ -45,7 +45,6 @@ import org.eclipse.jdt.core.dom.rewrite.ListRewrite;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -294,33 +293,21 @@ final class CreateCorrections {
 
         // ── Names ───────────────────────────────────────────────────────────────────────────────
 
+        /**
+         * A name for the parameter this argument will become, and never one already used.
+         *
+         * <p>{@link Names} is the whole of it now. The copy that stood here kept its own keyword list and
+         * its own primitive table, and the table disagreed — {@code boolean} came out as {@code b} where
+         * everything else in the engine calls it {@code flag}, and {@code int[]} came out as {@code is}
+         * rather than {@code ints}, because it stuck an {@code s} on the element's single letter.</p>
+         */
         private static String parameterName(Expression argument, ITypeBinding type, Set<String> taken) {
-            String base;
-            if (argument instanceof SimpleName) {
-                base = ((SimpleName) argument).getIdentifier();
-            } else if (type == null || type.isNullType()) {
-                base = "o";
-            } else if (type.isPrimitive()) {
-                base = type.getName().substring(0, 1);
-            } else if (type.isArray()) {
-                base = parameterName(null, type.getElementType(), new LinkedHashSet<>()) + "s";
-            } else {
-                String simple = type.getErasure().getName();
-                base = simple.isEmpty() ? "o" : simple.substring(0, 1).toLowerCase(Locale.ROOT) + simple.substring(1);
-            }
-            if (KEYWORDS.contains(base)) base = base + "Value";
-            String candidate = base;
-            for (int i = 2; !taken.add(candidate); i++) candidate = base + i;
-            return candidate;
+            String base = argument instanceof SimpleName
+                    ? ((SimpleName) argument).getIdentifier() : null;
+            String name = Names.derive(base, type, taken);
+            taken.add(name);
+            return name;
         }
-
-        private static final Set<String> KEYWORDS = Set.of(
-                "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class", "const",
-                "continue", "default", "do", "double", "else", "enum", "extends", "final", "finally", "float",
-                "for", "goto", "if", "implements", "import", "instanceof", "int", "interface", "long", "native",
-                "new", "package", "private", "protected", "public", "return", "short", "static", "strictfp",
-                "super", "switch", "synchronized", "this", "throw", "throws", "transient", "try", "void",
-                "volatile", "while", "true", "false", "null", "var", "record", "yield", "sealed", "permits");
     }
 
     /**
