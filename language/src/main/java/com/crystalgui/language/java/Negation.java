@@ -84,14 +84,7 @@ final class Negation {
      */
     private static String parenthesised(Expression expression, String source) {
         String text = textOf(expression, source);
-        boolean atomic = expression instanceof ParenthesizedExpression
-                || expression instanceof PrefixExpression
-                || expression instanceof org.eclipse.jdt.core.dom.SimpleName
-                || expression instanceof org.eclipse.jdt.core.dom.QualifiedName
-                || expression instanceof org.eclipse.jdt.core.dom.MethodInvocation
-                || expression instanceof org.eclipse.jdt.core.dom.FieldAccess
-                || expression instanceof org.eclipse.jdt.core.dom.BooleanLiteral;
-        return atomic ? text : "(" + text + ")";
+        return Precedence.bindsTighterThanUnary(expression) ? text : "(" + text + ")";
     }
 
     /**

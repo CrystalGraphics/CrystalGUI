@@ -111,16 +111,14 @@ final class ExpressionCorrections {
             out.add(context.preferredFix(REMOVE_CAST, "Remove unnecessary cast", edit));
         }
 
-        /** Expressions that already bind tighter than anything they can be dropped into. */
+        /**
+         * Expressions that already bind tighter than anything they can be dropped into.
+         *
+         * <p>Deliberately <b>not</b> {@code Precedence.bindsTighterThanUnary}, which is the same list plus
+         * a unary: dropping the brackets from {@code -(-a)} gives {@code --a}, a different operator.</p>
+         */
         private static boolean needsNoParentheses(Expression operand) {
-            return operand instanceof Name
-                    || operand instanceof ThisExpression
-                    || operand instanceof FieldAccess
-                    || operand instanceof ArrayAccess
-                    || operand instanceof ParenthesizedExpression
-                    || operand instanceof MethodInvocation
-                    || operand instanceof ClassInstanceCreation
-                    || operand instanceof StringLiteral;
+            return Precedence.isPrimary(operand);
         }
     }
 

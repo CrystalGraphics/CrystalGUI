@@ -134,6 +134,9 @@ public class CorpusTest extends FixFixture {
                 + " engine crashes, in " + seconds + "s");
         for (String each : regressions) System.out.println("  regression: " + each);
         for (String each : engineErrors) System.out.println("  engine: " + each);
+        // PRINTED AS WELL AS ASSERTED. The assertion message reaches the XML report and nothing else, and
+        // the one thing this test exists to tell you is which action broke which file.
+        for (String each : failures) System.out.println("  FAILURE: " + each);
         assertTrue("corpus failures:\n  " + String.join("\n  ", failures), failures.isEmpty());
     }
 
