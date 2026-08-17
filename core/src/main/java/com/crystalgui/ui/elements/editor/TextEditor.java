@@ -584,13 +584,17 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * <p>Clamping rather than refusing, because {@code Diagnostic.onRow} deliberately produces a column past
      * the end to mean "the whole row", and because a compiler occasionally reports one character past the
      * last. Both are the same clamp and neither is worth losing a mark over.</p>
+     *
+     * <p><b>The document's own conversion, not a second copy of it.</b> This was a hand-written clamp that
+     * looked equivalent and was not: {@code rowStart + Integer.MAX_VALUE} <em>overflows</em>, so
+     * {@code Math.min(rowEnd, …)} answered a negative offset and the {@code Math.max(from, …)} at the call
+     * site pulled it back to the row's start — every whole-row diagnostic drew a one-character squiggle in
+     * the leading whitespace instead of underlining its line. {@code SquigglesTest} passed throughout,
+     * because a collapsed band is widened to one character to be visible and its width still looked
+     * plausible. @see Rope#pointToOffset, which had the same defect and is now the one definition</p>
      */
     private int offsetOfPoint(TextPoint point) {
-        Rope document = buffer.document();
-        int row = Math.max(0, Math.min(point.row(), document.lineCount() - 1));
-        int rowStart = document.lineStartOffset(row);
-        int rowEnd = document.lineEndOffset(row);
-        return Math.min(rowEnd, rowStart + Math.max(0, point.column()));
+        return buffer.pointToOffset(point);
     }
 
     /** Moves the caret to the next problem after it, wrapping. False when there are none. */
