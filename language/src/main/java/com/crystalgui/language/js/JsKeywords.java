@@ -66,7 +66,12 @@ final class JsKeywords {
         PROBES.put("await", "async function probeH() { await 1; }");
         PROBES.put("import", "import { probeI } from 'x';");
         PROBES.put("export", "export var probeJ = 1;");
-        PROBES.put("of", "for (var probeK of []) {}");
+        PROBES.put("of", "for (var probeL of []) {}");
+        // NOT A KEYWORD, and it is here anyway. A template literal is punctuation, so it can never be
+        // OFFERED in a completion list -- but the "change to a template literal" intention must not be
+        // offered on a band that would refuse the result, and this is the one place that measures what the
+        // engine takes. @see #NOT_OFFERED, which is what keeps it out of the popup.
+        PROBES.put("template", "var probeM = `x`;");
     }
 
     private JsKeywords() {
@@ -81,7 +86,29 @@ final class JsKeywords {
      * @param parses whether the engine parses a snippet without error — the engine's own answer, since
      *               this is a question about the engine and not about the language
      */
-    static List<String> supportedBy(Predicate<String> parses) {
+    /**
+     * Measured, but not a keyword — so never a completion row.
+     *
+     * <p>The two lists have different consumers and one of them is a promise to the user: a row in the
+     * popup says "accepting this produces something that runs", and {@code template} is not something that
+     * can be accepted at all. The fix catalog asks the other question — "would this band take it" — and
+     * needs the full set.</p>
+     */
+    private static final java.util.Set<String> NOT_OFFERED = java.util.Set.of("template");
+
+    /** Everything the engine takes, keyword or construct — what the fix catalog gates on. */
+    static List<String> measuredBy(Predicate<String> parses) {
+        return supportedBy(parses);
+    }
+
+    /** What a completion list may offer: the measured set, minus what is not a keyword. */
+    static List<String> offerableBy(Predicate<String> parses) {
+        List<String> offerable = new ArrayList<>(supportedBy(parses));
+        offerable.removeAll(NOT_OFFERED);
+        return Collections.unmodifiableList(offerable);
+    }
+
+    private static List<String> supportedBy(Predicate<String> parses) {
         List<String> known = cached;
         if (known != null) return known;
         synchronized (JsKeywords.class) {

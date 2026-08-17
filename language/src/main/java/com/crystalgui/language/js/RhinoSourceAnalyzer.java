@@ -6,6 +6,8 @@ import com.crystalgui.language.engine.bridge.SourceAnalyzer;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.TextPoint;
+import com.crystalgui.language.engine.bridge.CodeActionContext;
+import com.crystalgui.text.lang.CodeAction;
 import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.text.lang.SymbolKind;
 import com.crystalgui.text.lang.TypeRef;
@@ -72,7 +74,10 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
      */
     @Override
     public List<String> keywords() {
-        return JsKeywords.supportedBy(RhinoSourceAnalyzer::parses);
+        // THE OFFERABLE SET, not the measured one: `template` is measured because an intention must not
+        // rewrite code into a form the band refuses, and it is not a keyword anybody can accept from a
+        // popup. @see JsKeywords#NOT_OFFERED
+        return JsKeywords.offerableBy(RhinoSourceAnalyzer::parses);
     }
 
     /** Whether this engine parses {@code snippet} with no errors at all. */
@@ -148,8 +153,10 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
         boolean parsed = root != null && !hasError(reported);
         if (parsed) reported = withUnusedWarnings(reported, scopes, lines);
 
-        return new ParsedScript(version, text, root, scopes, reported, parsed,
-                new RhinoResolution(root, scopes, text, lines, liveScope, interop, name));
+        RhinoResolution resolution = new RhinoResolution(root, scopes, text, lines, liveScope, interop,
+                name, JsKeywords.measuredBy(RhinoSourceAnalyzer::parses));
+        return new ParsedScript(version, text, root, scopes, reported, parsed, resolution,
+                new JsQuickFixes(root, scopes, new JsRewrites(text, version), resolution));
     }
 
     /**
@@ -269,9 +276,12 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
         private RhinoScopes scopes;
         private List<SyntaxToken> tokens;
         private RhinoResolution resolution;
+        private JsQuickFixes fixes;
 
         ParsedScript(long version, String source, AstRoot root, RhinoScopes scopes,
-                     List<Diagnostic> diagnostics, boolean parsed, RhinoResolution resolution) {
+                     List<Diagnostic> diagnostics, boolean parsed, RhinoResolution resolution,
+                     JsQuickFixes fixes) {
+            this.fixes = fixes;
             this.version = version;
             this.source = source;
             this.root = root;
@@ -344,6 +354,19 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
                     : resolution.symbolsInScope(offset);
         }
 
+        /**
+         * What Alt+Enter offers here.
+         *
+         * <p>Answered on this side of the bridge, like every other question about the tree — a host-side
+         * catalog would need a node-by-node view of the AST and a crossing per node walked. The
+         * {@code CodeAction}s that come back are parent-first records carrying a {@code ChangeSet}, so the
+         * answer crosses and the tree never does. @see JsQuickFixes</p>
+         */
+        @Override
+        public List<CodeAction> codeActionsIn(int from, int to, CodeActionContext context) {
+            return fixes == null ? Collections.<CodeAction>emptyList() : fixes.actionsIn(from, to);
+        }
+
         @Override
         public void close() {
             // The tree is ordinary heap, so dropping the reference is the whole of it -- there is no
@@ -355,6 +378,7 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
             // shared by every open document -- closing it here would empty it whenever any one file was
             // edited, which is a re-analysis of every Java class the next keystroke mentions.
             resolution = null;
+            fixes = null;
         }
 
         /** What was parsed. For the questions above that need the text as the parse saw it. */

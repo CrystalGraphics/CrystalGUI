@@ -29,7 +29,14 @@ import java.util.Locale;
  * it and the engine's corrections do too. Two copies of a stateless utility cost nothing and share
  * nothing.</p>
  */
-final class SimilarNames {
+public final class SimilarNames {
+
+    // ── VISIBILITY NOTE ────────────────────────────────────────────────────────────────────────
+    //
+    // Public because the JavaScript catalog offers "did you mean" too, and nothing in here was ever
+    // Java's: it takes strings and returns strings. Two implementations of "how close is close enough"
+    // would drift, and the first divergence reads as one engine being broken rather than as two
+    // tolerances -- so the ranking is shared and the CANDIDATES are each language's to supply.
 
     private static final int MAX_RESULTS = 5;
 
@@ -48,7 +55,7 @@ final class SimilarNames {
      * offering it again — and the ordering is total, so two hovers over the same problem list the same
      * things in the same order.</p>
      */
-    static List<String> rank(String typed, Collection<String> candidates) {
+    public static List<String> rank(String typed, Collection<String> candidates) {
         if (typed == null || typed.isEmpty() || candidates == null) return List.of();
         String needle = typed.toLowerCase(Locale.ROOT);
         int tolerance = tolerance(typed);
