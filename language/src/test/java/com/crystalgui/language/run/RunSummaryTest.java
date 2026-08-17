@@ -1,5 +1,6 @@
 package com.crystalgui.language.run;
 
+import com.crystalgui.language.run.console.RunSummary;
 import org.junit.Test;
 
 import java.util.concurrent.TimeUnit;

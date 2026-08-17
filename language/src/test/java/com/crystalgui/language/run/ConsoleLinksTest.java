@@ -1,5 +1,6 @@
 package com.crystalgui.language.run;
 
+import com.crystalgui.language.run.console.*;
 import com.crystalgui.text.TextBuffer;
 import java.io.PrintWriter;
 import java.io.StringWriter;

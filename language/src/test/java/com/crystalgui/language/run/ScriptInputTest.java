@@ -2,6 +2,10 @@ package com.crystalgui.language.run;
 
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
+import com.crystalgui.language.run.console.RunConsole;
+import com.crystalgui.language.run.console.RunLevel;
+import com.crystalgui.language.run.exec.ScriptInput;
+import com.crystalgui.language.run.exec.ScriptOutput;
 import com.crystalgui.text.TextBuffer;
 import org.junit.Test;
 

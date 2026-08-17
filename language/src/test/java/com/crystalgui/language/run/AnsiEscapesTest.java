@@ -1,5 +1,6 @@
 package com.crystalgui.language.run;
 
+import com.crystalgui.language.run.console.AnsiEscapes;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;

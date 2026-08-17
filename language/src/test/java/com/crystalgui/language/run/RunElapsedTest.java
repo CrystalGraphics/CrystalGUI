@@ -2,6 +2,7 @@ package com.crystalgui.language.run;
 
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
+import com.crystalgui.language.run.console.RunElapsed;
 import org.junit.Test;
 
 import java.util.concurrent.TimeUnit;

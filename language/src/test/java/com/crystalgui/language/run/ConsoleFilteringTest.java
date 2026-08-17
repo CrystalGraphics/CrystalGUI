@@ -1,5 +1,8 @@
 package com.crystalgui.language.run;
 
+import com.crystalgui.language.run.console.RunConsole;
+import com.crystalgui.language.run.console.RunLevel;
+import com.crystalgui.language.run.console.RunMessage;
 import com.crystalgui.text.TextBuffer;
 import org.junit.Test;
 

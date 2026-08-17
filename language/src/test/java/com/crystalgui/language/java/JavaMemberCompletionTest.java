@@ -3,6 +3,7 @@ package com.crystalgui.language.java;
 import com.crystalgui.language.engine.EngineBand;
 import com.crystalgui.language.engine.EngineSource;
 import com.crystalgui.language.engine.JavaEngine;
+import com.crystalgui.language.java.classpath.HostClasspath;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.lang.CompletionItem;
 import com.crystalgui.text.lang.CompletionList;

@@ -2,6 +2,7 @@ package com.crystalgui.language.run;
 
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.fs.Resource;
+import com.crystalgui.language.run.console.RunConsole;
 
 import javax.annotation.Nullable;
 

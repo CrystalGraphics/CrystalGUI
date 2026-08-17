@@ -4,6 +4,7 @@ import com.crystalgui.language.engine.EngineBand;
 import com.crystalgui.language.engine.EngineSource;
 import com.crystalgui.language.engine.JavaEngine;
 import com.crystalgui.language.engine.bridge.SourceAnalyzer;
+import com.crystalgui.language.java.exec.ScriptPrelude;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;

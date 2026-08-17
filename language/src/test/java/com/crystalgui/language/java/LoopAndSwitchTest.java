@@ -1,6 +1,9 @@
 package com.crystalgui.language.java;
 
 import com.crystalgui.language.engine.bridge.SourceAnalyzer;
+import com.crystalgui.language.java.fix.catalog.LambdaCorrections;
+import com.crystalgui.language.java.fix.catalog.LoopIntentions;
+import com.crystalgui.language.java.fix.catalog.SwitchIntentions;
 import com.crystalgui.text.lang.CodeAction;
 
 import org.junit.Assume;

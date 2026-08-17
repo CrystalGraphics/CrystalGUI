@@ -1,6 +1,7 @@
 package com.crystalgui.language.run;
 
 import com.crystalgui.fs.Resource;
+import com.crystalgui.language.run.console.ConsoleFilter;
 import com.crystalgui.text.syntax.Language;
 
 import javax.annotation.Nullable;

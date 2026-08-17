@@ -1,5 +1,6 @@
 package com.crystalgui.language.java;
 
+import com.crystalgui.language.java.fix.catalog.LambdaCorrections;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticTag;
 import com.crystalgui.text.lang.CodeAction;

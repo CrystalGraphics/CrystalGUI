@@ -4,6 +4,8 @@ import com.crystalgui.language.engine.EngineBand;
 import com.crystalgui.language.engine.EngineSource;
 import com.crystalgui.language.engine.JavaEngine;
 import com.crystalgui.language.engine.bridge.SourceAnalyzer;
+import com.crystalgui.language.java.assist.AttachedSources;
+import com.crystalgui.language.java.classpath.HostClasspath;
 import com.crystalgui.text.lang.Signature;
 import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.text.lang.SymbolKind;
@@ -503,7 +505,7 @@ public class JavaSignatureTest {
         String classes = ownCodeSource();
         Assume.assumeNotNull(classes);
         String source = ""
-                + "import com.crystalgui.language.java.HostClasspath;\n"
+                + "import com.crystalgui.language.java.classpath.HostClasspath;\n"
                 + "public class Script {\n"
                 + "    void run(ClassLoader loader) {\n"
                 + "        HostClasspath.detect(loader);\n"
@@ -524,7 +526,7 @@ public class JavaSignatureTest {
     private static String ownCodeSource() {
         try {
             java.net.URL location = HostClasspath.class.getProtectionDomain()
-                    .getCodeSource().getLocation();
+                                                       .getCodeSource().getLocation();
             return new java.io.File(location.toURI()).getAbsolutePath();
         } catch (Exception | NoClassDefFoundError unavailable) {
             return null;

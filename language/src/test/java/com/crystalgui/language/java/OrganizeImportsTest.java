@@ -1,5 +1,6 @@
 package com.crystalgui.language.java;
 
+import com.crystalgui.language.java.fix.catalog.ImportCorrections;
 import com.crystalgui.text.lang.CodeAction;
 import com.crystalgui.text.lang.CodeActionKind;
 

@@ -3,9 +3,10 @@ package com.crystalgui.language.js;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.language.engine.EngineHost;
 import com.crystalgui.language.engine.EngineSource;
-import com.crystalgui.language.run.RunConsole;
-import com.crystalgui.language.run.RunLevel;
-import com.crystalgui.language.run.ScriptOutput;
+import com.crystalgui.language.js.host.JsHost;
+import com.crystalgui.language.run.console.RunConsole;
+import com.crystalgui.language.run.console.RunLevel;
+import com.crystalgui.language.run.exec.ScriptOutput;
 import com.crystalgui.language.run.ScriptRuntime;
 import com.crystalgui.text.TextBuffer;
 

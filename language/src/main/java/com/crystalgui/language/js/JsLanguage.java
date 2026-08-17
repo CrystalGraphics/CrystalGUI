@@ -8,11 +8,12 @@ import com.crystalgui.language.engine.JavaEngine;
 import com.crystalgui.language.engine.bridge.JsExecutor;
 import com.crystalgui.language.engine.bridge.JsSourceAnalyzer;
 import com.crystalgui.language.engine.bridge.MemberNameMapper;
+import com.crystalgui.language.js.host.JsHost;
 import com.crystalgui.language.map.MappingSet;
-import com.crystalgui.language.java.HostClasspath;
+import com.crystalgui.language.java.classpath.HostClasspath;
 import com.crystalgui.language.java.JavaLanguage;
 import com.crystalgui.language.java.JavaLanguageServices;
-import com.crystalgui.language.java.TypeIndex;
+import com.crystalgui.language.java.classpath.TypeIndex;
 import com.crystalgui.language.run.ScriptPolicy;
 import com.crystalgui.language.run.ScriptRuntimes;
 import com.crystalgui.text.TextBuffer;
@@ -60,8 +61,8 @@ public final class JsLanguage {
     private static JobScheduler scheduler;
 
     /** The adapters, by name. Reached through the band host because the host cannot see their types. */
-    private static final String ANALYZER = "com.crystalgui.language.js.RhinoSourceAnalyzer";
-    private static final String EXECUTOR = "com.crystalgui.language.js.RhinoExecutor";
+    private static final String ANALYZER = "com.crystalgui.language.js.rhino.RhinoSourceAnalyzer";
+    private static final String EXECUTOR = "com.crystalgui.language.js.rhino.exec.RhinoExecutor";
 
     private JsLanguage() {
     }

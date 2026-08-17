@@ -1,5 +1,6 @@
 package com.crystalgui.language.java;
 
+import com.crystalgui.language.java.fix.catalog.CastCorrections;
 import org.eclipse.jdt.core.compiler.IProblem;
 import org.junit.Test;
 

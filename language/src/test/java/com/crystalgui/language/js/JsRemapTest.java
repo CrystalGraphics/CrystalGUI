@@ -4,6 +4,8 @@ import com.crystalgui.language.engine.EngineHost;
 import com.crystalgui.language.engine.EngineSource;
 import com.crystalgui.language.engine.bridge.Analysis;
 import com.crystalgui.language.java.JavaLanguage;
+import com.crystalgui.language.js.host.JsHost;
+import com.crystalgui.language.js.rhino.resolve.JsTypeRef;
 import com.crystalgui.language.map.MappingSet;
 import com.crystalgui.text.lang.SymbolInfo;
 

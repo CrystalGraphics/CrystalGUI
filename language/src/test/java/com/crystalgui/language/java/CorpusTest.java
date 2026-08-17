@@ -1,6 +1,7 @@
 package com.crystalgui.language.java;
 
 import com.crystalgui.language.engine.bridge.SourceAnalyzer;
+import com.crystalgui.language.java.fix.JavaQuickFixes;
 import com.crystalgui.text.Change;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
