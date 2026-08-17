@@ -320,7 +320,8 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
                 if (!problem.hasPosition()) continue;
                 int from = offsetOf(problem.start());
                 int to = Math.max(from, offsetOf(problem.end()));
-                entries.add(DecorationSet.Entry.of(from, to, problem));
+                entries.add(DecorationSet.Entry.of(from, to,
+                        new RuntimeProblem(problem, textIn(from, to))));
             }
         }
         buffer.decorations().replaceLane(runtimeLane,
@@ -378,12 +379,53 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
         List<Diagnostic> out = new ArrayList<>();
         for (TrackedRange range : buffer.decorations().inLane(lane)) {
             if (range.isRemoved() || range.collapsedByEdit()) continue;
-            Diagnostic original = range.payload(Diagnostic.class);
+            Diagnostic original = stillTrue(range);
             if (original == null) continue;
             out.add(new Diagnostic(pointOf(range.from()), pointOf(range.to()), original.severity(),
                     original.message(), original.source(), original.code()));
         }
         return out;
+    }
+
+    /**
+     * The diagnostic a tracked range carries — or null when it has stopped describing the text it is on.
+     *
+     * <p>The two lanes make different promises, and this is where they differ. A retained <b>warning</b> is
+     * the analyser's, re-stated only until the analyser can speak for itself, so it survives any edit that
+     * does not destroy its range. A <b>runtime</b> problem is evidence about one specific piece of text —
+     * "executing <em>this</em> threw" — so the moment that text changes the evidence is about something
+     * that no longer exists.</p>
+     *
+     * <p>Commenting the line out is the case that makes it obvious: the statement cannot throw, and it is
+     * not a deletion, so the range survives with the {@code //} now inside it and the mark sits there
+     * claiming a line that does not run any more is broken. Fixing the line has the same shape and is the
+     * more common one. The alternative is to wait for the next run, which means red text under a line you
+     * have already dealt with — the "the analyser is lagging" failure this codebase has paid for twice.</p>
+     *
+     * <p>It is a comparison rather than a flag because it wants to be exact: an edit <em>elsewhere</em>
+     * moves the range and leaves its text alone, so the mark travels; and an <b>undo</b> restores both the
+     * text and the mark, which a one-way "invalidated" bit could not do.</p>
+     */
+    @Nullable
+    private Diagnostic stillTrue(TrackedRange range) {
+        RuntimeProblem witnessed = range.payload(RuntimeProblem.class);
+        if (witnessed == null) return range.payload(Diagnostic.class);
+        return witnessed.text().equals(textIn(range.from(), range.to()))
+                ? witnessed.diagnostic() : null;
+    }
+
+    /**
+     * A problem, and the exact text it was reported against.
+     *
+     * <p>The text rather than a hash of it: these are one line each and there are a handful, so the
+     * comparison is cheap and what is stored can be read in a debugger — which matters for the one thing
+     * that would be hard to diagnose otherwise, a mark that will not go away.</p>
+     */
+    private record RuntimeProblem(Diagnostic diagnostic, String text) {
+    }
+
+    private String textIn(int from, int to) {
+        return buffer.document().slice(from, to).toString();
     }
 
     private int offsetOf(TextPoint point) {

@@ -137,6 +137,45 @@ public class JsRuntimeProblemsTest {
         assertEquals(2, moved.start().row());
     }
 
+    /**
+     * Commenting the line out withdraws it — the mark is evidence about that text, not about that row.
+     *
+     * <p>Reported from the harness: the statement was commented out and the error stayed, because the
+     * range survived the insertion (it grew to include the {@code //}) and only a <em>run</em> withdrew
+     * it. So the editor claimed a line that cannot execute was broken, until you ran the file again.</p>
+     */
+    @Test
+    public void editingTheMarkedLineWithdrawsIt() {
+        runIgnoringFailure(buffer.document().toString());
+        assertNotNull(runtimeProblemIn(lastAnnounced()));
+
+        // The user's gesture, exactly: toggle-comment on the throwing line.
+        buffer.replace(11, 11, "// ");
+        assertNull("the error survived its own line being commented out",
+                runtimeProblemIn(lastAnnounced()));
+    }
+
+    /** And undoing that brings it back, because the text is the evidence and it is the text again. */
+    @Test
+    public void undoingTheEditRestoresIt() {
+        runIgnoringFailure(buffer.document().toString());
+        buffer.replace(11, 11, "// ");
+        assertNull(runtimeProblemIn(lastAnnounced()));
+
+        buffer.replace(11, 14, "");
+        assertNotNull("the error did not come back when its line did",
+                runtimeProblemIn(lastAnnounced()));
+    }
+
+    /** An edit somewhere else leaves it alone — it moves, which is the whole point of the lane. */
+    @Test
+    public void anEditElsewhereDoesNotWithdrawIt() {
+        runIgnoringFailure(buffer.document().toString());
+        buffer.replace(buffer.length(), buffer.length(), "var appended = 1;\n");
+        assertNotNull("an unrelated edit withdrew the error",
+                runtimeProblemIn(lastAnnounced()));
+    }
+
     @Test
     public void closingTheDocumentForgetsIt() {
         services.close();
