@@ -165,6 +165,21 @@ public class SquigglesTest extends UiTestBase {
         assertEquals(1, found.size());
         float width = found.get(0).getRuntimeCache().getWidth();
         assertTrue("width " + width + " is not a plausible four-character row", width > 0f && width < 300f);
+
+        // AND IT IS THE SAME BAND AN EXPLICIT RANGE OVER THAT ROW DRAWS, which is the claim the bound
+        // above cannot make. `Diagnostic.onRow` says column Integer.MAX_VALUE, and both conversions to an
+        // offset -- the editor's own and `Rope.pointToOffset` -- OVERFLOWED on it, so the range collapsed
+        // to a point at the row's start and was widened to one character to be visible. One character is
+        // "plausible" for a four-character row, so this test stayed green over a squiggle sitting in the
+        // indentation. Compared against the other path rather than against a pixel count: the number is
+        // the font's business and the agreement between the two spellings is not.
+        editor.diagnostics().setAll(List.of(Diagnostic.error(
+                new TextPoint(1, 0), new TextPoint(1, 4), "the same row, spelled out")));
+        settle();
+        List<UIElement> explicit = bands("__squiggle-error__");
+        assertEquals(1, explicit.size());
+        assertEquals("a whole-row diagnostic does not cover the row an explicit range covers",
+                explicit.get(0).getRuntimeCache().getWidth(), width, 0.01f);
     }
 
     // ── Navigation ──────────────────────────────────────────────────────────────────────────────

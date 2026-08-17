@@ -104,6 +104,14 @@ public class JsRuntimeProblemsTest {
         assertEquals(DiagnosticSeverity.ERROR, problem.severity());
         assertEquals("on the throw, not the first line", 1, problem.start().row());
         assertEquals("Error: boom", problem.message());
+        // AND IT SPANS THE STATEMENT, which is the half a row assertion cannot see. Rhino reports a line
+        // and no column, so the mark is the whole line -- and it was a ONE-CHARACTER mark in the leading
+        // whitespace, because `Rope.pointToOffset` overflowed on the Integer.MAX_VALUE end column for
+        // every row but the first. Everything else about it was right: the row, the message, the owner,
+        // the Problems entry. @see RopeTest#aWholeLineColumnClampsRatherThanOverflowing
+        assertEquals("the mark does not reach the end of the line", 1, problem.end().row());
+        assertEquals("the mark collapsed to a point rather than spanning the statement",
+                buffer.line(1).length(), problem.end().column());
     }
 
     @Test

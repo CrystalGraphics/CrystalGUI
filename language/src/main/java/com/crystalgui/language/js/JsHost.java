@@ -355,7 +355,15 @@ public final class JsHost implements ScriptRuntime {
             }
         }
 
-        /** A thrown exception, onto its line in the document — if the engine can say which. */
+        /**
+         * A thrown exception, onto its line in the document — if the engine can say which.
+         *
+         * <p>To the <b>end of the line</b>, which is {@code Diagnostic.onRow}'s convention:
+         * {@code Integer.MAX_VALUE} means "however long this line turns out to be", clamped when it is
+         * converted to an offset. Rhino usually reports a line and no column for a runtime error — the
+         * interpreter knows which statement it was executing, not which character — and a whole statement
+         * underlined is the honest width for that. When it does give a column, the mark starts there.</p>
+         */
         private void publishFailure(Throwable failed) {
             if (ref == null) return;
             JsExecutor.Failure where = executor.describe(failed);
