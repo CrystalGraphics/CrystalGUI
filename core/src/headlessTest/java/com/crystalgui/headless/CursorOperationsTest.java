@@ -4,6 +4,7 @@ import com.crystalgui.text.Change;
 import com.crystalgui.text.Rope;
 import com.crystalgui.text.Selection;
 import com.crystalgui.text.WordClassifier;
+import com.crystalgui.text.cursor.ColumnSelection;
 import com.crystalgui.text.cursor.CursorColumns;
 import com.crystalgui.text.cursor.LineOperations;
 import com.crystalgui.text.cursor.MouseSelection;
@@ -263,6 +264,62 @@ public class CursorOperationsTest {
         TypeOperations.Enter enter = TypeOperations.enterAt(document, 12,
                 TypeOperations.IndentStyle.tabs(4), Language.java());
         assertEquals("\n\t\t", enter.text());
+    }
+
+    // ── Column selection ────────────────────────────────────────────────────────────────────────
+
+    /** One selection per row, all between the same two columns. */
+    @Test
+    public void aBoxCoversTheSameColumnsOnEveryRow() {
+        Rope document = Rope.of("abcdef\nghijkl\nmnopqr");
+        List<Selection> box = ColumnSelection.between(document, 1, document.lineStartOffset(2) + 4, 4);
+
+        assertEquals(3, box.size());
+        assertEquals(new Selection(1, 4), box.get(0));
+        assertEquals(new Selection(8, 11), box.get(1));
+        assertEquals(new Selection(15, 18), box.get(2));
+    }
+
+    /**
+     * <b>Columns are VISUAL, which is the whole of the port.</b> A box is a rectangle on screen, so two
+     * rows whose text differs in tabs must still line up — computed from character offsets it would be a
+     * ragged edge that follows the text rather than a box.
+     */
+    @Test
+    public void aBoxLinesUpAcrossTabsAndSpaces() {
+        Rope document = Rope.of("\tabc\n    def");
+        // Column 4 on both rows: just past the tab on the first, just past the four spaces on the second.
+        List<Selection> box = ColumnSelection.between(document, 1, document.lineStartOffset(1) + 4, 4);
+
+        assertEquals(2, box.size());
+        assertEquals("the tab row starts after its single tab character", 1, box.get(0).start());
+        assertEquals("and the space row after its four", document.lineStartOffset(1) + 4,
+                box.get(1).start());
+    }
+
+    /**
+     * <b>A short row is clamped, never skipped.</b> The point of a box is usually to type at the end of
+     * every line in it, and a row dropping out because it is shorter is exactly the row somebody wanted.
+     */
+    @Test
+    public void aShortRowIsClampedToItsOwnEnd() {
+        Rope document = Rope.of("abcdefgh\nij\nklmnopqr");
+        List<Selection> box = ColumnSelection.between(document, 4, document.lineStartOffset(2) + 6, 4);
+
+        assertEquals(3, box.size());
+        Selection middle = box.get(1);
+        assertEquals("clamped to the end of `ij`", document.lineStartOffset(1) + 2, middle.start());
+        assertEquals("and to the same place, so it is a bare caret", middle.start(), middle.end());
+    }
+
+    /** Dragging upwards puts the head's row last, so the caller can treat it as the primary. */
+    @Test
+    public void anUpwardBoxEndsOnTheHeadsRow() {
+        Rope document = Rope.of("aaaa\nbbbb\ncccc");
+        List<Selection> box = ColumnSelection.between(document, document.lineStartOffset(2) + 1, 1, 4);
+
+        assertEquals(3, box.size());
+        assertEquals("the head's row is last", 1, box.get(2).start());
     }
 
     // ── Paste ───────────────────────────────────────────────────────────────────────────────────
