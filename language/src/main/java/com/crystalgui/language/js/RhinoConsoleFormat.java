@@ -1,11 +1,9 @@
 package com.crystalgui.language.js;
 
 import org.mozilla.javascript.BaseFunction;
-import org.mozilla.javascript.ConsString;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.NativeArray;
-import org.mozilla.javascript.NativeJavaClass;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.Undefined;
@@ -61,14 +59,19 @@ final class RhinoConsoleFormat {
     private static String inspect(Object value, int depth) {
         if (value == null) return "null";
         if (Undefined.isUndefined(value)) return "undefined";
-        if (value instanceof CharSequence || value instanceof ConsString) return quote(value.toString());
+        // `ConsString` IS a CharSequence, which is the whole reason Rhino's rope type can be passed around
+        // as one -- naming it separately said the opposite.
+        if (value instanceof CharSequence) return quote(value.toString());
         if (value instanceof Number || value instanceof Boolean) return Context.toString(value);
-        if (value instanceof NativeJavaClass) {
-            Object unwrapped = ((NativeJavaClass) value).unwrap();
-            return "[JavaClass " + (unwrapped instanceof Class ? ((Class<?>) unwrapped).getName()
-                    : String.valueOf(unwrapped)) + "]";
+        // A JAVA VALUE IS TOLD FROM A JAVA CLASS BY WHAT IT WRAPS, never by the wrapper's own type: under
+        // a member-name mapping every one of them arrives inside a membrane and none is a NativeJavaClass,
+        // so a class printed through its own `toString()` as `class java.util.ArrayList` -- which is
+        // exactly the "reads as a typo" this branch exists to prevent.
+        if (value instanceof Wrapper) {
+            Object unwrapped = ((Wrapper) value).unwrap();
+            if (unwrapped instanceof Class) return "[JavaClass " + ((Class<?>) unwrapped).getName() + "]";
+            return String.valueOf(unwrapped);
         }
-        if (value instanceof Wrapper) return String.valueOf(((Wrapper) value).unwrap());
         if (value instanceof Function) return function((Function) value);
         if (value instanceof NativeArray) return array((NativeArray) value, depth);
         if (value instanceof Scriptable) {

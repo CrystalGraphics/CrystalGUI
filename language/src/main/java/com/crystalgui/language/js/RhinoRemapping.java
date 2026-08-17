@@ -6,10 +6,15 @@ import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.NativeJavaArray;
 import org.mozilla.javascript.Scriptable;
+import org.mozilla.javascript.Symbol;
+import org.mozilla.javascript.SymbolScriptable;
 import org.mozilla.javascript.WrapFactory;
 import org.mozilla.javascript.Wrapper;
 
 import javax.annotation.Nullable;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Makes a script's readable member names reach the runtime names a class declares.
@@ -66,13 +71,17 @@ final class RhinoRemapping {
         }
 
         /**
-         * Every value goes through here, and this is the hook that has to be overridden.
+         * Every value goes through here, and both hooks are overridden so the question does not arise.
          *
-         * <p>{@code wrapAsJavaObject} looks like the right place and is not: Rhino's own {@code wrap} on the
-         * band we run against constructs the wrapper directly rather than calling that hook, so overriding it
-         * alone left the feature silently inert. Measured, after the factory was confirmed installed and the
-         * mapping confirmed non-identity — nothing in the API's shape says which of the two a version will
-         * call, so this wraps the <em>result</em> and is correct either way.</p>
+         * <p>Published Rhino ends {@code wrap} with {@code return wrapAsJavaObject(...)}, which would make
+         * the second override sufficient on its own — and the feature was nonetheless silently inert with
+         * the factory installed and the mapping non-identity, until this one was added. The likeliest
+         * explanation is the {@code NativeJavaObject} subclass that was failing at the same time (see the
+         * class note), and the honest position is that we do not know which band did what.</p>
+         *
+         * <p>So this wraps the <em>result</em>: if the band did honour the other hook the value is already
+         * ours and comes back untouched, and if it did not, the plain wrapper is replaced. Correct either
+         * way, which is the only property worth having across two Rhinos.</p>
          */
         @Override
         public Object wrap(Context cx, Scriptable scope, Object obj, Class<?> staticType) {
@@ -123,7 +132,7 @@ final class RhinoRemapping {
      * unwraps its receiver through {@code Wrapper} to find the object to invoke on, so a membrane that was
      * only a {@code Scriptable} would be found by the lookup and then rejected by the call.</p>
      */
-    private static class MappedMembers implements Scriptable, Wrapper {
+    private static class MappedMembers implements Scriptable, Wrapper, SymbolScriptable {
 
         private final Scriptable delegate;
         private final Wrapper wrapper;
@@ -133,6 +142,37 @@ final class RhinoRemapping {
             this.delegate = delegate;
             this.wrapper = wrapper;
             this.mapper = mapper;
+        }
+
+        // ── Symbol-keyed properties, forwarded ──────────────────────────────────────────────────
+        //
+        // NOT OPTIONAL, and a membrane that only forwarded string keys looked complete. `NativeJavaObject`
+        // implements SymbolScriptable, and it is how `Symbol.iterator` reaches a Java Iterable -- so
+        // `for (var x of javaList)` worked on an unmapped deployment and stopped working on a mapped one,
+        // which is a difference the mapping has no business making. There is nothing to translate here: a
+        // Symbol is not a name a mapping file can rename.
+
+        @Override
+        public Object get(Symbol key, Scriptable start) {
+            return delegate instanceof SymbolScriptable
+                    ? ((SymbolScriptable) delegate).get(key, delegate) : Scriptable.NOT_FOUND;
+        }
+
+        @Override
+        public boolean has(Symbol key, Scriptable start) {
+            return delegate instanceof SymbolScriptable && ((SymbolScriptable) delegate).has(key, delegate);
+        }
+
+        @Override
+        public void put(Symbol key, Scriptable start, Object value) {
+            if (delegate instanceof SymbolScriptable) {
+                ((SymbolScriptable) delegate).put(key, delegate, value);
+            }
+        }
+
+        @Override
+        public void delete(Symbol key) {
+            if (delegate instanceof SymbolScriptable) ((SymbolScriptable) delegate).delete(key);
         }
 
         @Override
@@ -250,8 +290,11 @@ final class RhinoRemapping {
         }
 
         private String readable(Class<?> owner, String runtimeName) {
-            for (Class<?> at = owner; at != null && at != Object.class; at = at.getSuperclass()) {
-                String internal = at.getName().replace('.', '/');
+            // THE SAME WALK THE OUTWARD DIRECTION USES. It climbed superclasses only while `translate`
+            // also climbed interfaces, so a mapping declared on an interface renamed a call and not the
+            // list it was offered from -- the two directions disagreeing about one member.
+            for (Class<?> at : hierarchyOf(owner)) {
+                String internal = internalNameOf(at);
                 if (!mapper.mapsAnythingIn(internal)) continue;
                 String name = mapper.readableName(internal, runtimeName);
                 if (name != null && !name.equals(runtimeName)) return name;
@@ -311,26 +354,61 @@ final class RhinoRemapping {
     @Nullable
     private static String translate(MemberNameMapper mapper, @Nullable Class<?> owner, String readable) {
         if (owner == null || readable == null || readable.isEmpty()) return null;
-        // THE WHOLE HIERARCHY, because a mapping names the type that DECLARES the member while a script
-        // calls it on whatever it happens to be holding. Without the walk, a mapped method declared on a
-        // supertype is invisible the moment a script holds a subclass -- which on a real deployment is
-        // nearly always. `MappingSet`'s own javadoc calls resolving the declaring type the difficulty.
-        for (Class<?> at = owner; at != null && at != Object.class; at = at.getSuperclass()) {
-            String runtime = translateIn(mapper, at, readable);
-            if (runtime != null) return runtime;
-            for (Class<?> face : at.getInterfaces()) {
-                String fromInterface = translateIn(mapper, face, readable);
-                if (fromInterface != null) return fromInterface;
-            }
+        for (Class<?> at : hierarchyOf(owner)) {
+            String internal = internalNameOf(at);
+            if (!mapper.mapsAnythingIn(internal)) continue;
+            String runtime = mapper.runtimeName(internal, readable);
+            if (runtime != null && !runtime.equals(readable)) return runtime;
         }
         return null;
     }
 
-    @Nullable
-    private static String translateIn(MemberNameMapper mapper, Class<?> type, String readable) {
-        String internal = type.getName().replace('.', '/');
-        if (!mapper.mapsAnythingIn(internal)) return null;
-        String runtime = mapper.runtimeName(internal, readable);
-        return runtime == null || runtime.equals(readable) ? null : runtime;
+    /**
+     * Every type a member could have been <b>declared</b> on, nearest first — and computed once per class.
+     *
+     * <p>The walk exists because a mapping names the type that declares a member while a script calls it on
+     * whatever it happens to be holding: without it, a mapped method declared on a supertype is invisible
+     * the moment a script holds a subclass, which on a real deployment is nearly always.
+     * {@code MappingSet}'s own javadoc calls resolving the declaring type the difficulty.</p>
+     *
+     * <p><b>Super-interfaces included</b>, which the first version left out — it climbed superclasses and
+     * their <em>direct</em> interfaces only, so a mapping on {@code Collection} was missed for a class
+     * implementing {@code List}. And {@code Object} is excluded, because nothing maps its members and it is
+     * on the end of every walk.</p>
+     *
+     * <p>Cached in a {@link ClassValue}: this is asked on every property lookup a script makes, including
+     * every call into an unmapped JDK class, and it was rebuilding the internal name of each type in the
+     * hierarchy on every miss.</p>
+     */
+    private static List<Class<?>> hierarchyOf(Class<?> owner) {
+        return HIERARCHIES.get(owner);
     }
+
+    private static final ClassValue<List<Class<?>>> HIERARCHIES = new ClassValue<>() {
+        @Override
+        protected List<Class<?>> computeValue(Class<?> type) {
+            List<Class<?>> found = new ArrayList<>();
+            collect(type, found);
+            return List.copyOf(found);
+        }
+
+        private void collect(@Nullable Class<?> type, List<Class<?>> into) {
+            if (type == null || type == Object.class || into.contains(type)) return;
+            into.add(type);
+            collect(type.getSuperclass(), into);
+            for (Class<?> face : type.getInterfaces()) collect(face, into);
+        }
+    };
+
+    /** {@code net/minecraft/world/World} — the form a mapping file is keyed by. Cached; see above. */
+    private static String internalNameOf(Class<?> type) {
+        return INTERNAL_NAMES.get(type);
+    }
+
+    private static final ClassValue<String> INTERNAL_NAMES = new ClassValue<>() {
+        @Override
+        protected String computeValue(Class<?> type) {
+            return type.getName().replace('.', '/');
+        }
+    };
 }

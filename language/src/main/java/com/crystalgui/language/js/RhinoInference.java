@@ -47,15 +47,8 @@ import java.util.function.Predicate;
  */
 final class RhinoInference {
 
-    /**
-     * The roots a package chain may start at.
-     *
-     * <p>Rhino's standard scope installs these as {@code NativeJavaTopPackage}s, so they are the names a
-     * script can actually reach a class through — not a guess. {@code Packages} is the explicit escape
-     * for everything else ({@code Packages.mymod.Thing}), and is why the list does not need to grow.</p>
-     */
-    private static final Set<String> PACKAGE_ROOTS =
-            Set.of("java", "javax", "org", "com", "edu", "net", "Packages");
+    /** @see RhinoGlobals#PACKAGE_ROOTS — one definition, because three of them had already drifted. */
+    private static final Set<String> PACKAGE_ROOTS = RhinoGlobals.PACKAGE_ROOTS;
 
     private RhinoInference() {
     }

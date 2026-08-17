@@ -83,19 +83,18 @@ final class RhinoGlobals {
             } finally {
                 Context.exit();
             }
-            // ALWAYS PRESENT, whatever the scope said. `Packages` and the bare package roots are how
-            // Rhino reaches Java and are installed by the executor rather than by initStandardObjects,
-            // so a scope built here has never heard of them -- and marking `java.util.List` unresolved
-            // in a file whose whole purpose is Java interop would be the most visible possible error.
-            found.add("Packages");
-            found.add("java");
-            found.add("javax");
-            found.add("org");
-            found.add("com");
-            found.add("Java");
-            found.add("console");
-            found.add("print");
-            found.add("readLine");
+            // ALWAYS PRESENT, whatever the scope said. The bare package roots are how Rhino reaches Java,
+            // and the host globals are installed by the executor rather than by initStandardObjects, so a
+            // scope built here has never heard of either -- and marking `java.util.List` unresolved in a
+            // file whose whole purpose is Java interop would be the most visible possible error.
+            //
+            // FROM THE CONSTANTS BELOW, not typed again here. The two lists were written out in three
+            // files between them and had already drifted: `prompt` is installed and was not listed, and
+            // `edu`/`net` are package roots the inference tier reads and this did not -- so `prompt('x')`
+            // and `net.minecraft.…`, which is the first line a mod author writes, were both drawn as
+            // unresolved names and offered a rename.
+            found.addAll(PACKAGE_ROOTS);
+            found.addAll(HOST_GLOBALS);
             return Collections.unmodifiableSet(found);
         });
     }
@@ -111,6 +110,31 @@ final class RhinoGlobals {
             return false;
         }
     }
+
+    /**
+     * The names a package chain may start at — <b>one definition</b>, read by everything that cares.
+     *
+     * <p>Rhino's standard scope installs these as {@code NativeJavaTopPackage}s, so they are the names a
+     * script can actually reach a class through, not a guess. {@code Packages} is the explicit escape for
+     * everything else ({@code Packages.mymod.Thing}), which is why the list does not need to grow.</p>
+     *
+     * <p>It existed in three places — here, {@code RhinoInference}, and a host-side copy in the completion
+     * provider — and no two of them agreed. A fact about the engine belongs on the side of the bridge that
+     * has the engine; the host side reads it through {@link
+     * com.crystalgui.language.engine.bridge.JsSourceAnalyzer#globals()}.</p>
+     */
+    static final Set<String> PACKAGE_ROOTS =
+            Set.of("java", "javax", "org", "com", "edu", "net", "Packages");
+
+    /**
+     * What {@code RhinoExecutor.installGlobals} puts in every scope — the same list, from the same place.
+     *
+     * <p>A name installed at run time and unknown to the analyser is drawn as a mistake in an editor whose
+     * own runtime provides it, which is the worst kind of wrong: {@code prompt} was installed for a
+     * release and marked unresolved the whole time.</p>
+     */
+    static final Set<String> HOST_GLOBALS =
+            Set.of("console", "print", "readLine", "prompt", "Java");
 
     /**
      * Globals that exist on some bands and not others — asked one at a time.

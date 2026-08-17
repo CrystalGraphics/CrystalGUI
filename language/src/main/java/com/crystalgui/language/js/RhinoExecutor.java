@@ -89,20 +89,8 @@ public final class RhinoExecutor implements JsExecutor {
      */
     private static final ConcurrentHashMap<Thread, Run> RUNS = new ConcurrentHashMap<>();
 
-    /**
-     * Host classes from the host, Rhino's from the band. See the class note.
-     *
-     * <p>Parent-first over the host's loader, so every name the host has is the host's; {@code findClass}
-     * is reached only for what the host lacks, and answers only Rhino's own package — a script must not be
-     * able to name a class that exists solely on the engine's side of the bridge.</p>
-     */
-    private static final ClassLoader APPLICATION_LOADER = new ClassLoader(JsExecutor.class.getClassLoader()) {
-        @Override
-        protected Class<?> findClass(String name) throws ClassNotFoundException {
-            if (name.startsWith("org.mozilla.")) return RhinoExecutor.class.getClassLoader().loadClass(name);
-            throw new ClassNotFoundException(name);
-        }
-    };
+    /** Host classes from the host, Rhino's from the band. @see JsLoaders, which is the one definition. */
+    private static final ClassLoader APPLICATION_LOADER = JsLoaders.APPLICATION;
 
     /** One context factory for every run — its only job is to route the observer to the run's flag. */
     private static final ContextFactory FACTORY = new ContextFactory() {
@@ -197,6 +185,8 @@ public final class RhinoExecutor implements JsExecutor {
         }
         Script compiled = ((CompiledScript) script).script();
         Thread thread = Thread.currentThread();
+        // WHAT THE HOST HAD ON THIS THREAD, so the script itself can run under it. @see RhinoThread#withLoader
+        ClassLoader hostContext = thread.getContextClassLoader();
         Run run = new Run();
         RUNS.put(thread, run);
         try {
@@ -217,7 +207,12 @@ public final class RhinoExecutor implements JsExecutor {
                     // `Object`, `Math` and `parseInt` as things the script had just created.
                     run.scope = scope;
                     run.baseline = idsOf(scope);
-                    return compiled.exec(cx, scope);
+                    // THE SCRIPT RUNS UNDER THE HOST'S CONTEXT LOADER, not ours. Everything Rhino needed
+                    // the engine loader for has been resolved by now (the standard objects are built, so
+                    // the regular-expression engine is cached); what remains is the script calling OUT,
+                    // and leaving a child-first loader on the thread for that makes every ServiceLoader
+                    // in the application resolve against the engine's classpath.
+                    return RhinoThread.withLoader(hostContext, () -> compiled.exec(cx, scope));
                 } catch (Stopped stopped) {
                     throw interrupted();
                 } catch (WrappedException wrapped) {
@@ -280,11 +275,11 @@ public final class RhinoExecutor implements JsExecutor {
      */
     private static Object wrap(Context cx, Scriptable scope, Object value) {
         if (value instanceof Class) return cx.getWrapFactory().wrapJavaClass(cx, scope, (Class<?>) value);
-        // THE CONTEXT'S OWN FACTORY, not `Context.javaToJS`. The static helper does not route through the
-        // factory this context was given on the band we run against, so a binding arrived as a plain
-        // NativeJavaObject and the member-name mapping never saw it -- the whole readable-name feature was
-        // silently inert for exactly the values a host puts in scope. Asking the factory directly cannot
-        // diverge from whichever factory is installed, which is the property that matters here.
+        // THE CONTEXT'S OWN FACTORY, ASKED DIRECTLY, rather than through `Context.javaToJS`. Published
+        // Rhino routes the static helper through this same factory, so on paper the two are equivalent --
+        // but "on paper" is what the ObjectProperty and Token divergences were as well, and this call
+        // cannot diverge from whichever factory is installed on whichever band. It costs nothing to be
+        // sure about the one hop the whole member-name mapping hangs from.
         return cx.getWrapFactory().wrap(cx, scope, value, null);
     }
 
@@ -346,11 +341,12 @@ public final class RhinoExecutor implements JsExecutor {
             if (allowsClass != null && !allowsClass.test(name)) {
                 throw new SecurityException("Java.type: access to " + name + " is not permitted");
             }
-            try {
-                return wrap(cx, scope, Class.forName(name, true, cx.getApplicationClassLoader()));
-            } catch (ClassNotFoundException absent) {
-                throw new IllegalArgumentException("Java.type: no such class " + name);
-            }
+            // THROUGH THE SHARED LOOKUP, which also tries the nested spelling: a script writes
+            // `java.util.Map.Entry` -- the form the editor resolves and offers -- and the JVM knows only
+            // `java.util.Map$Entry`, so the name the popup suggested threw at run time.
+            Class<?> found = JsLoaders.load(name);
+            if (found == null) throw new IllegalArgumentException("Java.type: no such class " + name);
+            return wrap(cx, scope, found);
         });
         ScriptableObject.putProperty(scope, "Java", java);
     }
@@ -387,9 +383,14 @@ public final class RhinoExecutor implements JsExecutor {
     public void stop(Thread thread) {
         if (thread == null) return;
         Run run = RUNS.get(thread);
+        // ONLY A THREAD WE HAVE A RUN ON. Interrupting one we do not is not the harmless no-op the old
+        // comment claimed: it sets the interrupt status of somebody else's thread, and the windows where
+        // that happens are real -- a synchronous run whose executor entry has already been removed, or a
+        // Stop that lands between a host publishing its run and recording the thread it is on.
+        if (run == null) return;
         // THE FLAG FIRST, THEN THE INTERRUPT. A blocked script wakes on the interrupt and asks the flag;
         // the other order has a window where it wakes, sees no request, and goes back to waiting.
-        if (run != null) run.stopRequested = true;
+        run.stopRequested = true;
         if (thread.isAlive()) thread.interrupt();
     }
 
@@ -451,17 +452,18 @@ public final class RhinoExecutor implements JsExecutor {
         if (Undefined.isUndefined(value)) {
             return LiveScopeSnapshot.Entry.of(name, LiveScopeSnapshot.Kind.UNDEFINED);
         }
-        if (value instanceof NativeJavaClass) {
-            Object unwrapped = ((NativeJavaClass) value).unwrap();
-            String className = unwrapped instanceof Class ? ((Class<?>) unwrapped).getName() : null;
-            return new LiveScopeSnapshot.Entry(name, LiveScopeSnapshot.Kind.JAVA_CLASS, className,
-                    null, -1, List.<String>of());
-        }
+        // A JAVA VALUE, CLASS OR INSTANCE — TOLD APART BY WHAT IT WRAPS, never by the wrapper's own class.
+        // Under a member-name mapping every Java value arrives inside a membrane (@see RhinoRemapping), so
+        // it is not a NativeJavaClass however plainly it is a class: `var W = Java.type('…')` was reported
+        // as an INSTANCE of java.lang.Class, and `W.` then listed Class's own members.
         if (value instanceof Wrapper) {
             Object unwrapped = ((Wrapper) value).unwrap();
+            if (unwrapped instanceof Class) {
+                return new LiveScopeSnapshot.Entry(name, LiveScopeSnapshot.Kind.JAVA_CLASS,
+                        ((Class<?>) unwrapped).getName(), null, -1, List.of());
+            }
             return new LiveScopeSnapshot.Entry(name, LiveScopeSnapshot.Kind.JAVA_OBJECT,
-                    unwrapped == null ? null : unwrapped.getClass().getName(), null, -1,
-                    List.<String>of());
+                    unwrapped == null ? null : unwrapped.getClass().getName(), null, -1, List.of());
         }
         if (value instanceof BaseFunction) {
             BaseFunction function = (BaseFunction) value;
