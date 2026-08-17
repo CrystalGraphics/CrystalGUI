@@ -360,8 +360,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /** Search hits, in document offsets. Published under {@code ::highlight(search)}. */
     private final List<TextRange> searchMatches = new ArrayList<>();
     private int currentMatch = -1;
-    private String lastQuery = "";
-    private boolean lastQueryCaseSensitive;
 
     /** The two bracket positions when the caret is on a bracket, or {@code null}. */
     private int[] bracketPair;
@@ -1581,16 +1579,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /** Word-left — the START of the previous word. Deliberately not the mirror of the above. */
     private int previousWordBoundary(int from) {
         return WordOperations.previousWordStart(buffer.document(), from, wordClassifier);
-    }
-
-    /** Double-click selection, using the ported {@link WordOperations#wordAt}. */
-    private void selectWordAt(int offset) {
-        int[] word = WordOperations.wordAt(buffer.document(), offset, wordClassifier);
-        if (word == null) {
-            setCaret(offset);
-            return;
-        }
-        setSelection(word[0], word[1]);
     }
 
     // ── Geometry ────────────────────────────────────────────────────────────────────────────────
@@ -3562,8 +3550,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
      */
     public int find(@Nullable SearchQuery query) {
         lastSearch = query == null || query.isEmpty() ? null : query;
-        lastQuery = lastSearch == null ? "" : lastSearch.text();
-        lastQueryCaseSensitive = lastSearch != null && lastSearch.options().matchCase();
         // THE SCAN IS THE DOCUMENT'S, not this widget's -- see TextSearch. What stays here is what a view
         // owns: which match is selected, what to paint, and where the caret goes.
         results = results.withMatches(TextSearch.findAll(buffer.toString(), lastSearch));
@@ -4467,11 +4453,24 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     /** The advance of one space in the editor's measured font. */
     float spaceAdvance() {
-        CgFontFamily family = resolveFamily();
-        if (family == null) return 0f;
-        float[] widths = caretOffsets(" ", family);
-        return widths.length > 1 ? widths[1] : 0f;
+        var general = getStyle().getGeneralGroup();
+        String fontKey = general.fontFamily() + "/" + general.fontSize();
+        // CACHED, for the reason `gutterDigitsWidth` records for the digit: two view parts ask this
+        // EVERY FRAME -- the indent guides and the rulers, once each -- and every ask shaped a space. A
+        // value that only moves when the font does, re-derived sixty times a second. Keyed on the same
+        // font key `rowMetrics` uses, so the caches invalidate together.
+        if (spaceWidth < 0f || !fontKey.equals(spaceWidthFontKey)) {
+            CgFontFamily family = resolveFamily();
+            if (family == null) return 0f;
+            float[] widths = caretOffsets(" ", family);
+            spaceWidth = widths.length > 1 ? widths[1] : 0f;
+            spaceWidthFontKey = fontKey;
+        }
+        return spaceWidth;
     }
+
+    private float spaceWidth = -1f;
+    private String spaceWidthFontKey = "";
 
     /**
      * The measured x of every character column of a row, for {@link ShapedLineBreaks}.
@@ -5294,21 +5293,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return FOLD_PLACEHOLDER_TEXT + closing;
     }
 
-    /**
-     * Retires one pooled element.
-     *
-     * <p><b>Clears its text as well as collapsing its box</b>, for the reason {@code hideFrom} gives: zero
-     * size hides a fill and nothing else, and a {@code UIText} inside keeps painting. The line numbers
-     * looked immune because the gutter clips to its own bounds — but a retired number is still <em>inside</em>
-     * those bounds, so the clip never applied to it. Invisible until scroll-past-end made it possible to
-     * leave a long tail of retired numbers behind, which then drew on top of one another.</p>
-     */
-    private void hide(UIElement element) {
-        StyleGroup.defaultPipeline(element.getStyle().getLayoutGroup(), l -> l.width(0f).height(0f));
-        for (UIElement child : element.getChildren()) {
-            if (child instanceof UIText label) label.setText("");
-        }
-    }
 
     // ── §G view decorations: layout ─────────────────────────────────────────────────────────────
 
