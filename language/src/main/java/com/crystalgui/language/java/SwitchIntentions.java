@@ -5,12 +5,17 @@ import com.crystalgui.text.ChangeSet;
 import com.crystalgui.text.lang.CodeAction;
 
 import org.eclipse.jdt.core.compiler.IProblem;
+import org.eclipse.jdt.core.dom.ASTVisitor;
 import org.eclipse.jdt.core.dom.Block;
 import org.eclipse.jdt.core.dom.BreakStatement;
 import org.eclipse.jdt.core.dom.CharacterLiteral;
 import org.eclipse.jdt.core.dom.ContinueStatement;
+import org.eclipse.jdt.core.dom.DoStatement;
+import org.eclipse.jdt.core.dom.EnhancedForStatement;
 import org.eclipse.jdt.core.dom.Expression;
 import org.eclipse.jdt.core.dom.ExpressionStatement;
+import org.eclipse.jdt.core.dom.ForStatement;
+import org.eclipse.jdt.core.dom.ITypeBinding;
 import org.eclipse.jdt.core.dom.IfStatement;
 import org.eclipse.jdt.core.dom.InfixExpression;
 import org.eclipse.jdt.core.dom.MethodInvocation;
@@ -22,9 +27,13 @@ import org.eclipse.jdt.core.dom.StringLiteral;
 import org.eclipse.jdt.core.dom.SwitchCase;
 import org.eclipse.jdt.core.dom.SwitchStatement;
 import org.eclipse.jdt.core.dom.ThrowStatement;
+import org.eclipse.jdt.core.dom.VariableDeclarationStatement;
+import org.eclipse.jdt.core.dom.WhileStatement;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * "Replace if chain with switch" — a run of {@code else if} all testing one variable against constants.
@@ -49,8 +58,16 @@ import java.util.List;
  * gets nothing added; every other branch gets a {@code break;}. Missing one turns a chain that ran one
  * branch into a switch that runs the rest of them.</p>
  *
- * <p>Bodies are copied as written and re-indented one level. Nothing regenerates them, so comments and
- * formatting inside a branch survive.</p>
+ * <h3>And the branch has to mean the same thing once it is a case</h3>
+ *
+ * <p>Two of them, both silent, both found by a probe rather than by reading: a bare {@code break} in a
+ * branch was breaking a loop and would break the new {@code switch} instead, and two branches each
+ * declaring the same name were legal as separate {@code if} bodies and are one scope as a switch body. The
+ * first is refused, the second keeps its braces. See {@link #containsBareBreak} and
+ * {@code declaresAVariable}.</p>
+ *
+ * <p>Bodies are copied as written and re-indented one level through {@link Indent#reindent}. Nothing
+ * regenerates them, so comments and formatting inside a branch survive.</p>
  */
 final class SwitchIntentions {
 
@@ -84,7 +101,7 @@ final class SwitchIntentions {
             if (parsed == null) return;
 
             String source = context.source();
-            String indent = indentAt(source, chain.getStartPosition());
+            String indent = Indent.at(source, chain.getStartPosition());
             StringBuilder built = new StringBuilder("switch (").append(parsed.subject).append(") {\n");
             for (Branch branch : parsed.branches) {
                 built.append(indent).append("    case ").append(branch.label).append(":\n");
@@ -114,20 +131,54 @@ final class SwitchIntentions {
                     && context.touches(chain.getStartPosition(), chain.getThenStatement().getStartPosition());
         }
 
-        /** One branch's case label and the statement it runs. */
+        /**
+         * One branch's statements under their label, re-indented, with the {@code break} it needs.
+         *
+         * <h3>A branch that DECLARES something keeps its braces</h3>
+         *
+         * <p>A switch body is <b>one scope</b>, however many labels it has. Two branches that each declared
+         * {@code int a} were two separate blocks as an {@code if} chain and are one block as a switch — so
+         * unwrapping both produced a duplicate-variable error out of code that had none. Keeping the block
+         * gives the branch back the scope the {@code if} gave it, which is what IntelliJ writes here and for
+         * this reason.</p>
+         *
+         * <p>Only a declaration <b>directly</b> in the branch matters. One inside a nested {@code if} or
+         * block is already scoped by that, and wrapping for it would put braces around most branches.</p>
+         */
         private static void appendBody(StringBuilder built, Statement body, String source, String indent) {
-            String text = source.substring(body.getStartPosition(),
-                    body.getStartPosition() + body.getLength()).trim();
-            if (body instanceof Block) {
-                text = text.substring(1, text.length() - 1).trim();
-            }
-            for (String line : text.split("\n", -1)) {
-                built.append(indent).append(line.trim()).append('\n');
-            }
-            if (!leaves(body)) built.append(indent).append("break;\n");
+            boolean scoped = declaresAVariable(body);
+            String inner = scoped ? indent + "    " : indent;
+            if (scoped) built.append(indent).append("{\n");
+            String text = interiorOf(body, source);
+            if (!text.isEmpty()) built.append(Indent.reindent(text, inner)).append('\n');
+            if (!leaves(body)) built.append(inner).append("break;\n");
+            if (scoped) built.append(indent).append("}\n");
         }
 
-        /** Whether this branch already leaves the switch it is about to become part of. */
+        /** The branch's statements, without the braces the {@code if} wrote around them. */
+        private static String interiorOf(Statement body, String source) {
+            String text = Negation.textOf(body, source).trim();
+            if (!(body instanceof Block)) return text;
+            return text.substring(1, text.length() - 1).trim();
+        }
+
+        /** Whether this branch declares a name that the switch body's single scope would have to share. */
+        private static boolean declaresAVariable(Statement body) {
+            // A lone declaration is not a legal branch on its own -- `if (x) int a = 1;` does not parse --
+            // so only a block can be carrying one.
+            if (!(body instanceof Block)) return false;
+            for (Object each : ((Block) body).statements()) {
+                if (each instanceof VariableDeclarationStatement) return true;
+            }
+            return false;
+        }
+
+        /**
+         * Whether this branch already leaves the switch it is about to become part of.
+         *
+         * <p>{@code break} stays in the list even though {@link #containsBareBreak} has refused the whole
+         * conversion for an unlabeled one: {@code break outer;} still leaves, and still keeps its meaning.</p>
+         */
         private static boolean leaves(Statement body) {
             Statement last = body;
             if (body instanceof Block) {
@@ -167,21 +218,27 @@ final class SwitchIntentions {
     /** The chain as a switch, or null when any part of it is not one. */
     private static Chain parse(IfStatement head) {
         List<Branch> branches = new ArrayList<>();
+        Set<Object> labels = new LinkedHashSet<>();
         String subject = null;
         Statement otherwise = null;
 
         for (IfStatement at = head; at != null; ) {
-            String[] test = testOf(at.getExpression());
+            Test test = testOf(at.getExpression());
             if (test == null) return null;
             if (subject == null) {
-                subject = test[0];
-            } else if (!subject.equals(test[0])) {
+                if (!switchable(test.subject)) return null;
+                subject = test.subject.toString();
+            } else if (!subject.equals(test.subject.toString())) {
                 // EVERY BRANCH MUST TEST THE SAME VALUE. A chain that changes subject halfway is a chain,
                 // not a switch, and converting it would silently drop the other conditions.
                 return null;
             }
+            // TWO BRANCHES ON ONE CONSTANT are merely unreachable as a chain and a duplicate case label as
+            // a switch, which does not compile.
+            if (!labels.add(test.key)) return null;
             if (at.getThenStatement() == null) return null;
-            branches.add(new Branch(test[1], at.getThenStatement()));
+            if (containsBareBreak(at.getThenStatement())) return null;
+            branches.add(new Branch(test.label, at.getThenStatement()));
 
             Statement next = at.getElseStatement();
             if (next instanceof IfStatement) {
@@ -191,18 +248,35 @@ final class SwitchIntentions {
                 at = null;
             }
         }
+        if (otherwise != null && containsBareBreak(otherwise)) return null;
         return branches.size() >= MINIMUM_BRANCHES ? new Chain(subject, branches, otherwise) : null;
     }
 
+    /** One condition read as a case: what it tests, the label to write, and the constant that label is. */
+    private static final class Test {
+        final Expression subject;
+        final String label;
+        final Object key;
+
+        Test(Expression subject, Expression literal) {
+            this.subject = subject;
+            this.label = literal.toString();
+            Object constant = literal.resolveConstantExpressionValue();
+            // `case 'a'` AND `case 97` ARE ONE LABEL in an int switch, so a character compares as its code.
+            if (constant instanceof Character) constant = (int) (Character) constant;
+            this.key = constant != null ? constant : this.label;
+        }
+    }
+
     /**
-     * {@code {subject, caseLabel}} for a condition this can switch on, or null.
+     * The condition read as a case, or null.
      *
-     * <p>The subject is compared as <b>source text</b> rather than by binding, which is deliberate and is
-     * the conservative direction: two spellings of the same variable read as different subjects and refuse
-     * the conversion, where a binding comparison would accept them and then have to choose which spelling
-     * to write into the {@code switch} header.</p>
+     * <p>The subject is compared across branches as <b>source text</b> rather than by binding, which is
+     * deliberate and is the conservative direction: two spellings of the same variable read as different
+     * subjects and refuse the conversion, where a binding comparison would accept them and then have to
+     * choose which spelling to write into the {@code switch} header.</p>
      */
-    private static String[] testOf(Expression condition) {
+    private static Test testOf(Expression condition) {
         if (condition instanceof InfixExpression) {
             InfixExpression comparison = (InfixExpression) condition;
             if (comparison.getOperator() != InfixExpression.Operator.EQUALS
@@ -211,8 +285,8 @@ final class SwitchIntentions {
             }
             Expression left = comparison.getLeftOperand();
             Expression right = comparison.getRightOperand();
-            if (isName(left) && isSwitchableLiteral(right)) return new String[] {left.toString(), right.toString()};
-            if (isName(right) && isSwitchableLiteral(left)) return new String[] {right.toString(), left.toString()};
+            if (isName(left) && isSwitchableLiteral(right)) return new Test(left, right);
+            if (isName(right) && isSwitchableLiteral(left)) return new Test(right, left);
             return null;
         }
         if (condition instanceof MethodInvocation) {
@@ -221,15 +295,72 @@ final class SwitchIntentions {
             Expression receiver = call.getExpression();
             Expression argument = (Expression) call.arguments().get(0);
             if (receiver == null) return null;
-            if (isName(receiver) && argument instanceof StringLiteral) {
-                return new String[] {receiver.toString(), argument.toString()};
-            }
+            if (isName(receiver) && argument instanceof StringLiteral) return new Test(receiver, argument);
             // `"literal".equals(subject)` is the null-safe spelling and is at least as common.
-            if (receiver instanceof StringLiteral && isName(argument)) {
-                return new String[] {argument.toString(), receiver.toString()};
-            }
+            if (receiver instanceof StringLiteral && isName(argument)) return new Test(argument, receiver);
         }
         return null;
+    }
+
+    /**
+     * Whether a {@code switch} may take this value <b>at all</b>.
+     *
+     * <p>The switchable types are the integral ones up to {@code int}, their boxes, {@code String} and an
+     * enum — and nothing else. {@code if (n == 1)} on a {@code long} is perfectly ordinary code and became
+     * {@code switch (n)}, which is an error the chain did not have; the shape of the literal says nothing
+     * about the type of what it is compared to, so the subject's own binding is what decides.</p>
+     *
+     * <p>Enums are switchable and are refused earlier anyway, for the case label's sake — see the class
+     * javadoc.</p>
+     */
+    private static boolean switchable(Expression subject) {
+        ITypeBinding type = subject.resolveTypeBinding();
+        if (type == null) return false;
+        switch (type.isPrimitive() ? type.getName() : type.getQualifiedName()) {
+            case "int": case "short": case "byte": case "char":
+            case "java.lang.Integer": case "java.lang.Short": case "java.lang.Byte":
+            case "java.lang.Character": case "java.lang.String":
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /**
+     * Whether this statement contains a {@code break} that <b>would stop breaking what it breaks now</b>.
+     *
+     * <p>An unlabeled {@code break} inside an {@code if} chain has nothing to leave but a loop or a switch
+     * that <em>encloses</em> the chain. Make that branch a {@code case} and the nearest breakable thing
+     * becomes the new switch, so the loop it was ending now runs on: it compiles, and it is a different
+     * program. The reading that hid it is the one that looks most reasonable — {@code leaves()} saw the
+     * same {@code break} and concluded the branch already left, so it added nothing and everything looked
+     * consistent.</p>
+     *
+     * <p>The colon-to-arrow conversion asks the same question for a different reason: a switch rule may not
+     * complete abruptly with a {@code break} (JLS 14.11.2), so one left inside a group has no arrow form.</p>
+     *
+     * <p>Nested loops and switches are skipped — a {@code break} inside one of those already belongs to it
+     * and still will.</p>
+     */
+    private static boolean containsBareBreak(Statement body) {
+        boolean[] found = {false};
+        body.accept(new ASTVisitor() {
+            @Override public boolean visit(BreakStatement statement) {
+                if (statement.getLabel() == null) found[0] = true;
+                return false;
+            }
+
+            @Override public boolean visit(ForStatement nested) { return false; }
+
+            @Override public boolean visit(EnhancedForStatement nested) { return false; }
+
+            @Override public boolean visit(WhileStatement nested) { return false; }
+
+            @Override public boolean visit(DoStatement nested) { return false; }
+
+            @Override public boolean visit(SwitchStatement nested) { return false; }
+        });
+        return found[0];
     }
 
     private static boolean isName(Expression expression) {
@@ -239,16 +370,6 @@ final class SwitchIntentions {
     /** A number or a character — never an enum constant. @see SwitchIntentions */
     private static boolean isSwitchableLiteral(Expression expression) {
         return expression instanceof NumberLiteral || expression instanceof CharacterLiteral;
-    }
-
-    private static String indentAt(String source, int position) {
-        int lineStart = source.lastIndexOf('\n', Math.max(0, position - 1)) + 1;
-        int at = lineStart;
-        while (at < source.length() && at < position
-                && (source.charAt(at) == ' ' || source.charAt(at) == '\t')) {
-            at++;
-        }
-        return source.substring(lineStart, at);
     }
 
     /**
@@ -294,7 +415,7 @@ final class SwitchIntentions {
             if (groups == null) return;
 
             String source = context.source();
-            String indent = indentAt(source, switched.getStartPosition());
+            String indent = Indent.at(source, switched.getStartPosition());
             StringBuilder built = new StringBuilder("switch (")
                     .append(Negation.textOf(switched.getExpression(), source)).append(") {\n");
             for (Group group : groups) {
@@ -359,9 +480,8 @@ final class SwitchIntentions {
             }
             built.append("{\n");
             for (Statement statement : group.body) {
-                for (String line : Negation.textOf(statement, source).split("\n", -1)) {
-                    built.append(indent).append("        ").append(line.trim()).append('\n');
-                }
+                built.append(Indent.reindent(Negation.textOf(statement, source), indent + "        "))
+                        .append('\n');
             }
             built.append(indent).append("    }\n");
         }
@@ -415,6 +535,11 @@ final class SwitchIntentions {
         if (!pending.isEmpty()) groups.add(new Group(joined(pending), stripTrailingBreak(body)));
         for (Group group : groups) {
             if (group.body.isEmpty()) return null;
+            for (Statement statement : group.body) {
+                // A `break` STILL INSIDE THE GROUP breaks this switch, and a switch rule may not complete
+                // abruptly with one -- so there is no arrow form of it to write.
+                if (containsBareBreak(statement)) return null;
+            }
         }
         return groups.size() >= 2 ? groups : null;
     }

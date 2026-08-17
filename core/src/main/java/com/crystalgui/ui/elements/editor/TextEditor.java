@@ -546,7 +546,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         for (Diagnostic problem : problems) {
             int from = offsetOfPoint(problem.start());
             int to = Math.max(from, offsetOfPoint(problem.end()));
-            entries.add(DecorationSet.Entry.of(from, to, problem));
+            entries.add(DecorationSet.Entry.of(pastIndentIfWholeRow(from, to), to, problem));
         }
         // ALWAYS_GROWS: type at the start or the end of an underlined word and the new character is part of
         // the same mistake -- the mark should cover it, not sit beside it. Every other stickiness makes the
@@ -595,6 +595,31 @@ public class TextEditor extends ScrollerView implements UndoScope {
      */
     private int offsetOfPoint(TextPoint point) {
         return buffer.pointToOffset(point);
+    }
+
+    /**
+     * A mark that covers a whole row starts at that row's first non-whitespace character.
+     *
+     * <p>A producer that says "this row" — {@code Diagnostic.onRow}, which is what a compiler reporting
+     * only a line number produces, and what a runtime error out of a script engine produces — is pointing
+     * at the <em>statement</em>. Underlining the indentation in front of it marks text nobody claimed is
+     * wrong, and on a deeply nested line most of the squiggle is empty space, which reads as the mark
+     * being misaligned. IntelliJ trims to the first non-whitespace character for exactly this; VS Code
+     * draws the column-0 range literally, and its line-only producers are the ones people complain look
+     * off.</p>
+     *
+     * <p><b>Gated on the range covering the entire row</b>, so an explicit range that genuinely begins at
+     * column 0 — a producer that measured its own span and found it starts there — is left alone. A row
+     * that is nothing but whitespace is left alone too: there is no content to move onto, and collapsing
+     * the range would hide the mark completely.</p>
+     */
+    private int pastIndentIfWholeRow(int from, int to) {
+        Rope document = buffer.document();
+        int row = document.offsetToPoint(from).row();
+        if (from != document.lineStartOffset(row) || to != document.lineEndOffset(row)) return from;
+        int at = from;
+        while (at < to && Character.isWhitespace(document.charAt(at))) at++;
+        return at == to ? from : at;
     }
 
     /** Moves the caret to the next problem after it, wrapping. False when there are none. */

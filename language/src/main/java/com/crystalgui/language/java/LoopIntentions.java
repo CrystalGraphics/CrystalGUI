@@ -178,27 +178,58 @@ final class LoopIntentions {
         loop.getBody().accept(new ASTVisitor() {
             @Override public boolean visit(SimpleName name) {
                 if (!isNamed(name, counted.index)) return true;
-                ASTNode parent = name.getParent();
-                if (counted.array && parent instanceof ArrayAccess
-                        && ((ArrayAccess) parent).getIndex() == name
-                        && sameSequence(((ArrayAccess) parent).getArray(), counted.sequence)) {
-                    fetches.add((Expression) parent);
-                    return true;
+                Expression fetch = fetchAt(name, counted);
+                if (fetch == null || writtenThrough(fetch)) {
+                    otherUse[0] = true;
+                    return false;
                 }
-                if (!counted.array && parent instanceof MethodInvocation) {
-                    MethodInvocation call = (MethodInvocation) parent;
-                    if ("get".equals(call.getName().getIdentifier()) && call.arguments().size() == 1
-                            && call.arguments().get(0) == name && call.getExpression() != null
-                            && sameSequence(call.getExpression(), counted.sequence)) {
-                        fetches.add(call);
-                        return true;
-                    }
-                }
-                otherUse[0] = true;
-                return false;
+                fetches.add(fetch);
+                return true;
             }
         });
         return otherUse[0] ? null : fetches;
+    }
+
+    /** The {@code seq[i]} or {@code seq.get(i)} this use of the index is the index of, or null. */
+    private static Expression fetchAt(SimpleName name, Counted counted) {
+        ASTNode parent = name.getParent();
+        if (counted.array && parent instanceof ArrayAccess
+                && ((ArrayAccess) parent).getIndex() == name
+                && sameSequence(((ArrayAccess) parent).getArray(), counted.sequence)) {
+            return (Expression) parent;
+        }
+        if (!counted.array && parent instanceof MethodInvocation) {
+            MethodInvocation call = (MethodInvocation) parent;
+            if ("get".equals(call.getName().getIdentifier()) && call.arguments().size() == 1
+                    && call.arguments().get(0) == name && call.getExpression() != null
+                    && sameSequence(call.getExpression(), counted.sequence)) {
+                return call;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Whether the loop <b>writes</b> through this fetch — {@code xs[i] = 0}, {@code xs[i]++},
+     * {@code xs[i] += 1}.
+     *
+     * <p>A write is not a fetch, and reading it as one is the worst outcome this layer has: the element
+     * variable replaces the array slot, so {@code xs[i] = 0} becomes {@code element = 0}, which assigns to
+     * the loop's own copy. It compiles, it is offered as <em>preferred</em>, and the loop it produces does
+     * nothing at all. The enhanced form has no way to say "store here" — that is exactly the index it does
+     * not give back — so the only correct answer is to refuse the conversion.</p>
+     */
+    private static boolean writtenThrough(Expression fetch) {
+        ASTNode parent = fetch.getParent();
+        if (parent instanceof Assignment) return ((Assignment) parent).getLeftHandSide() == fetch;
+        if (parent instanceof PostfixExpression) return ((PostfixExpression) parent).getOperand() == fetch;
+        if (parent instanceof PrefixExpression) {
+            PrefixExpression.Operator operator = ((PrefixExpression) parent).getOperator();
+            return ((PrefixExpression) parent).getOperand() == fetch
+                    && (operator == PrefixExpression.Operator.INCREMENT
+                        || operator == PrefixExpression.Operator.DECREMENT);
+        }
+        return false;
     }
 
     // ── Small questions ─────────────────────────────────────────────────────────────────────────
