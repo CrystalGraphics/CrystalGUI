@@ -63,7 +63,9 @@ public class JsSandboxTest {
     public void restoreTheOpenPosture() {
         // THE POLICY IS PROCESS-WIDE, so a test that left one installed would restrict every later test in
         // the JVM -- and the failure would look like resolution breaking rather than like a leaked posture.
-        JsLanguage.restrictTo(ScriptPolicy.allowAll());
+        // BOTH POSTURES AT ONCE: the mapping is static for the same reason and leaks the same way, so one
+        // call restores them and a new test cannot restore half.
+        JsLanguage.resetPosturesForTesting();
     }
 
     /** Only `java.util`, so ArrayList is reachable and System is not. */

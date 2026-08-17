@@ -144,8 +144,7 @@ public final class RhinoExecutor implements JsExecutor {
         return RhinoThread.with(() -> {
             Context cx = FACTORY.enterContext();
             try {
-                return new CompiledScript(cx.compileString(text, name, 1, null),
-                        Collections.<String>emptyList());
+                return new CompiledScript(cx.compileString(text, name, 1, null), List.of());
             } catch (EvaluatorException refused) {
                 // AN ORDINARY OUTCOME, not an exception the shell has to catch. The analyser has usually
                 // already put the same problem on the same offsets in the editor; this is only the gate

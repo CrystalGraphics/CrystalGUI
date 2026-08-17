@@ -91,8 +91,6 @@ public final class JsHost implements ScriptRuntime {
     @Nullable
     private RunSessions sessions;
 
-
-
     public JsHost(JsExecutor executor) {
         this(executor, null);
     }
@@ -145,11 +143,13 @@ public final class JsHost implements ScriptRuntime {
     @Override
     public Compiled compileScript(String scriptName, String source, Map<String, String> bindingTypes) {
         String name = scriptName == null || scriptName.isEmpty() ? "script.js" : scriptName;
-        // BINDING TYPES ARE IGNORED, and that is not an omission. A binding is declared to the Java
-        // compiler as a typed field because Java needs one; JavaScript takes the VALUE at run time and
-        // has nothing to declare, so the type half of `ScriptBindings` simply does not apply here. The
-        // parameter stays on the seam because the seam serves both.
-        return new JsCompiled(this, executor.compile(name, source == null ? "" : source));
+        // BINDING TYPES ARE NOT NEEDED TO COMPILE. A binding is declared to the Java compiler as a typed
+        // field because Java needs one; JavaScript takes the VALUE at run time and has nothing to declare,
+        // so there is no prelude here and no type to emit. They are not unused, though -- the ANALYSER
+        // reads the same declarations, through `JsSourceAnalyzer.useHostBindings`, which is what lets a
+        // binding be coloured as a global and its Java members offered before anything has run.
+        String text = source == null ? "" : source;
+        return new JsCompiled(this, executor.compile(name, text), text);
     }
 
     // ── Run ─────────────────────────────────────────────────────────────────────────────────────
@@ -228,7 +228,7 @@ public final class JsHost implements ScriptRuntime {
                     + compiled.messages());
         }
         return new Running(compiled.engineCompiled(), bindings == null ? Map.of() : bindings,
-                compiled.ref());
+                compiled.ref(), compiled.sourceAsRun());
     }
 
     // ── Stop ────────────────────────────────────────────────────────────────────────────────────
@@ -297,10 +297,15 @@ public final class JsHost implements ScriptRuntime {
         volatile Thread thread;
         volatile boolean stopRequested;
 
-        Running(JsExecutor.Compiled compiled, Map<String, Object> bindings, @Nullable ScriptRef ref) {
+        /** The text that was compiled — what a runtime position means, and nothing else. @see #publishFailure */
+        private final String sourceAsRun;
+
+        Running(JsExecutor.Compiled compiled, Map<String, Object> bindings, @Nullable ScriptRef ref,
+                String sourceAsRun) {
             this.compiled = compiled;
             this.bindings = bindings;
             this.ref = ref;
+            this.sourceAsRun = sourceAsRun;
         }
 
         private void report(RunState state) {
@@ -440,13 +445,16 @@ public final class JsHost implements ScriptRuntime {
             Resource file = ref.file();
             AnalysedLanguageServices services = AnalysedLanguageServices.attachedTo(file);
             if (services == null) return;
+            // WITH THE TEXT THAT RAN. A run takes time and the file is edited while it runs, so the row
+            // the engine reports means something only against the source it compiled -- converting it
+            // against the buffer as it is now puts the mark one row off per line typed above.
             if (scheduler == null) {
-                services.reportRuntimeProblems(problems);
+                services.reportRuntimeProblems(problems, sourceAsRun);
                 return;
             }
             scheduler.<List<Diagnostic>>job(JobKey.of(JsHost.this, "js-runtime-problems"),
                             JobLane.LATENCY, context -> problems)
-                    .onDone(services::reportRuntimeProblems)
+                    .onDone(reported -> services.reportRuntimeProblems(reported, sourceAsRun))
                     .submit();
         }
     }
@@ -489,11 +497,18 @@ public final class JsHost implements ScriptRuntime {
 
         private final JsHost host;
         private final JsExecutor.Compiled compiled;
+        private final String sourceAsRun;
         private ScriptRef ref;
 
-        JsCompiled(JsHost host, JsExecutor.Compiled compiled) {
+        JsCompiled(JsHost host, JsExecutor.Compiled compiled, String sourceAsRun) {
             this.host = host;
             this.compiled = compiled;
+            this.sourceAsRun = sourceAsRun;
+        }
+
+        /** The exact text this was compiled from — the only document a runtime position describes. */
+        String sourceAsRun() {
+            return sourceAsRun;
         }
 
         @Override

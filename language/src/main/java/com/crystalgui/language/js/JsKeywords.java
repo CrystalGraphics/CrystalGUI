@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Predicate;
 
 /**
@@ -94,7 +95,7 @@ final class JsKeywords {
      * can be accepted at all. The fix catalog asks the other question — "would this band take it" — and
      * needs the full set.</p>
      */
-    private static final java.util.Set<String> NOT_OFFERED = java.util.Set.of("template");
+    private static final Set<String> NOT_OFFERED = Set.of("template");
 
     /** Everything the engine takes, keyword or construct — what the fix catalog gates on. */
     static List<String> measuredBy(Predicate<String> parses) {

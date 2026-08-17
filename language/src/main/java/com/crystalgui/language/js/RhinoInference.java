@@ -2,6 +2,7 @@ package com.crystalgui.language.js;
 
 import com.crystalgui.text.lang.TypeRef;
 
+import org.mozilla.javascript.Node;
 import org.mozilla.javascript.ast.ArrayLiteral;
 import org.mozilla.javascript.ast.AstNode;
 import org.mozilla.javascript.ast.FunctionCall;
@@ -135,7 +136,7 @@ final class RhinoInference {
      */
     @Nullable
     private static AstNode leftOf(ObjectProperty property) {
-        for (org.mozilla.javascript.Node child : property) {
+        for (Node child : property) {
             return child instanceof AstNode ? (AstNode) child : null;
         }
         return null;

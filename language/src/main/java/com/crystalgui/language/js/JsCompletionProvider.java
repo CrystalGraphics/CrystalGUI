@@ -20,6 +20,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -61,6 +63,9 @@ final class JsCompletionProvider implements CompletionProvider {
     /** The type whose members every other JavaScript object inherits. Java's is {@code java.lang.Object}. */
     private static final String OBJECT_PROTOTYPE = "Object.prototype";
 
+    /** And Java's, for the member lists that come from the Java engine. @see #itemFor */
+    private static final String JAVA_LANG_OBJECT = "java.lang.Object";
+
     /**
      * The names a script reaches Java through — offered in open code once something has been typed.
      *
@@ -70,16 +75,19 @@ final class JsCompletionProvider implements CompletionProvider {
     private static final String[] PACKAGE_ROOTS = {"java", "javax", "org", "com", "edu", "net",
             "Packages"};
 
-    /** What every JavaScript scope has, whatever the script did. */
-    private static final String[] GLOBALS = {"Array", "Boolean", "Date", "Error", "Function", "JSON",
-            "Java", "Math", "NaN", "Number", "Object", "RegExp", "String", "console", "decodeURI",
-            "decodeURIComponent", "encodeURI", "encodeURIComponent", "eval", "isFinite", "isNaN",
-            "parseFloat", "parseInt", "print", "prompt", "readLine", "undefined"};
-
     private final TextBuffer buffer;
     private final Supplier<Analysis> analysis;
     private final Supplier<LiveScopeSnapshot> liveScope;
     private final Supplier<List<String>> keywords;
+
+    /**
+     * What the engine has without anybody declaring it — <b>asked of the engine</b>.
+     *
+     * <p>This was a 26-name array in this file, which is the one thing {@code RhinoGlobals} exists to
+     * avoid: which globals exist differs per band, and the copy had already drifted past {@code Map},
+     * {@code Set}, {@code Symbol}, {@code Promise}, {@code Infinity} and {@code Packages}.</p>
+     */
+    private final Supplier<List<String>> globals;
     @Nullable private final TypeIndex types;
 
     /** What a script may reach — so a refused type is never offered inside {@code Java.type("…")}. */
@@ -89,7 +97,7 @@ final class JsCompletionProvider implements CompletionProvider {
      * Analyses arbitrary text — only for the probe parse, and only when the ordinary analysis could not
      * resolve a receiver, so the common case where a prefix has been typed pays nothing for it.
      */
-    @Nullable private final java.util.function.Function<String, Analysis> reanalyse;
+    @Nullable private final Function<String, Analysis> reanalyse;
 
     /** Set when an answer drew on a bounded sample, so the session must ask again as the query narrows. */
     private boolean sampled;
@@ -105,19 +113,21 @@ final class JsCompletionProvider implements CompletionProvider {
 
     JsCompletionProvider(TextBuffer buffer, Supplier<Analysis> analysis,
                          Supplier<LiveScopeSnapshot> liveScope, Supplier<List<String>> keywords,
+                         Supplier<List<String>> globals,
                          @Nullable TypeIndex types, Supplier<ScriptPolicy> policy,
-                         @Nullable java.util.function.Function<String, Analysis> reanalyse) {
+                         @Nullable Function<String, Analysis> reanalyse) {
         this.buffer = buffer;
         this.analysis = analysis;
         this.liveScope = liveScope;
         this.keywords = keywords;
+        this.globals = globals == null ? List::of : globals;
         this.types = types;
         this.policy = policy == null ? ScriptPolicy::allowAll : policy;
         this.reanalyse = reanalyse;
     }
 
     @Override
-    public void complete(Request request, java.util.function.Consumer<Versioned<CompletionList>> answer) {
+    public void complete(Request request, Consumer<Versioned<CompletionList>> answer) {
         Analysis current = analysis.get();
         if (current == null) {
             answer.accept(Versioned.of(buffer.version(), CompletionList.EMPTY));
@@ -206,10 +216,12 @@ final class JsCompletionProvider implements CompletionProvider {
 
         if (!items.isEmpty()) return items;
 
-        // NOTHING KNOWN ABOUT THE RECEIVER. A dynamic language earns this case honestly -- `make().` may
-        // have no knowable type at all -- so rather than an empty popup, offer what exists and say the
-        // answer is partial. Java probes with an inserted name instead, which works there because a Java
-        // receiver always has a static type to recover.
+        // NOTHING KNOWN ABOUT THE RECEIVER -- and that has to mean NO TYPE, not "a type with nothing on
+        // it". A receiver that resolved to `string` or `Array` and came back empty sent us here, so the
+        // popup offered every global the last run left AS MEMBERS OF A STRING. With the prototypes
+        // readable that is now a real answer; this stays for the case a dynamic language earns honestly,
+        // where `make().` has no knowable type at all.
+        if (type != null) return items;
         sampled = true;
         for (String name : liveScope.get().names()) {
             if (seen.add(name)) items.add(globalItem(name));
@@ -295,7 +307,7 @@ final class JsCompletionProvider implements CompletionProvider {
         for (SymbolInfo symbol : current.symbolsInScope(request.offset())) {
             if (seen.add(symbol.name())) items.add(itemFor(symbol));
         }
-        for (String global : GLOBALS) {
+        for (String global : globals.get()) {
             if (seen.add(global)) items.add(globalItem(global));
         }
         for (String keyword : keywords.get()) {
@@ -423,7 +435,12 @@ final class JsCompletionProvider implements CompletionProvider {
         // a no-argument method left the caret inside `()` with nothing to put there. One converter means a
         // rule like that is decided once instead of per language.
         return CompletionItem.builderFrom(symbol)
-                .inheritedFromObject(OBJECT_PROTOTYPE.equals(symbol.container()))
+                // BOTH ROOTS, because a member list reached from JavaScript is routinely JAVA's. Marking
+                // only `Object.prototype` left `toString`, `hashCode`, `wait` and `notify` at full rank in
+                // every `new java.util.ArrayList().` list -- the exact de-emphasis this flag exists for,
+                // applied to the language whose objects are less often the ones being completed.
+                .inheritedFromObject(OBJECT_PROTOTYPE.equals(symbol.container())
+                        || JAVA_LANG_OBJECT.equals(symbol.container()))
                 .build();
     }
 
@@ -436,7 +453,7 @@ final class JsCompletionProvider implements CompletionProvider {
      * the honest answer and is what {@code needsResolution()} expects.</p>
      */
     @Override
-    public void resolveItem(CompletionItem item, java.util.function.Consumer<CompletionItem> answer) {
+    public void resolveItem(CompletionItem item, Consumer<CompletionItem> answer) {
         answer.accept(item);
     }
 }
