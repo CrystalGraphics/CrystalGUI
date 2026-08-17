@@ -459,14 +459,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /** Spaces per tab stop. Separate from {@link #indentWidth}, exactly as VS Code separates the two. */
     private int tabSize = 4;
 
-    /**
-     * Which blocks are foldable and which are closed.
-     *
-     * <p><b>View state, not document state</b>, by the same boundary the engine draws for undo: it is how
-     * you are looking at the file, not what the file says. So it never reaches {@code UndoStack} and Ctrl+Z
-     * will not unfold — which is what VS Code and IntelliJ both do, and the same rule that keeps scroll
-     * position and selection out of the history.</p>
-     */
     // ── View parts ──────────────────────────────────────────────────────────────────────────────
     //
     // VS Code's decomposition, ported: each piece of the view owns its own elements and places them in
@@ -709,6 +701,14 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
 
+    /**
+     * Which blocks are foldable and which are closed.
+     *
+     * <p><b>View state, not document state</b>, by the same boundary the engine draws for undo: it is how
+     * you are looking at the file, not what the file says. So it never reaches {@code UndoStack} and Ctrl+Z
+     * will not unfold — which is what VS Code and IntelliJ both do, and the same rule that keeps scroll
+     * position and selection out of the history.</p>
+     */
     private final FoldingModel folding = new FoldingModel();
 
     /**
@@ -1958,28 +1958,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private final int[] resolveSerials = new int[4];
 
     /**
-     * Resolve the name at {@code offset} and hand the answer over, or report that nothing was asked.
-     *
-     * <h3>A serial per DESTINATION, not per feature and not one for everything</h3>
-     *
-     * <p>The serial exists to drop an answer for a request the user has replaced — so two requests
-     * supersede each other exactly when they would write to the same place. {@code Ctrl+Q} and hover share
-     * a lane because they fill one popup and the later one genuinely replaces the earlier;
-     * go-to-definition has its own because it moves the caret instead, and nothing about asking for
-     * documentation means you stopped wanting the jump.</p>
-     *
-     * <p>This was <b>one</b> shared serial until hover arrived, on the reasoning that the user's last
-     * action should win. Hover is what makes that wrong: it is ambient rather than an action, so a single
-     * lane let a stray mouse movement one pixel after {@code Ctrl+B} silently eat the jump — and only
-     * sometimes, depending on which resolve finished first.</p>
-     *
-     * <p>Both discards live here rather than at each call site because they are one line each and silent
-     * to omit: neither produces an error, both produce a confident answer about a position the user has
-     * left.</p>
-     *
-     * @return whether a request was issued — false means no engine, which is the ordinary case
-     */
-    /**
      * The problems covering {@code offset} <b>right now</b>, nearest-first.
      *
      * <p>Read from the decoration lane rather than from {@link DiagnosticSet}, and that is the whole
@@ -2067,6 +2045,28 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return true;
     }
 
+    /**
+     * Resolve the name at {@code offset} and hand the answer over, or report that nothing was asked.
+     *
+     * <h3>A serial per DESTINATION, not per feature and not one for everything</h3>
+     *
+     * <p>The serial exists to drop an answer for a request the user has replaced — so two requests
+     * supersede each other exactly when they would write to the same place. {@code Ctrl+Q} and hover share
+     * a lane because they fill one popup and the later one genuinely replaces the earlier;
+     * go-to-definition has its own because it moves the caret instead, and nothing about asking for
+     * documentation means you stopped wanting the jump.</p>
+     *
+     * <p>This was <b>one</b> shared serial until hover arrived, on the reasoning that the user's last
+     * action should win. Hover is what makes that wrong: it is ambient rather than an action, so a single
+     * lane let a stray mouse movement one pixel after {@code Ctrl+B} silently eat the jump — and only
+     * sometimes, depending on which resolve finished first.</p>
+     *
+     * <p>Both discards live here rather than at each call site because they are one line each and silent
+     * to omit: neither produces an error, both produce a confident answer about a position the user has
+     * left.</p>
+     *
+     * @return whether a request was issued — false means no engine, which is the ordinary case
+     */
     private boolean resolveAt(int lane, int offset, java.util.function.Consumer<SymbolInfo> onResolved) {
         if (languageServices == null) return false;
         final int serial = ++resolveSerials[lane];
@@ -2083,29 +2083,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return true;
     }
 
-    /**
-     * Resolve the name at the caret and go to where it is declared — {@code Ctrl+B}, and Ctrl+Click.
-     *
-     * <h3>Three ways this legitimately does nothing, and none of them is a failure</h3>
-     *
-     * <p>No engine ({@code languageServices == null}) is the three-tier absence rule and the ordinary case
-     * for a language that will never have one. A null {@link SymbolInfo#declaration()} is
-     * {@link DeclarationSite}'s own documented ordinary case — a member of a compiled class with no source
-     * attached, which is most of the JDK. And the callback may simply never fire, which
-     * {@link com.crystalgui.text.lang.Resolver} states as its contract for a superseded request. So this
-     * reports whether it <em>asked</em>, never whether it arrived: anything keyed on an answer coming back
-     * would hang open on the one path designed to produce silence.</p>
-     *
-     * <h3>Two independent discards, and dropping either produces a confidently wrong jump</h3>
-     *
-     * <p><b>Version</b> — an answer computed against text that has since been edited names a row that now
-     * holds something else, so it is discarded exactly as a stale diagnostic list is. <b>Request
-     * identity</b> — the caret moves, and an answer for the <em>previous</em> caret would jump somewhere
-     * the user stopped asking about. The serial is {@code CompletionSession}'s own guard, for the same
-     * reason and in the same shape.</p>
-     *
-     * @return whether a request was issued at all
-     */
     @Nullable
     private DocumentationPopup docPopup;
 
@@ -2338,6 +2315,29 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
 
+    /**
+     * Resolve the name at the caret and go to where it is declared — {@code Ctrl+B}, and Ctrl+Click.
+     *
+     * <h3>Three ways this legitimately does nothing, and none of them is a failure</h3>
+     *
+     * <p>No engine ({@code languageServices == null}) is the three-tier absence rule and the ordinary case
+     * for a language that will never have one. A null {@link SymbolInfo#declaration()} is
+     * {@link DeclarationSite}'s own documented ordinary case — a member of a compiled class with no source
+     * attached, which is most of the JDK. And the callback may simply never fire, which
+     * {@link com.crystalgui.text.lang.Resolver} states as its contract for a superseded request. So this
+     * reports whether it <em>asked</em>, never whether it arrived: anything keyed on an answer coming back
+     * would hang open on the one path designed to produce silence.</p>
+     *
+     * <h3>Two independent discards, and dropping either produces a confidently wrong jump</h3>
+     *
+     * <p><b>Version</b> — an answer computed against text that has since been edited names a row that now
+     * holds something else, so it is discarded exactly as a stale diagnostic list is. <b>Request
+     * identity</b> — the caret moves, and an answer for the <em>previous</em> caret would jump somewhere
+     * the user stopped asking about. The serial is {@code CompletionSession}'s own guard, for the same
+     * reason and in the same shape.</p>
+     *
+     * @return whether a request was issued at all
+     */
     public boolean goToDefinition() {
         return resolveAt(LANE_DEFINITION, getCaret(), symbol -> {
             DeclarationSite site = symbol.declaration();
@@ -3549,14 +3549,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
                 new Change(primary.start(), primary.end(), replacement))));
     }
 
-    // ── Helpers ─────────────────────────────────────────────────────────────────────────────────
-
-
-
     // ── Bracket matching ────────────────────────────────────────────────────────────────────────
 
-    private static final String OPENERS = "([{";
-    private static final String CLOSERS = ")]}";
 
     /**
      * Finds the bracket at the caret and its partner, or clears the pair.
@@ -3672,8 +3666,26 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     private int matchAt(int offset) {
         if (offset < 0 || offset >= buffer.length()) return -1;
-        char c = buffer.document().charAt(offset);
-        return OPENERS.indexOf(c) >= 0 || CLOSERS.indexOf(c) >= 0 ? offset : -1;
+        return partnerOf(buffer.document().charAt(offset)) != 0 ? offset : -1;
+    }
+
+    /**
+     * The other half of the pair {@code c} belongs to, or {@code 0}.
+     *
+     * <p>From the {@link Language}, which already knows the pairs — the matcher used to carry its own
+     * {@code "([{"} and {@code ")]}"} beside it, which is two definitions of "a bracket" and the one that
+     * cannot be taught a language whose blocks are spelled differently.</p>
+     *
+     * <p><b>A self-closing pair is refused.</b> A quote's opener and closer are the same character, so
+     * there is nothing to count depth on: a matcher that believed {@code isCloser} about it would scan for
+     * the "partner" of a quote and land on whichever quote came next in the file.</p>
+     */
+    private char partnerOf(char c) {
+        if (language.isSelfClosing(c)) return 0;
+        Character closer = language.structuralCloserFor(c);
+        if (closer != null) return closer;
+        Character opener = language.structuralOpenerFor(c);
+        return opener != null ? opener : 0;
     }
 
     /**
@@ -3685,17 +3697,27 @@ public class TextEditor extends ScrollerView implements UndoScope {
      */
     private int matchingBracket(int offset) {
         char bracket = buffer.document().charAt(offset);
-        int openIndex = OPENERS.indexOf(bracket);
-        boolean forward = openIndex >= 0;
-        char partner = forward ? CLOSERS.charAt(openIndex) : OPENERS.charAt(CLOSERS.indexOf(bracket));
+        char partner = partnerOf(bracket);
+        if (partner == 0) return -1;
+        boolean forward = language.structuralCloserFor(bracket) != null;
+        // A BRACKET INSIDE A STRING OR A COMMENT IS NOT PUNCTUATION, and the anchor's own state is what
+        // decides which candidates count. Without this, `(` in `"("` counted the next real `)` in the
+        // file and drew a pair spanning code it had nothing to do with -- and the highlight looked
+        // authoritative while doing it. Both references skip token types that are not brackets.
+        //
+        // Asked only of candidates, never of every character: `isInCommentOrString` tokenizes a window,
+        // and a scan bounded at BRACKET_SCAN_LIMIT holds a few dozen brackets rather than thousands.
+        boolean anchorQuoted = isInCommentOrString(offset);
         int step = forward ? 1 : -1;
         int depth = 0;
         int limit = Math.min(BRACKET_SCAN_LIMIT, buffer.length());
         for (int i = 0, at = offset; i < limit; i++, at += step) {
             if (at < 0 || at >= buffer.length()) return -1;
             char c = buffer.document().charAt(at);
+            if (c != bracket && c != partner) continue;
+            if (isInCommentOrString(at) != anchorQuoted) continue;
             if (c == bracket) depth++;
-            else if (c == partner && --depth == 0) return at;
+            else if (--depth == 0) return at;
         }
         return -1;
     }
@@ -4139,7 +4161,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return gutterVisible ? cachedFoldWidth : 0f;
     }
 
-    /** The vertical equivalent, for the same reason. */
     // ── Seams for the view parts ────────────────────────────────────────────────────────────────
     //
     // Package-private, and deliberately not public API. A view part is a piece of THIS widget rather
@@ -5612,13 +5633,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     /**
-     * Routes {@link UiDataKeys#UNDO_STACK} through the same walk everything else uses.
-     *
-     * <p>Without this the key would answer null for this widget while {@code UndoScope.nearest} found a
-     * stack — two mechanisms disagreeing about the same question, which is the thing {@code DataContext}
-     * exists to stop.</p>
-     */
-    /**
      * What Cut/Copy/Paste mean in a text editor. @see com.crystalgui.ui.ClipboardActions
      *
      * <p>Held rather than built per call: {@code getData} is asked while a menu is being built, once per
@@ -5665,6 +5679,13 @@ public class TextEditor extends ScrollerView implements UndoScope {
         }
     };
 
+    /**
+     * Routes {@link UiDataKeys#UNDO_STACK} through the same walk everything else uses.
+     *
+     * <p>Without this the key would answer null for this widget while {@code UndoScope.nearest} found a
+     * stack — two mechanisms disagreeing about the same question, which is the thing {@code DataContext}
+     * exists to stop.</p>
+     */
     @Override
     public Object getData(DataKey<?> key) {
         if (key == UiDataKeys.CLIPBOARD) return clipboardActions;

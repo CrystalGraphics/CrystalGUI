@@ -7,6 +7,7 @@ import com.crystalgraphics.platform.service.CgInputService;
 import com.crystalgui.testsupport.TestPlatformService;
 import com.crystalgui.testsupport.UiTestBase;
 import org.junit.Before;
+import com.crystalgui.text.syntax.Language;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.elements.editor.TextEditor;
@@ -545,6 +546,37 @@ public class TextEditorTest extends UiTestBase {
     public void anUnmatchedBracketHighlightsNothing() {
         build("(a");
         editor.setCaret(1);
+        settle();
+        editor.updateWindow();
+        settle();
+
+        assertFalse(lineHasHighlight(0, "bracket"));
+    }
+
+    /**
+     * <b>A bracket inside a string is not punctuation.</b> The scan counted characters with no idea what
+     * they were, so the {@code (} in {@code "("} counted the next real {@code )} in the file and drew a
+     * pair spanning code it had nothing to do with — authoritatively, which is the part that makes it
+     * worth a test rather than a shrug.
+     */
+    @Test
+    public void aBracketInsideAStringDoesNotMatchOneOutsideIt() {
+        build("String s = \"(\"; foo(a);");
+        editor.setLanguage(Language.java());
+        editor.setCaret(12);              // on the '(' inside the string literal
+        settle();
+        editor.updateWindow();
+        settle();
+
+        assertFalse("there is no partner inside the literal", lineHasHighlight(0, "bracket"));
+    }
+
+    /** And a quote is not a bracket: its two halves are the same character, so there is no depth. */
+    @Test
+    public void aQuoteIsNotTreatedAsABracket() {
+        build("String s = \"ab\";");
+        editor.setLanguage(Language.java());
+        editor.setCaret(11);              // on the opening quote
         settle();
         editor.updateWindow();
         settle();
