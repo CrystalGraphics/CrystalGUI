@@ -8,7 +8,6 @@ import org.eclipse.jdt.core.dom.AST;
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTVisitor;
 import org.eclipse.jdt.core.dom.AbstractTypeDeclaration;
-import org.eclipse.jdt.core.dom.AnonymousClassDeclaration;
 import org.eclipse.jdt.core.dom.ArrayType;
 import org.eclipse.jdt.core.dom.Assignment;
 import org.eclipse.jdt.core.dom.Block;
@@ -22,7 +21,6 @@ import org.eclipse.jdt.core.dom.ExpressionStatement;
 import org.eclipse.jdt.core.dom.FieldDeclaration;
 import org.eclipse.jdt.core.dom.ITypeBinding;
 import org.eclipse.jdt.core.dom.IfStatement;
-import org.eclipse.jdt.core.dom.Initializer;
 import org.eclipse.jdt.core.dom.LambdaExpression;
 import org.eclipse.jdt.core.dom.MethodDeclaration;
 import org.eclipse.jdt.core.dom.MethodInvocation;
@@ -109,7 +107,7 @@ final class CreateCorrections {
             MethodInvocation call = (MethodInvocation) name.getParent();
             if (call.getName() != name) return;
 
-            ITypeBinding here = enclosingTypeOf(call);
+            ITypeBinding here = Scopes.enclosingTypeBinding(call);
             ITypeBinding receiver = call.getExpression() == null ? here : call.getExpression().resolveTypeBinding();
             if (receiver == null) return;
             AbstractTypeDeclaration target = declarationOf(context, receiver);
@@ -194,14 +192,6 @@ final class CreateCorrections {
             return found[0];
         }
 
-        private static ITypeBinding enclosingTypeOf(ASTNode node) {
-            for (ASTNode at = node.getParent(); at != null; at = at.getParent()) {
-                if (at instanceof AbstractTypeDeclaration) return ((AbstractTypeDeclaration) at).resolveBinding();
-                if (at instanceof AnonymousClassDeclaration) return ((AnonymousClassDeclaration) at).resolveBinding();
-            }
-            return null;
-        }
-
         /** {@code Foo.bar()} — the receiver is a type — or a bare call from a static method or initialiser. */
         private static boolean isStaticCall(MethodInvocation call, ITypeBinding here) {
             Expression receiver = call.getExpression();
@@ -209,13 +199,7 @@ final class CreateCorrections {
                 return ((Name) receiver).resolveBinding() instanceof ITypeBinding;
             }
             if (receiver != null) return false;
-            for (ASTNode at = call.getParent(); at != null; at = at.getParent()) {
-                if (at instanceof MethodDeclaration) return Modifier.isStatic(((MethodDeclaration) at).getModifiers());
-                if (at instanceof Initializer) return Modifier.isStatic(((Initializer) at).getModifiers());
-                if (at instanceof FieldDeclaration) return Modifier.isStatic(((FieldDeclaration) at).getModifiers());
-                if (at instanceof BodyDeclaration || at instanceof AnonymousClassDeclaration) return false;
-            }
-            return false;
+            return Scopes.isStaticContext(call);
         }
 
         // ── Types ───────────────────────────────────────────────────────────────────────────────
@@ -394,7 +378,7 @@ final class CreateCorrections {
             made.setConstructor(true);
             made.setName(ast.newSimpleName(declaration.getName().getIdentifier()));
 
-            ITypeBinding here = CreateMethod.enclosingTypeOf(creation);
+            ITypeBinding here = Scopes.enclosingTypeBinding(creation);
             boolean sameType = here != null && here.getErasure().isEqualTo(target.getErasure());
             made.modifiers().add(ast.newModifier(sameType
                     ? Modifier.ModifierKeyword.PRIVATE_KEYWORD : Modifier.ModifierKeyword.PUBLIC_KEYWORD));

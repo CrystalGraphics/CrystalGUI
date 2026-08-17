@@ -7,7 +7,6 @@ import org.eclipse.jdt.core.compiler.IProblem;
 import org.eclipse.jdt.core.dom.AST;
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTVisitor;
-import org.eclipse.jdt.core.dom.AnonymousClassDeclaration;
 import org.eclipse.jdt.core.dom.Assignment;
 import org.eclipse.jdt.core.dom.Block;
 import org.eclipse.jdt.core.dom.CatchClause;
@@ -215,14 +214,8 @@ final class ExceptionCorrections {
          * that throws.
          */
         private static MethodDeclaration enclosingMethod(Statement statement) {
-            for (ASTNode at = statement.getParent(); at != null; at = at.getParent()) {
-                if (at instanceof MethodDeclaration) return (MethodDeclaration) at;
-                if (at instanceof LambdaExpression || at instanceof Initializer
-                        || at instanceof AnonymousClassDeclaration) {
-                    return null;
-                }
-            }
-            return null;
+            return Scopes.enclosingMethod(statement,
+                    Scopes.Stop.LAMBDA, Scopes.Stop.INITIALIZER, Scopes.Stop.ANONYMOUS);
         }
     }
 
