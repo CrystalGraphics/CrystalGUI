@@ -406,6 +406,23 @@ public class TextEditorTest extends UiTestBase {
         assertEquals("  if (x) {" + NL + "      ", editor.getText());
     }
 
+    /**
+     * <b>Enter between a brace pair opens a line between them and leaves the caret on it.</b> Reported
+     * from the harness: it produced one line with the closing brace beside the caret, because the rule
+     * asked whether the LINE ended in an opener and with the caret between the pair it ends in the closer.
+     */
+    @Test
+    public void enterBetweenBracesLandsTheCaretOnAMiddleLine() {
+        build("  if (x) {}");
+        editor.setCaret(editor.getText().length() - 1);
+
+        key(CgKeyCodes.KEY_RETURN);
+
+        assertEquals("  if (x) {" + NL + "      " + NL + "  }", editor.getText());
+        assertEquals("and the caret is on the middle line, not below the closer",
+                "  if (x) {".length() + NL.length() + 6, editor.getCaret());
+    }
+
     @Test
     public void tabIndentsEveryLineOfASelection() {
         build("one" + NL + "two" + NL + "three");

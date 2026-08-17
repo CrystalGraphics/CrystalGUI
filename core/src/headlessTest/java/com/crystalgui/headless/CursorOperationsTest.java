@@ -180,6 +180,102 @@ public class CursorOperationsTest {
                 TypeOperations.backspaceFrom(document, 12, 4));
     }
 
+    /**
+     * <b>Counted the way the line is DRAWN.</b> Two tabs are two characters and eight columns; counting
+     * characters said {@code 2 % 4 == 2} and one press deleted the whole indent, landing the caret at
+     * column zero. Reported from the harness as "backspace does not take me back up to the previous
+     * line" — which is the same bug seen from its other end, since only column zero joins lines.
+     */
+    @Test
+    public void backspaceTakesOneTabAtATime() {
+        Rope document = Rope.of("\t\ttext");
+        assertEquals("one tab, not both", 1, TypeOperations.backspaceFrom(document, 2, 4));
+        assertEquals("then the other", 0, TypeOperations.backspaceFrom(document, 1, 4));
+    }
+
+    /** An indent that is not on a stop goes to the stop below it, not a whole level from where it is. */
+    @Test
+    public void backspaceFromAnUnalignedIndentGoesToTheStop() {
+        Rope document = Rope.of("      text");
+        assertEquals(4, TypeOperations.backspaceFrom(document, 6, 4));
+        assertEquals(0, TypeOperations.backspaceFrom(document, 4, 4));
+    }
+
+    /** At column zero it is the line join, which is what the whole indent walk is on its way to. */
+    @Test
+    public void backspaceAtColumnZeroJoinsTheLines() {
+        Rope document = Rope.of("a\n    b");
+        assertEquals(1, TypeOperations.backspaceFrom(document, 2, 4));
+    }
+
+    // ── Enter ───────────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * <b>The caret lands on a line of its own between the braces.</b> Reported from the harness: typing
+     * Enter after {@code if (true) &#123;} with the closer already there produced one line with the
+     * closing brace sitting beside the caret. The rule that did it asked whether the LINE ended in an
+     * opener, and with the caret between the pair the line ends in the closer.
+     */
+    @Test
+    public void enterBetweenBracesOpensAMiddleLine() {
+        Rope document = Rope.of("    if (true) {}");
+        TypeOperations.Enter enter = TypeOperations.enterAt(document, 15,
+                TypeOperations.IndentStyle.spaces(4), Language.java());
+        assertEquals("\n        \n    ", enter.text());
+        assertEquals("the caret is on the FIRST of the two new lines", 15 + 9, enter.caret());
+    }
+
+    /** An opener with anything else after it indents once and stays on one line. */
+    @Test
+    public void enterAfterAnOpenerIndentsOnce() {
+        Rope document = Rope.of("    if (true) {");
+        TypeOperations.Enter enter = TypeOperations.enterAt(document, 15,
+                TypeOperations.IndentStyle.spaces(4), Language.java());
+        assertEquals("\n        ", enter.text());
+        assertEquals(15 + 9, enter.caret());
+    }
+
+    /** Anything else carries the indentation across and does nothing more. */
+    @Test
+    public void enterElsewhereCarriesTheIndent() {
+        Rope document = Rope.of("    call();");
+        TypeOperations.Enter enter = TypeOperations.enterAt(document, 11,
+                TypeOperations.IndentStyle.spaces(4), Language.java());
+        assertEquals("\n    ", enter.text());
+    }
+
+    /**
+     * <b>The line's last character is not the question.</b> Splitting a line in the middle carries the
+     * indent and nothing else, however the line happens to end.
+     */
+    @Test
+    public void enterInTheMiddleOfALineDoesNotIndent() {
+        Rope document = Rope.of("    foo bar {");
+        TypeOperations.Enter enter = TypeOperations.enterAt(document, 7,
+                TypeOperations.IndentStyle.spaces(4), Language.java());
+        assertEquals("\n    ", enter.text());
+    }
+
+    /** In tabs mode one level is a tab, and the carried indent is whatever the line already had. */
+    @Test
+    public void enterInTabsModeIndentsWithATab() {
+        Rope document = Rope.of("\tif (true) {");
+        TypeOperations.Enter enter = TypeOperations.enterAt(document, 12,
+                TypeOperations.IndentStyle.tabs(4), Language.java());
+        assertEquals("\n\t\t", enter.text());
+    }
+
+    // ── Tab ─────────────────────────────────────────────────────────────────────────────────────
+
+    /** To the next stop, so a Tab-indented block does not drift one character further out per press. */
+    @Test
+    public void tabGoesToTheNextStop() {
+        Rope document = Rope.of("ab");
+        assertEquals("  ", TypeOperations.tabAt(document, 2, TypeOperations.IndentStyle.spaces(4)));
+        assertEquals("    ", TypeOperations.tabAt(document, 0, TypeOperations.IndentStyle.spaces(4)));
+        assertEquals("\t", TypeOperations.tabAt(document, 1, TypeOperations.IndentStyle.tabs(4)));
+    }
+
     @Test
     public void surroundWrapsRatherThanReplaces() {
         List<Change> changes = TypeOperations.surround(List.of(new Selection(0, 5)), '(', ')');
