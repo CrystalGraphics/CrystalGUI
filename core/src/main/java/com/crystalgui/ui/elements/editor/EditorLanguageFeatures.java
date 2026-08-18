@@ -346,8 +346,41 @@ final class EditorLanguageFeatures {
             showCodeActionsAt(offset);
         }));
         requestCodeActions(offset, available -> {
-            if (docPopup != null && docPopup.isOpen()) docPopup.setProblem(problems, available);
+            if (docPopup != null && docPopup.isOpen()) {
+                docPopup.setProblem(problems, worthTheBand(problems, available));
+            }
         });
+    }
+
+    /**
+     * The actions worth a band in a HOVER — the rest belong to the bulb and to Alt+Enter.
+     *
+     * <h3>The band exists to say something</h3>
+     *
+     * <p>{@code FixContext.intention} already states the rule from the other end: a quick fix leaves its
+     * description null because <em>the compiler has already said the useful thing</em>, and an intention
+     * carries one because otherwise "the band draws as a blank grey strip, which reads as a message that
+     * failed to load rather than as a message that does not exist". So an action with <b>neither</b> a
+     * diagnostic behind it nor a line about itself has nothing to put there.</p>
+     *
+     * <p>The JavaScript catalog was written without that rule — its {@code refactor(id, title, edit)}
+     * helper takes no description where Java's {@code intention(id, title, description, edit)} requires
+     * one — and three of its entries apply to very nearly every line: "Change 'var' to 'let'", "Change
+     * 'var' to 'const'" and "Surround with try/catch". A hover anywhere in a script therefore grew an
+     * action bar with no message above it, which is the shape of a popup that failed rather than one with
+     * nothing to add. IntelliJ keeps exactly that class of intention behind the bulb.</p>
+     *
+     * <p><b>Not gated on the diagnostic alone</b>, which is what this used to be and why it changed: there
+     * is no diagnostic behind "Replace with lambda", so gating hid an inspection the gutter bulb two
+     * inches away was advertising. A described action still shows; only the silent ones move.</p>
+     */
+    static List<CodeAction> worthTheBand(List<Diagnostic> problems, List<CodeAction> available) {
+        if (!problems.isEmpty() || available.isEmpty()) return available;
+        List<CodeAction> described = new ArrayList<>(available.size());
+        for (CodeAction action : available) {
+            if (action.description() != null && !action.description().isEmpty()) described.add(action);
+        }
+        return described;
     }
 
     /**
