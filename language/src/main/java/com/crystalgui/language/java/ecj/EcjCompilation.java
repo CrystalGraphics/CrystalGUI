@@ -1,8 +1,6 @@
 package com.crystalgui.language.java.ecj;
 
-import com.crystalgui.language.map.MappingSet;
-import com.crystalgui.language.platform.ScriptPlatform;
-import com.crystalgui.language.platform.ScriptPlatforms;
+import com.crystalgui.language.engine.bridge.TypeBytes;
 
 import org.eclipse.jdt.core.compiler.CategorizedProblem;
 import org.eclipse.jdt.internal.compiler.ClassFile;
@@ -60,12 +58,13 @@ final class EcjCompilation {
     private EcjCompilation() {
     }
 
-    static Output compile(String className, String source, List<String> classpath, int releaseLevel) {
+    static Output compile(String className, String source, List<String> classpath, int releaseLevel,
+                          TypeBytes types) {
         Output output = new Output();
         INameEnvironment environment = null;
         try {
             Map<String, String> options = optionsFor(releaseLevel);
-            environment = environmentFor(classpath, releaseLevel);
+            environment = environmentFor(classpath, releaseLevel, types);
 
             final Output collecting = output;
             ICompilerRequestor requestor = new ICompilerRequestor() {
@@ -133,17 +132,15 @@ final class EcjCompilation {
     }
 
     /**
-     * The live environment over ECJ's own classpath resolution.
+     * The live tiers over ECJ's own classpath resolution.
      *
-     * <p>Falls back to the plain {@code FileSystem} if the front end refuses the options, because a
-     * compile against the classpath alone is a far better failure than no compile at all.</p>
+     * <p>{@code types} arrives already composed, from the host — see {@link TypeBytes} for why it cannot
+     * be assembled here. With {@link TypeBytes#NONE} this is exactly the file-based environment it
+     * replaces.</p>
      */
-    private static INameEnvironment environmentFor(List<String> classpath, int releaseLevel) {
-        INameEnvironment files = fileSystemFor(classpath, releaseLevel);
-        ScriptPlatform platform = ScriptPlatforms.current();
-        // MappingSet.IDENTITY until 26.7 wires detection; a dev host is genuinely the identity, so this
-        // is the correct answer there rather than a placeholder.
-        return new ScriptNameEnvironment(files, platform, MappingSet.IDENTITY);
+    private static INameEnvironment environmentFor(List<String> classpath, int releaseLevel,
+                                                   TypeBytes types) {
+        return new ScriptNameEnvironment(fileSystemFor(classpath, releaseLevel), types);
     }
 
     private static INameEnvironment fileSystemFor(List<String> classpath, int releaseLevel) {

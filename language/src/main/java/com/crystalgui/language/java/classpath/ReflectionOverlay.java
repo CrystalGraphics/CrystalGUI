@@ -126,6 +126,23 @@ public final class ReflectionOverlay {
     }
 
     private void write(Class<?> type) throws IOException {
+        String internalName = Type.getInternalName(type);
+        Path target = directory.resolve(internalName + ".class");
+        Files.createDirectories(target.getParent());
+        Files.write(target, stubOf(type));
+    }
+
+    /**
+     * One class file for {@code type}, in memory — same supertypes, members and signatures, no bodies.
+     *
+     * <p>Public and static because there are two consumers and only one synthesis worth having. The
+     * overlay writes these into a directory for the file-based classpath; {@code ScriptNameEnvironment}
+     * hands them straight to the compiler as a last resort, for a type the live loader can produce a
+     * {@link Class} for and no bytes at all. Two implementations of "what does this type look like"
+     * would be two answers to a question with one right one, and they would drift on exactly the parts
+     * that are fiddly — generic signatures, bridges, the {@code ACC_SUPER}/{@code ACC_SYNTHETIC} fixup.</p>
+     */
+    public static byte[] stubOf(Class<?> type) {
         ClassWriter writer = new ClassWriter(0);
         String internalName = Type.getInternalName(type);
         String[] interfaces = new String[type.getInterfaces().length];
@@ -167,10 +184,7 @@ public final class ReflectionOverlay {
                     exceptionsOf(method.getExceptionTypes())).visitEnd();
         }
         writer.visitEnd();
-
-        Path target = directory.resolve(internalName + ".class");
-        Files.createDirectories(target.getParent());
-        Files.write(target, writer.toByteArray());
+        return writer.toByteArray();
     }
 
     private static String[] exceptionsOf(Class<?>[] thrown) {

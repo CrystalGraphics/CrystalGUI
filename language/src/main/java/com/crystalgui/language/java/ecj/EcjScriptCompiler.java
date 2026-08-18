@@ -1,6 +1,7 @@
 package com.crystalgui.language.java.ecj;
 
 import com.crystalgui.language.engine.bridge.ScriptCompiler;
+import com.crystalgui.language.engine.bridge.TypeBytes;
 
 import java.util.List;
 
@@ -29,9 +30,24 @@ import java.util.List;
  */
 public final class EcjScriptCompiler implements ScriptCompiler {
 
+    /**
+     * What the classpath cannot supply, installed by the host. @see TypeBytes
+     *
+     * <p>Volatile because it is written once during startup, on whichever thread opened the engine, and
+     * read on every analysis and every run thereafter — which are not that thread.</p>
+     */
+    private volatile TypeBytes types = TypeBytes.NONE;
+
+    @Override
+    public ScriptCompiler resolveAgainst(TypeBytes types) {
+        this.types = types == null ? TypeBytes.NONE : types;
+        return this;
+    }
+
     @Override
     public Result compile(String className, String source, List<String> classpath, int releaseLevel) {
-        EcjCompilation.Output output = EcjCompilation.compile(className, source, classpath, releaseLevel);
+        EcjCompilation.Output output =
+                EcjCompilation.compile(className, source, classpath, releaseLevel, types);
         // A compile that produced no classes is a failure even without a reported error: there is
         // nothing to define, so calling it success would defer the failure to the run, where it arrives
         // as a missing class rather than as a compile problem.
