@@ -56,13 +56,54 @@ public final class HostClasspath {
         addUrlsOf(loader, entries);
         addReflectiveSources(loader, entries);
         addSystemProperty(entries);
+        // LAST, so an application jar shadowing a platform class still wins.
+        addJavaClassLibrary(entries);
 
         List<String> existing = new ArrayList<>(entries.size());
         for (String entry : entries) {
-            Path path = new File(entry).toPath();
-            if (Files.exists(path)) existing.add(entry);
+            if (isUsable(new File(entry))) existing.add(entry);
         }
         return existing;
+    }
+
+    /**
+     * A directory, or a file that really opens as an archive.
+     *
+     * <h3>Existing is not enough, and the difference is a crash</h3>
+     *
+     * <p>ECJ's {@code FileSystem} builds a {@code ClasspathJar} for every non-directory entry and calls
+     * {@code initialize()} on it inside a {@code catch (IOException)} that <b>ignores the failure</b>. The
+     * entry stays in the list with its {@code packageCache} left null — and every later
+     * {@code getModulesDeclaringPackage} on it throws {@code NullPointerException} from inside ECJ.</p>
+     *
+     * <p>Which is not a compile error. It surfaces through {@code ClasspathLocation.isPackage} into
+     * {@code LookupEnvironment.askForType}, out of {@code BinaryTypeBinding.availableMethods} — and JDT's
+     * DOM catches it: {@code ITypeBinding.getDeclaredMethods()} wraps its work in
+     * {@code catch (RuntimeException)}, logs "Could not retrieve declared methods" with no stack, and
+     * returns an <b>empty array</b>. So every binary CLASS reports no methods while its fields are fine
+     * and its interfaces are fine — JDT synthesises interface members rather than reading them off the
+     * binding. {@code System.out.} offered nothing, {@code String.} offered {@code compareTo} alone from
+     * {@code Comparable}, and {@code Minecraft.} offered {@code IPlayerUsage}'s three.</p>
+     *
+     * <p>A modded launch is where this comes from: {@code LaunchClassLoader.getSources()} reports what
+     * the loader was given, which routinely includes natives directories, an absent coremod and entries
+     * that are simply not archives. On an ordinary JVM every entry opens and the whole failure mode is
+     * unreachable, which is why it missed the harness and every test.</p>
+     *
+     * <p>Opening each archive once at detection is the cost, and it is paid once per process — against a
+     * compiler that would otherwise be handed an entry it cannot use and would fail on obscurely.</p>
+     */
+    private static boolean isUsable(File entry) {
+        Path path = entry.toPath();
+        if (!Files.exists(path)) return false;
+        if (entry.isDirectory()) return true;
+        try (java.util.zip.ZipFile archive = new java.util.zip.ZipFile(entry)) {
+            return archive.size() >= 0;
+        } catch (Exception notAnArchive) {
+            // A native library, a text file, a truncated download. Not something a compiler can read, and
+            // ECJ's own answer to being handed one is a null cache and a crash three layers away.
+            return false;
+        }
     }
 
     /** Every {@link URLClassLoader} in the parent chain, which covers the harness and plain JVMs. */
@@ -119,6 +160,66 @@ public final class HostClasspath {
             // Absent on most loaders and refused on some. Both mean "this route has nothing", which is
             // the ordinary case rather than a failure -- there are two other routes.
             return null;
+        }
+    }
+
+    /**
+     * <b>The JDK's own class library, on a host that has no JRT filesystem.</b>
+     *
+     * <p>Java 9 replaced {@code rt.jar} with a module image the compiler reads through the {@code jrt:}
+     * filesystem, which needs no classpath entry — so on every JVM this code has ever been developed or
+     * tested on, {@code java.lang} resolves with nothing here doing anything. On <b>Java 8 there is no
+     * such filesystem</b>: the platform classes live in {@code java.home/lib/rt.jar}, that jar is on no
+     * URL list, in no {@code java.class.path}, and in nothing {@code getSources()} returns, and a
+     * compiler handed a classpath without it cannot resolve {@code java.lang.Object}.</p>
+     *
+     * <h3>What that actually looked like</h3>
+     *
+     * <p>Not an error — a <b>silently empty member list</b>. A 1.7.10 client runs on Java 8, so in the
+     * one environment this exists for, {@code System.out.} offered nothing, {@code System.} offered
+     * nothing, and {@code Minecraft.getMinecraft().} offered exactly three rows: the methods of
+     * {@code IPlayerUsage}, the only ones on that class whose signatures name no JDK type. Everything
+     * else on Minecraft mentions a {@code String} or an {@code Object} somewhere and therefore could not
+     * be typed. Object's own members were missing too, which is the tell — a receiver that fails to
+     * resolve still reports eleven inherited members, and there were none, because {@code Object} was
+     * unresolvable as well.</p>
+     *
+     * <p>It was invisible everywhere else by construction: the harness, the test JVMs and every modern
+     * loader are on 9+, where the JRT covers it. Scripts still <em>ran</em>, because compilation resolves
+     * through the live name environment rather than through this list — so the editor was blind while the
+     * runtime was fine, which reads as a completion bug rather than a classpath one.</p>
+     *
+     * <p>Keyed on the jar EXISTING rather than on a version check: {@code rt.jar} is present exactly when
+     * it is needed, so there is no version to get wrong and no branch to keep in step with a new release.
+     * {@code java.home} may be a JRE or a JDK, hence both spellings.</p>
+     */
+    private static void addJavaClassLibrary(Set<String> into) {
+        String home = System.getProperty("java.home");
+        if (home == null || home.isEmpty()) return;
+        File base = new File(home);
+
+        // A JDK's java.home holds the JRE beneath it; a JRE's does not.
+        for (File lib : new File[]{new File(base, "lib"), new File(base, "jre" + File.separator + "lib")}) {
+            File rt = new File(lib, "rt.jar");
+            if (!rt.isFile()) continue;
+
+            into.add(rt.getAbsolutePath());
+            // The rest of the boot class path. rt.jar alone covers java.lang and java.util, which is what
+            // the failure above was about, but a script reaching javax.crypto or java.nio.charset would
+            // hit the same wall one type later -- and the whole point is that a missing platform type is
+            // silent rather than reported.
+            for (String beside : new String[]{"jce.jar", "jsse.jar", "charsets.jar", "resources.jar"}) {
+                File jar = new File(lib, beside);
+                if (jar.isFile()) into.add(jar.getAbsolutePath());
+            }
+            File extensions = new File(lib, "ext");
+            File[] extensionJars = extensions.listFiles();
+            if (extensionJars != null) {
+                for (File jar : extensionJars) {
+                    if (jar.isFile() && jar.getName().endsWith(".jar")) into.add(jar.getAbsolutePath());
+                }
+            }
+            return;
         }
     }
 

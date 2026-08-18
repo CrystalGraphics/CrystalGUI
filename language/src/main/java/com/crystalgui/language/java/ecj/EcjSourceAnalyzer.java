@@ -118,7 +118,9 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
         // obfuscated host it resolves nothing a script actually names -- the compiler saw `Minecraft`
         // and the editor saw `ave.class`, and a script that compiled and ran showed as broken.
         // @see DomResolution
-        CompilationUnit unit = live(className, source, classpath, releaseLevel);
+        // THE ENVIRONMENT COMES BACK WITH THE UNIT, because the unit still needs it. @see #live
+        INameEnvironment[] keep = new INameEnvironment[1];
+        CompilationUnit unit = live(className, source, classpath, releaseLevel, keep);
         if (unit == null) unit = parse(className, source, classpath, releaseLevel, true);
         // JDT COULD NOT FINISH, so ask it for the half it can still do. See parse().
         if (unit == null) unit = parse(className, source, classpath, releaseLevel, false);
@@ -127,7 +129,7 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
         // archive has to resolve against what this parse resolved against, or the binding keys the two
         // are matched by would not be the same strings. @see AttachedSources
         return new EcjAnalysis(unit, source, version, releaseLevel,
-                AttachedSources.forClasspath(classpath));
+                AttachedSources.forClasspath(classpath), keep[0]);
     }
 
     /**
@@ -151,25 +153,55 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
      * they keep.</p>
      */
     private CompilationUnit live(String className, String source, List<String> classpath,
-                                 int releaseLevel) {
+                                 int releaseLevel, INameEnvironment[] keep) {
         TypeBytes available = types;
         if (available == TypeBytes.NONE || !DomResolution.isAvailable()) return null;
         INameEnvironment environment = null;
         try {
             environment = EcjCompilation.environmentFor(classpath, releaseLevel, available);
-            return DomResolution.resolve(new InMemoryUnit(className, source), source.toCharArray(),
-                    environment, compilerOptions(releaseLevel), EcjOptions.jlsLevel());
+            CompilationUnit unit = DomResolution.resolve(new InMemoryUnit(className, source),
+                    source.toCharArray(), environment, compilerOptions(releaseLevel),
+                    EcjOptions.jlsLevel());
+            // KEPT OPEN, and this is the whole method's hazard.
+            //
+            // A resolved unit does NOT hold its bindings; it resolves them LAZILY, on the first question
+            // anyone asks. So the environment they resolve through has to outlive the call that built
+            // them -- and this used to clean it up in a `finally`, one statement after the unit was made.
+            //
+            // Nothing failed visibly. `FileSystem.cleanup()` closes every classpath jar and nulls its
+            // handle, and `ClasspathJar.getModulesDeclaringPackage` then rebuilds its package cache from
+            // `this.zipFile` -- which is now null. The NPE surfaces through `ClasspathLocation.isPackage`
+            // into `LookupEnvironment.askForType`, out of `BinaryTypeBinding.availableMethods`, and JDT's
+            // DOM CATCHES IT: `getDeclaredMethods()` logs "Could not retrieve declared methods" with no
+            // stack and returns an EMPTY ARRAY. So every binary class reported no methods, while its
+            // fields were fine (already resolved) and its interfaces were fine (JDT synthesises those).
+            // `System.out.` offered nothing, `String.` offered `compareTo` alone out of `Comparable`, and
+            // `Minecraft.` offered `IPlayerUsage`'s three.
+            //
+            // It needs a Java 8 host to reproduce, which is why it only ever appeared in a 1.7.10 client:
+            // from 9 onward the JDK is a JRT filesystem rather than a jar, and `ClasspathJrt` survives the
+            // same cleanup -- so every test JVM and the harness resolved `java.lang` regardless.
+            if (unit != null) {
+                keep[0] = environment;
+                environment = null;
+            }
+            return unit;
         } catch (RuntimeException | LinkageError | AssertionError failed) {
             // Falling back is always available and always correct, so nothing here is worth throwing.
             return null;
         } finally {
-            if (environment != null) {
-                try {
-                    environment.cleanup();
-                } catch (RuntimeException ignored) {
-                    // Cleanup failing must not lose an analysis that already succeeded.
-                }
-            }
+            // Only what nobody took ownership of -- a failed resolve, or a null unit.
+            cleanupQuietly(environment);
+        }
+    }
+
+    /** Closes an environment's classpath handles, or does nothing. */
+    private static void cleanupQuietly(INameEnvironment environment) {
+        if (environment == null) return;
+        try {
+            environment.cleanup();
+        } catch (RuntimeException ignored) {
+            // Cleanup failing must not lose an analysis that already succeeded.
         }
     }
 
@@ -273,8 +305,12 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
          */
         private final int releaseLevel;
 
+        /** The classpath the unit's bindings resolve through — released in {@link #close()}, not before. */
+        private INameEnvironment environment;
+
         EcjAnalysis(CompilationUnit unit, String source, long version, int releaseLevel,
-                    AttachedSources attached) {
+                    AttachedSources attached, INameEnvironment environment) {
+            this.environment = environment;
             this.unit = unit;
             this.source = source == null ? "" : source;
             this.version = version;
@@ -1263,10 +1299,14 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
 
         @Override
         public void close() {
-            // The AST and every binding hanging off it. Dropping the reference is the whole release --
-            // JDT has no native resources here -- but it is worth being explicit, because a resolved
-            // unit with bindings is large and one is held per open document.
+            // The AST and every binding hanging off it, and THEN the environment they resolve through.
+            //
+            // In that order, and the environment is not merely tidiness: it holds an open ZipFile per
+            // classpath entry, and a unit resolves its bindings lazily against it, so it may only be
+            // released once nothing can ask another question. @see EcjSourceAnalyzer#live
             unit = null;
+            cleanupQuietly(environment);
+            environment = null;
         }
 
         private static TypeRef typeRef(ITypeBinding type) {

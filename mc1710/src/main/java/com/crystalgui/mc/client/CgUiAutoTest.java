@@ -31,6 +31,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Collections;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -371,20 +372,53 @@ public final class CgUiAutoTest {
                         + "if this host has no JRT filesystem then java.lang resolves to nothing");
             }
 
-            probeCompletion("a field receiver", "System.out." + NL, "System.out.");
-            probeCompletion("a type receiver", "System." + NL, "System.");
-            probeCompletion("a call receiver", "new java.util.ArrayList<String>()." + NL,
+            openProbe("a field receiver", "System.out." + NL, "System.out.");
+            openProbe("a type receiver", "System." + NL, "System.");
+            openProbe("a call receiver", "new java.util.ArrayList<String>()." + NL,
                     "new java.util.ArrayList<String>().");
-            probeCompletion("a minecraft receiver",
+            openProbe("a minecraft receiver",
                     "net.minecraft.client.Minecraft.getMinecraft()." + NL,
                     "net.minecraft.client.Minecraft.getMinecraft().");
+            openProbe("a jdk-only line", "String s = \"x\"; int n = s.length(); s." + NL, "s.");
+            // THE DISCRIMINATOR. Identical receiver, identical caret, the only difference being that this
+            // one declares a type and so is analysed AS WRITTEN, where a bare body is wrapped in a prelude
+            // and every offset translated back. If a unit answers fully and a snippet answers with one
+            // interface method, the fault is in that translation and not in the member walk.
+            openProbe("a unit, string receiver",
+                    "class P { void m() { String s = \"x\"; s." + NL + " } }", "s.");
         } catch (Throwable failed) {
             CrystalGuiCore.LOGGER.error("CGUI AUTOTEST complete: FAILED" + NL + "{}", describe(failed));
         }
     }
 
-    /** Opens services over {@code source} alone and logs what the provider offers after {@code upTo}. */
-    private static void probeCompletion(String what, String source, String upTo) {
+    /** One pending probe: services kept alive so the debounced analysis can actually land. */
+    private static final class Probe {
+        final String what;
+        final String source;
+        final int caret;
+        final LanguageServices services;
+
+        Probe(String what, String source, int caret, LanguageServices services) {
+            this.what = what;
+            this.source = source;
+            this.caret = caret;
+            this.services = services;
+        }
+    }
+
+    private static final List<Probe> PENDING = new ArrayList<Probe>();
+
+    /**
+     * Opens services over {@code source} and <b>leaves them open</b>.
+     *
+     * <p>Asking on the same frame is what the first version of this did, and it measured the wrong thing:
+     * the analysis is debounced and runs on a worker that drains on the UI thread, so a probe that opens
+     * and asks within one call is guaranteed to find {@code analysis.get() == null} — and the provider's
+     * answer to that is an EMPTY, COMPLETE list. Every shape reported zero rows for that reason alone,
+     * which is indistinguishable in the log from the defect being chased. The one probe that returned
+     * anything was the last, and only because the four before it had given the scheduler time.</p>
+     */
+    private static void openProbe(String what, String source, String upTo) {
         LanguageRegistry.Entry entry = LanguageRegistry.forFileName("Probe.java");
         if (entry == null) {
             CrystalGuiCore.LOGGER.error("CGUI AUTOTEST complete: no Java entry registered");
@@ -396,24 +430,46 @@ public final class CgUiAutoTest {
             CrystalGuiCore.LOGGER.error("CGUI AUTOTEST complete: no services for {}", what);
             return;
         }
-        try {
-            int caret = source.indexOf(upTo) + upTo.length();
-            final CompletionList[] got = {CompletionList.EMPTY};
-            services.completion().complete(
-                    CompletionProvider.Request.character(caret, "", "."),
-                    answer -> got[0] = answer.orElse(CompletionList.EMPTY));
-            List<CompletionItem> items = got[0].items();
-            StringBuilder first = new StringBuilder();
-            for (int i = 0; i < Math.min(6, items.size()); i++) {
-                first.append(i == 0 ? "" : ", ").append(items.get(i).label());
+        PENDING.add(new Probe(what, source, source.indexOf(upTo) + upTo.length(), services));
+    }
+
+    /** Asks every pending probe, once the frames in between have let their analyses land. */
+    static void reportCompletionProbes() {
+        if (!ENABLED || !COMPLETE_PROBE || PENDING.isEmpty()) return;
+        for (Probe probe : PENDING) {
+            try {
+                final List<com.crystalgui.text.diagnostic.Diagnostic>[] problems = new List[]{null};
+                probe.services.onDiagnostics(announced ->
+                        problems[0] = announced.orElse(java.util.Collections.<com.crystalgui.text.diagnostic.Diagnostic>emptyList()));
+
+                final CompletionList[] got = {CompletionList.EMPTY};
+                probe.services.completion().complete(
+                        CompletionProvider.Request.character(probe.caret, "", "."),
+                        answer -> got[0] = answer.orElse(CompletionList.EMPTY));
+                List<CompletionItem> items = got[0].items();
+                StringBuilder first = new StringBuilder();
+                for (int i = 0; i < Math.min(8, items.size()); i++) {
+                    first.append(i == 0 ? "" : ", ").append(items.get(i).label());
+                }
+                CrystalGuiCore.LOGGER.info(
+                        "CGUI AUTOTEST complete: {} — {} rows, incomplete={}, {} problems [{}]",
+                        probe.what, items.size(), got[0].incomplete(),
+                        problems[0] == null ? "no" : String.valueOf(problems[0].size()), first);
+                if (problems[0] != null) {
+                    int shown = 0;
+                    for (com.crystalgui.text.diagnostic.Diagnostic problem : problems[0]) {
+                        if (shown++ >= 4) break;
+                        CrystalGuiCore.LOGGER.info("CGUI AUTOTEST complete:     {}", problem.message());
+                    }
+                }
+            } catch (Throwable failed) {
+                CrystalGuiCore.LOGGER.error("CGUI AUTOTEST complete: {} FAILED" + NL + "{}",
+                        probe.what, describe(failed));
+            } finally {
+                probe.services.close();
             }
-            CrystalGuiCore.LOGGER.info("CGUI AUTOTEST complete: {} — {} rows, incomplete={} [{}]",
-                    what, items.size(), got[0].incomplete(), first);
-        } catch (Throwable failed) {
-            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST complete: {} FAILED" + NL + "{}", what, describe(failed));
-        } finally {
-            services.close();
         }
+        PENDING.clear();
     }
 
     /** Pre-transform bytes — what a file-based classpath would see. */

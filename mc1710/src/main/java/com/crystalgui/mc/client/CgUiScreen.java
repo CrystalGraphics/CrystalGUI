@@ -271,6 +271,9 @@ public final class CgUiScreen extends GuiScreen {
         if (framesPainted == 5) CgUiAutoTest.probeLiveBytesOnce();
         // And what the member list actually holds here. @see CgUiAutoTest#probeCompletionOnce
         if (framesPainted == 6) CgUiAutoTest.probeCompletionOnce();
+        // ...and asked much later, because the analysis behind each one is debounced onto a worker that
+        // drains on THIS thread. @see CgUiAutoTest#reportCompletionProbes
+        if (framesPainted == 60) CgUiAutoTest.reportCompletionProbes();
         if (framesPainted == CgUiAutoTest.CAPTURE_ON_FRAME) {
             CgUiAutoTest.captureAndQuit(mc, mc.displayWidth, mc.displayHeight);
         }
