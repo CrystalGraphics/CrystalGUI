@@ -17,7 +17,9 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.List;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import com.crystalgui.language.engine.bridge.Analysis;
@@ -112,6 +114,35 @@ public class HostClasspathTest {
         } finally {
             engine.close();
         }
+    }
+
+    /**
+     * <b>The editor and the runner resolve against the same classpath — and nothing else makes them.</b>
+     *
+     * <p>Four independent call sites ask for one: {@code JavaLanguage} for the analyser,
+     * {@code ScriptHost} for the compiler, and {@code JsLanguage} twice for the interop tier. They agree
+     * only because each calls {@link HostClasspath#detect()} and the answer is stable, so this pins the
+     * stability rather than the convention — a probe that answered differently per call would split the
+     * two silently.</p>
+     *
+     * <p>Silently is the whole problem: a class the editor can see and the runtime cannot is
+     * <em>offered by the popup and refused at run time</em>, which AGENTS.md already names as worse than
+     * either restriction alone, because the editor is then actively wrong.</p>
+     *
+     * <p>The second assertion is the observable consequence and the one that would break first.
+     * {@code JavaLanguageServices.typeIndexFor} is a map keyed on the list itself, so an unstable probe
+     * would miss every time — a fresh fifty-thousand-entry scan per document, and two documents holding
+     * indices that disagree. Reference equality is the only way to see that from outside.</p>
+     */
+    @Test
+    public void theEditorAndTheRunnerGetTheSameClasspath() {
+        List<String> first = HostClasspath.detect();
+        List<String> second = HostClasspath.detect();
+        assertEquals("the probe is not stable, so nothing that calls it twice agrees", first, second);
+
+        // Equal AND therefore a cache hit: the index is shared rather than rescanned per asker.
+        assertSame("one classpath must mean one type index",
+                JavaLanguageServices.typeIndexFor(first), JavaLanguageServices.typeIndexFor(second));
     }
 
     /** Stands in for the application API a real script would compile against. */

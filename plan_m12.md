@@ -561,7 +561,461 @@ program bound and its own blit runs through our vertex shader instead.
 
 ---
 
-## Phases 2+ — sketch only, not designed
+## Phase 2 — the language stack in-game — **done**
+
+Scoped as ":language into the jar, native extraction, staged engine bands, and the second
+`enableModernJavaSyntax` fight", and all of it landed alongside Phase 1:
+
+- `:language` is `compileOnly` and reaches runtime through the shadow jar, downgraded.
+- **tree-sitter grammars are live on Java 8.** The JNI hazard is real — upstream `tree-sitter-ng`
+  returns `JNI_VERSION_10` from `JNI_OnLoad`, and a Java 8 VM rejects anything above
+  `JNI_VERSION_1_8` — but the vendored jars come from a fork whose C returns `JNI_VERSION_1_8`, so the
+  natives load. Verified by forcing `org.treesitter.TSParser` rather than trusting a lazy registration,
+  which proves nothing.
+- The tree-sitter jars are bundled **unrelocated** (`from(zipTree(...))`, never
+  `shadowImplementation`): a JNI symbol is `Java_<mangled-package>_…`, so relocating the package
+  renames the symbol the `.dll` does not export.
+- **ECJ and Rhino open**, after fixing `EngineHost.withOwnClasses` — see 25.9 item 8.
+- `ScriptWorkbench` is installed by the host, so Run and Stop exist and scripts execute.
+
+**One item remains, and it is 26.1 below**: the bands are found through a dev-run system property
+pointing at a Gradle output directory. A shipped mod has no such directory.
+
+---
+
+# Phase 3 — readable names in a live client
+
+**This is what M12 exists for.** Its §20 exit criterion is *"a script written in readable names
+compiles, runs and links inside a real 1.7.10 client, against MC classes and a mixin-added member;
+completion never shows `func_147439_a`; the same script runs unchanged in dev and prod."* Phase 1
+delivered "runs inside a real client" and none of the rest. **It is also the only thing keeping M6 at ◐.**
+
+> **The architecture rule for this whole phase.** Every mechanism below lives in `language/`. A platform
+> contributes exactly two kinds of thing — **what to provide** (a route to live bytes, mapping
+> coordinates) and **where to put it** (a directory) — through one small interface, and contributes no
+> logic at all. Downloading, verifying, caching, parsing, remapping, detection and compilation belong to
+> the core, once, so that `mc1201` is an implementation of one interface rather than a second copy of
+> this phase. Anything that starts to look like per-platform logic is a design error and belongs behind
+> the SPI instead.
+
+## 26.0 What is already built, and why that changes the shape
+
+`plan_syntax.md` §15.5 splits this in two, and **the half with the hard logic is done and proven**:
+
+| Piece | Where | State |
+|---|---|---|
+| `MappingSet` — readable ⇄ runtime, keyed by owner, with `IDENTITY` | `language.map` | ✅ built |
+| `ReadableView` — the **in** direction, remapping runtime bytes to readable types | `language.map` | ✅ built |
+| `InheritanceAwareRemapper` — the **out** direction, ~180 lines on plain ASM | `language.map` | ✅ built |
+| `MemberNameMapper` — the bridge-crossing name seam, both directions | `language.engine.bridge` | ✅ built, used by Rhino |
+| The round trip, incl. a negative control against a plain `ClassRemapper` | tests | ✅ nine tests |
+| **A compiler that can accept a name environment** | — | ❌ 26.3 |
+| **The live name environment** | — | ❌ 26.4 |
+| **The mapping data** | — | ❌ 26.5–26.7 |
+
+Three consequences, all of which make this smaller or differently shaped than it first looks.
+
+**`MappingSet.IDENTITY` means a dev environment takes the SAME path.** It is documented as "the common
+case, not a fallback", so there is no dev-only branch to keep in step, and every mechanism below is
+exercised from the first run in a dev client — with an identity mapping, which is what 1.7.10 dev
+genuinely is.
+
+**The obfuscation problem and the live-bytes problem are different problems.** §15.5 A needs a *live
+classloader*, not an obfuscated one. Its hardest claim — a **mixin-added member** resolving — is testable
+in the dev client today, because CrystalGraphics ships mixins into it. Only "unchanged in dev and prod"
+needs a reobfuscated client, and that is 26.8: validation, not a blocker.
+
+**The JavaScript half already has its seam.** `MemberNameMapper` exists, carries both directions, and
+crosses the bridge as strings precisely because `MappingSet` is not parent-first. So once 26.5–26.7
+produce a `MappingSet`, wiring Rhino is adapting one interface rather than new design. Java is the side
+that needs 26.3 and 26.4.
+
+## 26.1 The platform SPI — one interface, and nothing else
+
+Everything a platform knows and the core cannot. Lives in `language.platform`; `mc1710` implements it,
+and `mc1201` will implement the same one.
+
+```java
+public interface ScriptPlatform {
+
+    /** Post-transform bytes for an internal name, or null. @see ReadableView.ByteSource */
+    ReadableView.ByteSource liveBytes();
+
+    /** Root for anything this module downloads or extracts. Must survive a restart. */
+    Path cacheRoot();
+
+    /** Which mapping artifact this environment needs, or NONE where the runtime is already readable. */
+    MappingCoordinates mappings();
+
+    /** How to tell a readable runtime from an obfuscated one. @see 26.7 */
+    NamespaceProbe namespaceProbe();
+}
+```
+
+- **`liveBytes()`** is the only genuinely per-platform *code*, and on 1.7.10 it is a dozen lines (26.4).
+- **`cacheRoot()`** answers "where to put it" and nothing more — `.minecraft/config/crystalgui` here. The
+  core decides the layout *under* it, so every platform gets the same tree and a layout bug is fixed once.
+- **`mappings()`** is data, not behaviour: channel, version, base URL, per-file digests. A platform states
+  which artifact it needs; the core fetches, verifies, caches and parses it.
+- **`namespaceProbe()`** is data too — a type and two member names (26.7).
+
+> **Registration mirrors `CgPlatform`**: one bundle, registered by the loader, read through a static
+> accessor. Two registries is how a loader wires up half of something, and CrystalGraphics already
+> learned that once — `AGENTS.md`, "CrystalGUI has no platform registry".
+
+> **`ScriptPlatform.NONE` is a real deployment, not a test double.** The harness, the tests and a
+> dedicated server all run with no platform: `liveBytes()` falls back to `ByteSource.ofClassLoader`,
+> `mappings()` is `NONE`, and the stack behaves exactly as it does today. That is what keeps `language/`
+> runnable off a Minecraft host, which is the property the module exists for.
+
+## 26.2 Ship the engine bands
+
+Every `EngineSource` today is filesystem-based — `NONE`, `directory(Path)`, `of(Collection<Path>)`,
+`ofPathList(String)` — and the dev run points at `language/build/engines` through
+`-Dcrystalgui.engines.dir`. Nothing reads from inside a jar, so a shipped mod has no bands at all.
+
+**Bundled**, decided: jar size does not matter for 1.7.10, and offline-by-default is worth more than a
+slim jar for a tool people install in order to write code. This is the opposite call from 26.5's
+mappings, deliberately — see there.
+
+- **Band 8 only** in the 1.7.10 jar: ECJ 3.26.0 (~15 MB) and Rhino 1.7.15.1 (~1.5 MB). Shipping 11 and 17
+  as well would triple it for jars this platform can never load. Which band a jar carries is a build
+  decision, so a `mc1201` jar carries 17 by the same rule.
+- **`EngineSource.extractedFrom(ClassLoader, String resourceRoot, Path into)`** — core-side. Copies the
+  band's jars out of the mod jar into `<cacheRoot>/engines/<band>/`, then delegates to `directory(...)`.
+- **The same present/verify/atomic/delete discipline as 26.5.** The failure modes are identical and there
+  is no reason for two implementations; factor the file half out and have both call it.
+- `EngineHost.defaultSource()` keeps the system property as a first-priority override, so dev runs and
+  `runHarness` are untouched.
+
+## 26.3 A compiler that can be given a name environment
+
+**A prerequisite for 26.4, and not small.** Both ECJ entry points are file-path based today, and neither
+can accept a live name source:
+
+| | today | why it cannot work |
+|---|---|---|
+| `EcjScriptCompiler.compile` | `BatchCompiler.compile("-classpath …")` | a command line of **file paths** |
+| `EcjSourceAnalyzer.analyze` | `ASTParser.setEnvironment(…)` | also **file paths** |
+
+`EcjScriptCompiler`'s own javadoc has been waiting for this and names the route exactly:
+
+> *"That path is `org.eclipse.jdt.internal.compiler.Compiler` with an `ICompilerRequestor` collecting
+> bytes and a custom `INameEnvironment` supplying types, which is also exactly where §15.5's
+> obfuscated-name mapping has to hook in. Both are present in all three bands; neither is driven yet."*
+> … *"So: this proves the seam and runs scripts. It is not the compiler the editor will use."*
+
+So 26.3 is that replacement, and it pays for itself three times:
+
+- **`ICompilerRequestor` collects bytes in memory** — no temp directory, no class files written, no I/O
+  per compile. The current design is documented as "the cheapest thing that is genuinely correct … far
+  too slow for the per-keystroke analysis M6 needs".
+- **`INameEnvironment` is the seam 26.4 plugs into.** Without this step there is nowhere to plug in.
+- **One implementation serves both** compile and analyse, so the editor and the runner cannot disagree
+  about what resolves — which they can today, taking separate routes to the same jars.
+
+**Band risk, and the reason to do this first.** `org.eclipse.jdt.internal.compiler.*` is internal API
+across three pinned ECJ versions (3.26.0 / 3.33.0 / 3.46.0). The javadoc asserts both types exist in all
+three; signatures are not guaranteed stable. `smokeEngineBands` already runs each band on a JVM of its
+era — **extend it to drive a real compile through the new path in each**, so a band that cannot support
+it fails at build time rather than at a user.
+
+## 26.4 The live name environment (§15.5 A)
+
+**What it replaces.** `ReadableView.materialise` writes remapped classes to a directory and hands over the
+path, because `setEnvironment` takes file paths. Correct wherever bytes are obtainable — and wrong on a
+live host, where bytes come from the launch classloader through the transformer chain. Feeding those to
+ECJ wants an `INameEnvironment`: no writing, no staleness, and it works for a class whose bytes exist
+**only because a mixin produced them**. `HostClasspath` is the file-based baseline this supersedes on MC
+hosts, and its javadoc says so, "because a file list that looks complete is exactly how this gets
+forgotten".
+
+**The seam already exists.** `ReadableView.ByteSource` is one method — `byte[] bytesOf(String
+internalName)` — and its default `ofClassLoader` carries the warning in its own javadoc: *"Correct off a
+Minecraft host and not on one, because it reads what is on disk and that is precisely the thing that lies
+there. Named as the default so a platform that needs the transformer chain has something obvious to
+replace."*
+
+**LaunchWrapper makes the 1.7.10 implementation trivial, which was not obvious.** Both halves are public:
+
+```java
+public byte[] getClassBytes(String name)               // RAW, pre-transform
+public List<IClassTransformer> getTransformers()       // the chain itself
+```
+
+`runTransformers` is private, but it is only a loop over that list. So `liveBytes()` reads the raw bytes
+and walks the public transformer list, applying each `transform(name, transformedName, bytes)` in order.
+**No reflection, and mixins come for free**, because Mixin applies through a transformer in exactly that
+list. That is the entire platform-specific part of this phase.
+
+**The core side**, in `language.java.ecj`:
+
+- `findType(char[][])` / `findType(char[], char[][])` → ask `ScriptPlatform.liveBytes()`, remap through
+  `ReadableView`, answer with a `NameEnvironmentAnswer` over the bytes. Nothing is written.
+- `isPackage(char[][], char[])` → answered from the same source. Getting this wrong makes a type resolve
+  while its package does not, which reads as a phantom compile error.
+- **A reflection-synthesized stub as fallback**, per §15.5 A, for classes whose bytes cannot be retrieved:
+  a type that exists to the JVM but whose bytes the loader will not yield must still resolve, or a script
+  fails to compile against a class it can demonstrably call. Synthesize from
+  `Class#getDeclaredMethods`/`getDeclaredFields` — signatures only, no bodies.
+- **Cache per compile, never per process.** A mixin can add a member between runs, and a stale answer is
+  exactly the "compiles and then does not link" failure this design exists to remove.
+
+## 26.5 Acquiring the mapping data — downloaded, not shipped
+
+**Not bundled, and the reason is a distinction rather than caution.** Two different acts get conflated:
+
+- **Building a mod with MCP mappings.** The compiled bytecode carries SRG or notch names; the mapping
+  data is not in the jar. Every Forge mod since 2011 does this and nobody questions it.
+- **Putting the CSVs in the jar as runtime data.** That is redistributing the mapping data itself.
+
+Only the second is in question, and classic MCP terms prohibited exactly it — Forge distributes the data
+through Maven for *build* use. 1.7.10-era `mcp_stable` predates the 2020 relicensing around MCPConfig and
+official Mojang mappings, so the old terms apply. Fetching from the canonical source sidesteps the
+question entirely: nothing is redistributed, and the user's machine gets the files from where Gradle
+already gets them.
+
+> Deliberately the opposite call from 26.2. Bundle the engines — EPL/MPL, redistribution plainly
+> permitted, and offline matters for a 16 MB compiler. Download the mappings — 670 KB, and the only one
+> of the two with a licence question.
+
+**Source**, both already in `mc1710/gradle.properties`, so the mod and the build cannot disagree:
+
+```
+remoteMappings = https://raw.githubusercontent.com/MinecraftForge/FML/1.7.10/conf/
+channel = stable          mappingsVersion = 12
+```
+
+**Layout**, decided by the core beneath `ScriptPlatform.cacheRoot()`:
+
+```
+<cacheRoot>/mappings/<mcVersion>/<channel>-<version>/{methods,fields,params}.csv
+             1.7.10   stable-12
+```
+
+### Staleness is designed out, not managed
+
+**A published mapping version is immutable.** `mcp_stable` 12 for 1.7.10 is frozen — it will never change
+content under that name. So the version *is* the cache key and **there is nothing to invalidate**: a
+different requirement is a different directory. Moving to `stable-13` simply misses and downloads, and
+the old directory becomes inert. No TTL, no revalidation, no invalidation logic anywhere.
+
+That property only holds if the coordinates are **pinned in the mod** rather than discovered from the
+environment. A version read at runtime is a version that can differ between dev and prod, which is the
+one thing this phase exists to prevent.
+
+What still needs handling is not staleness but **partial and damaged state**:
+
+- **Present-and-valid on every launch, and missing is treated identically to invalid.** Three files,
+  670 KB, hashed in single-digit milliseconds. Checking mere existence is what lets a truncated download
+  persist forever, so there is no "assume it is fine because the file is there".
+- **Verify against a digest, not a size.** Upstream publishes `.md5` beside each artifact and the expected
+  digests are pinned alongside the version in `MappingCoordinates`, so a corrupted *download* and a
+  corrupted *cache* are caught by one check — and a mirror serving something unexpected cannot be
+  silently accepted.
+- **Atomic install.** Fetch to `<name>.part` in the same directory, verify there, then
+  `Files.move(..., ATOMIC_MOVE)`. Nothing incomplete is ever visible under the real name, two clients
+  starting at once cannot observe a half-written file, and a crash mid-download leaves a `.part` the next
+  launch overwrites.
+- **Delete on verification failure**, so the next launch retries rather than being wedged on bad bytes.
+
+### When it happens, and what happens without it
+
+- **Off the client thread, on first need.** A network fetch must never sit inside `initGui`.
+- **Absent is a supported state and already the designed one.** No mappings means the runtime namespace
+  is presented as-is: the editor opens, colours, compiles and runs scripts — it shows `func_147439_a`
+  instead of `getBlock`. The same degradation `EngineHost` applies to an absent band, reported once
+  rather than thrown.
+- **Report which state, once.** "No mappings configured" and "the download failed" are different things
+  to somebody offline on purpose, and the line that distinguishes them is the difference between a bug
+  report and a shrug.
+
+## 26.6 Parsing them — one format SPI in the core
+
+**`language/` takes mapping *files* and parses them itself, and for 1.7.10 that is entirely plausible.**
+The MCP data is the easiest version of this problem that exists — already in the Gradle cache at
+`mcp_stable/12`, matching `mappingsVersion = 12`:
+
+| file | size | lines | shape |
+|---|---|---|---|
+| `methods.csv` | 375 KB | 4,820 | `searge,name,side,desc` |
+| `fields.csv` | 253 KB | 4,792 | same |
+| `params.csv` | 40 KB | 1,885 | same |
+
+11,500 lines of flat CSV, `srg → readable`, and **no owner qualification is needed, because SRG names are
+globally unique by construction**. That is a `split(",", 4)` into `MappingSet.builder()`.
+
+**It does not generalise cleanly to every version, so the design admits that up front.** Modern targets
+use genuinely different formats — TSRG2 for Forge's SRG data, ProGuard `.txt` for Mojmap, Tiny v2 for
+Fabric — and none is a variation on CSV.
+
+```
+com.crystalgui.language.map.format
+    MappingFormat     SPI: does this file look like mine, and parse it into a MappingSet.Builder
+    McpCsvFormat      methods.csv / fields.csv / params.csv          <- now
+    SrgFormat         packaged.srg / joined.srg, notch <-> srg       <- only if risk 1 says so
+    TsrgFormat  ProGuardFormat  TinyFormat                           <- when a platform needs one
+    MappingFiles.load(List<Path>) -> MappingSet
+```
+
+**A platform hands over paths, never parsed data.** That keeps preprocessing at zero for every format the
+core knows and leaves the escape hatch open: a platform with something exotic reduces it minimally to a
+supported form rather than teaching this module a one-off dialect. One parser per format, in the module
+that owns `MappingSet`, is the version that does not drift.
+
+**Parse once, hold one `MappingSet`.** It is keyed by owner and is immutable; rebuilding it per compile
+would re-read 670 KB for nothing.
+
+## 26.7 Choosing the namespace — detected, never configured
+
+- 1.7.10 **dev** is `IDENTITY`: the classes really are at MCP names, so the mapping is the identity and
+  the same code path runs.
+- 1.7.10 **prod** builds a `MappingSet` from the fetched CSVs.
+
+**Which applies is probed, not declared.** `NamespaceProbe` names a type and the two spellings of one of
+its members — ask `liveBytes()` for `net/minecraft/world/World`; if it declares `getBlock` this is a
+readable runtime, if it declares `func_147439_a` it is not. A flag someone has to set is a flag that will
+be wrong in exactly the environment nobody tests, and the probe costs one class read at startup.
+
+> The probe reads through **the same `ByteSource` as everything else**, so it cannot disagree with what
+> the compiler will later see — which a check against a file on disk could.
+
+## 26.8 Reobfuscated validation
+
+The last mile, and the only part that genuinely needs a non-dev client. RFG already produces a
+reobfuscated jar; run a real client against it and confirm that **the same script file, unchanged**, does
+what it did in dev.
+
+Do this last, and do not let it gate 26.3–26.7 — all of them are testable in the dev client, and treating
+it as a prerequisite would stall the work that can actually proceed.
+
+## 26.9 Order of work, and what each step unblocks
+
+Ordered so that every step is verifiable when it lands, and nothing waits on the reobf client.
+
+| # | Step | Unblocks | Verified by |
+|---|---|---|---|
+| 1 | **26.1** `ScriptPlatform` + `NONE`, `mc1710` impl returning `cacheRoot` only | everything | existing suites still green with `NONE` |
+| 2 | **26.3** internal `Compiler` + `ICompilerRequestor`, replacing `BatchCompiler` | 26.4 | `smokeEngineBands` drives a compile per band |
+| 3 | **26.3** ~~same environment used by `EcjSourceAnalyzer`~~ — **not achievable, see below** | — | the two already share a classpath; pinned by `theEditorAndTheRunnerGetTheSameClasspath` |
+| 4 | **26.4** `liveBytes()` on `mc1710` + `INameEnvironment` | readable names | mixin-added member resolves in the dev client |
+| 5 | **26.2** bundle + extract the bands | shippable | non-dev jar analyses with no system property |
+| 6 | **26.6** `MappingFormat` + `McpCsvFormat` | 26.5, 26.7 | unit test over the real CSVs |
+| 7 | **26.5** fetch, verify, cache | prod names | delete-and-relaunch restores; corrupt-and-relaunch re-downloads |
+| 8 | **26.7** `NamespaceProbe` + wiring | dev/prod parity | dev probes readable, fixture probes obfuscated |
+| 9 | **26.8** reobf client | the milestone | the same script file runs unchanged |
+
+**Steps 2–4 are the spine.** They are also the only ones with real unknowns, which is why they come
+before the mapping work — that half is a parser and a downloader, both well understood.
+
+### Revision: step 3 cannot be done as written, and did not need to be
+
+**`ASTParser` has no name-environment seam.** Its whole public surface for saying what a parse resolves
+against is `setEnvironment(String[] classpath, String[] sourcepath, String[] encodings, boolean vmBoot)`,
+`setProject(IJavaProject)` and `setWorkingCopyOwner` — file paths, an Eclipse workspace, or nothing. There
+is no overload taking an `INameEnvironment`, on any of the three bands.
+
+**And the internal route is closed by the signing rule, not merely by taste.** The class that would do it
+is `org.eclipse.jdt.core.dom.CompilationUnitResolver`, which *is*
+`org.eclipse.jdt.internal.compiler.Compiler` plus the DOM converter — but it is **package-private**, so
+reaching it means putting a class in `org.eclipse.jdt.core.dom`. Eclipse jars are signed, and a JVM
+refuses a package whose classes come from differently-signed sources: that is the `SecurityException`
+this plan's own build already has `signerConflicts` to catch. Reflection over a package-private static
+across three pinned ECJ versions is the remaining option, and §26.3 already names that class of thing as
+the band risk worth avoiding — the plan asserts `internal.compiler.Compiler`'s signature is stable across
+bands and asserts nothing of the kind here.
+
+**What step 3 was actually for was already true.** The stated goal is that *"the editor and the runner
+cannot disagree about what resolves — which they can today, since they take separate paths to the same
+jars"*. Separate paths, yes; **same jars, already** — every asker calls `HostClasspath.detect()`:
+`JavaLanguage` for the analyser, `ScriptHost` for the compiler, and `JsLanguage` twice for the interop
+tier. The probe collects into a `LinkedHashSet`, so repeated calls are equal and everything that keys on
+the list (notably `JavaLanguageServices.typeIndexFor`) actually hits.
+
+That agreement rested on four independent call sites and nothing enforced it, so it is now pinned by a
+test rather than left as a convention — including the reference-equality half, which is the only way to
+observe from outside that one classpath means one type index rather than a fresh fifty-thousand-entry
+scan per document.
+
+**What this defers to 26.4.** The divergence that matters is not the classpath, it is **live bytes**: the
+compiler can be handed an `INameEnvironment` and the analyser cannot, so a class whose bytes exist only
+because a transformer produced them will resolve for the runner and not for the editor. That is a
+decision 26.4 has to make explicitly — a materialised cache under `cacheRoot()` for the analyser, or an
+accepted asymmetry with the editor falling back to the file view. It is no longer a step that can be
+quietly assumed away, which is why it is written down here.
+
+## 26.10 How each piece is tested
+
+Following the project's own rule: test the spine — ownership, re-entrancy, codecs, announcements — never
+pixel layout or cosmetics.
+
+- **26.3** — a compile through the new path produces identical bytes to the `BatchCompiler` path for a
+  fixture script. That is the regression net for replacing a working compiler.
+- **26.4** — three cases, all headless with a fake `ByteSource`: a type resolves from bytes; a type with
+  *no* bytes resolves from the reflection stub; **a member added to the returned bytes after a first
+  compile is visible on the second**, which is the per-compile cache assertion and the mixin case in
+  miniature.
+- **26.5** — the file discipline, with no network: a truncated file is rejected and re-fetched, a wrong
+  digest is rejected and the file deleted, a `.part` left behind does not become the real file, and two
+  concurrent installs leave one valid result.
+- **26.6** — parse the real `mcp_stable/12` CSVs and assert a handful of known pairs
+  (`func_147439_a` ⇄ `getBlock`). Cheap, and it fails loudly if a format assumption is wrong.
+- **26.7** — probe a readable fixture and an obfuscated one, assert `IDENTITY` and non-identity
+  respectively.
+- **In-client** — `-PcgAutoTest` opens a script that names a Minecraft type and captures. The mixin case
+  needs a member CrystalGraphics' own mixins add, which makes the assertion real rather than staged.
+
+## 26.11 What Phase 3 deliberately does not include
+
+- **`mc1201`.** Every mechanism is shaped so the platform-specific part is one `ByteSource`, one
+  `MappingCoordinates` and one `NamespaceProbe` — that is the point — but a second loader is its own
+  phase.
+- **The workspace over the wire.** Phase 4.
+- **Sandbox policy for `net.minecraft.*`.** Scripts reaching Minecraft raises a real question about what
+  a script may touch. It is a policy decision rather than a mechanism; note it, do not answer it here.
+- **Parameter names.** `params.csv` is fetched and parsed, but surfacing parameter names in completion
+  and hover is M13's, not this phase's.
+
+## 26.12 Risks
+
+1. **Script classes are defined by our own loader, bypassing FML's deobfuscating transformer.** In
+   1.7.10 prod, mod bytecode ships at SRG names and FML remaps SRG→notch at load — but that transformer
+   applies to classes loaded through `LaunchClassLoader`, and a compiled script is `defineClass`'d by the
+   engine's own loader. So the **out** direction may need readable→notch rather than readable→SRG.
+   **Settle this before 26.5**: it decides whether the CSV pair suffices or `SrgFormat` and
+   `packaged.srg` are needed too. Cheap to determine, expensive to discover after building the mapping.
+2. **ECJ internal API across three bands** — see 26.3. Mitigated by extending `smokeEngineBands`, and the
+   reason that step is second rather than later.
+3. **Transformer order and exclusions.** `getTransformers()` gives the list, but `transformName` /
+   `untransformName` are private and exclusions are not exposed. For `net.minecraft.*` in dev the names
+   are unchanged, so this is prod-only — and it surfaces as a wrong answer rather than an exception,
+   which is the shape that costs the most to find.
+4. **MCP licensing.** Downloading rather than bundling is what keeps this off the critical path; if the
+   terms turn out to permit redistribution, bundling becomes a simplification rather than a requirement.
+   It must not block 26.3 or 26.4, which need no mapping data at all.
+5. **Cache invalidation against mixins** — see 26.4. A per-process cache is wrong in a way that only
+   appears once a mixin adds a member, i.e. not in any test that does not stage one.
+
+## 26.13 Exit criteria
+
+1. A shipped (non-dev) mod jar opens the editor **with analysis working** — bands extracted from the jar,
+   no system property set.
+2. A script naming a Minecraft type resolves, completes and hovers in **readable names** in the dev
+   client; completion never shows `func_147439_a`.
+3. A script referencing a **mixin-added member** compiles and links — the claim no file-based classpath
+   can satisfy, and the reason 26.4 exists.
+4. Mappings are **absent on a clean install and acquired on first use**, verified against pinned digests
+   and installed atomically. Deleting the cache and relaunching restores it; corrupting a file in it
+   causes a re-download rather than a wrong answer.
+5. The dev/prod namespace choice is **detected**, and no configuration selects it.
+6. An **offline** first run still opens the editor and runs scripts, shows runtime names, and says why.
+7. The same script file, unchanged, runs in dev and in a reobfuscated client.
+8. `mc1710`'s `ScriptPlatform` implementation contains **no logic** beyond a byte route, a path and two
+   data objects — the test that this is reusable rather than 1.7.10-shaped.
+
+---
+
+## Phase 4+ — sketch only, not designed
 
 - **Phase 2 — the language stack in-game.** `:language` into the jar, native extraction, staged engine
   bands, and the second `enableModernJavaSyntax` fight.
