@@ -296,4 +296,195 @@ public class JsQuickFixTest {
             assertFalse(action.isApplicableTo(2L));
         }
     }
+
+    // -- The four that rebuild a construct --------------------------------------------------------
+
+    /**
+     * <b>A function expression becomes an arrow, and a single {@code return} loses its braces.</b>
+     *
+     * <p>The JavaScript twin of {@code LambdaCorrections}. Asserted on the produced text, because an
+     * arrow written at the wrong offsets is still a syntactically valid arrow.</p>
+     */
+    @Test
+    public void aFunctionExpressionConvertsToAnArrow() {
+        assertEquals("var f = (a, b) => a + b;\n",
+                applied("var f = fun|ction (a, b) { return a + b; };\n",
+                        "Convert to an arrow function"));
+    }
+
+    /** A body that is not one {@code return} keeps its block — there is nothing to shorten. */
+    @Test
+    public void anArrowKeepsABlockBody() {
+        assertEquals("list.forEach((x) => { console.log(x); });\n",
+                applied("list.forEach(fun|ction (x) { console.log(x); });\n",
+                        "Convert to an arrow function"));
+    }
+
+    /**
+     * <b>Not offered on a body that names {@code this}</b> — an arrow inherits it lexically, so the
+     * converted function reads a different object under the same name and still runs.
+     *
+     * <p>This one shipped broken for a round and the cause is worth keeping: the check compared the
+     * source span of the {@code this} node, and the {@code KeywordLiteral} in {@code this.x} reports
+     * its length as <em>five</em> characters — {@code "this."}, dot included. The comparison quietly
+     * never matched, so the conversion was offered on exactly the shape it exists to refuse.
+     */
+    @Test
+    public void anArrowIsRefusedWhenTheBodyUsesThis() {
+        assertNull("an arrow was offered for a function that uses `this`",
+                titled("var f = fun|ction () { return this.x; };\n", "Convert to an arrow function"));
+        assertNull("...or `arguments`", titled(
+                "var f = fun|ction () { return arguments.length; };\n",
+                "Convert to an arrow function"));
+    }
+
+    /**
+     * <b>Not offered on a function <em>declaration</em></b>, which is hoisted where an assigned arrow is
+     * not — so anything calling it above its own line would stop working.
+     */
+    @Test
+    public void anArrowIsRefusedForADeclaration() {
+        assertNull(titled("fun|ction f(a) { return a; }\n", "Convert to an arrow function"));
+    }
+
+    /**
+     * <b>An index loop becomes {@code for…of}</b>, and the element is named from the sequence.
+     *
+     * <p>{@code LoopIntentions}' rule ported, with one divergence: the Java version derives the element
+     * name from the resolved element <em>type</em>, and there is no type here — so the collection's own
+     * name is the evidence, which is usually good evidence because a collection is named for what it
+     * holds.</p>
+     */
+    @Test
+    public void anIndexLoopConvertsToForOf() {
+        assertEquals("var items = [1, 2];\nfor (var item of items) {\n    console.log(item);\n}\n",
+                applied("var items = [1, 2];\nfo|r (var i = 0; i < items.length; i++) {\n"
+                        + "    console.log(items[i]);\n}\n", "Convert to 'for\u2026of'"));
+    }
+
+    /**
+     * <b>Refused when the index is used for anything but a fetch.</b> The {@code of} form has no index
+     * to offer, so the conversion would produce code that does not run — and looks like it should.
+     */
+    @Test
+    public void forOfIsRefusedWhenTheIndexIsUsedForItself() {
+        assertNull(titled("var xs = [1];\nfo|r (var i = 0; i < xs.length; i++) {\n"
+                + "    console.log(i + 1);\n}\n", "Convert to 'for\u2026of'"));
+    }
+
+    /**
+     * <b>And refused when the loop writes <em>through</em> the index.</b>
+     *
+     * <p>The one shape here that converts, still runs, and silently stops doing its job: {@code xs[i] = 0}
+     * stores into the array, while {@code x = 0} in a {@code for…of} assigns to the loop variable and is
+     * discarded. Nothing throws and nothing looks wrong.</p>
+     */
+    @Test
+    public void forOfIsRefusedWhenTheLoopWritesThroughTheIndex() {
+        assertNull(titled("var xs = [1];\nfo|r (var i = 0; i < xs.length; i++) {\n"
+                + "    xs[i] = 0;\n}\n", "Convert to 'for\u2026of'"));
+    }
+
+    /**
+     * <b>An {@code if}/{@code else if} chain becomes a {@code switch}</b>, each arm keeping its braces.
+     *
+     * <p>The braces are not formatting. The arms were separate blocks and the cases are one, so two arms
+     * declaring the same name give a syntax error under {@code let} and a silently shared binding under
+     * {@code var}. One line per arm buys back the scoping the {@code if} form had.</p>
+     */
+    @Test
+    public void anIfChainConvertsToASwitch() {
+        assertEquals("var kind = 'a';\n"
+                        + "switch (kind) {\n"
+                        + "    case 'a': {\n        one();\n        break;\n    }\n"
+                        + "    case 'b': {\n        two();\n        break;\n    }\n"
+                        + "    default: {\n        other();\n    }\n"
+                        + "}\n",
+                applied("var kind = 'a';\ni|f (kind === 'a') {\n    one();\n"
+                                + "} else if (kind === 'b') {\n    two();\n} else {\n    other();\n}\n",
+                        "Convert to 'switch'"));
+    }
+
+    /** One arm is not a chain — a {@code switch} over it is longer and says less. */
+    @Test
+    public void aSingleIfIsNotASwitch() {
+        assertNull(titled("var k = 'a';\ni|f (k === 'a') { one(); }\n", "Convert to 'switch'"));
+    }
+
+    /**
+     * <b>Refused when an arm contains a {@code break}.</b>
+     *
+     * <p>Inside an {@code if} in a loop it leaves the loop; the identical statement inside a
+     * {@code switch} leaves the switch. Nothing fails to parse — the loop simply stops stopping.
+     */
+    @Test
+    public void aSwitchIsRefusedWhenAnArmBreaks() {
+        assertNull(titled("while (true) {\n"
+                        + "    i|f (k === 'a') { break; } else if (k === 'b') { two(); }\n}\n",
+                "Convert to 'switch'"));
+    }
+
+    /**
+     * <b>Extract to local</b>, with the name read off what is being extracted.
+     *
+     * <p>{@code Names}' deriving half is what this was deferred on — it took a JDT binding, so there was
+     * nothing for JavaScript to reuse. It is {@code DerivedNames} in {@code core} now, split where the
+     * rule stops needing a type, and {@code getDisplayName()} names itself {@code displayName} in both
+     * languages from the one implementation.</p>
+     */
+    @Test
+    public void anExpressionExtractsToALocal() {
+        assertEquals("var displayName = player.getDisplayName();\nconsole.log(displayName);\n",
+                applied("console.log(player.getDisplayNam|e());\n",
+                        "Introduce variable 'displayName'"));
+    }
+
+    /**
+     * <b>The caret on a callee extracts the CALL, never the callee.</b>
+     *
+     * <p>Hoisting {@code player.getDisplayName} on its own gives a detached function, so the call that
+     * follows runs with the wrong receiver — it parses, and usually returns something.
+     */
+    @Test
+    public void extractingFromACalleeTakesTheWholeCall() {
+        String extracted = applied("console.log(player.getDisplayNam|e());\n",
+                "Introduce variable 'displayName'");
+        assertTrue("the receiver was left behind: " + extracted,
+                extracted.contains("player.getDisplayName()"));
+    }
+
+    /**
+     * <b>Never out of a loop header.</b> Hoisting {@code xs.length} above {@code while (i < xs.length)}
+     * evaluates it once and the loop stops terminating — a hang, from an edit accepted without reading.
+     *
+     * <p>It was offered, too, and the cause was one inheritance: Rhino's loops extend {@code Scope}
+     * (they must — {@code for (let i …)} declares into one), so the structural "is my parent a statement
+     * container" walk stopped on the loop's own condition and reported it as a statement.</p>
+     */
+    @Test
+    public void extractIsRefusedInALoopHeader() {
+        for (String title : titlesAt("while (i < xs.leng|th) { i++; }\n")) {
+            assertFalse("an expression was extracted out of a loop header: " + title,
+                    title.startsWith("Introduce variable"));
+        }
+    }
+
+    /** A whole expression statement is already as extracted as it gets. */
+    @Test
+    public void extractIsRefusedOnABareStatement() {
+        for (String title : titlesAt("fo|o();\n")) {
+            assertFalse(title, title.startsWith("Introduce variable"));
+        }
+    }
+
+    /**
+     * The same inheritance, from the other side: "Surround with try/catch" on a loop condition used to
+     * offer to wrap <em>the condition</em>, producing a {@code while} header containing a {@code try}.
+     */
+    @Test
+    public void wrappingInALoopHeaderWrapsTheLoop() {
+        String wrapped = applied("while (i < xs.leng|th) { i++; }\n", "Surround with try/catch");
+        assertTrue("the condition was wrapped instead of the loop: " + wrapped,
+                wrapped.contains("try {\n    while (i < xs.length)"));
+    }
 }

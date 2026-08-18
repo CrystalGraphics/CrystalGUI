@@ -1,5 +1,7 @@
 package com.crystalgui.language.java.fix.edit;
 
+import com.crystalgui.text.DerivedNames;
+
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTVisitor;
 import org.eclipse.jdt.core.dom.ITypeBinding;
@@ -10,13 +12,20 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 /**
- * <b>A name for something that does not have one yet</b> — shared by every correction that declares a
- * variable the author did not.
+ * <b>Java's half of naming something the author has not named</b> — the part that needs a binding.
  *
- * <p>Extracted when the second caller appeared. It is three lines of judgement and one real trap, and the
- * trap is not obvious: <b>a type name is not always a legal variable name</b>. {@code int} lowercases to
- * {@code int}, so the first version of "Introduce variable" produced {@code int int = getSize();}, which
- * does not parse. Every primitive hits it and so does any type whose name happens to be a keyword.</p>
+ * <p>The mechanism moved to {@link DerivedNames} in {@code core} when JavaScript's fix catalog grew an
+ * "extract to local" of its own: deduplication, the accessor stem and the lowercase convention know
+ * nothing about types, so two copies of them would have been two copies to keep in step. What stays here
+ * is what only a resolved type can answer, and <b>the reserved-word set, which is deliberately not
+ * shared</b> — {@code int} is a Java keyword and an ordinary JavaScript name, {@code function} the
+ * reverse, so one merged list would refuse legal names in both languages to be safe in one.</p>
+ *
+ * <p>The trap that made this class worth extracting in the first place is still the reason
+ * {@link DerivedNames#derive} takes a reserved set: <b>a type name is not always a legal variable
+ * name</b>. {@code int} lowercases to {@code int}, so the first version of "Introduce variable" produced
+ * {@code int int = getSize();}, which does not parse. Every primitive hits it, and so does any type whose
+ * name happens to be a keyword.</p>
  */
 public final class Names {
 
@@ -40,30 +49,12 @@ public final class Names {
      */
     public static String derive(String base, ITypeBinding type, Set<String> taken) {
         String stem = base == null || base.isEmpty() ? fromType(type) : base;
-        if (stem.isEmpty() || KEYWORDS.contains(stem) || !Character.isJavaIdentifierStart(stem.charAt(0))) {
-            stem = "value";
-        }
-        String name = stem;
-        for (int n = 1; taken.contains(name); n++) name = stem + n;
-        return name;
+        return DerivedNames.derive(stem, taken, KEYWORDS);
     }
 
-    /**
-     * The first of {@code stems} nothing has taken, else the first stem numbered.
-     *
-     * <p>For the cases where the <em>stem</em> is the convention rather than derived from a type: a catch
-     * parameter is {@code e}, and {@code ex} when something already is — which is what everybody writes
-     * and is not something {@link #derive} could work out. Numbering falls back to the first stem, because
-     * {@code e1} is a numbered {@code e} and {@code ex1} is nothing anybody means.</p>
-     */
+    /** @see DerivedNames#free */
     public static String free(Set<String> taken, String... stems) {
-        for (String stem : stems) {
-            if (!taken.contains(stem)) return stem;
-        }
-        String stem = stems[0];
-        for (int n = 1; ; n++) {
-            if (!taken.contains(stem + n)) return stem + n;
-        }
+        return DerivedNames.free(taken, stems);
     }
 
     /**
@@ -90,21 +81,14 @@ public final class Names {
         return lower(type.getErasure().getName());
     }
 
-    /** {@code getSize} → {@code size}: the stem people actually want from an accessor's name. */
+    /** @see DerivedNames#fromAccessor */
     public static String fromAccessor(String method) {
-        for (String prefix : new String[] {"get", "is", "to", "as"}) {
-            if (method.length() > prefix.length() && method.startsWith(prefix)
-                    && Character.isUpperCase(method.charAt(prefix.length()))) {
-                return lower(method.substring(prefix.length()));
-            }
-        }
-        return method;
+        return DerivedNames.fromAccessor(method);
     }
 
+    /** @see DerivedNames#lower */
     public static String lower(String name) {
-        if (name.isEmpty()) return name;
-        String cleaned = name.replace("[]", "s");
-        return Character.toLowerCase(cleaned.charAt(0)) + cleaned.substring(1);
+        return DerivedNames.lower(name);
     }
 
     /**

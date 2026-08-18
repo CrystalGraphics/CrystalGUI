@@ -817,10 +817,22 @@ cannot pass against an edit at the wrong offsets.
 - **A template literal is measured but never offered.** `JsKeywords` gained a `template` probe so the
   intention is not offered on a band that would refuse the result — and it is filtered out of the completion
   list, because it is punctuation and a row there is a promise that accepting it produces something.
-- **Deferred, with reasons:** function expression → arrow, index `for` → `for…of`, `if`-chain → `switch`
-  (each needs a use-analysis the scopes do not yet expose — whether `this`/`arguments` appear, whether an
-  index is used only to index, whether every arm tests one variable), and extract-to-local (needs `Names`,
-  whose deriving half takes a JDT binding). None is blocked; each is a day's work with its own fixture.
+- **~~Deferred~~ — all four landed**, in `JsIntentions` beside the catalog. They were deferred as a group
+  because each has to prove something about a whole body before it may fire (whether `this`/`arguments`
+  appear, whether an index is used only to index, whether every arm tests one variable), and extract-to-local
+  additionally waited on `Names`, whose deriving half took a JDT binding — it is now `DerivedNames` in
+  `core`, split where the rule stops needing a type, so `getDisplayName()` names itself `displayName` in
+  both languages from one implementation. `JsKeywords` gained an `arrow` probe beside `template`, and for
+  the same reason.
+  **The proofs are the work, and three of them were wrong on the first pass in ways that still compiled:**
+  the `this` check compared a source span, and a `KeywordLiteral` in `this.x` measures five characters
+  (`"this."`), so the conversion was offered on exactly the shape it exists to refuse; the write-through
+  check excluded plain `=`, so `xs[i] = 0` read as a fetch and `for…of` silently stopped storing; and
+  `break` was matched by text against a node whose source carries its semicolon. Found by dumping twelve
+  fixtures through the real analyser rather than by reading the conditions.
+  **It also fixed a pre-existing one:** Rhino's loops extend `Scope`, so the structural statement walk
+  stopped on a loop's own header — "Surround with try/catch" offered to wrap a `while` condition. Both fix
+  classes now share one walk that excludes `Loop`.
 - **A refused keyword still gets no fix**, which is the one catalog entry that is an absence: `class` cannot
   be rewritten as a function honestly, and a repair that silently changed semantics is worse than none.
 

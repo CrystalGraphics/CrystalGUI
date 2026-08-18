@@ -31,7 +31,7 @@ import java.util.function.Predicate;
  * them is something a completion list offers — you do not complete punctuation. They belong to the
  * compatibility band (10.3b), which warns about them in source you have already written.</p>
  */
-final class JsKeywords {
+public final class JsKeywords {
 
     /**
      * Accepted by every Rhino, so never probed.
@@ -73,6 +73,12 @@ final class JsKeywords {
         // offered on a band that would refuse the result, and this is the one place that measures what the
         // engine takes. @see #NOT_OFFERED, which is what keeps it out of the popup.
         PROBES.put("template", "var probeM = `x`;");
+        // NOR IS THIS ONE, for the same reason and with a sharper edge: `=>` is punctuation, so there is
+        // nothing for a completion row to insert -- and "convert to an arrow function" must not be offered
+        // on a band that would refuse the result. The probe uses BOTH halves of the syntax (a parameter
+        // list and an expression body), because a band could take one form and not the other and the
+        // intention writes whichever fits.
+        PROBES.put("arrow", "var probeN = (a) => a;");
     }
 
     private JsKeywords() {
@@ -95,11 +101,23 @@ final class JsKeywords {
      * can be accepted at all. The fix catalog asks the other question — "would this band take it" — and
      * needs the full set.</p>
      */
-    private static final Set<String> NOT_OFFERED = Set.of("template");
+    private static final Set<String> NOT_OFFERED = Set.of("template", "arrow");
 
     /** Everything the engine takes, keyword or construct — what the fix catalog gates on. */
     static List<String> measuredBy(Predicate<String> parses) {
         return supportedBy(parses);
+    }
+
+    /**
+     * The measured entries that are <b>not</b> reserved words, for a caller holding only the measured set.
+     *
+     * <p>{@code template} and {@code arrow} are constructs, so a fix deriving a variable name must not
+     * treat them as words it has to avoid — {@code var arrow = …} is perfectly legal JavaScript. Exposed
+     * rather than re-listed, because a second copy of this pair is a second thing to keep in step and the
+     * only symptom would be a fix quietly naming a variable {@code value}.</p>
+     */
+    public static Set<String> notAKeyword() {
+        return NOT_OFFERED;
     }
 
     /** What a completion list may offer: the measured set, minus what is not a keyword. */
