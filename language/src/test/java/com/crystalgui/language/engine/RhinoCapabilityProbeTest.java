@@ -144,6 +144,60 @@ public class RhinoCapabilityProbeTest {
     }
 
     /**
+     * <b>Band 8's probe output ships as a RESOURCE, and this is what stops it going stale.</b>
+     *
+     * <p>The compatibility band (§10.3b) warns an author on a modern host that a construct their local
+     * Rhino parsed happily is one a Java 8 player cannot load. It cannot ask band 8's parser to find
+     * that out, because a deployment ships <em>one</em> band — those jars are not there. So the answer
+     * has to travel as data, which means a file that can silently stop describing the jar it was
+     * measured from.</p>
+     *
+     * <p>Generated, never hand-edited, and asserted against a fresh measurement here: this is the same
+     * rule {@code StyleGovernanceTest.theDocumentedTokenTableIsCurrent} applies to the token table.
+     * <b>When it fails, copy {@code build/probe/rhino-8.properties} over the resource</b> — do not edit
+     * the resource to match, because the measurement is the truth and the file is the copy.</p>
+     */
+    @Test
+    public void theShippedBandEightProbeMatchesTheJarsItDescribes() throws IOException {
+        EngineClassLoader loader = loaderFor(EngineBand.JAVA_8);
+        Map<String, String> measured = new LinkedHashMap<>();
+        try {
+            Rhino rhino = new Rhino(loader);
+            for (Map.Entry<String, String> probe : SYNTAX.entrySet()) {
+                measured.put("syntax." + probe.getKey(), rhino.parses(probe.getValue()));
+            }
+        } finally {
+            loader.close();
+        }
+
+        java.util.Properties shipped = new java.util.Properties();
+        try (java.io.InputStream in = RhinoCapabilityProbeTest.class.getResourceAsStream(
+                "/assets/crystalgui/language/rhino-8.properties")) {
+            assertNotNull("the shipped band-8 probe resource is missing -- the compatibility band has "
+                    + "nothing to read, and warns about nothing at all, silently", in);
+            shipped.load(in);
+        }
+
+        for (Map.Entry<String, String> answer : measured.entrySet()) {
+            String was = shipped.getProperty(answer.getKey());
+            // COMPARED ON accepted-vs-refused, not on the message. The refusal text carries Rhino's own
+            // wording and a probe file regenerated on another machine may phrase it differently; what the
+            // compatibility band reads is the verdict, and that is what must not drift.
+            assertEquals("the shipped band-8 probe disagrees with band 8's actual jars about "
+                            + answer.getKey() + " -- copy build/probe/rhino-8.properties over "
+                            + "language/src/main/resources/assets/crystalgui/language/",
+                    verdictOf(answer.getValue()), verdictOf(was));
+        }
+    }
+
+    /** {@code accepted} or {@code refused}, dropping whatever explanation follows. */
+    private static String verdictOf(String answer) {
+        if (answer == null) return "missing";
+        int colon = answer.indexOf(':');
+        return colon < 0 ? answer.trim() : answer.substring(0, colon).trim();
+    }
+
+    /**
      * The four constructs `plan_m10.md` §13a claims no shipped band accepts.
      *
      * <p>Asserted rather than merely recorded, because the whole ES-level story told to authors rests on
