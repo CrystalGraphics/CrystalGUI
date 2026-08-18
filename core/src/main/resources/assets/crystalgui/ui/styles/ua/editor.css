@@ -1571,7 +1571,50 @@ documentationpopup .__doc-body__ {
     max-height: 220px;
 }
 
-/* THE BOTTOM BAND IS GONE for now, rules and all.
+/* THE BOTTOM BAND, back — and the objection that removed it is answered rather than worked around.
+ *
+ * It read `this file` for anything declared in the open document, which says less than the owner band
+ * above it. It now HIDES in that case (DeclarationSite.resource == null means this document), so the
+ * only time it appears is the one no other band covers: the symbol is declared somewhere else and this
+ * names where. Same rule the body band follows.
+ *
+ * The pencil is `editor.goToDefinition` with a different affordance. No kebab: its four entries are
+ * settings that do not exist. */
+documentationpopup .__doc-footer__ {
+    flex-direction: row;
+    align-items: center;
+    gap-all: 4px;
+}
+
+/* THE FILE, not the action. This briefly carried the pencil's own icon, which made the row read as two
+ * buttons with a filename between them. */
+documentationpopup .__doc-footer-icon__ {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    background: icon("crystalgui:file-text");
+}
+
+documentationpopup .__doc-footer-text__ {
+    font-size: 8;
+    color: var(--doc-footer-fg, #7A7E85);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    /* THE ONE THAT GIVES. The pencil must not be squeezed out of a narrow popup, and a filename is the
+     * half that can lose characters and still say something. */
+    width: 0;
+    flex-grow: 1;
+}
+
+documentationpopup .__doc-footer-edit__ {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    cursor: pointer;
+    background: icon("crystalgui:general/action/edit");
+}
+
+/* THE OLD NOTE, kept because the reasoning that removed the band is still what shapes it.
  *
  * It read `this file` for anything declared in the open document -- the common case -- which says less
  * than the owner band directly above it. IntelliJ's names the MODULE instead, and we have no notion of
