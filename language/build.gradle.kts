@@ -60,7 +60,7 @@ val jdtBand17 = "3.46.0"       // newest at 2026-08-12
 val rhinoBand8 = "1.7.15.1"    // last release whose class files are Java 8
 // `org.eclipse.text` — where IDocument and TextEdit live, and therefore what ASTRewrite's only usable
 // exit is spelled in. Named here rather than only inside platformBand8 because the ADAPTER compiles
-// against it too (see the compileOnly pair below), and two spellings of one version is the hazard the
+// against it too (see `engineApi` below), and two spellings of one version is the hazard the
 // note above this block already describes.
 val eclipseTextBand8 = "3.11.0"
 val asmVersion = "9.10"     // real classes are major 49; only module-info is 53
@@ -122,6 +122,26 @@ val platformBand11 = listOf(
 /** Class-file major a band's JVM can load: 52 = Java 8, 55 = Java 11, 61 = Java 17. */
 val bandCeiling = mapOf("8" to 52, "11" to 55, "17" to 61)
 
+// ── What the adapter compiles against, exposed so a platform module can borrow it ───────────────
+//
+// These jars ship in nothing. At run time an engine comes out of `EngineClassLoader`, and putting ECJ
+// or Rhino on an application classpath is the one thing the band split exists to prevent -- so they are
+// `compileOnly` here and absent from every jar this build produces.
+//
+// A module that BUNDLES this module's class files still has to be able to NAME them. jvmDowngrader
+// walks the supertypes of every referenced type while deciding what needs a Java 8 stub, and a type it
+// cannot open is reported as `Could not find class` and then treated as having no supertypes at all --
+// 1,820 error lines on every `:mc1710:downgradeJar`, for exactly the 140 types in these four jars.
+//
+// Consumable rather than re-declared on the other side: two spellings of a version is the hazard this
+// file already spends a paragraph on, and a platform module pinning `jdt.core:3.26.0` itself would be a
+// second copy to keep in step with `EngineBand`. `compileOnly` extends this, so there is one list.
+val engineApi: Configuration by configurations.creating {
+    isCanBeConsumed = true
+    isCanBeResolved = false
+}
+configurations.named("compileOnly") { extendsFrom(engineApi) }
+
 // Resolvable, and consumed by nothing. `./gradlew :language:engineReport` prints each band's closure.
 val engineBand8: Configuration by configurations.creating { isCanBeConsumed = false }
 val engineBand11: Configuration by configurations.creating { isCanBeConsumed = false }
@@ -162,11 +182,11 @@ dependencies {
     testCompileOnly("com.google.code.findbugs:jsr305:3.0.2")
 
 
-    // THE ADAPTER COMPILES AGAINST THE OLDEST BAND, AND ONLY THE OLDEST (§6.3). `compileOnly`, so it
-    // never reaches a runtime classpath -- at run time the engine comes from EngineClassLoader and this
-    // artifact is not there at all. Pinning band 8's version here is what turns "one adapter across
-    // three bands" into a compile-time guarantee: an API added after 3.26.0 fails the build rather than
-    // failing on a Java 8 host months later.
+    // THE ADAPTER COMPILES AGAINST THE OLDEST BAND, AND ONLY THE OLDEST (§6.3). Declared on
+    // `engineApi`, which `compileOnly` extends -- so it never reaches a runtime classpath, and at run
+    // time the engine comes from EngineClassLoader with this artifact not there at all. Pinning band 8's
+    // version here is what turns "one adapter across three bands" into a compile-time guarantee: an API
+    // added after 3.26.0 fails the build rather than failing on a Java 8 host months later.
     //
     // Note this is jdt.core ALONE, without band 8's platform closure. The adapter uses the compiler,
     // not the workspace, and pulling the closure in would let it reach APIs that happen to resolve here
@@ -183,7 +203,7 @@ dependencies {
     //
     // If something here ever genuinely needs a platform type, add it from `platformBand8` above rather
     // than by restoring transitivity: those versions are pinned, and a range is not.
-    compileOnly("org.eclipse.jdt:org.eclipse.jdt.core:$jdtBand8") { isTransitive = false }
+    engineApi("org.eclipse.jdt:org.eclipse.jdt.core:$jdtBand8") { isTransitive = false }
 
     // ONE platform artifact, and the compiler named it: `ASTParser.createAST` takes an
     // `org.eclipse.core.runtime.IProgressMonitor`, so javac cannot type the call without it even though
@@ -193,7 +213,7 @@ dependencies {
     //
     // Taken from `platformBand8` rather than from a range, which is the whole point of the line above:
     // 3.14.100 is pinned, ships in band 8, and is the version a Java 8 host will actually load.
-    compileOnly("org.eclipse.platform:org.eclipse.equinox.common:3.14.100") { isTransitive = false }
+    engineApi("org.eclipse.platform:org.eclipse.equinox.common:3.14.100") { isTransitive = false }
 
     // AND org.eclipse.text, for the SAME BAND and for one reason: `ASTRewrite` lives in jdt.core but
     // both its exits are spelled in types that do not -- `rewriteAST` takes an `org.eclipse.jface.text
@@ -207,7 +227,7 @@ dependencies {
     // -- compiling against it asserts something that is true in production rather than only here.
     // Pinned to band 8's version for the usual reason: an API added later must fail the build now.
     // Non-transitive for the reason given on jdt.core: this one's ranges are open too.
-    compileOnly("org.eclipse.platform:org.eclipse.text:$eclipseTextBand8") { isTransitive = false }
+    engineApi("org.eclipse.platform:org.eclipse.text:$eclipseTextBand8") { isTransitive = false }
 
     // AND RHINO, same rule, same band. The JS adapter names `org.mozilla.javascript.*` for exactly the
     // reason the ECJ one names JDT: it lives on the far side of the bridge and its whole job is to speak
@@ -217,7 +237,7 @@ dependencies {
     //
     // The probe is what says which SYNTAX each band accepts; this says which API all of them carry.
     // Two different questions about the same jars, and neither answers the other.
-    compileOnly("org.mozilla:rhino:$rhinoBand8")
+    engineApi("org.mozilla:rhino:$rhinoBand8") { isTransitive = false }
 
     // AND ON THE TEST COMPILE PATH, so a fix's test can write `IProblem.UnusedImport` instead of the
     // literal 268435844. That is not merely nicer to read: a correction is keyed on a problem id, and a

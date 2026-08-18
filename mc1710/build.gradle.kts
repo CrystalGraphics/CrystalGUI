@@ -1,6 +1,15 @@
+import xyz.wagyourtail.jvmdg.gradle.task.DowngradeJar
+
 plugins {
     id("com.gtnewhorizons.gtnhconvention")
     `java-library`
+}
+
+// Resolvable, and on no compile or run classpath -- see the `downgradeJar` block below for why that
+// matters and why these jars may never be beside the application.
+val engineApi: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
 }
 
 group = providers.gradleProperty("modGroup").orElse("com.crystalgui").get()
@@ -42,6 +51,29 @@ jvmdg.multiReleaseOriginal.set(false)
 //     unzip -p mc1710/build/libs/crystalgui-1.0.0-dev.jar com/crystalgui/ui/UIWindow.class | od -An -t u1 -N 8
 dependencies {
     compileOnly(project(":core"))
+
+    // :language's engine API, for the DOWNGRADE CLASSPATH ONLY -- see downgradeJar below.
+    engineApi(project(path = ":language", configuration = "engineApi"))
+}
+
+// ECJ, Rhino and the two Eclipse platform jars the adapter names, on `downgradeJar`'s classpath.
+//
+// NOT on the compile or run classpath, and that distinction is the whole point: an engine is loaded by
+// EngineClassLoader from a band directory, so these must never be beside the application. But jvmdg is
+// not running the classes, it is REWRITING them -- it walks the supertypes of every referenced type to
+// decide what needs a Java 8 stub, and `DowngradeJar.classpath` defaults to this module's
+// `main.compileClasspath`, which cannot contain them because `compileOnly` is not transitive across a
+// project dependency.
+//
+// So every one of the 140 types in those jars was reported `Could not find class` and then treated as
+// having no supertypes at all: 1,820 error lines per build. Harmless here -- the stub mapper only needs
+// a supertype walk to notice a Java 9+ API reached THROUGH an inherited member, and these are all
+// Java 8-era third-party APIs -- but a wall of red that hides anything real, and the same absence would
+// be silent rather than harmless the day one of them did inherit something stubbed.
+//
+// Borrowed from :language rather than re-declared, so `jdt.core:3.26.0` is pinned in exactly one file.
+tasks.named<DowngradeJar>("downgradeJar") {
+    classpath = classpath.plus(engineApi)
 }
 
 // Remove Kotlin and a Java 9 file from JOML when shadowing.
