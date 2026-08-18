@@ -18,6 +18,18 @@ val engineBand8: Configuration by configurations.creating {
     isCanBeResolved = true
 }
 
+/**
+ * Mixin's LaunchWrapper tweaker, for the OBFUSCATED run only. @see stageObfMods
+ *
+ * Non-transitive: this stages a mods folder, and pulling unimixins' own dependencies into it would put
+ * libraries beside mods where FML expects only mods.
+ */
+val obfMixinBootstrap: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    isTransitive = false
+}
+
 group = providers.gradleProperty("modGroup").orElse("com.crystalgui").get()
 version = providers.gradleProperty("modVersion").orElse("1.0.0").get()
 
@@ -63,6 +75,10 @@ dependencies {
 
     // Band 8's jars, to be carried INSIDE the mod jar as resources -- see bundleEngineBand8 below.
     engineBand8(project(path = ":language", configuration = "engineBand8Bundle"))
+
+    // The version the GTNH convention already puts on the DEV run -- stated here because only the dev
+    // variant is on that classpath and an obf mods folder needs the release one. @see obfMixinBootstrap
+    obfMixinBootstrap("io.github.legacymoddingmc:unimixins:0.2.1")
 }
 
 // ── The engine band, bundled (§26.2) ────────────────────────────────────────────────────────────
@@ -137,7 +153,13 @@ tasks.named<DowngradeJar>("downgradeJar") {
 //
 // A missing GL call produces wrong rendering and NO exception, so there is nothing to search for
 // without these; they are the only way to rule the manager in or out.
-tasks.named<JavaExec>("runClient") {
+// APPLIED TO BOTH CLIENTS, and that is what makes §26.8 testable at all. `runObfClient` launches the
+// FORGE OBFUSCATED client -- Minecraft at SRG names, which is production -- so it is the only run in this
+// build where the namespace probe answers "obfuscated" and the mapping path actually executes. Wiring the
+// harness to `runClient` alone would leave the last mile verifiable only by hand, which is precisely the
+// loop the harness exists to remove.
+listOf("runClient", "runObfClient").forEach { runTask ->
+tasks.named<JavaExec>(runTask) {
     if (providers.gradleProperty("cgNoDedup").isPresent) {
         systemProperty("crystalgraphics.state.noDedup", "true")
     }
@@ -213,6 +235,50 @@ tasks.named<JavaExec>("runClient") {
             systemProperty("crystalgui.autotest.bytes", it)
         }
     }
+}
+}
+
+// ── The reobfuscated client (§26.8) ─────────────────────────────────────────────────────────────
+//
+// `runObfClient` launches Minecraft at SRG names, which is the only run in this build where the
+// namespace probe answers "obfuscated" and the mapping path actually executes. Two things stop it
+// working out of the box, and neither is ours:
+//
+//  1. GTNH's ToolchainModule overrides the working directory of runClient, runVanillaClient AND
+//     runObfClient to `runClientDirectory` -- while RFG's prepareObfModsFolder stages the reobfuscated
+//     jars into `run/obfuscated/mods`. So the obf client searches run/client/mods, finds nothing, and
+//     loads three mods (mcp, FML, Forge) with no error anywhere. Put back.
+//
+//  2. Only THIS project's jar is staged. CrystalGraphics is the parent mod and always present in
+//     production, so an obf run without it is not a production shape at all -- its reobfuscated jar is
+//     copied in beside ours.
+val stageObfMods = tasks.register<Copy>("stageObfMods") {
+    group = "crystalgui"
+    description = "Puts the reobfuscated CrystalGUI and CrystalGraphics jars where the obf client looks."
+    into(layout.projectDirectory.dir("run/obfuscated/mods"))
+    from(tasks.named("reobfJar"))
+    // CrystalGraphics is an INCLUDED BUILD, not a subproject, so `project(":CrystalGraphics:mc1710")`
+    // does not resolve -- the `:CrystalGraphics:` prefix in Gradle's own output is the included build's
+    // name rather than a project path. Its task is reachable through `gradle.includedBuild` and its
+    // artifact by path; there is no substitution for a reobfuscated jar, because substitutions resolve
+    // the DEV one.
+    dependsOn(gradle.includedBuild("CrystalGraphics").task(":mc1710:reobfJar"))
+    from(rootProject.file("CrystalGraphics/mc1710/build/libs/crystalgraphics-1.0.0.jar"))
+
+    // AND THE MIXIN BOOTSTRAP. CrystalGraphics declares mixins.crystalgraphics.json, so LaunchWrapper
+    // asks for org.spongepowered.asm.launch.MixinTweaker before any mod loads -- and the dev run gets it
+    // from a `devOnlyNonPublishable` dependency that, by definition, is not published into an obf mods
+    // folder. Without it the obf client dies with a ClassNotFoundException naming Mixin, several layers
+    // above anything of ours.
+    //
+    // The RELEASE artifact, not the `-dev` one the dev run uses: `-dev` is mapped for a deobfuscated
+    // environment, which is the opposite of what this run is for.
+    from(obfMixinBootstrap)
+}
+
+tasks.named<JavaExec>("runObfClient") {
+    dependsOn(stageObfMods)
+    workingDir = layout.projectDirectory.dir("run/obfuscated").asFile
 }
 
 tasks.shadowJar {

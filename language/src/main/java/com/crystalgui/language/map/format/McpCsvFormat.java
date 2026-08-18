@@ -48,7 +48,6 @@ public final class McpCsvFormat implements MappingFormat {
 
     private static final String METHOD_PREFIX = "func_";
     private static final String FIELD_PREFIX = "field_";
-    private static final String PARAMETER_PREFIX = "p_";
 
     @Override
     public String id() {
@@ -101,12 +100,9 @@ public final class McpCsvFormat implements MappingFormat {
         } else if (runtime.startsWith(FIELD_PREFIX)) {
             into.field(runtime, readable);
         }
-        // Anything else -- p_* parameters, and MCP's handful of hand-named rows -- is skipped rather than
-        // refused. See the class note: a strict reader loses thousands of good rows to a few odd ones.
+        // Anything else is skipped rather than refused, and there are two kinds: `p_*` parameter rows,
+        // which are debug metadata nothing resolves against, and MCP's handful of hand-named entries.
+        // See the class note -- a strict reader loses thousands of good rows to a few odd ones.
     }
 
-    /** Whether a name looks like an MCP parameter, i.e. the tier this format deliberately drops. */
-    static boolean isParameter(String name) {
-        return name.startsWith(PARAMETER_PREFIX);
-    }
 }

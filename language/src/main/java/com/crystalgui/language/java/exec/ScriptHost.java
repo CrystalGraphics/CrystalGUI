@@ -7,6 +7,7 @@ import com.crystalgui.language.engine.bridge.ScriptCompiler;
 import com.crystalgui.language.java.JavaLanguage;
 import com.crystalgui.language.java.classpath.HostClasspath;
 import com.crystalgui.language.map.InheritanceAwareRemapper;
+import com.crystalgui.language.map.PlatformMappings;
 import com.crystalgui.language.map.MappingSet;
 import com.crystalgui.language.run.*;
 import com.crystalgui.language.run.console.ConsoleFilter;
@@ -120,9 +121,29 @@ public final class ScriptHost implements ScriptRuntime {
         return this;
     }
 
-    /** The ordinary setup: identity mappings, an in-memory cache, the host's own classpath. */
+    /**
+     * The ordinary setup: an in-memory cache, the host's own classpath, and the PROBED mapping.
+     *
+     * <h3>The mapping is read here rather than passed in</h3>
+     *
+     * <p>Which namespace the runtime speaks is not a caller's choice -- {@link PlatformMappings} probes
+     * it -- and taking it as a parameter is how the runner ends up translating differently from the
+     * editor. It used to be {@code MappingSet.IDENTITY} outright, which is correct on every host whose
+     * runtime is already readable and silently wrong on the one that is not: the script compiles against
+     * {@code Blocks.stone}, nothing rewrites it, and the run dies with
+     * {@code NoSuchFieldError: stone} on a field that exists under another name. Measured in the
+     * reobfuscated client, which is the only place it can be.</p>
+     *
+     * <p>Read ONCE, at construction, unlike {@code PlatformTypeBytes} which re-reads. A host outlives a
+     * compile and a run, and swapping the mapping under it mid-flight would remap one script's bytes
+     * through a different table from the one its {@code ScriptCacheKey} names -- so a first launch that
+     * is still fetching runs unmapped, consistently, and the next host picks the mapping up. The cache
+     * key carries {@link #mappingsId}, so nothing compiled under one is ever replayed under the other.</p>
+     */
     public static ScriptHost of(JavaEngine engine) {
-        return new ScriptHost(engine, ScriptCache.inMemory(), MappingSet.IDENTITY, "identity",
+        MappingSet mappings = PlatformMappings.current();
+        return new ScriptHost(engine, ScriptCache.inMemory(), mappings,
+                mappings.isIdentity() ? "identity" : "mapped",
                 ScriptHost.class.getClassLoader(), null);
     }
 
@@ -377,7 +398,8 @@ public final class ScriptHost implements ScriptRuntime {
                     + compiled.messages());
         }
         Map<String, byte[]> remapped = new InheritanceAwareRemapper(mappings,
-                InheritanceAwareRemapper.fromClassLoader(hostLoader)).remap(compiled.classes());
+                InheritanceAwareRemapper.fromClassLoader(hostLoader),
+                InheritanceAwareRemapper.membersFromClassLoader(hostLoader)).remap(compiled.classes());
         Map<String, byte[]> instrumented = Safepoints.inject(remapped);
 
         // REFUSED BEFORE ANYTHING RUNS, and checked on the REMAPPED bytes -- the policy is written in the

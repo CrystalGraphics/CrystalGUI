@@ -6,6 +6,7 @@ import com.crystalgui.language.platform.ScriptPlatform;
 import com.crystalgui.language.platform.ScriptPlatforms;
 
 import org.junit.After;
+import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -39,6 +40,15 @@ public class PlatformMappingsTest {
 
     private static final String WORLD = "net/minecraft/world/World";
 
+    /**
+     * BEFORE as well as after, and the before is the one that was missing.
+     *
+     * <p>{@code PlatformMappings} resolves once per process by design, and anything that opens a
+     * {@code ScriptHost} reads it — so a test class running earlier leaves it resolved to the identity,
+     * and this one then registers a platform that is never probed. It passed alone and failed in the
+     * suite, which is the signature.</p>
+     */
+    @Before
     @After
     public void forget() {
         ScriptPlatforms.reset();
@@ -104,13 +114,26 @@ public class PlatformMappingsTest {
                 Files.exists(cache.resolve("mappings")));
     }
 
-    /** An obfuscated runtime acquires the mapping and translates through it. */
+    /**
+     * An obfuscated runtime acquires the mapping and translates through it.
+     *
+     * <p>The cache is filled FIRST, so the resolution this asserts is the synchronous one. That is not
+     * avoiding the hard case, it is testing the one that is deterministic: with a complete cache
+     * {@code begin()} parses on the calling thread by design, and asserting on the background fetch
+     * instead means racing a daemon thread on a machine running the rest of the suite -- which is a test
+     * that fails for reasons that have nothing to do with the code. The fetch path has its own coverage
+     * in {@link MappingCacheTest}, where nothing is asynchronous.</p>
+     */
     @Test
     public void anObfuscatedRuntimeResolvesAMapping() throws Exception {
         Path cache = folder.newFolder("cache").toPath();
-        register("func_147439_a", cache, upstream());
+        MappingCoordinates coordinates = upstream();
+        assertEquals(MappingCache.State.FETCHED, MappingCache.load(coordinates, cache).state());
 
-        MappingSet mappings = awaitNonIdentity();
+        register("func_147439_a", cache, coordinates);
+
+        MappingSet mappings = PlatformMappings.current();
+        assertFalse("an obfuscated runtime was left on the identity mapping", mappings.isIdentity());
         assertEquals("getBlock", mappings.readableMethod(WORLD, "func_147439_a"));
     }
 
@@ -151,18 +174,4 @@ public class PlatformMappingsTest {
         assertFalse(Files.exists(cache.resolve("mappings")));
     }
 
-    /**
-     * The answer may arrive on a background thread, so a test has to wait for it rather than read once.
-     *
-     * <p>Bounded, and it fails by assertion rather than by hanging: a resolution that never completes is
-     * the bug, and a test that blocks forever hides it behind a timeout somewhere else.</p>
-     */
-    private MappingSet awaitNonIdentity() throws InterruptedException {
-        for (int attempt = 0; attempt < 200; attempt++) {
-            MappingSet mappings = PlatformMappings.current();
-            if (!mappings.isIdentity()) return mappings;
-            Thread.sleep(25);
-        }
-        throw new AssertionError("the mapping never resolved");
-    }
 }

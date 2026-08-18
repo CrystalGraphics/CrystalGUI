@@ -2,6 +2,7 @@ package com.crystalgui.mc.script;
 
 import com.crystalgui.language.map.ReadableView;
 
+import net.minecraft.launchwrapper.IClassNameTransformer;
 import net.minecraft.launchwrapper.IClassTransformer;
 import net.minecraft.launchwrapper.Launch;
 import net.minecraft.launchwrapper.LaunchClassLoader;
@@ -32,6 +33,29 @@ import java.util.List;
  * <p><b>Mixin-added members come for free.</b> Mixin applies through a transformer in exactly this list,
  * so a class whose bytes exist only because a mixin produced them is returned here like any other. That
  * is the claim no file-based classpath can satisfy and the reason this class exists.</p>
+ *
+ * <h3>The NAME has to be untransformed first, and in a dev client nothing says so</h3>
+ *
+ * <p>Callers ask for {@code net/minecraft/world/World}. In production the jar entry is {@code ave.class}
+ * — Notch names, remapped to SRG <em>as they load</em> — so {@code getClassBytes} for that name returns
+ * <b>null</b> and every Minecraft type looks absent. In a development client the two spellings are
+ * identical, so the mistake is completely invisible there: it was found by running the obfuscated client,
+ * where the namespace probe reported that it could not read {@code World} at all.</p>
+ *
+ * <p>{@code LaunchClassLoader.findClass} does exactly this before it reads anything:</p>
+ *
+ * <pre>
+ * final String untransformedName = untransformName(name);   // SRG  → Notch
+ * final String transformedName   = transformName(name);     // Notch → SRG
+ * byte[] basicClass = getClassBytes(untransformedName);
+ * runTransformers(untransformedName, transformedName, basicClass);
+ * </pre>
+ *
+ * <p>Both delegate to a {@link IClassNameTransformer}, which the loader keeps in a private field — but
+ * the same object is also an ordinary entry in the public transformer list, so it can be found by type
+ * instead of by reflection. That is the whole of the fix, and it is why the pair of names is passed to
+ * each transformer rather than one name twice: a deobfuscating transformer decides what to rename from
+ * the difference between them.</p>
  */
 final class LaunchWrapperBytes {
 
@@ -54,9 +78,21 @@ final class LaunchWrapperBytes {
         // so the conversion happens here rather than at each call site -- one spelling of a class name
         // per layer is what stops a lookup silently matching nothing.
         String binaryName = internalName.replace('/', '.');
+
+        List<IClassTransformer> transformers = loader.getTransformers();
+        if (transformers == null) transformers = java.util.Collections.<IClassTransformer>emptyList();
+
+        // THE TWO SPELLINGS, exactly as LaunchClassLoader.findClass computes them. Identical in a dev
+        // client, which is why getting this wrong is invisible there and total in production.
+        IClassNameTransformer renamer = renamerIn(transformers);
+        String untransformedName = renamer == null ? binaryName : renamer.unmapClassName(binaryName);
+        String transformedName = renamer == null ? binaryName : renamer.remapClassName(binaryName);
+        if (untransformedName == null) untransformedName = binaryName;
+        if (transformedName == null) transformedName = binaryName;
+
         byte[] bytes;
         try {
-            bytes = loader.getClassBytes(binaryName);
+            bytes = loader.getClassBytes(untransformedName);
         } catch (Exception unreadable) {
             // Absent is an ordinary answer -- the caller falls back to a reflection-synthesized stub --
             // so this must not become an exception the compiler has to understand.
@@ -64,15 +100,9 @@ final class LaunchWrapperBytes {
         }
         if (bytes == null) return null;
 
-        // The names LaunchWrapper passes a transformer are the un-transformed and transformed spellings
-        // of the class. In a development environment they are identical, and in production the
-        // deobfuscating transformer is itself one of the entries below, so passing the same name twice
-        // is what its own callers do for a class that needs no renaming.
-        List<IClassTransformer> transformers = loader.getTransformers();
-        if (transformers == null) return bytes;
         for (IClassTransformer transformer : transformers) {
             try {
-                byte[] next = transformer.transform(binaryName, binaryName, bytes);
+                byte[] next = transformer.transform(untransformedName, transformedName, bytes);
                 // A transformer returning null means "removed"; keeping the previous bytes would present
                 // a class the runtime does not have.
                 if (next == null) return null;
@@ -86,5 +116,25 @@ final class LaunchWrapperBytes {
             }
         }
         return bytes;
+    }
+
+    /**
+     * The loader's class-NAME transformer, found by type in its own public list.
+     *
+     * <p>{@code LaunchClassLoader} keeps this in a private {@code renameTransformer} field and registers
+     * it in the transformer list as well, so there is nothing to reflect on: the entry that implements
+     * {@link IClassNameTransformer} is the same object. Null off a deobfuscated environment, where there
+     * is no renaming to do and both spellings are the one the caller asked with.</p>
+     *
+     * <p>Not cached. It is one {@code instanceof} over a list of a few dozen, against a list that a mod
+     * may still be appending to during startup — and a cache populated before the deobfuscating
+     * transformer registered would answer null for the rest of the process, which is the failure this
+     * method exists to fix.</p>
+     */
+    private static IClassNameTransformer renamerIn(List<IClassTransformer> transformers) {
+        for (IClassTransformer transformer : transformers) {
+            if (transformer instanceof IClassNameTransformer) return (IClassNameTransformer) transformer;
+        }
+        return null;
     }
 }

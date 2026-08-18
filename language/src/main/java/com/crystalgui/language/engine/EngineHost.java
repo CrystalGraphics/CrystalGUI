@@ -1,11 +1,11 @@
 package com.crystalgui.language.engine;
 
-import java.io.Closeable;
-import java.io.IOException;
-import java.net.URL;
 import com.crystalgui.language.platform.ScriptPlatform;
 import com.crystalgui.language.platform.ScriptPlatforms;
 
+import java.io.Closeable;
+import java.io.IOException;
+import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.CodeSource;
