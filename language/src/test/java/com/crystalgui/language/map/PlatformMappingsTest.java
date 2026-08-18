@@ -87,6 +87,11 @@ public class PlatformMappingsTest {
             public NamespaceProbe namespaceProbe() {
                 return NamespaceProbe.declaring(WORLD, "getBlock");
             }
+
+            @Override
+            public String runtimeClassName(String onDiskInternalName) {
+                return onDiskInternalName;
+            }
         });
     }
 
@@ -167,6 +172,11 @@ public class PlatformMappingsTest {
             @Override
             public NamespaceProbe namespaceProbe() {
                 return NamespaceProbe.declaring(WORLD, "getBlock");
+            }
+
+            @Override
+            public String runtimeClassName(String onDiskInternalName) {
+                return onDiskInternalName;
             }
         });
 

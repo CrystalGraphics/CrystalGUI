@@ -119,6 +119,11 @@ public class ScriptPlatformTest {
             public NamespaceProbe namespaceProbe() {
                 return NamespaceProbe.NONE;
             }
+
+            @Override
+            public String runtimeClassName(String onDiskInternalName) {
+                return onDiskInternalName;
+            }
         };
     }
 }

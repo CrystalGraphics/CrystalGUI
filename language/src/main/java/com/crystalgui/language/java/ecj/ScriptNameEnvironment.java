@@ -104,6 +104,9 @@ final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
     /** Names already decided package-or-type by the live tier, for this compile. @see #isPackage */
     private final Map<String, Boolean> packages = new HashMap<String, Boolean>();
 
+    /** @see #classpathModules */
+    private char[][] classpathModules;
+
     /** Everything the classpath cannot supply, composed on the HOST side. @see TypeBytes */
     private final TypeBytes types;
 
@@ -293,9 +296,68 @@ final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
         return modules() == null ? null : modules().findType(typeName, packageName, moduleName);
     }
 
+    /**
+     * Which modules declare a package — <b>the module-aware spelling of {@link #isPackage}</b>.
+     *
+     * <h3>This is the one ECJ actually calls, and overriding only {@code isPackage} looks right</h3>
+     *
+     * <p>{@code isPackage} is a <em>default</em> method on {@code IModuleAwareNameEnvironment},
+     * implemented in terms of this one — so at compliance 9 or above ECJ asks here and the override
+     * never runs. The failure is silent and total: {@code demo.live.OnlyInMemory} is looked up as a type,
+     * comes back null, and resolution stops with {@code demo cannot be resolved to a type} without
+     * {@code isPackage} being consulted once.</p>
+     *
+     * <p>It also splits by band, which is what makes it nasty to find: band 8 compiles at compliance 8
+     * and uses {@code isPackage}, so an obfuscated 1.7.10 client worked while the test suite — which runs
+     * on band 17 — did not, for the same source and the same environment.</p>
+     *
+     * <h3>The module answer is BORROWED rather than invented</h3>
+     *
+     * <p>A live package belongs wherever the classpath's own types belong, and naming that module means
+     * naming ECJ's unnamed-module constant — an internal detail that has moved before. So the delegate is
+     * asked once about a package it certainly has, and its answer is reused verbatim. That cannot drift
+     * from what the rest of the environment reports, because it <em>is</em> what the rest of the
+     * environment reports.</p>
+     */
     @Override
     public char[][] getModulesDeclaringPackage(char[][] packageName, char[] moduleName) {
-        return modules() == null ? null : modules().getModulesDeclaringPackage(packageName, moduleName);
+        char[][] fromFiles = modules() == null
+                ? null : modules().getModulesDeclaringPackage(packageName, moduleName);
+        if (fromFiles != null || !live) return fromFiles;
+
+        String name = internalName(packageName, null);
+        if (name.isEmpty()) return null;
+        if (resolvedPackages.contains(name)) return classpathModules(moduleName);
+
+        Boolean known = packages.get(name);
+        if (known == null) {
+            known = types.readable(name) == null;
+            packages.put(name, known);
+        }
+        return known ? classpathModules(moduleName) : null;
+    }
+
+    /**
+     * Whatever the delegate says about a package it definitely has — {@code java/lang}.
+     *
+     * <p>Resolved once and cached, including a null answer: an environment that will not name a module
+     * for {@code java.lang} is not going to name one for ours either, and asking again per package would
+     * be a delegate call on the hot path of every qualified name.</p>
+     */
+    private char[][] classpathModules(char[] moduleName) {
+        if (classpathModules == null) {
+            // THE CALLER'S OWN moduleName, never null. FileSystem.getModulesDeclaringPackage does
+            // String.valueOf(moduleName) with no guard, so asking with null answers with an NPE from
+            // inside ECJ rather than with a module list -- and it arrives as a failed conversion, which
+            // reads as the type not existing.
+            char[][] borrowed = modules() == null ? null
+                    : modules().getModulesDeclaringPackage(
+                    new char[][]{"java".toCharArray(), "lang".toCharArray()}, moduleName);
+            // An empty module name is the unnamed module, which is what a plain classpath is. Used only
+            // where the delegate declines to answer at all.
+            classpathModules = borrowed == null ? new char[][]{new char[0]} : borrowed;
+        }
+        return classpathModules;
     }
 
     @Override
@@ -331,14 +393,21 @@ final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
      * and the type apart. Joining them here is why {@link #find} has one form to key its caches on.</p>
      */
     private static String internalName(char[][] packageName, char[] typeName) {
+        // NULL IS THE DEFAULT PACKAGE, and ECJ really does pass it: `isPackage(null, "demo")` is how it
+        // asks about a top-level package name. Treating it as an empty array rather than dereferencing
+        // it matters more than it looks -- an NPE thrown out of a name environment does not surface as a
+        // crash, it surfaces as `demo cannot be resolved to a type`, which reads as the type genuinely
+        // being absent and sends you looking at the byte source.
+        char[][] segmentsIn = packageName == null ? new char[0][] : packageName;
+        if (typeName == null && segmentsIn.length == 0) return "";
         StringBuilder name = new StringBuilder();
-        int segments = typeName == null ? packageName.length - 1 : packageName.length;
+        int segments = typeName == null ? segmentsIn.length - 1 : segmentsIn.length;
         for (int i = 0; i < segments; i++) {
             if (name.length() > 0) name.append('/');
-            name.append(packageName[i]);
+            name.append(segmentsIn[i]);
         }
         if (name.length() > 0) name.append('/');
-        name.append(typeName == null ? packageName[packageName.length - 1] : typeName);
+        name.append(typeName == null ? segmentsIn[segmentsIn.length - 1] : typeName);
         return name.toString();
     }
 

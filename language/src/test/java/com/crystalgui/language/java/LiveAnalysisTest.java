@@ -1,0 +1,193 @@
+package com.crystalgui.language.java;
+
+import com.crystalgui.language.engine.EngineBand;
+import com.crystalgui.language.engine.EngineSource;
+import com.crystalgui.language.engine.JavaEngine;
+import com.crystalgui.language.engine.bridge.SourceAnalyzer;
+import com.crystalgui.language.java.classpath.HostClasspath;
+import com.crystalgui.language.map.PlatformMappings;
+import com.crystalgui.language.map.ReadableView;
+import com.crystalgui.language.platform.MappingCoordinates;
+import com.crystalgui.language.platform.NamespaceProbe;
+import com.crystalgui.language.platform.ScriptPlatform;
+import com.crystalgui.language.platform.ScriptPlatforms;
+import com.crystalgui.text.diagnostic.Diagnostic;
+import com.crystalgui.text.diagnostic.DiagnosticSeverity;
+import com.crystalgui.text.lang.SymbolInfo;
+
+import org.junit.After;
+import org.junit.Assume;
+import org.junit.Before;
+import org.junit.Test;
+import org.objectweb.asm.ClassWriter;
+import org.objectweb.asm.Opcodes;
+
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Collection;
+import java.util.Collections;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+/**
+ * <b>The EDITOR resolves a type that exists only in live bytes.</b>
+ *
+ * <p>This is the half that was missing, and it was missing invisibly: the compiler was handed an
+ * {@code INameEnvironment} and the analyser was handed a list of files, so on an obfuscated Minecraft
+ * host a script compiled and ran perfectly while the editor could not resolve a single Minecraft type —
+ * red names, no completion, and a quick fix that could not offer the import because the type index had
+ * never heard of the class.</p>
+ *
+ * <p>The fixture serves a class through {@link ScriptPlatform#liveBytes()} that is <b>on no classpath at
+ * all</b>. Nothing but the live route can resolve it, so this fails outright if the analyser falls back
+ * to {@code ASTParser} — which is precisely what it did before, and what it still does everywhere no
+ * platform is registered.</p>
+ */
+public class LiveAnalysisTest {
+
+    /** Deliberately not a real package on any classpath — only the fixture can produce it. */
+    private static final String OWNER = "demo/live/OnlyInMemory";
+
+    private JavaEngine engine;
+
+    @Before
+    @After
+    public void forget() {
+        ScriptPlatforms.reset();
+        PlatformMappings.resetForTesting();
+    }
+
+    /** A class declaring one method, synthesized rather than compiled — it exists nowhere on disk. */
+    private static byte[] onlyInMemory() {
+        ClassWriter writer = new ClassWriter(0);
+        writer.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC | Opcodes.ACC_SUPER, OWNER, null,
+                "java/lang/Object", null);
+        writer.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null).visitEnd();
+        writer.visitMethod(Opcodes.ACC_PUBLIC, "greeting", "()Ljava/lang/String;", null, null).visitEnd();
+        writer.visitEnd();
+        return writer.toByteArray();
+    }
+
+    private void registerPlatform() {
+        ScriptPlatforms.register(new ScriptPlatform() {
+            @Override
+            public ReadableView.ByteSource liveBytes() {
+                return name -> OWNER.equals(name) ? onlyInMemory() : null;
+            }
+
+            @Override
+            public Path cacheRoot() {
+                return Paths.get("build", "crystalgui-test-cache").toAbsolutePath();
+            }
+
+            @Override
+            public MappingCoordinates mappings() {
+                return MappingCoordinates.NONE;
+            }
+
+            @Override
+            public NamespaceProbe namespaceProbe() {
+                return NamespaceProbe.NONE;
+            }
+
+            @Override
+            public String runtimeClassName(String onDiskInternalName) {
+                return onDiskInternalName;
+            }
+        });
+    }
+
+    private SourceAnalyzer analyzerOverBand() throws Exception {
+        EngineBand band = EngineBand.detect();
+        String paths = System.getProperty("cgui.test.engineBand" + band.minimumFeatureVersion());
+        EngineSource source = EngineSource.ofPathList(paths);
+        Assume.assumeTrue("no jars supplied for band " + band + "; skipping",
+                !source.jarsFor(band).isEmpty());
+        // The platform must be registered BEFORE the engine opens: JavaEngine installs the TypeBytes on
+        // both adapters in its constructor, which is the one place they cannot end up different.
+        registerPlatform();
+        engine = JavaEngine.open(band, source);
+        return engine.analyzer();
+    }
+
+    @After
+    public void closeEngine() throws Exception {
+        if (engine != null) engine.close();
+        engine = null;
+    }
+
+    /**
+     * A type only the live source has resolves, with no error and with its member typed.
+     *
+     * <p>Both halves matter. No error proves the name resolved; the member's return type proves it was
+     * resolved from real <em>bindings</em> rather than recovered as an unknown — which is what makes
+     * hover, documentation and completion follow from it rather than needing their own fix.</p>
+     */
+    @Test
+    public void aTypeThatExistsOnlyInLiveBytesResolvesInTheEditor() throws Exception {
+        SourceAnalyzer analyzer = analyzerOverBand();
+        String script = ""
+                + "public class Script {\n"
+                + "    String run() { return new demo.live.OnlyInMemory().greeting(); }\n"
+                + "}\n";
+
+        SourceAnalyzer.Analysis analysis =
+                analyzer.analyze("Script", script, HostClasspath.detect(), engine.releaseLevel(), 1L);
+        assertNotNull("the analyser produced nothing at all", analysis);
+        try {
+            for (Diagnostic problem : analysis.diagnostics()) {
+                if (problem.severity() == DiagnosticSeverity.ERROR) {
+                    fail("a live-only type did not resolve in the editor: " + problem);
+                }
+            }
+
+            SymbolInfo call = analysis.resolveAt(script.indexOf(".greeting") + 2);
+            assertNotNull("the member resolved to nothing", call);
+            assertNotNull(call.type());
+            assertEquals("java.lang.String", call.type().qualifiedName());
+        } finally {
+            analysis.close();
+        }
+    }
+
+    /**
+     * <b>And the same source fails without a platform</b>, which is what makes the test above mean
+     * something.
+     *
+     * <p>Without this, a build where the live route silently never ran would pass the first test for the
+     * wrong reason — the type would have to be on the classpath, and if it ever were, neither test would
+     * notice. This asserts the fixture really is unreachable by the file-based path.</p>
+     */
+    @Test
+    public void theSameSourceDoesNotResolveWithoutTheLiveRoute() throws Exception {
+        EngineBand band = EngineBand.detect();
+        String paths = System.getProperty("cgui.test.engineBand" + band.minimumFeatureVersion());
+        EngineSource source = EngineSource.ofPathList(paths);
+        Assume.assumeTrue("no jars supplied for band " + band + "; skipping",
+                !source.jarsFor(band).isEmpty());
+
+        // No platform registered, so TypeBytes is NONE and the analyser takes the ASTParser path.
+        engine = JavaEngine.open(band, source);
+        String script = ""
+                + "public class Script {\n"
+                + "    String run() { return new demo.live.OnlyInMemory().greeting(); }\n"
+                + "}\n";
+
+        SourceAnalyzer.Analysis analysis = engine.analyzer()
+                .analyze("Script", script, HostClasspath.detect(), engine.releaseLevel(), 1L);
+        assertNotNull(analysis);
+        try {
+            boolean unresolved = false;
+            for (Diagnostic problem : analysis.diagnostics()) {
+                if (problem.severity() == DiagnosticSeverity.ERROR) unresolved = true;
+            }
+            assertTrue("the fixture type resolved WITHOUT a platform, so it is on the classpath "
+                    + "somewhere and the other test proves nothing", unresolved);
+        } finally {
+            analysis.close();
+        }
+    }
+}

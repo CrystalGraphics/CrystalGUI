@@ -138,7 +138,7 @@ final class EcjCompilation {
      * be assembled here. With {@link TypeBytes#NONE} this is exactly the file-based environment it
      * replaces.</p>
      */
-    private static INameEnvironment environmentFor(List<String> classpath, int releaseLevel,
+    static INameEnvironment environmentFor(List<String> classpath, int releaseLevel,
                                                    TypeBytes types) {
         return new ScriptNameEnvironment(fileSystemFor(classpath, releaseLevel), types);
     }

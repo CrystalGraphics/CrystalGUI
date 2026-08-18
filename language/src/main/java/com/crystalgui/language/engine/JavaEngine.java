@@ -2,6 +2,7 @@ package com.crystalgui.language.engine;
 
 import com.crystalgui.language.engine.bridge.ScriptCompiler;
 import com.crystalgui.language.engine.bridge.SourceAnalyzer;
+import com.crystalgui.language.engine.bridge.TypeBytes;
 import com.crystalgui.language.java.classpath.PlatformTypeBytes;
 
 import java.io.Closeable;
@@ -50,8 +51,12 @@ public final class JavaEngine implements Closeable {
         //
         // Which namespace the runtime speaks is PROBED rather than passed -- see PlatformMappings -- so
         // there is nothing to decide here and no way for two engines to decide it differently.
-        this.compiler = compiler.resolveAgainst(PlatformTypeBytes.of());
-        this.analyzer = analyzer;
+        // ONE OBJECT, BOTH SIDES. Handing the analyser its own would let the editor and the runner
+        // disagree about what exists -- which they did: the compiler resolved live and the analyser read
+        // files, so an obfuscated host compiled and ran a script the editor could not resolve at all.
+        TypeBytes types = PlatformTypeBytes.of();
+        this.compiler = compiler.resolveAgainst(types);
+        this.analyzer = analyzer.resolveAgainst(types);
     }
 
     /**
