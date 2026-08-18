@@ -216,6 +216,17 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
         if (parsed) {
             reported = withUnusedWarnings(reported, scopes, lines);
             reported = withConstantConditions(reported, root, text, lines);
+            // AND WHAT AN OLDER HOST WOULD REFUSE, if one has been named. Gated on the same `parsed`
+            // flag as the other two and for a sharper reason than theirs: this reports constructs THIS
+            // engine accepted, so on a file it could not parse the question is not merely unreliable,
+            // it is unanswerable. @see JsCompatibility
+            List<Diagnostic> incompatible = JsCompatibility.warningsIn(root, text, lines,
+                    refusedByTarget, targetLabel);
+            if (!incompatible.isEmpty()) {
+                List<Diagnostic> merged = new ArrayList<>(reported);
+                merged.addAll(incompatible);
+                reported = merged;
+            }
         }
 
         // THE IMPORTS JOIN THE HOST'S BINDINGS, which is what they are: a name in scope that the file
@@ -345,6 +356,22 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
      * a mark on correct code in every event loop ever written. {@code if (true)} is not exempt, because
      * nobody writes one on purpose.</p>
      */
+    /**
+     * What the target band refuses, and what to call it — both empty by default.
+     *
+     * <p>Volatile and plain fields rather than anything cleverer: this is a setting a host writes once
+     * at startup and every analysis reads, which is the same shape the policy and the mappings have.</p>
+     */
+    private volatile Set<String> refusedByTarget = Set.of();
+
+    private volatile String targetLabel = "older";
+
+    @Override
+    public void compatibleWith(Set<String> refused, String label) {
+        this.refusedByTarget = refused == null ? Set.of() : Set.copyOf(refused);
+        this.targetLabel = label == null || label.isBlank() ? "older" : label;
+    }
+
     private static List<Diagnostic> withConstantConditions(List<Diagnostic> problems, AstRoot root,
                                                            String source, LineIndex lines) {
         List<Diagnostic> out = new ArrayList<>(problems);
