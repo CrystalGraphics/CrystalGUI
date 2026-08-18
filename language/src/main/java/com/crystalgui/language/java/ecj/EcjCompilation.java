@@ -98,14 +98,34 @@ final class EcjCompilation {
                     requestor,
                     new DefaultProblemFactory(Locale.getDefault()))
                     .compile(new ICompilationUnit[]{new InMemoryUnit(className, source)});
-        } catch (RuntimeException failed) {
+        } catch (OutOfMemoryError exhausted) {
+            // THE ONE THING NOT TURNED INTO A MESSAGE. Building a diagnostic string after the heap has
+            // run out is how a recoverable stall becomes an unrecoverable one. EcjSourceAnalyzer.parse
+            // makes the same carve-out for the same reason.
+            throw exhausted;
+        } catch (RuntimeException | LinkageError | AssertionError failed) {
             output.errored = true;
+            // ERRORS AS WELL AS EXCEPTIONS, and the sibling analyser has caught both since it was
+            // written -- its javadoc explains that JDT asserts on its own invariants and that one such
+            // assertion fires on perfectly good Java. This path had only RuntimeException, and the gap
+            // was not theoretical: on a Minecraft 1.7.10 client a missing ASM meant NoClassDefFoundError
+            // out of this method, through the Run command, through the UI dispatch, into
+            // Minecraft.runGameLoop -- which ends the client. A compiler must not be able to do that.
+            //
+            // LinkageError specifically, rather than Throwable, because the failures worth surviving here
+            // are LOADING failures: an engine class absent from a band, a class file a host's JVM
+            // refuses, a jar whose signer does not match. Those are deployment facts a user can be told
+            // about. AssertionError is JDT's own, per above. A ThreadDeath or a stop is not ours to eat.
+            //
             // WITH THE TOP FRAME. "could not compile: NullPointerException" names nothing a reader can
             // act on, and this path catches faults in ECJ's internals as well as in ours -- the frame is
             // the only thing that says which.
             StackTraceElement[] frames = failed.getStackTrace();
-            output.messages.add("could not compile: " + failed
-                    + (frames.length > 0 ? " at " + frames[0] + " | " + frames[1] + " | " + frames[2] : ""));
+            StringBuilder message = new StringBuilder("could not compile: ").append(failed);
+            for (int i = 0; i < frames.length && i < 3; i++) {
+                message.append(i == 0 ? " at " : " | ").append(frames[i]);
+            }
+            output.messages.add(message.toString());
         } finally {
             if (environment != null) environment.cleanup();
         }
