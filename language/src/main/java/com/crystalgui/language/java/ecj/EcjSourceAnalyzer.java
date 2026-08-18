@@ -20,6 +20,7 @@ import org.eclipse.jdt.core.compiler.CategorizedProblem;
 import org.eclipse.jdt.core.compiler.IProblem;
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTParser;
+import org.eclipse.jdt.internal.compiler.env.INameEnvironment;
 import org.eclipse.jdt.core.dom.ASTVisitor;
 import org.eclipse.jdt.core.dom.Annotation;
 import org.eclipse.jdt.core.dom.AbstractTypeDeclaration;
@@ -64,6 +65,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import com.crystalgui.language.engine.bridge.Analysis;
+import com.crystalgui.language.engine.bridge.TypeBytes;
 import com.crystalgui.language.engine.bridge.CodeActionContext;
 
 /**
@@ -95,10 +97,29 @@ import com.crystalgui.language.engine.bridge.CodeActionContext;
  */
 public final class EcjSourceAnalyzer implements SourceAnalyzer {
 
+    /**
+     * What the classpath cannot supply — the SAME object the compiler resolves against.
+     *
+     * <p>Volatile because it is installed once during startup, on whichever thread opened the engine,
+     * and read on every analysis thereafter — which is a scheduler lane, not that thread.</p>
+     */
+    private volatile TypeBytes types = TypeBytes.NONE;
+
+    @Override
+    public SourceAnalyzer resolveAgainst(TypeBytes types) {
+        this.types = types == null ? TypeBytes.NONE : types;
+        return this;
+    }
+
     @Override
     public Analysis analyze(String className, String source, List<String> classpath,
                             int releaseLevel, long version) {
-        CompilationUnit unit = parse(className, source, classpath, releaseLevel, true);
+        // THE LIVE ROUTE FIRST, where there is one. `ASTParser` can only be told about FILES, so on an
+        // obfuscated host it resolves nothing a script actually names -- the compiler saw `Minecraft`
+        // and the editor saw `ave.class`, and a script that compiled and ran showed as broken.
+        // @see DomResolution
+        CompilationUnit unit = live(className, source, classpath, releaseLevel);
+        if (unit == null) unit = parse(className, source, classpath, releaseLevel, true);
         // JDT COULD NOT FINISH, so ask it for the half it can still do. See parse().
         if (unit == null) unit = parse(className, source, classpath, releaseLevel, false);
         if (unit == null) return null;
@@ -107,6 +128,49 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
         // are matched by would not be the same strings. @see AttachedSources
         return new EcjAnalysis(unit, source, version, releaseLevel,
                 AttachedSources.forClasspath(classpath));
+    }
+
+    /**
+     * A resolved unit built against the live name environment, or null where there is none.
+     *
+     * <h3>The same environment as the compiler, deliberately</h3>
+     *
+     * <p>Not an equivalent one — the same {@link TypeBytes}, so the editor and the runner cannot
+     * disagree about what exists. Two implementations that happen to agree is what this replaces, and
+     * they did not agree: the runner resolved through live bytes and the editor through files.</p>
+     *
+     * <h3>A fresh environment per analysis, like a compile</h3>
+     *
+     * <p>{@code ScriptNameEnvironment}'s caches are per instance because a transformer can add a member
+     * between one analysis and the next; sharing one across keystrokes would answer from before it. The
+     * classpath half is ECJ's own {@code FileSystem}, rebuilt with it — which is what the file-based
+     * path did per parse anyway.</p>
+     *
+     * <p>Null when no platform is registered, which is the harness, every test and a plain JVM: those
+     * take the {@code ASTParser} path exactly as before, so the route with the coverage is the route
+     * they keep.</p>
+     */
+    private CompilationUnit live(String className, String source, List<String> classpath,
+                                 int releaseLevel) {
+        TypeBytes available = types;
+        if (available == TypeBytes.NONE || !DomResolution.isAvailable()) return null;
+        INameEnvironment environment = null;
+        try {
+            environment = EcjCompilation.environmentFor(classpath, releaseLevel, available);
+            return DomResolution.resolve(new InMemoryUnit(className, source), source.toCharArray(),
+                    environment, compilerOptions(releaseLevel), EcjOptions.jlsLevel());
+        } catch (RuntimeException | LinkageError | AssertionError failed) {
+            // Falling back is always available and always correct, so nothing here is worth throwing.
+            return null;
+        } finally {
+            if (environment != null) {
+                try {
+                    environment.cleanup();
+                } catch (RuntimeException ignored) {
+                    // Cleanup failing must not lose an analysis that already succeeded.
+                }
+            }
+        }
     }
 
     /**

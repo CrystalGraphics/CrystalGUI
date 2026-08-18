@@ -61,6 +61,18 @@ public final class Mc1710ScriptPlatform implements ScriptPlatform {
     }
 
     /**
+     * Notch → SRG, so the type index can offer a class the classpath stores under another name.
+     *
+     * <p>The whole of the 1.7.10 answer, because LaunchWrapper already owns the translation — the same
+     * {@code IClassNameTransformer} {@link LaunchWrapperBytes} uses to ask for bytes. Identity in a
+     * development client.</p>
+     */
+    @Override
+    public String runtimeClassName(String onDiskInternalName) {
+        return LaunchWrapperBytes.runtimeName(onDiskInternalName);
+    }
+
+    /**
      * {@code .minecraft/config/crystalgui} — beside the config, never inside the workspace.
      *
      * <p>The rule the session record, the trash and the engine bands all already follow: derived and

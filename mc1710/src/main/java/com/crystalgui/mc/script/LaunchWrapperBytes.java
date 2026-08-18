@@ -119,6 +119,33 @@ final class LaunchWrapperBytes {
     }
 
     /**
+     * What the runtime calls a class the classpath stores as {@code internalName}.
+     *
+     * <p>Notch → SRG, through the same {@link IClassNameTransformer} the byte route uses, so the type
+     * index and the compiler cannot end up naming a class differently. Returns the argument unchanged in
+     * a development client, where there is no renaming to do.</p>
+     *
+     * <p>Used while scanning every class file on the classpath — tens of thousands of entries — so the
+     * renamer is looked up once and held. That is safe HERE and deliberately not in {@link #transformed}:
+     * an index scan happens when a document opens, long after every mod has registered, whereas a byte
+     * request can arrive at any time and a null cached early would answer wrongly for the whole process.</p>
+     */
+    static String runtimeName(String internalName) {
+        LaunchClassLoader loader = Launch.classLoader;
+        if (loader == null) return internalName;
+        if (cachedRenamer == null) {
+            List<IClassTransformer> transformers = loader.getTransformers();
+            if (transformers == null) return internalName;
+            cachedRenamer = renamerIn(transformers);
+            if (cachedRenamer == null) return internalName;
+        }
+        String renamed = cachedRenamer.remapClassName(internalName.replace('/', '.'));
+        return renamed == null ? internalName : renamed.replace('.', '/');
+    }
+
+    private static volatile IClassNameTransformer cachedRenamer;
+
+    /**
      * The loader's class-NAME transformer, found by type in its own public list.
      *
      * <p>{@code LaunchClassLoader} keeps this in a private {@code renameTransformer} field and registers

@@ -65,6 +65,11 @@ public interface ScriptPlatform {
         }
 
         @Override
+        public String runtimeClassName(String onDiskInternalName) {
+            return onDiskInternalName;
+        }
+
+        @Override
         public String toString() {
             return "ScriptPlatform.NONE";
         }
@@ -92,4 +97,31 @@ public interface ScriptPlatform {
 
     /** How to tell a readable runtime from an obfuscated one, or {@link NamespaceProbe#NONE}. */
     NamespaceProbe namespaceProbe();
+
+    /**
+     * What the runtime calls a class the <b>classpath stores under another name</b>.
+     *
+     * <h3>What this is for, and what it is not</h3>
+     *
+     * <p>Only the type index, which is what offers a class you have not imported yet. It scans jar
+     * central directories, and on an obfuscated host those hold Notch names — so typing {@code Minecr}
+     * offered {@code MinecraftForge} and {@code MinecraftServer}, which are ordinary unobfuscated Forge
+     * classes, and never {@code net.minecraft.client.Minecraft}. Nothing could offer the import either,
+     * because nothing knew the class existed.</p>
+     *
+     * <p><b>Resolution does not need this.</b> Analysis, hover and documentation go through the live name
+     * environment, which asks about a name it is given rather than enumerating. This exists purely
+     * because a completion list has to know what there is <em>to</em> offer.</p>
+     *
+     * <h3>A translation rather than a listing</h3>
+     *
+     * <p>The index already walks every class file on the classpath, so handing it a rename costs one
+     * string operation per entry and nothing else — no enumeration to build, no list to hold, no class
+     * bytes read twice. The <em>kind</em> still comes from the real file, which is what keeps an
+     * interface's glyph an interface: obfuscation renames a class, it does not change its access flags.</p>
+     *
+     * <p>Internal names, with slashes, both ways. Returning the argument unchanged is the ordinary answer
+     * and the only one a development client, a plain JVM or any non-Minecraft host ever gives.</p>
+     */
+    String runtimeClassName(String onDiskInternalName);
 }

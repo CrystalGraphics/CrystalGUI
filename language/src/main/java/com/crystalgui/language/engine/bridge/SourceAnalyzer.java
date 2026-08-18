@@ -37,6 +37,24 @@ public interface SourceAnalyzer {
                      long version);
 
     /**
+     * Types the classpath cannot supply — the same object the compiler resolves against.
+     *
+     * <p><b>The editor and the runner must not answer differently</b>, and until this existed they did:
+     * the compiler was handed a live name environment and the analyser read files, so on an obfuscated
+     * host a script compiled and ran while the editor could not resolve a single Minecraft type. Sharing
+     * the object rather than the classpath is what makes the two identical by construction instead of by
+     * two implementations agreeing.</p>
+     *
+     * <p>A default of {@link TypeBytes#NONE} keeps the harness and every test on the file-based path they
+     * have always taken. @see ScriptCompiler#resolveAgainst</p>
+     *
+     * @return this, so a host can install it where it obtains the analyser
+     */
+    default SourceAnalyzer resolveAgainst(TypeBytes types) {
+        return this;
+    }
+
+    /**
      * The Java engine's analysis — the general {@link com.crystalgui.language.engine.bridge.Analysis},
      * under the name it had before the answer was split from the request.
      *

@@ -1,5 +1,7 @@
 package com.crystalgui.language.java.classpath;
 
+import com.crystalgui.language.platform.ScriptPlatforms;
+
 import com.crystalgui.text.SimilarNames;
 
 import com.crystalgui.text.lang.SymbolKind;
@@ -553,7 +555,17 @@ public final class TypeIndex {
         // Neither of these is a type anybody writes.
         if (path.endsWith("package-info.class") || path.endsWith("module-info.class")) return;
 
-        String binary = path.substring(0, path.length() - ".class".length()).replace('/', '.');
+        // WHAT THE RUNTIME CALLS IT, which on an obfuscated host is not what the jar calls it. Applied
+        // here rather than at each scan site because all three of them end up in this method, and a
+        // classpath entry that skipped the rename would put Notch names in the completion list for one
+        // source and readable ones for another.
+        //
+        // Identity everywhere but an obfuscated Minecraft client, where without it the index holds `ave`
+        // and friends: typing `Minecr` offered MinecraftForge and MinecraftServer -- real, unobfuscated
+        // Forge classes -- and never net.minecraft.client.Minecraft, so nothing could offer the import
+        // either. @see ScriptPlatform#runtimeClassName
+        String internalName = path.substring(0, path.length() - ".class".length());
+        String binary = ScriptPlatforms.current().runtimeClassName(internalName).replace('/', '.');
         // NOT FOR USERS. `sun.` and anything with an `internal` package segment is implementation detail
         // that the compiler will refuse or warn about; offering it is offering a mistake. IntelliJ hides
         // the same set. Filtered here rather than per-source so the classpath gets it too.
