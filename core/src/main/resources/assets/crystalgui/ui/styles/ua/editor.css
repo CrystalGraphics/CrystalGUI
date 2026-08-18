@@ -1450,6 +1450,18 @@ documentationpopup .__doc-owner-text__ {
     color: var(--doc-owner-fg, #7A7A7A);
 }
 
+/* THE PROVENANCE NOTE -- `— from JSDoc`, `— from last run`. A dynamic language's answer carries a
+ * provenance a static one never needs, and the owner band is the right place for it: that band already
+ * says where a symbol comes from.
+ *
+ * QUIETER THAN THE OWNER, and italic, because it is a remark ABOUT the answer rather than part of it.
+ * Without a rule of its own it was walked as another segment of the qualified path -- `from` tinted as a
+ * package, `JSDoc` as a type -- which read as the engine having parsed a class called `from.JSDoc`. */
+documentationpopup .__doc-owner-text__::highlight(doc-owner-note) {
+    color: var(--doc-owner-note-fg, #5F5F5F);
+    font-style: italic;
+}
+
 /* The definition line -- ONE text run, and NOT a wrapping one.
  *
  * `white-space: normal` here is what made the box too narrow, and the mechanism is worth stating because

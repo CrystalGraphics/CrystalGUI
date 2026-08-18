@@ -144,6 +144,21 @@ public final class RhinoResolution {
         String identifier = property.getIdentifier();
         if (identifier == null || identifier.isEmpty()) return null;
 
+        // THE TYPE AT THE END OF A PACKAGE CHAIN IS THE TYPE, not a property of a package. Hovering the
+        // `ArrayList` of `new java.util.ArrayList()` asked what `java.util` has by that name, and a
+        // package has no type, so the receiver came back null and the answer was a bare `PropertyGet`
+        // property: the popup drew the word `ArrayList` with no owner, no signature and no icon, where
+        // the same hover in a .java file names the class and quotes its declaration. The chain is already
+        // recognised for COLOURING -- markJavaChains draws exactly these segments as module/module/type --
+        // so resolution disagreeing with the colours was the engine contradicting itself on one line.
+        if (interop != null) {
+            String typeName = RhinoInference.javaNameOf(access, scopes::declaresAnywhere);
+            if (typeName != null && typeName.endsWith("." + identifier)) {
+                SymbolInfo type = interop.describe(typeName, false);
+                if (type != null) return type;
+            }
+        }
+
         TypeRef receiver = typeOf(access.getTarget(), access.getAbsolutePosition());
         String javaName = receiver == null ? null : JsTypeRef.javaNameOf(receiver);
         if (javaName != null && interop != null) {
@@ -159,15 +174,29 @@ public final class RhinoResolution {
                 // from what the member already reported. @see InteropResolver#describeMember
                 SymbolInfo described = interop.describeMember(javaName, candidate, staticSide);
                 Signature quoted = described == null ? null : described.signature();
+                // WHAT KIND OF TYPE OWNS IT, asked of the Java engine rather than guessed. The popup's
+                // own inference has only the member's kind to reason from and cannot tell a class from an
+                // interface, so every Java member hovered from JavaScript drew a class glyph -- while the
+                // same member hovered in a .java file drew the interface one, from the same widget, in
+                // the same session. The engine already knows; nothing was asking it.
+                SymbolInfo owned = candidate.withContainerKind(javaTypeKind(javaName));
                 if (quoted == null) {
-                    return candidate.withSignature(JsSignatures.of(candidate, List.of()));
+                    return owned.withSignature(JsSignatures.of(owned, List.of()));
                 }
                 // THE SIGNATURE AND THE DECLARATION SITE ONLY -- never the whole description. The probe
                 // resolves against the GENERIC declaration, so it reports the container as
                 // `java.util.ArrayList<E>` where `membersOf` says `java.util.ArrayList`; returning it
                 // wholesale made one member describe itself two different ways depending on whether a
                 // hover or a completion had asked. The member's identity stays the list's.
-                SymbolInfo signed = candidate.withSignature(quoted);
+                // AND THE OWNER AS THE PROBE RESOLVED IT -- `java.util.ArrayList<E>`, not the raw
+                // `java.util.ArrayList` the member list carries. The probe resolves against the GENERIC
+                // declaration, which is the same thing the Java engine's own hover reports, so taking it
+                // here is what makes the two editors agree. It deliberately does NOT travel back into
+                // `membersOf`: a completion row names the receiver the user typed, and only the hover is
+                // describing the declaration.
+                String owner = described.container();
+                SymbolInfo signed = (owner == null ? owned : owned.withContainer(owner))
+                        .withSignature(quoted);
                 return described.declaration() == null ? signed
                         : signed.withDeclaration(described.declaration());
             }
@@ -277,10 +306,11 @@ public final class RhinoResolution {
         TypeRef type = live != null ? live : stated;
         String tier = live != null ? FROM_LAST_RUN : declaredType != null ? FROM_JSDOC : null;
 
-        return signed(new SymbolInfo(identifier, declared.kind, type,
+        SymbolInfo symbol = new SymbolInfo(identifier, declared.kind, type,
                 tier == null ? container : suffixed(container, tier),
                 emptyToNull(doc.description()), modifiersOf(declared, doc.isDeprecated()), site,
-                parametersOf(declared, doc)), declared);
+                parametersOf(declared, doc));
+        return signed(symbol.withContainerKind(containerKindOf(declared)), declared);
     }
 
     /** What the last run made of a declared name, when that is more than the file could say. */
@@ -363,9 +393,13 @@ public final class RhinoResolution {
         if (typeName == null || typeName.isEmpty()) return null;
         TypeRef type = typeName.indexOf('.') > 0 ? JsTypeRef.javaInstance(typeName)
                 : JsTypeRef.js(typeName);
+        // MODULE, so the owner band draws a module glyph rather than a class one. The band's own
+        // inference reasons from the SYMBOL's kind -- a member lives in a type -- which is right for Java
+        // and wrong for every owner JavaScript has: a host, a file, or the last run's global scope.
         SymbolInfo binding = new SymbolInfo(identifier, SymbolKind.PROPERTY, type, FROM_HOST, null,
                 Set.of(), null);
-        return binding.withSignature(JsSignatures.of(binding, List.of()));
+        return binding.withContainerKind(SymbolKind.MODULE)
+                .withSignature(JsSignatures.of(binding, List.of()));
     }
 
     /** Whether the host bound this name — what stops a fix catalog treating it as a mistake. */
@@ -386,7 +420,10 @@ public final class RhinoResolution {
         }
         SymbolInfo global = new SymbolInfo(identifier, kindOf(entry), typeOfLive(entry),
                 FROM_LAST_RUN, null, Set.of(), null, parameters);
-        return global.withSignature(JsSignatures.of(global, List.of()));
+        // MODULE for the same reason as the host binding above: the global scope a run left behind is a
+        // place, not a class.
+        return global.withContainerKind(SymbolKind.MODULE)
+                .withSignature(JsSignatures.of(global, List.of()));
     }
 
     private static SymbolKind kindOf(LiveScopeSnapshot.Entry entry) {
@@ -668,9 +705,47 @@ public final class RhinoResolution {
         return name == null || name.getIdentifier() == null ? sourceName : name.getIdentifier();
     }
 
-    /** {@code summarise — from JSDoc}: the provenance, in the band that already names the owner. */
+    /**
+     * What KIND of thing that owner is — stated, never inferred.
+     *
+     * <p>The popup infers an owner's kind from the SYMBOL's kind on Java's rule: a member is declared in
+     * a type, a type in a package. That is right for Java and wrong for every owner JavaScript has. A
+     * local's owner is a <b>function</b> and a top-level declaration's is the <b>file</b>, and both came
+     * out drawn with a class glyph — {@code Ⓒ useJava} beside a local, {@code Ⓒ Probe.js} beside a
+     * top-level function, each asserting a class that does not exist.</p>
+     *
+     * <p>The owner itself is kept rather than dropped to match Java, which reports none for a local. A
+     * JavaScript local really is owned by its function, and with the right glyph that reads correctly;
+     * the defect was the icon claiming a type, not the fact being offered.</p>
+     */
+    @Nullable
+    private SymbolKind containerKindOf(RhinoScopes.Declaration declared) {
+        return declared.owner == null ? SymbolKind.MODULE : SymbolKind.FUNCTION;
+    }
+
+    /**
+     * {@code summarise — from JSDoc}: the provenance, after the owner it qualifies.
+     *
+     * <p>The separator is load-bearing rather than decorative — {@code DocumentationPopup} splits on it
+     * so the note is drawn as a muted trailing remark instead of being coloured as another segment of the
+     * qualified path. Without that the band read {@code applyDiscount — from JSDoc} with `from` and
+     * `JSDoc` tinted as though they were package and type names.</p>
+     */
     private static String suffixed(@Nullable String container, String tier) {
         return container == null || container.isEmpty() ? tier : container + " — " + tier;
+    }
+
+    /**
+     * Whether a Java type is a class, an interface or an enum — the owner band's glyph.
+     *
+     * <p>Asked of the Java engine, which is the only thing that knows: the three are spelled identically
+     * at every use site, and {@code membersOf} reports a member without saying what declared it.</p>
+     */
+    @Nullable
+    private SymbolKind javaTypeKind(String binaryName) {
+        if (interop == null) return null;
+        SymbolInfo type = interop.describe(binaryName, false);
+        return type == null ? null : type.kind();
     }
 
     private static Set<SymbolModifier> modifiersOf(RhinoScopes.Declaration declared, boolean deprecated) {

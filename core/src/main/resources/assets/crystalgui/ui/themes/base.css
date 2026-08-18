@@ -453,6 +453,10 @@ theme {
      * which is the whole reason the component layer exists. */
     --doc-problem-bg: var(--surface-base);
     --doc-owner-fg: var(--fg-hint);
+    /* The provenance remark after the owner -- quieter than the owner itself, because it qualifies the
+     * answer rather than naming it. Derived from the disabled foreground, which is this system's
+     * quietest legible text. */
+    --doc-owner-note-fg: var(--fg-disabled);
     --doc-body-fg: var(--fg);
 
     --squiggle-error: var(--error);
