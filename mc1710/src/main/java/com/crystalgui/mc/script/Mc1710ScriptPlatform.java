@@ -31,7 +31,19 @@ public final class Mc1710ScriptPlatform implements ScriptPlatform {
      */
     private static final MappingCoordinates MCP_STABLE_12 = MappingCoordinates
             .of("1.7.10", "stable", "12",
-                    "https://raw.githubusercontent.com/MinecraftForge/FML/1.7.10/conf/");
+                    "https://raw.githubusercontent.com/MinecraftForge/FML/1.7.10/conf/")
+            // The two files that carry members. `params.csv` is deliberately not among them: its names
+            // are parameter names, which exist in bytecode only as debug metadata and are never resolved
+            // against, so downloading it would cost 40 KB to change nothing a script can observe.
+            //
+            // NO DIGESTS PINNED YET, which is the one thing here that is provisional rather than decided.
+            // Upstream publishes no .md5 beside these two, so pinning means recording a hash of what was
+            // fetched -- a real check against a mirror serving something else, and one that has to be
+            // taken from a trusted fetch rather than invented. Until then a corrupted download is caught
+            // by the parse rather than by the digest, which is weaker and is stated so it is not mistaken
+            // for a decision.
+            .withFile("methods.csv")
+            .withFile("fields.csv");
 
     /**
      * {@code World#getBlock} is {@code func_147439_a} in production.
