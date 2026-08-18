@@ -90,6 +90,18 @@ public final class TypeIndex {
     /** Kept to a handful so the popup is not a wall of near-identical names. */
     private static final int MAX_RESULTS = 40;
 
+    /**
+     * Packages get their own, larger budget, because they are FEW and cutting them is what shows.
+     *
+     * <p>Forty is the right size for a list of types: it is a sample of something unbounded, and a
+     * narrower query gives a better one. A package list is not that — {@code net.minecraft} has
+     * twenty-seven sub-packages and that is the whole answer, so trimming it does not sample anything,
+     * it just loses {@code block}, {@code item}, {@code nbt} and most of the rest with nothing to
+     * suggest they existed. A package tree is wide at the top and shallow, so this bounds a pathological
+     * classpath without ever biting a real one.</p>
+     */
+    private static final int MAX_PACKAGES = 500;
+
     private final List<String> classpath;
     private List<Entry> entries;
 
@@ -187,15 +199,18 @@ public final class TypeIndex {
             return new Match(kept, all.truncated());
         }
 
-        /** As {@link TypeIndex#startingWith}, minus what the policy refuses. */
-        public Match startingWith(String qualifiedPrefix) {
-            Match all = index.startingWith(qualifiedPrefix);
+        /** As {@link TypeIndex#childrenOf}, minus what the policy refuses. */
+        public Children childrenOf(String parentPackage, String partialSegment) {
+            Children all = index.childrenOf(parentPackage, partialSegment);
             if (allowsClass == null) return all;
-            List<Entry> kept = new ArrayList<>(all.entries().size());
-            for (Entry entry : all.entries()) {
+            List<Entry> kept = new ArrayList<>(all.types().size());
+            for (Entry entry : all.types()) {
                 if (allowsClass.test(entry.qualifiedName())) kept.add(entry);
             }
-            return new Match(kept, all.truncated());
+            // Packages are not filtered: a policy names CLASSES, and a package that holds one refused
+            // class and twenty permitted ones still exists. Hiding it would make the permitted twenty
+            // unreachable.
+            return new Children(all.packages(), kept, all.truncated());
         }
 
         public Kind kindOf(Entry entry) {
@@ -234,39 +249,78 @@ public final class TypeIndex {
         return new Match(under, truncated);
     }
 
+    /** What sits directly under one package: its sub-package names, and the types in it. */
+    public record Children(List<String> packages, List<Entry> types, boolean truncated) {
+    }
+
     /**
-     * Entries whose <b>qualified name</b> begins with {@code qualifiedPrefix}, partial segment included.
+     * The one query an {@code import} line needs: sub-packages and types <b>directly</b> under a package.
      *
-     * <h3>Why {@link #allUnder} cannot answer this</h3>
+     * <h3>Why neither of the other two can answer it</h3>
      *
-     * <p>{@code allUnder} matches on a dot boundary, which is right for "everything in
-     * {@code java.util}" and wrong the moment a segment is half typed: {@code net.mine} is not a package,
-     * so it matches nothing at all, and the import being written offers nothing until the segment happens
-     * to be complete. That is exactly when a completion list is least useful.</p>
+     * <p>{@link #matching} takes a simple name, and an import is a qualified one. {@link #allUnder}
+     * matches on a dot boundary, so a half-typed segment — {@code java.ut} — is not a package and matches
+     * nothing, which is exactly when a completion list should be helping.</p>
      *
-     * <p>So this is a plain prefix test on the qualified name. Bounded like the others, and truncation is
-     * reported so the caller knows to ask again as the query narrows.</p>
+     * <h3>The cap belongs on the ANSWER, not on the scan</h3>
+     *
+     * <p>A capped scan truncates by <em>alphabet</em>. {@code net.minecraft} holds about 4,300 classes, so
+     * stopping after forty entries stops inside {@code net.minecraft.client} — and the sub-packages
+     * derived from those forty were {@code entity}, {@code gui}, {@code multiplayer} and a handful more,
+     * with {@code block}, {@code item}, {@code init}, {@code nbt} and most of the rest simply absent.
+     * Worse, {@code net.minecraft.client.Minecraft} was missing from its own package while two classes
+     * alphabetically before it were shown.</p>
+     *
+     * <p>So this is a full pass with the two output lists bounded <b>separately</b>. Packages are deduped
+     * to a segment each and there are rarely more than a few dozen, so the whole set survives; types are
+     * capped, because one package genuinely can hold hundreds and that is a list nobody reads.</p>
+     *
+     * @param parentPackage the completed part, {@code ""} for the top level
+     * @param partialSegment what has been typed of the next segment, possibly empty
      */
-    public Match startingWith(String qualifiedPrefix) {
-        if (qualifiedPrefix == null || qualifiedPrefix.isEmpty()) return new Match(List.of(), false);
+    public Children childrenOf(String parentPackage, String partialSegment) {
         ensureBuilt();
-        List<Entry> found = new ArrayList<>();
+        String parent = parentPackage == null ? "" : parentPackage;
+        String partial = partialSegment == null ? "" : partialSegment;
+        String prefix = parent.isEmpty() ? "" : parent + ".";
+
+        // SORTED AND DEDUPED. A package is a segment shared by everything in it, so the same name arrives
+        // once per class -- thousands of times for `net.minecraft.block`.
+        java.util.TreeSet<String> packages = new java.util.TreeSet<>();
+        List<Entry> types = new ArrayList<>();
         boolean truncated = false;
+
         for (Entry entry : entries) {
-            // The package first, because it is an interned string shared by every entry in it -- a cheap
-            // reject before building the qualified name, which is a concatenation per entry.
-            if (!entry.packageName().isEmpty() && !qualifiedPrefix.startsWith(entry.packageName())
-                    && !entry.packageName().startsWith(qualifiedPrefix)) {
+            String owner = entry.packageName();
+            if (owner.equals(parent)) {
+                if (!startsWith(entry.simpleName(), partial)) continue;
+                if (types.size() >= MAX_RESULTS) {
+                    truncated = true;
+                    continue;
+                }
+                types.add(entry);
                 continue;
             }
-            if (!entry.qualifiedName().startsWith(qualifiedPrefix)) continue;
-            if (found.size() >= MAX_RESULTS) {
-                truncated = true;
-                break;
-            }
-            found.add(entry);
+            if (!prefix.isEmpty() && !owner.startsWith(prefix)) continue;
+            if (prefix.isEmpty() && owner.isEmpty()) continue;
+
+            String remainder = prefix.isEmpty() ? owner : owner.substring(prefix.length());
+            int dot = remainder.indexOf('.');
+            String segment = dot < 0 ? remainder : remainder.substring(0, dot);
+            if (startsWith(segment, partial)) packages.add(segment);
         }
-        return new Match(found, truncated);
+
+        List<String> named = new ArrayList<>(packages);
+        if (named.size() > MAX_PACKAGES) {
+            named = new ArrayList<>(named.subList(0, MAX_PACKAGES));
+            truncated = true;
+        }
+        return new Children(named, types, truncated);
+    }
+
+    /** Case-insensitive, because a completion list is matched the way names are typed rather than spelt. */
+    private static boolean startsWith(String candidate, String prefix) {
+        return prefix.isEmpty() || candidate.regionMatches(true, 0, prefix, 0, prefix.length());
     }
 
     /** Whether {@code packageName} is at or under {@code prefix}, on a dot boundary. */

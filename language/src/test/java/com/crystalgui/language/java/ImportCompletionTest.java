@@ -5,6 +5,7 @@ import com.crystalgui.language.java.classpath.TypeIndex;
 
 import org.junit.Test;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -12,9 +13,8 @@ import static org.junit.Assert.assertTrue;
  * Completing a qualified name, which is what an {@code import} line is.
  *
  * <p>The ordinary list matches a <b>simple</b> name, so {@code import net.mine} asked about {@code mine}
- * and matched nothing — the popup opened with no rows, on every classpath rather than only an obfuscated
- * one. These pin the query the import path needs; the popup itself is a widget and not what is under
- * test here.</p>
+ * and matched nothing — an empty popup on every classpath, not only an obfuscated one. These pin the
+ * query the import path needs; the popup itself is a widget and is not what is under test.</p>
  */
 public class ImportCompletionTest {
 
@@ -23,40 +23,67 @@ public class ImportCompletionTest {
     }
 
     /**
-     * <b>A half-typed segment matches, which is the whole point.</b>
+     * <b>Every sub-package, not a sample of them.</b>
      *
-     * <p>{@code allUnder} already existed and answers on a dot boundary — right for "everything in
-     * {@code java.util}", useless for {@code java.ut}, which is not a package and so matches nothing.
-     * A completion list that only works once a segment is finished is one that never helps you finish
-     * it.</p>
+     * <p>The failure this pins is the one that shipped: the scan was bounded at forty <em>entries</em>,
+     * so the package set was whatever could be derived from the first forty classes — which all live in
+     * one sub-package, since entries are walked in name order. {@code net.minecraft} showed nine of its
+     * twenty-seven packages and {@code java} would show one.</p>
+     *
+     * <p>Asserted against {@code java}, whose sub-packages are on any JDK and are numerous enough that a
+     * capped scan cannot pass: {@code util}, {@code io}, {@code net}, {@code nio}, {@code text},
+     * {@code time}, {@code math}, {@code security} and more, and {@code java.util} alone holds far more
+     * than forty classes — so a scan that stopped early would never reach {@code java.time}.</p>
      */
     @Test
-    public void aPartialSegmentMatchesOnTheQualifiedName() {
-        TypeIndex.Match partial = index().startingWith("java.ut");
-        assertFalse("a half-typed package segment matched nothing", partial.entries().isEmpty());
-        for (TypeIndex.Entry entry : partial.entries()) {
-            assertTrue(entry.qualifiedName(), entry.qualifiedName().startsWith("java.ut"));
+    public void everySubPackageIsOfferedRatherThanTheFirstFew() {
+        TypeIndex.Children children = index().childrenOf("java", "");
+        for (String expected : new String[]{"util", "io", "net", "nio", "text", "time", "math",
+                "security", "lang"}) {
+            assertTrue("java." + expected + " was not offered: " + children.packages(),
+                    children.packages().contains(expected));
         }
     }
 
-    /** And a completed one still matches, so this is a widening rather than a replacement. */
+    /** A partial segment narrows the packages — which is the point of typing it. */
     @Test
-    public void aCompleteSegmentStillMatches() {
-        TypeIndex.Match whole = index().startingWith("java.util.");
-        assertFalse(whole.entries().isEmpty());
-        boolean sawList = false;
-        for (TypeIndex.Entry entry : whole.entries()) {
-            if ("java.util.List".equals(entry.qualifiedName())) sawList = true;
+    public void aPartialSegmentNarrowsThePackages() {
+        TypeIndex.Children children = index().childrenOf("java", "ut");
+        assertTrue(children.packages().contains("util"));
+        assertFalse("an unrelated package survived a narrowing prefix",
+                children.packages().contains("io"));
+    }
+
+    /**
+     * <b>Types come from the EXACT package, never from under it.</b>
+     *
+     * <p>An import names one type; offering {@code java.util.concurrent.Future} while the caret is at
+     * {@code java.util.} would insert a name that does not exist at that path.</p>
+     */
+    @Test
+    public void typesAreTheOnesDirectlyInThePackage() {
+        TypeIndex.Children children = index().childrenOf("java.util", "");
+        assertFalse("no types at all in java.util", children.types().isEmpty());
+        for (TypeIndex.Entry entry : children.types()) {
+            assertEquals("a type from a nested package was offered: " + entry.qualifiedName(),
+                    "java.util", entry.packageName());
         }
-        assertTrue("java.util.List was not under java.util.", sawList
-                || whole.truncated());
+        // And the sub-packages are still there beside them.
+        assertTrue(children.packages().contains("concurrent"));
+    }
+
+    /** Case-insensitive, because a list is matched the way names are typed rather than spelt. */
+    @Test
+    public void matchingIgnoresCase() {
+        assertTrue(index().childrenOf("java", "UT").packages().contains("util"));
+        assertFalse(index().childrenOf("java.util", "arrayl").types().isEmpty());
     }
 
     @Test
-    public void nothingMatchesAnEmptyOrUnknownPrefix() {
-        assertTrue(index().startingWith("").entries().isEmpty());
-        assertTrue(index().startingWith(null).entries().isEmpty());
-        assertTrue(index().startingWith("zzz.no.such.package").entries().isEmpty());
+    public void anUnknownPrefixOffersNothing() {
+        TypeIndex.Children none = index().childrenOf("zzz.no.such.package", "");
+        assertTrue(none.packages().isEmpty());
+        assertTrue(none.types().isEmpty());
     }
 
     /**
@@ -67,13 +94,10 @@ public class ImportCompletionTest {
      * which was correct for exactly as long as the two names were the same: 1.7.10 obfuscation gives an
      * inner class a <em>top-level</em> Notch name, so the dollar only appears after translation and the
      * list filled with {@code Minecraft$1} … {@code Minecraft$16} before {@code Minecraft} itself.</p>
-     *
-     * <p>Asserted over the whole index rather than one case, because the property is "no entry anywhere",
-     * and a single example would keep passing if a new source of names skipped the filter.</p>
      */
     @Test
     public void theIndexHoldsNoNestedTypes() {
-        for (TypeIndex.Entry entry : index().startingWith("java.").entries()) {
+        for (TypeIndex.Entry entry : index().childrenOf("java.util", "").types()) {
             assertFalse("a nested type reached the index: " + entry.qualifiedName(),
                     entry.qualifiedName().indexOf('$') >= 0);
         }
