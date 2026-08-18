@@ -376,9 +376,16 @@ public final class CgUiAutoTest {
             openProbe("a type receiver", "System." + NL, "System.");
             openProbe("a call receiver", "new java.util.ArrayList<String>()." + NL,
                     "new java.util.ArrayList<String>().");
+            // THE MIXIN-ADDED MEMBER, asked of the EDITOR rather than of the compiler.
+            //
+            // A script calling it compiles, which is exit criterion 3 -- and that says nothing about
+            // whether anyone could have WRITTEN the call. The compiler and the analyser reach the live
+            // bytes through different entry points, and this session's whole defect was those two
+            // disagreeing: every script resolved perfectly while the member list beside it was empty.
+            // So the popup is asked directly.
             openProbe("a minecraft receiver",
                     "net.minecraft.client.Minecraft.getMinecraft()." + NL,
-                    "net.minecraft.client.Minecraft.getMinecraft().");
+                    "net.minecraft.client.Minecraft.getMinecraft().", "cgMixinProbe");
             openProbe("a jdk-only line", "String s = \"x\"; int n = s.length(); s." + NL, "s.");
             // THE DISCRIMINATOR. Identical receiver, identical caret, the only difference being that this
             // one declares a type and so is analysed AS WRITTEN, where a bare body is wrapped in a prelude
@@ -397,12 +404,15 @@ public final class CgUiAutoTest {
         final String source;
         final int caret;
         final LanguageServices services;
+        /** A member the list must contain, or null. @see #reportCompletionProbes */
+        final String expect;
 
-        Probe(String what, String source, int caret, LanguageServices services) {
+        Probe(String what, String source, int caret, LanguageServices services, String expect) {
             this.what = what;
             this.source = source;
             this.caret = caret;
             this.services = services;
+            this.expect = expect;
         }
     }
 
@@ -419,6 +429,11 @@ public final class CgUiAutoTest {
      * anything was the last, and only because the four before it had given the scheduler time.</p>
      */
     private static void openProbe(String what, String source, String upTo) {
+        openProbe(what, source, upTo, null);
+    }
+
+    /** As above, and asserts in the log that {@code expect} is among the members offered. */
+    private static void openProbe(String what, String source, String upTo, String expect) {
         LanguageRegistry.Entry entry = LanguageRegistry.forFileName("Probe.java");
         if (entry == null) {
             CrystalGuiCore.LOGGER.error("CGUI AUTOTEST complete: no Java entry registered");
@@ -430,7 +445,7 @@ public final class CgUiAutoTest {
             CrystalGuiCore.LOGGER.error("CGUI AUTOTEST complete: no services for {}", what);
             return;
         }
-        PENDING.add(new Probe(what, source, source.indexOf(upTo) + upTo.length(), services));
+        PENDING.add(new Probe(what, source, source.indexOf(upTo) + upTo.length(), services, expect));
     }
 
     /** Asks every pending probe, once the frames in between have let their analyses land. */
@@ -455,6 +470,14 @@ public final class CgUiAutoTest {
                         "CGUI AUTOTEST complete: {} — {} rows, incomplete={}, {} problems [{}]",
                         probe.what, items.size(), got[0].incomplete(),
                         problems[0] == null ? "no" : String.valueOf(problems[0].size()), first);
+                if (probe.expect != null) {
+                    boolean offered = false;
+                    for (CompletionItem item : items) {
+                        if (probe.expect.equals(item.filterKey())) offered = true;
+                    }
+                    CrystalGuiCore.LOGGER.info("CGUI AUTOTEST complete:     {} offered by the editor: {}",
+                            probe.expect, offered ? "YES" : "NO");
+                }
                 if (problems[0] != null) {
                     int shown = 0;
                     for (com.crystalgui.text.diagnostic.Diagnostic problem : problems[0]) {
