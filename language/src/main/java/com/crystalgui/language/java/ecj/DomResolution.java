@@ -6,7 +6,6 @@ import org.eclipse.jdt.internal.compiler.DefaultErrorHandlingPolicies;
 import org.eclipse.jdt.internal.compiler.ICompilerRequestor;
 import org.eclipse.jdt.internal.compiler.env.ICompilationUnit;
 import org.eclipse.jdt.internal.compiler.env.INameEnvironment;
-import org.eclipse.jdt.internal.compiler.impl.CompilerOptions;
 import org.eclipse.jdt.internal.compiler.problem.DefaultProblemFactory;
 
 import java.lang.reflect.Constructor;
@@ -69,8 +68,10 @@ final class DomResolution {
         Constructor<?> constructor;
         Method resolve;
         Method convert;
+        Method compilerOptions;
         Field bindingTables;
         Constructor<?> tables;
+        int convertFlags;
     }
 
     /**
@@ -100,9 +101,15 @@ final class DomResolution {
         Handles found = lookUp();
         if (found == null) return null;
         try {
+            // JDT'S OWN OPTIONS FACTORY, with statement recovery ON -- the boolean is what it is for.
+            // Building them with `new CompilerOptions(options)` instead leaves recovery off, and the
+            // difference is not subtle: a script under the caret is nearly always incomplete, so an
+            // analyser without recovery answers for the one shape that does not need it.
+            Object compilerOptions = found.compilerOptions.invoke(null, options, Boolean.TRUE);
+
             Object resolver = found.constructor.newInstance(environment,
                     DefaultErrorHandlingPolicies.proceedWithAllProblems(),
-                    new CompilerOptions(options),
+                    compilerOptions,
                     DISCARDING,
                     new DefaultProblemFactory(Locale.getDefault()),
                     null, Boolean.FALSE);
@@ -120,8 +127,14 @@ final class DomResolution {
             // to get at all. Nothing is generated.
             Object declaration = found.resolve.invoke(resolver, unit, true, true, false);
             if (declaration == null) return null;
+            // THE FLAGS ARE THE RECOVERY, and passing 0 is why this shipped broken. `ASTParser` sets
+            // setStatementsRecovery and setBindingsRecovery, which its own note calls "the entire
+            // works-while-typing story"; through this entry point they are bits on `convert`. Without
+            // them a trailing dot -- `System.out.` , `getMinecraft().` , the commonest shape a completion
+            // popup ever opens on -- produced a tree with no usable bindings, so the member list came
+            // back empty or, worse, holding only what one interface contributed.
             Object converted = found.convert.invoke(null, declaration, source, apiLevel, options,
-                    true, null, tables, 0, null, true);
+                    true, null, tables, found.convertFlags, null, true);
             return converted instanceof CompilationUnit ? (CompilationUnit) converted : null;
         } catch (Throwable unavailable) {
             // Includes the AssertionError JDT's binding layer raises on a record whose component types
@@ -150,6 +163,13 @@ final class DomResolution {
             }
             return handles;
         }
+    }
+
+    /** One {@code public static final int} off the resolver, or 0 — which fails the whole lookup. */
+    private static int flag(Class<?> type, String name) throws ReflectiveOperationException {
+        Field field = type.getDeclaredField(name);
+        field.setAccessible(true);
+        return field.getInt(null);
     }
 
     private static Handles find() {
@@ -186,7 +206,19 @@ final class DomResolution {
             found.tables = found.bindingTables.getType().getDeclaredConstructor();
             found.tables.setAccessible(true);
 
+            found.compilerOptions = type.getDeclaredMethod("getCompilerOptions",
+                    java.util.Map.class, boolean.class);
+            found.compilerOptions.setAccessible(true);
+
+            // Recovery on both axes, plus the binding resolution that is the point of taking this route.
+            // A band missing any of them is treated as not supporting the shape at all rather than run
+            // with the bits we happened to find: partial recovery is exactly the failure being fixed.
+            found.convertFlags = flag(type, "RESOLVE_BINDING")
+                    | flag(type, "STATEMENT_RECOVERY")
+                    | flag(type, "BINDING_RECOVERY");
+
             return found.constructor == null || found.resolve == null || found.convert == null
+                    || found.compilerOptions == null || found.convertFlags == 0
                     ? null : found;
         } catch (Throwable absent) {
             return null;

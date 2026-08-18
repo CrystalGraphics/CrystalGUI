@@ -154,6 +154,44 @@ public class LiveAnalysisTest {
     }
 
     /**
+     * <b>An INCOMPLETE expression still resolves its receiver.</b>
+     *
+     * <p>A trailing dot is the commonest shape a completion popup ever opens on — {@code System.out.},
+     * {@code getMinecraft().} — and it does not parse. Recovery is what makes the rest of the file
+     * resolve anyway, and through this entry point it is a pair of bits on {@code convert} rather than
+     * the {@code ASTParser} setters, so it was silently off: the member list came back empty, or holding
+     * only what a single interface contributed.</p>
+     *
+     * <p>Asserted on the RECEIVER rather than on a member list, because that is the thing recovery
+     * saves: with it, the declaration above the broken line still has a type; without it, nothing in the
+     * unit does.</p>
+     */
+    @Test
+    public void aTrailingDotStillResolvesWhatCameBefore() throws Exception {
+        SourceAnalyzer analyzer = analyzerOverBand();
+        // The last line is deliberately unparseable -- exactly what a popup opens on.
+        String script = ""
+                + "public class Script {\n"
+                + "    void run() {\n"
+                + "        demo.live.OnlyInMemory held = new demo.live.OnlyInMemory();\n"
+                + "        held.\n"
+                + "    }\n"
+                + "}\n";
+
+        SourceAnalyzer.Analysis analysis =
+                analyzer.analyze("Script", script, HostClasspath.detect(), engine.releaseLevel(), 1L);
+        assertNotNull(analysis);
+        try {
+            SymbolInfo receiver = analysis.resolveAt(script.indexOf("held.") + 2);
+            assertNotNull("the receiver before a trailing dot resolved to nothing", receiver);
+            assertNotNull(receiver.type());
+            assertEquals("demo.live.OnlyInMemory", receiver.type().qualifiedName());
+        } finally {
+            analysis.close();
+        }
+    }
+
+    /**
      * <b>And the same source fails without a platform</b>, which is what makes the test above mean
      * something.
      *
