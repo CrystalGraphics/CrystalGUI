@@ -1034,6 +1034,45 @@ pixel layout or cosmetics.
 5. **Cache invalidation against mixins** — see 26.4. A per-process cache is wrong in a way that only
    appears once a mixin adds a member, i.e. not in any test that does not stage one.
 
+## 26.13a Where each exit criterion actually stands
+
+**Every step landed and both clients run the same script.** Recorded per criterion rather than as a tick,
+because three of the eight are met in substance and not in the letter, and a plan that says "done" about
+those is a plan that lies to whoever reads it next.
+
+| # | Criterion | Status |
+|---|---|---|
+| 1 | shipped jar opens the editor with analysis working, no system property | **met** — `-PcgBundledEngines` withholds the property; band 8 extracts to `<cacheRoot>/engines/8` and a script compiles and runs |
+| 2 | a Minecraft type resolves, completes and hovers in readable names | **resolve: met** — an obfuscated client compiles `Blocks.stone.getUnlocalizedName()`, which is only possible against a readable view. **Completion and hover: not separately exercised**; they read the same `Analysis`, so this is an untested inference rather than a verified claim |
+| 3 | a script referencing a mixin-added member compiles and links | **the hard half is met, the literal claim is not.** `-PcgBytes` shows 42 constants in the live `EntityRenderer` that exist in no file, including three Mixin-merged handlers — so the environment demonstrably carries members no classpath can. No script *calls* one, because the members CrystalGraphics' mixins add are private synthetics. A public mixin-added member would need mixin infrastructure in `mc1710`, which is scaffolding this phase deliberately did not add |
+| 4 | mappings absent on a clean install, acquired on first use, verified, installed atomically | **met, with one honest gap: no digests are pinned.** Upstream publishes no `.md5` beside `methods.csv`/`fields.csv`, so a pin has to be taken from a trusted fetch rather than invented; until then a corrupted download is caught by the parse rather than by the digest. The machinery is there and tested — `MappingCacheTest` covers corrupt-then-repair and reject-on-mismatch — it is the *data* that is missing |
+| 5 | the dev/prod namespace choice is detected, never configured | **met** — dev reports `the runtime already speaks readable names`, obfuscated fetches. No setting selects it |
+| 6 | an offline first run opens the editor, runs scripts, shows runtime names, and says why | **met in unit test, not exercised by being offline.** `UNAVAILABLE` is asserted through an unreachable `file:` URL and carries the reason; nobody has pulled a cable |
+| 7 | the same script file, unchanged, runs in dev and in a reobfuscated client | **met** — `tile.stone` in both, from one source |
+| 8 | `mc1710`'s `ScriptPlatform` contains no logic beyond a byte route, a path and two data objects | **met, and it grew.** 33 non-comment lines in `Mc1710ScriptPlatform` (a path and two constants) and 52 in `LaunchWrapperBytes`. The byte route is bigger than "a dozen lines" because production needs the name untransformed first — but it is still one route, and every line of it is about *obtaining bytes*. Nothing about mappings, caching, probing or compilation leaked down here |
+
+### What the reobfuscated client found that nothing else could
+
+Four defects, all invisible in dev and three of them silent. Recorded because the cost of §26.8 was
+almost entirely in *reaching* the client, and the value was entirely in what it then showed within
+minutes:
+
+1. `runObfClient` could not load the mod at all — GTNH points it at the dev run directory while RFG
+   stages into `run/obfuscated/mods`. It loaded three mods and said nothing.
+2. `getClassBytes` was asked in the wrong namespace, so every Minecraft type looked absent.
+3. `isPackage` could not answer for `net/minecraft/init`, stopping every script that named a
+   Minecraft type.
+4. The out direction was not applied — and then, once applied, renamed the script's own `run()`.
+
+### Two things this phase changed in the plan itself
+
+- **Step 3 is not achievable as written** (§26.9) — `ASTParser` has no name-environment seam, and the
+  internal route is closed by the jar-signing rule rather than by taste.
+- **"No owner qualification is needed" holds in one direction only** (§26.6) — readable → runtime is
+  ambiguous for about a fifth of the data, and the resolution is the owner rather than `packaged.srg`.
+
+---
+
 ## 26.13 Exit criteria
 
 1. A shipped (non-dev) mod jar opens the editor **with analysis working** — bands extracted from the jar,
