@@ -150,8 +150,9 @@ them. Family files lose their private helpers and get shorter.
   common leading whitespace* rather than trimming. Landed early with D5. (`ofLine` was not needed.)
 - ✅ **`Expected.typeOf(expression)`** — initialiser, assignment RHS, return (stopping at lambda),
   argument (via sole candidate), condition → boolean, cast operand. `Cast`, `Create` and `Value` all
-  read it; `Create.returnTypeFor` becomes `Expected.typeOf(call)` + `TypeNames`. **Not started** — it
-  is in, with `TypeNames.typeNode`
+  read it; `Create.returnTypeFor` becomes `Expected.typeOf(call)` + `TypeNames`. Landed with
+  `TypeNames.typeNode` — this row carried a leftover **Not started** immediately after saying it was in,
+  which is the only line in this file that contradicted its own tick
 
 ### 3.2 Existing classes that grow or shrink
 

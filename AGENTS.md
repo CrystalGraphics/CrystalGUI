@@ -1457,7 +1457,12 @@ com.crystalgui.ui              UIElement, UIWindow, Ui, UITransform, EventListen
 
 com.crystalgui.text            Rope, TextBuffer, TextSummary, Change/ChangeSet, Selection,
                                SelectionModel, TextPoint, TextRange, WordClassifier, WordOperations,
-                               LineEnding — the document model, all headless
+                               LineEnding — the document model, all headless. Plus the two utilities
+                               BOTH engines need and neither may own: SimilarNames (how close is close
+                               enough for a "did you mean") and DerivedNames (a name for something the
+                               author has not named). Each was in an engine until the second engine
+                               wanted it — a child-side class may not be imported across, so a shared
+                               utility is MOVED here rather than referenced in place
   .cursor                      CursorColumns, MoveOperations, TypeOperations, LineOperations,
                                MouseSelection, ColumnSelection — VS Code's boundaries, but NOT
                                file-for-file: MouseSelection and LineOperations come from
