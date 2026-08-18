@@ -45,6 +45,24 @@ public interface ScriptCompiler {
     Result compile(String className, String source, List<String> classpath, int releaseLevel);
 
     /**
+     * Types the classpath cannot supply — the live runtime, and the reflective floor under it.
+     *
+     * <p>On the compiler rather than passed per compile, for the reason {@code ScriptRuntime.restrictTo}
+     * gives about the sandbox: this is a property of the <b>deployment</b>, and every compile in it
+     * resolves the same way. Passing it per call would make it possible for two compiles in one process
+     * to disagree about what exists.</p>
+     *
+     * <p>A default of {@link TypeBytes#NONE} is the harness's posture and a test's — resolution then goes
+     * entirely through the classpath, exactly as it did before this existed. An engine with nothing to
+     * resolve beyond files ignores it.</p>
+     *
+     * @return this, so a host can install it where it obtains the compiler
+     */
+    default ScriptCompiler resolveAgainst(TypeBytes types) {
+        return this;
+    }
+
+    /**
      * What came back.
      *
      * <p><b>One thing to watch if this module is ever desugared toward Java 8 bytecode</b>, which

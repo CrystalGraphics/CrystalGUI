@@ -1,8 +1,6 @@
 package com.crystalgui.language.java.ecj;
 
-import com.crystalgui.language.map.MappingSet;
-import com.crystalgui.language.map.ReadableView;
-import com.crystalgui.language.platform.ScriptPlatform;
+import com.crystalgui.language.engine.bridge.TypeBytes;
 
 import org.eclipse.jdt.internal.compiler.env.IModule;
 import org.eclipse.jdt.internal.compiler.env.IModuleAwareNameEnvironment;
@@ -10,7 +8,9 @@ import org.eclipse.jdt.internal.compiler.env.INameEnvironment;
 import org.eclipse.jdt.internal.compiler.env.NameEnvironmentAnswer;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * What the compiler resolves against: the <b>live runtime</b> first, the classpath behind it.
@@ -31,15 +31,36 @@ import java.util.Map;
  *
  * <p>Answering from bytes means what the compiler resolves against is exactly what will execute.</p>
  *
- * <h3>The classpath is still the fallback, and off a Minecraft host it is the whole answer</h3>
+ * <h3>Three tiers, in this order, and the order is the design</h3>
  *
- * <p>With no platform registered — the harness, every test, a plain JVM — {@link #liveBytesFirst} is
- * false and every query goes straight to the delegate, so behaviour is identical to the file-based path
- * this replaces. That is deliberate: the environment nobody runs is the environment nobody notices
- * breaking, and this one is run by the entire existing suite.</p>
+ * <ol>
+ *   <li><b>{@link TypeBytes#readable}</b> — the live runtime, remapped. What is loaded is what will
+ *       execute, so where it and a file disagree it wins (§15.2).</li>
+ *   <li><b>The classpath delegate</b> — ECJ's own {@code FileSystem}. The JDK, and every jar that is on
+ *       the script's classpath and not loaded.</li>
+ *   <li><b>{@link TypeBytes#synthesized}</b> — a reflective stub, and only where the first two have both
+ *       said nothing. It is erased of whatever reflection cannot see, so it must never pre-empt a real
+ *       class file.</li>
+ * </ol>
  *
- * <p>With a platform, live bytes win and the delegate answers for everything the runtime does not have —
- * the JDK, and any jar on the script's classpath that is not loaded.</p>
+ * <h3>It holds a bridge type and nothing else, which is not a style choice</h3>
+ *
+ * <p>This class is loaded by {@code EngineClassLoader}, which is child-first for everything outside
+ * {@code java.*}, the bridge package and {@code com.crystalgui.text.*}. So naming
+ * {@code ScriptPlatforms} here gets the band's <em>own</em> copy of it, with its own statics — and since
+ * {@code register()} runs on the host, the compiler reads a registry nothing ever wrote to, concludes
+ * there is no platform, and resolves entirely from files. <b>Everything works and nothing is live.</b>
+ * That is not hypothetical: it is what the first version of this class did, undetectably, because a
+ * file-based answer is a plausible answer.</p>
+ *
+ * <p>So the host composes {@link TypeBytes} and only {@code byte[]} crosses — the same rule
+ * {@code MemberNameMapper} states for {@code MappingSet}, the console for its {@code Consumer} and the
+ * sandbox for its {@code Predicate}.</p>
+ *
+ * <p>With {@link TypeBytes#NONE} — the harness, every test, a plain JVM — {@link #live} is false and
+ * every query goes straight to the delegate, so behaviour is identical to the file-based path this
+ * replaces. That is deliberate: the environment nobody runs is the environment nobody notices breaking,
+ * and this one is run by the entire existing suite.</p>
  *
  * <h3>Module-aware, because on a modern band ECJ requires it</h3>
  *
@@ -65,8 +86,6 @@ import java.util.Map;
 final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
 
     private final INameEnvironment delegate;
-    private final ReadableView readable;
-    private final boolean liveBytesFirst;
 
     /** @see #cache — per instance, and an instance is per compile */
     private final Map<String, NameEnvironmentAnswer> cache = new HashMap<String, NameEnvironmentAnswer>();
@@ -74,13 +93,31 @@ final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
     /** Names already looked up and known absent, so a miss is not re-fetched within one compile. */
     private final Map<String, Boolean> misses = new HashMap<String, Boolean>();
 
-    ScriptNameEnvironment(INameEnvironment delegate, ScriptPlatform platform, MappingSet mappings) {
+    /**
+     * Packages a type has genuinely been resolved inside. @see #isPackage
+     *
+     * <p>Per instance for the same reason the caches are: a package that exists only because a
+     * transformer synthesized a class into it can stop existing between one compile and the next.</p>
+     */
+    private final Set<String> resolvedPackages = new HashSet<String>();
+
+    /** Everything the classpath cannot supply, composed on the HOST side. @see TypeBytes */
+    private final TypeBytes types;
+
+    /**
+     * Whether the live tiers are consulted at all.
+     *
+     * <p>False for {@link TypeBytes#NONE} — the harness, every test, a plain JVM — so every query goes
+     * straight to the delegate and behaviour is identical to the file-based path this replaces. That is
+     * deliberate: the environment nobody runs is the environment nobody notices breaking, and this one is
+     * run by the entire existing suite.</p>
+     */
+    private final boolean live;
+
+    ScriptNameEnvironment(INameEnvironment delegate, TypeBytes types) {
         this.delegate = delegate;
-        // NONE reads the classloader, which off a Minecraft host would answer for everything and quietly
-        // take over from the classpath. Asking only when a platform is actually registered keeps the
-        // existing path byte-for-byte unchanged where nothing needs it.
-        this.liveBytesFirst = platform != ScriptPlatform.NONE;
-        this.readable = new ReadableView(mappings, platform.liveBytes());
+        this.types = types == null ? TypeBytes.NONE : types;
+        this.live = this.types != TypeBytes.NONE;
     }
 
     @Override
@@ -94,36 +131,69 @@ final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
     }
 
     private NameEnvironmentAnswer find(String internalName) {
-        if (!liveBytesFirst) return delegate.findType(split(internalName));
+        if (!live) return delegate.findType(split(internalName));
 
         NameEnvironmentAnswer cached = cache.get(internalName);
         if (cached != null) return cached;
         if (!misses.containsKey(internalName)) {
-            byte[] bytes = readableBytes(internalName);
+            byte[] bytes = types.readable(internalName);
             if (bytes != null) {
                 NameEnvironmentAnswer answer = answerFor(internalName, bytes);
                 if (answer != null) {
-                    cache.put(internalName, answer);
+                    remember(internalName, answer);
                     return answer;
                 }
             }
             misses.put(internalName, Boolean.TRUE);
         }
-        return delegate.findType(split(internalName));
+
+        NameEnvironmentAnswer fromFiles = delegate.findType(split(internalName));
+        if (fromFiles != null) {
+            // NOT CACHED. The delegate has its own cache and is the authority on its own answers;
+            // holding a second copy here would only add a way for the two to disagree.
+            rememberPackageOf(internalName);
+            return fromFiles;
+        }
+        return synthesized(internalName);
     }
 
     /**
-     * The type's bytes as the readable namespace sees them, or null.
+     * The last resort: a stub built by reflection, for a type that exists to the JVM and has no bytes.
      *
-     * <p>Failure is an ordinary answer, not an error: a type the live loader cannot produce is one the
-     * classpath may still have, and turning that into an exception would make an unremarkable miss fatal
-     * to a compile.</p>
+     * <p><b>Third and not second.</b> A stub is a weaker answer than either real source — it is erased of
+     * everything reflection cannot see, and it describes the class as <em>loaded</em> rather than as the
+     * compiler would read it. So it only ever answers where both the live loader and the classpath have
+     * already said nothing, which is precisely §15.5 A's case: a type the loader will hand over a
+     * {@link Class} for but no bytes. A class generated at runtime and a class a previous script defined
+     * are the two that occur, and both would otherwise fail to compile against something the author can
+     * demonstrably call.</p>
+     *
+     * <p>Loaded with {@code initialize = false}: resolving a name must never run a static initializer.
+     * On a Minecraft host that would execute arbitrary class setup during a keystroke.</p>
      */
-    private byte[] readableBytes(String internalName) {
-        try {
-            return readable.readableBytesOf(internalName);
-        } catch (Exception unavailable) {
-            return null;
+    private NameEnvironmentAnswer synthesized(String internalName) {
+        byte[] stub = types.synthesized(internalName);
+        if (stub == null) return null;
+        NameEnvironmentAnswer answer = answerFor(internalName, stub);
+        if (answer != null) remember(internalName, answer);
+        return answer;
+    }
+
+    private void remember(String internalName, NameEnvironmentAnswer answer) {
+        cache.put(internalName, answer);
+        rememberPackageOf(internalName);
+    }
+
+    /**
+     * Records that a package exists, because a type inside it resolved.
+     *
+     * <p>Every ancestor, not just the immediate one: {@code isPackage} is asked about each segment of a
+     * qualified name in turn, so recording only {@code net/minecraft/world} would leave
+     * {@code net/minecraft} unanswered and the walk would stop before reaching it.</p>
+     */
+    private void rememberPackageOf(String internalName) {
+        for (int slash = internalName.indexOf('/'); slash > 0; slash = internalName.indexOf('/', slash + 1)) {
+            resolvedPackages.add(internalName.substring(0, slash));
         }
     }
 
@@ -140,12 +210,35 @@ final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
         }
     }
 
+    /**
+     * Whether a name is a package — the delegate's answer, plus packages we have actually resolved into.
+     *
+     * <h3>Why this cannot simply ask the byte source</h3>
+     *
+     * <p>A package is not a class file. A {@code ByteSource} answers "give me these bytes" and a
+     * classloader cannot enumerate what is under a prefix at all, so there is nothing to ask. And
+     * <b>guessing yes is not the safe direction</b>: every misspelled type would look like a package
+     * rather than an error, which surfaces much later as a resolution failure in a message about
+     * something else entirely.</p>
+     *
+     * <h3>Why the delegate alone was not enough either</h3>
+     *
+     * <p>The failure it leaves is the one §26.4 names: a type resolves while its package does not, and
+     * the compiler then reports a phantom error about a type it just successfully read. On a Minecraft
+     * host the delegate covers the ordinary case — the jars are on disk, obfuscated but present, so
+     * {@code net/minecraft/world} is a real directory whatever the members are called. What it misses is
+     * a package that exists <em>only</em> because something synthesized a class into it: a mixin, a
+     * runtime proxy, a class a previous script defined.</p>
+     *
+     * <p>So the extra half is evidence-based rather than a guess — a package is claimed only once a type
+     * inside it has genuinely been answered from live bytes or from a stub. Nothing is invented, and a
+     * misspelling still gets its error.</p>
+     */
     @Override
     public boolean isPackage(char[][] parentPackageName, char[] packageName) {
-        // ALWAYS THE DELEGATE. A package is not a class file, so live bytes cannot answer it, and
-        // guessing yes would make every misspelled type look like a package rather than an error --
-        // which reads as a phantom resolution failure much later, in a message about something else.
-        return delegate.isPackage(parentPackageName, packageName);
+        if (delegate.isPackage(parentPackageName, packageName)) return true;
+        if (resolvedPackages.isEmpty()) return false;
+        return resolvedPackages.contains(internalName(parentPackageName, packageName));
     }
 
     @Override

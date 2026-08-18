@@ -2,6 +2,8 @@ package com.crystalgui.language.engine;
 
 import com.crystalgui.language.engine.bridge.ScriptCompiler;
 import com.crystalgui.language.engine.bridge.SourceAnalyzer;
+import com.crystalgui.language.java.classpath.PlatformTypeBytes;
+import com.crystalgui.language.map.MappingSet;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -39,7 +41,17 @@ public final class JavaEngine implements Closeable {
                        SourceAnalyzer analyzer) {
         this.host = host;
         this.ownsHost = ownsHost;
-        this.compiler = compiler;
+        // THE ONE PLACE THE LIVE TIERS ARE INSTALLED, and it is here because it is the one place every
+        // consumer of a compiler passes through -- ScriptHost, a language's register(), a test. Doing it
+        // at a call site instead would mean a compiler that resolves live for the runner and not for
+        // whatever obtained one second, which is the disagreement the seam exists to prevent.
+        //
+        // `PlatformTypeBytes.of` answers NONE when no platform is registered, so a harness and every
+        // test are unaffected and resolution goes entirely through the classpath, exactly as before.
+        //
+        // MappingSet.IDENTITY until 26.7 probes the namespace: a dev client's runtime really is readable,
+        // so this is the correct answer there rather than a placeholder.
+        this.compiler = compiler.resolveAgainst(PlatformTypeBytes.of(MappingSet.IDENTITY));
         this.analyzer = analyzer;
     }
 
