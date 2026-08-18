@@ -13,7 +13,7 @@ opposite reasons.
 | 25.3 | The provider chain | **partly built** — `SourceArchives` is the shape and two of its four producers work today (a real `-sources.jar`, and the JDK's `src.zip` where it is on disk). The other two are 25.4's and M12's mapping data |
 | 25.4 | Bundling our own sources | **M12's** — a packaging question about the loader jar M12 assembles |
 | 25.5 | The JDK, fetched rather than bundled | **M12's**, and a licence decision before any of it — not a question code can settle |
-| 25.6 | Rendering the doc body | **done** — `EcjOptions` enables doc-comment support, `JavaDocs` renders the node, `JavaSignatures.documentationOf` finds it here or in the attached source and **inherits it for an override**. 8 tests. Plain text; the styled version is still §24.1`s `CgMarkupParser` call |
+| 25.6 | Rendering the doc body | **done for the hover**; the completion pane is the one consumer left, and needs a re-resolve rather than a line — see below. Otherwise: — `EcjOptions` enables doc-comment support, `JavaDocs` renders the node, `JavaSignatures.documentationOf` finds it here or in the attached source and **inherits it for an override**. 8 tests. Plain text; the styled version is still §24.1`s `CgMarkupParser` call |
 
 ### The two findings this milestone is built on, both measured
 
@@ -215,6 +215,13 @@ asking the API, because the node covered the comment while the accessor denied i
 carries `@Override` and no doc of its own — `Message.toString()` in the shipped fixture is exactly this
 shape. Without walking to the supertype's declaration for the text, a large fraction of methods render an
 empty body, which reads as the feature not working rather than as the method having no doc.
+
+**✅ Built — for the hover. One consumer is still unfilled and now has a home rather than a comment.**
+The completion popup's documentation pane shows nothing, because the completion path builds its symbols
+from bindings without asking for a comment. `JavaCompletionProvider.resolveItem` is exactly where it
+would be filled — it is the lazy hook and the pane is the one place a doc is worth the lookup — but it
+receives a `CompletionItem` rather than a binding, so filling it means re-resolving the declaring type.
+Real work rather than a line, and it belongs to this section rather than to a javadoc nobody owns.
 
 **Javadoc is not plain text**: `{@link}`, `{@code}`, `@param`, `@return`, embedded HTML, entities.
 §24.1 already picked the tool and said why — `CgMarkupParser` is right for the *body* and wrong for the

@@ -260,13 +260,17 @@ public class DocumentationPopupTest extends UiTestBase {
     }
 
     /**
-     * The body band is hidden rather than empty while no engine reports documentation — which is every
-     * symbol today. An empty band is a gap that reads as a rendering failure.
+     * The body band is hidden rather than empty when there is no documentation to show.
+     *
+     * <p>This used to read "which is every symbol today", and that stopped being true at M13 §25.6 —
+     * the Java engine populates {@code documentation} now. The rule it pins did not change: a symbol
+     * with no doc comment still gets no band, because an empty one is a gap that reads as a rendering
+     * failure. The widget was always ready for this; nothing here needed editing but the sentence.</p>
      */
     @Test
     public void theBodyBandIsHiddenWithNoDocumentationAndShownWithSome() {
         show(field("x", "int"));
-        assertFalse("no engine populates documentation yet, so the band must not be drawn",
+        assertFalse("a symbol with no documentation must not draw the band",
                 popup.isBodyShown());
 
         show(field("x", "int").withDocumentation("Holds the thing."));

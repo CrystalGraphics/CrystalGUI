@@ -189,7 +189,13 @@ From the reference and from JetBrains' own docs, top to bottom:
 The kebab is the options menu — font size, show the toolbar, `Show on Mouse Move`, and
 `Download documentation` for a library with no sources attached.
 
-**The body is empty for us today, and that is fine.** `EcjSourceAnalyzer` never populates
+**✅ The body is filled now — M13 §25.6, and the prediction below held exactly.** `EcjOptions` enables
+doc-comment support, `JavaDocs` renders the node and `JavaSignatures.documentationOf` finds it here or in
+an attached source, inheriting an override's from its supertype. **No widget change was needed**, which
+is what the paragraph as written predicted and is the reason the popup was built in this order. The
+original text follows, because the reasoning is what made that true rather than lucky.
+
+~~**The body is empty for us today, and that is fine.**~~ `EcjSourceAnalyzer` never populates
 `documentation` — grep confirms it: the field is declared on the seam and no engine fills it.
 The reference image has no Javadoc in it either; what it shows is the *definition* and the
 *location*, both of which we can render from what `SymbolInfo` already carries. So the popup ships
