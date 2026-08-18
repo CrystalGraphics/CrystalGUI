@@ -90,7 +90,7 @@ public final class KeymapSheet {
         List<Entry> parsed = new ArrayList<>();
         JsonElement root;
         try {
-            root = JsonParser.parseString(json == null ? "" : json);
+            root = new JsonParser().parse(json == null ? "" : json);
         } catch (RuntimeException e) {
             CrystalGuiCore.LOGGER.warn("Keymap sheet is not valid JSON, ignoring it entirely: {}",
                     e.getMessage());
