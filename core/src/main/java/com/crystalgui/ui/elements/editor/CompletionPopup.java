@@ -146,8 +146,23 @@ public final class CompletionPopup extends Popover {
      * decision in {@link #reposition} is computed from the popup's total height and cannot read the cascade. */
     private static final float HINT_HEIGHT = 16f;
 
+    /**
+     * The popup's own vertical padding, which its declared height has to CARRY.
+     *
+     * <p>Paired with {@code completionpopup { padding-all }}, and the third number here that is duplicated
+     * from the sheet for the same reason as {@link #ROW_HEIGHT} and {@link #HINT_HEIGHT} — this widget
+     * writes its own geometry and cannot read the cascade.</p>
+     *
+     * <p><b>Because the box is {@code border-box}</b>, which is this engine's default and not CSS's: a
+     * declared height is the OUTSIDE of the box, so the list inside it gets that height minus the padding.
+     * Writing {@code rows * ROW_HEIGHT + HINT_HEIGHT} therefore left the content four pixels short — the
+     * last row clipped and a scrollbar on a list that fits, at every row count, including one. It reads as
+     * a scrolling bug and is an arithmetic one.</p>
+     */
+    private static final float VERTICAL_PADDING = 4f;
+
     /** Two rows and the strip — below this the popup is a box with nothing readable in it. */
-    private static final float MIN_HEIGHT = 2f * ROW_HEIGHT + HINT_HEIGHT;
+    private static final float MIN_HEIGHT = 2f * ROW_HEIGHT + HINT_HEIGHT + VERTICAL_PADDING;
 
     private final ObservableList<CompletionSession.Row> rows = new ObservableList<>();
     private final ListView<CompletionSession.Row> list = new ListView<>(rows);
@@ -523,7 +538,8 @@ public final class CompletionPopup extends Popover {
      */
     private void sizeToContent(int rowCount) {
         if (isUserSizedHeight()) return;
-        float height = Math.min(rowCount, MAX_VISIBLE_ROWS) * ROW_HEIGHT + HINT_HEIGHT;
+        float height = Math.min(rowCount, MAX_VISIBLE_ROWS) * ROW_HEIGHT + HINT_HEIGHT
+                + VERTICAL_PADDING;
         // DEFAULT origin, not IMPORTANT -- see the note on the width write in reposition().
         StyleGroup.defaultPipeline(getStyle().getLayoutGroup(), l -> l.height(height));
     }
@@ -579,7 +595,8 @@ public final class CompletionPopup extends Popover {
         if (isUserSized() || userMoved) return;
         float wanted = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, measuredWidth));
         float width = Math.max(0f, Math.min(wanted, window.getScreenWidth() - 2f * MARGIN));
-        float height = Math.min(Math.max(rows.size(), 1), MAX_VISIBLE_ROWS) * ROW_HEIGHT + HINT_HEIGHT;
+        float height = Math.min(Math.max(rows.size(), 1), MAX_VISIBLE_ROWS) * ROW_HEIGHT + HINT_HEIGHT
+                + VERTICAL_PADDING;
 
         float left = Math.max(MARGIN, Math.min(anchorX, window.getScreenWidth() - width - MARGIN));
         // FIT, then flip, then SHRINK — and the third step is the one that was missing.
