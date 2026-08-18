@@ -3306,15 +3306,28 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return find.replaceAll(replacement);
     }
 
-    /** Clips document-relative ranges to one line and rebases them onto it. */
-    private static void addDocumentRanges(Map<String, List<TextRange>> byName, String name,
+    /**
+     * Clips document-relative ranges to one line and rebases them onto it.
+     *
+     * <p><b>Through {@link #addRange}, which is what the syntax path already does.</b> This added
+     * directly, so five names reached {@code HighlightRegistry.set} with no overlap guard at all —
+     * {@code occurrence}, {@code selection-occurrence}, {@code search}, {@code search-excluded} and
+     * {@code bracket} — and a highlight refuses overlapping ranges with a hard failure, thrown from
+     * {@code tickFrame} where nothing above it in the trace names the producer.</p>
+     *
+     * <p>Overlap here is ordinary rather than exotic: a search can match at two positions one character
+     * apart, and an occurrence list computed against one revision and rebased onto another can hold two
+     * spans of the same word that no longer sit where they did. Dropping is the same resolution and the
+     * same reasoning {@code addRange} already documents — the ranges carry ONE name, so they resolve to
+     * one colour, and painting the union or the first is indistinguishable to a reader.</p>
+     */
+    static void addDocumentRanges(Map<String, List<TextRange>> byName, String name,
                                           List<TextRange> ranges, int lineStart, int lineEnd) {
         for (TextRange range : ranges) {
             int start = Math.max(range.start(), lineStart);
             int end = Math.min(range.end(), lineEnd);
             if (end <= start) continue;
-            byName.computeIfAbsent(name, key -> new ArrayList<>())
-                    .add(TextRange.of(start - lineStart, end - lineStart));
+            addRange(byName, name, TextRange.of(start - lineStart, end - lineStart));
         }
     }
 
