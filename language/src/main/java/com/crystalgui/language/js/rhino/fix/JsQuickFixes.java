@@ -546,6 +546,24 @@ public final class JsQuickFixes {
         return CodeAction.fix(ID + id, title, edit, edits.version());
     }
 
+    /**
+     * An intention with <b>no description</b> — Alt+Enter and the bulb, never a hover band.
+     *
+     * <p>Java's {@code FixContext.intention} takes a description and says why: the popup's header band
+     * exists to state a diagnostic, an intention has none, and without a line of its own the band draws
+     * as a blank grey strip that reads as a message which failed to load. {@code EditorLanguageFeatures}
+     * enforces the other half — an action with neither a diagnostic behind it nor a description is left
+     * out of the hover entirely.</p>
+     *
+     * <p>That is the right home for everything here <b>because these apply nearly everywhere</b>. "Change
+     * 'var' to 'let'" fires on every {@code var} and "Surround with try/catch" on every statement, so a
+     * hover anywhere in a script grew an action bar with nothing above it. IntelliJ keeps this class of
+     * intention behind the bulb for the same reason.</p>
+     *
+     * <p><b>A shape-specific entry should describe itself and say so</b> — one that recognises a
+     * particular construct, the way Java's {@code preferredIntention} does, has earned the band. Give it
+     * a description and it appears there; that is the whole switch.</p>
+     */
     private CodeAction refactor(String id, String title, ChangeSet edit) {
         return new CodeAction(ID + id, title, CodeActionKind.REFACTOR, edit, null, false,
                 edits.version());
