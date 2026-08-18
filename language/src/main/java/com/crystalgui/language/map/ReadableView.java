@@ -82,7 +82,46 @@ public final class ReadableView {
      */
     public Path materialise(Path into, List<String> internalNames) throws IOException {
         Files.createDirectories(into);
-        Remapper toReadable = new Remapper() {
+        for (String internalName : internalNames) {
+            byte[] view = readableBytesOf(internalName);
+            if (view == null) continue;
+
+            String readableName = mappings.readableClass(internalName);
+            Path target = into.resolve(readableName + ".class");
+            Files.createDirectories(target.getParent());
+            Files.write(target, view);
+        }
+        return into;
+    }
+
+    /**
+     * One type's runtime bytes, remapped into the readable namespace — <b>without writing anything</b>.
+     *
+     * <p>The whole of what {@link #materialise} does per class, minus the file. Extracted because a live
+     * host does not want the file: an {@code INameEnvironment} answers the compiler from bytes, so a
+     * directory is a staging area that can only go stale, and on a Minecraft host it would go stale
+     * against the very thing that makes this necessary — a mixin adding a member between one compile and
+     * the next.</p>
+     *
+     * <p>{@code materialise} is still the right shape where a file path is genuinely required, which is
+     * anything driving ECJ's batch front end, and it now shares this implementation rather than carrying
+     * a second copy of the remap.</p>
+     *
+     * @return the readable view, or null when the source has no bytes for that name — an ordinary answer
+     *         rather than a failure, since a caller normally has a classpath to fall back to
+     */
+    public byte[] readableBytesOf(String internalName) throws IOException {
+        byte[] bytes = source.bytesOf(internalName);
+        if (bytes == null) return null;
+        ClassReader reader = new ClassReader(bytes);
+        ClassWriter writer = new ClassWriter(reader, 0);
+        reader.accept(new ClassRemapper(writer, toReadable()), 0);
+        return writer.toByteArray();
+    }
+
+    /** Runtime → readable, for every name a class file carries. */
+    private Remapper toReadable() {
+        return new Remapper() {
             @Override
             public String map(String internalName) {
                 return mappings.readableClass(internalName);
@@ -98,20 +137,6 @@ public final class ReadableView {
                 return mappings.readableField(owner, name);
             }
         };
-
-        for (String internalName : internalNames) {
-            byte[] bytes = source.bytesOf(internalName);
-            if (bytes == null) continue;
-            ClassReader reader = new ClassReader(bytes);
-            ClassWriter writer = new ClassWriter(reader, 0);
-            reader.accept(new ClassRemapper(writer, toReadable), 0);
-
-            String readableName = mappings.readableClass(internalName);
-            Path target = into.resolve(readableName + ".class");
-            Files.createDirectories(target.getParent());
-            Files.write(target, writer.toByteArray());
-        }
-        return into;
     }
 
     /**
