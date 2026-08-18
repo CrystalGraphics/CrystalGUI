@@ -600,10 +600,13 @@ public final class UIText extends UIElement {
         // 4, argued at HighlightStyle.ALLOWED. What has not changed is the fallback: a highlight that is
         // silent about weight must not make its range lighter than the text around it, which is what keeps
         // a bold label bold across the three characters a search happened to match.
-        // 0 for the decoration colour: a `::highlight()` sets one colour, and CSS's own
-        // `text-decoration-color: currentColor` default says an underline follows it.
+        // The highlight's own decoration colour, 0 meaning "follow the text" -- CSS's currentColor
+        // default and the backend's sentinel are the same value, so there is nothing to translate.
+        // This used to be hard-coded 0 on the reasoning that a highlight sets ONE colour; a scheme that
+        // underlines a reassigned variable in a different colour from its text is the ordinary
+        // counter-example, and CgStyleSpan has carried decorationArgb all along.
         return new CgStyleSpan(start, end, style.isBold(bold), style.isItalic(italic),
-                toCgDecorations(style.decorations()), color, null, 0f, 0);
+                toCgDecorations(style.decorations()), color, null, 0f, style.decorationColor());
     }
 
     private static Set<CgTextDecoration> toCgDecorations(Set<TextDecorationLine> source) {
