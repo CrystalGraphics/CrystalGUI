@@ -107,10 +107,66 @@ public final class EngineHost implements Closeable {
         return band -> {
             List<URL> urls = new ArrayList<>(engines.jarsFor(band));
             if (urls.isEmpty()) return urls;
-            CodeSource ours = EngineHost.class.getProtectionDomain().getCodeSource();
-            if (ours != null && ours.getLocation() != null) urls.add(ours.getLocation());
+            URL own = ownClasses();
+            if (own != null) {
+                urls.add(own);
+            } else {
+                // LOUD, because the downstream symptom names the wrong thing entirely. Without our own
+                // classes on the child's URLs the adapter is not in the child, Class.forName falls back
+                // to the parent, the parent loads it happily, and the first engine type it touches dies
+                // as `NoClassDefFoundError: org/mozilla/javascript/ErrorReporter` — a message that points
+                // at Rhino when the fault is that this module could not find itself.
+                System.err.println("[crystalgui] the engine band cannot be opened: this module's own "
+                        + "classes could not be located, so the adapters would load outside the band.");
+            }
             return urls;
         };
+    }
+
+    /**
+     * Where this module's classes live, as a URL a {@link java.net.URLClassLoader} can actually use.
+     *
+     * <p><b>Two sources, and both need normalising — that second part is the whole difficulty.</b> A
+     * {@code CodeSource} is the direct answer and is what every environment but Minecraft gives: a plain
+     * JVM, Gradle and the harness all report the jar or the classes directory. LaunchWrapper reports the
+     * <em>class entry inside</em> the jar:</p>
+     *
+     * <pre>
+     * jar:file:/…/crystalgui-1.0.0-dev.jar!/com/crystalgui/language/engine/EngineHost.class
+     * </pre>
+     *
+     * <p>which is a perfectly good URL and a useless classpath root. Added verbatim it makes the child
+     * loader look for classes <em>under a .class file</em>, so every {@code findClass} misses, delegation
+     * falls to the parent, and the adapter is defined outside the band — the failure {@link #adapter}
+     * exists to catch, reported against Rhino or ECJ rather than against this method.</p>
+     *
+     * <p>So whatever the source, the result is reduced to a root: an archive URL keeps only the archive,
+     * and a file URL keeps only the part before this class's own package path.</p>
+     */
+    private static URL ownClasses() {
+        CodeSource source = EngineHost.class.getProtectionDomain().getCodeSource();
+        URL candidate = source == null ? null : source.getLocation();
+        if (candidate == null) {
+            candidate = EngineHost.class.getClassLoader()
+                    .getResource(EngineHost.class.getName().replace('.', '/') + ".class");
+        }
+        return candidate == null ? null : asClasspathRoot(candidate);
+    }
+
+    /** Reduces a URL that may name a class entry to the root that contains it. */
+    private static URL asClasspathRoot(URL url) {
+        String text = url.toString();
+        try {
+            if (text.startsWith("jar:")) {
+                int separator = text.indexOf("!/");
+                // "jar:" is four characters; everything between it and "!/" is the archive itself.
+                return separator > 0 ? new URL(text.substring(4, separator)) : url;
+            }
+            String path = EngineHost.class.getName().replace('.', '/') + ".class";
+            return text.endsWith(path) ? new URL(text.substring(0, text.length() - path.length())) : url;
+        } catch (java.net.MalformedURLException malformed) {
+            return null;
+        }
     }
 
     public EngineBand band() {

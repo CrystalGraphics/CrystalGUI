@@ -65,8 +65,13 @@ public final class HighlightRegistry {
         sorted.sort((a, b) -> Integer.compare(a.start(), b.start()));
         for (int i = 1; i < sorted.size(); i++) {
             if (sorted.get(i).start() < sorted.get(i - 1).end()) {
+                // THE NAME IS THE HALF THAT IDENTIFIES THE PRODUCER, and it was missing. Two offsets say
+                // an overlap happened; the name says which pass built it — a syntax capture, a search
+                // result, an engine's occurrences — and without it the only way to find out is to guess
+                // at each producer in turn.
                 throw new IllegalArgumentException("Ranges within one highlight must not overlap: "
-                        + sorted.get(i - 1) + " and " + sorted.get(i)
+                        + sorted.get(i - 1) + " and " + sorted.get(i) + " in highlight '" + name
+                        + "' (" + sorted.size() + " ranges)"
                         + ". Use two differently-named highlights if you want both to apply.");
             }
         }
