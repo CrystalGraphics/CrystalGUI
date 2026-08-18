@@ -8,6 +8,7 @@ import com.crystalgui.language.engine.JavaEngine;
 import com.crystalgui.language.java.classpath.HostClasspath;
 import com.crystalgui.language.java.exec.ScriptHost;
 import com.crystalgui.language.map.MappingSet;
+import com.crystalgui.language.map.PlatformMappings;
 import com.crystalgui.language.run.exec.ScriptCache;
 import com.crystalgui.language.run.ScriptRuntimes;
 import com.crystalgui.language.run.ScriptPolicy;
@@ -106,9 +107,23 @@ public final class JavaLanguage {
         // here rather than by asking this class -- so a second language contributes the same way and the
         // panel is not edited. The cache root is the workbench's to choose, which is why this is a
         // provider and not an instance.
-        ScriptRuntimes.contribute(Language.JAVA, cacheRoot -> new ScriptHost(engine,
-                cacheRoot == null ? ScriptCache.inMemory() : ScriptCache.directory(cacheRoot),
-                MappingSet.IDENTITY, "identity", JavaLanguage.class.getClassLoader(), classpath));
+        //
+        // THE MAPPING IS READ WHEN THE RUNTIME OPENS, not here and not by the caller. It was
+        // MappingSet.IDENTITY outright -- correct on every host whose runtime already speaks readable
+        // names, and silently wrong on the one that does not: the script compiles against `Blocks.stone`
+        // because the name environment shows it that way, nothing rewrites the bytes on the way out, and
+        // the run dies with `NoSuchFieldError: stone` on a field whose runtime name is field_150348_b.
+        // Compile clean, run broken, and only in production. Measured in the reobfuscated client.
+        //
+        // Inside the lambda because a provider is invoked when a workbench opens, which is later than
+        // registration -- and later is what gives a first launch's background fetch time to land.
+        ScriptRuntimes.contribute(Language.JAVA, cacheRoot -> {
+            MappingSet mappings = PlatformMappings.current();
+            return new ScriptHost(engine,
+                    cacheRoot == null ? ScriptCache.inMemory() : ScriptCache.directory(cacheRoot),
+                    mappings, mappings.isIdentity() ? "identity" : "mapped",
+                    JavaLanguage.class.getClassLoader(), classpath);
+        });
         return true;
     }
 

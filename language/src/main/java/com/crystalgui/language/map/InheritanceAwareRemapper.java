@@ -49,16 +49,58 @@ public final class InheritanceAwareRemapper {
         /** Superclass then interfaces, in internal-name form; empty for {@code java/lang/Object}. */
         List<String> supertypesOf(String internalName);
 
-        /** Nothing has a supertype — the identity case, and what a test with no hierarchy uses. */
+            /** Nothing has a supertype — the identity case, and what a test with no hierarchy uses. */
         Hierarchy NONE = internalName -> java.util.Collections.emptyList();
+    }
+
+    /**
+     * The member names a runtime type declares — the owner, asked directly.
+     *
+     * <h3>Why the mapping alone cannot finish the job</h3>
+     *
+     * <p>MCP's data is unqualified: SRG names are globally unique, so the files carry no owner. That
+     * makes SRG → readable a function and readable → SRG <b>not</b> one — measured on
+     * {@code mcp_stable/12}, 357 method names and 329 field names are claimed by more than one runtime
+     * name, covering about a fifth of the rows. {@code getUnlocalizedName} is one of them.</p>
+     *
+     * <p>{@link MappingSet} refuses to guess between them, which is right and leaves the rename
+     * unresolved — and an unresolved rename is a {@code NoSuchMethodError} at the call. The owner is
+     * what settles it, and the owner is right here: enumerate what the runtime type declares, map each
+     * name FORWARD (the direction that is a function), and keep the one whose readable name is the one
+     * the script wrote. No {@code packaged.srg}, no second mapping format.</p>
+     *
+     * <h3>It also stops an unqualified rename escaping its own namespace</h3>
+     *
+     * <p>{@code run} and {@code add} are ordinary readable names that MCP maps. Applied without an
+     * owner they renamed the SCRIPT'S OWN {@code run()} to a {@code func_*} — leaving {@code ScriptHost}
+     * reporting that a class it had just compiled had no entry point — and would do the same to
+     * {@code list.add(...)}. A type that will not load answers empty, which is the correct answer for
+     * the classes being compiled: they are not loadable yet, and their members are authored names rather
+     * than readable-namespace aliases.</p>
+     */
+    public interface Members {
+
+        /** Every member name {@code internalName} declares, supertypes included; empty if unloadable. */
+        Set<String> namesOf(String internalName);
+
+        /** Knows nothing, so no unqualified rename is ever applied. The default, and what a test uses. */
+        Members NONE = internalName -> java.util.Collections.emptySet();
     }
 
     private final MappingSet mappings;
     private final Hierarchy hierarchy;
+    private final Members members;
 
+    /** Owner-keyed mappings only — no unqualified entry is ever applied. @see Members */
     public InheritanceAwareRemapper(MappingSet mappings, Hierarchy hierarchy) {
+        this(mappings, hierarchy, Members.NONE);
+    }
+
+    /** @param members resolves and verifies unqualified renames against the owner. @see Members */
+    public InheritanceAwareRemapper(MappingSet mappings, Hierarchy hierarchy, Members members) {
         this.mappings = mappings;
         this.hierarchy = hierarchy == null ? Hierarchy.NONE : hierarchy;
+        this.members = members == null ? Members.NONE : members;
     }
 
     /**
@@ -120,6 +162,8 @@ public final class InheritanceAwareRemapper {
 
         private final Hierarchy hierarchy;
 
+        private final Map<String, Set<String>> declaredNames = new java.util.HashMap<>();
+
         PropagatingRemapper(Hierarchy hierarchy) {
             this.hierarchy = hierarchy;
         }
@@ -131,18 +175,57 @@ public final class InheritanceAwareRemapper {
 
         @Override
         public String mapMethodName(String owner, String name, String descriptor) {
-            String direct = mappings.runtimeMethod(owner, name);
+            String direct = mappings.runtimeMethodOfOwner(owner, name);
             if (!direct.equals(name)) return direct;
             String inherited = walkForMethod(owner, name, new LinkedHashSet<>());
-            return inherited == null ? name : inherited;
+            if (inherited != null) return inherited;
+            return fromOwner(owner, name, true);
         }
 
         @Override
         public String mapFieldName(String owner, String name, String descriptor) {
-            String direct = mappings.runtimeField(owner, name);
+            String direct = mappings.runtimeFieldOfOwner(owner, name);
             if (!direct.equals(name)) return direct;
             String inherited = walkForField(owner, name, new LinkedHashSet<>());
-            return inherited == null ? name : inherited;
+            if (inherited != null) return inherited;
+            return fromOwner(owner, name, false);
+        }
+
+        /**
+         * The runtime name {@code owner} declares for this readable name, or the name unchanged.
+         *
+         * <p>The unqualified tier, made owner-correct. Two things fall out of asking the owner rather
+         * than the map: an ambiguous readable name is resolved (only one of the candidates is declared
+         * here), and a name that is not this type's at all is left alone. @see Members</p>
+         *
+         * <p>The fast path is the map: where the unqualified answer is unique AND the owner declares it,
+         * there is nothing to search. The scan only runs for a name the map will not answer, which is
+         * the ambiguous fifth of the data.</p>
+         */
+        private String fromOwner(String owner, String readableName, boolean method) {
+            String anywhere = method ? mappings.runtimeMethodAnywhere(readableName)
+                    : mappings.runtimeFieldAnywhere(readableName);
+            Set<String> declared = names(owner);
+            if (!anywhere.equals(readableName)) {
+                return declared.contains(anywhere) ? anywhere : readableName;
+            }
+            for (String candidate : declared) {
+                String readable = method ? mappings.readableMethod(owner, candidate)
+                        : mappings.readableField(owner, candidate);
+                if (readable.equals(readableName)) return candidate;
+            }
+            return readableName;
+        }
+
+        /** {@link Members#namesOf}, once per owner per remap — ECJ names the same types repeatedly. */
+        private Set<String> names(String owner) {
+            Set<String> known = declaredNames.get(owner);
+            if (known == null) {
+                known = members.namesOf(owner);
+                declaredNames.put(owner, known == null ? java.util.Collections.emptySet() : known);
+                known = declaredNames.get(owner);
+            }
+            return known;
         }
 
         /**
@@ -152,7 +235,7 @@ public final class InheritanceAwareRemapper {
         private String walkForMethod(String owner, String name, Set<String> seen) {
             if (!seen.add(owner)) return null;
             for (String parent : hierarchy.supertypesOf(owner)) {
-                String mapped = mappings.runtimeMethod(parent, name);
+                String mapped = mappings.runtimeMethodOfOwner(parent, name);
                 if (!mapped.equals(name)) return mapped;
                 String deeper = walkForMethod(parent, name, seen);
                 if (deeper != null) return deeper;
@@ -163,13 +246,44 @@ public final class InheritanceAwareRemapper {
         private String walkForField(String owner, String name, Set<String> seen) {
             if (!seen.add(owner)) return null;
             for (String parent : hierarchy.supertypesOf(owner)) {
-                String mapped = mappings.runtimeField(parent, name);
+                String mapped = mappings.runtimeFieldOfOwner(parent, name);
                 if (!mapped.equals(name)) return mapped;
                 String deeper = walkForField(parent, name, seen);
                 if (deeper != null) return deeper;
             }
             return null;
         }
+    }
+
+    /**
+     * Every declared member name, read from the host's loader and walking supertypes.
+     *
+     * <p>Inherited members count: a script calling {@code block.getUnlocalizedName()} names the type it
+     * has rather than the one that declares the method, so a scan confined to the exact owner would miss
+     * every inherited call. Interfaces are walked for the same reason.</p>
+     *
+     * <p>A type that will not load answers empty — see {@link Members} for why that is the right answer
+     * and not a degradation.</p>
+     */
+    public static Members membersFromClassLoader(final ClassLoader loader) {
+        return internalName -> {
+            Set<String> names = new LinkedHashSet<>();
+            try {
+                collectMembers(Class.forName(internalName.replace('/', '.'), false, loader),
+                        names, new LinkedHashSet<>());
+            } catch (Throwable notLoadable) {
+                return names;
+            }
+            return names;
+        };
+    }
+
+    private static void collectMembers(Class<?> type, Set<String> into, Set<Class<?>> seen) {
+        if (type == null || !seen.add(type)) return;
+        for (java.lang.reflect.Method method : type.getDeclaredMethods()) into.add(method.getName());
+        for (java.lang.reflect.Field field : type.getDeclaredFields()) into.add(field.getName());
+        collectMembers(type.getSuperclass(), into, seen);
+        for (Class<?> face : type.getInterfaces()) collectMembers(face, into, seen);
     }
 
     /** Supertypes read from the host's loader — everything the script did not itself declare. */

@@ -232,7 +232,11 @@ public final class CgUiAutoTest {
             CrystalGuiCore.LOGGER.info("CGUI AUTOTEST script: compiled, successful={}",
                     compiled == null ? "null" : Boolean.valueOf(compiled.successful()));
             if (compiled == null || !compiled.successful()) {
-                CrystalGuiCore.LOGGER.error("CGUI AUTOTEST script: compile failed, not running");
+                // WITH THE MESSAGES. "compile failed" names nothing a reader can act on, and this probe
+                // exists precisely for the runs nobody is watching -- a failure whose reason is not in
+                // the log costs another whole launch to find out.
+                CrystalGuiCore.LOGGER.error("CGUI AUTOTEST script: compile failed, not running: {}",
+                        compiled == null ? "(no result)" : compiled.messages());
                 return;
             }
 

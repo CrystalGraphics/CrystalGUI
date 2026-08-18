@@ -219,6 +219,48 @@ public final class MappingSet {
         return mapped == null ? readableName : mapped;
     }
 
+    // ── The two tiers, apart ────────────────────────────────────────────────────────────────────
+    //
+    // A caller that REWRITES BYTECODE has to tell them apart, because they carry different authority.
+    // An owner-keyed entry names the type it applies to and can be trusted outright. An unqualified one
+    // applies to no owner in particular, so applying it blindly renames members of classes that have
+    // nothing to do with the mapping.
+    //
+    // That is not theoretical. `run` and `add` are ordinary readable names, and MCP maps SRG methods to
+    // both -- so an unverified rename turned the SCRIPT'S OWN `run()` into a func_* name and left
+    // ScriptHost reporting "Probe has neither a no-argument run() nor a static main(String[])" about a
+    // class it had just compiled. The same rename would hit `list.add(...)` on the way past.
+
+    /** The owner-keyed answer only, or {@code readableName}. Trustworthy without further checking. */
+    public String runtimeMethodOfOwner(String readableOwner, String readableName) {
+        String mapped = methodsReversed.get(key(readableOwner, readableName));
+        return mapped == null ? readableName : mapped;
+    }
+
+    /** @see #runtimeMethodOfOwner */
+    public String runtimeFieldOfOwner(String readableOwner, String readableName) {
+        String mapped = fieldsReversed.get(key(readableOwner, readableName));
+        return mapped == null ? readableName : mapped;
+    }
+
+    /**
+     * The unqualified answer only, or {@code readableName}.
+     *
+     * <p><b>A caller rewriting bytecode must verify this against the owner</b> — see the note above.
+     * Reading it to DISPLAY a name is safe, because a wrong readable name is a cosmetic error and a
+     * wrong runtime name is a {@code NoSuchMethodError}.</p>
+     */
+    public String runtimeMethodAnywhere(String readableName) {
+        String mapped = globalMethodsReversed.get(readableName);
+        return mapped == null ? readableName : mapped;
+    }
+
+    /** @see #runtimeMethodAnywhere */
+    public String runtimeFieldAnywhere(String readableName) {
+        String mapped = globalFieldsReversed.get(readableName);
+        return mapped == null ? readableName : mapped;
+    }
+
     /** Whether any member of this readable type is mapped — the fast path for an unmapped class. */
     public boolean mapsAnyMemberOf(String readableOwner) {
         // A GLOBAL ENTRY MAPS EVERY OWNER, so this fast path cannot skip anything while one exists. That

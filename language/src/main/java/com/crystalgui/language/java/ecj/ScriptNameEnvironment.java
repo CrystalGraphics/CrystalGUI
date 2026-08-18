@@ -101,6 +101,9 @@ final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
      */
     private final Set<String> resolvedPackages = new HashSet<String>();
 
+    /** Names already decided package-or-type by the live tier, for this compile. @see #isPackage */
+    private final Map<String, Boolean> packages = new HashMap<String, Boolean>();
+
     /** Everything the classpath cannot supply, composed on the HOST side. @see TypeBytes */
     private final TypeBytes types;
 
@@ -211,40 +214,58 @@ final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
     }
 
     /**
-     * Whether a name is a package — the delegate's answer, plus packages we have actually resolved into.
+     * Whether a name is a package.
      *
-     * <h3>Why this cannot simply ask the byte source</h3>
+     * <h3>Why the delegate alone cannot answer this on a live runtime</h3>
      *
      * <p>A package is not a class file. A {@code ByteSource} answers "give me these bytes" and a
-     * classloader cannot enumerate what is under a prefix at all, so there is nothing to ask. And
-     * <b>guessing yes is not the safe direction</b>: every misspelled type would look like a package
-     * rather than an error, which surfaces much later as a resolution failure in a message about
-     * something else entirely.</p>
+     * classloader cannot enumerate what lives under a prefix, so there is nothing to ask it directly.
+     * The classpath delegate answers correctly wherever the files are laid out in packages — which is
+     * everywhere except the case this whole layer exists for.</p>
      *
-     * <h3>Why the delegate alone was not enough either</h3>
+     * <p><b>On an obfuscated 1.7.10 client there is no {@code net/minecraft/init} directory anywhere.</b>
+     * The jar holds {@code ave.class} and friends; {@code net.minecraft.init.Blocks} exists only after
+     * the deobfuscating transformer has run. So the delegate says "not a package", and ECJ — which asks
+     * about each segment of a qualified name <em>before</em> it looks the type up — stops with
+     * {@code net.minecraft.init cannot be resolved}. Every Minecraft type in every script, on the one
+     * environment that is production. Found by running the reobfuscated client, and invisible in dev
+     * where the packages really are directories.</p>
      *
-     * <p>The failure it leaves is the one §26.4 names: a type resolves while its package does not, and
-     * the compiler then reports a phantom error about a type it just successfully read. On a Minecraft
-     * host the delegate covers the ordinary case — the jars are on disk, obfuscated but present, so
-     * {@code net/minecraft/world} is a real directory whatever the members are called. What it misses is
-     * a package that exists <em>only</em> because something synthesized a class into it: a mixin, a
-     * runtime proxy, a class a previous script defined.</p>
+     * <h3>So the live tier answers it the only way it can: a name that is not a TYPE is a package</h3>
      *
-     * <p>So the extra half is evidence-based rather than a guess — a package is claimed only once a type
-     * inside it has genuinely been answered from live bytes or from a stub. Nothing is invented, and a
-     * misspelling still gets its error.</p>
+     * <p>That is what any classloader-backed name environment does, and the inversion is sound in the
+     * direction that matters: the source can say definitively that something <em>is</em> a type, so
+     * everything else is either a package or nothing, and ECJ finds out which the moment it asks for the
+     * type itself.</p>
+     *
+     * <p>It does mean a misspelled qualified name is reported as an unresolvable <em>type</em> rather
+     * than an unknown package, which is the better message anyway. It is gated on {@link #live}, so a
+     * harness, a test and a plain JVM keep the delegate's answer exactly as before.</p>
      */
     @Override
     public boolean isPackage(char[][] parentPackageName, char[] packageName) {
         if (delegate.isPackage(parentPackageName, packageName)) return true;
-        if (resolvedPackages.isEmpty()) return false;
-        return resolvedPackages.contains(internalName(parentPackageName, packageName));
+        if (!live) return false;
+
+        String name = internalName(parentPackageName, packageName);
+        if (resolvedPackages.contains(name)) return true;
+
+        Boolean known = packages.get(name);
+        if (known != null) return known;
+        // A TYPE of this exact name settles it; anything else is treated as a package. Cached, because
+        // ECJ asks about the same prefixes for every qualified name in a unit -- `net`, `net/minecraft`
+        // and `net/minecraft/init` once per Minecraft type the script mentions.
+        boolean isPackage = types.readable(name) == null;
+        packages.put(name, isPackage);
+        return isPackage;
     }
 
     @Override
     public void cleanup() {
         cache.clear();
         misses.clear();
+        packages.clear();
+        resolvedPackages.clear();
         delegate.cleanup();
     }
 
@@ -302,21 +323,22 @@ final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
                 ? (IModuleAwareNameEnvironment) delegate : null;
     }
 
+    /**
+     * {@code a/b/C} from either shape ECJ asks in.
+     *
+     * <p>Two callers with different conventions: {@code findType(char[][])} passes the whole compound
+     * name with the type as its last segment, and {@code findType(char[], char[][])} passes the package
+     * and the type apart. Joining them here is why {@link #find} has one form to key its caches on.</p>
+     */
     private static String internalName(char[][] packageName, char[] typeName) {
         StringBuilder name = new StringBuilder();
-        int segments = typeName == null ? packageName.length : packageName.length;
+        int segments = typeName == null ? packageName.length - 1 : packageName.length;
         for (int i = 0; i < segments; i++) {
-            if (typeName == null && i == packageName.length - 1) break;
             if (name.length() > 0) name.append('/');
             name.append(packageName[i]);
         }
-        if (typeName == null) {
-            if (name.length() > 0) name.append('/');
-            name.append(packageName[packageName.length - 1]);
-        } else {
-            if (name.length() > 0) name.append('/');
-            name.append(typeName);
-        }
+        if (name.length() > 0) name.append('/');
+        name.append(typeName == null ? packageName[packageName.length - 1] : typeName);
         return name.toString();
     }
 
