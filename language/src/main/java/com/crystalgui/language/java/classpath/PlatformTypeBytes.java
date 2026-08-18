@@ -80,6 +80,18 @@ public final class PlatformTypeBytes implements TypeBytes {
     public static TypeBytes of() {
         ScriptPlatform platform = ScriptPlatforms.current();
         if (platform == ScriptPlatform.NONE) return TypeBytes.NONE;
+        // A WAY TO TURN THE LIVE ROUTE OFF WITHOUT REMOVING THE PLATFORM, for diagnosis only.
+        //
+        // "Live" and "file-based" differ in exactly one place and produce identical behaviour nearly
+        // everywhere, which is why the note below exists at all -- and the corollary is that when they
+        // DO differ, there is no way to attribute it without being able to run the same client both
+        // ways. Registering no platform is not the same experiment: that also disables the mapping and
+        // the namespace probe, so it changes three things at once.
+        if (Boolean.getBoolean("crystalgui.language.noLiveBytes")) {
+            System.err.println("[crystalgui] live runtime resolution DISABLED by "
+                    + "-Dcrystalgui.language.noLiveBytes -- diagnosis only");
+            return TypeBytes.NONE;
+        }
         // SAID OUT LOUD, ONCE PER ENGINE, and it earns the line. "Live" and "inert" produce identical
         // behaviour for every script that only touches classes which are also on disk -- which is most
         // of them -- so without this there is no way to tell from a log whether §15.5 A is working or

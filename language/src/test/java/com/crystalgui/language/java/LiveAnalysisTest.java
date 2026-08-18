@@ -291,4 +291,38 @@ public class LiveAnalysisTest {
         assertTrue("size() is missing from " + labels.size() + " rows: " + labels,
                 labels.toString().contains("size"));
     }
+
+    /**
+     * <b>A receiver from a JAR still has members</b> — the live route's classpath must outlive its unit.
+     *
+     * <h3>Why a jar, and why not the JDK</h3>
+     *
+     * <p>{@code live()} built a resolved unit and cleaned its name environment up in a {@code finally}
+     * one statement later. But a resolved unit does not hold its bindings — it resolves them <em>lazily</em>,
+     * on the first question anyone asks — so every member list was read through an environment that had
+     * already been torn down. {@code FileSystem.cleanup()} closes each classpath jar and nulls its handle;
+     * {@code ClasspathJar.getModulesDeclaringPackage} then rebuilds its package cache from that null and
+     * throws, and JDT's DOM <b>catches it</b>: {@code getDeclaredMethods()} logs "Could not retrieve
+     * declared methods" with no stack and answers with an empty array.</p>
+     *
+     * <p>So the receiver has to come out of a <b>jar</b>. From Java 9 the JDK is a JRT filesystem rather
+     * than an archive, and {@code ClasspathJrt} survives the same cleanup untouched — which is exactly why
+     * this reproduced only in a 1.7.10 client, where {@code java.lang} is {@code rt.jar}, and why every
+     * test JVM and the harness resolved {@code System.out.} perfectly throughout. A JDK receiver here
+     * would pass on this host with the bug fully present.</p>
+     *
+     * <p>JUnit is on the test classpath as a jar and is the one dependency this module is guaranteed to
+     * have.</p>
+     */
+    @Test
+    public void membersResolveThroughAJarAfterTheUnitIsBuilt() throws Exception {
+        analyzerOverBand();
+        String upTo = "new org.junit.runner.Result().";
+        List<String> labels = completeAfter(upTo + "\n", upTo);
+        assertFalse("a jar-backed receiver offered nothing at all -- the classpath was closed before "
+                + "its bindings were read", labels.isEmpty());
+        assertTrue("Result's own declared methods are missing, which is what an empty getDeclaredMethods() "
+                        + "looks like from the outside: " + labels.size() + " rows: " + labels,
+                labels.toString().contains("getRunCount"));
+    }
 }

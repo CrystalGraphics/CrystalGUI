@@ -241,6 +241,11 @@ tasks.named<JavaExec>(runTask) {
         providers.gradleProperty("cgComplete").orNull?.let {
             systemProperty("crystalgui.autotest.complete", it)
         }
+        // -PcgNoLive turns §15.5 A's live name environment off while leaving the platform registered,
+        // so the same client can be run both ways and a difference attributed to that one input.
+        providers.gradleProperty("cgNoLive").orNull?.let {
+            systemProperty("crystalgui.language.noLiveBytes", it)
+        }
     }
 }
 }

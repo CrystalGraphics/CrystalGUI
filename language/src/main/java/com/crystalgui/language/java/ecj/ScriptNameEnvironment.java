@@ -203,6 +203,16 @@ final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
         }
     }
 
+    /**
+     * A {@code NameEnvironmentAnswer} over raw bytes.
+     *
+     * <p><b>Not fully initialised</b>, and that is deliberate rather than a default left alone. The eager
+     * form was tried while chasing an empty member list and rejects a class file that a lazy read
+     * tolerates — a synthesized stub carries method entries with no {@code Code} attribute, which is
+     * malformed by the letter of the format and exactly what {@code TypeBytes.synthesized} produces. It
+     * made a live-only type stop resolving at all, and it was never the fix: the empty member list was a
+     * name environment closed before its bindings were read. @see EcjSourceAnalyzer#live</p>
+     */
     private static NameEnvironmentAnswer answerFor(String internalName, byte[] bytes) {
         try {
             return new NameEnvironmentAnswer(
@@ -252,12 +262,31 @@ final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
 
         String name = internalName(parentPackageName, packageName);
         if (resolvedPackages.contains(name)) return true;
+        return isPackageName(name);
+    }
 
+    /**
+     * The inversion itself, <b>in one place because two callers share its cache</b>.
+     *
+     * <p>{@link #isPackage} and {@link #getModulesDeclaringPackage} ask the same question and memoise the
+     * answer in the same map, so a second copy of the predicate is not duplication — it is a way for the
+     * two to disagree, decided by which ECJ happens to ask first. That is exactly what happened: this one
+     * was corrected and the other was not, so the corrected method went on returning the wrong answer out
+     * of the cache the stale one had filled, and the fix appeared to do nothing at all.</p>
+     */
+    private boolean isPackageName(String name) {
         Boolean known = packages.get(name);
         if (known != null) return known;
         // A TYPE of this exact name settles it; anything else is treated as a package. Cached, because
         // ECJ asks about the same prefixes for every qualified name in a unit -- `net`, `net/minecraft`
         // and `net/minecraft/init` once per Minecraft type the script mentions.
+        //
+        // ASKED OF THE LIVE SOURCE ALONE, deliberately. Consulting the delegate too looks like it would
+        // make this more accurate -- it is the classpath, after all, and it knows what a type is. It is
+        // not: `findType` on a name that is a package PREFIX rather than a type is a miss ECJ records,
+        // and asking it here for every segment of every qualified name resolved `demo` to nothing where
+        // the live route had it. The inversion's job is to answer for names the classpath has never
+        // heard of, which is the whole reason it exists on an obfuscated host.
         boolean isPackage = types.readable(name) == null;
         packages.put(name, isPackage);
         return isPackage;
@@ -328,13 +357,8 @@ final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
         String name = internalName(packageName, null);
         if (name.isEmpty()) return null;
         if (resolvedPackages.contains(name)) return classpathModules(moduleName);
-
-        Boolean known = packages.get(name);
-        if (known == null) {
-            known = types.readable(name) == null;
-            packages.put(name, known);
-        }
-        return known ? classpathModules(moduleName) : null;
+        // THE SAME PREDICATE, not a second copy of it. @see #isPackageName
+        return isPackageName(name) ? classpathModules(moduleName) : null;
     }
 
     /**
