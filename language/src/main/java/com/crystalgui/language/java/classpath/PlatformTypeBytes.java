@@ -2,6 +2,7 @@ package com.crystalgui.language.java.classpath;
 
 import com.crystalgui.language.engine.bridge.TypeBytes;
 import com.crystalgui.language.map.MappingSet;
+import com.crystalgui.language.map.PlatformMappings;
 import com.crystalgui.language.map.ReadableView;
 import com.crystalgui.language.platform.ScriptPlatform;
 import com.crystalgui.language.platform.ScriptPlatforms;
@@ -29,12 +30,40 @@ import com.crystalgui.language.platform.ScriptPlatforms;
  */
 public final class PlatformTypeBytes implements TypeBytes {
 
-    private final ReadableView readable;
+    private final ReadableView.ByteSource source;
     private final ClassLoader loader;
 
-    private PlatformTypeBytes(ReadableView readable, ClassLoader loader) {
-        this.readable = readable;
+    /** The view, and the mapping it was built for. @see #view */
+    private volatile ReadableView readable;
+    private volatile MappingSet builtFor;
+
+    private PlatformTypeBytes(ReadableView.ByteSource source, ClassLoader loader) {
+        this.source = source;
         this.loader = loader;
+    }
+
+    /**
+     * The remapping view for whatever mapping is current <b>now</b>.
+     *
+     * <p>Re-read rather than captured, because the mapping arrives late on a first launch: the probe is
+     * synchronous but a download is not, so {@link PlatformMappings#current} answers {@code IDENTITY}
+     * until the fetch lands and then answers the real set. A view built once at construction would pin
+     * the identity for the life of the process, and the symptom would be that mappings work on the
+     * second launch and never on the first — which reads as a caching bug rather than a captured
+     * reference.</p>
+     *
+     * <p>Rebuilt only when the set actually changes, which is at most once, so the steady-state cost is
+     * one reference comparison per type the compiler asks about.</p>
+     */
+    private ReadableView view() {
+        MappingSet now = PlatformMappings.current();
+        ReadableView cached = readable;
+        if (cached == null || builtFor != now) {
+            cached = new ReadableView(now, source);
+            readable = cached;
+            builtFor = now;
+        }
+        return cached;
     }
 
     /**
@@ -44,11 +73,11 @@ public final class PlatformTypeBytes implements TypeBytes {
      * answers for <em>everything</em>, so a default view would quietly take over from the classpath and
      * change what every existing test resolves against. The absence has to stay an absence.</p>
      *
-     * @param mappings readable ↔ runtime, or {@link MappingSet#IDENTITY} on a host whose runtime is
-     *                 already readable — which a dev client genuinely is, so it is an answer and not a
-     *                 placeholder
+     * <p>The mapping is not a parameter: which namespace the runtime speaks is <b>probed</b>, not chosen
+     * by a caller, and {@link PlatformMappings} is where that happens. Passing one in would let two
+     * engines in one process translate differently.</p>
      */
-    public static TypeBytes of(MappingSet mappings) {
+    public static TypeBytes of() {
         ScriptPlatform platform = ScriptPlatforms.current();
         if (platform == ScriptPlatform.NONE) return TypeBytes.NONE;
         // SAID OUT LOUD, ONCE PER ENGINE, and it earns the line. "Live" and "inert" produce identical
@@ -57,16 +86,15 @@ public final class PlatformTypeBytes implements TypeBytes {
         // was silently skipped. That is not a hypothetical failure: it is the one this class exists to
         // fix, and it survived a full test suite and a working client.
         System.err.println("[crystalgui] resolving against the live runtime through "
-                + platform.getClass().getName()
-                + (mappings == MappingSet.IDENTITY ? " (identity mapping)" : " (mapped)"));
-        return new PlatformTypeBytes(new ReadableView(mappings, platform.liveBytes()),
+                + platform.getClass().getName());
+        return new PlatformTypeBytes(platform.liveBytes(),
                 PlatformTypeBytes.class.getClassLoader());
     }
 
     @Override
     public byte[] readable(String internalName) {
         try {
-            return readable.readableBytesOf(internalName);
+            return view().readableBytesOf(internalName);
         } catch (Exception unavailable) {
             // An ordinary answer, not an error. A type the live loader cannot produce is one the
             // classpath may still have, and turning that into a throw would make an unremarkable miss
