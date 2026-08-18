@@ -680,6 +680,13 @@ tasks.test {
     dependsOn(stageEngines)
     systemProperty("crystalgui.engines.dir", stagedEnginesDir.get().asFile.absolutePath)
 
+    // THE REAL MCP CSVs, where this machine has them. RFG downloads mcp_stable/12 to build 1.7.10, so
+    // they are present wherever this project has been built -- and McpCsvFormatTest skips rather than
+    // failing where they are not, the same allowance every engine test makes. Derived from Gradle's own
+    // home rather than hard-coded, because that is the one path that is the same on every machine.
+    systemProperty("cgui.test.mcpCsvDir",
+        File(gradle.gradleUserHomeDir, "caches/minecraft/de/oceanlabs/mcp/mcp_stable/12").absolutePath)
+
     // The pins, so a test can hold EngineBand to what the build actually resolves. Two copies of a
     // version number is a real hazard: bump one and the build downloads 3.46.0 while the runtime asks
     // for 3.45.0, which fails on the one platform whoever bumped it does not have.
