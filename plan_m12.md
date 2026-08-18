@@ -936,7 +936,7 @@ Ordered so that every step is verifiable when it lands, and nothing waits on the
 **Steps 2–4 are the spine.** They are also the only ones with real unknowns, which is why they come
 before the mapping work — that half is a parser and a downloader, both well understood.
 
-### Revision: step 3 cannot be done as written, and did not need to be
+### Revision (superseded below): step 3 cannot be done as written, and did not need to be
 
 **`ASTParser` has no name-environment seam.** Its whole public surface for saying what a parse resolves
 against is `setEnvironment(String[] classpath, String[] sourcepath, String[] encodings, boolean vmBoot)`,
@@ -971,6 +971,42 @@ because a transformer produced them will resolve for the runner and not for the 
 decision 26.4 has to make explicitly — a materialised cache under `cacheRoot()` for the analyser, or an
 accepted asymmetry with the editor falling back to the file view. It is no longer a step that can be
 quietly assumed away, which is why it is written down here.
+
+### Correction: the analyser CAN be given the name environment, and now is
+
+**The revision above was half wrong, and the half it got wrong was the important one.** The deferred
+asymmetry turned out not to be tolerable at all: on an obfuscated client the editor could not resolve a
+single Minecraft type, offered none in completion, and could not even suggest the import — while the
+runner compiled and ran the same file. It was reported from a real session, not found by a test.
+
+`ASTParser` genuinely has no seam; that part stands. What was wrong was concluding that the internal
+route was closed. `CompilationUnitResolver` is package-private, and that blocks putting a class **beside**
+it in `org.eclipse.jdt.core.dom` — the signing rule. It never blocked reaching it reflectively, and the
+three members needed are **public** on that class:
+
+```
+public CompilationUnitResolver(INameEnvironment, IErrorHandlingPolicy, CompilerOptions,
+                               ICompilerRequestor, IProblemFactory, IProgressMonitor, boolean)
+public CompilationUnitDeclaration resolve(ICompilationUnit, boolean, boolean, boolean)
+public static CompilationUnit convert(…, BindingTables, int, IProgressMonitor, boolean)
+```
+
+Byte-identical in `jdt.core` 3.26.0 (2021) and 3.46.0 (2026) — twenty-five releases apart — so the band
+risk §26.3 avoided this for does not hold here, and it is reflection for *accessibility* rather than into
+internals. Every failure returns null and falls back to the `ASTParser` parse, so the worst case is the
+behaviour that shipped before.
+
+**The rejected alternative is worth recording.** Materialising a remapped copy of the runtime to disk
+would also have worked, and was the first proposal: ~4,300 classes transformed and written on first
+launch, tens of MB of cache, mixin-added members stale in the editor until a rebuild — and, decisively,
+it is two views that agree rather than one view. Sharing the `TypeBytes` object makes the editor and the
+runner identical *by construction*.
+
+**One thing genuinely does need enumeration**, and only one: completion of types you have not imported.
+That is a rename rather than a listing — `ScriptPlatform.runtimeClassName` translates a single on-disk
+name and `TypeIndex` applies it while scanning as it already did, so it costs one string operation per
+entry and no extra I/O. Which is why exit criterion 8 now reads "a byte route, a path, a rename and two
+data objects".
 
 ## 26.10 How each piece is tested
 
@@ -1043,13 +1079,13 @@ those is a plan that lies to whoever reads it next.
 | # | Criterion | Status |
 |---|---|---|
 | 1 | shipped jar opens the editor with analysis working, no system property | **met** — `-PcgBundledEngines` withholds the property; band 8 extracts to `<cacheRoot>/engines/8` and a script compiles and runs |
-| 2 | a Minecraft type resolves, completes and hovers in readable names | **resolve: met** — an obfuscated client compiles `Blocks.stone.getUnlocalizedName()`, which is only possible against a readable view. **Completion and hover: not separately exercised**; they read the same `Analysis`, so this is an untested inference rather than a verified claim |
+| 2 | a Minecraft type resolves, completes and hovers in readable names | **was the gap, now addressed.** The runner always resolved; the EDITOR did not, and reported it as red names with no completion and no import quick-fix. Fixed by giving the analyser the same name environment (see the correction under §26.9) and the type index a rename. `LiveAnalysisTest` pins resolution against a class served only through `liveBytes()`; **completion and hover in a running obfuscated client remain a human check** |
 | 3 | a script referencing a mixin-added member compiles and links | **the hard half is met, the literal claim is not.** `-PcgBytes` shows 42 constants in the live `EntityRenderer` that exist in no file, including three Mixin-merged handlers — so the environment demonstrably carries members no classpath can. No script *calls* one, because the members CrystalGraphics' mixins add are private synthetics. A public mixin-added member would need mixin infrastructure in `mc1710`, which is scaffolding this phase deliberately did not add |
 | 4 | mappings absent on a clean install, acquired on first use, verified, installed atomically | **met, with one honest gap: no digests are pinned.** Upstream publishes no `.md5` beside `methods.csv`/`fields.csv`, so a pin has to be taken from a trusted fetch rather than invented; until then a corrupted download is caught by the parse rather than by the digest. The machinery is there and tested — `MappingCacheTest` covers corrupt-then-repair and reject-on-mismatch — it is the *data* that is missing |
 | 5 | the dev/prod namespace choice is detected, never configured | **met** — dev reports `the runtime already speaks readable names`, obfuscated fetches. No setting selects it |
 | 6 | an offline first run opens the editor, runs scripts, shows runtime names, and says why | **met in unit test, not exercised by being offline.** `UNAVAILABLE` is asserted through an unreachable `file:` URL and carries the reason; nobody has pulled a cable |
 | 7 | the same script file, unchanged, runs in dev and in a reobfuscated client | **met** — `tile.stone` in both, from one source |
-| 8 | `mc1710`'s `ScriptPlatform` contains no logic beyond a byte route, a path and two data objects | **met, and it grew.** 33 non-comment lines in `Mc1710ScriptPlatform` (a path and two constants) and 52 in `LaunchWrapperBytes`. The byte route is bigger than "a dozen lines" because production needs the name untransformed first — but it is still one route, and every line of it is about *obtaining bytes*. Nothing about mappings, caching, probing or compilation leaked down here |
+| 8 | `mc1710`'s `ScriptPlatform` contains no logic beyond a byte route, a path and two data objects | **met, and it grew twice.** A `runtimeClassName` rename joined it so completion can offer a class the jar stores under another name — one line, delegating to the same `IClassNameTransformer` the byte route already finds. 33 non-comment lines in `Mc1710ScriptPlatform` (a path and two constants) and 52 in `LaunchWrapperBytes`. The byte route is bigger than "a dozen lines" because production needs the name untransformed first — but it is still one route, and every line of it is about *obtaining bytes*. Nothing about mappings, caching, probing or compilation leaked down here |
 
 ### What the reobfuscated client found that nothing else could
 
