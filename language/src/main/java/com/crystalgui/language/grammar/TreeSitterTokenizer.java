@@ -27,6 +27,7 @@ import org.treesitter.TSTree;
 import javax.annotation.Nullable;
 
 import java.nio.charset.StandardCharsets;
+import java.util.function.UnaryOperator;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -245,7 +246,7 @@ public final class TreeSitterTokenizer
     public FoldingRegions compute(Rope document, int tabSize) {
         TSQuery folds = foldQuery();
         if (folds == null) return FoldingRegions.empty();
-        if (tree == null || (stale && scheduler == null)) reparse(document.toString());
+        if (tree == null || (stale && scheduler == null)) reparse(forParser(document.toString()));
         if (tree == null) return FoldingRegions.empty();
 
         // THE WHOLE DOCUMENT, unlike highlighting. A fold arrow is drawn in the gutter for a region that
@@ -379,7 +380,7 @@ public final class TreeSitterTokenizer
         // it is structurally behind but positionally correct, which is exactly what every editor shows for
         // the handful of frames a parse takes. Blocking here instead would put the whole ~17ms back on the
         // frame and defeat the point of having somewhere else to run it.
-        if (tree == null || (stale && scheduler == null)) reparse(document.toString());
+        if (tree == null || (stale && scheduler == null)) reparse(forParser(document.toString()));
         if (tree == null) return List.of();
 
         int startByte = offsets.toUtf8(from);
@@ -503,7 +504,7 @@ public final class TreeSitterTokenizer
         // answer is written into the document, where a wrong indent stays until somebody fixes it by
         // hand -- so this is the one query that waits for the parse rather than showing a frame of
         // slightly-behind colour.
-        if (tree == null || stale) reparse(document.toString());
+        if (tree == null || stale) reparse(forParser(document.toString()));
         return tree != null;
     }
 
@@ -739,7 +740,7 @@ public final class TreeSitterTokenizer
                 workerParser = new TSParser();
                 workerParser.setLanguage(language);
             }
-            String text = document.toString();
+            String text = forParser(document.toString());
             context.throwIfCancelled();
             TSTree parsed = workerParser.parseString(snapshot, text);
             // Built here rather than on delivery: it is an O(n) pass over the document and belongs on the
@@ -800,6 +801,54 @@ public final class TreeSitterTokenizer
 
     /** A finished parse and the offset index over the text it describes — swapped in together. */
     private record Parsed(TSTree tree, Utf8Offsets offsets) {
+    }
+
+    /**
+     * Text a grammar cannot parse, neutralised before it sees it — <b>length-preserving, always</b>.
+     *
+     * <h3>Why a grammar needs one at all</h3>
+     *
+     * <p>A JavaScript file may carry {@code import a.b.C;}, which this engine supports and which
+     * tree-sitter's grammar cannot parse: {@code import} there is an ES module declaration expecting a
+     * string or a {@code from}, so the line becomes an ERROR node. The damage is not local — measured,
+     * the same file parsed with and without it colours {@code var} as {@code keyword} in one and
+     * {@code variable} in the other, and {@code TEXT_MATERIAL} as {@code property} against
+     * {@code constructor}. One unparseable line at the top corrupts the whole document's colouring.</p>
+     *
+     * <h3>The contract, and it is not negotiable</h3>
+     *
+     * <p><b>The filter must return a string of exactly the same length.</b> Every offset this class
+     * reports — every token, every fold, every indent — is an offset into the text it parsed, and the
+     * editor reads them as offsets into the document. A filter that shortened by one character would move
+     * every colour in the file below it. Blanking to spaces is the only shape that satisfies this, and it
+     * is the shape both {@code JsImports} and {@code ScriptPrelude} already use.</p>
+     *
+     * <p>Which grammar needs one, and why it is declared on {@link Grammar} rather than by the language
+     * whose dialect it is, is recorded on {@code Grammar#sourceFilter} — the short version being that a
+     * bytecode scan forbids the language packages from naming this one.</p>
+     */
+    private UnaryOperator<String> sourceFilter;
+
+    /** @see #sourceFilter */
+    public void filterSourceWith(UnaryOperator<String> filter) {
+        this.sourceFilter = filter;
+    }
+
+    /**
+     * The text the parser should see.
+     *
+     * <p>The length check is an assertion rather than a repair, and it fails loudly: a filter that
+     * changed the length would produce colouring that is subtly wrong everywhere below the edit, which is
+     * far harder to diagnose than a thrown exception naming the filter.</p>
+     */
+    private String forParser(String text) {
+        if (sourceFilter == null) return text;
+        String filtered = sourceFilter.apply(text);
+        if (filtered == null || filtered.length() != text.length()) {
+            throw new IllegalStateException("a grammar source filter must preserve length: "
+                    + text.length() + " became " + (filtered == null ? "null" : filtered.length()));
+        }
+        return filtered;
     }
 
     private void reparse(String text) {

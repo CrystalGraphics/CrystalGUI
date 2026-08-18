@@ -73,9 +73,25 @@ public final class RhinoResolution {
     /** What the host put in scope, by name and declared Java type. @see JsSourceAnalyzer#useHostBindings */
     private final Map<String, String> hostBindings;
 
+    /** Simple names an {@code import} statement bound — a subset of {@link #hostBindings}'s keys. */
+    private final Set<String> imported;
+
     public RhinoResolution(@Nullable AstRoot root, RhinoScopes scopes, String source, LineIndex lines,
                     LiveScopeSnapshot live, @Nullable InteropResolver interop, String sourceName,
                     List<String> keywords, Map<String, String> hostBindings) {
+        this(root, scopes, source, lines, live, interop, sourceName, keywords, hostBindings, Set.of());
+    }
+
+    /**
+     * @param imported the subset of {@code hostBindings} that an {@code import} statement bound, which
+     *                 are CLASS objects rather than instances the host handed over. An overload rather
+     *                 than a tenth parameter on the only constructor, so a caller with no imports — every
+     *                 test, and any host that does not scan for them — is untouched.
+     */
+    public RhinoResolution(@Nullable AstRoot root, RhinoScopes scopes, String source, LineIndex lines,
+                    LiveScopeSnapshot live, @Nullable InteropResolver interop, String sourceName,
+                    List<String> keywords, Map<String, String> hostBindings, Set<String> imported) {
+        this.imported = imported == null ? Set.of() : imported;
         this.keywords = keywords == null ? List.of() : keywords;
         this.hostBindings = hostBindings == null ? Map.of() : hostBindings;
         this.root = root;
@@ -391,6 +407,16 @@ public final class RhinoResolution {
     private SymbolInfo fromHostBinding(String identifier) {
         String typeName = hostBindings.get(identifier);
         if (typeName == null || typeName.isEmpty()) return null;
+        // AN IMPORTED NAME IS THE CLASS ITSELF, and is described by the engine that knows it. `import
+        // a.b.C` binds the CLASS OBJECT -- its members are the statics, exactly as `Java.type('a.b.C')`
+        // binds -- where an ordinary host binding is an INSTANCE the host handed over. Reported through
+        // `interop.describe` so an imported name hovers identically to the fully qualified spelling it
+        // replaced: same kind, same quoted declaration, same owner. Anything else would make the
+        // shorthand read as a different thing from the name it stands for.
+        if (imported.contains(identifier) && interop != null) {
+            SymbolInfo described = interop.describe(typeName, true);
+            if (described != null) return described;
+        }
         TypeRef type = typeName.indexOf('.') > 0 ? JsTypeRef.javaInstance(typeName)
                 : JsTypeRef.js(typeName);
         // MODULE, so the owner band draws a module glyph rather than a class one. The band's own

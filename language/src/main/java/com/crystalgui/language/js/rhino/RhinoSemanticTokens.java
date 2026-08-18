@@ -74,7 +74,61 @@ final class RhinoSemanticTokens {
      *                     so without them every binding a mod offers would be marked unresolved
      */
     static List<SyntaxToken> of(@Nullable AstRoot root, RhinoScopes scopes, Set<String> hostBindings) {
-        if (root == null) return List.of();
+        return of(root, scopes, hostBindings, List.of());
+    }
+
+    /**
+     * @param imports the file's {@code import} statements, which the tree cannot describe because they
+     *                were blanked before it was built. @see #markImports
+     */
+    static List<SyntaxToken> of(@Nullable AstRoot root, RhinoScopes scopes, Set<String> hostBindings,
+                                List<JsImports.Imported> imports) {
+        // MARKED EVEN WHEN THE TREE IS NULL. A file that fails to parse still has imports the author
+        // can read, and colouring them is the one thing still possible for it.
+        List<SyntaxToken> all = tokensFor(root, scopes, hostBindings);
+        markImports(imports, all);
+        all.sort(Comparator.comparingInt(SyntaxToken::start));
+        return all;
+    }
+
+    /**
+     * The package path and the type name of every {@code import} — {@code module} and {@code type}, the
+     * captures the Java engine publishes for the identical line.
+     *
+     * <p><b>Only this pass can produce them.</b> {@link JsImports} blanks the statement before the parser
+     * sees it, so there is no node anywhere in the tree to colour from — and tree-sitter, still reading
+     * the raw text, parses {@code import a.b.C;} as a broken ES module declaration and colours the line
+     * out of its error recovery. That is what a working import looked like: a keyword, and then whatever
+     * the grammar guessed.</p>
+     *
+     * <p>Segment by segment rather than one span over the whole path, because that is what the Java
+     * engine does for {@code import java.util.ArrayList} — {@code java} and {@code util} as
+     * {@code module}, {@code ArrayList} as {@code type} — and the two languages colouring the same line
+     * differently is the thing this is here to stop.</p>
+     */
+    private static void markImports(List<JsImports.Imported> imports, List<SyntaxToken> tokens) {
+        for (JsImports.Imported each : imports) {
+            String name = each.binaryName();
+            int lastDot = name.lastIndexOf('.');
+            int at = each.nameStart();
+            int from = 0;
+            while (from <= lastDot && lastDot >= 0) {
+                int dot = name.indexOf('.', from);
+                int end = dot < 0 ? name.length() : dot;
+                if (end > from) add(tokens, at + from, end - from, "module");
+                if (dot < 0) break;
+                from = dot + 1;
+            }
+            int typeAt = lastDot < 0 ? 0 : lastDot + 1;
+            if (typeAt < name.length()) {
+                add(tokens, at + typeAt, name.length() - typeAt, "type");
+            }
+        }
+    }
+
+    private static List<SyntaxToken> tokensFor(@Nullable AstRoot root, RhinoScopes scopes,
+                                               Set<String> hostBindings) {
+        if (root == null) return new ArrayList<>();
         List<SyntaxToken> tokens = new ArrayList<>();
 
         // DECLARATIONS FIRST, so a name is coloured where it is introduced as well as where it is used.
