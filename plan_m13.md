@@ -9,10 +9,10 @@ opposite reasons.
 | § | Item | State |
 |---|---|---|
 | 25.1 | Parameter names from the class file | **done** — `ClassFileParameterNames`, read through the analysis classpath and then the running loader (which is what reaches the JDK's runtime image); `JavaSignatures` falls back to it when the unit does not declare the method. `-parameters` on `core` and `language` is the other half and is asserted, not trusted |
-| 25.2 | The header transform | not started — built from two rules the engine already encodes |
-| 25.3 | The provider chain | partly built — `SourceArchives` is already the shape |
-| 25.4 | Bundling our own sources | not started — packaging blocked on M12 |
-| 25.5 | The JDK, fetched rather than bundled | not started — licence question first |
+| 25.2 | The header transform | **M12's** — built from two rules the engine already encodes, and its only consumers are 25.4 and 25.5, so it ships with them |
+| 25.3 | The provider chain | **partly built** — `SourceArchives` is the shape and two of its four producers work today (a real `-sources.jar`, and the JDK's `src.zip` where it is on disk). The other two are 25.4's and M12's mapping data |
+| 25.4 | Bundling our own sources | **M12's** — a packaging question about the loader jar M12 assembles |
+| 25.5 | The JDK, fetched rather than bundled | **M12's**, and a licence decision before any of it — not a question code can settle |
 | 25.6 | Rendering the doc body | **done** — `EcjOptions` enables doc-comment support, `JavaDocs` renders the node, `JavaSignatures.documentationOf` finds it here or in the attached source and **inherits it for an override**. 8 tests. Plain text; the styled version is still §24.1`s `CgMarkupParser` call |
 
 ### The two findings this milestone is built on, both measured
