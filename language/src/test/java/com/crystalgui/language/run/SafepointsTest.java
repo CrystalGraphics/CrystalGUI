@@ -5,6 +5,8 @@ import com.crystalgui.language.run.exec.ScriptControl;
 import com.crystalgui.language.run.exec.ScriptStoppedException;
 import org.junit.Test;
 
+import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
@@ -28,6 +30,53 @@ import com.crystalgui.language.engine.ScriptClassLoader;
 public class SafepointsTest {
 
     /** A class with one method: an entry, a loop, or neither, as asked. */
+    /**
+     * <b>Injection moves neither {@code maxStack} nor {@code maxLocals}</b> — the property the whole
+     * design rests on, and the one worth a deterministic test.
+     *
+     * <p>{@code SafepointOverheadBenchmark} measures what a safepoint costs (§23 row 14: 1.06x on a
+     * 400M-iteration loop, +0.014 ns per iteration — it vanishes). A number is not something to assert
+     * in an ordinary build, and it is not what a regression would break first. <b>This is.</b> An
+     * {@code invokestatic} of a void no-arg method pushes nothing and declares nothing, so every frame
+     * and every max already in the class file stays valid — which is why {@code inject} can run with
+     * neither {@code COMPUTE_FRAMES} nor {@code COMPUTE_MAXS}, and therefore without ASM calling
+     * {@code getCommonSuperClass} and loading classes at instrumentation time.</p>
+     *
+     * <p>Change the injected instruction to anything that touches the stack and the bytes still verify
+     * on this fixture while the recomputation cost returns everywhere. This fails instead.</p>
+     */
+    @Test
+    public void injectingChangesNeitherTheStackNorTheLocals() {
+        byte[] original = classWith("MaxProbe", true, false);
+        int[] before = maxsOf(original);
+        int[] after = maxsOf(Safepoints.inject(original));
+
+        assertEquals("a safepoint grew the operand stack, so every frame in every instrumented class "
+                + "now has to be recomputed -- which is what loads classes at instrumentation time",
+                before[0], after[0]);
+        assertEquals("a safepoint declared a local", before[1], after[1]);
+    }
+
+    /** {@code work}'s {@code (maxStack, maxLocals)}, read off the class file rather than recomputed. */
+    private static int[] maxsOf(byte[] bytes) {
+        int[] found = {-1, -1};
+        new ClassReader(bytes).accept(new ClassVisitor(Opcodes.ASM9) {
+            @Override
+            public MethodVisitor visitMethod(int access, String name, String descriptor,
+                                             String signature, String[] exceptions) {
+                if (!"work".equals(name)) return null;
+                return new MethodVisitor(Opcodes.ASM9) {
+                    @Override public void visitMaxs(int maxStack, int maxLocals) {
+                        found[0] = maxStack;
+                        found[1] = maxLocals;
+                    }
+                };
+            }
+        }, 0);
+        assertTrue("no `work` method in the fixture", found[0] >= 0);
+        return found;
+    }
+
     private static byte[] classWith(String name, boolean loop, boolean abstractMethod) {
         ClassWriter writer = new ClassWriter(0);
         writer.visit(Opcodes.V1_8,
