@@ -363,23 +363,14 @@ public final class JavaCompletionProvider implements CompletionProvider {
 
         int lastDot = typedPrefix.lastIndexOf('.');
         String parent = lastDot < 0 ? "" : typedPrefix.substring(0, lastDot);
+        String partial = lastDot < 0 ? typedPrefix : typedPrefix.substring(lastDot + 1);
 
-        TypeIndex.Match matched = types.startingWith(typedPrefix);
-        java.util.Set<String> packages = new java.util.LinkedHashSet<>();
-        for (TypeIndex.Entry entry : matched.entries()) {
-            if (entry.packageName().equals(parent)) {
-                items.add(importTypeItem(entry));
-                continue;
-            }
-            // The NEXT segment only. `net.minecraft.client` under a typed `net.mine` contributes
-            // `minecraft`, not the whole remaining path -- offering the tail would insert three segments
-            // from one keystroke and skip everything in between.
-            String remainder = parent.isEmpty()
-                    ? entry.packageName() : entry.packageName().substring(parent.length() + 1);
-            int dot = remainder.indexOf('.');
-            packages.add(dot < 0 ? remainder : remainder.substring(0, dot));
-        }
-        for (String segment : packages) {
+        // ONE QUERY, and it does the splitting. Deriving packages from a capped list of ENTRIES truncates
+        // by alphabet: net.minecraft holds ~4,300 classes, so forty of them are all inside
+        // net.minecraft.client and most of the package list never appears. @see TypeIndex#childrenOf
+        TypeIndex.Children matched = types.childrenOf(parent, partial);
+        for (TypeIndex.Entry entry : matched.types()) items.add(importTypeItem(entry));
+        for (String segment : matched.packages()) {
             items.add(CompletionItem.builder(segment, SymbolKind.PACKAGE)
                     .detail(parent.isEmpty() ? segment : parent + "." + segment)
                     .filterText(segment)
