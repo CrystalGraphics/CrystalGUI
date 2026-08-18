@@ -15,6 +15,7 @@ import org.mozilla.javascript.ast.AstRoot;
 import org.mozilla.javascript.ast.Block;
 import org.mozilla.javascript.ast.FunctionNode;
 import org.mozilla.javascript.ast.InfixExpression;
+import org.mozilla.javascript.ast.Loop;
 import org.mozilla.javascript.ast.Name;
 import org.mozilla.javascript.ast.PropertyGet;
 import org.mozilla.javascript.ast.Scope;
@@ -101,8 +102,21 @@ public final class JsQuickFixes {
         switchJavaTypeSpelling(actions, caret);
         concatenationToTemplate(actions, caret);
         wrapInTryCatch(actions, caret);
+        // AND THE FOUR THAT REBUILD A CONSTRUCT, which live next door because each has to prove something
+        // about a whole body before it may fire. @see JsIntentions
+        structural().contribute(actions, caret, nodeCovering(caret), this::refactor);
         return actions;
     }
+
+    /** Built once per Alt+Enter, and only when there is a tree to walk. */
+    private JsIntentions structural() {
+        if (intentions == null) {
+            intentions = new JsIntentions(root, scopes, edits, resolution.supportedKeywords());
+        }
+        return intentions;
+    }
+
+    @Nullable private JsIntentions intentions;
 
     // ── Corrections ─────────────────────────────────────────────────────────────────────────────
 
@@ -191,7 +205,7 @@ public final class JsQuickFixes {
     private void declareAsLocal(List<CodeAction> actions, Name free) {
         String name = free.getIdentifier();
         if (name == null || name.isEmpty()) return;
-        AstNode statement = enclosingStatement(free);
+        AstNode statement = enclosingStatementOf(free);
         if (statement == null) return;
         int at = edits.lineStartAt(statement.getAbsolutePosition());
         String indent = edits.indentAt(statement.getAbsolutePosition());
@@ -310,7 +324,7 @@ public final class JsQuickFixes {
 
     /** "Surround with try/catch" — the twin of {@code ExceptionCorrections}' second half. */
     private void wrapInTryCatch(List<CodeAction> actions, int caret) {
-        AstNode statement = enclosingStatement(nodeCovering(caret));
+        AstNode statement = enclosingStatementOf(nodeCovering(caret));
         if (statement == null) return;
         int from = statement.getAbsolutePosition();
         int end = from + statement.getLength();
@@ -453,14 +467,23 @@ public final class JsQuickFixes {
      * miss: a function body is a {@code Block}, so without it the walk runs past every statement inside
      * every function and answers the function itself — and "insert above this statement" became "insert at
      * the top of the file". It read as an off-by-one in the offset arithmetic rather than as the wrong node.</p>
+     *
+     * <p><b>And a {@code Loop} is a {@code Scope}, which makes its own header look like a statement
+     * container.</b> Rhino's {@code ForLoop}, {@code WhileLoop} and {@code ForInLoop} all extend
+     * {@code Scope} — they have to, since {@code for (let i …)} declares into one — so the condition of
+     * {@code while (i &lt; xs.length)} answered "yes, my parent is a container" and the walk stopped on the
+     * comparison. "Surround with try/catch" on a loop condition therefore offered to wrap the condition,
+     * producing a {@code while} header containing a {@code try} block. Excluding {@code Loop} is what makes
+     * the answer the loop itself, which is the statement a reader would point at.</p>
      */
     @Nullable
-    private AstNode enclosingStatement(@Nullable AstNode node) {
+    static AstNode enclosingStatementOf(@Nullable AstNode node) {
         for (AstNode at = node; at != null; at = at.getParent()) {
             AstNode parent = at.getParent();
             // THE ROOT IS NOT A STATEMENT. Returning it for an empty document made "surround with
             // try/catch" offer to wrap nothing at all, in a file with nothing in it.
             if (parent == null) return at instanceof AstRoot ? null : at;
+            if (parent instanceof Loop) continue;
             if (parent instanceof Block || parent instanceof Scope || parent instanceof AstRoot) {
                 return at;
             }
