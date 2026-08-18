@@ -3309,21 +3309,19 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /**
      * Clips document-relative ranges to one line and rebases them onto it.
      *
-     * <p><b>Through {@link #addRange}, so the overlap guard applies here too.</b> This filed ranges
-     * directly for a long time and got away with it because its callers — the find bar, a
-     * {@code ::highlight()} registration — were the only ones publishing under their own names, and each
-     * produced ranges that happened not to overlap. Neither is guaranteed: overlapping matches are
-     * ordinary ({@code "aa"} in {@code "aaa"} matches at 0–2 and 1–3), and a language engine registering
-     * occurrences has no obligation to disjoin them either.</p>
+     * <p><b>Through {@link #addRange}, which is what the syntax path already does.</b> This added
+     * directly, so five names reached {@code HighlightRegistry.set} with no overlap guard at all —
+     * {@code occurrence}, {@code selection-occurrence}, {@code search}, {@code search-excluded} and
+     * {@code bracket} — and a highlight refuses overlapping ranges with a hard failure, thrown from
+     * {@code tickFrame} where nothing above it in the trace names the producer.</p>
      *
-     * <p>{@code HighlightRegistry.set} refuses an overlap outright, so the consequence was a hard crash
-     * out of the frame tick — <i>"Ranges within one highlight must not overlap: TextRange[start=42,
-     * end=44] and TextRange[start=43, end=45]"</i> — from a paint pass, naming offsets rather than the
-     * feature that produced them. Dropping the later range is the same resolution {@link #addRange}
-     * already documents and is right for the same reason: both ranges carry one name, so they resolve to
-     * one colour, and the covered text is styled either way.</p>
+     * <p>Overlap here is ordinary rather than exotic: a search can match at two positions one character
+     * apart, and an occurrence list computed against one revision and rebased onto another can hold two
+     * spans of the same word that no longer sit where they did. Dropping is the same resolution and the
+     * same reasoning {@code addRange} already documents — the ranges carry ONE name, so they resolve to
+     * one colour, and painting the union or the first is indistinguishable to a reader.</p>
      */
-    private static void addDocumentRanges(Map<String, List<TextRange>> byName, String name,
+    static void addDocumentRanges(Map<String, List<TextRange>> byName, String name,
                                           List<TextRange> ranges, int lineStart, int lineEnd) {
         for (TextRange range : ranges) {
             int start = Math.max(range.start(), lineStart);
