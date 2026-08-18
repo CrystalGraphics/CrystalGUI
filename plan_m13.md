@@ -13,7 +13,7 @@ opposite reasons.
 | 25.3 | The provider chain | partly built — `SourceArchives` is already the shape |
 | 25.4 | Bundling our own sources | not started — packaging blocked on M12 |
 | 25.5 | The JDK, fetched rather than bundled | not started — licence question first |
-| 25.6 | Rendering the doc body | not started — `SymbolInfo.documentation` has never been populated |
+| 25.6 | Rendering the doc body | **done** — `EcjOptions` enables doc-comment support, `JavaDocs` renders the node, `JavaSignatures.documentationOf` finds it here or in the attached source and **inherits it for an override**. 8 tests. Plain text; the styled version is still §24.1`s `CgMarkupParser` call |
 
 ### The two findings this milestone is built on, both measured
 

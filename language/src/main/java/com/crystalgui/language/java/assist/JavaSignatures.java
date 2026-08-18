@@ -620,6 +620,98 @@ public final class JavaSignatures {
         return new JavaSignatures(source.unit, source.text, nameCaptures).quotedNode(declaration);
     }
 
+    /**
+     * The doc comment for a binding, <b>inherited when it has none of its own</b> — M13 §25.6.
+     *
+     * <p>The same two-step lookup {@link #quoted} does, because it is the same question about the same
+     * node: this unit's tree first, then the attached source for a classpath symbol. Written beside it
+     * rather than folded into it — one walk, two extractions — since a signature and a doc comment are
+     * wanted in different places and only sometimes together.</p>
+     *
+     * <h3>Inheritance is not a refinement, it is what stops this looking broken</h3>
+     *
+     * <p>An overriding method usually carries {@code @Override} and no doc of its own. Without walking
+     * to the supertype a large fraction of methods render an empty body, and an empty body reads as the
+     * feature not working rather than as the method having nothing to say. Java's own tooling does the
+     * same walk for a bare {@code {@inheritDoc}} and for no comment at all, and so does IntelliJ.</p>
+     *
+     * <p>Superclass before interfaces, which is Java's own resolution order, and breadth-first with a
+     * bound: a deep hierarchy is a hover, not a search.</p>
+     */
+    @Nullable
+    public String documentationOf(@Nullable IBinding binding) {
+        String own = docTextOf(binding);
+        if (own != null) return own;
+        if (!(binding instanceof IMethodBinding)) return null;
+        return inheritedDocOf((IMethodBinding) binding);
+    }
+
+    /** How far up a hierarchy to look for an inherited comment. Deeper than any real API, cheaper than a search. */
+    private static final int MAX_DOC_HOPS = 6;
+
+    @Nullable
+    private String inheritedDocOf(IMethodBinding method) {
+        ITypeBinding declaring = method.getDeclaringClass();
+        if (declaring == null) return null;
+        List<ITypeBinding> queue = new ArrayList<>();
+        addSupertypes(declaring, queue);
+        for (int hop = 0; hop < MAX_DOC_HOPS && hop < queue.size(); hop++) {
+            ITypeBinding candidate = queue.get(hop);
+            if (candidate == null) continue;
+            for (IMethodBinding above : candidate.getDeclaredMethods()) {
+                if (!method.overrides(above) && !above.isSubsignature(method)) continue;
+                String inherited = docTextOf(above);
+                if (inherited != null) return inherited;
+            }
+            addSupertypes(candidate, queue);
+        }
+        return null;
+    }
+
+    private static void addSupertypes(ITypeBinding type, List<ITypeBinding> into) {
+        // THE SUPERCLASS FIRST, which is Java's own order for resolving an inherited comment.
+        ITypeBinding parent = type.getSuperclass();
+        if (parent != null && !into.contains(parent)) into.add(parent);
+        for (ITypeBinding each : type.getInterfaces()) {
+            if (each != null && !into.contains(each)) into.add(each);
+        }
+    }
+
+    /** A binding's own comment, from this unit or from its attached source, rendered. */
+    @Nullable
+    private String docTextOf(@Nullable IBinding binding) {
+        if (binding == null) return null;
+        String here = renderedDocOf(unit == null ? null : unit.findDeclaringNode(binding));
+        if (here != null) return here;
+        if (attached == null) return null;
+
+        String topLevel = topLevelSourceName(binding);
+        if (topLevel == null) return null;
+        AttachedSources.Attached source = attached.unitFor(topLevel);
+        if (source == null || source.unit == null) return null;
+        String key = declarationKeyOf(binding);
+        if (key == null) return null;
+        return renderedDocOf(source.unit.findDeclaringNode(key));
+    }
+
+    /**
+     * The comment on a declaring node.
+     *
+     * <p>A field's declaring node is its {@code VariableDeclarationFragment} and the comment belongs to
+     * the {@code FieldDeclaration} above it — the same off-by-one-level the signature path has to
+     * handle, arriving here from the other direction.</p>
+     */
+    @Nullable
+    private static String renderedDocOf(@Nullable ASTNode declaration) {
+        for (ASTNode at = declaration; at != null; at = at.getParent()) {
+            if (at instanceof BodyDeclaration) {
+                return JavaDocs.render(((BodyDeclaration) at).getJavadoc());
+            }
+            if (at instanceof CompilationUnit) return null;
+        }
+        return null;
+    }
+
     /** Which of the two quoting shapes a declaring node is, or null if it is neither. */
     private Signature quotedNode(ASTNode declaration) {
         if (declaration instanceof VariableDeclarationFragment) return quotedFragment(declaration);

@@ -84,6 +84,19 @@ public final class DocumentationPopup extends Popover {
     public static final String DEFINITION_CLASS = "__doc-definition__";
     public static final String DEFINITION_BOX_CLASS = "__doc-definition-box__";
     public static final String BODY_CLASS = "__doc-body__";
+
+    /**
+     * The rule between the definition and the prose — IntelliJ draws one and it earns its line.
+     *
+     * <p>The two bands are different <em>kinds</em> of thing: one is code, syntax-coloured and
+     * read a token at a time, and the other is prose. Without a rule they read as one block whose
+     * colours change halfway, which is what the gap alone gave.</p>
+     *
+     * <p><b>An element, not a border.</b> A one-sided {@code border-width-*} either draws all four
+     * edges or none, never the one named — the invariant `statusbarview` learned and spells with a
+     * `__status-sep__` of its own.</p>
+     */
+    public static final String SEPARATOR_CLASS = "__doc-separator__";
     public static final String PROBLEM_CLASS = "__doc-problem__";
     public static final String PROBLEM_MESSAGE_CLASS = "__doc-problem-message__";
     public static final String PROBLEM_ACTIONS_CLASS = "__doc-problem-actions__";
@@ -154,6 +167,9 @@ public final class DocumentationPopup extends Popover {
     private final UIElement definition = new UIElement();
     private final List<UIText> definitionLines = new ArrayList<>();
     private String definitionText = "";
+    /** @see #SEPARATOR_CLASS */
+    private final UIElement separator = new UIElement();
+
     private final UIText body = new UIText("");
 
     /**
@@ -250,6 +266,8 @@ public final class DocumentationPopup extends Popover {
         // white-space and adding text-overflow each changed the SYMPTOM and none of them fixed it.
 
         ownerText.forceSelfSizeWidth();
+        separator.addClass(SEPARATOR_CLASS);
+        separator.setHitTest(false);
         body.addClass(BODY_CLASS);
 
         problemMessage.addClass(PROBLEM_MESSAGE_CLASS);
@@ -293,6 +311,7 @@ public final class DocumentationPopup extends Popover {
         addInternalChild(problemRow);
         addInternalChild(ownerRow);
         addInternalChild(definition);
+        addInternalChild(separator);
         addInternalChild(body);
 
         // Enter and Leave do NOT bubble, but one is dispatched to every element in the entered and left
@@ -532,6 +551,7 @@ public final class DocumentationPopup extends Popover {
         ownerRow.setDisplayed(false);
         definition.setDisplayed(false);
         bodyShown = false;
+        separator.setDisplayed(false);
         body.setDisplayed(false);
         setProblem(problems, List.of());
     }
@@ -560,6 +580,7 @@ public final class DocumentationPopup extends Popover {
         ownerRow.setDisplayed(false);
         definition.setDisplayed(false);
         bodyShown = false;
+        separator.setDisplayed(false);
         body.setDisplayed(false);
         setProblem(problems, List.of());
     }
@@ -634,6 +655,10 @@ public final class DocumentationPopup extends Popover {
         // HIDDEN, not empty. An empty band is a gap under the definition that looks like a rendering
         // failure; no band is a popup that is simply shorter.
         bodyShown = docs != null && !docs.isBlank();
+        // THE RULE FOLLOWS THE BAND IT DIVIDES. Left visible with no body under it, it draws a line
+        // across the bottom of the popup that reads as a band which failed to load -- the same reason
+        // the body itself hides rather than showing empty.
+        separator.setDisplayed(bodyShown);
         body.setDisplayed(bodyShown);
         body.setText(docs == null ? "" : docs);
     }

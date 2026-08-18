@@ -1538,11 +1538,36 @@ documentationpopup .__doc-definition__::highlight(doc-name) {
  * its content: a popover's height comes from its own children, so there is no free space to distribute
  * and a growing child with a zero basis resolves to zero -- a popup with an invisible body. QuickPick
  * records the same trap. A max-height of its own gives it somewhere to scroll inside instead. */
+/* A RULE, AND IT IS AN ELEMENT. A one-sided `border-width-*` draws all four edges or none, never the
+ * one named -- so a divider is a 1px-tall box, which is what `.__status-sep__` already spells.
+ *
+ * Full width and zero-shrink: in a column the cross axis stretches by default, and `flex-shrink` is 0
+ * here anyway, but the height is the thing a stretch could eat. */
+documentationpopup .__doc-separator__ {
+    width: 100%;
+    height: 1px;
+    flex-shrink: 0;
+    margin-top: 3px;
+    margin-bottom: 4px;
+    background-color: var(--doc-border, #393B40);
+}
+
+/* The one band that can be arbitrarily long, so it is the one that scrolls -- and it bounds ITSELF
+ * rather than growing into the popup.
+ *
+ * `max-width` is a MEASURE, not a fraction. The popup is sized by its signature, which is one nowrap
+ * line and can be very wide -- so prose given the same width ran to 100-odd characters a line, which is
+ * roughly twice what anything is comfortable to read. A percentage was the obvious alternative and is
+ * worse in both directions: a short signature would squeeze the prose into a sliver, and a long one
+ * would still leave it unreadably wide. 440px is about 65 characters at this size, which is the number
+ * typography has settled on, and it lands inside the "half to two thirds" this was asked for at the
+ * widths the popup actually reaches. */
 documentationpopup .__doc-body__ {
     font-size: 9;
     color: var(--doc-body-fg, #DFE1E5);
     white-space: normal;
     overflow: auto;
+    max-width: 440px;
     max-height: 220px;
 }
 

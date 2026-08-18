@@ -809,7 +809,8 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                         containerName(declaring), null, modifiers,
                         declarationOf(unit, binding))
                         .withContainerKind(declaring == null ? null : JavaSignatures.kindOf(declaring))
-                        .withSignature(signatures.of(binding, kind, name.getIdentifier()));
+                        .withSignature(signatures.of(binding, kind, name.getIdentifier()))
+                        .withDocumentation(signatures.documentationOf(binding));
             }
             if (binding instanceof IMethodBinding) {
                 IMethodBinding method = (IMethodBinding) binding;
@@ -820,7 +821,8 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                         containerName(declaring), null, modifiers,
                         declarationOf(unit, binding), parameterTypesOf(method))
                         .withContainerKind(declaring == null ? null : JavaSignatures.kindOf(declaring))
-                        .withSignature(signatures.of(binding, kind, name.getIdentifier()));
+                        .withSignature(signatures.of(binding, kind, name.getIdentifier()))
+                        .withDocumentation(signatures.documentationOf(binding));
             }
             if (binding instanceof ITypeBinding) {
                 ITypeBinding type = (ITypeBinding) binding;
@@ -832,7 +834,8 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                 return new SymbolInfo(name.getIdentifier(), kind, typeRef(type),
                         type.getPackage() == null ? null : type.getPackage().getName(), null,
                         modifiers, declarationOf(unit, binding))
-                        .withSignature(signatures.of(binding, kind, name.getIdentifier()));
+                        .withSignature(signatures.of(binding, kind, name.getIdentifier()))
+                        .withDocumentation(signatures.documentationOf(binding));
             }
             return SymbolInfo.of(name.getIdentifier(), SymbolKind.UNKNOWN);
         }
