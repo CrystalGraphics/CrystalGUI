@@ -845,6 +845,34 @@ The MCP data is the easiest version of this problem that exists — already in t
 11,500 lines of flat CSV, `srg → readable`, and **no owner qualification is needed, because SRG names are
 globally unique by construction**. That is a `split(",", 4)` into `MappingSet.builder()`.
 
+> ### Revision: that guarantee holds in ONE DIRECTION, and the other one is 20% of the data
+>
+> **Measured while writing the parser, not predicted.** SRG → readable is a function — every `func_*`
+> names one method, exactly as claimed. Readable → SRG is **not**, because unrelated classes are allowed
+> the same readable name. `getBlock` is four distinct SRG methods in `mcp_stable/12`
+> (`func_145805_f`, `func_147439_a`, `func_150810_a`, `func_151337_f`), and across the real files:
+>
+> | | rows | distinct readable names | ambiguous | rows they cover |
+> |---|---|---|---|---|
+> | `methods.csv` | 4,819 | 4,311 | 357 | 865 (18%) |
+> | `fields.csv` | 4,791 | 4,058 | 329 | 1,062 (22%) |
+>
+> **The reverse is the direction that makes a script link**, so this is not a corner. A map that kept the
+> last entry would remap `world.getBlock(…)` to whichever of four it happened to hold, and the script
+> would fail at run time with a `NoSuchMethodError` naming an SRG name its author never wrote — after
+> compiling, verifying and looking entirely correct.
+>
+> So `MappingSet` **refuses to guess**: a colliding readable name is left out of the reverse table and
+> reported by `isAmbiguousReadableMethod`. Unmapped is also wrong, and it is wrong in the direction that
+> can be detected and repaired.
+>
+> **What repairs it is the owner, and the owner does not need `packaged.srg`.** At remap time the
+> declaring type is known, and its live bytes are already being read — so "which of the four `getBlock`s
+> does `net/minecraft/world/World` declare" is answered by forward-mapping that class's own method names,
+> which is a lookup in the direction that IS a function. That is `InheritanceAwareRemapper`'s existing
+> job, and it means risk 1's conclusion stands: the CSV pair suffices, and `SrgFormat` is still not
+> needed.
+
 **It does not generalise cleanly to every version, so the design admits that up front.** Modern targets
 use genuinely different formats — TSRG2 for Forge's SRG data, ProGuard `.txt` for Mojmap, Tiny v2 for
 Fabric — and none is a variation on CSV.
