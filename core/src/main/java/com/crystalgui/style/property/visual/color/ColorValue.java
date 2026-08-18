@@ -20,6 +20,21 @@ public class ColorValue extends StyleValue<Integer> {
 
         value = value.trim().toLowerCase();
 
+        // `transparent` — a CSS-wide colour keyword, and the one this parser was missing.
+        //
+        // CSS Color 4 defines it as exactly rgba(0, 0, 0, 0), NOT as "no colour": it is a real colour
+        // that happens to have zero alpha, which is why it composites and interpolates like any other.
+        // That distinction matters for transitions — animating to `transparent` must fade toward
+        // transparent BLACK, and returning null here instead would drop the declaration and animate
+        // toward whatever the cascade fell back to.
+        //
+        // Twelve declarations in the user-agent sheet use it. Every one of them was failing to parse,
+        // so each logged a warning and was skipped — visible as a wall of
+        // "Stylesheet declaration 'background-color: transparent' failed to parse — skipping" on any
+        // client that loads the default sheet, and as a handful of surfaces quietly keeping a
+        // background they were written to clear.
+        if (value.equals("transparent")) return 0x00000000;
+
         try {
             if (value.startsWith("#")) {
                 String hex = value.substring(1);

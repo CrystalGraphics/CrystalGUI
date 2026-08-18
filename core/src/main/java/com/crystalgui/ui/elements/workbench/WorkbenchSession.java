@@ -357,7 +357,7 @@ public final class WorkbenchSession {
     public boolean fromJson(String json) {
         StateMap<JsonElement> in;
         try {
-            in = new StateMap<>(JsonOps.INSTANCE, JsonParser.parseString(json));
+            in = new StateMap<>(JsonOps.INSTANCE, new JsonParser().parse(json));
         } catch (RuntimeException malformed) {
             CrystalGuiCore.LOGGER.warn("Session record could not be read; opening with the defaults",
                     malformed);

@@ -50,7 +50,36 @@ dependencies {
     // CG declares commons-io compileOnly (Minecraft ships it at runtime), so it isn't inherited
     // transitively. Tests that load a resource go through CgIO -> IOUtils, so they need it directly.
     testImplementation("commons-io:commons-io:2.4")
-    implementation("org.apache.logging.log4j:log4j-core:2.26.1")
+    // LOG4J: COMPILED AGAINST THE OLDEST VERSION core/ MUST RUN ON, WHICH IS MINECRAFT 1.7.10's.
+    //
+    // 1.7.10 ships log4j 2.0-beta9. The parameterised overloads `warn(String, Object)`,
+    // `warn(String, Object, Object)` and friends were only added in 2.6 -- beta9 has just
+    // `warn(String, Object...)`. Overload selection happens at COMPILE time, so building against a
+    // modern log4j-api makes javac emit `warn(String, Object)` for every `LOGGER.warn("x {}", a)` in
+    // this module, and each one is a NoSuchMethodError the first time it is reached in game:
+    //
+    //     java.lang.NoSuchMethodError:
+    //       org.apache.logging.log4j.Logger.warn(Ljava/lang/String;Ljava/lang/Object;)V
+    //       at com.crystalgui.style.sheet.DeclarationParser.parseBlock
+    //
+    // It is a landmine rather than a build break: it only fires on the branch that logs, so the first
+    // one found was in a CSS warning path -- which meant opening the editor died inside the user-agent
+    // stylesheet parse and looked like a resource problem. 27 files in this module use `{}` args.
+    //
+    // Compiling against beta9 binds them all to the varargs overload, which every later log4j still
+    // has, so the harness and the tests (running 2.26.1) are unaffected. API ONLY: core names just
+    // LogManager and Logger. The implementation stays modern and runtime-scoped, which also keeps it
+    // off mc1710's classpath, where Minecraft supplies its own.
+    compileOnly("org.apache.logging.log4j:log4j-api:2.0-beta9")
+    runtimeOnly("org.apache.logging.log4j:log4j-core:2.26.1")
+    testImplementation("org.apache.logging.log4j:log4j-core:2.26.1")
+
+    // JSpecify, declared because it is USED (UIInputHandler and friends import @Nullable from it).
+    // It used to arrive transitively from log4j-core 2.26.1 -- modern log4j-api depends on it -- so
+    // moving log4j off the compile classpath above took an annotation package with it. Annotation-only
+    // and CLASS-retention, so compileOnly is the whole requirement.
+    compileOnly("org.jspecify:jspecify:1.0.0")
+    testCompileOnly("org.jspecify:jspecify:1.0.0")
 
     // Taffy layout engine + JOML (consumed from CG at runtime; needed here for compile)
     compileOnly("dev.vfyjxf:taffy:${rootProject.properties["taffy_version"]}")
@@ -61,9 +90,24 @@ dependencies {
     // @Nullable / @NonNull annotations — javax.annotation not on module path in JDK 11+
     compileOnly("com.google.code.findbugs:jsr305:3.0.2")
 
-    // Real Gson (not shaded) — core must run standalone (tests, gl-debug-harness), so this can't be
-    // compileOnly on the assumption a loader/Minecraft provides it at runtime.
-    implementation("com.google.code.gson:gson:2.11.0")
+    // GSON: COMPILED AGAINST THE OLDEST VERSION core/ MUST RUN ON, WHICH IS MINECRAFT 1.7.10's.
+    //
+    // The same trap as log4j above, and found the same way -- at runtime, on a branch that had not been
+    // taken yet. 1.7.10 ships gson 2.2.4; `JsonParser.parseString(String)` is a STATIC method added in
+    // 2.8.6, so building against a modern gson emits a call that does not exist in game:
+    //
+    //     java.lang.NoSuchMethodError: com.google.gson.JsonParser.parseString(...)
+    //       at com.crystalgui.core.settings.SettingsCodec.fromJson
+    //
+    // It only fired once a preferences file existed for loadPreferences to read, which is why several
+    // clean launches preceded it. Compiling against 2.2.4 makes javac pick `new JsonParser().parse(...)`
+    // -- deprecated in modern gson, present in every version -- so tests and the harness are unaffected.
+    //
+    // THE GENERAL RULE, now paid for twice: a library Minecraft also supplies must be COMPILED against
+    // the oldest version any target ships, never merely tested against the newest. The failure is always
+    // a NoSuchMethodError on a cold path, never a build error.
+    compileOnly("com.google.code.gson:gson:2.2.4")
+    runtimeOnly("com.google.code.gson:gson:2.11.0")
     testImplementation("com.google.code.gson:gson:2.11.0")
 
     // LWJGL 2 — needed for ScissorStack.java (V3.x legacy, scheduled for deletion in Phase 2).
