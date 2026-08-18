@@ -1079,7 +1079,7 @@ those is a plan that lies to whoever reads it next.
 | # | Criterion | Status |
 |---|---|---|
 | 1 | shipped jar opens the editor with analysis working, no system property | **met** — `-PcgBundledEngines` withholds the property; band 8 extracts to `<cacheRoot>/engines/8` and a script compiles and runs |
-| 2 | a Minecraft type resolves, completes and hovers in readable names | **was the gap, now addressed.** The runner always resolved; the EDITOR did not, and reported it as red names with no completion and no import quick-fix. Fixed by giving the analyser the same name environment (see the correction under §26.9) and the type index a rename. `LiveAnalysisTest` pins resolution against a class served only through `liveBytes()`; **completion and hover in a running obfuscated client remain a human check** |
+| 2 | a Minecraft type resolves, completes and hovers in readable names | **was the gap, now addressed.** The runner always resolved; the EDITOR did not, and reported it as red names with no completion and no import quick-fix. Fixed by giving the analyser the same name environment (see the correction under §26.9) and the type index a rename. `LiveAnalysisTest` pins resolution against a class served only through `liveBytes()`; **completion is now machine-verified in the obfuscated client too** (2026-08-19): the `-PcgComplete` probe reports 110 members for `Minecraft.getMinecraft().` under `runObfClient`, in readable names (`displayGuiScreen`, `crashed`, `addGraphicsAndWorldToCrashReport`) on a jar that stores them obfuscated, and identical counts to the dev client for four JDK receivers. Only the *drawn* popup and hover remain a human check |
 | 3 | a script referencing a mixin-added member compiles and links | **the hard half is met, the literal claim is not.** `-PcgBytes` shows 42 constants in the live `EntityRenderer` that exist in no file, including three Mixin-merged handlers — so the environment demonstrably carries members no classpath can. No script *calls* one, because the members CrystalGraphics' mixins add are private synthetics. A public mixin-added member would need mixin infrastructure in `mc1710`, which is scaffolding this phase deliberately did not add |
 | 4 | mappings absent on a clean install, acquired on first use, verified, installed atomically | **met, with one honest gap: no digests are pinned.** Upstream publishes no `.md5` beside `methods.csv`/`fields.csv`, so a pin has to be taken from a trusted fetch rather than invented; until then a corrupted download is caught by the parse rather than by the digest. The machinery is there and tested — `MappingCacheTest` covers corrupt-then-repair and reject-on-mismatch — it is the *data* that is missing |
 | 5 | the dev/prod namespace choice is detected, never configured | **met** — dev reports `the runtime already speaks readable names`, obfuscated fetches. No setting selects it |
@@ -1099,6 +1099,36 @@ minutes:
 3. `isPackage` could not answer for `net/minecraft/init`, stopping every script that named a
    Minecraft type.
 4. The out direction was not applied — and then, once applied, renamed the script's own `run()`.
+
+### What the DEV client found that nothing else could, either
+
+The reobfuscated client earned its section above. The dev client then earned one of its own, and the
+defect it found is the more instructive of the two because **every layer was green while it was
+present**.
+
+Reported as an empty completion popup. The analyser, the provider on a fresh analysis and on a stale
+one, the whole services stack for a unit and for a bare snippet, and the harness through the identical
+call — all correct, all answering 46 rows for `System.out.` The client answered 0.
+
+`EcjSourceAnalyzer.live()` built a resolved unit and cleaned its name environment up in a `finally` one
+statement later. A resolved unit does not hold its bindings; it resolves them **lazily**, so every member
+list was read through a classpath that had already been closed. `FileSystem.cleanup()` closes each
+classpath jar and nulls its handle, `ClasspathJar.getModulesDeclaringPackage` rebuilds its cache from
+that null and throws, and JDT's DOM **catches it** — `getDeclaredMethods()` logs "Could not retrieve
+declared methods" with no stack and returns an empty array. Binary classes reported no methods; their
+fields were fine (already resolved) and their interfaces were fine (JDT synthesises those), so
+`String.` offered `compareTo` alone and `Minecraft.` offered `IPlayerUsage`'s three.
+
+**It needs a Java 8 host.** From 9 onward the JDK is a JRT filesystem rather than an archive and
+`ClasspathJrt` survives the same cleanup, so no test JVM and no harness run on this hardware could
+reach it. That is a standing blind spot rather than a solved one: **band 8 is what a 1.7.10 client
+runs, and nothing but a 1.7.10 client runs band 8.** `BandDomResolutionTest` drives each band
+explicitly and skips the ones whose ceiling is below the host's class library, which makes the gap
+visible in the suite rather than merely absent from it.
+
+The instrument that closed it is `-PcgComplete` on `runClient`/`runObfClient`, beside `-PcgScript` and
+`-PcgBytes`. When something reproduces only in a client, add a gated probe and bisect with properties;
+four layers of passing tests proved nothing.
 
 ### Two things this phase changed in the plan itself
 
