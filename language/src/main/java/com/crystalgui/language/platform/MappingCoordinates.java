@@ -1,7 +1,9 @@
 package com.crystalgui.language.platform;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -35,21 +37,24 @@ import java.util.Map;
 public final class MappingCoordinates {
 
     /** Runtime already speaks the readable namespace, so there is nothing to fetch. */
-    public static final MappingCoordinates NONE =
-            new MappingCoordinates("", "", "", "", Collections.<String, String>emptyMap());
+    public static final MappingCoordinates NONE = new MappingCoordinates("", "", "", "",
+            Collections.<String>emptyList(), Collections.<String, String>emptyMap());
 
     private final String minecraftVersion;
     private final String channel;
     private final String version;
     private final String baseUrl;
+    /** The files to fetch, in the order a platform named them. @see #files */
+    private final List<String> files;
     private final Map<String, String> digests;
 
     private MappingCoordinates(String minecraftVersion, String channel, String version, String baseUrl,
-                               Map<String, String> digests) {
+                               List<String> files, Map<String, String> digests) {
         this.minecraftVersion = minecraftVersion;
         this.channel = channel;
         this.version = version;
         this.baseUrl = baseUrl;
+        this.files = files;
         this.digests = digests;
     }
 
@@ -63,20 +68,45 @@ public final class MappingCoordinates {
                                         String baseUrl) {
         return new MappingCoordinates(minecraftVersion, channel, version,
                 baseUrl.endsWith("/") ? baseUrl : baseUrl + "/",
-                Collections.<String, String>emptyMap());
+                Collections.<String>emptyList(), Collections.<String, String>emptyMap());
     }
 
-    /** The expected MD5 of one file, e.g. {@code withDigest("methods.csv", "a1b2…")}. */
+    /**
+     * One file this artifact consists of, with no digest pinned yet.
+     *
+     * <p>Order is kept, because it is overlay order when the files are parsed: a later file's entry for
+     * the same runtime name wins.</p>
+     */
+    public MappingCoordinates withFile(String fileName) {
+        if (files.contains(fileName)) return this;
+        List<String> next = new ArrayList<String>(files);
+        next.add(fileName);
+        return new MappingCoordinates(minecraftVersion, channel, version, baseUrl,
+                Collections.unmodifiableList(next), digests);
+    }
+
+    /**
+     * One file and its expected MD5, e.g. {@code withDigest("methods.csv", "a1b2…")}.
+     *
+     * <p>Names the file as well as pinning it, so a platform states its artifact once rather than in two
+     * lists that can disagree about which files exist.</p>
+     */
     public MappingCoordinates withDigest(String fileName, String md5) {
         Map<String, String> next = new LinkedHashMap<String, String>(digests);
         next.put(fileName, md5.toLowerCase());
+        MappingCoordinates named = withFile(fileName);
         return new MappingCoordinates(minecraftVersion, channel, version, baseUrl,
-                Collections.unmodifiableMap(next));
+                named.files, Collections.unmodifiableMap(next));
+    }
+
+    /** The files to fetch, in the order they were named. Empty means there is nothing to acquire. */
+    public List<String> files() {
+        return files;
     }
 
     /** Whether there is anything to fetch at all. */
     public boolean isNone() {
-        return channel.isEmpty() || version.isEmpty();
+        return channel.isEmpty() || version.isEmpty() || files.isEmpty();
     }
 
     public String minecraftVersion() {
