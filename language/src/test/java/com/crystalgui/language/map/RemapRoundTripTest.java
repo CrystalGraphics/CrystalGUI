@@ -70,7 +70,18 @@ public class RemapRoundTripTest {
     }
 
     private static JavaEngine openEngine() throws Exception {
-        EngineBand band = EngineBand.detect();
+        return openEngine(EngineBand.detect());
+    }
+
+    /**
+     * Opens one named band's jars, whatever JVM this is.
+     *
+     * <p>Legal in-process on any modern JVM because the pin is by class-file <em>major</em>: band 8's ECJ
+     * is major 52, which a 17 or 21 host loads perfectly well. The pin exists so an <b>old</b> host can
+     * load the jars, not so a new one cannot — which is what makes {@link #everyBandsCompilerAcceptsTheRemappedView}
+     * possible without three JVMs.</p>
+     */
+    private static JavaEngine openEngine(EngineBand band) throws Exception {
         String paths = System.getProperty("cgui.test.engineBand" + band.minimumFeatureVersion());
         EngineSource source = EngineSource.ofPathList(paths);
         Assume.assumeTrue("no jars supplied for band " + band + "; skipping",
@@ -170,6 +181,83 @@ public class RemapRoundTripTest {
         } finally {
             engine.close();
             deleteTree(view);
+        }
+    }
+
+    /**
+     * <b>§23 row 10 — the remapped view resolves on EVERY band's compiler, not just this JVM's.</b>
+     *
+     * <p>The row asks whether "every band's ECJ accepts a custom name environment serving
+     * remapped/synthesized types", and names "the M6 remap-round-trip fixture, run against each band's
+     * jar" as how to find out. It was never run that way: every other test in this file opens
+     * {@code EngineBand.detect()}, which is <em>this</em> machine's band. A developer is on 17 or 21 and a
+     * 1.7.10 client is on 8, so the one band that mattered was the one nobody exercised.</p>
+     *
+     * <p>Both directions per band, because they fail differently. A view the compiler cannot read gives
+     * errors on the readable name; a view that is not <em>shadowing</em> the real class gives none on the
+     * runtime name — and the second is the silent one, since a script naming {@code m_1234} would compile
+     * here and break on the next environment.</p>
+     *
+     * <p>Runs all three in one JVM, which the pinning makes safe: bands are pinned by class-file major so
+     * an <b>old</b> host can load them, and a new host loads all three. This is not a substitute for
+     * {@code smokeEngineBands}, which runs each band under a launcher of its own era — that answers
+     * "does this jar work on that JVM", and this answers "does that jar's compiler accept our view".</p>
+     */
+    @Test
+    public void everyBandsCompilerAcceptsTheRemappedView() throws Exception {
+        MappingSet mappings = mappings();
+        Path view = readableViewOf(mappings);
+        List<String> exercised = new ArrayList<>();
+        try {
+            for (EngineBand band : EngineBand.values()) {
+                String paths = System.getProperty("cgui.test.engineBand" + band.minimumFeatureVersion());
+                if (paths == null || EngineSource.ofPathList(paths).jarsFor(band).isEmpty()) continue;
+
+                JavaEngine engine = JavaEngine.open(band, EngineSource.ofPathList(paths));
+                try {
+                    assertResolves(engine, band, view, "world.getBlock() + world.depth", false);
+                    assertResolves(engine, band, view, "world.m_1234()", true);
+                    exercised.add(band.toString());
+                } finally {
+                    engine.close();
+                }
+            }
+        } finally {
+            deleteTree(view);
+        }
+        Assume.assumeFalse("no engine bands supplied; skipping", exercised.isEmpty());
+        assertTrue("only " + exercised + " was exercised -- \u00a723 row 10 is about EVERY band, and a "
+                + "single-band pass is what it already had", exercised.size() > 1);
+    }
+
+    /** Compiles {@code expression} against the readable view on one band and says whether it was refused. */
+    private static void assertResolves(JavaEngine engine, EngineBand band, Path view,
+                                       String expression, boolean expectRefusal) throws Exception {
+        String script = ""
+                + "public class Script {\n"
+                + "    " + RuntimeWorld.class.getCanonicalName() + " world;\n"
+                + "    String run() { return \"\" + " + expression + "; }\n"
+                + "}\n";
+        SourceAnalyzer.Analysis analysis = engine.analyzer().analyze(
+                "Script", script, classpathWith(view), engine.releaseLevel(), 1L);
+        try {
+            boolean refused = false;
+            String firstProblem = null;
+            for (Diagnostic problem : analysis.diagnostics()) {
+                if (problem.severity() != DiagnosticSeverity.ERROR) continue;
+                refused = true;
+                if (firstProblem == null) firstProblem = problem.message();
+            }
+            if (expectRefusal) {
+                assertTrue("band " + band + ": the RUNTIME name resolved, so the view is not shadowing "
+                        + "the real class on this band -- a script naming it would compile here and "
+                        + "break on the next environment", refused);
+            } else {
+                assertFalse("band " + band + ": the readable view did not resolve: " + firstProblem,
+                        refused);
+            }
+        } finally {
+            analysis.close();
         }
     }
 
