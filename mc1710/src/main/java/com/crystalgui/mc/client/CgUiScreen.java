@@ -262,6 +262,12 @@ public final class CgUiScreen extends GuiScreen {
         editor.giveInitialFocus();
 
         framesPainted++;
+        // UNATTENDED SCRIPT RUN, off unless asked for. On the CLIENT THREAD, which is where the Run
+        // command runs too -- a probe on a worker would prove nothing about a failure that reaches the
+        // game loop. @see CgUiAutoTest#runScriptOnce
+        if (framesPainted == CgUiAutoTest.RUN_SCRIPT_ON_FRAME) {
+            CgUiAutoTest.runScriptOnce(scripting);
+        }
         if (framesPainted == CgUiAutoTest.CAPTURE_ON_FRAME) {
             CgUiAutoTest.captureAndQuit(mc, mc.displayWidth, mc.displayHeight);
         }

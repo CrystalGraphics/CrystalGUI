@@ -133,6 +133,19 @@ tasks.named<JavaExec>("runClient") {
         }
         val world = providers.gradleProperty("cgAutoTest").get()
         if (world.isNotEmpty() && world != "true") systemProperty("crystalgui.autotest.world", world)
+
+        // -PcgScript=Probe.java compiles and runs one snippet once the editor is up, logging each step.
+        // The EXTENSION picks the language, which is the comparison that matters when one runs and the
+        // other kills the client. -PcgScriptSource overrides the snippet. @see CgUiAutoTest#runScriptOnce
+        providers.gradleProperty("cgScript").orNull?.let {
+            systemProperty("crystalgui.autotest.script", it)
+        }
+        providers.gradleProperty("cgScriptSource").orNull?.let {
+            systemProperty("crystalgui.autotest.scriptSource", it)
+        }
+        providers.gradleProperty("cgFrame").orNull?.let {
+            systemProperty("crystalgui.autotest.frame", it)
+        }
     }
 }
 

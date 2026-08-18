@@ -1,6 +1,8 @@
 package com.crystalgui.mc.client;
 
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.language.run.ScriptRuntime;
+import com.crystalgui.language.run.view.ScriptWorkbench;
 
 import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
@@ -17,6 +19,7 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.nio.ByteBuffer;
+import java.util.Collections;
 
 /**
  * Drives the client unattended: open the editor, screenshot it, quit.
@@ -86,6 +89,28 @@ public final class CgUiAutoTest {
     /** Frames in the world before opening, so the render pipeline has really run. */
     private static final int IN_WORLD_SETTLE_TICKS = 40;
 
+    /**
+     * A script to compile and run once the editor is up, or null to run nothing.
+     *
+     * <p>{@code -PcgScript=Probe.java} — the EXTENSION picks the language, which is the whole point: the
+     * same probe run as {@code .java} and as {@code .js} is the only honest comparison when one works and
+     * the other does not.</p>
+     */
+    private static final String SCRIPT = emptyToNull(System.getProperty("crystalgui.autotest.script"));
+
+    /**
+     * What that script says. One line, because the failure being chased is not in the script.
+     *
+     * <p>{@code System.out.println} is deliberate: it is the first thing anybody writes, it exercises the
+     * output capture, and it is what the report that prompted this named.</p>
+     */
+    private static final String SCRIPT_SOURCE = System.getProperty(
+            "crystalgui.autotest.scriptSource", "System.out.println(\"moo\");");
+
+    /** Which painted frame runs it — before {@link #CAPTURE_ON_FRAME}, so a capture still happens. */
+    static final int RUN_SCRIPT_ON_FRAME =
+            SCRIPT == null ? -1 : Integer.getInteger("crystalgui.autotest.scriptFrame", 5);
+
     private static String emptyToNull(String value) {
         return value == null || value.isEmpty() ? null : value;
     }
@@ -95,6 +120,7 @@ public final class CgUiAutoTest {
     private static int ticks;
     private static boolean opened;
     private static boolean captured;
+    private static boolean scriptRun;
 
     private CgUiAutoTest() {
     }
@@ -144,6 +170,94 @@ public final class CgUiAutoTest {
             CrystalGuiCore.LOGGER.info("CGUI AUTOTEST opening the editor");
             CgUiScreen.open();
         }
+    }
+
+    /**
+     * Compiles and runs one script, on the client thread, logging every step.
+     *
+     * <h3>Why this bypasses the Run command</h3>
+     *
+     * <p>It is a bisect, not a substitute. Going through the command would exercise the keymap, the
+     * action's enablement, the panel and the console as well as the runtime — so a failure anywhere in
+     * that chain looks the same. This calls {@code ScriptRuntimes.forFile} + {@code compileScript} +
+     * {@code runAsync} and nothing else, so if the game still dies the language stack owns it and if it
+     * does not, the shell does.</p>
+     *
+     * <p><b>On the client thread deliberately.</b> That is where the Run command's compile happens, and a
+     * probe on a worker thread would prove nothing about a failure that reaches Minecraft's game loop —
+     * {@code Minecraft.run} catches {@code MinecraftError} silently and then runs
+     * {@code shutdownMinecraftApplet}, which is a clean exit 0 with no crash report and nothing in the log
+     * to search for. The compile is the half that runs here; {@code runAsync} takes a daemon thread of its
+     * own, so a fault after that line is the script's and not the game's.</p>
+     *
+     * <p>Every step is logged before it is attempted rather than after, because the failure being chased
+     * leaves nothing behind — the last line printed is the answer.</p>
+     */
+    static void runScriptOnce(ScriptWorkbench scripting) {
+        if (!ENABLED || SCRIPT == null || scriptRun) return;
+        scriptRun = true;
+        if (scripting == null) {
+            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST script: no ScriptWorkbench — no engine band opened");
+            return;
+        }
+        try {
+            CrystalGuiCore.LOGGER.info("CGUI AUTOTEST script: resolving a runtime for {}", SCRIPT);
+            ScriptRuntime runtime = scripting.runtimes().forFile(SCRIPT);
+            if (runtime == null) {
+                CrystalGuiCore.LOGGER.error("CGUI AUTOTEST script: no runtime for {}", SCRIPT);
+                return;
+            }
+            CrystalGuiCore.LOGGER.info("CGUI AUTOTEST script: runtime is {} for language {}",
+                    runtime.getClass().getName(), runtime.language());
+
+            CrystalGuiCore.LOGGER.info("CGUI AUTOTEST script: compiling [{}]", SCRIPT_SOURCE);
+            ScriptRuntime.Compiled compiled =
+                    runtime.compileScript(SCRIPT, SCRIPT_SOURCE, Collections.emptyMap());
+            CrystalGuiCore.LOGGER.info("CGUI AUTOTEST script: compiled, successful={}",
+                    compiled == null ? "null" : Boolean.valueOf(compiled.successful()));
+            if (compiled == null || !compiled.successful()) {
+                CrystalGuiCore.LOGGER.error("CGUI AUTOTEST script: compile failed, not running");
+                return;
+            }
+
+            CrystalGuiCore.LOGGER.info("CGUI AUTOTEST script: runAsync");
+            runtime.runAsync(compiled, Collections.<String, Object>emptyMap(),
+                    (ref, thrown) -> CrystalGuiCore.LOGGER.error("CGUI AUTOTEST script: threw", thrown));
+            CrystalGuiCore.LOGGER.info("CGUI AUTOTEST script: runAsync returned — the game survived it");
+        } catch (Throwable failed) {
+            // THROWABLE, and it is the point. EcjCompilation catches RuntimeException and lets an Error
+            // through, and JDT is documented here as asserting on its own invariants -- so an Error is
+            // the likely shape and the ordinary catch would miss exactly the case being chased.
+            //
+            // AS A STRING, NEVER AS A THROWABLE. Handing log4j 2.0-beta9 a Throwable makes ThrowableProxy
+            // walk the trace and Class.forName every frame's class on the APP loader to annotate it with
+            // a jar name -- and a frame in a child-side class cannot be DEFINED there, because its
+            // supertype is an engine type that lives only in the band loader. The NoClassDefFoundError
+            // that produces escapes the logging call itself, so the act of reporting the failure destroys
+            // the report and takes the client with it. @see #describe
+            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST script: FAILED\n{}", describe(failed));
+        }
+    }
+
+    /**
+     * A throwable as plain text, with its causes — safe to hand a logger.
+     *
+     * <p>Built here rather than with {@code Throwables.getStackTraceAsString} or a {@code PrintWriter}
+     * because the point is that <b>no {@code Throwable} object reaches log4j</b>. Frame classes are named
+     * as the strings they already are; nothing is loaded to describe them.</p>
+     */
+    private static String describe(Throwable failed) {
+        StringBuilder text = new StringBuilder();
+        for (Throwable at = failed; at != null; at = at.getCause()) {
+            text.append(at == failed ? "" : "Caused by: ")
+                .append(at.getClass().getName()).append(": ").append(at.getMessage()).append('\n');
+            StackTraceElement[] frames = at.getStackTrace();
+            for (int i = 0; i < frames.length && i < 18; i++) {
+                text.append("\tat ").append(frames[i]).append('\n');
+            }
+            if (at.getCause() == at) break;
+        }
+        return text.toString();
     }
 
     /**
