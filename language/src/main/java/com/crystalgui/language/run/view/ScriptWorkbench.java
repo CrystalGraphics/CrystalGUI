@@ -32,6 +32,7 @@ import com.crystalgui.language.run.console.RunConsole;
 import com.crystalgui.language.run.console.RunLevel;
 import com.crystalgui.language.run.console.RunMessage;
 import com.crystalgui.language.run.console.RunSummary;
+import com.crystalgui.language.run.exec.ScriptRefusedException;
 
 /**
  * Scripting, attached to a workbench — the engine, the commands, the console, and the indicator.
@@ -346,13 +347,49 @@ public final class ScriptWorkbench implements Closeable {
      * rail row, and navigating to the wrong file.</p>
      */
     private void report(@Nullable ScriptRef script, Throwable failure) {
-        Notifications.error("Script failed: " + failure);
         String name = script == null ? "script" : script.name();
+
+        // A REFUSAL IS NOT A CRASH, and printing it as one told the author nothing. Every frame in its
+        // trace is ours -- it is thrown out of `prepare`, before a line of the script has run -- so the
+        // stack was twenty rows of internals under a notification carrying the whole refused list, which
+        // is what a balloon is worst at. The list is the entire content, one class per row, in the place
+        // the author is already looking; the balloon says only that it happened and how much.
+        ScriptRefusedException refused = refusalIn(failure);
+        if (refused != null) {
+            int count = refused.refused().size();
+            Notifications.error(name + ": " + count + (count == 1 ? " class" : " classes")
+                    + " refused by the script policy — see the Run console");
+            console.append(RunMessage.of(name, RunLevel.ERROR,
+                    "Refused before running. This script reaches classes the deployment's "
+                            + "ScriptPolicy does not allow:"));
+            for (String each : refused.refused()) {
+                console.append(RunMessage.of(name, RunLevel.ERROR, "    " + each));
+            }
+            return;
+        }
+
+        Notifications.error("Script failed: " + failure);
         StringWriter trace = new StringWriter();
         failure.printStackTrace(new PrintWriter(trace));
         for (String line : trace.toString().split("\\R")) {
             if (!line.isBlank()) console.append(RunMessage.of(name, RunLevel.ERROR, line));
         }
+    }
+
+    /**
+     * The refusal anywhere in a failure's cause chain, or null.
+     *
+     * <p>Walked rather than tested at the top, because a runtime is free to wrap what {@code prepare}
+     * threw — the Java host throws it bare today and a future one need not, and a refusal reported as a
+     * stack trace because somebody added a wrapper is a regression nobody would look for.</p>
+     */
+    @Nullable
+    private static ScriptRefusedException refusalIn(@Nullable Throwable failure) {
+        for (Throwable at = failure; at != null; at = at.getCause()) {
+            if (at instanceof ScriptRefusedException) return (ScriptRefusedException) at;
+            if (at.getCause() == at) break;
+        }
+        return null;
     }
 
     @Override

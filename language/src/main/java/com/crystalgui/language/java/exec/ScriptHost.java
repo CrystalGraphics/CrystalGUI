@@ -4,20 +4,14 @@ import com.crystalgui.fs.Resource;
 import com.crystalgui.language.engine.JavaEngine;
 import com.crystalgui.language.engine.ScriptClassLoader;
 import com.crystalgui.language.engine.bridge.ScriptCompiler;
+import com.crystalgui.language.java.JavaLanguage;
 import com.crystalgui.language.java.classpath.HostClasspath;
 import com.crystalgui.language.map.InheritanceAwareRemapper;
 import com.crystalgui.language.map.MappingSet;
+import com.crystalgui.language.run.*;
 import com.crystalgui.language.run.console.ConsoleFilter;
 import com.crystalgui.language.run.console.JavaStackFrameFilter;
-import com.crystalgui.language.run.RunSessions;
-import com.crystalgui.language.run.RunState;
-import com.crystalgui.language.run.exec.Safepoints;
-import com.crystalgui.language.run.exec.ScriptCache;
-import com.crystalgui.language.run.exec.ScriptCacheKey;
-import com.crystalgui.language.run.exec.ScriptOutput;
-import com.crystalgui.language.run.ScriptRef;
-import com.crystalgui.language.run.ScriptRuntime;
-import com.crystalgui.language.run.exec.ScriptStoppedException;
+import com.crystalgui.language.run.exec.*;
 import com.crystalgui.text.syntax.Language;
 
 import javax.annotation.Nullable;
@@ -378,7 +372,37 @@ public final class ScriptHost implements ScriptRuntime {
                 InheritanceAwareRemapper.fromClassLoader(hostLoader)).remap(compiled.classes());
         Map<String, byte[]> instrumented = Safepoints.inject(remapped);
 
-        ScriptClassLoader loader = new ScriptClassLoader(instrumented, hostLoader);
+        // REFUSED BEFORE ANYTHING RUNS, and checked on the REMAPPED bytes -- the policy is written in the
+        // names a deployment knows, and remapping is what turns the readable names the author wrote into
+        // them. Scanning before the remap would ask about names that exist only in the editor.
+        // ONLY WHERE A DEPLOYMENT CONFIGURED ONE, and the floor rides along inside `allowsClass` when it
+        // does. `ScriptPolicy.ALWAYS_REFUSED` stops a script reaching the machinery that would let it
+        // relax the policy IN FORCE, which is the whole of the requirement: with no policy configured
+        // there is nothing to relax, and the worst a script can do by calling `restrictTo` itself is
+        // RESTRICT -- a one-way ratchet, since the floor then stops anything undoing it.
+        //
+        // Skipping the whole check under allowAll() also keeps the default posture free, which is what
+        // `allowsEverything` exists to let a consumer do.
+        ScriptPolicy current = JavaLanguage.policy();
+        if (!current.allowsEverything()) {
+            List<String> refused = RefusedTypes.in(instrumented, current::allowsClass);
+            if (!refused.isEmpty()) {
+                // RECORDED AS A RUN THAT FAILED, before the throw. `RunPanel` decides between its empty
+                // state and the console from `RunSessions.isEmpty()`, and an empty listing DETACHES the
+                // transcript -- so a refusal that told nobody appended its explanation to a console the
+                // panel had taken out of the tree, and the author saw a balloon over an empty panel
+                // saying "see the Run console". FAILED is the state's own definition, "threw, and
+                // registered nothing": this threw one step earlier than usual, and registered nothing.
+                if (sessions != null && compiled.ref() != null) {
+                    sessions.set(compiled.ref().file(), RunState.FAILED);
+                }
+                throw new ScriptRefusedException(refused);
+            }
+        }
+
+        // AND AGAIN AT THE LOADER, for the names the scan cannot see. @see ScriptClassLoader#loadClass
+        ScriptClassLoader loader = new ScriptClassLoader(instrumented, hostLoader,
+                current.allowsEverything() ? null : current::allowsClass);
         // THE BINARY NAME, which for a file declaring a package is not the file stem. Asking for
         // the stem compiles fine and then throws ClassNotFoundException for a class that is
         // plainly in the output -- see ScriptPrelude.Wrapped.binaryName.

@@ -10,7 +10,11 @@ import com.crystalgui.language.java.exec.ScriptHost;
 import com.crystalgui.language.map.MappingSet;
 import com.crystalgui.language.run.exec.ScriptCache;
 import com.crystalgui.language.run.ScriptRuntimes;
+import com.crystalgui.language.run.ScriptPolicy;
 import com.crystalgui.text.TextBuffer;
+
+import javax.annotation.Nullable;
+
 import com.crystalgui.text.lang.LanguageServices;
 import com.crystalgui.text.syntax.Language;
 import com.crystalgui.text.syntax.LanguageRegistry;
@@ -135,6 +139,38 @@ public final class JavaLanguage {
     /** The staged-directory source a dev run sets up, or nothing. @see EngineHost#defaultSource */
     public static EngineSource defaultSource() {
         return EngineHost.defaultSource();
+    }
+
+    /**
+     * Which Java classes a script may reach — process-wide, for the same reason JavaScript's is.
+     *
+     * <p>One allowlist read by every surface that could leak a name: the executor's loader gate, the
+     * ahead-of-time scan of the compiled bytes, the type index, and completion. A policy each of them
+     * could be told separately is a policy some of them would be told, and a class offered by the popup
+     * and refused at run time is a worse failure than either restriction alone.</p>
+     *
+     * <p><b>Read §19.1 before relying on this.</b> For Java it is a <em>guardrail</em>, not a security
+     * boundary: compiled bytecode links what it links, {@code SecurityManager} is gone, and a script that
+     * can reach reflection can resolve a name this never sees. It keeps honest scripts honest and keeps
+     * the tool from teaching an API the deployment refuses. {@link ScriptPolicy#UNSAFE} is what makes it
+     * worth anything at all.</p>
+     */
+    private static ScriptPolicy policy = ScriptPolicy.allowAll();
+
+    /**
+     * Restricts every Java surface at once — the <b>only</b> way to set it.
+     *
+     * <p>{@code ScriptPolicy.denying(ScriptPolicy.UNSAFE)} is the posture this was built for: everything
+     * reachable except the handful of routes out of a class filter. An allowlist wide enough to be usable
+     * is thousands of entries, and a control nobody writes is worse than a leaky one that gets used.</p>
+     */
+    public static synchronized void restrictTo(@Nullable ScriptPolicy target) {
+        policy = target == null ? ScriptPolicy.allowAll() : target;
+    }
+
+    /** The policy every Java surface obeys. */
+    public static synchronized ScriptPolicy policy() {
+        return policy;
     }
 
     /** The shared engine, or null when none opened. */
