@@ -268,6 +268,8 @@ public final class CgUiScreen extends GuiScreen {
         if (framesPainted == CgUiAutoTest.RUN_SCRIPT_ON_FRAME) {
             CgUiAutoTest.runScriptOnce(scripting);
         }
+        // The §15.5 A proof, on the same frame budget. @see CgUiAutoTest#probeLiveBytesOnce
+        if (framesPainted == 5) CgUiAutoTest.probeLiveBytesOnce();
         if (framesPainted == CgUiAutoTest.CAPTURE_ON_FRAME) {
             CgUiAutoTest.captureAndQuit(mc, mc.displayWidth, mc.displayHeight);
         }
