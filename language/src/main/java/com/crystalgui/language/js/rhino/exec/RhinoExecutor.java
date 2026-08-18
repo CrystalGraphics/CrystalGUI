@@ -334,17 +334,33 @@ public final class RhinoExecutor implements JsExecutor {
         java.setParentScope(scope);
         define(java, scope, "type", args -> {
             String name = args.length == 0 || args[0] == null ? "" : Context.toString(args[0]);
-            if (name.isEmpty()) throw new IllegalArgumentException("Java.type: a class name is required");
+            // THROWN THE WAY RHINO THROWS, and not as a bare Java exception.
+            //
+            // Rhino does not hand an arbitrary Throwable raised inside a host Callable to a script's own
+            // `catch` -- it goes straight past the interpreter and out of the run. So a
+            // `new SecurityException(...)` here KILLED THE WHOLE FILE on the first refused reach, in an
+            // engine whose entire refusal story is that it answers per reach: the shutter is asked every
+            // time a name is used, which is exactly what a compiled language cannot do and what the
+            // harness fixtures are written around. One line into a file whose first line says
+            // "JavaScript is refused per reach, not per file".
+            //
+            // It looked like a fixture bug because the SHUTTER path was always right -- its refusals are
+            // Rhino's own errors and were caught normally -- so one section of SandboxTest.js was caught
+            // and the one above it was fatal.
+            //
+            // Catchability weakens nothing: the reach is still refused, and all a script gains is the
+            // ability to notice, which every other failed operation already offers.
+            if (name.isEmpty()) throw Context.reportRuntimeError("Java.type: a class name is required");
             // ASKED HERE AS WELL AS AT THE SHUTTER, so a refused class is never even loaded and the
             // message names the class rather than the member the script went on to call.
             if (allowsClass != null && !allowsClass.test(name)) {
-                throw new SecurityException("Java.type: access to " + name + " is not permitted");
+                throw Context.reportRuntimeError("Java.type: access to " + name + " is not permitted");
             }
             // THROUGH THE SHARED LOOKUP, which also tries the nested spelling: a script writes
             // `java.util.Map.Entry` -- the form the editor resolves and offers -- and the JVM knows only
             // `java.util.Map$Entry`, so the name the popup suggested threw at run time.
             Class<?> found = JsLoaders.load(name);
-            if (found == null) throw new IllegalArgumentException("Java.type: no such class " + name);
+            if (found == null) throw Context.reportRuntimeError("Java.type: no such class " + name);
             return wrap(cx, scope, found);
         });
         ScriptableObject.putProperty(scope, "Java", java);

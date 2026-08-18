@@ -220,6 +220,54 @@ public class JsSandboxTest {
         }
     }
 
+    /**
+     * <b>A refusal is refused per REACH, and the script may carry on.</b>
+     *
+     * <p>That is the whole difference between the two engines: Java refuses a script as a file, before
+     * it starts, because compiled bytecode links its classes when the class is defined; Rhino is asked
+     * every time the script names one, so it can answer every time. The harness fixtures are written
+     * around that distinction and say so at the top of each file.</p>
+     *
+     * <p>It was not true of {@code Java.type}. That path threw a bare {@link SecurityException}, and
+     * Rhino does not hand an arbitrary Java exception raised inside a host {@code Callable} to a script's
+     * own {@code catch} — so the whole file died on the first refused reach, one line into a fixture
+     * whose first line says the opposite. The shutter path was always correct, which is what made it look
+     * like a fixture problem: section 3 of {@code SandboxTest.js} was caught and section 1 was not.</p>
+     *
+     * <p>Catchability weakens nothing. The reach is still refused; all a script gains is the ability to
+     * notice, which is what any other failed operation already offers.</p>
+     */
+    @Test
+    public void aScriptCanCatchARefusalAndKeepGoing() throws Throwable {
+        restrictToJavaUtil();
+        JsHost host = new JsHost(JsLanguage.executor());
+        try {
+            Object answer = host.run(host.compileScript("Probe.js",
+                    "var reached = 'no';\n"
+                            + "try { Java.type('" + REFUSED + "'); reached = 'yes'; }\n"
+                            + "catch (refused) { reached = 'caught'; }\n"
+                            + "reached;\n", Map.of()), Map.of());
+            assertEquals("the script could not catch its own refusal", "caught",
+                    String.valueOf(answer));
+        } finally {
+            host.close();
+        }
+    }
+
+    /** Same for a class that simply is not there — an ordinary failure, and ordinary failures are catchable. */
+    @Test
+    public void aMissingClassIsCatchableToo() throws Throwable {
+        JsHost host = new JsHost(JsLanguage.executor());
+        try {
+            Object answer = host.run(host.compileScript("Probe.js",
+                    "try { Java.type('no.such.Class'); 'no'; } catch (e) { 'caught'; }\n",
+                    Map.of()), Map.of());
+            assertEquals("caught", String.valueOf(answer));
+        } finally {
+            host.close();
+        }
+    }
+
     /** The package spelling is refused too — one class, not one path to it. */
     @Test
     public void theBarePackageSpellingIsRefusedAsWell() throws Throwable {
