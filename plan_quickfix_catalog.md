@@ -8,6 +8,15 @@ Written against `org.eclipse.jdt.core` **3.26.0** — band 8's floor, the versio
 against, and therefore the only version whose constants may be named. Every `IProblem` constant below
 was read out of that jar with `javap`, not recalled. It has 966 of them.
 
+> **Java only, and the JavaScript catalogue is deliberately not a column here.**
+> `plan_m10.md` said this file would "gain a JS column rather than a second document", and that was
+> the wrong shape: **every row here is keyed on an `IProblem` id**, and Rhino reports no
+> problem ids at all. A JS column would be empty for nearly every row, because the two catalogues
+> divide differently — Java's is mostly *corrections* answering a diagnostic, and JavaScript's is
+> mostly *intentions* answering the caret, which is a table with a different key rather than a
+> column with the same one. It lives on `JsQuickFixes` and `JsIntentions`, whose class javadocs
+> are the catalogue, with the reasoning in `plan_m10.md` §8.
+
 ---
 
 ## 1. The two references, and what may be taken from each
