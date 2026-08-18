@@ -18,6 +18,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
 
 import org.lwjgl.input.Keyboard;
+import org.lwjgl.input.Mouse;
 
 import java.io.File;
 
@@ -175,6 +176,27 @@ public final class CgUiScreen extends GuiScreen {
         CgRenderPipeline.getInstance().getFrameData().timeSecs =
                 (float) (System.nanoTime() / 1_000_000_000.0);
 
+        // INPUT, DRAINED PER FRAME RATHER THAN PER TICK.
+        //
+        // Minecraft delivers input to a screen from GuiScreen.handleInput(), which it calls from
+        // runTick() -- and runTick is driven by `new Timer(20.0F)`:
+        //
+        //     for (int i = 0; i < this.timer.elapsedTicks; ++i) this.runTick();
+        //
+        // So a GuiScreen's input is pumped at 20 Hz while drawScreen renders at 60+. For clicks and
+        // typing that is invisible; for anything CONTINUOUS it is not. A resize handle or a split
+        // divider redraws three times a second per twelve frames of motion, which reads as the UI being
+        // slow to paint rather than as input being sampled coarsely -- the drag is smooth, the picture
+        // is not.
+        //
+        // Draining here costs nothing extra: it is the same loop handleInput runs, moved to the frame
+        // clock. MC's own tick-rate call then finds an empty queue and does nothing, so this needs no
+        // override and stays correct if a frame is ever skipped.
+        //
+        // The harness has always polled per frame (InteractiveSceneRunner.pollInput), which is why this
+        // only appears in game.
+        pumpInput();
+
         // ONE NETWORK TICK, before anything reads the workspace.
         workspace.pump(delta);
         if (!projectsAsked && workspace.isConnected()) {
@@ -245,6 +267,23 @@ public final class CgUiScreen extends GuiScreen {
         }
         if (framesPainted == CgUiAutoTest.LATE_CAPTURE_ON_FRAME) {
             CgUiAutoTest.captureLateAndQuit(mc, mc.displayWidth, mc.displayHeight);
+        }
+    }
+
+    /**
+     * Drains both input queues into the window, once per rendered frame.
+     *
+     * <p>The same body as {@code GuiScreen.handleInput}, on the frame clock instead of the tick clock.
+     * Guarded on {@code isCreated()} exactly as the original is — a headless or shutting-down client has
+     * neither device.</p>
+     */
+    private void pumpInput() {
+        if (uiWindow == null) return;
+        if (Mouse.isCreated()) {
+            while (Mouse.next()) handleMouseInput();
+        }
+        if (Keyboard.isCreated()) {
+            while (Keyboard.next()) handleKeyboardInput();
         }
     }
 
