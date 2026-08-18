@@ -44,6 +44,20 @@ java {
     }
 }
 
+tasks.withType<JavaCompile>().configureEach {
+    // NAMES FOR THE EDITOR, and the only mechanism that reaches an INTERFACE method (M13 §25.1).
+    //
+    // Parameter names already survive compilation for anything with a body -- Gradle passes `-g`, so the
+    // `LocalVariableTable` carries them and a hover reads them straight off the class file with nothing
+    // shipped. An abstract or interface method has no `Code` attribute and therefore no such table, which
+    // for an SPI-heavy module is most of the interesting surface: `SourceAnalyzer.analyze`, `ScriptRuntime`,
+    // every bridge seam. `MethodParameters` is the one attribute that does not need a body.
+    //
+    // One flag, roughly 1% class-file growth, and `ClassFileParameterNames` prefers it to the local table
+    // because it lists parameters and only parameters, in order.
+    options.compilerArgs.add("-parameters")
+}
+
 repositories {
     mavenCentral()
 }

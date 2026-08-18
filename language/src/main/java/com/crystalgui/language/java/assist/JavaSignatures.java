@@ -34,6 +34,8 @@ import org.eclipse.jdt.core.dom.VariableDeclarationExpression;
 import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
 import org.eclipse.jdt.core.dom.VariableDeclarationStatement;
 
+import javax.annotation.Nullable;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
@@ -358,8 +360,65 @@ public final class JavaSignatures {
             ITypeBinding owner = method.getDeclaringClass();
             declaration = owner == null ? null : unit.findDeclaringNode(owner);
         }
-        if (declaration == null) return null;
-        return namesOf(structuralList(declaration, "recordComponents"));
+        if (declaration == null) return fromTheClassFile(method);
+        List<String> declared = namesOf(structuralList(declaration, "recordComponents"));
+        return declared != null ? declared : fromTheClassFile(method);
+    }
+
+    /**
+     * The names the <b>compiler kept</b>, for a method this unit does not declare.
+     *
+     * <p>The gap this closes had been read as unclosable: source attachment is what names a classpath
+     * method's parameters, and {@code src.zip} ships with a JDK and not with a JRE, so most players were
+     * always going to see types only. That reasoning was about the wrong artefact. <b>Names survive
+     * compilation</b> — measured, on the running JDK: {@code ArrayList.add} carries {@code e} and
+     * {@code String.format} carries {@code format} and {@code args}, and our own jar carries its names
+     * today because Gradle passes {@code -g} by default.</p>
+     *
+     * <p>Second, not first. A quoted declaration out of a real {@code -sources.jar} carries the javadoc
+     * and the author's own layout; this carries names. Where both exist the quote is strictly better, so
+     * this only ever runs where the quote could not.</p>
+     *
+     * @see ClassFileParameterNames for the three silent traps in reading them
+     */
+    @Nullable
+    private List<String> fromTheClassFile(IMethodBinding method) {
+        if (attached == null || method == null) return null;
+        ITypeBinding owner = method.getDeclaringClass();
+        if (owner == null) return null;
+        String ownerName = owner.getErasure() == null ? null : owner.getErasure().getBinaryName();
+        if (ownerName == null) return null;
+
+        ITypeBinding[] types = method.getParameterTypes();
+        if (types.length == 0) return null;
+        List<String> erased = new ArrayList<>(types.length);
+        for (ITypeBinding type : types) {
+            String name = erasedNameOf(type);
+            if (name == null) return null;
+            erased.add(name);
+        }
+        return attached.parameterNamesOf(ownerName,
+                method.isConstructor() ? "<init>" : method.getName(), erased);
+    }
+
+    /**
+     * A type as the class file spells it.
+     *
+     * <p>Two divergences from {@code getBinaryName()} alone, and both would silently fail to match.
+     * An <b>array</b> is {@code [Ljava/lang/String;} in JDT's binary name and {@code java.lang.String[]}
+     * in the class file's own vocabulary. And a <b>type variable</b> has to be erased first, or
+     * {@code List.add(E)} looks for a parameter of type {@code E} where the descriptor says
+     * {@code java.lang.Object}.</p>
+     */
+    @Nullable
+    private static String erasedNameOf(ITypeBinding type) {
+        if (type == null) return null;
+        if (type.isArray()) {
+            String component = erasedNameOf(type.getComponentType());
+            return component == null ? null : component + "[]";
+        }
+        ITypeBinding erasure = type.getErasure();
+        return erasure == null ? null : erasure.getBinaryName();
     }
 
     private static List<String> namesOf(List<?> declarations) {

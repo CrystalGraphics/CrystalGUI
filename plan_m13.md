@@ -8,7 +8,7 @@ opposite reasons.
 
 | § | Item | State |
 |---|---|---|
-| 25.1 | Parameter names from the class file | not started — needs no shipped artifact |
+| 25.1 | Parameter names from the class file | **done** — `ClassFileParameterNames`, read through the analysis classpath and then the running loader (which is what reaches the JDK's runtime image); `JavaSignatures` falls back to it when the unit does not declare the method. `-parameters` on `core` and `language` is the other half and is asserted, not trusted |
 | 25.2 | The header transform | not started — built from two rules the engine already encodes |
 | 25.3 | The provider chain | partly built — `SourceArchives` is already the shape |
 | 25.4 | Bundling our own sources | not started — packaging blocked on M12 |
@@ -52,7 +52,7 @@ Read the declaring class's bytes and take names from `MethodParameters` if prese
 | | concrete methods | abstract / interface |
 |---|---|---|
 | JDK | ✅ verified (`ArrayList.add` → `e`, `String.format` → `format`, `args`) | ❌ `java.util.List` has neither attribute — verified, zero `MethodParameters` in it |
-| Ours | ✅ verified in `core.jar` today | ❌ — until `-parameters` |
+| Ours | ✅ verified in `core.jar` today | ✅ — `-parameters` is on `core` and `language`, and `Resolver.resolveAt` names `offset`/`answer` in a test that fails without it |
 | Mods and libraries built normally | ✅ | ❌ |
 | Obfuscated MC, ProGuard'd mods | ❌ stripped | ❌ |
 
@@ -60,6 +60,22 @@ Read the declaring class's bytes and take names from `MethodParameters` if prese
 shape of the gap, and it matters more than the table suggests: idiomatic Java declares variables as the
 interface, so `List.add`, `Map.put`, `Collection.stream` and `Comparator.compare` are exactly the hovers
 a reader performs most.
+
+**✅ Built.** The reader is `ClassFileParameterNames` in `language.java.classpath`; the insertion point
+was where the plan said it was. Three notes from building it:
+
+- **All three traps were real and all three were measured on the running JDK before being coded against.**
+  `String.format` is the static case and its slot 0 is `format`; `ArrayList.add(int, Object)` reports
+  `[this, index, element, s, elementData]`, so the trailing locals are not parameters; and a parameter
+  after a `long` sits at slot 3.
+- **Ambiguity answers null.** Two same-arity overloads this cannot separate give types-only — which is
+  exactly what the caller did before — because a signature wearing another overload's names reads as
+  authoritative.
+- **It inverted an existing test, and the inversion is the point.**
+  `aSymbolWithNoAttachedSourceIsAssembledInstead` used the *missing* parameter name as "the one
+  difference visible from outside" between the assembled and quoted paths. That premise is the one this
+  section corrects, so it is no longer a boundary marker; what still separates the two is the author's
+  layout and, later, their javadoc. Its twin inverted the same way when `AttachedSources` landed.
 
 **`-parameters` on `core`, `platform` and `language` is the other half, and only for our own code.**
 `MethodParameters` needs no `Code` attribute, so it is the one mechanism that names an *interface*
