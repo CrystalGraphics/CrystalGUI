@@ -47,6 +47,7 @@ public final class HighlightStyle {
             StylePropertyRegistry.COLOR,
             StylePropertyRegistry.BACKGROUND_COLOR,
             StylePropertyRegistry.TEXT_DECORATION_LINE,
+            StylePropertyRegistry.TEXT_DECORATION_COLOR,
             // font-weight and font-style are a DELIBERATE DIVERGENCE from CSS Pseudo-Elements 4, which
             // allows a highlight only properties that cannot reflow the text it highlights.
             //
@@ -126,6 +127,16 @@ public final class HighlightStyle {
 
     public Set<TextDecorationLine> decorations() {
         return get(StylePropertyRegistry.TEXT_DECORATION_LINE, Collections.emptySet());
+    }
+
+    /**
+     * The colour of this range's underline or strikethrough, or {@code 0} for the text's own colour.
+     *
+     * <p>{@code 0} is both CSS's {@code text-decoration-color: currentColor} default and the backend's
+     * sentinel for "inherit the draw colour", so the two agree without a translation.</p>
+     */
+    public int decorationColor() {
+        return get(StylePropertyRegistry.TEXT_DECORATION_COLOR, 0);
     }
 
     /**
