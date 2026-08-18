@@ -636,4 +636,60 @@ public class JavaMemberCompletionTest {
             services.close();
         }
     }
+
+    // ── The snippet shape ───────────────────────────────────────────────────────────────────────
+
+    /** Completes at {@code caret} through the full services stack, exactly as the editor does. */
+    private List<String> completeAt(String source, int caret) {
+        TextBuffer buffer = new TextBuffer(source);
+        LanguageServices services = new JavaLanguageServices(
+                buffer, engine, null, "Script", HostClasspath.detect());
+        try {
+            AtomicReference<CompletionList> answered = new AtomicReference<>(CompletionList.EMPTY);
+            services.completion().complete(
+                    CompletionProvider.Request.character(caret, "", "."),
+                    (Versioned<CompletionList> v) -> answered.set(v.orElse(CompletionList.EMPTY)));
+            return labelsOf(answered.get().items());
+        } finally {
+            services.close();
+        }
+    }
+
+    /**
+     * <b>A SCRIPT is a snippet, and every test above is a compilation unit.</b>
+     *
+     * <p>{@code JavaLanguageServices.analyse} branches on {@link ScriptPrelude#declaresType}: a file that
+     * declares a type is analysed as written, and a bare body is wrapped in a prelude first and every
+     * answer translated back through {@code SnippetAnalysis}. Both member-completion tests here opened
+     * with {@code class Demo {}, so the wrapped half — which is what a person actually writes in the Run
+     * panel — had no coverage at all, and the translation sits between the provider and every offset it
+     * asks about.</p>
+     *
+     * <p>{@code System.out.} is the first line most scripts have.</p>
+     */
+    @Test
+    public void aBareSnippetOffersMembersToo() {
+        String source = "System.out.\n";
+        List<String> labels = completeAt(source, source.indexOf("System.out.") + "System.out.".length());
+        assertFalse("a snippet offered nothing at all", labels.isEmpty());
+        assertTrue("println is missing from " + labels.size() + " rows: " + labels,
+                labels.toString().contains("println"));
+    }
+
+    /**
+     * And a CALL receiver in a snippet — the shape reported as offering three rows.
+     *
+     * <p>Two things compose here that are each covered alone: a {@code )} immediately before the dot,
+     * where no identifier covers the offset, and the prelude's offset translation. The probe re-parse has
+     * to survive both, and it inserts its name into the <em>snippet</em> before the wrap.</p>
+     */
+    @Test
+    public void aCallReceiverInASnippetOffersMembers() {
+        String source = "new java.util.ArrayList<String>().\n";
+        String upTo = "new java.util.ArrayList<String>().";
+        List<String> labels = completeAt(source, source.indexOf(upTo) + upTo.length());
+        assertFalse("a call receiver in a snippet offered nothing at all", labels.isEmpty());
+        assertTrue("ArrayList's members are missing from " + labels.size() + " rows: " + labels,
+                labels.toString().contains("size"));
+    }
 }

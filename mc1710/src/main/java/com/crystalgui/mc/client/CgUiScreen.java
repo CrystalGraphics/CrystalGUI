@@ -269,6 +269,8 @@ public final class CgUiScreen extends GuiScreen {
         }
         // The §15.5 A proof, on the same frame budget. @see CgUiAutoTest#probeLiveBytesOnce
         if (framesPainted == 5) CgUiAutoTest.probeLiveBytesOnce();
+        // And what the member list actually holds here. @see CgUiAutoTest#probeCompletionOnce
+        if (framesPainted == 6) CgUiAutoTest.probeCompletionOnce();
         if (framesPainted == CgUiAutoTest.CAPTURE_ON_FRAME) {
             CgUiAutoTest.captureAndQuit(mc, mc.displayWidth, mc.displayHeight);
         }

@@ -64,7 +64,13 @@ public final class CompletionSession {
      * than inserting beside it. Fixed rather than recomputed, because recomputing it from the caret after
      * every keystroke is how a session that began mid-word starts replacing the wrong span.</p>
      */
-    private final int wordStart;
+    /**
+     * Where the word being completed starts. <b>Not final</b> — see {@link #caretMoved}.
+     *
+     * <p>It was, and that was the bug: typing a {@code .} leaves the caret in a different word, and a
+     * session anchored to the previous one keeps filtering the previous list.</p>
+     */
+    private int wordStart;
 
     private List<CompletionItem> unfiltered = List.of();
     private List<Row> rows = List.of();
@@ -208,6 +214,25 @@ public final class CompletionSession {
         // that does not answer inline -- and without the guard the first keystroke after opening killed the
         // session before its first list ever arrived, which reads as the popup never appearing at all.
         if (!answered) return;
+        // A DIFFERENT WORD, so the held list is about something else entirely.
+        //
+        // THIS IS WHAT A `.` DOES, and it is why `System.out.` showed an empty popup. The prefix is
+        // `text.substring(wordStart, caret)`, so typing a dot did not start a new word -- it made the
+        // prefix `out.`, which still startsWith the queried `out`, so the narrowing check below passed
+        // and the session refiltered the members of `System` against a string containing a dot. Nothing
+        // matches that, and an empty list from a filter is indistinguishable from an empty list from a
+        // provider. Where a fuzzy match happened to survive it was worse: a handful of unrelated rows,
+        // which reads as the member list being wrong rather than absent.
+        //
+        // Re-anchoring rather than special-casing the dot: the question is "is the caret still in the
+        // word this session is about", and every way of leaving it -- a dot, a space, a bracket -- has
+        // the same answer. WordClassifier decides, so it stays the one definition of a word.
+        int freshStart = wordStartBefore(buffer, caret);
+        if (freshStart != wordStart) {
+            wordStart = freshStart;
+            request(caret, CompletionProvider.TriggerKind.RETRIGGER, null);
+            return;
+        }
         // NARROWING ONLY. See queriedPrefix: a list fetched for a longer query cannot answer a shorter one,
         // so a backspace has to go back to the provider however complete the list claimed to be.
         if (!prefix().startsWith(queriedPrefix)) {

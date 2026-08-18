@@ -5,6 +5,12 @@ import com.crystalgui.language.engine.EngineSource;
 import com.crystalgui.language.engine.JavaEngine;
 import com.crystalgui.language.engine.bridge.SourceAnalyzer;
 import com.crystalgui.language.java.classpath.HostClasspath;
+import com.crystalgui.text.TextBuffer;
+import com.crystalgui.text.lang.CompletionItem;
+import com.crystalgui.text.lang.CompletionList;
+import com.crystalgui.text.lang.CompletionProvider;
+import com.crystalgui.text.lang.LanguageServices;
+import com.crystalgui.text.lang.Versioned;
 import com.crystalgui.language.map.PlatformMappings;
 import com.crystalgui.language.map.ReadableView;
 import com.crystalgui.language.platform.MappingCoordinates;
@@ -24,11 +30,13 @@ import org.objectweb.asm.Opcodes;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Collection;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -227,5 +235,60 @@ public class LiveAnalysisTest {
         } finally {
             analysis.close();
         }
+    }
+
+    // ── The client's actual shape ───────────────────────────────────────────────────────────────
+
+    /** Labels the provider offers after {@code upTo}, through the full services stack. */
+    private List<String> completeAfter(String source, String upTo) {
+        TextBuffer buffer = new TextBuffer(source);
+        LanguageServices services = new JavaLanguageServices(
+                buffer, engine, null, "Script", HostClasspath.detect());
+        try {
+            int caret = source.indexOf(upTo) + upTo.length();
+            final CompletionList[] got = {CompletionList.EMPTY};
+            services.completion().complete(
+                    CompletionProvider.Request.character(caret, "", "."),
+                    (Versioned<CompletionList> v) -> got[0] = v.orElse(CompletionList.EMPTY));
+            List<String> labels = new ArrayList<>();
+            for (CompletionItem item : got[0].items()) labels.add(item.label());
+            return labels;
+        } finally {
+            services.close();
+        }
+    }
+
+    /**
+     * <b>A member list, on a bare SNIPPET, with a platform registered.</b>
+     *
+     * <p>Three things have to hold at once here and each is covered alone: the {@code DomResolution}
+     * entry point, which only runs when a platform supplies live bytes; the prelude wrap and the offset
+     * translation a script body needs; and recovery over a trailing dot, which does not parse. Every test
+     * that existed covered two of the three — the snippet tests run with no platform, so they take
+     * {@code ASTParser}, and the live tests are compilation units.</p>
+     *
+     * <p>That gap is the reported defect exactly: {@code System.out.} in a script opened a popup with no
+     * rows at all, in the client and nowhere else. An unresolved receiver makes the answer
+     * {@link CompletionList#partial}, so the popup does not even close itself — it stays on screen showing
+     * a hint strip over nothing.</p>
+     */
+    @Test
+    public void aSnippetOffersMembersUnderTheLiveRoute() throws Exception {
+        analyzerOverBand();
+        List<String> labels = completeAfter("System.out.\n", "System.out.");
+        assertFalse("a snippet under the live route offered nothing at all", labels.isEmpty());
+        assertTrue("println is missing from " + labels.size() + " rows: " + labels,
+                labels.toString().contains("println"));
+    }
+
+    /** The same, for a call receiver — the shape reported as offering three rows. */
+    @Test
+    public void aSnippetCallReceiverOffersMembersUnderTheLiveRoute() throws Exception {
+        analyzerOverBand();
+        String upTo = "new java.util.ArrayList<String>().";
+        List<String> labels = completeAfter(upTo + "\n", upTo);
+        assertFalse("a call receiver under the live route offered nothing at all", labels.isEmpty());
+        assertTrue("size() is missing from " + labels.size() + " rows: " + labels,
+                labels.toString().contains("size"));
     }
 }
