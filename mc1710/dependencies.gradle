@@ -39,6 +39,30 @@ dependencies {
     // it. The classes reach runtime through the shadow jar, downgraded by jvmdg.
     compileOnly project(':language')
 
+    // ASM: SHADED, and required at RUNTIME by :language — which nothing was shipping.
+    //
+    // :language declares these `api`, but this module takes :language as `compileOnly` and the shadow jar
+    // bundles :language's CLASS FILES only, so ASM reached the mod jar through no route at all. Six
+    // classes need it and three are unavoidable: ReadableView (the §15.5 remap), Safepoints (the
+    // stop-injection every script is rewritten by) and RefusedTypes (the sandbox's constant-pool scan).
+    // So NO .java script could ever have run here — it died with NoClassDefFoundError on
+    // org/objectweb/asm/commons/ClassRemapper, and the failure moved earlier when the in-memory compiler
+    // landed rather than being introduced by it. JavaScript was unaffected, which is what made it look
+    // like a Java-specific defect.
+    //
+    // RELOCATED, AND THAT IS LOAD-BEARING RATHER THAN INCIDENTAL. LaunchWrapper ships
+    // asm-debug-all-5.0.3 and `org.objectweb.asm.` is in LaunchClassLoader's parent-first exclusion
+    // list, so an unrelocated bundle would ALWAYS lose to 5.0.3 — which predates `ClassRemapper`
+    // entirely (it is `RemappingClassAdapter` there). Relocating puts our 9.10 in a package nothing else
+    // claims, so the two coexist instead of one silently winning.
+    //
+    // Safe to relocate, unlike JOML below: no ASM type appears in a signature any OTHER jar defines.
+    // :core does not reference ASM at all (checked), and CrystalGraphics does not ship it — every
+    // reference is inside :language, whose classes are rewritten by the same relocation.
+    shadowImplementation("org.ow2.asm:asm:${asmVersion}")
+    shadowImplementation("org.ow2.asm:asm-commons:${asmVersion}")
+    shadowImplementation("org.ow2.asm:asm-tree:${asmVersion}")
+
     // Taffy: SHADED, because nothing else ships it. CrystalGUI is the only consumer -- UIElement and
     // ElementStyle hold TaffyStyle/NodeId fields and no Taffy type ever crosses into CrystalGraphics --
     // so relocating it can only rewrite references this jar also owns.

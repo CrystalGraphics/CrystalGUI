@@ -63,7 +63,9 @@ val rhinoBand8 = "1.7.15.1"    // last release whose class files are Java 8
 // against it too (see `engineApi` below), and two spellings of one version is the hazard the
 // note above this block already describes.
 val eclipseTextBand8 = "3.11.0"
-val asmVersion = "9.10"     // real classes are major 49; only module-info is 53
+// Real classes are major 49; only module-info is 53. In gradle.properties because a LOADER has to ship
+// this jar and must ship the same version -- see mc1710/dependencies.gradle.
+val asmVersion = providers.gradleProperty("asmVersion").get()
 val rhinoModern = "1.9.1"      // needs Java 11 -- so bands 11 and 17 SHARE it; see EngineBand
 
 // ── The Eclipse platform closure, pinned per band ───────────────────────────────────────────────
