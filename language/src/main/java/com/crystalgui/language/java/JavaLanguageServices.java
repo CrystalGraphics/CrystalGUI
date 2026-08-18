@@ -6,7 +6,10 @@ import com.crystalgui.language.engine.JavaEngine;
 import com.crystalgui.language.engine.bridge.Analysis;
 import com.crystalgui.language.java.assist.JavaCompletionProvider;
 import com.crystalgui.language.java.classpath.TypeIndex;
+import com.crystalgui.language.java.exec.ScriptHost;
+import com.crystalgui.language.java.exec.ScriptPrelude;
 import com.crystalgui.language.java.fix.JavaCodeActions;
+import com.crystalgui.language.run.ScriptBindings;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.lang.CodeActionProvider;
 import com.crystalgui.text.lang.CompletionProvider;
@@ -63,9 +66,31 @@ public final class JavaLanguageServices extends AnalysedLanguageServices {
         start();
     }
 
+    /**
+     * ECJ over this document — <b>wrapped first when it is a script rather than a compilation unit</b>.
+     *
+     * <p>A Java script is a body: statements, with the host bindings already in scope. {@code ScriptHost}
+     * has always wrapped one through {@link ScriptPrelude} before compiling it, and this path did not —
+     * so a bare snippet <em>ran correctly</em> and the editor covered it in the parser trying to read
+     * {@code System.out.println(...)} as a member declaration. Thirty syntax errors on a file with none.
+     * The two paths now ask the same question of the same text.</p>
+     *
+     * <p>{@link ScriptPrelude#declaresType} is the same test {@code ScriptHost.compileSource} uses, so a
+     * file cannot be a unit to one and a snippet to the other. And the bindings come from the same
+     * registry the runtime injects from, which is what makes a name the host provides resolve in the
+     * editor instead of reading as undefined.</p>
+     */
     @Override
     protected Analysis analyse(String source, long version) {
-        return engine.analyzer().analyze(className, source, classpath, engine.releaseLevel(), version);
+        if (ScriptPrelude.declaresType(source)) {
+            return engine.analyzer().analyze(className, source, classpath, engine.releaseLevel(), version);
+        }
+        ScriptPrelude.Wrapped wrapped = ScriptHost.preludeFor(className, ScriptBindings.types()).wrap(source);
+        Analysis unit = engine.analyzer().analyze(wrapped.className(), wrapped.unitSource(), classpath,
+                engine.releaseLevel(), version);
+        // AND EVERY ANSWER TRANSLATED BACK, or the editor would be describing a document the author
+        // cannot see. @see SnippetAnalysis
+        return new SnippetAnalysis(unit, wrapped, source.length());
     }
 
     @Override
