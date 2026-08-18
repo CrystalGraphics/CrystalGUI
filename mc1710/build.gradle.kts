@@ -146,6 +146,11 @@ tasks.named<JavaExec>("runClient") {
         providers.gradleProperty("cgFrame").orNull?.let {
             systemProperty("crystalgui.autotest.frame", it)
         }
+        // -PcgBytes=net/minecraft/client/Minecraft reports every member the LIVE class declares and no
+        // file does -- the §15.5 A claim, shown rather than asserted.
+        providers.gradleProperty("cgBytes").orNull?.let {
+            systemProperty("crystalgui.autotest.bytes", it)
+        }
     }
 }
 
