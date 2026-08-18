@@ -1437,33 +1437,60 @@ rename/find-usages/signature help for JS ahead of Java having them.
 
 ## 15. Verify before building on it (the probe's list — §23's discipline)
 
+*Audited 2026-08-19 against the code, because a list of open questions nobody closes is a list that
+stops being read. Each row below is now answered, struck as superseded, or explicitly still open —
+and the audit found one that was neither: step 11 had never been done, and doing it is the whole
+reason a band divergence keeps being found by a person rather than by the build.*
+
 1. ~~`Context.getSourcePositionFromStack` visibility per band~~ — **answered: package-private on all
-   three**, so the direct route is out. Still open: whether `new EvaluatorException("")` constructed on
-   the script thread carries the current line in interpreted mode, or whether `RhinoOrigin` needs the
-   same-package accessor shaded beside Rhino (§9.4).
-2. `JavaMembers` refuses a `ClassShutter`-hidden class for an object *passed in* as a binding, not
-   only for `Packages` lookups.
-3. Rhino's interpreter treats a `java.lang.Error` from `observeInstructionCount` as uncatchable by
-   script `catch` and still runs `finally` — on both Rhinos.
-4. `initStandardObjects(null, true)` (sealed) permits installing `Java`/`console` afterwards, or must
-   be sealed after installation.
-5. Which parser warnings each band emits in IDE mode with an `ErrorCollector` (the message-id list §4's
-   policy is keyed on), and whether `setRecordingLocalJsDocComments` attaches JSDoc to `var`/`let`/`const`
-   initialisers as well as to functions.
-6. `SymbolKind` has a kind for a plain JS object/`Object.prototype` container (`OBJECT`), or `PROPERTY`/
-   `MODULE` cover it — a core edit if not, and a one-line one.
-7. `NativeFunction`'s arity/name accessors are the same names on both Rhinos.
+   three**, so the direct route is out. **And the fallback works**, which is the half that was left
+   open: `RhinoExecutor.currentLine()` builds `new EvaluatorException("origin")` on the script thread
+   and reads `getScriptStack()`. No same-package accessor, nothing shaded beside Rhino.
+2. **Open.** `JavaMembers` refuses a `ClassShutter`-hidden class for an object *passed in* as a
+   binding, not only for `Packages` lookups. `JsSandboxTest` covers the `Java.type` and call routes;
+   the passed-in binding is the one shape nothing asks about.
+3. **Half answered.** `aStopCannotBeCaughtByTheScript` pins that Rhino's interpreter refuses to let a
+   script `catch` the stop — on the running band. That a `finally` still runs, and that both bands
+   agree, is untested.
+4. ~~`initStandardObjects(null, true)` (sealed) permits installing `Java`/`console` afterwards~~ —
+   **answered by 9a**, which measured it directly: a sealed scope still takes globals, so install
+   order is free. Duplicate row, kept struck rather than deleted so the question is not asked a third
+   time.
+5. **Half answered, half decided.** `setRecordingLocalJsDocComments` does attach JSDoc to `var`
+   initialisers — the JSDoc tier reads them and `JsAnalysisTest` covers it. The parser-warning
+   message-id list per band was **not** measured and no longer needs to be: §12a settled that Rhino's
+   own warnings stay off, because they are strict-mode output and which style opinions to show is a
+   policy decision nobody has made.
+6. ~~`SymbolKind` has a kind for a plain JS object container~~ — **answered: no core edit needed.**
+   `PROPERTY` and `MODULE` cover it; there is no `OBJECT` constant and nothing wanted one.
+7. **Open, and moot for now.** `NativeFunction`'s arity/name accessors — nothing in the module names
+   that type today, so the question has no consumer. It returns the moment one appears.
 8. ~~Promises drain at the end of an evaluation~~ — **answered: they do**, on every band. No pump.
-9. ~~`?.`, `??`, `**`, rest parameters, generators per band~~ — **answered**, and six of the guesses were
-   wrong; see the measured table in §13a. The probe file is what the policy, the keyword set and the
-   compatibility-band warning read.
+9. ~~`?.`, `??`, `**`, rest parameters, generators per band~~ — **answered**, and six of the guesses
+   were wrong; see the measured table in §13a. The probe file is what the policy, the keyword set and
+   the compatibility-band warning read — and since 10.3b, band 8's copy **ships as a resource** with a
+   test asserting it still matches the jars it describes.
 9a. ~~Whether a sealed scope still takes new globals~~ — **answered: it does**, so install order is free.
-9b. **A standing question for every engine, raised by the regexp finding:** does any other adapter reach
-   a `ServiceLoader` seam? ECJ has service files of its own, so the same "engine loader must be the
-   thread context classloader, before first class-init" rule may already apply to the Java engine
-   without anything having noticed — nothing it does today needs one, and that is not a guarantee.
-10. `CompilerEnvirons.setGenerateObserverCount(true)` makes the observer fire in compiled mode on both
-    Rhinos, and the generated class-file version loads on band 8.
-11. `EngineApiSurfaceTest`'s existing Rhino block already pins `Context`, `ContextFactory`, `ClassShutter`,
-   `Scriptable`, `ScriptableObject`, `ErrorReporter`, `EvaluatorException`; step 2 extends it with the
-   parser and interop surface above so a band bump fails the build rather than the popup.
+9b. **Open, and deliberately kept open.** A standing question for every engine, raised by the regexp
+   finding: does any other adapter reach a `ServiceLoader` seam? ECJ has service files of its own, so
+   the "engine loader must be the thread context classloader before first class-init" rule may already
+   apply to the Java engine without anything having noticed. Nothing it does today needs one, and that
+   is not a guarantee.
+10. ~~`setGenerateObserverCount(true)` makes the observer fire in compiled mode~~ — **not applicable.**
+   §9.1 chose interpreted mode (`setOptimizationLevel(-1)`) and the executor sets it unconditionally,
+   so there is no compiled path for the observer to fire on. The question returns only if that
+   decision does.
+11. ~~Extend `EngineApiSurfaceTest` with the parser and interop surface~~ — **done, and it had not
+   been.** The row said step 2 would extend it "so a band bump fails the build rather than the popup";
+   the block still pinned only what M5 needed — seven types about evaluating a string — while
+   everything the editor is built on arrived afterwards and was pinned by nothing.
+   `everyBandCarriesTheRhinoApiTheEDITORUses` now covers the IDE-mode parse, the tree accessors
+   (including `visit`, the one reading true on both bands), the symbol table, the twenty-six node
+   types the fix catalog and the compatibility band locate by class, and the execution seam.
+   **All four band divergences this module has hit were the kind this catches** — `ObjectProperty.getLeft`,
+   the `Token` constants, `CatchClause.getVarName`, `NativeJavaObject`'s three-argument constructor —
+   and every one of them was found by a person running it on the other band.
+   *(One shape worth recording: `ContextFactory.observeInstructionCount` is `protected`, so a
+   `getMethod` check reports it missing on every band. A member an adapter **overrides** rather than
+   calls needs `getDeclaredMethod` — the question is whether it is there to override, not whether it
+   is callable.)*
