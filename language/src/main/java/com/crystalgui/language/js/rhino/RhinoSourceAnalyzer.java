@@ -25,6 +25,7 @@ import org.mozilla.javascript.ast.KeywordLiteral;
 import org.mozilla.javascript.ast.ParseProblem;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -172,12 +173,23 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
         String text = source == null ? "" : source;
         String name = sourceName == null || sourceName.isEmpty() ? "script.js" : sourceName;
 
+        // THE SAME BLANKING THE EXECUTOR DOES, from the same method, for the same reason: `import` is a
+        // reserved word in Rhino and the parser refuses a script carrying one. Blanking is
+        // length-preserving, so every offset below -- diagnostics, semantic tokens, resolution, folds --
+        // is an offset into the document the author is looking at, with no mapping layer anywhere.
+        //
+        // ONE METHOD, TWO CALLERS, which is the point rather than tidiness: an analyser and an executor
+        // that blanked differently would disagree about what the script says, and the editor would be
+        // describing a file the runtime never compiled.
+        JsImports.Scanned scanned = JsImports.scan(text);
+        String forParser = scanned.source();
+
         CompilerEnvirons environs = environs();
 
         ErrorCollector problems = new ErrorCollector();
         AstRoot root = null;
         try {
-            root = new Parser(environs, problems).parse(text, name, 1);
+            root = new Parser(environs, problems).parse(forParser, name, 1);
         } catch (RuntimeException fatal) {
             // RECOVERY IS NOT TOTAL. `setRecoverFromErrors` covers the errors the parser has a rule for;
             // a few shapes still unwind (a runaway string, some malformed regexes). The collected
@@ -206,12 +218,24 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
             reported = withConstantConditions(reported, root, text, lines);
         }
 
+        // THE IMPORTS JOIN THE HOST'S BINDINGS, which is what they are: a name in scope that the file
+        // never declared, carrying a Java type. Merging rather than adding a second channel means every
+        // consumer already handles them -- resolution, the free-name pass that decides `variable.global`
+        // from `variable.unresolved`, and completion's list of what is in scope. A separate list would be
+        // a second thing each of those had to remember to ask.
+        //
+        // THE FILE'S OWN, LAST: a script that imports a name the host already provides means the import.
         Map<String, String> bindings = hostBindings;
+        if (!scanned.isEmpty()) {
+            bindings = new LinkedHashMap<>(hostBindings);
+            bindings.putAll(scanned.imported());
+        }
         RhinoResolution resolution = new RhinoResolution(root, scopes, text, lines, liveScope, interop,
-                name, JsKeywords.measuredBy(RhinoSourceAnalyzer::parses), bindings);
+                name, JsKeywords.measuredBy(RhinoSourceAnalyzer::parses), bindings,
+                scanned.imported().keySet());
         return new ParsedScript(version, text, root, scopes, reported, parsed, resolution,
                 new JsQuickFixes(root, scopes, new JsRewrites(text, version), resolution),
-                bindings.keySet());
+                bindings.keySet(), scanned.statements());
     }
 
     /**
@@ -374,9 +398,19 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
         private JsQuickFixes fixes;
         private final Set<String> hostBindings;
 
+        /**
+         * The file's imports, kept because <b>nothing else can describe them</b>.
+         *
+         * <p>They are blanked before the parser runs, so the tree has no node for them and the semantic
+         * pass is the only thing that can colour the line. Without this the editor fell back to
+         * tree-sitter reading {@code import a.b.C;} as a broken ES module declaration.</p>
+         */
+        private final List<JsImports.Imported> imports;
+
         ParsedScript(long version, String source, AstRoot root, RhinoScopes scopes,
                      List<Diagnostic> diagnostics, boolean parsed, RhinoResolution resolution,
-                     JsQuickFixes fixes, Set<String> hostBindings) {
+                     JsQuickFixes fixes, Set<String> hostBindings, List<JsImports.Imported> imports) {
+            this.imports = imports == null ? List.of() : imports;
             this.version = version;
             this.source = source;
             this.root = root;
@@ -427,7 +461,7 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
                 // the empty set, so the capture was dead and every binding a mod offers was drawn as an
                 // unresolved name -- in the one editor whose own runtime provides it.
                 tokens = root == null ? List.of()
-                        : RhinoSemanticTokens.of(root, scopes, hostBindings);
+                        : RhinoSemanticTokens.of(root, scopes, hostBindings, imports);
             }
             return tokens;
         }
