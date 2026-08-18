@@ -584,6 +584,12 @@ tasks.test {
     systemProperty("cgui.test.corpus", if (project.hasProperty("noCorpus")) "false" else "true")
     // The repository root, so the corpus can find the other modules' sources from inside this one.
     systemProperty("cgui.test.repoRoot", rootProject.projectDir.absolutePath)
+    // `-Pbench` runs the measurements §23 asks for and `check` must not: a timing assertion in an
+    // ordinary build is a flaky test waiting to happen, and what protects these against regression is the
+    // structural property underneath each number, which its own test asserts deterministically. These
+    // exist to ANSWER a "verify before you build on it" row, once, with the answer recorded in the plan.
+    // See SafepointOverheadBenchmark and TypeIndexScaleBenchmark.
+    systemProperty("cgui.test.bench", project.hasProperty("bench").toString())
     // `-Pcoverage` prints what the engine reports and cannot answer, over the same corpus. An instrument
     // rather than a check -- it asserts nothing and its output is only useful to a person deciding what to
     // build next -- so unlike the corpus it stays off by default. See CoverageProbeTest.
