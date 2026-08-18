@@ -234,6 +234,13 @@ tasks.named<JavaExec>(runTask) {
         providers.gradleProperty("cgBytes").orNull?.let {
             systemProperty("crystalgui.autotest.bytes", it)
         }
+        // -PcgComplete=true logs the member list the live editor produces for four receiver shapes,
+        // with the classpath it resolved them against. Every layer answers correctly in every JVM this
+        // can be driven from -- including the harness, through the same call -- so the remaining
+        // difference is the client itself, and it cannot be reached any other way.
+        providers.gradleProperty("cgComplete").orNull?.let {
+            systemProperty("crystalgui.autotest.complete", it)
+        }
     }
 }
 }

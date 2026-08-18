@@ -1,10 +1,17 @@
 package com.crystalgui.mc.client;
 
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.language.java.classpath.HostClasspath;
 import com.crystalgui.language.platform.ScriptPlatform;
 import com.crystalgui.language.platform.ScriptPlatforms;
 import com.crystalgui.language.run.ScriptRuntime;
 import com.crystalgui.language.run.view.ScriptWorkbench;
+import com.crystalgui.text.TextBuffer;
+import com.crystalgui.text.lang.CompletionItem;
+import com.crystalgui.text.lang.CompletionList;
+import com.crystalgui.text.lang.CompletionProvider;
+import com.crystalgui.text.lang.LanguageServices;
+import com.crystalgui.text.syntax.LanguageRegistry;
 
 import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
@@ -25,6 +32,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -122,6 +130,18 @@ public final class CgUiAutoTest {
      */
     private static final String BYTES_PROBE = emptyToNull(System.getProperty("crystalgui.autotest.bytes"));
 
+    /**
+     * Whether to ask the live editor what its member list actually holds — {@code -PcgComplete}.
+     *
+     * <p>Because every layer answers correctly everywhere it can be driven from a test: the analyser, the
+     * provider on a fresh analysis and on a stale one, and the whole services stack for a compilation unit
+     * and for a bare snippet. The harness reports 46 rows for {@code System.out.} through the same call
+     * this makes. Only the client disagrees, so the question is what is different about the CLIENT — and
+     * a classpath assembled by LaunchWrapper is the obvious candidate that no test JVM can have.</p>
+     */
+    private static final boolean COMPLETE_PROBE =
+            Boolean.parseBoolean(System.getProperty("crystalgui.autotest.complete", "false"));
+
     /** Which painted frame runs it — before {@link #CAPTURE_ON_FRAME}, so a capture still happens. */
     static final int RUN_SCRIPT_ON_FRAME =
             SCRIPT == null ? -1 : Integer.getInteger("crystalgui.autotest.scriptFrame", 5);
@@ -137,6 +157,10 @@ public final class CgUiAutoTest {
     private static boolean captured;
     private static boolean scriptRun;
     private static boolean bytesProbed;
+    private static boolean completionProbed;
+
+    /** A newline, spelled once — a probe source is written inline and every one of them needs one. */
+    private static final String NL = String.valueOf((char) 10);
 
     private CgUiAutoTest() {
     }
@@ -308,6 +332,87 @@ public final class CgUiAutoTest {
             }
         } catch (Throwable failed) {
             CrystalGuiCore.LOGGER.error("CGUI AUTOTEST bytes: FAILED\n{}", describe(failed));
+        }
+    }
+
+    /**
+     * <b>What the member list holds in the CLIENT</b>, asked of the provider directly.
+     *
+     * <p>Reported twice as an empty popup on {@code System.out.} — and a popup with no rows that stays on
+     * screen is a specific thing, not merely "no answer": a session whose filter empties the list closes
+     * itself, so a list that renders as nothing but a hint strip was answered with zero items and marked
+     * INCOMPLETE. That is a provider answer, so this asks the provider.</p>
+     *
+     * <p>The classpath is logged first because it is the one input a test JVM cannot reproduce. Under
+     * LaunchWrapper the disk view is assembled by the launcher, and on a Java 8 host the class library is
+     * {@code rt.jar} inside {@code java.home} — which is on no URL list, in no system property, and in
+     * nothing {@code getSources()} returns. Every JVM this has been driven from resolves {@code java.lang}
+     * through the JRT filesystem instead, which needs no classpath entry at all and therefore hides the
+     * gap completely.</p>
+     */
+    static void probeCompletionOnce() {
+        if (!ENABLED || !COMPLETE_PROBE || completionProbed) return;
+        completionProbed = true;
+        try {
+            List<String> classpath = HostClasspath.detect();
+            CrystalGuiCore.LOGGER.info("CGUI AUTOTEST complete: java {} home {}",
+                    System.getProperty("java.version"), System.getProperty("java.home"));
+            CrystalGuiCore.LOGGER.info("CGUI AUTOTEST complete: classpath has {} entries", classpath.size());
+            boolean library = false;
+            for (String entry : classpath) {
+                String lower = entry.toLowerCase(java.util.Locale.ROOT);
+                if (lower.endsWith("rt.jar") || lower.endsWith("jce.jar") || lower.endsWith("jrt-fs.jar")) {
+                    library = true;
+                    CrystalGuiCore.LOGGER.info("CGUI AUTOTEST complete:   class library {}", entry);
+                }
+            }
+            if (!library) {
+                CrystalGuiCore.LOGGER.warn("CGUI AUTOTEST complete: NO class library on the classpath — "
+                        + "if this host has no JRT filesystem then java.lang resolves to nothing");
+            }
+
+            probeCompletion("a field receiver", "System.out." + NL, "System.out.");
+            probeCompletion("a type receiver", "System." + NL, "System.");
+            probeCompletion("a call receiver", "new java.util.ArrayList<String>()." + NL,
+                    "new java.util.ArrayList<String>().");
+            probeCompletion("a minecraft receiver",
+                    "net.minecraft.client.Minecraft.getMinecraft()." + NL,
+                    "net.minecraft.client.Minecraft.getMinecraft().");
+        } catch (Throwable failed) {
+            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST complete: FAILED" + NL + "{}", describe(failed));
+        }
+    }
+
+    /** Opens services over {@code source} alone and logs what the provider offers after {@code upTo}. */
+    private static void probeCompletion(String what, String source, String upTo) {
+        LanguageRegistry.Entry entry = LanguageRegistry.forFileName("Probe.java");
+        if (entry == null) {
+            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST complete: no Java entry registered");
+            return;
+        }
+        TextBuffer buffer = new TextBuffer(source);
+        LanguageServices services = entry.newServices(buffer, null);
+        if (services == null) {
+            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST complete: no services for {}", what);
+            return;
+        }
+        try {
+            int caret = source.indexOf(upTo) + upTo.length();
+            final CompletionList[] got = {CompletionList.EMPTY};
+            services.completion().complete(
+                    CompletionProvider.Request.character(caret, "", "."),
+                    answer -> got[0] = answer.orElse(CompletionList.EMPTY));
+            List<CompletionItem> items = got[0].items();
+            StringBuilder first = new StringBuilder();
+            for (int i = 0; i < Math.min(6, items.size()); i++) {
+                first.append(i == 0 ? "" : ", ").append(items.get(i).label());
+            }
+            CrystalGuiCore.LOGGER.info("CGUI AUTOTEST complete: {} — {} rows, incomplete={} [{}]",
+                    what, items.size(), got[0].incomplete(), first);
+        } catch (Throwable failed) {
+            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST complete: {} FAILED" + NL + "{}", what, describe(failed));
+        } finally {
+            services.close();
         }
     }
 

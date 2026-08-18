@@ -429,13 +429,29 @@ public final class UIInputHandler implements CgSystemInput.Keyboard, CgSystemInp
             if (!propagationStopped) {
                 moveTabFocus(event, modifiers);
             }
-        } else {
-            emitKeyboardUp(event, modifiers);
-            // A release binding is not gated on propagation: a release cannot be "handled" the way a press
-            // can, because what it ends was already begun by the matching press. Suppressing it would
-            // leave a space-to-pan gesture stuck on.
-            resolveKeymap(event, modifiers, KeyEventType.RELEASE);
+            // ACTIVATION IS GATED TOO, by the same rule the line above follows: one keystroke does one
+            // thing. A widget that consumed Space must not also have a click synthesized on it.
+            if (!propagationStopped) {
+                handleActivationKey(event);
+            }
+            // AND THE HOST IS TOLD, which it was not.
+            //
+            // This returned false unconditionally, so a key the UI had fully consumed was reported to the
+            // platform as untouched -- and the platform acts on what is left over. On 1.7.10 that is
+            // `GuiScreen`: Escape closed the completion popup through `stopPropagation`, the answer came
+            // back "nobody wanted it", and the screen shut underneath the editor. So the popup closed AND
+            // the whole editor did, which reads as Escape being wired to the wrong thing rather than as a
+            // return value.
+            //
+            // It is not only Escape. Every consumed keystroke was mis-reported; Escape is simply the one
+            // key a Minecraft host also acts on itself, so it is the only one where the lie was visible.
+            return propagationStopped;
         }
+        emitKeyboardUp(event, modifiers);
+        // A release binding is not gated on propagation: a release cannot be "handled" the way a press
+        // can, because what it ends was already begun by the matching press. Suppressing it would
+        // leave a space-to-pan gesture stuck on.
+        resolveKeymap(event, modifiers, KeyEventType.RELEASE);
         handleActivationKey(event);
         return false;
     }
