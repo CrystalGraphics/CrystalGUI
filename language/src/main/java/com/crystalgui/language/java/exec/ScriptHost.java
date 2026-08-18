@@ -245,7 +245,15 @@ public final class ScriptHost implements ScriptRuntime {
             // ref saying `Main`, `ScriptRef.owns` matches nothing, and every line loses the origin that
             // says which of the script's lines printed it. Silent -- the output still arrives, still
             // filters and still stops; only the column naming its source comes back empty.
-            this.ref = file == null ? null : ScriptRef.ofClass(file, wrapped.binaryName());
+            //
+            // AND THE PREFIX ROWS, for the same reason and with the same asymmetry: a JVM frame names a
+            // line in the UNIT, and the unit has a class header, a method header and any hoisted imports
+            // above the author's first line. Six lines of script reported themselves as line 10, and the
+            // console link went past the end of the file. `ScriptPrelude` has always carried the mapping
+            // and its javadoc has always said a runtime stack trace and a compile diagnostic must both
+            // name the line the author sees -- the diagnostics half was wired and this one was not.
+            this.ref = file == null ? null
+                    : ScriptRef.ofClass(file, wrapped.binaryName(), wrapped.prefixRows());
             return this;
         }
 

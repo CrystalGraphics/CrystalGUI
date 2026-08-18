@@ -60,7 +60,12 @@ public record ScriptRef(Resource file, Origin origin) {
      * runtime that defines its script as a class — a JS engine in compiled mode, a Kotlin one — answers
      * this way, and the one that does not answers its own way.</p>
      */
-    public record ClassOrigin(String binaryName) implements Origin {
+    public record ClassOrigin(String binaryName, int prependedRows) implements Origin {
+
+        /** A class compiled from the author's text as written — no wrapper, so no shift. */
+        public ClassOrigin(String binaryName) {
+            this(binaryName, 0);
+        }
 
         /**
          * Whether {@code className} is this script's own code.
@@ -77,18 +82,50 @@ public record ScriptRef(Resource file, Origin origin) {
                     && (className.charAt(binaryName.length()) == '$');
         }
 
+        /**
+         * A frame's line, as the AUTHOR's file numbers it.
+         *
+         * <p>A runtime that wraps a snippet compiles a unit the author never wrote — a class header, a
+         * method header, hoisted imports — so a JVM frame names a line in the <em>unit</em> and every
+         * console row points somewhere past the end of a short file. Six lines of script reported as line
+         * 10, with the link navigating nowhere.</p>
+         *
+         * <p>{@code prependedRows} is engine-neutral on purpose: how many rows a runtime added before the
+         * author's first is a number, not a Java fact, and a Kotlin host or a JS engine in compiled mode
+         * has the same one. What the rows CONTAIN stays the runtime's business — {@code ScriptPrelude}
+         * owns that and hands over the count.</p>
+         *
+         * <p><b>Below the author's first line answers -1, never a clamp.</b> A frame inside the prelude is
+         * code the author never wrote and cannot navigate to; clamping it to line 1 would blame their
+         * first character for it. -1 is already the documented "running, but not on a line I can name",
+         * and {@code ScriptOutput.message} degrades it to a row with no link rather than a broken one —
+         * the same choice {@code ScriptPrelude.toScriptPoint} makes for diagnostics.</p>
+         */
         @Override
         public int currentLine() {
             Optional<StackWalker.StackFrame> frame = StackWalker.getInstance().walk(
                     frames -> frames.filter(f -> owns(f.getClassName()) && f.getLineNumber() > 0)
                             .findFirst());
-            return frame.map(StackWalker.StackFrame::getLineNumber).orElse(-1);
+            int unitLine = frame.map(StackWalker.StackFrame::getLineNumber).orElse(-1);
+            if (unitLine < 0) return -1;
+            int authorLine = unitLine - prependedRows;
+            return authorLine > 0 ? authorLine : -1;
         }
     }
 
     /** A script that runs as a JVM class — its lines are found on the stack. */
     public static ScriptRef ofClass(Resource file, String binaryName) {
-        return new ScriptRef(file, new ClassOrigin(binaryName));
+        return ofClass(file, binaryName, 0);
+    }
+
+    /**
+     * A script that runs as a JVM class compiled from a WRAPPED unit.
+     *
+     * @param prependedRows rows the runtime added before the author's first line — see
+     *                      {@link ClassOrigin#currentLine()}
+     */
+    public static ScriptRef ofClass(Resource file, String binaryName, int prependedRows) {
+        return new ScriptRef(file, new ClassOrigin(binaryName, prependedRows));
     }
 
     public ScriptRef {
