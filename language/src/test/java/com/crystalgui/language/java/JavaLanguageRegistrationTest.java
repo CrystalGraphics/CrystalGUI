@@ -22,6 +22,7 @@ import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -203,6 +204,64 @@ public class JavaLanguageRegistrationTest {
             throw new AssertionError(failed);
         } finally {
             host.close();
+        }
+    }
+
+    /**
+     * <b>A bare snippet ANALYSES clean, not just runs clean.</b>
+     *
+     * <p>The twin of the test above, and the asymmetry it closes was the whole defect: {@code ScriptHost}
+     * has always wrapped a snippet through {@code ScriptPrelude} before compiling it, and the editor's
+     * analysis path did not — so a file that ran correctly was covered in ECJ trying to read
+     * {@code System.out.println(...)} as a member declaration. "insert Identifier ( to complete
+     * MethodHeaderName", "RecordHeaderName expected instead": thirty errors on a file with none.</p>
+     *
+     * <p>Reported from the harness, where it is unmissable, and invisible here — because every test
+     * either RAN a snippet or ANALYSED a class, and never the pairing.</p>
+     */
+    @Test
+    public void aBareSnippetAnalysesWithoutSyntaxErrors() {
+        TextBuffer buffer = new TextBuffer("System.out.println(\"hello\");\nint n = 1 + 2;\n");
+        LanguageServices services = javaEntry().newServices(
+                buffer, Resource.of("project", "src/Snippet.java"));
+        assertNotNull(services);
+        try {
+            List<List<Diagnostic>> announced = new ArrayList<>();
+            services.onDiagnostics(v -> announced.add(v.orElse(List.of())));
+            assertFalse("nothing was announced -- the analysis never ran", announced.isEmpty());
+
+            for (Diagnostic problem : announced.get(announced.size() - 1)) {
+                assertNotEquals("a snippet was parsed as a compilation unit: " + problem.message(),
+                        DiagnosticSeverity.ERROR, problem.severity());
+            }
+        } finally {
+            services.close();
+        }
+    }
+
+    /**
+     * And a real problem in one is reported on the author's OWN row.
+     *
+     * <p>The other half of wrapping: the compiler answers about a document whose first line is a class
+     * header and whose every row is shifted by the prelude. A diagnostic left at the compiler's row would
+     * point several lines below the mistake, which is worse than none because it is confidently wrong.</p>
+     */
+    @Test
+    public void aProblemInASnippetIsReportedOnTheAuthorsRow() {
+        // Row 0 is fine, row 1 is the mistake. Whatever the prelude's height, the answer must be 1.
+        TextBuffer buffer = new TextBuffer("int ok = 1;\nSystem.out.println(nothingHere());\n");
+        LanguageServices services = javaEntry().newServices(
+                buffer, Resource.of("project", "src/Snippet.java"));
+        assertNotNull(services);
+        try {
+            List<List<Diagnostic>> announced = new ArrayList<>();
+            services.onDiagnostics(v -> announced.add(v.orElse(List.of())));
+            List<Diagnostic> problems = announced.get(announced.size() - 1);
+            assertFalse("a call to a method that does not exist reported nothing", problems.isEmpty());
+            assertEquals("the diagnostic is on the compiler's row rather than the author's",
+                    1, problems.get(0).start().row());
+        } finally {
+            services.close();
         }
     }
 
