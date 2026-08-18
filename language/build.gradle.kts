@@ -567,6 +567,22 @@ val stageEngines = tasks.register<Sync>("stageEngines") {
     into("17") { from(engineBand17) }
 }
 
+// ── Band 8, for a loader that BUNDLES it (§26.2) ────────────────────────────────────────────────
+//
+// Consumable, so `mc1710` can put these jars inside its mod jar without re-declaring `jdt.core:3.26.0`
+// and `rhino:1.7.15.1` in a second file — the same reason `engineApi` exists. Extends the resolvable
+// bucket rather than repeating its dependencies, so the pins stay in one place and a bump reaches both.
+//
+// BAND 8 ONLY, and only for a platform that asks. A 1.7.10 jar carries ~16MB of ECJ and Rhino; shipping
+// 11 and 17 beside them would triple that for jars a Java 8 client can never load. Which band a jar
+// carries is a build decision, which is why this is a configuration rather than something the runtime
+// chooses.
+val engineBand8Bundle: Configuration by configurations.creating {
+    isCanBeConsumed = true
+    isCanBeResolved = false
+    extendsFrom(engineBand8)
+}
+
 /** Where {@code stageEngines} puts them — read by the harness's run task. */
 val stagedEnginesDir: Provider<Directory> = layout.buildDirectory.dir("engines")
 

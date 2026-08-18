@@ -12,6 +12,12 @@ val engineApi: Configuration by configurations.creating {
     isCanBeResolved = true
 }
 
+/** Band 8's jars, carried inside the mod jar as resources. @see bundleEngineBand8 */
+val engineBand8: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+
 group = providers.gradleProperty("modGroup").orElse("com.crystalgui").get()
 version = providers.gradleProperty("modVersion").orElse("1.0.0").get()
 
@@ -54,6 +60,46 @@ dependencies {
 
     // :language's engine API, for the DOWNGRADE CLASSPATH ONLY -- see downgradeJar below.
     engineApi(project(path = ":language", configuration = "engineApi"))
+
+    // Band 8's jars, to be carried INSIDE the mod jar as resources -- see bundleEngineBand8 below.
+    engineBand8(project(path = ":language", configuration = "engineBand8Bundle"))
+}
+
+// ── The engine band, bundled (§26.2) ────────────────────────────────────────────────────────────
+//
+// A shipped jar has no `-Dcrystalgui.engines.dir`, so without this it has no bands at all and the editor
+// colours without analysing -- a legitimate degradation, and not the one anybody installing a code editor
+// wants. Bundled rather than downloaded, which is the opposite call from the mappings and deliberately
+// so: EPL and MPL plainly permit redistribution, and offline-by-default is worth more than a slim jar for
+// a tool people install in order to write code.
+//
+// AS RESOURCES UNDER assets/, not as a flattened classpath. They must stay whole jars: EngineClassLoader
+// is a URLClassLoader and opens them by URL after extraction, and merging their classes into the mod jar
+// would put ECJ and Rhino beside the application -- exactly what the band split exists to prevent.
+//
+// The INDEX is what makes them findable. A ClassLoader cannot list a resource directory, and every route
+// that fakes it is a special case of where the resource physically lives; one text file reads the same
+// however it is stored. @see EngineBundle
+val bundleEngineBand8 = tasks.register<Sync>("bundleEngineBand8") {
+    group = "build"
+    description = "Lays band 8's jars out as jar resources, with the index EngineBundle reads."
+    // The Sync's OWN destination is the bundle root and the band is a path INSIDE it. Syncing straight
+    // into the band directory instead makes that directory the task's output, so `from(bundleEngineBand8)`
+    // in shadowJar copies its CONTENTS -- fifteen jars and an index at the root of the mod jar, with the
+    // assets/ prefix silently gone and nothing to say so.
+    into(layout.buildDirectory.dir("engine-bundle"))
+    into("assets/crystalgui/engines/8") { from(engineBand8) }
+    doLast {
+        val directory = layout.buildDirectory.dir("engine-bundle/assets/crystalgui/engines/8").get().asFile
+        val jars = directory.listFiles()?.filter { it.name.endsWith(".jar") }?.map { it.name }?.sorted()
+            ?: emptyList()
+        // SORTED, so the classpath order is identical on every machine that builds this. `Sync` copies in
+        // whatever order the filesystem reports, and two jars declaring the same package would otherwise
+        // resolve differently per build host -- the bug that reproduces for one person and nobody else.
+        directory.resolve("index.txt").writeText(
+            "# Band 8 engine jars, in classpath order. Written by :mc1710:bundleEngineBand8.\n"
+                    + jars.joinToString("\n") + "\n")
+    }
 }
 
 // ECJ, Rhino and the two Eclipse platform jars the adapter names, on `downgradeJar`'s classpath.
@@ -112,9 +158,24 @@ tasks.named<JavaExec>("runClient") {
     // Absent is a legitimate deployment: EngineHost prints one line to stderr and the editor colours
     // without analysing. That is the degradation the whole stack is built around, so this is wiring a
     // capability on, not repairing a hole.
-    dependsOn(":language:stageEngines")
-    systemProperty("crystalgui.engines.dir",
-        project(":language").layout.buildDirectory.dir("engines").get().asFile.absolutePath)
+    //
+    // -PcgBundledEngines instead points at NOTHING and makes the client fall back to the band bundled
+    // inside the jar, extracting it to <cacheRoot>/engines on first use. That is exit criterion 1 -- "a
+    // shipped jar opens the editor with analysis working, no system property set" -- and it is only
+    // testable by withholding the property, because the property WINS when it is set.
+    //
+    // The bundle directory joins the run classpath rather than the jar, because a dev run loads the mod
+    // from source sets and never opens the shadow jar at all: without this the resource is in an artifact
+    // nothing on this classpath reads, and extraction would report an empty band while the jar it was
+    // testing is perfectly correct.
+    if (providers.gradleProperty("cgBundledEngines").isPresent) {
+        dependsOn(tasks.named("bundleEngineBand8"))
+        classpath(layout.buildDirectory.dir("engine-bundle"))
+    } else {
+        dependsOn(":language:stageEngines")
+        systemProperty("crystalgui.engines.dir",
+            project(":language").layout.buildDirectory.dir("engines").get().asFile.absolutePath)
+    }
 
     // UNATTENDED CAPTURE:  ./gradlew :mc1710:runClient -PcgAutoTest
     //
@@ -158,6 +219,10 @@ tasks.shadowJar {
     dependencies {
         exclude(dependency("org.jetbrains.kotlin:.*"))
     }
+    // The band, as resources. Shadow rewrites .class entries and copies everything else verbatim, so a
+    // nested jar crosses intact -- which is required: relocating inside ECJ would rename types its own
+    // reflection looks up by string.
+    from(bundleEngineBand8)
     exclude("module-info.class")
     exclude("kotlin/**")
     exclude("org/jetbrains/kotlin/**")

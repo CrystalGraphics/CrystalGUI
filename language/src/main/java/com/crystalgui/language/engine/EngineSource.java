@@ -1,6 +1,9 @@
 package com.crystalgui.language.engine;
 
+import com.crystalgui.language.cache.CacheFiles;
+
 import java.io.File;
+import java.io.InputStream;
 import java.io.IOException;
 import java.net.URL;
 import java.nio.file.Files;
@@ -136,6 +139,65 @@ public interface EngineSource {
             if (Files.isRegularFile(jar)) jars.add(jar);
         }
         return jars.isEmpty() ? NONE : of(jars);
+    }
+
+    /**
+     * The band's jars carried <b>inside</b> a jar, extracted to a cache directory on first use.
+     *
+     * <h3>Why extraction and not reading in place</h3>
+     *
+     * <p>A {@code URLClassLoader} cannot open a jar nested inside another one — there is no URL for it
+     * — and {@code EngineClassLoader} is one. Reading the entries and defining classes by hand would
+     * mean reimplementing jar loading, sealing and signing for the sake of avoiding a one-off copy of
+     * 16 MB. So they are extracted once and the ordinary {@link #directory} source takes over.</p>
+     *
+     * <h3>What "on first use" costs, and what it does not</h3>
+     *
+     * <p>Second and later launches copy nothing: {@link CacheFiles#isValid} finds each jar present and
+     * non-empty and the extraction is skipped entirely. The first launch pays one sequential copy, off
+     * the client thread by virtue of when engines are opened.</p>
+     *
+     * <p>No digest is pinned, and that is a considered absence rather than an omission. These bytes come
+     * out of our own jar, whose integrity is already the JVM's problem — there is no upstream to
+     * disagree with and nothing to compare against that would not simply be a hash of ourselves. What
+     * the check still catches is the case that actually happens: a copy interrupted half way.</p>
+     *
+     * @param loader       what holds the resources — the mod's own loader
+     * @param resourceRoot where the bands live inside it, one directory per band, no trailing slash
+     * @param into         the cache directory, normally {@code <cacheRoot>/engines}
+     */
+    static EngineSource extractedFrom(ClassLoader loader, String resourceRoot, Path into) {
+        return new EngineSource() {
+            @Override
+            public List<URL> jarsFor(EngineBand band) throws IOException {
+                String prefix = resourceRoot + "/" + band.minimumFeatureVersion() + "/";
+                List<String> names = EngineBundle.listing(loader, prefix);
+                if (names.isEmpty()) return Collections.emptyList();
+
+                Path directory = into.resolve(String.valueOf(band.minimumFeatureVersion()));
+                List<Path> extracted = new ArrayList<>(names.size());
+                for (String name : names) {
+                    Path target = directory.resolve(name);
+                    if (!CacheFiles.isValid(target, null)) {
+                        InputStream bytes = loader.getResourceAsStream(prefix + name);
+                        // A name that came out of the listing and then cannot be opened is a broken jar,
+                        // not a missing band -- skipped so the rest still extract, and it surfaces later
+                        // as the engine failing to find a class rather than as an unexplained absence.
+                        if (bytes == null) continue;
+                        if (!CacheFiles.install(target, bytes, null)) continue;
+                    }
+                    extracted.add(target);
+                }
+                List<URL> urls = new ArrayList<>(extracted.size());
+                for (Path jar : extracted) urls.add(jar.toUri().toURL());
+                return urls;
+            }
+
+            @Override
+            public String toString() {
+                return "EngineSource.extractedFrom(" + resourceRoot + " -> " + into + ")";
+            }
+        };
     }
 
     /** Two sources tried in order — the first non-empty answer wins. */
