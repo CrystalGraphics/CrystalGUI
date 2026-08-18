@@ -453,7 +453,25 @@ public final class CgUiPaintContext {
         // Full opacity — the resolved texture already carries whatever per-element opacity the UI tree
         // itself applied while painting into msaaFbo; this composite is the "put the finished picture
         // on screen" step, not another opacity multiply.
-        blitLayer(msaaResolveFbo, 1f);
+        //
+        // SCOPED, because this draw happens AFTER glScope.close() above and would otherwise be the one
+        // piece of UI state nothing restores. blitLayer binds a material — so on return from endFrame a
+        // shader program of ours is still current, with the frame's own restore already spent.
+        //
+        // In the harness that is invisible: nothing else in that process draws, so a stale program is
+        // never observed. Minecraft observes it immediately. Its final present is
+        // Framebuffer.framebufferRender, which is pure fixed-function — GL_TEXTURE_2D, GL_COLOR_MATERIAL
+        // and a Tessellator quad — and it never calls glUseProgram(0). So Minecraft's blit of its own
+        // framebuffer to the window runs through OUR vertex shader, which expects instanced quad data
+        // out of an SSBO and gets immediate-mode vertices instead.
+        //
+        // The symptom is genuinely bewildering: the UI renders CORRECTLY into Minecraft's framebuffer —
+        // a glReadPixels there shows the whole editor — while the window shows a flat fill, because the
+        // step between the two is broken rather than the drawing. Anything that reads the framebuffer
+        // (a screenshot tool, a capture) therefore disagrees with the screen.
+        try (CgGlScope blitScope = CgGlState.save(CgGlSlot.PROGRAM, CgGlSlot.TEXTURES)) {
+            blitLayer(msaaResolveFbo, 1f);
+        }
 
         currentMaterial = null;
         currentTexture = null;

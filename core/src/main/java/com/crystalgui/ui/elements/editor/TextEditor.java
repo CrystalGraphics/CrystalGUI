@@ -3306,15 +3306,30 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return find.replaceAll(replacement);
     }
 
-    /** Clips document-relative ranges to one line and rebases them onto it. */
+    /**
+     * Clips document-relative ranges to one line and rebases them onto it.
+     *
+     * <p><b>Through {@link #addRange}, so the overlap guard applies here too.</b> This filed ranges
+     * directly for a long time and got away with it because its callers — the find bar, a
+     * {@code ::highlight()} registration — were the only ones publishing under their own names, and each
+     * produced ranges that happened not to overlap. Neither is guaranteed: overlapping matches are
+     * ordinary ({@code "aa"} in {@code "aaa"} matches at 0–2 and 1–3), and a language engine registering
+     * occurrences has no obligation to disjoin them either.</p>
+     *
+     * <p>{@code HighlightRegistry.set} refuses an overlap outright, so the consequence was a hard crash
+     * out of the frame tick — <i>"Ranges within one highlight must not overlap: TextRange[start=42,
+     * end=44] and TextRange[start=43, end=45]"</i> — from a paint pass, naming offsets rather than the
+     * feature that produced them. Dropping the later range is the same resolution {@link #addRange}
+     * already documents and is right for the same reason: both ranges carry one name, so they resolve to
+     * one colour, and the covered text is styled either way.</p>
+     */
     private static void addDocumentRanges(Map<String, List<TextRange>> byName, String name,
                                           List<TextRange> ranges, int lineStart, int lineEnd) {
         for (TextRange range : ranges) {
             int start = Math.max(range.start(), lineStart);
             int end = Math.min(range.end(), lineEnd);
             if (end <= start) continue;
-            byName.computeIfAbsent(name, key -> new ArrayList<>())
-                    .add(TextRange.of(start - lineStart, end - lineStart));
+            addRange(byName, name, TextRange.of(start - lineStart, end - lineStart));
         }
     }
 
