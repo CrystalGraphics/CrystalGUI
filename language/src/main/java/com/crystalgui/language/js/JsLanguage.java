@@ -10,6 +10,7 @@ import com.crystalgui.language.engine.bridge.JsSourceAnalyzer;
 import com.crystalgui.language.engine.bridge.MemberNameMapper;
 import com.crystalgui.language.js.host.JsHost;
 import com.crystalgui.language.map.MappingSet;
+import com.crystalgui.language.map.MemberResolution;
 import com.crystalgui.language.java.classpath.HostClasspath;
 import com.crystalgui.language.java.JavaLanguage;
 import com.crystalgui.language.java.JavaLanguageServices;
@@ -200,15 +201,23 @@ public final class JsLanguage {
      */
     private static MemberNameMapper mapperFor(MappingSet set) {
         if (set == null || set.isIdentity()) return MemberNameMapper.IDENTITY;
+        // THE OWNER IS CONSULTED, exactly as the bytecode remapper does it, and for the same reason:
+        // MCP's entries carry no owner, so `add` (func_76163_a) and `run` (func_99999_d) are ordinary
+        // readable names that a blind reverse lookup would rename on ANY receiver -- including a plain
+        // java.util.List, through this very membrane. Cached, because the membrane asks about the same
+        // few types on every property access. @see MemberResolution
+        MemberResolution.Members members =
+                MemberResolution.caching(MemberResolution.fromClassLoader(JsLanguage.class.getClassLoader()));
         return new MemberNameMapper() {
             @Override
             public String runtimeName(String ownerInternalName, String readableName) {
-                String method = set.runtimeMethod(ownerInternalName, readableName);
+                String method = MemberResolution.runtimeMethod(set, members, ownerInternalName, readableName);
                 // A METHOD FIRST, THEN A FIELD. A name is one or the other and the two tables are separate;
                 // asking both and preferring the method is what makes `world.getBlock` and `world.rand`
                 // both work without the caller having to know which it is.
                 return method.equals(readableName)
-                        ? set.runtimeField(ownerInternalName, readableName) : method;
+                        ? MemberResolution.runtimeField(set, members, ownerInternalName, readableName)
+                        : method;
             }
 
             @Override

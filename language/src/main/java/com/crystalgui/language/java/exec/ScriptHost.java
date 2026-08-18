@@ -7,6 +7,7 @@ import com.crystalgui.language.engine.bridge.ScriptCompiler;
 import com.crystalgui.language.java.JavaLanguage;
 import com.crystalgui.language.java.classpath.HostClasspath;
 import com.crystalgui.language.map.InheritanceAwareRemapper;
+import com.crystalgui.language.map.MemberResolution;
 import com.crystalgui.language.map.PlatformMappings;
 import com.crystalgui.language.map.MappingSet;
 import com.crystalgui.language.run.*;
@@ -399,7 +400,8 @@ public final class ScriptHost implements ScriptRuntime {
         }
         Map<String, byte[]> remapped = new InheritanceAwareRemapper(mappings,
                 InheritanceAwareRemapper.fromClassLoader(hostLoader),
-                InheritanceAwareRemapper.membersFromClassLoader(hostLoader)).remap(compiled.classes());
+                MemberResolution.caching(MemberResolution.fromClassLoader(hostLoader)))
+                .remap(compiled.classes());
         Map<String, byte[]> instrumented = Safepoints.inject(remapped);
 
         // REFUSED BEFORE ANYTHING RUNS, and checked on the REMAPPED bytes -- the policy is written in the
