@@ -1227,14 +1227,21 @@ mostly invisible when wrong:
    the shape matters: `everyCaptureLandsOnTheTextItNamesAcrossMultiByteCharacters` asserts captured
    **text**, not that ranges are in bounds, because a range shifted by the encoding delta is still a
    valid range. `SurrogateSafetyTest` covers the astral-plane half, which is where the real crash was.
-6. **Decoration stickiness goldens** — Monaco's boundary-insertion cases, all four modes. (M8)
-7. **The §13 checklist as tests** — one JUnit method per row (generic substitution, overload
+6. ✅ **Decoration stickiness goldens** — Monaco's boundary-insertion cases, all four modes. Sixteen of them, including both asymmetric modes and the re-sort trap that falls out of mapping being monotonic only for a fixed assoc. (M8)
+7. ✅ **The §13 checklist as tests** — one JUnit method per row (generic substitution, overload
    phases, bridge filtering, accessibility-from-context, pattern-variable regions, lambda target
-   typing), against ECJ bindings, headless. (M6)
+   typing), against ECJ bindings, headless. Twelve of them in `BindingChecklistTest`, and they
+   run on broken source too, which is the state a file spends most of its life in. (M6)
 8. ✅ **Native leak test** — §9.2 D: `openingAndClosingManyDocumentsDoesNotAccumulateNatives`,
    plus `closingIsIdempotent`, since double-close is the failure mode a leak fix introduces.
-9. **Sandbox symmetry** — a refused type is absent from execution, completion, hover and index in
-   the same test. (M10)
+9. ✅ **Sandbox symmetry** — a refused type is absent from execution, completion, hover and index.
+   **Three of those four were covered and hover was not**, though this row had claimed it since
+   M10 — a row claiming coverage that does not exist is worse than one admitting a gap, and
+   writing the missing assertion found a real leak: `InteropResolver` gates `describe` and
+   `membersOf`, but the INFERENCE tier reads `Java.type('java.lang.System')` straight off the
+   syntax and asked nobody, so a variable holding one hovered as `s : java.lang.System` under a
+   policy refusing `java.lang`. That is the sandbox's own failure mode exactly — offered by the
+   editor, refused at run time. Filtered at the seam now, like the member list. (M10)
 10. ✅ **The semantic vocabulary is coloured too** (`StyleGovernanceTest.everySymbolKindNamesACaptureTheSheetColours`)
     — added at M4, and it is the same rule as (1) arriving from a third direction. A
     `SemanticTokenProvider` names its colours through `SymbolKind.captureName()` rather than
@@ -1301,7 +1308,7 @@ rules, and it is also the enforcement of them.
 | 9 | Per-loader route to **post-transform class bytes** (1.7.10 `LaunchClassLoader` + transformer chain; Fabric launcher; Forge/Neo SecureJar) | M6 | probe per platform, 1.7.10 first — it is the hardest and the one that motivated §15.5 |
 | 10 | ~~Every band's ECJ accepts a custom name environment serving remapped/synthesized types~~ | ~~M5/M6~~ | **Answered: all three** — `everyBandsCompilerAcceptsTheRemappedView` reports `[JAVA_8, JAVA_11, JAVA_17]`, both directions per band. The row named exactly the right test and it had never been run that way: every other case in `RemapRoundTripTest` opens `EngineBand.detect()`, which is the machine's own band — so a developer on 17 or 21 exercised 17, and **band 8, the one a 1.7.10 client runs, was the band nobody was testing**. Loops in one JVM, which the pinning makes safe: bands are pinned by class-file major so an *old* host can load them, and a new host loads all three. Both directions because they fail differently — a view the compiler cannot read errors on the readable name, while a view that is not *shadowing* the real class errors on nothing, and that is the silent one |
 | 11 | Mapping data sourcing and licences (1.7.10 MCP CSVs incl. `params.csv`, Mojang official mappings terms, Parchment, Fabric tiny) | M6 | resolve, cache strategy decided, recorded in `THIRD-PARTY.md` |
-| 12 | Rhino member-lookup remapping route per band: patch `JavaMembers` in our shaded Rhino vs adopt KubeJS's fork (does it cover band 1?) | M5/M10 | compile both candidates against the band matrix; pick per band |
+| 12 | ~~Rhino member-lookup remapping route per band~~ | ~~M5/M10~~ | **Answered: neither candidate — a MEMBRANE**, and all three forced it. `JavaMembers` is internal and differs per band, so a patched copy is a fork to re-derive. Subclassing `NativeJavaObject` compiles and throws `NoSuchMethodError` at the first binding, because its `(Scriptable, Object, Class)` constructor is on band 8 and not on band 11. And overriding `wrapAsJavaObject` does nothing at all, since Rhino constructs the wrapper directly — the feature sat silently inert with the factory installed and the mapping non-identity. `RhinoRemapping` overrides `wrap` and wraps the result; see the AGENTS row for what a membrane must forward and why `Wrapper` is load-bearing |
 | 13 | ~~Output remapper with inheritance propagation: adopt tiny-remapper vs write the propagation walk on plain ASM~~ | ~~M6~~ | **Answered: plain ASM**, on three measurements. ASM's real classes are class-file **major 49** (only `module-info.class` is 53, which a Java 8 JVM never reads), so it runs on every band; the three jars total **0.24 MB**; and it has **no transitive dependencies**. tiny-remapper is a similar size alone but pulls `asm-util` and `mapping-io` behind it, and its API is built around remapping jars on disk with a thread pool — a workflow, where what is needed is one focused walk. `InheritanceAwareRemapper` is ~180 lines and the round-trip includes the override case **with a negative control** |
 | 14 | ~~Safepoint-injection overhead (§19.3) on a hot script loop~~ | ~~M7~~ | **Answered: 1.06x, +0.014 ns per iteration**, on a 400M-iteration counted loop, best of five, both paths warmed equally (`SafepointOverheadBenchmark`, `-Pbench`). It does vanish. **The row's own premise was stale** — the injection is not a volatile read but a single `invokestatic` of a void no-arg method, because a read-and-branch needs a new branch target → a new `StackMapTable` entry → `COMPUTE_FRAMES` → ASM loading classes at instrumentation time, which is fatal on an MC host. So the real question was whether HotSpot inlines the callee back to that read, and it does. What guards it from here is not the number: `injectingChangesNeitherTheStackNorTheLocals` asserts the structural property that makes it free, deterministically |
 

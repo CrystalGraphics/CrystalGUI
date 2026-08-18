@@ -238,7 +238,7 @@ public final class RhinoResolution {
         }
         // THE SYNTACTIC ANSWER FIRST, because `Java.type("a.b.C")` and a bare `java.util.List` are both
         // shapes inference reads directly and neither needs a member lookup.
-        TypeRef syntactic = RhinoInference.typeOf(expression, scopes::declaresAnywhere);
+        TypeRef syntactic = inferredType(expression);
         if (syntactic != null) return syntactic;
 
         if (expression instanceof PropertyGet) {
@@ -316,7 +316,7 @@ public final class RhinoResolution {
         String declaredType = doc.declaredType();
         TypeRef stated = declaredType != null ? typeNamed(declaredType)
                 : declared.kind == SymbolKind.FUNCTION ? null
-                : RhinoInference.typeOf(declared.initializer, scopes::declaresAnywhere);
+                : inferredType(declared.initializer);
 
         TypeRef live = liveTypeFor(declared, identifier);
         TypeRef type = live != null ? live : stated;
@@ -806,4 +806,30 @@ public final class RhinoResolution {
     private static String emptyToNull(@Nullable String text) {
         return text == null || text.isEmpty() ? null : text;
     }
+    /**
+     * The syntactic tier's answer, <b>minus anything the policy refuses</b>.
+     *
+     * <p>{@code InteropResolver} gates {@code describe} and {@code membersOf}, so a refused class was
+     * absent from the completion list, from the index and from execution. It was <b>not</b> absent from
+     * the hover: inference reads {@code Java.type('java.lang.System')} straight off the syntax and never
+     * asks anyone, so a variable holding one hovered as {@code s : java.lang.System} under a policy that
+     * refuses {@code java.lang} — the editor naming a type whose every use throws.</p>
+     *
+     * <p>That is the failure the sandbox exists to prevent stated exactly: <em>offered by the editor and
+     * refused at run time</em>, which is worse than either restriction alone because the editor is then
+     * actively wrong. §21.9 has always claimed hover was covered; nothing asserted it, and this is what
+     * writing that assertion found.</p>
+     *
+     * <p>Filtered on the way <b>out</b> rather than inside {@code RhinoInference}, for the reason the
+     * member list already gives: inference is a pure function of the syntax and says the same thing
+     * whatever the posture, so the policy belongs at the seam where an answer is handed over.</p>
+     */
+    @Nullable
+    private TypeRef inferredType(@Nullable AstNode expression) {
+        TypeRef inferred = RhinoInference.typeOf(expression, scopes::declaresAnywhere);
+        if (inferred == null || interop == null) return inferred;
+        String javaName = JsTypeRef.javaNameOf(inferred);
+        return javaName == null || interop.permits(javaName) ? inferred : null;
+    }
+
 }

@@ -470,7 +470,12 @@ correction), same `CodeAction` types, same popup, same Alt+Enter, same version g
 `ChangeSet`s stamped with the analysis version like Java's — and it stays small because Rhino gives
 absolute positions for every node. Every correction is tested through the same `FixFixture` shape Java
 uses (a fixture file per family under `fixtures/js/`), and the catalog file `plan_quickfix_catalog.md`
-gains a JS column rather than a second document.
+gains a JS column rather than a second document. **— Revised: it does not, and should not.** Every row
+in that file is keyed on an `IProblem` id and Rhino reports none, so a JS column would be empty for
+nearly every row. The two catalogues divide differently: Java's is mostly corrections answering a
+diagnostic, JavaScript's mostly intentions answering the caret — a different key, not a second column
+under the same one. The JS catalogue is the class javadoc on `JsQuickFixes` and `JsIntentions`, and
+§8 below is its reasoning.
 
 ---
 
@@ -793,7 +798,7 @@ JS quotes `src.zip` when present; go-to-definition to a JS declaration and to a 
 - The tier provenance §7 asks for was already done at 10.6, in the owner band's text.
 
 **10.9 — Quick fixes + intentions.** `JsRewrites`, `JsQuickFixes`, the §8 catalog, fixtures under
-`fixtures/js/`; `plan_quickfix_catalog.md` gains a JS column. *Tests:* one fixture per family through
+`fixtures/js/`; the catalogue is the class javadoc, not a column in `plan_quickfix_catalog.md` — see §8. *Tests:* one fixture per family through
 the `FixFixture` shape; `Negation`, `Names`, `SimilarNames`, `SwitchIntentions`' rule reused rather
 than copied — a test asserting the JS intention and the Java one agree on the same shape.
 

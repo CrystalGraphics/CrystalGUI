@@ -122,7 +122,8 @@ public final class InteropResolver {
         }
     }
 
-    private boolean permits(@Nullable String binaryName) {
+    /** Package-private so {@code RhinoResolution} can filter the INFERENCE tier on the same policy. */
+    boolean permits(@Nullable String binaryName) {
         Predicate<String> policy = allowsClass;
         return policy == null || binaryName == null || binaryName.isEmpty() || policy.test(binaryName);
     }
