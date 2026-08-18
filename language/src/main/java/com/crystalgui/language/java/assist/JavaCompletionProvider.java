@@ -7,6 +7,7 @@ import com.crystalgui.text.Change;
 import com.crystalgui.text.lang.CompletionItem;
 import com.crystalgui.text.lang.CompletionList;
 import com.crystalgui.text.lang.CompletionProvider;
+import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.text.lang.SymbolKind;
 import com.crystalgui.text.lang.SymbolModifier;
@@ -102,7 +103,12 @@ public final class JavaCompletionProvider implements CompletionProvider {
         }
 
         int wordStart = Math.max(0, request.offset() - request.prefix().length());
-        List<CompletionItem> items = receiverEndingAt(wordStart) >= 0
+        // AN IMPORT IS A QUALIFIED NAME, so it cannot be completed on a simple one. The ordinary list
+        // matches `request.prefix()` against simple names, which for `import net.mine` is `mine` and
+        // matches nothing -- the popup opened with no rows on every classpath, Minecraft or not.
+        List<CompletionItem> items = importPrefixAt(request.offset()) != null
+                ? importItems(importPrefixAt(request.offset()))
+                : receiverEndingAt(wordStart) >= 0
                 ? memberItems(current, receiverEndingAt(wordStart), request.offset())
                 : openCodeItems(current, request);
 
@@ -309,6 +315,98 @@ public final class JavaCompletionProvider implements CompletionProvider {
 
     /** The type whose members every other Java type inherits. */
     private static final String OBJECT = "java.lang.Object";
+
+    /**
+     * What has been typed after {@code import} on this line, or null when the caret is not in one.
+     *
+     * <p>Read off the text rather than the tree, deliberately: an import being typed is <b>incomplete</b>
+     * — {@code import net.mine} has no semicolon and no resolvable name — so the parse either recovers it
+     * as something else or drops it, and asking the AST what it is answers about a node that reflects the
+     * last keystroke that happened to parse. The line is what the author can see.</p>
+     *
+     * <p>Refuses once a {@code ;} has been passed, so the caret after a finished import is ordinary code
+     * again, and refuses a static import, whose tail is a member rather than a type.</p>
+     */
+    private String importPrefixAt(int offset) {
+        // The LINE, through the buffer's own row lookup rather than a scan back through the document —
+        // the same answer at a fraction of the cost on a file of any size.
+        TextPoint caret = buffer.offsetToPoint(offset);
+        String row = buffer.line(caret.row());
+        String line = row.substring(0, Math.min(Math.max(caret.column(), 0), row.length()));
+
+        String trimmed = line.trim();
+        if (!trimmed.startsWith("import")) return null;
+        String tail = trimmed.substring("import".length());
+        if (tail.isEmpty() || !Character.isWhitespace(tail.charAt(0))) return null;
+        tail = tail.trim();
+        // A finished import is not a context any more, and `import static` completes members.
+        if (tail.indexOf(';') >= 0 || tail.startsWith("static")) return null;
+        return tail;
+    }
+
+    /**
+     * Packages and types under a qualified prefix — what an import statement can actually take.
+     *
+     * <h3>Both kinds, because a package is most of what you type</h3>
+     *
+     * <p>{@code net.mine} is three packages deep before it is a type, and a list that offered only types
+     * would show every class under {@code net.minecraft} at the first keystroke and nothing that helps
+     * you get there. So a sub-package is a row of its own: accepting it extends the prefix by one segment
+     * and leaves the caret ready for the next, which is how every IDE completes a qualified name.</p>
+     *
+     * <p>Packages are derived from the entries rather than held separately — a package exists exactly
+     * when something is in it, so a second structure could only disagree with the first.</p>
+     */
+    private List<CompletionItem> importItems(String typedPrefix) {
+        List<CompletionItem> items = new ArrayList<>();
+        if (typedPrefix.isEmpty()) return items;
+
+        int lastDot = typedPrefix.lastIndexOf('.');
+        String parent = lastDot < 0 ? "" : typedPrefix.substring(0, lastDot);
+
+        TypeIndex.Match matched = types.startingWith(typedPrefix);
+        java.util.Set<String> packages = new java.util.LinkedHashSet<>();
+        for (TypeIndex.Entry entry : matched.entries()) {
+            if (entry.packageName().equals(parent)) {
+                items.add(importTypeItem(entry));
+                continue;
+            }
+            // The NEXT segment only. `net.minecraft.client` under a typed `net.mine` contributes
+            // `minecraft`, not the whole remaining path -- offering the tail would insert three segments
+            // from one keystroke and skip everything in between.
+            String remainder = parent.isEmpty()
+                    ? entry.packageName() : entry.packageName().substring(parent.length() + 1);
+            int dot = remainder.indexOf('.');
+            packages.add(dot < 0 ? remainder : remainder.substring(0, dot));
+        }
+        for (String segment : packages) {
+            items.add(CompletionItem.builder(segment, SymbolKind.PACKAGE)
+                    .detail(parent.isEmpty() ? segment : parent + "." + segment)
+                    .filterText(segment)
+                    // ABOVE the types, because a package is a step and a type is a destination: at
+                    // `net.mine` the answer is almost always `minecraft`, never one of its thousand classes.
+                    .sortText(" " + segment)
+                    // NO EXPLICIT RANGE. The session replaces the word under the caret, and a dot is not
+                    // a word character -- so inserting `minecraft` over a typed `mine` leaves
+                    // `net.minecraft`, which is exactly the step this row means.
+                    .insertText(segment)
+                    .build());
+        }
+        typesSampled = matched.truncated();
+        return items;
+    }
+
+    /** A type row inside an import — the qualified name is already being written, so no import edit. */
+    private CompletionItem importTypeItem(TypeIndex.Entry type) {
+        TypeIndex.Kind kind = types.kindOf(type);
+        return CompletionItem.builder(type.simpleName(), kind.kind())
+                .modifiers(kind.isAbstract() ? java.util.Set.of(SymbolModifier.ABSTRACT) : java.util.Set.of())
+                .detail(type.packageName())
+                .filterText(type.simpleName())
+                .sortText("~" + type.simpleName())
+                .insertText(type.simpleName())
+                .build();
+    }
 
     /**
      * A type that is not imported yet — and the import that accepting it must bring.

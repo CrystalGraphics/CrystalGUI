@@ -187,6 +187,17 @@ public final class TypeIndex {
             return new Match(kept, all.truncated());
         }
 
+        /** As {@link TypeIndex#startingWith}, minus what the policy refuses. */
+        public Match startingWith(String qualifiedPrefix) {
+            Match all = index.startingWith(qualifiedPrefix);
+            if (allowsClass == null) return all;
+            List<Entry> kept = new ArrayList<>(all.entries().size());
+            for (Entry entry : all.entries()) {
+                if (allowsClass.test(entry.qualifiedName())) kept.add(entry);
+            }
+            return new Match(kept, all.truncated());
+        }
+
         public Kind kindOf(Entry entry) {
             return index.kindOf(entry);
         }
@@ -221,6 +232,41 @@ public final class TypeIndex {
             under.add(entry);
         }
         return new Match(under, truncated);
+    }
+
+    /**
+     * Entries whose <b>qualified name</b> begins with {@code qualifiedPrefix}, partial segment included.
+     *
+     * <h3>Why {@link #allUnder} cannot answer this</h3>
+     *
+     * <p>{@code allUnder} matches on a dot boundary, which is right for "everything in
+     * {@code java.util}" and wrong the moment a segment is half typed: {@code net.mine} is not a package,
+     * so it matches nothing at all, and the import being written offers nothing until the segment happens
+     * to be complete. That is exactly when a completion list is least useful.</p>
+     *
+     * <p>So this is a plain prefix test on the qualified name. Bounded like the others, and truncation is
+     * reported so the caller knows to ask again as the query narrows.</p>
+     */
+    public Match startingWith(String qualifiedPrefix) {
+        if (qualifiedPrefix == null || qualifiedPrefix.isEmpty()) return new Match(List.of(), false);
+        ensureBuilt();
+        List<Entry> found = new ArrayList<>();
+        boolean truncated = false;
+        for (Entry entry : entries) {
+            // The package first, because it is an interned string shared by every entry in it -- a cheap
+            // reject before building the qualified name, which is a concatenation per entry.
+            if (!entry.packageName().isEmpty() && !qualifiedPrefix.startsWith(entry.packageName())
+                    && !entry.packageName().startsWith(qualifiedPrefix)) {
+                continue;
+            }
+            if (!entry.qualifiedName().startsWith(qualifiedPrefix)) continue;
+            if (found.size() >= MAX_RESULTS) {
+                truncated = true;
+                break;
+            }
+            found.add(entry);
+        }
+        return new Match(found, truncated);
     }
 
     /** Whether {@code packageName} is at or under {@code prefix}, on a dot boundary. */
@@ -548,10 +594,6 @@ public final class TypeIndex {
     /** Turns {@code java/util/ArrayList.class} into an entry, or ignores it. */
     private static void add(String path, List<Entry> into, String container) {
         if (!path.endsWith(".class")) return;
-        // NESTED TYPES ARE SKIPPED. `Map$Entry` cannot be imported under that name and inserting it
-        // produces a compile error naming a type the list just offered -- which reads as the completion
-        // being wrong rather than the name being unusable.
-        if (path.indexOf('$') >= 0) return;
         // Neither of these is a type anybody writes.
         if (path.endsWith("package-info.class") || path.endsWith("module-info.class")) return;
 
@@ -566,6 +608,17 @@ public final class TypeIndex {
         // either. @see ScriptPlatform#runtimeClassName
         String internalName = path.substring(0, path.length() - ".class".length());
         String binary = ScriptPlatforms.current().runtimeClassName(internalName).replace('/', '.');
+
+        // NESTED TYPES ARE SKIPPED. `Map$Entry` cannot be imported under that name and inserting it
+        // produces a compile error naming a type the list just offered -- which reads as the completion
+        // being wrong rather than the name being unusable.
+        //
+        // AFTER THE RENAME, NOT BEFORE, and that ordering is the whole of it. 1.7.10 obfuscation gives an
+        // inner class a TOP-LEVEL Notch name -- `avf.class`, no dollar in it anywhere -- so a check
+        // against the path passes it, and the dollar only appears once the name is translated back. The
+        // list filled with Minecraft$1 through Minecraft$16 before Minecraft itself, none of which can be
+        // imported. Checking the on-disk path was correct for as long as the two names were the same.
+        if (binary.indexOf('$') >= 0) return;
         // NOT FOR USERS. `sun.` and anything with an `internal` package segment is implementation detail
         // that the compiler will refuse or warn about; offering it is offering a mistake. IntelliJ hides
         // the same set. Filtered here rather than per-source so the classpath gets it too.
