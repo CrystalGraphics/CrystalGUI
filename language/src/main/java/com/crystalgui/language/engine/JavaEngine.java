@@ -3,7 +3,6 @@ package com.crystalgui.language.engine;
 import com.crystalgui.language.engine.bridge.ScriptCompiler;
 import com.crystalgui.language.engine.bridge.SourceAnalyzer;
 import com.crystalgui.language.java.classpath.PlatformTypeBytes;
-import com.crystalgui.language.map.MappingSet;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -49,9 +48,9 @@ public final class JavaEngine implements Closeable {
         // `PlatformTypeBytes.of` answers NONE when no platform is registered, so a harness and every
         // test are unaffected and resolution goes entirely through the classpath, exactly as before.
         //
-        // MappingSet.IDENTITY until 26.7 probes the namespace: a dev client's runtime really is readable,
-        // so this is the correct answer there rather than a placeholder.
-        this.compiler = compiler.resolveAgainst(PlatformTypeBytes.of(MappingSet.IDENTITY));
+        // Which namespace the runtime speaks is PROBED rather than passed -- see PlatformMappings -- so
+        // there is nothing to decide here and no way for two engines to decide it differently.
+        this.compiler = compiler.resolveAgainst(PlatformTypeBytes.of());
         this.analyzer = analyzer;
     }
 
