@@ -1073,18 +1073,45 @@ never be documented as a security boundary. Claiming otherwise is a lie with a C
 
 ### 19.2 The allowlist
 
-One **allowlist** policy object (never a denylist — the auto-close precedent), consulted at every
-layer that could leak a name, so the tool never teaches an API the runtime refuses:
+One policy object, consulted at every layer that could leak a name, so the tool never teaches an API
+the runtime refuses:
 
-| Layer | Enforcement |
-|---|---|
-| JS execution | Rhino `ClassShutter` + scope curation — real, call-time interception |
-| Java compilation | name-environment curation: refused types don't resolve (advisory — see §19.1) |
-| Completion & hover | provider-side filter |
-| Type index | refused types never indexed |
+| Layer | Enforcement | Built |
+|---|---|---|
+| JS execution | Rhino `ClassShutter` + scope curation — real, call-time interception | ✅ |
+| Java execution | `RefusedTypes` scans the compiled constant pool and refuses the **whole script before it starts**; `ScriptClassLoader.loadClass` gates what links late | ✅ |
+| Java compilation | name-environment curation: refused types don't resolve (advisory — see §19.1) | ❌ |
+| Completion & hover | provider-side filter | ✅ JS only |
+| Type index | refused types never indexed | ✅ JS only |
 
-Default posture: the host's own API surface, the MC surface (§15.5), and a conservative `java.*`
-slice. The host owns the policy; `language/` owns the mechanism.
+Default posture: allow-all until a host calls `restrictTo`. The host owns the policy; `language/`
+owns the mechanism.
+
+**Revised: a denylist as well, and it is now the expected spelling.** The rule was allowlist-only,
+because *a denylist is unsound the moment a new class appears*. That is still true and is still why a
+denylist may never be what a security claim rests on — but it stopped being the whole argument once
+§19.1 settled the honest posture. For a **guardrail**, the allowlist that would actually be needed is
+the host API plus the MC surface plus a usable slice of `java.*`: thousands of entries. *A control
+nobody will write is worse than a leaky one that gets used.* So the two **compose** — a denial is a
+veto, checked before the allowlist — and `ScriptPolicy.denying(ScriptPolicy.UNSAFE)` is the posture
+this was built for. `UNSAFE` is reflection, method handles, `ClassLoader`, `Runtime`,
+`ProcessBuilder`, `java.security` and the internals: without those refused, a class filter is
+decorative, because every one of them turns a permitted name into an arbitrary one.
+
+**And a floor the host cannot widen.** `ScriptPolicy.ALWAYS_REFUSED` covers `com.crystalgui.language`
+and is checked ahead of both lists. Without it the whole thing was one line deep: `restrictTo` is
+`public static`, the class is on the host classpath, and `ScriptClassLoader` is parent-first, so under
+"deny `java.io`" the name `com.crystalgui.language.java.JavaLanguage` was not denied and a script
+could simply switch the filter off for every script after it. It applies to any policy that restricts
+anything — under allow-all there is nothing to relax, and a script installing a policy of its own can
+only narrow, after which the floor refuses anything that would widen it again.
+
+Two exemptions, both narrow and both load-bearing. A script's **own classes** are never asked about —
+they exist in no policy, so asking would refuse every script under any allowlist that did not name the
+package the prelude invented. And `ScriptControl`, because `Safepoints` injects a call to it into every
+method of every script: policing that made the **kill switch** the thing that refused the script, with
+a message naming an internal the author never wrote. It exposes one `public static void` that reads
+the calling thread's own interrupt status.
 
 ### 19.3 Runaway scripts
 
