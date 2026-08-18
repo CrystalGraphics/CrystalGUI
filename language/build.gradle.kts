@@ -171,7 +171,29 @@ dependencies {
     // Note this is jdt.core ALONE, without band 8's platform closure. The adapter uses the compiler,
     // not the workspace, and pulling the closure in would let it reach APIs that happen to resolve here
     // and are absent from a real deployment's loader.
-    compileOnly("org.eclipse.jdt:org.eclipse.jdt.core:$jdtBand8")
+    //
+    // AND `isTransitive = false` IS WHAT MAKES THAT TRUE. The sentence above was written as a statement
+    // of intent and was false for as long as it existed: jdt.core declares its platform dependencies as
+    // OPEN RANGES, so a plain `compileOnly` resolved the whole closure at whatever was newest --
+    // core.runtime 3.34.200, osgi 3.24.200, jna 5.18.1, thirteen artifacts of it. Every one is class
+    // major 53+ and CANNOT LOAD ON BAND 8, which is the failure this file already spends three
+    // paragraphs on; `checkEngineBands` catches it for the bands and nothing was watching the adapter's
+    // own compile path. So the adapter could name an API that resolves here and is absent from every
+    // deployment -- exactly the hazard the comment claims to prevent.
+    //
+    // If something here ever genuinely needs a platform type, add it from `platformBand8` above rather
+    // than by restoring transitivity: those versions are pinned, and a range is not.
+    compileOnly("org.eclipse.jdt:org.eclipse.jdt.core:$jdtBand8") { isTransitive = false }
+
+    // ONE platform artifact, and the compiler named it: `ASTParser.createAST` takes an
+    // `org.eclipse.core.runtime.IProgressMonitor`, so javac cannot type the call without it even though
+    // every caller here passes null. That package is the one split across `core.runtime` and
+    // `equinox.common` -- the split this file's signer-conflict check exists for -- and IProgressMonitor
+    // is on the `equinox.common` side.
+    //
+    // Taken from `platformBand8` rather than from a range, which is the whole point of the line above:
+    // 3.14.100 is pinned, ships in band 8, and is the version a Java 8 host will actually load.
+    compileOnly("org.eclipse.platform:org.eclipse.equinox.common:3.14.100") { isTransitive = false }
 
     // AND org.eclipse.text, for the SAME BAND and for one reason: `ASTRewrite` lives in jdt.core but
     // both its exits are spelled in types that do not -- `rewriteAST` takes an `org.eclipse.jface.text
@@ -184,7 +206,8 @@ dependencies {
     // `platformBand11` and band 17's resolved closure alike, so it is present at runtime on every band
     // -- compiling against it asserts something that is true in production rather than only here.
     // Pinned to band 8's version for the usual reason: an API added later must fail the build now.
-    compileOnly("org.eclipse.platform:org.eclipse.text:$eclipseTextBand8")
+    // Non-transitive for the reason given on jdt.core: this one's ranges are open too.
+    compileOnly("org.eclipse.platform:org.eclipse.text:$eclipseTextBand8") { isTransitive = false }
 
     // AND RHINO, same rule, same band. The JS adapter names `org.mozilla.javascript.*` for exactly the
     // reason the ECJ one names JDT: it lives on the far side of the bridge and its whole job is to speak
@@ -205,7 +228,7 @@ dependencies {
     // honest, because the ONLY route to an engine remains EngineSource + EngineClassLoader. The trap it
     // opens is narrow and loud: naming a non-constant JDT API here compiles and then dies at runtime with
     // NoClassDefFoundError, since jdt.core is on no test RUNTIME classpath. Constants only.
-    testCompileOnly("org.eclipse.jdt:org.eclipse.jdt.core:$jdtBand8")
+    testCompileOnly("org.eclipse.jdt:org.eclipse.jdt.core:$jdtBand8") { isTransitive = false }
 
     // ── ASM, for the mapping boundary (§15.5) ───────────────────────────────────────────────────
     //
