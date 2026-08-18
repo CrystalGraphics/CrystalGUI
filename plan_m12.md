@@ -978,12 +978,22 @@ pixel layout or cosmetics.
 
 ## 26.12 Risks
 
-1. **Script classes are defined by our own loader, bypassing FML's deobfuscating transformer.** In
-   1.7.10 prod, mod bytecode ships at SRG names and FML remaps SRG→notch at load — but that transformer
-   applies to classes loaded through `LaunchClassLoader`, and a compiled script is `defineClass`'d by the
-   engine's own loader. So the **out** direction may need readable→notch rather than readable→SRG.
-   **Settle this before 26.5**: it decides whether the CSV pair suffices or `SrgFormat` and
-   `packaged.srg` are needed too. Cheap to determine, expensive to discover after building the mapping.
+1. ~~**Script classes are defined by our own loader, bypassing FML's deobfuscating transformer.**~~
+   **SETTLED: the out direction is readable→SRG, and the CSV pair suffices.** No `SrgFormat`, no
+   `packaged.srg`.
+
+   The concern was that a compiled script is `defineClass`'d by `ScriptClassLoader` rather than by
+   `LaunchClassLoader`, so FML's transformer never touches it. True, and it does not matter: what the
+   transformer has to have touched is the class the script *refers to*, not the script itself.
+   `ScriptClassLoader` is `super(parent)` over the **host** loader and its `loadClass` ends in
+   `super.loadClass(name, resolve)` — parent-first — so `net.minecraft.world.World` is resolved by
+   `LaunchClassLoader` with `FMLDeobfuscatingRemapper` already applied. The class a script links against
+   therefore presents **SRG** members, which is exactly what `liveBytes()` reports through the same
+   chain. Only the script's own classes are defined by our loader, and those contain no Minecraft names
+   to translate — their references are resolved by the JVM against the parent-loaded, SRG-named types.
+
+   Determined by reading `ScriptClassLoader` rather than by running a reobfuscated client, which is what
+   made it cheap; 26.8 still confirms it end to end.
 2. **ECJ internal API across three bands** — see 26.3. Mitigated by extending `smokeEngineBands`, and the
    reason that step is second rather than later.
 3. **Transformer order and exclusions.** `getTransformers()` gives the list, but `transformName` /
