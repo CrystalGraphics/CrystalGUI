@@ -1033,8 +1033,11 @@ name node**, never from `getArguments()`, which is the lesson `UnusedPrivateFiel
   catalogue already records the case that makes it dangerous — an RHS with a call in it, where deleting
   drops the side effect. Narrow enough to need its own thinking, not a line in a batch.
 
-Both stay in the catalogue; neither ships here. Deferring them is the point of having written §12's
-exclusions down.
+**Half stale, and corrected rather than deleted.** `DeadCode` <b>did</b> ship — `DeadCodeCorrections`
+is registered and answers for it — so the paragraph above records the reasoning that was true when the
+batch was written and stopped being true when the family was built. `AssignmentHasNoEffect` is still
+deferred, and still for the stated reason: an RHS with a call in it makes deleting the statement drop a
+side effect, which is narrow enough to need its own thinking rather than a line in a batch.
 
 **`EcjProblemSeverities` is created only if something needs enabling**, and the only thing that does is
 step 5's `MissingOverrideAnnotation` — which makes it step 5's cost, not step 4's.
