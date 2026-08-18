@@ -1,5 +1,6 @@
 package com.crystalgui.language.run;
 
+import com.crystalgui.fs.Resource;
 import com.crystalgui.language.java.exec.ScriptHost;
 import com.crystalgui.language.engine.EngineBand;
 import com.crystalgui.language.engine.EngineSource;
@@ -37,6 +38,9 @@ import static org.junit.Assert.fail;
  */
 public class ScriptHostTest {
 
+    /** Distinct from -1, which is a real answer meaning "running, but not on a line I can name". */
+    private static final int NOT_ASKED = -99;
+
     /** What a script's side effects land on — standing in for the application's own API. */
     public static final class Sink {
         public static final List<String> WRITTEN = new ArrayList<>();
@@ -48,6 +52,22 @@ public class ScriptHostTest {
 
         public static void tick() {
             LOOPS.incrementAndGet();
+        }
+
+        /** The ref under test, and the line it reported. @see #aWrappedScriptReportsTheAuthorsLine */
+        public static final AtomicReference<ScriptRef> REF = new AtomicReference<>();
+        public static final AtomicInteger LINE = new AtomicInteger(NOT_ASKED);
+
+        /**
+         * Asks the ref which of the SCRIPT's lines is executing, from inside a call the script made.
+         *
+         * <p>Called rather than asserted from outside because {@code ClassOrigin.currentLine} walks the
+         * live stack: the script's own frame has to be on it, which it only is while the script is
+         * running. Reading it afterwards would answer -1 whatever the mapping did.</p>
+         */
+        public static void recordLine() {
+            ScriptRef ref = REF.get();
+            LINE.set(ref == null ? NOT_ASKED : ref.origin().currentLine());
         }
 
         /** Weak, so the reporting cannot be what keeps a loader alive. */
@@ -83,6 +103,8 @@ public class ScriptHostTest {
         Sink.WRITTEN.clear();
         Sink.LOOPS.set(0);
         Sink.LOADERS.clear();
+        Sink.REF.set(null);
+        Sink.LINE.set(NOT_ASKED);
     }
 
     @After
@@ -163,6 +185,45 @@ public class ScriptHostTest {
         } catch (IllegalStateException expected) {
             assertTrue(expected.getMessage(), expected.getMessage().contains("did not compile"));
         }
+    }
+
+    /**
+     * <b>A wrapped script reports the AUTHOR's line, not the generated unit's.</b>
+     *
+     * <p>The prelude puts a class header, a method header and any hoisted imports above the author's
+     * first line, so a JVM frame names a line that is further down than anything they wrote. Six lines of
+     * script reported themselves as line 10 in the Minecraft client, and the console link navigated past
+     * the end of the file.</p>
+     *
+     * <p>{@code ScriptPrelude} has carried the mapping since it was written and its javadoc says outright
+     * that "a runtime stack trace and a compile diagnostic must name the line the author sees" — the
+     * diagnostics half was wired and this one was not, which is the shape of bug a test per half catches
+     * and a test of the mapping alone does not.</p>
+     *
+     * <p>Asserted through a real compile and a real run because {@code currentLine} walks the live stack;
+     * there is no way to fake a frame, and a unit test of the arithmetic would pass against a host that
+     * never passes the offset in.</p>
+     */
+    @Test
+    public void aWrappedScriptReportsTheAuthorsLine() throws Throwable {
+        // Two imports the prelude HOISTS, a blank, then the call: the author's line 4.
+        String body = "import java.util.List;\n"
+                + "import java.util.Map;\n"
+                + "\n"
+                + Sink.class.getCanonicalName() + ".recordLine();\n";
+
+        ScriptPrelude.Wrapped wrapped = wrap(body);
+        assertTrue("the prelude prepended nothing, so this would pass without the mapping",
+                wrapped.prefixRows() > 0);
+
+        ScriptHost.Compiled compiled = compileOrFail(wrapped)
+                .withSource(Resource.of(Resource.SCHEME_PROJECT, "src/Main.java"));
+        Sink.REF.set(compiled.ref());
+
+        host.run(compiled, Map.of());
+
+        assertEquals("the console would link " + wrapped.prefixRows() + " lines past where it should",
+                4, Sink.LINE.get());
     }
 
     // ── Re-run replaces ─────────────────────────────────────────────────────────────────────────
