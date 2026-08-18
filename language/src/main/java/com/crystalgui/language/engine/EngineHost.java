@@ -3,6 +3,9 @@ package com.crystalgui.language.engine;
 import java.io.Closeable;
 import java.io.IOException;
 import java.net.URL;
+import com.crystalgui.language.platform.ScriptPlatform;
+import com.crystalgui.language.platform.ScriptPlatforms;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.CodeSource;
@@ -198,12 +201,48 @@ public final class EngineHost implements Closeable {
      */
     public static final String ENGINES_DIRECTORY_PROPERTY = "crystalgui.engines.dir";
 
-    /** The staged-directory source a dev run sets up, or nothing. */
+    /**
+     * Where the bands live inside a jar that bundles them — one directory per band beneath it.
+     *
+     * <p>Under {@code assets/} so it travels with the resources a mod jar already carries and cannot
+     * collide with a package name.</p>
+     */
+    public static final String BUNDLED_ENGINES_ROOT = "assets/crystalgui/engines";
+
+    /**
+     * The staged directory a dev run points at, then the bands bundled in the jar, then nothing.
+     *
+     * <h3>The property stays first, and it is not merely legacy</h3>
+     *
+     * <p>A dev run and {@code runHarness} both set it, and both want the jars Gradle just resolved rather
+     * than whatever a previous build extracted — otherwise changing a pin in {@code language/build.gradle
+     * .kts} would leave the old band in the cache and the new one unused, which reads as the pin not
+     * taking effect. An override that only applies when somebody sets it costs a property read.</p>
+     *
+     * <h3>All three answers are legitimate deployments</h3>
+     *
+     * <p>Extraction needs somewhere to write, which is {@link ScriptPlatform#cacheRoot()} — so a process
+     * with no platform registered simply has no second candidate, exactly as before this existed. And a
+     * jar that bundles no band yields an empty listing rather than an error: shipping the editor without
+     * the engines is a supported build, and it degrades to grammar-only colouring like every other
+     * absence in this stack.</p>
+     */
     public static EngineSource defaultSource() {
+        return EngineSource.firstOf(configuredSource(), bundledSource());
+    }
+
+    private static EngineSource configuredSource() {
         String configured = System.getProperty(ENGINES_DIRECTORY_PROPERTY);
         if (configured == null || configured.trim().isEmpty()) return EngineSource.NONE;
         Path root = Path.of(configured.trim());
         return Files.isDirectory(root) ? EngineSource.directory(root) : EngineSource.NONE;
+    }
+
+    private static EngineSource bundledSource() {
+        Path cacheRoot = ScriptPlatforms.current().cacheRoot();
+        if (cacheRoot == null) return EngineSource.NONE;
+        return EngineSource.extractedFrom(EngineHost.class.getClassLoader(),
+                BUNDLED_ENGINES_ROOT, cacheRoot.resolve("engines"));
     }
 
     private static EngineHost shared;
