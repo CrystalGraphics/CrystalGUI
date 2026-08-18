@@ -298,17 +298,27 @@ public final class JavaSignatures {
     }
 
     /**
-     * {@code (@Nullable String x, int count)} — with real names when this file declares the method.
+     * {@code (@Nullable String x, int count)} — with real names wherever they can be found.
      *
-     * <p><b>Names only when the declaration is in this unit.</b> {@code IMethodBinding} exposes
-     * parameter types and not names, because a class read off the classpath genuinely has none unless
-     * it was built with {@code -parameters}; the names live on the {@code MethodDeclaration}, which
-     * exists only for source. IntelliJ shows {@code x} for {@code println} because it has the JDK
-     * sources attached, and falls back to types exactly as this does when it does not.</p>
+     * <h3>This paragraph has been wrong twice, in opposite directions</h3>
      *
-     * <p>So a classpath method reads {@code println(String)} and one in the open file reads
-     * {@code println(String x)}. That difference is real information — it says where the source is —
-     * rather than an inconsistency to paper over with {@code arg0}.</p>
+     * <p>It first read <em>"names only when the declaration is in this unit"</em>, on the reasoning that
+     * {@code IMethodBinding} exposes types and not names and the names live on a
+     * {@code MethodDeclaration} that exists only for source. Both halves are true and the conclusion was
+     * not. <b>{@code AttachedSources}</b> found the source — a {@code -sources.jar} beside a jar, or the
+     * JDK's own {@code src.zip} — and the classpath case started quoting names like any other.</p>
+     *
+     * <p>Then it read that a class file <em>"genuinely has none unless it was built with
+     * {@code -parameters}"</em>, which sent M13 §25.1 looking in the wrong place for a session.
+     * <b>Names survive compilation.</b> {@code ArrayList.add} carries {@code e} in its
+     * {@code LocalVariableTable} and our own jar carries its names today, because Gradle passes
+     * {@code -g}. {@code -parameters} is needed for one shape only — an abstract or interface method,
+     * which has no {@code Code} attribute and therefore no table.</p>
+     *
+     * <p>So the fallback chain is: this unit's declaration, then an attached source's, then the class
+     * file itself ({@link ClassFileParameterNames}). Types-only is what is left when all three miss,
+     * which is an obfuscated jar or a stripped one — and it is a real answer rather than a shortfall,
+     * because {@code arg0} would be worse than nothing.</p>
      */
     private void appendParameters(Signature.Builder out, IMethodBinding method, boolean broken) {
         out.append("(", "punctuation.bracket");
@@ -819,10 +829,12 @@ public final class JavaSignatures {
         // the one band meant to hold a single declaration, sitting directly above the band whose
         // whole purpose is documentation.
         //
-        // Skipped by READING THE TEXT rather than by asking getJavadoc(), which answers null unless
-        // the parser was configured with doc-comment support -- and it still is not, so the node
-        // covered the comment while the accessor denied it existed. Scanning also catches the ordinary
-        // `//` and `/* */` comments a Javadoc node would never have represented.
+        // Skipped by READING THE TEXT rather than by asking getJavadoc(). That began as a workaround --
+        // the parser had no doc-comment support, so the node covered the comment while the accessor
+        // denied it existed -- and `EcjOptions` turns that support on now (M13 §25.6). The scan stays,
+        // because it was always doing the wider job: an ordinary `//` or `/* */` comment above a
+        // declaration is not a Javadoc node and never would have been, and it has to be stepped over
+        // just the same.
         from = skipLeadingComments(from, end);
         if (from >= end) return null;
 

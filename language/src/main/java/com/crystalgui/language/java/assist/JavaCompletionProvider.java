@@ -374,10 +374,18 @@ public final class JavaCompletionProvider implements CompletionProvider {
     /**
      * Documentation for one row.
      *
-     * <p>Nothing to add yet: {@code SymbolInfo.documentation} is null across the bridge because JDT only
-     * attaches javadoc when the AST was built with source for the declaring type, which is true for this
-     * file and false for everything on the classpath. Returning the item unchanged is the honest answer and
-     * is what {@link CompletionItem#needsResolution()} expects — the pane shows nothing rather than
+     * <p><b>Still nothing to add, and the reason has changed.</b> This used to say documentation was null
+     * across the bridge because JDT attaches javadoc only where it has source for the declaring type —
+     * which stopped being true when {@code AttachedSources} landed and again at M13 §25.6, where the
+     * hover path started reporting a rendered comment for anything with source reachable.</p>
+     *
+     * <p>What remains true is narrower: the <em>completion</em> path builds its symbols from bindings
+     * without asking for a comment, so the rows carry none. This method is exactly where that would be
+     * filled — it is the lazy hook, and the pane it feeds is the one place a doc is worth the lookup —
+     * but it receives a {@link CompletionItem} rather than a binding, so filling it means re-resolving
+     * the declaring type. Real work rather than a line, and it is recorded in {@code plan_m13.md} §25.6
+     * rather than left as a comment nobody owns. Returning the item unchanged is still the honest answer
+     * and is what {@link CompletionItem#needsResolution()} expects — the pane shows nothing rather than
      * "loading" forever.</p>
      */
     @Override

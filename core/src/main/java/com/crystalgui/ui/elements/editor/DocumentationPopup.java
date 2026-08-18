@@ -62,10 +62,13 @@ import javax.annotation.Nullable;
  * here: the band arrives when an engine reports structured doc, and no widget change is needed to hold a
  * place for it.</p>
  *
- * <p><b>The body is empty for every symbol today</b>, because no engine populates {@code documentation}
- * yet. That is fine and is why the work was ordered this way round: the definition and the location are
- * both derivable from what {@code SymbolInfo} already carries, so the popup is useful on day one and grows
- * a body without being touched. It hides the band rather than showing an empty one.</p>
+ * <p><b>The body was empty for every symbol until M13 §25.6</b>, because no engine populated
+ * {@code documentation} — and the popup shipped anyway, which is why the work was ordered this way
+ * round: the definition and the location are both derivable from what {@code SymbolInfo} already
+ * carries, so the box was useful on day one and grew a body <b>without a widget change</b>, exactly as
+ * this paragraph predicted. The Java engine now fills it from the doc comment, here or in an attached
+ * source, inheriting an override's from its supertype. It still hides the band rather than showing an
+ * empty one, which is what a symbol with no comment gets.</p>
  *
  * <h3>{@code Popover}, in {@code AUTO} — and not a {@code Tooltip}</h3>
  *
