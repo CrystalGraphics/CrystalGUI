@@ -2,7 +2,6 @@ package com.crystalgui.mc.client;
 
 import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.platform.gl.state.CgGlState;
-import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.editor.CrystalEditor;
 import com.crystalgui.core.command.CommandRegistry;
