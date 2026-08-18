@@ -203,7 +203,12 @@ public class JsResolutionTest {
         assertNotNull("the member did not resolve", add);
         assertEquals("add", add.name());
         assertEquals(SymbolKind.METHOD, add.kind());
-        assertEquals("the container is not the declaring Java class", "java.util.ArrayList",
+        // THE GENERIC DECLARATION, which is what the Java engine's own hover reports for the same member
+        // (`java.util.List<E>` over `List.add`). The raw name is what `membersOf` carries for a completion
+        // row -- there the receiver is the thing the user typed -- and the two differing is the point
+        // rather than a slip: only the hover is describing a declaration. Pinned raw until the two
+        // editors were put side by side.
+        assertEquals("the container is not the declaring Java class", "java.util.ArrayList<E>",
                 add.container());
     }
 

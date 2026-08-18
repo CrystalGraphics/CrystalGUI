@@ -125,6 +125,19 @@ public final class DocumentationPopup extends Popover {
     public static final String HL_TYPE = "doc-type";
     public static final String HL_NAME = "doc-name";
 
+    /**
+     * The muted trailing remark an engine may append to the owner it reports.
+     *
+     * <p>A dynamic language's answer carries a provenance a static one never needs — {@code from JSDoc},
+     * {@code from last run} — and the owner band is where it belongs, because that band already says
+     * where a symbol comes from. It is <b>not</b> part of the qualified path, so it is marked once and
+     * excluded from the segment colouring. @see #markOwnerPath
+     */
+    public static final String HL_OWNER_NOTE = "doc-owner-note";
+
+    /** What separates the owner from {@link #HL_OWNER_NOTE}. An em dash, spaced, as an engine writes it. */
+    private static final String NOTE_SEPARATOR = " — ";
+
     private final UIElement ownerRow = new UIElement();
     private final UIElement ownerIcon = new UIElement();
     private final UIText ownerText = new UIText("");
@@ -650,13 +663,29 @@ public final class DocumentationPopup extends Popover {
         // enum constant after an interface showed `com.crystalgui.language.grammar.Main.Severity` with
         // interface cyan across characters 10-14, which is `lgui`.
         ownerText.highlights().clear();
+
+        // A TRAILING NOTE IS NOT PART OF THE PATH. An engine may qualify the owner it reports with why it
+        // knows — JavaScript's `applyDiscount — from JSDoc`, `count — from last run` — which is real
+        // information a Java answer never had to carry. Walked as a path it was coloured segment by
+        // segment, so `from` and `JSDoc` were tinted as though they were a package and a type, and the
+        // owner's own icon sat in front of the pair claiming they were a class.
+        //
+        // Split here rather than refused, because the note is worth showing and only its PRESENTATION was
+        // wrong. Everything after the separator is drawn muted and marked once, and the path rules below
+        // never see it.
+        int note = path.indexOf(NOTE_SEPARATOR);
+        int pathEnd = note < 0 ? path.length() : note;
+        if (note >= 0) {
+            ownerText.highlights().set(HL_OWNER_NOTE, TextRange.of(note, path.length()));
+        }
+
         List<TextRange> packages = new ArrayList<>();
         List<TextRange> types = new ArrayList<>();
         TextRange lastType = null;
         int from = 0;
-        while (from <= path.length()) {
+        while (from <= pathEnd) {
             int dot = path.indexOf('.', from);
-            int end = dot < 0 ? path.length() : dot;
+            int end = dot < 0 || dot > pathEnd ? pathEnd : dot;
             // A GENERIC ARGUMENT LIST IS NOT PART OF THE PATH. `Main.Box<T>` ends its last segment at the
             // `<`, and marking through it would colour the parameters as though they were the owner.
             int stop = end;
@@ -687,7 +716,7 @@ public final class DocumentationPopup extends Popover {
         // instantiation, so everything inside the brackets is a parameter by construction.
         List<TextRange> parameters = new ArrayList<>();
         int open = path.indexOf('<');
-        for (int i = open < 0 ? path.length() : open; i < path.length(); ) {
+        for (int i = open < 0 || open > pathEnd ? pathEnd : open; i < pathEnd; ) {
             if (!Character.isJavaIdentifierStart(path.charAt(i))) { i++; continue; }
             int word = i;
             while (i < path.length() && Character.isJavaIdentifierPart(path.charAt(i))) i++;

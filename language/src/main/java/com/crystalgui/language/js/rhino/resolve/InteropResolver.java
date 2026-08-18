@@ -340,9 +340,22 @@ public final class InteropResolver {
         TypeRef type = probe != null ? probe.type()
                 : (exists(binaryName) ? JsTypeRef.javaInstance(binaryName) : null);
         if (type == null) return null;
-        return new SymbolInfo(simple, SymbolKind.CLASS,
+
+        // THE JAVA ENGINE'S OWN DESCRIPTION OF THE TYPE, where there is one. This used to hand-build the
+        // symbol with a hard-coded CLASS and no signature, and both showed: `java.util.List` reported
+        // itself a class, so the owner band drew a class glyph beside an interface; and with no signature
+        // the popup fell through to its ASSEMBLED line, which paints from its own three bands rather than
+        // from the editor's scheme. So a Java type hovered from JavaScript read `class ArrayList` in the
+        // popup's yellow while the identical hover in a .java file read
+        // `public interface List<E> extends SequencedCollection<E>` in the code colours. Same widget,
+        // same session, two answers.
+        SymbolInfo declared = probe == null ? null : probe.declaration();
+        SymbolInfo described = new SymbolInfo(simple,
+                declared == null ? SymbolKind.CLASS : declared.kind(),
                 staticSide ? JsTypeRef.javaClass(binaryName) : type,
-                container, null, Set.of(), null);
+                container, declared == null ? null : declared.documentation(),
+                declared == null ? Set.of() : declared.modifiers(), null);
+        return declared == null ? described : described.withSignature(declared.signature());
     }
 
     /**
@@ -381,8 +394,14 @@ public final class InteropResolver {
         Probe cached = cache.get(binaryName);
         if (cached != null) return cached.isUsable() ? cached : null;
 
-        String source = "class " + PROBE_CLASS + " { " + binaryName + " " + PROBE_FIELD + "; }";
+        String prefix = "class " + PROBE_CLASS + " { ";
+        String source = prefix + binaryName + " " + PROBE_FIELD + "; }";
         int offset = source.indexOf(PROBE_FIELD);
+        // AND WHERE THE TYPE ITSELF IS WRITTEN. Resolving the FIELD answers what it is; resolving the
+        // type NAME answers what the type is -- its kind, its modifiers and the declaration the Java
+        // engine would quote for it. The unit already exists and is already analysed, so this is a second
+        // question to an answer we have rather than a second compile.
+        int typeOffset = prefix.length() + binaryName.lastIndexOf('.') + 1;
         Analysis analysis;
         try {
             analysis = java.analyze(PROBE_CLASS, source, classpath, releaseLevel, -1L);
@@ -394,7 +413,7 @@ public final class InteropResolver {
         if (analysis == null) return null;
         SymbolInfo field = analysis.resolveAt(offset);
         TypeRef type = field == null ? null : field.type();
-        Probe probe = new Probe(analysis, type, offset);
+        Probe probe = new Probe(analysis, type, offset, typeOffset);
         // CACHED EVEN WHEN THE TYPE DID NOT RESOLVE, so a name that is not a class is not re-analysed on
         // every keystroke -- a mistyped package would otherwise cost a compile per character.
         cache.put(binaryName, probe);
@@ -407,13 +426,33 @@ public final class InteropResolver {
         private final Analysis analysis;
         @Nullable private final TypeRef type;
         private final int offset;
+        private final int typeOffset;
         @Nullable private List<SymbolInfo> members;
+        @Nullable private SymbolInfo declaration;
+        private boolean declarationAsked;
         private boolean closed;
 
-        Probe(Analysis analysis, @Nullable TypeRef type, int offset) {
+        Probe(Analysis analysis, @Nullable TypeRef type, int offset, int typeOffset) {
             this.analysis = analysis;
             this.type = type;
             this.offset = offset;
+            this.typeOffset = typeOffset;
+        }
+
+        /**
+         * What the Java engine says about the TYPE — kind, modifiers, and its quoted declaration.
+         *
+         * <p>The flag rather than a null check, because "no declaration" is a real answer for a type with
+         * no source beside it and re-asking on every hover would defeat the cache the whole class is.</p>
+         */
+        @Nullable
+        SymbolInfo declaration() {
+            if (!isUsable()) return null;
+            if (!declarationAsked) {
+                declarationAsked = true;
+                declaration = analysis.resolveAt(typeOffset);
+            }
+            return declaration;
         }
 
         boolean isUsable() {

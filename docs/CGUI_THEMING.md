@@ -212,6 +212,7 @@ editor scheme's.
 | `--doc-body-fg` | `var(--fg)` | base.css |
 | `--doc-border` | `var(--border-base)` | base.css |
 | `--doc-owner-fg` | `var(--fg-hint)` | base.css |
+| `--doc-owner-note-fg` | `var(--fg-disabled)` | base.css |
 | `--doc-problem-bg` | `var(--surface-base)` | base.css |
 | `--dock-active-border` | `var(--accent-soft)` | base.css |
 | `--dock-bg` | `var(--surface-panel)` | base.css |
