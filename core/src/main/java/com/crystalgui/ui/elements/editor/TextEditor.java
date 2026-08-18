@@ -3555,15 +3555,16 @@ public class TextEditor extends ScrollerView implements UndoScope {
      *
      * <p>{@code textOriginY() + viewLine * lineHeight() - getScrollTop()} was written out in eight view
      * parts and three more places here. That is a formula every part has to agree on exactly, and the
-     * disagreement was already there: {@code getScrollTop()} <b>can be NaN</b> — §3.4 of the review has it
-     * open, with {@code getMaxScrollTop} reading an unmeasured viewport as the likeliest source — and NaN
-     * minus anything is NaN, so every row lands at the same y and the whole editor draws as one stacked
-     * line. One call site had a {@code finiteOrZero} around it. The other ten did not, and could not have
-     * been fixed without finding them all.</p>
+     * disagreement was already there: {@code getScrollTop()} <b>can be NaN</b> — and NaN minus anything is
+     * NaN, so every row lands at the same y and the whole editor draws as one stacked line. One call site
+     * had a {@code finiteOrZero} around it. The other ten did not, and could not have been fixed without
+     * finding them all.</p>
      *
-     * <p>So the guard lives here, once, and the parts ask rather than compute. That does not make the NaN
-     * correct — it makes it survivable in the one place it can be, which is what the review asks for:
-     * anything consuming the offset should treat a non-finite value as zero.</p>
+     * <p>So the guard lives here, once, and the parts ask rather than compute. <b>The source is fixed</b> —
+     * it was a NaN {@code line-height} multiplier getting past two guards that both looked protective, see
+     * {@link #lineHeight()} — so this is defence in depth rather than the repair. It stays because the
+     * formula having one home is worth it on its own, and because a scroll offset arriving non-finite from
+     * somewhere new should degrade to zero rather than flatten the document.</p>
      */
     float topOfViewLine(int viewLine) {
         return textOriginY() + viewLine * lineHeight() - finiteOrZero(getScrollTop());
