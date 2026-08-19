@@ -20,6 +20,7 @@ Per-directory detail lives beside the assets it covers; this is the index.
 | tree-sitter query families (`folds.scm`, `indents.scm`, `locals.scm`) | `language/src/main/resources/assets/crystalgui/syntax/*/` | **Apache 2.0** | © nvim-treesitter contributors. Six languages × three families. **Modified**: each file's upstream `; inherits:` chain is resolved at vendoring time by concatenation, since this engine implements no query inheritance; the resolved sources are named in every file's header. One pattern is added at load time (`Queries.captureJavaScriptParameters`) and is marked as ours in the query text. See [Query families](#query-families-folds-indents-and-scopes) |
 | Eclipse JDT (`org.eclipse.jdt.core` + the platform closure) | `language/build.gradle.kts`, bands 8/11/17 | **EPL-2.0** | The Java engine. See [Engine bands](#engine-bands-ecj-and-rhino) |
 | Rhino | `language/build.gradle.kts`, bands 8/11/17 | **MPL-2.0** | The JavaScript engine. See [Engine bands](#engine-bands-ecj-and-rhino) |
+| Minecraft name mappings (MCP `stable_12` for 1.7.10) | **Not in this repository** — fetched at runtime to the user's own config directory | See [Name mappings](#minecraft-name-mappings-fetched-never-redistributed) | `methods.csv` / `fields.csv` / `params.csv`, read from MinecraftForge's FML repository. We do not redistribute them, and that is the whole licensing position |
 | ASM (`asm`, `asm-commons`, `asm-tree`) | `language/build.gradle.kts` | **BSD-3-Clause** | © INRIA, France Télécom. The bytecode reader/writer behind the readable↔runtime mapping boundary. 0.24 MB, no transitive dependencies, real classes at class-file major 49 so it runs on every band |
 
 ## Engine bands: ECJ and Rhino
@@ -51,11 +52,55 @@ correctness one, not a licensing one.
 classloader boundary without linking against modified copies — which is a consequence of the
 isolation `EngineClassLoader` exists for, not a coincidence.
 
-> **This becomes a live obligation the moment a loader module ships.** Nothing in this build
-> distributes an engine today: the configurations resolve for tests and for the band-floor check, and
-> `mc1710/` and `mc1201/` are commented out of `settings.gradle.kts`. When one of them starts
-> bundling a band, the licence texts have to travel in the jar — a row in this table is the index, not
-> the discharge. Recorded here rather than left to be discovered at release.
+> **This is now a LIVE obligation, and the note here used to say it was not.** It read "nothing in this
+> build distributes an engine today … `mc1710/` and `mc1201/` are commented out of
+> `settings.gradle.kts`". Both halves stopped being true at M12: `settings.gradle.kts` carries
+> `include("mc1710")`, and that module's jar task ends `from(bundleEngineBand8)` — so **every `:mc1710`
+> jar carries band 8's fifteen jars, about 13 MB, unconditionally**, and a client with no engine staged
+> falls back to exactly those. This is the sentence the old note asked somebody to come back and change.
+>
+> **What discharges it today.** `bundleEngineBand8` is a `Sync` of *whole, unmodified jars* rather than a
+> shadow or a class merge, so each artifact's own notices travel inside it — verified rather than
+> assumed: the Eclipse jars carry `about.html` and are signed, and Rhino carries `META-INF/LICENSE.txt`
+> and `META-INF/NOTICE.txt`. Nothing is repackaged, relocated or stripped, which is also what keeps the
+> file-level copyleft of EPL-2.0 and MPL-2.0 away from our own code. The "where to get the source" half
+> is discharged by the exact coordinates in the table above.
+>
+> **What to check before a release**, since a row in this table is an index and not a discharge: that the
+> band is still bundled as whole jars (a future shadow/relocation step would break both the notices and
+> the unmodified-binary reasoning), and that `mc1201/` gets the same treatment when it lands rather than
+> merging classes.
+
+## Minecraft name mappings (fetched, never redistributed)
+
+Readable Minecraft names (`getUnlocalizedName` rather than `func_149739_a`) come from the **MCP** name
+data, taken from MinecraftForge's FML repository at
+`https://raw.githubusercontent.com/MinecraftForge/FML/1.7.10/conf/` — `methods.csv`, `fields.csv` and
+`params.csv` for `mcp_stable/12`.
+
+**None of it is in this repository and none of it is in any jar we build.** A client fetches what it
+needs on first use into its own config directory (`config/crystalgui/mappings/<mc>/<channel>-<version>`)
+and reuses it thereafter. That is not a caching optimisation that happens to have a licensing
+side-effect — it is the licensing position, chosen because MCP's terms have historically permitted use
+while restricting redistribution, and it is why `plan_syntax.md` §22 row 11 asks for the sourcing
+decision rather than for a bundled file.
+
+Three properties follow from it, and all three are enforced in code rather than remembered:
+
+- **Version-addressed, never discovered.** `MappingCoordinates` pins the channel and version in the mod
+  rather than reading them from the running environment, because a published mapping version is
+  immutable — `mcp_stable/12` will never change content under that name. A version read from the
+  environment is one that can differ between dev and production.
+- **Absent is a first-class state.** A clean install has no mappings, an offline first run says so and
+  falls back to runtime names rather than failing, and nothing about the editor depends on the fetch
+  having happened.
+- **The cache is the user's, not ours.** It lives under their game directory; deleting it re-fetches.
+
+> **Open, and honest about it:** no digests are pinned, because upstream publishes no `.md5` beside the
+> CSVs. A corrupted download is currently caught by the parse rather than by a digest. The verification
+> machinery exists and is tested (`MappingCacheTest` covers corrupt-then-repair and reject-on-mismatch);
+> it is the reference data that is missing. Recorded here as well as in `plan_m12.md` §26.13a because
+> this file is where somebody checks before a release.
 
 ## Fonts
 
