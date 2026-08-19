@@ -1199,7 +1199,7 @@ Run before Phase 4 rather than after, and guided rather than swept: the exit cri
 delivered, and an audit asks whether it was delivered in a shape the next milestone can build on. Findings
 are recorded here as they land, including the ones that turn out to be nothing.
 
-### Finding 1 — `ScriptPlatforms` was a second platform registry ✅ fixed
+### Finding 1 — `ScriptServices` was a second platform registry ✅ fixed
 
 Phase 3 gave the language stack a static holder with a setter, and wired it in `ClientProxy` beside
 CrystalGraphics' own `CgPlatform.register`. That is a shape this project has deleted once already, and
