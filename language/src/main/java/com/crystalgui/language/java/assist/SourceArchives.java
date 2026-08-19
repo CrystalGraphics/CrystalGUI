@@ -47,8 +47,10 @@ import java.util.zip.ZipFile;
  *       row above from "absent in production" into "usually present".</li>
  *   <li><b>A fetched extract</b>, named through {@link JdkSourceExtract#SOURCES_PROPERTY} — and the same
  *       property is how somebody points at a {@code src.zip} of their own.</li>
- *   <li><b>Our own jar</b> (M13 §25.4) — loose {@code .java} under {@link #BUNDLED_PREFIX}, searched
- *       last so anything more specific wins.</li>
+ *   <li><b>A jar that ships its own</b> (M13 §25.4) — loose {@code .java} under
+ *       {@code assets/<namespace>/sources/}, one namespace per project ({@link #BUNDLED_PREFIXES}), and
+ *       searched last so anything more specific wins. CrystalGUI and CrystalGraphics both do it; the
+ *       mechanism is a convention any mod with a script-facing API can adopt.</li>
  * </ul>
  */
 public final class SourceArchives {
@@ -89,11 +91,19 @@ public final class SourceArchives {
     private static void announce(List<Archive> archives) {
         int libraries = 0;
         int platforms = 0;
-        boolean bundled = false;
+        StringBuilder bundled = new StringBuilder();
         String first = null;
         for (Archive archive : archives) {
             if (archive instanceof ResourceArchive) {
-                bundled = true;
+                // ASKED, NOT ASSUMED. An archive object exists for every declared prefix whether or not
+                // anything ships one, so reporting its mere existence would have said "ours bundled" on a
+                // build that had dropped the packaging -- a diagnostic line lying about the exact thing it
+                // was added to reveal.
+                ResourceArchive resource = (ResourceArchive) archive;
+                if (resource.available()) {
+                    if (bundled.length() > 0) bundled.append(", ");
+                    bundled.append(resource.namespace());
+                }
             } else if (archive.platform()) {
                 platforms++;
                 // THE PATH, not toString(): "src.zip" is the answer to a different question -- which
@@ -114,7 +124,7 @@ public final class SourceArchives {
             if (platforms > 1) line.append(" (+").append(platforms - 1).append(" more)");
         }
         line.append(libraries == 0 ? ", no library sources" : ", " + libraries + " library source jars");
-        line.append(bundled ? ", ours bundled" : ", ours NOT bundled");
+        line.append(bundled.length() == 0 ? ", NO bundled sources" : ", bundled: " + bundled);
         System.err.println(line);
     }
 
@@ -179,7 +189,9 @@ public final class SourceArchives {
                 for (File candidate : sourcesBeside(entry)) addArchive(candidate, false, seen, found);
             }
         }
-        if (bundled != null) found.add(new ResourceArchive(bundled, BUNDLED_PREFIX));
+        if (bundled != null) {
+            for (String prefix : BUNDLED_PREFIXES) found.add(new ResourceArchive(bundled, prefix));
+        }
         return found;
     }
 
@@ -193,6 +205,27 @@ public final class SourceArchives {
      * access for free, because the JVM indexed the jar's central directory when the loader opened it.</p>
      */
     static final String BUNDLED_PREFIX = "assets/crystalgui/sources/";
+
+    /**
+     * Every namespace that ships sources this way — <b>one per project, never one shared directory.</b>
+     *
+     * <h3>Why not put everything under {@link #BUNDLED_PREFIX}</h3>
+     *
+     * <p>It would work, needs no list, and is wrong. CrystalGraphics is a standalone rendering library
+     * that other mods depend on <em>without</em> CrystalGUI anywhere in the pack, and a jar that ships an
+     * {@code assets/crystalgui/} directory to a game that has no CrystalGUI is claiming a namespace it
+     * does not own. A project's sources belong under its own name for the same reason its textures do.</p>
+     *
+     * <p>They cannot collide in any case — the paths beneath are package paths — so the list is about
+     * ownership rather than correctness, and the cost is one extra {@code getResourceAsStream} miss per
+     * type looked up. <b>This is the contract, not a private arrangement between these two projects:</b>
+     * any mod shipping an API a script can call makes its own declarations quotable by putting its sources
+     * at {@code assets/<its namespace>/sources/} and adding a line here.</p>
+     */
+    static final String[] BUNDLED_PREFIXES = {
+            BUNDLED_PREFIX,
+            "assets/crystalgraphics/sources/",
+    };
 
     private static void addArchive(File candidate, boolean platform, Set<String> seen,
                                    List<Archive> into) {
@@ -391,6 +424,24 @@ public final class SourceArchives {
         @Override
         public boolean platform() {
             return false;
+        }
+
+        /**
+         * Whether this prefix resolves at all — asked so {@link #announce} can report what is really
+         * there rather than that an archive object was constructed.
+         *
+         * <p>The jar's directory entry, which Gradle writes and this project's jars all carry. A jar
+         * built without them would read as absent while its files were perfectly readable; that is a
+         * conservative error in a diagnostic line and is the price of not having to know a filename.</p>
+         */
+        boolean available() {
+            return loader.getResource(prefix) != null;
+        }
+
+        /** {@code assets/crystalgraphics/sources/} → {@code crystalgraphics}. */
+        String namespace() {
+            String[] parts = prefix.split("/");
+            return parts.length > 1 ? parts[1] : prefix;
         }
 
         @Override
