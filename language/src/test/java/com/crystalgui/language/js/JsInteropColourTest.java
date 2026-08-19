@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -138,6 +139,59 @@ public class JsInteropColourTest {
                 "ArrayList", declared.type().displayName());
         assertEquals("and the QUALIFIED name must not shorten -- every lookup is keyed on it",
                 "java.util.ArrayList", declared.type().qualifiedName());
+    }
+
+    /**
+     * <b>A CALL is drawn as a call, not as a declaration.</b>
+     *
+     * <p>{@code SymbolKind.METHOD} names itself {@code function.method}, which is the colour a scheme
+     * draws a method's <em>declaration</em> in — so {@code list.add('one')} came out in the declaration
+     * colour beside {@code String.join(…)} in the call colour, on one screen, because the grammar had
+     * marked one and this pass had marked the other. The kind says what a member IS; where it sits says
+     * how it is being used.</p>
+     */
+    @Test
+    public void aJavaMethodCallIsDrawnAsACall() {
+        String source = "import java.util.ArrayList;\nvar list = new ArrayList();\nlist.add('one');\n";
+        List<String> captures = capturesOver(source, "add", 0);
+        assertTrue("a call was drawn in the declaration colour: " + captures,
+                captures.contains("function.call"));
+        assertFalse("and it must not ALSO carry the declaration capture: " + captures,
+                captures.contains("function.method"));
+    }
+
+    /**
+     * <b>Writing the import must not make the file know less.</b>
+     *
+     * <p>The syntactic tier reads {@code new ArrayList()} and can only answer {@code ArrayList} — the
+     * package is on an {@code import} line it never saw — and everything downstream is keyed on a
+     * binary name. So the shorthand resolved to nothing: no members, so {@code list.add(…)} went
+     * unresolved; no owner, so the hover read {@code ArrayList} where the fully-qualified spelling of
+     * the same line read {@code java.util.ArrayList<E>} with {@code public boolean add(E e)} under
+     * it.</p>
+     *
+     * <p>Asserted as <b>parity</b> between the two spellings rather than against a fixed string, because
+     * the point is that they agree — whatever they say.</p>
+     */
+    @Test
+    public void theImportedSpellingResolvesLikeTheQualifiedOne() {
+        String imported = "import java.util.ArrayList;\nvar list = new ArrayList();\nlist.add('one');\n";
+        String qualified = "var list = new java.util.ArrayList();\nlist.add('one');\n";
+
+        SymbolInfo viaImport = memberAt(imported, "add");
+        SymbolInfo viaChain = memberAt(qualified, "add");
+        assertNotNull("the qualified spelling stopped resolving, so this test proves nothing", viaChain);
+        assertNotNull("the imported spelling resolved to nothing at all", viaImport);
+        assertEquals("the two spellings disagree about the owner",
+                viaChain.container(), viaImport.container());
+        assertNotNull("the imported spelling has no signature, so the popup shows a bare name",
+                viaImport.signature());
+    }
+
+    /** The symbol under the member name of {@code receiver.member(...)}. */
+    private static SymbolInfo memberAt(String source, String member) {
+        return JsLanguage.analyzer().analyze("Probe.js", source, 1L)
+                .resolveAt(source.indexOf("." + member) + 1);
     }
 
     /** And an ordinary object's property keeps the grammar's answer, which is already right for it. */

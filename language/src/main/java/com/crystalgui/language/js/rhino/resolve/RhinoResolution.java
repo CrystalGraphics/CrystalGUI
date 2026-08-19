@@ -15,6 +15,7 @@ import org.mozilla.javascript.ast.AstRoot;
 import org.mozilla.javascript.ast.FunctionCall;
 import org.mozilla.javascript.ast.FunctionNode;
 import org.mozilla.javascript.ast.Name;
+import org.mozilla.javascript.ast.NewExpression;
 import org.mozilla.javascript.ast.PropertyGet;
 
 import javax.annotation.Nullable;
@@ -903,10 +904,69 @@ public final class RhinoResolution {
      */
     @Nullable
     private TypeRef inferredType(@Nullable AstNode expression) {
-        TypeRef inferred = RhinoInference.typeOf(expression, scopes::declaresAnywhere);
+        TypeRef syntactic = RhinoInference.typeOf(expression, scopes::declaresAnywhere);
+        if (syntactic == null) syntactic = fromImportedName(expression);
+        TypeRef inferred = qualifyImports(syntactic);
         if (inferred == null || interop == null) return inferred;
         String javaName = JsTypeRef.javaNameOf(inferred);
         return javaName == null || interop.permits(javaName) ? inferred : null;
+    }
+
+    /**
+     * The type of an expression that names an <b>imported</b> class by its simple name.
+     *
+     * <p>{@code RhinoInference} answers nothing here, and correctly: it reads Java out of a dotted
+     * CHAIN, and {@code ArrayList} on its own is not one — a bare capitalised name is just a name to
+     * anything reasoning from syntax alone. What makes it a class is an {@code import} line, which is a
+     * fact about this file rather than about the expression, so it is answered here.</p>
+     *
+     * <p>Without it, writing the import made the file know <em>less</em>: {@code new ArrayList()} typed
+     * to nothing, so {@code list.add(…)} fell through to "a property we cannot type is still a
+     * property" and the hover showed a bare name where the fully-qualified spelling of the same line
+     * quoted {@code public boolean add(E e)} under {@code java.util.ArrayList<E>}.</p>
+     *
+     * <p>A {@code new} makes an INSTANCE and a bare mention is the CLASS OBJECT — the same distinction
+     * {@code JsTypeRef} draws everywhere else, and the reason {@code Collections.EMPTY_LIST} wants the
+     * statics while {@code list.add} wants the instance members.</p>
+     */
+    @Nullable
+    private TypeRef fromImportedName(@Nullable AstNode expression) {
+        if (expression == null || imported.isEmpty()) return null;
+        boolean instance = expression instanceof NewExpression;
+        AstNode named = instance ? ((NewExpression) expression).getTarget() : expression;
+        if (!(named instanceof Name)) return null;
+        String simple = ((Name) named).getIdentifier();
+        if (simple == null || !imported.contains(simple)) return null;
+        String binary = hostBindings.get(simple);
+        if (binary == null || binary.isEmpty()) return null;
+        return instance ? JsTypeRef.javaInstance(binary) : JsTypeRef.javaClass(binary);
+    }
+
+    /**
+     * An imported simple name, expanded to the class it names.
+     *
+     * <p>The syntactic tier reads {@code new ArrayList()} and can only answer {@code ArrayList} — the
+     * package is on an {@code import} line it never saw. Everything downstream is keyed on a BINARY
+     * name, so that answer looked like a type and resolved to nothing: no members, so
+     * {@code list.add(…)} went unresolved; no owner, so the hover read {@code ArrayList} where the
+     * fully-qualified spelling of the same line read {@code java.util.ArrayList<E>} with the method
+     * quoted under it. <b>Writing the import made the file know less.</b></p>
+     *
+     * <p>Expanded here rather than inside {@code RhinoInference} because the imports are a property of
+     * this FILE and that class is a pure function of the syntax — the same split the policy filter uses,
+     * one seam further in.</p>
+     */
+    @Nullable
+    private TypeRef qualifyImports(@Nullable TypeRef type) {
+        if (type == null || !JsTypeRef.isJava(type)) return type;
+        String name = type.qualifiedName();
+        // ONLY A BARE NAME. Anything already qualified is either a real chain or an expansion that has
+        // happened once already, and re-reading it against the imports could only make it wrong.
+        if (name == null || name.indexOf('.') >= 0 || !imported.contains(name)) return type;
+        String binary = hostBindings.get(name);
+        if (binary == null || binary.isEmpty()) return type;
+        return type instanceof JsTypeRef && ((JsTypeRef) type).isStaticSide()
+                ? JsTypeRef.javaClass(binary) : JsTypeRef.javaInstance(binary);
     }
 
 }
