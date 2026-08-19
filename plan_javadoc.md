@@ -150,6 +150,28 @@ already taken on.
 with attribution if any of it is copied verbatim. In practice what transfers is the *rules*, and
 `JavaDocs` already implements several of them.
 
+### 3.4b There is already a `CgMarkupParser`, and it is a different problem
+
+CrystalGraphics ships one in `text/richtext/`. It turns markup into a **`CgStyledText`** — one flat
+string plus non-overlapping style spans — over a bespoke `<b>/<i>/<u>/<s>/<color=#RRGGBB>` vocabulary
+with no entities and no attributes. That is what a renderer needs to draw a *line*: a chat message, a
+label, a tooltip with a bold word in it.
+
+A doc comment is not a line. Paragraphs, `<pre>` samples and lists are **blocks**, and a code sample has
+to become an element with its own background and coloured runs. One string and a span list cannot say
+that — encoding it in one is the wall of text this plan exists to remove.
+
+**The module boundary settles it independently.** `CgStyledText` is in CrystalGraphics *core*, and
+`core/src/headlessTest` takes `com.crystalgraphics:platform` and deliberately not core. That absence is
+the assertion that a dedicated server builds documents with no GL and no fonts, and documentation is one
+of those — `SymbolInfo` sits beside the language SPIs, which run headlessly for the same reason. A parser
+reaching CG core could be neither tested there nor shipped on a server.
+
+**Where they do meet is at draw time**, one layer below this one: a run marked `STRONG` *is* a
+`CgStyleSpan`, and converting the one into the other is the renderer's job on CrystalGraphics' side of
+the seam. This layer decides what the document says; CrystalGraphics decides what a run of glyphs looks
+like. If anything is expanded later it is that mapping, not the parser.
+
 ### 3.5 The two pieces
 
 **`com.crystalgui.text.markup`** — generic, reusable, and the thing this plan is really about. A
