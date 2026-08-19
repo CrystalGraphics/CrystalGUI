@@ -16,10 +16,10 @@ import com.crystalgraphics.platform.CgService;
  *
  * <p>So the declaration below is a {@link CgService} slot. Registration goes through the same stack every
  * other platform service does, {@code CgService.declared()} can print this one along with the rest, and
- * a loader has one place to look. CrystalGraphics never names {@link ScriptPlatform} — a slot is generic
+ * a loader has one place to look. CrystalGraphics never names {@link ScriptService} — a slot is generic
  * in its contract, which is what lets a consumer own a service the framework has never heard of.</p>
  *
- * <h3>Absent is the default and answers {@link ScriptPlatform#NONE}</h3>
+ * <h3>Absent is the default and answers {@link ScriptService#NONE}</h3>
  *
  * <p>Never null, and stated <b>once</b> — here, beside the contract, rather than at each call site. That
  * is the difference between a slot and a lookup returning an {@code Optional}: the fallback is part of
@@ -28,20 +28,20 @@ import com.crystalgraphics.platform.CgService;
  * — read the classloader, no mappings — is exactly what {@code NONE} already does. Off a Minecraft host
  * this class is invisible.</p>
  */
-public final class ScriptPlatforms {
+public final class ScriptServices {
 
     /**
      * The slot. The only member here, because a wrapper around it would be a second way to say the same
      * thing — and a second way is how two callers end up disagreeing about which one is authoritative.
      *
      * <pre>{@code
-     * CgPlatform.provide(ScriptPlatforms.SERVICE, new ScriptService1710());  // a loader, once
-     * CgPlatform.get(ScriptPlatforms.SERVICE).liveBytes();                   // everyone else
+     * CgPlatform.provide(ScriptServices.SERVICE, new ScriptService1710());  // a loader, once
+     * CgPlatform.get(ScriptServices.SERVICE).liveBytes();                   // everyone else
      * }</pre>
      */
-    public static final CgService<ScriptPlatform> SERVICE =
-            CgService.of("crystalgui:script-platform", ScriptPlatform.NONE);
+    public static final CgService<ScriptService> SERVICE =
+            CgService.of("crystalgui:script-platform", ScriptService.NONE);
 
-    private ScriptPlatforms() {
+    private ScriptServices() {
     }
 }

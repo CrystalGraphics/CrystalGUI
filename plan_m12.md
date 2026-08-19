@@ -642,7 +642,7 @@ Everything a platform knows and the core cannot. Lives in `language.platform`; `
 and `mc1201` will implement the same one.
 
 ```java
-public interface ScriptPlatform {
+public interface ScriptService {
 
     /** Post-transform bytes for an internal name, or null. @see ReadableView.ByteSource */
     ReadableView.ByteSource liveBytes();
@@ -669,7 +669,7 @@ public interface ScriptPlatform {
 > accessor. Two registries is how a loader wires up half of something, and CrystalGraphics already
 > learned that once — `AGENTS.md`, "CrystalGUI has no platform registry".
 
-> **`ScriptPlatform.NONE` is a real deployment, not a test double.** The harness, the tests and a
+> **`ScriptService.NONE` is a real deployment, not a test double.** The harness, the tests and a
 > dedicated server all run with no platform: `liveBytes()` falls back to `ByteSource.ofClassLoader`,
 > `mappings()` is `NONE`, and the stack behaves exactly as it does today. That is what keeps `language/`
 > runnable off a Minecraft host, which is the property the module exists for.
@@ -756,7 +756,7 @@ list. That is the entire platform-specific part of this phase.
 
 **The core side**, in `language.java.ecj`:
 
-- `findType(char[][])` / `findType(char[], char[][])` → ask `ScriptPlatform.liveBytes()`, remap through
+- `findType(char[][])` / `findType(char[], char[][])` → ask `ScriptService.liveBytes()`, remap through
   `ReadableView`, answer with a `NameEnvironmentAnswer` over the bytes. Nothing is written.
 - `isPackage(char[][], char[])` → answered from the same source. Getting this wrong makes a type resolve
   while its package does not, which reads as a phantom compile error.
@@ -792,7 +792,7 @@ remoteMappings = https://raw.githubusercontent.com/MinecraftForge/FML/1.7.10/con
 channel = stable          mappingsVersion = 12
 ```
 
-**Layout**, decided by the core beneath `ScriptPlatform.cacheRoot()`:
+**Layout**, decided by the core beneath `ScriptService.cacheRoot()`:
 
 ```
 <cacheRoot>/mappings/<mcVersion>/<channel>-<version>/{methods,fields,params}.csv
@@ -929,7 +929,7 @@ Ordered so that every step is verifiable when it lands, and nothing waits on the
 
 | # | Step | Unblocks | Verified by |
 |---|---|---|---|
-| 1 | **26.1** `ScriptPlatform` + `NONE`, `mc1710` impl returning `cacheRoot` only | everything | existing suites still green with `NONE` |
+| 1 | **26.1** `ScriptService` + `NONE`, `mc1710` impl returning `cacheRoot` only | everything | existing suites still green with `NONE` |
 | 2 | **26.3** internal `Compiler` + `ICompilerRequestor`, replacing `BatchCompiler` | 26.4 | `smokeEngineBands` drives a compile per band |
 | 3 | **26.3** ~~same environment used by `EcjSourceAnalyzer`~~ — **not achievable, see below** | — | the two already share a classpath; pinned by `theEditorAndTheRunnerGetTheSameClasspath` |
 | 4 | **26.4** `liveBytes()` on `mc1710` + `INameEnvironment` | readable names | mixin-added member resolves in the dev client |
@@ -1009,7 +1009,7 @@ it is two views that agree rather than one view. Sharing the `TypeBytes` object 
 runner identical *by construction*.
 
 **One thing genuinely does need enumeration**, and only one: completion of types you have not imported.
-That is a rename rather than a listing — `ScriptPlatform.runtimeClassName` translates a single on-disk
+That is a rename rather than a listing — `ScriptService.runtimeClassName` translates a single on-disk
 name and `TypeIndex` applies it while scanning as it already did, so it costs one string operation per
 entry and no extra I/O. Which is why exit criterion 8 now reads "a byte route, a path, a rename and two
 data objects".
@@ -1120,7 +1120,7 @@ half was a human check and is now machine-verified as well.)*
 | 5 | the dev/prod namespace choice is detected, never configured | **met** — dev reports `the runtime already speaks readable names`, obfuscated fetches. No setting selects it |
 | 6 | an offline first run opens the editor, runs scripts, shows runtime names, and says why | **met in unit test, not exercised by being offline.** `UNAVAILABLE` is asserted through an unreachable `file:` URL and carries the reason; nobody has pulled a cable |
 | 7 | the same script file, unchanged, runs in dev and in a reobfuscated client | **met** — `tile.stone` in both, from one source |
-| 8 | `mc1710`'s `ScriptPlatform` contains no logic beyond a byte route, a path and two data objects | **met, and it grew twice.** A `runtimeClassName` rename joined it so completion can offer a class the jar stores under another name — one line, delegating to the same `IClassNameTransformer` the byte route already finds. 33 non-comment lines in `Mc1710ScriptPlatform` (a path and two constants) and 52 in `LaunchWrapperBytes`. The byte route is bigger than "a dozen lines" because production needs the name untransformed first — but it is still one route, and every line of it is about *obtaining bytes*. Nothing about mappings, caching, probing or compilation leaked down here |
+| 8 | `mc1710`'s `ScriptService` contains no logic beyond a byte route, a path and two data objects | **met, and it grew twice.** A `runtimeClassName` rename joined it so completion can offer a class the jar stores under another name — one line, delegating to the same `IClassNameTransformer` the byte route already finds. 33 non-comment lines in `Mc1710ScriptService` (a path and two constants) and 52 in `LaunchWrapperBytes`. The byte route is bigger than "a dozen lines" because production needs the name untransformed first — but it is still one route, and every line of it is about *obtaining bytes*. Nothing about mappings, caching, probing or compilation leaked down here |
 
 ### What the reobfuscated client found that nothing else could
 
@@ -1188,7 +1188,7 @@ four layers of passing tests proved nothing.
 5. The dev/prod namespace choice is **detected**, and no configuration selects it.
 6. An **offline** first run still opens the editor and runs scripts, shows runtime names, and says why.
 7. The same script file, unchanged, runs in dev and in a reobfuscated client.
-8. `mc1710`'s `ScriptPlatform` implementation contains **no logic** beyond a byte route, a path and two
+8. `mc1710`'s `ScriptService` implementation contains **no logic** beyond a byte route, a path and two
    data objects — the test that this is reusable rather than 1.7.10-shaped.
 
 ---

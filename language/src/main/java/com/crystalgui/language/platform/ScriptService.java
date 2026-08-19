@@ -34,7 +34,7 @@ import java.nio.file.Paths;
  * behaves exactly as it did before this interface existed. Keeping that path real is what lets
  * {@code language/} run off a Minecraft host at all, which is the property the module exists for.</p>
  */
-public interface ScriptPlatform {
+public interface ScriptService {
 
     /**
      * No Minecraft host: read bytes off the classloader, no mappings, nothing to detect.
@@ -42,11 +42,11 @@ public interface ScriptPlatform {
      * <p>{@code cacheRoot()} is the working directory rather than a temporary one on purpose — a
      * download that vanishes between runs is a download that happens every run.</p>
      */
-    ScriptPlatform NONE = new ScriptPlatform() {
+    ScriptService NONE = new ScriptService() {
 
         @Override
         public ReadableView.ByteSource liveBytes() {
-            return ReadableView.ByteSource.ofClassLoader(ScriptPlatform.class.getClassLoader());
+            return ReadableView.ByteSource.ofClassLoader(ScriptService.class.getClassLoader());
         }
 
         @Override
@@ -71,7 +71,7 @@ public interface ScriptPlatform {
 
         @Override
         public String toString() {
-            return "ScriptPlatform.NONE";
+            return "ScriptService.NONE";
         }
     };
 

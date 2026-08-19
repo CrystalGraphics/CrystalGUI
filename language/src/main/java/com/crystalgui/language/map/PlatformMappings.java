@@ -2,9 +2,9 @@ package com.crystalgui.language.map;
 
 import com.crystalgui.language.platform.MappingCoordinates;
 import com.crystalgui.language.platform.NamespaceProbe;
-import com.crystalgui.language.platform.ScriptPlatform;
+import com.crystalgui.language.platform.ScriptService;
 import com.crystalgraphics.platform.CgPlatform;
-import com.crystalgui.language.platform.ScriptPlatforms;
+import com.crystalgui.language.platform.ScriptServices;
 
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
@@ -22,7 +22,7 @@ import org.objectweb.asm.Opcodes;
  * {@code func_147439_a}. A flag someone sets is a flag that will be wrong in exactly the environment
  * nobody tests; the two differ observably, so this observes them. It costs one class read.</p>
  *
- * <p>The read goes through {@link ScriptPlatform#liveBytes()} — the same source the compiler resolves
+ * <p>The read goes through {@link ScriptService#liveBytes()} — the same source the compiler resolves
  * against — so the probe cannot answer differently from what will later be compiled against. A check
  * against a file could, and on the platform where the disk view lies that is the worst of both.</p>
  *
@@ -62,8 +62,8 @@ public final class PlatformMappings {
         if (started) return;
         started = true;
 
-        ScriptPlatform platform = CgPlatform.get(ScriptPlatforms.SERVICE);
-        if (platform == ScriptPlatform.NONE) return;
+        ScriptService platform = CgPlatform.get(ScriptServices.SERVICE);
+        if (platform == ScriptService.NONE) return;
 
         NamespaceProbe probe = platform.namespaceProbe();
         MappingCoordinates coordinates = platform.mappings();
@@ -124,7 +124,7 @@ public final class PlatformMappings {
      * behaviour: treating an unreadable probe as obfuscated would download a mapping and translate every
      * name through it on a runtime that never needed one, which is worse than doing nothing.</p>
      */
-    private static Boolean isReadable(ScriptPlatform platform, NamespaceProbe probe) {
+    private static Boolean isReadable(ScriptService platform, NamespaceProbe probe) {
         byte[] bytes;
         try {
             bytes = platform.liveBytes().bytesOf(probe.internalName());

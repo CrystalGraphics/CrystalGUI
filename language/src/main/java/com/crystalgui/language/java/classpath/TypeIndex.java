@@ -1,7 +1,7 @@
 package com.crystalgui.language.java.classpath;
 
 import com.crystalgraphics.platform.CgPlatform;
-import com.crystalgui.language.platform.ScriptPlatforms;
+import com.crystalgui.language.platform.ScriptServices;
 
 import com.crystalgui.text.SimilarNames;
 
@@ -660,9 +660,9 @@ public final class TypeIndex {
         // Identity everywhere but an obfuscated Minecraft client, where without it the index holds `ave`
         // and friends: typing `Minecr` offered MinecraftForge and MinecraftServer -- real, unobfuscated
         // Forge classes -- and never net.minecraft.client.Minecraft, so nothing could offer the import
-        // either. @see ScriptPlatform#runtimeClassName
+        // either. @see ScriptService#runtimeClassName
         String internalName = path.substring(0, path.length() - ".class".length());
-        String binary = CgPlatform.get(ScriptPlatforms.SERVICE).runtimeClassName(internalName).replace('/', '.');
+        String binary = CgPlatform.get(ScriptServices.SERVICE).runtimeClassName(internalName).replace('/', '.');
 
         // NESTED TYPES ARE SKIPPED. `Map$Entry` cannot be imported under that name and inserting it
         // produces a compile error naming a type the list just offered -- which reads as the completion

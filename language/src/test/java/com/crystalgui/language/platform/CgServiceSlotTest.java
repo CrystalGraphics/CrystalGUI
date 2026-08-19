@@ -32,12 +32,12 @@ public class CgServiceSlotTest {
     @Before
     @After
     public void forget() {
-        CgPlatform.provide(ScriptPlatforms.SERVICE, null);
+        CgPlatform.provide(ScriptServices.SERVICE, null);
     }
 
     /** A fake that is identifiable by reference. */
-    private static ScriptPlatform fake() {
-        return new ScriptPlatform() {
+    private static ScriptService fake() {
+        return new ScriptService() {
             @Override
             public com.crystalgui.language.map.ReadableView.ByteSource liveBytes() {
                 return name -> null;
@@ -74,22 +74,22 @@ public class CgServiceSlotTest {
      */
     @Test
     public void anUnprovidedSlotAnswersItsAbsentValueRatherThanNull() {
-        assertFalse(CgPlatform.isProvided(ScriptPlatforms.SERVICE));
-        assertNotNull(CgPlatform.get(ScriptPlatforms.SERVICE));
-        assertSame(ScriptPlatform.NONE, CgPlatform.get(ScriptPlatforms.SERVICE));
+        assertFalse(CgPlatform.isProvided(ScriptServices.SERVICE));
+        assertNotNull(CgPlatform.get(ScriptServices.SERVICE));
+        assertSame(ScriptService.NONE, CgPlatform.get(ScriptServices.SERVICE));
         // And through the convenience wrapper, which is what nearly every caller actually uses.
-        assertSame(ScriptPlatform.NONE, CgPlatform.get(ScriptPlatforms.SERVICE));
+        assertSame(ScriptService.NONE, CgPlatform.get(ScriptServices.SERVICE));
     }
 
     /** Providing installs it, and {@code isProvided} distinguishes it from the fallback. */
     @Test
     public void providingInstallsIt() {
-        ScriptPlatform installed = fake();
-        CgPlatform.provide(ScriptPlatforms.SERVICE, installed);
+        ScriptService installed = fake();
+        CgPlatform.provide(ScriptServices.SERVICE, installed);
 
-        assertTrue(CgPlatform.isProvided(ScriptPlatforms.SERVICE));
-        assertSame(installed, CgPlatform.get(ScriptPlatforms.SERVICE));
-        assertSame(installed, CgPlatform.get(ScriptPlatforms.SERVICE));
+        assertTrue(CgPlatform.isProvided(ScriptServices.SERVICE));
+        assertSame(installed, CgPlatform.get(ScriptServices.SERVICE));
+        assertSame(installed, CgPlatform.get(ScriptServices.SERVICE));
     }
 
     /**
@@ -101,16 +101,16 @@ public class CgServiceSlotTest {
      */
     @Test
     public void lastWriteWinsAndNullClears() {
-        ScriptPlatform first = fake();
-        ScriptPlatform second = fake();
+        ScriptService first = fake();
+        ScriptService second = fake();
 
-        CgPlatform.provide(ScriptPlatforms.SERVICE, first);
-        CgPlatform.provide(ScriptPlatforms.SERVICE, second);
-        assertSame(second, CgPlatform.get(ScriptPlatforms.SERVICE));
+        CgPlatform.provide(ScriptServices.SERVICE, first);
+        CgPlatform.provide(ScriptServices.SERVICE, second);
+        assertSame(second, CgPlatform.get(ScriptServices.SERVICE));
 
-        CgPlatform.provide(ScriptPlatforms.SERVICE, null);
-        assertFalse(CgPlatform.isProvided(ScriptPlatforms.SERVICE));
-        assertSame(ScriptPlatform.NONE, CgPlatform.get(ScriptPlatforms.SERVICE));
+        CgPlatform.provide(ScriptServices.SERVICE, null);
+        assertFalse(CgPlatform.isProvided(ScriptServices.SERVICE));
+        assertSame(ScriptService.NONE, CgPlatform.get(ScriptServices.SERVICE));
     }
 
     /**
@@ -125,7 +125,7 @@ public class CgServiceSlotTest {
     public void theSlotIsVisibleInTheDeclaredStack() {
         // Touch the class so its slot is certainly declared -- the one property `declared()` cannot
         // give on its own, and the reason absence is reported from get() rather than from a sweep.
-        assertNotNull(ScriptPlatforms.SERVICE);
+        assertNotNull(ScriptServices.SERVICE);
 
         List<CgService<?>> declared = CgPlatform.services();
         for (CgService<?> slot : declared) {
@@ -155,7 +155,7 @@ public class CgServiceSlotTest {
     @Test
     public void aSlotRefusesAnEmptyName() {
         try {
-            CgService.of("", ScriptPlatform.NONE);
+            CgService.of("", ScriptService.NONE);
             fail("an unnamed slot was accepted");
         } catch (IllegalArgumentException expected) {
             assertEquals(true, expected.getMessage().contains("name"));
