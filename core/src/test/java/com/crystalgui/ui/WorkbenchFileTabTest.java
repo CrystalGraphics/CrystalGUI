@@ -461,4 +461,58 @@ public class WorkbenchFileTabTest extends UiTestBase {
                 new com.crystalgraphics.platform.input.CgSystemInput.Mouse.Event(cx, cy, 0, 0, 0, true, 0f, 0L));
         window.getInputHandler().endFrame();
     }
+    // ── Focus after a close ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * <b>Closing the focused tab leaves the focus on the editor that took its place.</b>
+     *
+     * <p>Closing detaches the editor that had focus and {@code UIInputHandler} correctly forgets a
+     * detached element, so the owner becomes null and the keyboard goes nowhere. Every part behaves — the
+     * dock does not know what a document is, the input handler is right to drop the reference — and nobody
+     * was left holding "and now who has it?". Ctrl+W ended with the caret in no editor at all.</p>
+     */
+    @Test
+    public void closingTheFocusedTabFocusesTheEditorThatReplacesIt() {
+        CgPath first = CgPath.parse("mymod.proj:First.java");
+        CgPath second = CgPath.parse("mymod.proj:Second.java");
+        TextEditor firstEditor = openWithContent(first);
+        TextEditor secondEditor = openWithContent(second);
+        window.getInputHandler().requestFocus(secondEditor);
+        settle();
+        assertSame(secondEditor, window.getInputHandler().getFocusedElement());
+
+        workbench.dock().closePanel(workbench.refFor(second));
+        settle();
+
+        assertSame("the editor that took over must hold the focus the closed one had",
+                firstEditor, window.getInputHandler().getFocusedElement());
+    }
+
+    /**
+     * <b>...and it never TAKES focus from somewhere else.</b>
+     *
+     * <p>The gate that keeps this from becoming the auto-focus coupling just removed from the project
+     * tree. Closing a background tab from a menu, or closing one while the caret is elsewhere, must leave
+     * focus exactly where the user put it — this fills a vacuum, it does not claim one.</p>
+     */
+    @Test
+    public void closingATabDoesNotTakeFocusFromElsewhere() {
+        CgPath first = CgPath.parse("mymod.proj:First.java");
+        CgPath second = CgPath.parse("mymod.proj:Second.java");
+        openWithContent(first);
+        openWithContent(second);
+
+        UIElement elsewhere = workbench.fileTree().treeView();
+        elsewhere.setFocusPolicy(com.crystalgui.ui.input.FocusPolicy.FOCUSABLE);
+        window.getInputHandler().requestFocus(elsewhere);
+        settle();
+        assertSame(elsewhere, window.getInputHandler().getFocusedElement());
+
+        workbench.dock().closePanel(workbench.refFor(second));
+        settle();
+
+        assertSame("a close must not pull focus out of whatever the user was using",
+                elsewhere, window.getInputHandler().getFocusedElement());
+    }
+
 }

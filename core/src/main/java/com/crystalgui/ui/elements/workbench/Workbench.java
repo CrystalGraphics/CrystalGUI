@@ -504,6 +504,9 @@ public class Workbench extends UIElement {
         // renderer -- lived until the process did. Disposer could not help, because the thing that knew
         // the tab was gone had no way to say so.
         dock.onDidClosePanel.connect(this::releaseClosedPanel);
+        // AND THE EDITOR THAT TOOK OVER GETS THE FOCUS THE CLOSED ONE HAD. Spent a frame later -- see
+        // focusActiveEditorPending.
+        dock.onDidClosePanel.connect(panel -> focusActiveEditorPending = true);
         // Tab dirty markers. Was a per-frame refreshDirtyMarkers(), which meant encoding every open
         // document -- a whole shader graph serialised sixty times a second -- to notice a marker that
         // moves when somebody types. The equality guard SURVIVES the move: the announcement means
@@ -944,6 +947,46 @@ public class Workbench extends UIElement {
      * to a diagnostic's line - have nothing to do with a document that has no lines.</p>
      */
     @Nullable
+    /**
+     * A tab was closed and the editor that took its place has not been focused yet.
+     *
+     * <p>@see #focusActiveEditorAfterClose</p>
+     */
+    private boolean focusActiveEditorPending;
+
+    /**
+     * Puts the focus the closed tab held onto the editor that replaced it.
+     *
+     * <h3>Why this is needed at all</h3>
+     *
+     * <p>Closing a tab detaches the editor that had focus, and {@code UIInputHandler} correctly forgets a
+     * detached element — so the focus owner becomes <b>null</b> and the keyboard goes nowhere. Every part
+     * is behaving: the dock does not know what a document is, and the input handler is right to drop a
+     * reference to something that left the tree. Nobody was left holding the question "and now who has
+     * it?", which is why Ctrl+W ended with the caret in no editor at all.</p>
+     *
+     * <h3>A frame later, and only when nobody else took it</h3>
+     *
+     * <p>Deferred because {@code requestRebuild} only sets a flag: at the moment the close is announced
+     * the strip has not been rebuilt and the panel that is about to become active has not been retargeted,
+     * so there is nothing yet to focus.</p>
+     *
+     * <p>Gated on the focus owner being <b>null</b>, which is what keeps this from being the auto-focus
+     * coupling that was just taken out of the project tree. Closing a background tab from a menu, or
+     * closing one while the caret is in the terminal, leaves focus exactly where the user put it — this
+     * only fills a vacuum, it never takes.</p>
+     */
+    private void focusActiveEditorAfterClose() {
+        if (!focusActiveEditorPending) return;
+        UIWindow window = getAttachedWindow();
+        if (window == null) return;
+        focusActiveEditorPending = false;
+        if (window.getInputHandler().getFocusedElement() != null) return;
+        TextEditor editor = activeEditor();
+        if (editor == null || editor.getAttachedWindow() == null) return;
+        window.getInputHandler().requestFocus(editor);
+    }
+
     public TextEditor activeEditor() {
         return activeDocument() instanceof TextFileDocument text ? text.editor() : null;
     }
@@ -1603,6 +1646,7 @@ public class Workbench extends UIElement {
             ticking = false;
             return false;
         }
+        focusActiveEditorAfterClose();
         // A few directories a frame, until the workspace is walked. Go to File searches what this has
         // reached, so warming it in the background is what makes the first Ctrl+P useful rather than
         // empty -- and it warms the tree's own listing cache, so there is no second index to keep in step.
