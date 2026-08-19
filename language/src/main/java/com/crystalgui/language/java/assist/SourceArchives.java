@@ -30,7 +30,7 @@ import java.util.zip.ZipFile;
  * keys its entries — and every one of those failures is silent, because the fallback is simply the older
  * and poorer rendering. So the half that can be tested directly is the half that is.</p>
  *
- * <h3>The three places sources actually are</h3>
+ * <h3>The places sources actually are</h3>
  *
  * <ul>
  *   <li><b>Beside the jar</b> — {@code foo.jar} → {@code foo-sources.jar}. A hand-built classpath, a
@@ -41,6 +41,14 @@ import java.util.zip.ZipFile;
  *       jar. A "look next to it" rule finds nothing in the one layout every Gradle build produces.</li>
  *   <li><b>The JDK</b> — {@code src.zip}, at {@code lib/src.zip} on 9+ and one level up from the
  *       {@code jre} home on 8. The one that matters most, since most hovers are {@code java.*}.</li>
+ *   <li><b>Any OTHER JDK on this machine</b> (M13 §25.5) — {@code JAVA_HOME}, the conventional install
+ *       roots, the toolchain caches. A modded player launches on a jlink'd JRE that carries no
+ *       {@code src.zip} while frequently having installed a full JDK, so this is the step that turns the
+ *       row above from "absent in production" into "usually present".</li>
+ *   <li><b>A fetched extract</b>, named through {@link JdkSourceExtract#SOURCES_PROPERTY} — and the same
+ *       property is how somebody points at a {@code src.zip} of their own.</li>
+ *   <li><b>Our own jar</b> (M13 §25.4) — loose {@code .java} under {@link #BUNDLED_PREFIX}, searched
+ *       last so anything more specific wins.</li>
  * </ul>
  */
 public final class SourceArchives {
@@ -82,7 +90,7 @@ public final class SourceArchives {
         for (Archive archive : archives) {
             String text = archive.read(path);
             if (text != null) {
-                found = new Found(text, archive.platform);
+                found = new Found(text, archive.platform());
                 break;
             }
         }
@@ -95,24 +103,53 @@ public final class SourceArchives {
 
     /** Visible for testing — which archives a classpath resolves to, in search order. */
     static List<Archive> discover(List<String> classpath) {
+        return discover(classpath, SourceArchives.class.getClassLoader());
+    }
+
+    /**
+     * The same, with the loader the bundled producer reads from named — which a test supplies.
+     *
+     * <h3>The order is a precedence rule, and every step of it was a decision</h3>
+     *
+     * <ol>
+     *   <li><b>The JDK</b>, because it answers the overwhelming majority of hovers and because a jar
+     *       that happens to ship a {@code java/…} source tree must not shadow it.</li>
+     *   <li><b>A real {@code -sources.jar} on disk</b>, which is the artifact somebody deliberately put
+     *       beside the jar and is therefore the most specific answer available.</li>
+     *   <li><b>Our own sources out of the jar</b> — last, so a working tree or a published
+     *       {@code -sources.jar} for the same types wins in a dev workspace. It is the production
+     *       fallback, and being last is what keeps it from shadowing something better.</li>
+     * </ol>
+     */
+    static List<Archive> discover(List<String> classpath, ClassLoader bundled) {
         List<Archive> found = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
-        // THE JDK FIRST, because it answers the overwhelming majority of hovers and because a jar that
-        // happens to ship a `java/…` source tree must not shadow it.
         for (File candidate : jdkSources()) addArchive(candidate, true, seen, found);
         if (classpath != null) {
             for (String entry : classpath) {
                 for (File candidate : sourcesBeside(entry)) addArchive(candidate, false, seen, found);
             }
         }
+        if (bundled != null) found.add(new ResourceArchive(bundled, BUNDLED_PREFIX));
         return found;
     }
+
+    /**
+     * Where a jar puts the sources it ships. M13 §25.4.
+     *
+     * <p>Loose {@code .java} entries under this prefix, not a nested zip: {@code ZipFile} needs a real
+     * file and cannot open an archive inside another, while {@code ZipInputStream} works over a resource
+     * stream but is strictly sequential — so every hover would decompress entries until it found the one
+     * it wanted, and the only way out is extracting to disk on first run. Loose entries give random
+     * access for free, because the JVM indexed the jar's central directory when the loader opened it.</p>
+     */
+    static final String BUNDLED_PREFIX = "assets/crystalgui/sources/";
 
     private static void addArchive(File candidate, boolean platform, Set<String> seen,
                                    List<Archive> into) {
         if (candidate == null || !candidate.isFile()) return;
         if (!seen.add(candidate.getAbsolutePath())) return;
-        into.add(new Archive(candidate, platform));
+        into.add(new ZipArchive(candidate, platform));
     }
 
     /**
@@ -124,16 +161,81 @@ public final class SourceArchives {
      */
     static List<File> jdkSources() {
         List<File> candidates = new ArrayList<>();
-        String home = System.getProperty("java.home");
-        if (home == null || home.isEmpty()) return candidates;
-        File javaHome = new File(home);
-        candidates.add(new File(javaHome, "lib/src.zip"));
-        File parent = javaHome.getParentFile();
-        if (parent != null) {
-            candidates.add(new File(parent, "src.zip"));
-            candidates.add(new File(parent, "lib/src.zip"));
+
+        // 1. WHAT SOMEBODY CHOSE, or what M13 §25.5 fetched. Named through a system property because
+        // that is the one channel the engine band and the host genuinely share -- a static field set on
+        // the host is invisible to the band's own copy of this class. @see JdkSourceExtract
+        String named = System.getProperty(JdkSourceExtract.SOURCES_PROPERTY);
+        if (named != null && !named.trim().isEmpty()) candidates.add(new File(named.trim()));
+
+        // 2. THE RUNNING JVM. Present on a JDK and absent on a JRE, which is the split that decides
+        // whether any of the rest of this is needed.
+        addJdkAt(System.getProperty("java.home"), candidates);
+
+        // 3. ANY OTHER JDK ON THIS MACHINE, and this is the step that matters in production. A modded
+        // player launches on a jlink'd JRE -- Mojang's launcher ships one, and it carries no src.zip --
+        // while very often having installed a full JDK because a pack's own guide told them to. Reading
+        // theirs costs nothing, needs no network, and raises no licence question at all, which makes it
+        // strictly the first thing to try before fetching anything.
+        addJdkAt(System.getenv("JAVA_HOME"), candidates);
+        addJdkAt(System.getenv("JDK_HOME"), candidates);
+        for (File root : INSTALL_ROOTS) {
+            // GATED ON THE DIRECTORY EXISTING, so a Windows host does not stat /usr/lib/jvm and a Linux
+            // one does not walk Program Files. This runs once per classpath, and the same lesson the
+            // Gradle sibling search records applies: an ungated walk is waste on every host but one.
+            File[] installed = root.isDirectory() ? root.listFiles() : null;
+            if (installed == null) continue;
+            for (File home : installed) {
+                if (!home.isDirectory()) continue;
+                addJdkAt(home.getPath(), candidates);
+                // macOS buries the home one level further, and always at this exact path.
+                addJdkAt(new File(home, "Contents/Home").getPath(), candidates);
+            }
         }
         return candidates;
+    }
+
+    /**
+     * The two places a JDK home keeps {@code src.zip}, added if the home is named at all.
+     *
+     * <p>On 9+ it is {@code $JAVA_HOME/lib/src.zip}. On 8 {@code java.home} points at the {@code jre}
+     * subdirectory, so the file sits one level <em>up</em> — and a check that knows only the modern
+     * layout finds nothing on exactly the host band 8 exists for.</p>
+     */
+    private static void addJdkAt(String home, List<File> into) {
+        if (home == null || home.trim().isEmpty()) return;
+        File javaHome = new File(home.trim());
+        into.add(new File(javaHome, "lib/src.zip"));
+        File parent = javaHome.getParentFile();
+        if (parent != null) {
+            into.add(new File(parent, "src.zip"));
+            into.add(new File(parent, "lib/src.zip"));
+        }
+    }
+
+    /** Where the conventional installers put a JDK, per platform. Missing ones cost one {@code isDirectory}. */
+    private static final File[] INSTALL_ROOTS = installRoots();
+
+    private static File[] installRoots() {
+        List<File> roots = new ArrayList<>();
+        String programFiles = System.getenv("ProgramFiles");
+        if (programFiles != null && !programFiles.isEmpty()) {
+            roots.add(new File(programFiles, "Java"));
+            roots.add(new File(programFiles, "Eclipse Adoptium"));
+            roots.add(new File(programFiles, "Microsoft"));
+            roots.add(new File(programFiles, "Zulu"));
+            roots.add(new File(programFiles, "Amazon Corretto"));
+        }
+        roots.add(new File("/usr/lib/jvm"));
+        roots.add(new File("/Library/Java/JavaVirtualMachines"));
+        String userHome = System.getProperty("user.home");
+        if (userHome != null && !userHome.isEmpty()) {
+            // Toolchain caches, which on a developer's machine hold more JDKs than the installers do.
+            roots.add(new File(userHome, ".gradle/jdks"));
+            roots.add(new File(userHome, ".sdkman/candidates/java"));
+            roots.add(new File(userHome, "Library/Java/JavaVirtualMachines"));
+        }
+        return roots.toArray(new File[0]);
     }
 
     /**
@@ -198,6 +300,80 @@ public final class SourceArchives {
     // ── One archive ─────────────────────────────────────────────────────────────────────────────
 
     /**
+     * Somewhere source files can be read from by package path.
+     *
+     * <p>Two implementations and they are not the same shape, which is the point of the seam.
+     * {@link ZipArchive} has to open a zip, walk every entry and build an index, and does it lazily
+     * precisely because that is expensive. {@link ResourceArchive} needs none of it — the lookup either
+     * answers or it does not, because the classloader indexed the jar's central directory when it opened
+     * it. Writing the second as a mode of the first would have meant a class with an index it never
+     * builds and a file it never has.</p>
+     */
+    interface Archive {
+
+        /** The JDK's own {@code src.zip}, which is parsed differently. @see AttachedSources */
+        boolean platform();
+
+        /** The decoded text at {@code packagePath} ({@code java/util/List.java}), or null. */
+        String read(String packagePath);
+    }
+
+    /**
+     * Our own sources, shipped as loose entries in a jar and read through the loader that has it.
+     *
+     * <p>M13 §25.4. Everything this class would otherwise need — an index, a handle, a lazy pass, a
+     * staleness question — is the classloader's already. What is left is one {@code getResourceAsStream}
+     * and a decode.</p>
+     *
+     * <p><b>Never platform.</b> Ours are read at the band's ceiling like any other library, and must be:
+     * they are written in the same Java the engine compiles scripts at, and the pre-module compliance the
+     * JDK's sources need exists only to dodge a {@code java.util} package clash that nothing here has.</p>
+     */
+    static final class ResourceArchive implements Archive {
+
+        private final ClassLoader loader;
+        private final String prefix;
+
+        ResourceArchive(ClassLoader loader, String prefix) {
+            this.loader = loader;
+            this.prefix = prefix;
+        }
+
+        @Override
+        public boolean platform() {
+            return false;
+        }
+
+        @Override
+        public String read(String packagePath) {
+            // A PACKAGE PATH BECOMES A RESOURCE PATH, so it may not climb out of the prefix. The name
+            // comes from a binding rather than from user text today, and that is a fact about today.
+            if (packagePath == null || packagePath.isEmpty() || packagePath.contains("..")) return null;
+            try (InputStream stream = loader.getResourceAsStream(prefix + packagePath)) {
+                if (stream == null) return null;
+                return new String(readAll(stream), StandardCharsets.UTF_8);
+            } catch (IOException | RuntimeException unreadable) {
+                return null;
+            }
+        }
+
+        @Override
+        public String toString() {
+            return prefix + " (bundled)";
+        }
+    }
+
+    /** Shared by both archive kinds, which is the only reason it is not a private method of one. */
+    private static byte[] readAll(InputStream stream) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream(8192);
+        byte[] buffer = new byte[8192];
+        for (int read = stream.read(buffer); read > 0; read = stream.read(buffer)) {
+            out.write(buffer, 0, read);
+        }
+        return out.toByteArray();
+    }
+
+    /**
      * A source archive, indexed by package path <b>on first read</b> and reopened per read after that.
      *
      * <h3>Two decisions, both about not paying for what nobody asked for</h3>
@@ -214,15 +390,15 @@ public final class SourceArchives {
      * user may want to replace. Reopening costs about a millisecond and happens once per type, because
      * the decoded text is cached above.</p>
      */
-    static final class Archive {
+    static final class ZipArchive implements Archive {
 
         private final File file;
         /** The JDK's own {@code src.zip}, which is parsed differently. @see AttachedSources */
-        final boolean platform;
+        private final boolean platform;
         /** Package path to the archive's own entry name; null until something asks. */
         private Map<String, String> entries;
 
-        Archive(File file, boolean platform) {
+        ZipArchive(File file, boolean platform) {
             this.file = file;
             this.platform = platform;
         }
@@ -249,6 +425,11 @@ public final class SourceArchives {
             return entries;
         }
 
+        @Override
+        public boolean platform() {
+            return platform;
+        }
+
         /** Visible for testing — how many source files this archive offers. */
         int size() {
             return entries().size();
@@ -269,7 +450,8 @@ public final class SourceArchives {
             return name;
         }
 
-        String read(String packagePath) {
+        @Override
+        public String read(String packagePath) {
             String entryName = entries().get(packagePath);
             if (entryName == null) return null;
             try (ZipFile zip = new ZipFile(file)) {
@@ -281,15 +463,6 @@ public final class SourceArchives {
             } catch (IOException | RuntimeException unreadable) {
                 return null;
             }
-        }
-
-        private static byte[] readAll(InputStream stream) throws IOException {
-            ByteArrayOutputStream out = new ByteArrayOutputStream(8192);
-            byte[] buffer = new byte[8192];
-            for (int read = stream.read(buffer); read > 0; read = stream.read(buffer)) {
-                out.write(buffer, 0, read);
-            }
-            return out.toByteArray();
         }
 
         @Override

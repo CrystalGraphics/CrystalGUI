@@ -1,6 +1,7 @@
 package com.crystalgui.language.java;
 
 import com.crystalgui.core.async.JobScheduler;
+import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.language.engine.EngineHost;
 import com.crystalgui.language.engine.EngineSource;
@@ -96,6 +97,17 @@ public final class JavaLanguage {
         LanguageRegistry.Entry current = LanguageRegistry.forFileName("Any.java");
         LanguageRegistry.registerExtensions(current.withServices(
                 (buffer, resource) -> servicesFor(buffer, resource, classpath)), "java");
+
+        // AND JAVA'S ONE COMMAND (M13 §25.5), into the GLOBAL registry rather than a workbench's.
+        //
+        // It has to be here rather than beside the Run commands: `language.run` is the engine-neutral
+        // shell, and `RunShellIsEngineNeutralTest` is a bytecode scan that fails the commit which makes
+        // it name `language.java` at all. Registering from each host instead would be a step every new
+        // loader has to remember, and forgetting it leaves a working download nobody can start.
+        //
+        // The call also ADOPTS an extract an earlier session fetched, which is why it is not conditional
+        // on the engine having opened: source attachment is the editor's, not the compiler's.
+        JdkSourceCommands.register(CommandRegistry.global());
 
         // AND THAT JAVA CAN RUN. The Run panel is written against ScriptRuntime and finds its runtimes
         // here rather than by asking this class -- so a second language contributes the same way and the
