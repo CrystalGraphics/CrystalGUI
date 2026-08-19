@@ -10,6 +10,7 @@ import com.crystalgui.ui.elements.MenuItem;
 import com.crystalgui.ui.elements.Popover;
 import com.crystalgui.ui.elements.Scroller;
 import com.crystalgui.ui.elements.ScrollerView;
+import com.crystalgui.ui.elements.ProgressBar;
 import com.crystalgui.ui.elements.Slider;
 import com.crystalgui.ui.elements.SplitView;
 import com.crystalgui.ui.elements.Switch;
@@ -78,6 +79,7 @@ public final class ElementRegistry {
         register("dialog", Dialog.class, () -> new Dialog(""));
         register("scroller", Scroller.class, Scroller::new);
         register("scrollerview", ScrollerView.class, ScrollerView::new);
+        register("progressbar", ProgressBar.class, ProgressBar::new);
         register("slider", Slider.class, Slider::new);
         register("splitview", SplitView.class, SplitView::new);
         register("switch", Switch.class, Switch::new);

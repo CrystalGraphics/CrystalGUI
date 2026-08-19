@@ -474,6 +474,17 @@ theme {
     --statusbar-fg: var(--fg-secondary);
     --statusbar-hover-fg: var(--fg);
     --statusbar-item-fg: var(--fg-secondary);
+    /* A second, quieter readout weight -- the "(3)" beside the progress line, and a process's detail
+     * row. Hint rather than disabled: it is legible text nobody needs to read, not an inert control. */
+    --statusbar-item-dim-fg: var(--fg-hint);
+
+    /* Progress. The track is a hollow, so it derives from the border family rather than a surface --
+     * it has to read as an inset against --statusbar-bg, which a surface value would not. */
+    --progress-track-bg: var(--border-base);
+    --progress-fill-bg: var(--accent);
+    /* Asked to cancel and not yet stopped. Disabled, because the control IS inert now -- the work is
+     * not, which is why the bar beside it keeps its colour. */
+    --progress-cancelling-fg: var(--fg-disabled);
     /* --border-base, not --divider. A divider separates two SURFACES and only has to be visible against
      * both; these sit ON one surface, and --divider resolves within about five points of --surface-base,
      * so the rules between the readouts were technically painted and effectively absent. The third time
