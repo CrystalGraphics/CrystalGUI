@@ -1354,7 +1354,12 @@ documentationpopup .__doc-problem-message__ {
     padding-bottom: -3px;
     color: var(--editor-fg, #BCBEC4);
     white-space: normal;
-    max-width: 360px;
+    /* THE SAME MEASURE THE BODY USES, and for the same reason: the popup is sized by its widest band, so a
+     * message wider than the prose beside it decides the box on its own. At 360 it did -- with the type
+     * declaration stacked one interface per line, this line became the widest thing in the popup and held
+     * it 50px past what its own content needed. A quick-fix message is a sentence, so it takes a
+     * sentence's measure. @see .__doc-body__ */
+    max-width: 300px;
     flex-shrink: 0;
 }
 
@@ -1583,16 +1588,46 @@ documentationpopup .__doc-separator__ {
  * line and can be very wide -- so prose given the same width ran to 100-odd characters a line, which is
  * roughly twice what anything is comfortable to read. A percentage was the obvious alternative and is
  * worse in both directions: a short signature would squeeze the prose into a sliver, and a long one
- * would still leave it unreadably wide. 440px is about 65 characters at this size, which is the number
- * typography has settled on, and it lands inside the "half to two thirds" this was asked for at the
- * widths the popup actually reaches. */
+ * would still leave it unreadably wide.
+ *
+ * 300px, AND THE NUMBER IT REPLACED IS THE WHOLE LESSON. This said 440px and claimed that was "about 65
+ * characters at this size". It is not: 440px at font-size 9 is about **107**, because the estimate
+ * assumed a monospace advance and this band is set in the proportional UI font, whose average advance is
+ * nearer 0.46em than 0.6em. So the rule that existed to bound the measure was itself derived from a
+ * measure that was never taken, and the popup read as a wall of text with a correct-looking rule sitting
+ * above it.
+ *
+ * COUNTED FROM A CAPTURE, not calculated again: `String`'s own documentation in the dock harness wraps
+ * at ~73 characters here, against IntelliJ's ~69 for the same class. Typography's comfortable range is
+ * 45-75 and both land in it. Anyone changing this number should count a line in a screenshot rather than
+ * multiply by an assumed advance -- that is exactly how it went wrong the first time. */
+/* THE SCROLLING REGION -- everything except the quick-fix band above it.
+ *
+ * BOUNDED BY ITS OWN max-height, NOT by `height: 0; flex-grow: 1`. That idiom is this engine's usual
+ * answer for "take the slack" and it needs a parent with a DEFINITE size to take slack from -- the popup
+ * is sized by its content and carries a max-height rather than a height, so there is no free space to
+ * distribute and the scroller sat at its basis of zero. The popup collapsed to the quick-fix band alone,
+ * measured at 58px tall with 480px of documentation inside a box with no height.
+ *
+ * So the cap goes here: the region grows to its content and then scrolls, and the popup's own max-height
+ * is the backstop rather than the mechanism.
+ *
+ * The body no longer scrolls itself: a scrollbar inside one band scrolls the prose while leaving a long
+ * `implements` list pinned above it, which is how you end up unable to reach what the declaration pushed
+ * off the bottom. */
+documentationpopup .__doc-scroll__ {
+    flex-direction: column;
+    width: 100%;
+    max-height: 260px;
+    overflow: auto;
+    gap-all: 3px;
+}
+
 documentationpopup .__doc-body__ {
     font-size: 9;
     color: var(--doc-body-fg, #DFE1E5);
     white-space: normal;
-    overflow: auto;
-    max-width: 440px;
-    max-height: 220px;
+    max-width: 300px;
     /* LOOSER THAN THE BANDS ABOVE IT, and the two want opposite things.
      *
      * The popup declares `line-height: 1.15` on itself so it reaches every band -- that number was chosen
