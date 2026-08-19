@@ -1155,3 +1155,127 @@ runpanel .__run-notice__ {
     white-space: nowrap;
     text-overflow: ellipsis;
 }
+
+/* ── Progress: the status bar indicator and the Processes popup ──────────────────────────────────
+ *
+ * Functional geometry only, as everywhere in this sheet. Every colour is a token with a fallback, so a
+ * theme owns the appearance and this still renders with none loaded.
+ *
+ * The bar's fill is sized by ProgressBar in PERCENT at IMPORTANT -- that is the data, not a style, and
+ * it is the one number the widget writes. Nothing here may set the fill's width.
+ */
+
+.__progress-item__ {
+    flex-direction: row;
+    align-items: center;
+    gap-all: 6px;
+    flex-shrink: 0;
+}
+
+.__progress-item__ .__label__ {
+    font-size: 9px;
+    color: var(--statusbar-item-fg, #9DA0A8);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    max-width: 240px;
+}
+
+.__progress-item__ .__count__ {
+    font-size: 9px;
+    color: var(--statusbar-item-dim-fg, #6E7178);
+    white-space: nowrap;
+}
+
+/* A track needs a width of its own: it has no content, so content-sizing gives it zero. */
+progressbar {
+    width: 120px;
+    height: 4px;
+    flex-shrink: 0;
+    background-color: var(--progress-track-bg, #3C3F41);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+progressbar .__fill__ {
+    height: 100%;
+    background-color: var(--progress-fill-bg, #3D7AB8);
+    border-radius: 2px;
+}
+
+.__progress-item__ .__cancel__ {
+    width: 10px;
+    height: 10px;
+    flex-shrink: 0;
+    background: icon("crystalgui:x");
+    color: var(--statusbar-item-dim-fg, #6E7178);
+}
+
+.__progress-item__ .__cancel__:hover {
+    color: var(--statusbar-item-fg, #9DA0A8);
+}
+
+/* The Processes popup. */
+
+.__processes__ {
+    flex-direction: column;
+    min-width: 320px;
+    padding-all: 10px;
+    gap-all: 8px;
+    background-color: var(--menu-bg, #3C3F41);
+    border-width-left: 1px;
+    border-color: var(--menu-border, #4E5254);
+    border-radius: 4px;
+}
+
+.__processes__ .__title__ {
+    font-size: 9px;
+    color: var(--menu-fg, #BBBBBB);
+    text-align: center;
+}
+
+.__processes__ .__process-row__ {
+    flex-direction: column;
+    gap-all: 4px;
+}
+
+.__processes__ .__process-row__ .__label__ {
+    font-size: 9px;
+    color: var(--menu-fg, #BBBBBB);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.__processes__ .__process-row__ .__detail__ {
+    font-size: 8px;
+    color: var(--statusbar-item-dim-fg, #6E7178);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* The row's bar fills the row; only the status bar's is a fixed 120px. */
+.__processes__ .__process-row__ progressbar {
+    width: 0;
+    flex-grow: 1;
+}
+
+.__processes__ .__process-row__ .__cancel__ {
+    width: 10px;
+    height: 10px;
+    flex-shrink: 0;
+    margin-left: 8px;
+    background: icon("crystalgui:x");
+    color: var(--statusbar-item-dim-fg, #6E7178);
+}
+
+.__processes__ .__process-row__ .__cancel__:hover {
+    color: var(--menu-fg, #BBBBBB);
+}
+
+/* Asked for and not yet acknowledged: inert, but the bar stays -- the work has not stopped. */
+.__processes__ .__process-row__.__cancelling__ .__label__ {
+    color: var(--statusbar-item-dim-fg, #6E7178);
+}
+
+.__processes__ .__process-row__.__cancelling__ .__cancel__ {
+    color: var(--progress-cancelling-fg, #4E5254);
+}
