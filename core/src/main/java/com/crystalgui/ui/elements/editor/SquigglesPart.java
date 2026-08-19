@@ -114,8 +114,8 @@ final class SquigglesPart extends EditorViewPart {
             LineProjection.ViewPosition toView = editor.projectionAt(viewLine)
                     .toViewPosition(segmentTo - rowStart, LineProjection.Affinity.LEFT);
 
-            float left = pad + editor.xOfView(viewLine, fromView.column()) - editor.getScrollLeft();
-            float right = pad + editor.xOfView(viewLine, toView.column()) - editor.getScrollLeft();
+            float left = pad + editor.xOfView(viewLine, fromView.column());
+            float right = pad + editor.xOfView(viewLine, toView.column());
             float width = Math.max(1f, right - left);
 
             UIElement band = bandAt(index++);
@@ -165,7 +165,7 @@ final class SquigglesPart extends EditorViewPart {
             band.markAsInternal();
             // In the viewport, in document coordinates, like every other decoration -- see SelectionsPart
             // for what happens when one of these is parented to the editor instead.
-            editor.textViewport().addInternalChild(band);
+            editor.linesLayer().addInternalChild(band);
             bands.add(band);
         }
         // BACK INTO LAYOUT. Retirement is `display: none` at IMPORTANT -- see DecorationPool.hide for why

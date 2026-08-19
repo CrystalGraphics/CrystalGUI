@@ -35,7 +35,7 @@ final class ViewCursorsPart extends EditorViewPart {
 
     ViewCursorsPart(TextEditor editor) {
         super(editor);
-        this.carets = new DecorationPool(editor::textViewport, TextEditor.CARET_CLASS, false);
+        this.carets = new DecorationPool(editor::linesLayer, TextEditor.CARET_CLASS, false);
     }
 
     /** Seconds per full blink cycle; {@code 0} keeps the caret solid. */
@@ -118,8 +118,9 @@ final class ViewCursorsPart extends EditorViewPart {
         // the bitmap-font reason above; a block and an underline COVER the character at the caret, so
         // shifting them by their own width would put them over the character before it.
         final float boundaryShift = editor.getCaretStyle() == TextEditor.CaretStyle.LINE ? caretWidth : 0f;
+        // DOCUMENT COORDINATES -- TextEditor.linesLayer() carries the horizontal offset.
         final float left = editor.codeLeftPad() + editor.xOfView(view.viewLine(), view.column())
-                - boundaryShift - editor.getScrollLeft();
+                - boundaryShift;
         final float top = editor.topOfViewLine(view.viewLine()) + (height - ink) / 2f;
 
         final float caretHeight = editor.getCaretStyle() == TextEditor.CaretStyle.UNDERLINE

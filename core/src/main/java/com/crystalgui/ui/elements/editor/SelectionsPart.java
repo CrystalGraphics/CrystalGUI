@@ -32,7 +32,7 @@ final class SelectionsPart extends EditorViewPart {
 
     SelectionsPart(TextEditor editor) {
         super(editor);
-        this.bands = new DecorationPool(editor::textViewport, TextEditor.SELECTION_CLASS, false);
+        this.bands = new DecorationPool(editor::linesLayer, TextEditor.SELECTION_CLASS, false);
     }
 
     @Override
@@ -88,15 +88,15 @@ final class SelectionsPart extends EditorViewPart {
             // when the row's own start is inside the selection. A wrapped continuation fails that test
             // (its `from` is past the row start), so it still begins at its carried indent.
             boolean fromRowStart = from == rowStart;
-            float left = (fromRowStart ? 0f : pad + editor.xOfView(viewLine, fromView.column()))
-                    - editor.getScrollLeft();
+            // DOCUMENT COORDINATES -- TextEditor.linesLayer() carries the horizontal offset.
+            float left = fromRowStart ? 0f : pad + editor.xOfView(viewLine, fromView.column());
             // A selected line break shows as a sliver past the end of the text, which is how every editor
             // signals "the newline is in the selection too". A soft wrap is NOT a line break, so the
             // sliver is only drawn where the selection genuinely continues onto another document row.
             boolean continuesPastRow = selection.end() > lineEnd
                     && editor.modelAt(viewLine).viewLineInRow()
                        == editor.projectionAt(viewLine).viewLineCount() - 1;
-            float right = pad + editor.xOfView(viewLine, toView.column()) - editor.getScrollLeft()
+            float right = pad + editor.xOfView(viewLine, toView.column())
                     + (continuesPastRow ? height * 0.4f : 0f);
 
             // THE LINE BOX, NOT THE INK -- and the two are not the same the moment `line-height` is not 1.

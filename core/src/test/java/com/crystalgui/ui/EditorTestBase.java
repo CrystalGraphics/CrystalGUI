@@ -206,6 +206,20 @@ public abstract class EditorTestBase extends UiTestBase {
         }
     }
 
+    /**
+     * Everything under {@code from}, at any depth.
+     *
+     * <p>For asking "is this decoration in the gutter" without also asserting how many elements deep it
+     * sits. The gutter's numbers, the fold column's arrows and the text's rows all live inside a
+     * {@code __scroll-layer__} now — see {@code TextEditor#linesLayer()} — so a walk over direct
+     * children answers zero for all of them while every one is on screen.</p>
+     */
+    protected static java.util.List<UIElement> descendantsOf(UIElement from) {
+        java.util.List<UIElement> out = new java.util.ArrayList<>();
+        collectAll(from, out);
+        return out;
+    }
+
     protected java.util.List<UIElement> allWithClass(String name) {
         java.util.List<UIElement> out = new java.util.ArrayList<>();
         collectWithClass(editor, name, out);
@@ -520,9 +534,29 @@ public abstract class EditorTestBase extends UiTestBase {
     }
 
     /** Screen y of the caret, which is what a fold must not move. */
+    /**
+     * Where something inside a scroll layer is actually DRAWN, vertically.
+     *
+     * <p>Its laid-out position is in <b>document</b> coordinates — that is the whole point of
+     * {@code TextEditor#linesLayer()}, since a position that does not change while scrolling is a
+     * position nothing has to rewrite every frame — and the layer's transform is what puts it on
+     * screen. So a test that wants the screen position has to apply the same offset the layer does.</p>
+     *
+     * <p>Reading the layout position alone still <em>looks</em> right at the top of a document, which is
+     * where most fixtures start, so this is worth going through rather than open-coding.</p>
+     */
+    protected float drawnY(UIElement inLayer) {
+        return inLayer.getRuntimeCache().getY() - editor.getScrollTop();
+    }
+
+    /** The horizontal half of {@link #drawnY}. */
+    protected float drawnX(UIElement inLayer) {
+        return inLayer.getRuntimeCache().getX() - editor.getScrollLeft();
+    }
+
     protected float caretScreenY() {
         UIElement caret = childWithClass(TextEditor.CARET_CLASS);
         assertNotNull("the caret is on screen", caret);
-        return caret.getRuntimeCache().getY();
+        return drawnY(caret);
     }
 }
