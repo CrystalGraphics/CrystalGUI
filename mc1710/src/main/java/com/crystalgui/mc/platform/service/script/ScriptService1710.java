@@ -1,4 +1,4 @@
-package com.crystalgui.mc.script;
+package com.crystalgui.mc.platform.service.script;
 
 import com.crystalgui.language.map.ReadableView;
 import com.crystalgui.language.platform.MappingCoordinates;
@@ -19,7 +19,7 @@ import java.nio.file.Path;
  * If anything in here grows past "state a fact about this platform", it belongs behind the interface
  * instead.</p>
  */
-public final class Mc1710ScriptPlatform implements ScriptPlatform {
+public final class ScriptService1710 implements ScriptPlatform {
 
     /**
      * MCP, matching {@code mc1710/gradle.properties} — {@code channel = stable},

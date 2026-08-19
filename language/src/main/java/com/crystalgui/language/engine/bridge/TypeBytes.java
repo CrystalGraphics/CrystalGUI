@@ -1,5 +1,7 @@
 package com.crystalgui.language.engine.bridge;
 
+import com.crystalgraphics.platform.CgPlatform;
+
 /**
  * Class files for types the classpath cannot supply — the §15.5 A crossing.
  *
@@ -13,7 +15,7 @@ package com.crystalgui.language.engine.bridge;
  * <p><b>It cannot ask the platform directly.</b> {@code ScriptPlatform} lives in
  * {@code language.platform} and {@code ReadableView} in {@code language.map}, and neither package is
  * parent-first — so a child-side class naming one gets the band loader's own copy, with its own statics.
- * That failure is silent and total: {@code ScriptPlatforms.register()} runs on the host, the compiler
+ * That failure is silent and total: {@code CgPlatform.provide(ScriptPlatforms.SERVICE, …)} runs on the host, the compiler
  * reads a different registry, finds nothing, and quietly resolves against files as though no platform
  * were installed. Everything works and nothing is live.</p>
  *

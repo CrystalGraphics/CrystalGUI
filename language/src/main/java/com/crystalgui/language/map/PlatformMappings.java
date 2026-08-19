@@ -3,6 +3,7 @@ package com.crystalgui.language.map;
 import com.crystalgui.language.platform.MappingCoordinates;
 import com.crystalgui.language.platform.NamespaceProbe;
 import com.crystalgui.language.platform.ScriptPlatform;
+import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.language.platform.ScriptPlatforms;
 
 import org.objectweb.asm.ClassReader;
@@ -61,7 +62,7 @@ public final class PlatformMappings {
         if (started) return;
         started = true;
 
-        ScriptPlatform platform = ScriptPlatforms.current();
+        ScriptPlatform platform = CgPlatform.get(ScriptPlatforms.SERVICE);
         if (platform == ScriptPlatform.NONE) return;
 
         NamespaceProbe probe = platform.namespaceProbe();

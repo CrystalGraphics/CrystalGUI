@@ -3,6 +3,7 @@ package com.crystalgui.language.map;
 import com.crystalgui.language.platform.MappingCoordinates;
 import com.crystalgui.language.platform.NamespaceProbe;
 import com.crystalgui.language.platform.ScriptPlatform;
+import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.language.platform.ScriptPlatforms;
 
 import org.junit.After;
@@ -51,7 +52,7 @@ public class PlatformMappingsTest {
     @Before
     @After
     public void forget() {
-        ScriptPlatforms.reset();
+        CgPlatform.provide(ScriptPlatforms.SERVICE, null);
         PlatformMappings.resetForTesting();
     }
 
@@ -67,7 +68,7 @@ public class PlatformMappingsTest {
 
     /** A platform whose runtime declares {@code member} and whose mappings live in {@code upstream}. */
     private void register(String member, Path cacheRoot, MappingCoordinates coordinates) {
-        ScriptPlatforms.register(new ScriptPlatform() {
+        CgPlatform.provide(ScriptPlatforms.SERVICE, new ScriptPlatform() {
             @Override
             public com.crystalgui.language.map.ReadableView.ByteSource liveBytes() {
                 return name -> WORLD.equals(name) ? classDeclaring(member) : null;
@@ -152,7 +153,7 @@ public class PlatformMappingsTest {
     @Test
     public void anUnreadableProbeDoesNotFetch() throws IOException {
         Path cache = folder.newFolder("cache").toPath();
-        ScriptPlatforms.register(new ScriptPlatform() {
+        CgPlatform.provide(ScriptPlatforms.SERVICE, new ScriptPlatform() {
             @Override
             public com.crystalgui.language.map.ReadableView.ByteSource liveBytes() {
                 return name -> null;

@@ -1,4 +1,4 @@
-package com.crystalgui.mc.script;
+package com.crystalgui.mc.platform.service.script;
 
 import com.crystalgui.language.map.ReadableView;
 

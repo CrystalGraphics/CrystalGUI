@@ -5,6 +5,7 @@ import com.crystalgui.language.map.MappingSet;
 import com.crystalgui.language.map.PlatformMappings;
 import com.crystalgui.language.map.ReadableView;
 import com.crystalgui.language.platform.ScriptPlatform;
+import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.language.platform.ScriptPlatforms;
 
 /**
@@ -78,7 +79,7 @@ public final class PlatformTypeBytes implements TypeBytes {
      * engines in one process translate differently.</p>
      */
     public static TypeBytes of() {
-        ScriptPlatform platform = ScriptPlatforms.current();
+        ScriptPlatform platform = CgPlatform.get(ScriptPlatforms.SERVICE);
         if (platform == ScriptPlatform.NONE) return TypeBytes.NONE;
         // A WAY TO TURN THE LIVE ROUTE OFF WITHOUT REMOVING THE PLATFORM, for diagnosis only.
         //

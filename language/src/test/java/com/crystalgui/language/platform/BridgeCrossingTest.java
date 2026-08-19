@@ -1,5 +1,7 @@
 package com.crystalgui.language.platform;
 
+import com.crystalgraphics.platform.CgPlatform;
+
 import com.crystalgui.language.engine.EngineBand;
 import com.crystalgui.language.engine.EngineHost;
 import com.crystalgui.language.engine.EngineSource;
@@ -19,7 +21,7 @@ import static org.junit.Assert.assertSame;
  * <p>{@code EngineClassLoader} is child-first for everything outside {@code java.*}, the bridge package
  * and {@code com.crystalgui.text.*}. So a compiler-side class that names a host class does not fail —
  * it gets the band's own copy, complete with its own statics. For anything holding a registry that is
- * total and invisible: {@code ScriptPlatforms.register()} runs on the host, the compiler reads a
+ * total and invisible: {@code CgPlatform.provide(ScriptPlatforms.SERVICE, …)} runs on the host, the compiler reads a
  * different static, finds nothing, and resolves from files as though no platform were installed.</p>
  *
  * <p>The first live-name-environment implementation did exactly that and looked entirely correct —

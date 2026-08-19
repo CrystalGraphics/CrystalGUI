@@ -1,5 +1,6 @@
 package com.crystalgui.language.java.classpath;
 
+import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.language.platform.ScriptPlatforms;
 
 import com.crystalgui.text.SimilarNames;
@@ -661,7 +662,7 @@ public final class TypeIndex {
         // Forge classes -- and never net.minecraft.client.Minecraft, so nothing could offer the import
         // either. @see ScriptPlatform#runtimeClassName
         String internalName = path.substring(0, path.length() - ".class".length());
-        String binary = ScriptPlatforms.current().runtimeClassName(internalName).replace('/', '.');
+        String binary = CgPlatform.get(ScriptPlatforms.SERVICE).runtimeClassName(internalName).replace('/', '.');
 
         // NESTED TYPES ARE SKIPPED. `Map$Entry` cannot be imported under that name and inserting it
         // produces a compile error naming a type the list just offered -- which reads as the completion

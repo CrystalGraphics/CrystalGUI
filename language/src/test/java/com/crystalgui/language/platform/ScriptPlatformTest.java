@@ -1,5 +1,7 @@
 package com.crystalgui.language.platform;
 
+import com.crystalgraphics.platform.CgPlatform;
+
 import org.junit.After;
 import org.junit.Test;
 
@@ -24,12 +26,12 @@ public class ScriptPlatformTest {
 
     @After
     public void restoreDefault() {
-        ScriptPlatforms.reset();
+        CgPlatform.provide(ScriptPlatforms.SERVICE, null);
     }
 
     @Test
     public void withNothingRegisteredTheCurrentPlatformIsNoneRatherThanNull() {
-        assertSame(ScriptPlatform.NONE, ScriptPlatforms.current());
+        assertSame(ScriptPlatform.NONE, CgPlatform.get(ScriptPlatforms.SERVICE));
     }
 
     /** Every member of NONE answers, so no caller has to special-case the absent platform. */
@@ -54,15 +56,15 @@ public class ScriptPlatformTest {
 
     @Test
     public void registeringNullFallsBackRatherThanStoringIt() {
-        ScriptPlatforms.register(null);
-        assertSame(ScriptPlatform.NONE, ScriptPlatforms.current());
+        CgPlatform.provide(ScriptPlatforms.SERVICE, null);
+        assertSame(ScriptPlatform.NONE, CgPlatform.get(ScriptPlatforms.SERVICE));
     }
 
     @Test
     public void aRegisteredPlatformIsWhatCurrentAnswers() {
         ScriptPlatform fake = fakePlatform(Paths.get("somewhere"));
-        ScriptPlatforms.register(fake);
-        assertSame(fake, ScriptPlatforms.current());
+        CgPlatform.provide(ScriptPlatforms.SERVICE, fake);
+        assertSame(fake, CgPlatform.get(ScriptPlatforms.SERVICE));
     }
 
     /**
