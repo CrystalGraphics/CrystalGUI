@@ -1530,12 +1530,14 @@ public class Workbench extends UIElement {
     private DiagnosticSet boundTo;
 
     /**
-     * Whether the tree follows the active tab — VS Code's {@code explorer.autoReveal}, default on.
+     * Whether the tree follows the active tab — {@code explorer.autoReveal}, <b>default off</b>.
      *
-     * <p>Off is a real preference rather than a hypothetical: revealing scrolls the tree, and somebody
-     * navigating the tree while switching tabs loses their place every time.</p>
+     * <p>Which is IntelliJ's posture and not VS Code's; see {@code WorkbenchSettings.AUTO_REVEAL} for why
+     * the default went that way. The field's own default matches the setting's so a workbench built
+     * without a settings store behaves like one built with the shipped defaults — a default stated in two
+     * places that disagree is worse than either.</p>
      */
-    private boolean autoReveal = true;
+    private boolean autoReveal = false;
 
     public Workbench setAutoReveal(boolean enabled) {
         this.autoReveal = enabled;
