@@ -1193,6 +1193,56 @@ four layers of passing tests proved nothing.
 
 ---
 
+## 26.14 The Phase 3 audit
+
+Run before Phase 4 rather than after, and guided rather than swept: the exit criteria say what was
+delivered, and an audit asks whether it was delivered in a shape the next milestone can build on. Findings
+are recorded here as they land, including the ones that turn out to be nothing.
+
+### Finding 1 — `ScriptPlatforms` was a second platform registry ✅ fixed
+
+Phase 3 gave the language stack a static holder with a setter, and wired it in `ClientProxy` beside
+CrystalGraphics' own `CgPlatform.register`. That is a shape this project has deleted once already, and
+`AGENTS.md` still carries the invariant: *"CrystalGUI has no platform registry … two registries let a
+loader wire up one and not the other: a working GL backend and a dead keyboard, with nothing to report
+it."* `CrystalGuiCore`'s four static fields went for exactly that reason; Phase 3 rebuilt the hazard one
+layer out.
+
+The obvious repair — a tenth method on `CgPlatformService` — is wrong twice over: it would put a type
+only the language stack uses into CrystalGraphics' SPI, and the two registrations happen in **different
+Forge mods**, so no single bundle object can carry both however the interface is shaped.
+
+What shipped is `CgService<T>` in `platform/`: a **slot**, declared by whoever owns the contract, carrying
+its own name and its own absent-value, filled and read through `CgPlatform.provide` / `get`. The design
+turns on one thing — a `Map<Class<?>, Object>` returning an `Optional` puts the fallback at **every call
+site**, so N consumers can disagree about what absence means; the fallback is part of the contract, so it
+is stated once beside it. Three things then collapse into one object: declaring a slot *is* expecting it
+(no separate registration to drift), the value arrives typed, and `CgPlatform.services()` can enumerate
+what the platform is carrying — which nothing could answer before.
+
+Absence announces itself **once, from the read**, rather than at a lifecycle checkpoint: a slot only
+exists once its declaring class has loaded, so a checkpoint would silently skip exactly the service nobody
+had touched. That is the same rule §15.5 already follows about live-versus-inert.
+
+The nine core services deliberately stay a closed bundle with no defaults. Migrating them would trade
+compiler enforcement for uniformity, and a graceful absent-value is precisely what `CgPlatformService`
+must not have. **Closed for what the framework requires; slots for what its consumers require.**
+
+Costs, stated: `language/` gains `compileOnly` on `com.crystalgraphics:platform` — it had no
+CrystalGraphics dependency at all before. Defensible (pure SPI, `core` takes it the same way, present on
+every host including a dedicated server) and deliberate rather than noticed later.
+
+### Carried forward, not fixed
+
+- **`cacheRoot()` is the only client-shaped member** of `ScriptService1710` — it reads
+  `Minecraft.getMinecraft().mcDataDir`. The other four are installation-level. So registering in
+  `ClientProxy` is *one method deep* rather than inherent to what a `ScriptPlatform` is.
+- **`CommonProxy` is empty**, so nothing registers server-side. Not a live defect — `mc1710` runs no
+  scripts on a server today — but the plan says a dedicated server runs scripts, and when that lands both
+  the registration site and that one method move.
+
+---
+
 ## Phase 4 — sketch only, not designed
 
 Phases 2 and 3 were sketched here and are now designed, built and documented above — Phase 2 in its own
