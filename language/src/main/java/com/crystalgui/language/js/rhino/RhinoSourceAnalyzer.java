@@ -491,8 +491,7 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
                 // in front of it. Lazy like everything here, and the resolver caches per class, so a
                 // file mentioning one Java type asks about it once. @see RhinoSemanticTokens#markJavaMembers
                 tokens = root == null ? List.of()
-                        : RhinoSemanticTokens.of(root, scopes, hostBindings, imports,
-                                resolution::memberCaptureAt);
+                        : RhinoSemanticTokens.of(root, scopes, hostBindings, imports, resolution::memberCaptureAt);
             }
             return tokens;
         }
