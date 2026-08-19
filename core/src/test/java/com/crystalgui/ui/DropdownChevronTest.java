@@ -39,6 +39,6 @@ public class DropdownChevronTest extends UiTestBase {
         var overlay = chevrons.get(0).getStyle().getGeneralGroup().overlay();
         assertTrue("the marker must actually draw the chevron shape, not just claim the class",
                 overlay instanceof CgUiShape
-                        && ((CgUiShape) overlay).getKind() == CgUiShape.Kind.CHEVRON_DOWN);
+                        && ((CgUiShape) overlay).kind() == CgUiShape.Kind.CHEVRON_DOWN);
     }
 }
