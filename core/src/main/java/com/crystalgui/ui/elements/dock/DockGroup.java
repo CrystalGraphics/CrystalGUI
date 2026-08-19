@@ -256,6 +256,13 @@ public class DockGroup extends UIElement {
             // than pushed onto the tab: the strip is rebuilt on every rearrangement, and anything pushed
             // would have to be pushed again by somebody who noticed.
             applyDecoration(tab, panel);
+            // CLOSABILITY IS THE PANEL TYPE'S, and it is already recorded there -- a console or an editor
+            // may be closed, a region's permanent host may not. Routed to the same `closePanel` the Close
+            // Panel command uses, so the mouse and the keyboard cannot come to mean different things.
+            if (area.registry().isClosable(panel)) {
+                tab.setClosable(true);
+                tab.onCloseRequested.connect(() -> area.closePanel(panel));
+            }
             tab.content().addChild(contentFor(panel));
             tabByPanel.put(panel, tab);
             area.installTabDrag(this, panel, tab);

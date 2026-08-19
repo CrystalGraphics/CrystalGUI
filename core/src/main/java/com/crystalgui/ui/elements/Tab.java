@@ -1,5 +1,7 @@
 package com.crystalgui.ui.elements;
 
+import com.crystalgui.core.signal.Signal;
+import javax.annotation.Nullable;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.serialization.StateMap;
@@ -46,8 +48,25 @@ public class Tab extends Button {
     /** On the content pane, not on the tab itself. */
     public static final String PANE_CLASS = "__pane__";
 
+    /** The close affordance — see {@link #setClosable}. */
+    public static final String CLOSE_CLASS = "__close__";
+
     private final UIElement pane;
     private boolean selected = false;
+
+    /** The close button, or null when this tab is not closable. @see #setClosable */
+    @Nullable
+    private Button close;
+
+    /**
+     * Someone pressed the close affordance.
+     *
+     * <p>A <b>request</b>, not a closure: a tab does not know what it is a tab for, and whichever thing
+     * owns the document behind it may want to ask before discarding unsaved work. {@code DockGroup} routes
+     * this to {@code DockArea.closePanel}, which is the same path the Close Panel command takes — so a tab
+     * closed with the mouse and one closed with Ctrl+W cannot diverge.</p>
+     */
+    public final Signal.Action onCloseRequested = new Signal.Action();
 
     public Tab(String label) {
         super(label);
@@ -66,6 +85,54 @@ public class Tab extends Button {
     /** The content pane. An ordinary element — it accepts children normally. */
     public UIElement content() {
         return pane;
+    }
+
+    /**
+     * Gives this tab a close button.
+     *
+     * <h3>The space is reserved and the glyph is not</h3>
+     *
+     * <p>The button exists from the moment a tab is closable and is <b>faded rather than hidden</b> until
+     * the pointer is over the tab or the tab is the selected one — which is what IntelliJ, VS Code and
+     * every browser do, and the reason is layout rather than taste. A tab that grows a button on hover
+     * changes width, so the tabs to its right move; do that on a strip and the tab under the pointer
+     * shifts out from under it, and pressing where a label was closes the neighbour instead. The width has
+     * to be paid for whether or not the glyph is drawn.</p>
+     *
+     * <p>Which is why the sheet does this with {@code opacity} and never {@code display}. Being invisible
+     * and still hit-testable costs nothing: reaching it requires hovering the tab, and hovering is what
+     * makes it appear — so there is no state in which a user can press a button they cannot see.</p>
+     *
+     * <h3>Pressing it does not select the tab</h3>
+     *
+     * <p>And that needs no {@code stopPropagation}, which is worth stating because reaching for one is the
+     * obvious move. A {@code Button}'s activation comes from its {@code defaultEvents}, which fire only in
+     * the TARGET phase — so the press whose target is the close button reaches the tab in the BUBBLE
+     * phase, where the tab's own activation does not run. Stopping propagation here would additionally
+     * pre-empt anything a caller had attached to the tab, since a stop halts the remaining listeners on
+     * that element and phase rather than only the walk.</p>
+     */
+    public Tab setClosable(boolean closable) {
+        if (closable == (close != null)) return this;
+        if (!closable) {
+            removeInternalChild(close);
+            close = null;
+            return this;
+        }
+        // A Button rather than a bare element: it is a control, so it wants the hover, press and focus
+        // behaviour every other control has, and the sheet styles it as one.
+        Button button = new Button("");
+        button.addClass(CLOSE_CLASS);
+        button.markAsInternal();
+        button.attachListener(onCloseRequested::emit);
+        close = button;
+        addInternalChild(button);
+        return this;
+    }
+
+    /** @see #setClosable */
+    public boolean isClosable() {
+        return close != null;
     }
 
     /**

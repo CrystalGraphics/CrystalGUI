@@ -578,6 +578,9 @@ editor scheme's.
 | `--tab-active-border` | `var(--border-base)` | base.css |
 | `--tab-active-fg` | `var(--fg)` | base.css |
 | `--tab-bg` | `#00000000` | base.css |
+| `--tab-close-fg` | `var(--fg-disabled)` | base.css |
+| `--tab-close-hover-bg` | `var(--hover-bg)` | base.css |
+| `--tab-close-hover-fg` | `var(--fg)` | base.css |
 | `--tab-disabled-bg` | `var(--surface-raised)` | base.css |
 | `--tab-disabled-fg` | `var(--fg-disabled)` | base.css |
 | `--tab-fg` | `var(--fg-secondary)` | base.css |
