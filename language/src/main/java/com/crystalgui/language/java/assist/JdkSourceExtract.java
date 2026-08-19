@@ -94,15 +94,30 @@ public final class JdkSourceExtract {
             "https://api.adoptium.net/v3/binary/latest/%d/ga/linux/x64/sources/hotspot/normal/eclipse";
 
     /**
-     * The packages a script author actually touches.
+     * <b>The public API of {@code java.base}</b> — which is what this list adds up to, measured rather
+     * than chosen.
      *
-     * <p>The whole tree is tens of thousands of files across modules nobody scripting a Minecraft mod
-     * will ever name. These eight are what {@code plan_m13.md} measured at 1256 files, and cutting to
-     * them is most of the difference between 43 MB and single-digit ones.</p>
+     * <p>It began as eight packages somebody picked as "what a script author touches", which is a
+     * judgement nobody can check. Measured against a real {@code src.zip} it turned out to cover 41% of
+     * {@code java.base}'s files, and <b>the only public packages it missed were {@code java.security} and
+     * {@code javax.security}</b> — 224 files and 1.72 MB, now included. Everything else left out of the
+     * module is {@code jdk.internal.*}, {@code sun.*} and {@code com.sun.*}: implementation internals a
+     * script cannot usefully call, that {@code ScriptPolicy} refuses anyway, and that no completion list
+     * offers.</p>
+     *
+     * <p>So the rule is now sayable in one line instead of being a list to argue with, and the ten entries
+     * are its spelling. <b>Only {@code java.base}</b>: {@code java.desktop} is Swing and AWT, {@code
+     * java.xml} is a parser stack, and neither is something a Minecraft script reaches for — together they
+     * are most of {@code src.zip}'s 185 MB and would multiply the cache for nothing.</p>
+     *
+     * <p>Spelled as path prefixes rather than module names because a Java 8 {@code src.zip} has no
+     * modules in its layout at all, and the same list has to work against all three shapes
+     * {@link #relativePathOf} normalises.</p>
      */
     static final String[] PACKAGES = {
             "java/lang/", "java/util/", "java/io/", "java/nio/",
             "java/time/", "java/text/", "java/math/", "java/net/",
+            "java/security/", "javax/security/",
     };
 
     /** Where a JDK repository keeps the sources that become {@code src.zip}. */

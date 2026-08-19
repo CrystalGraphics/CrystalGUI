@@ -2,24 +2,36 @@ package com.crystalgui.core.async;
 
 import org.junit.Test;
 
+import java.util.concurrent.atomic.AtomicLong;
+
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
- * The readout beside the bar — {@code "12.4 MB of 48.9 MB · 30s left"}.
+ * The readout beside the bar — {@code "12.4 MB of 110 MB · 40s left"}.
  *
- * <p>Here rather than in the chrome because it is arithmetic and formatting, and because the widget that
- * draws it has no branches at all: it appends a string the state produced. The unit is the thing under
- * test as much as the numbers are — the whole reason {@link Progress.Unit} exists is that a reader given
- * two longs cannot tell a byte count from a file count, and would render "412 of 1178 bytes".</p>
+ * <p>The state <b>formats</b> the estimate and never computes one: the measurement is a sliding
+ * {@link RateEstimator} and the refresh throttle are both {@link JobContext}'s, because only it sees
+ * consecutive readings. Three estimators were invented here before anybody read how curl, wget and
+ * Chromium do it, and every one failed within a minute of a user watching it — so what is asserted below
+ * is the split, the formatting, and the throttle, not an algorithm of our own.</p>
  */
 public class ProgressSummaryTest {
 
     private static final long START = 1_000_000L;
 
+    /** A reading with no estimate on it — the shape before there is anything to measure. */
     private static ProgressState bytes(long done, long total) {
-        return new ProgressState("Downloading", "", done, total, START, Progress.Unit.BYTES);
+        return new ProgressState("Downloading", "", done, total, START, START + 5_000,
+                Progress.Unit.BYTES);
+    }
+
+    /** A reading carrying the estimate {@link JobContext} decided. */
+    private static ProgressState bytes(long done, long total, long secondsLeft) {
+        return new ProgressState("Downloading", "", done, total, START, START + 5_000,
+                Progress.Unit.BYTES, secondsLeft);
     }
 
     /** A count of files is what the bar already says; repeating it as a size would be a lie. */
@@ -27,13 +39,13 @@ public class ProgressSummaryTest {
     public void countingJobsGetNoReadout() {
         ProgressState items = new ProgressState("Indexing", "", 412, 1178, START);
         assertEquals("the default unit is ITEMS", Progress.Unit.ITEMS, items.unit());
-        assertNull(items.summary(START + 5_000));
+        assertNull(items.summary());
     }
 
     @Test
     public void aTransferReadsAsSizeOfSize() {
-        String summary = bytes(13_000_000L, 51_300_000L).summary(START + 500);
-        assertTrue(summary, summary.startsWith("12.4 MB of 48.9 MB"));
+        assertEquals("12.4 MB of 48.9 MB", bytes(13_000_000L, 51_300_000L).summary());
+        assertEquals("12.4 MB of 48.9 MB · 40s left", bytes(13_000_000L, 51_300_000L, 40).summary());
     }
 
     /**
@@ -52,42 +64,77 @@ public class ProgressSummaryTest {
         assertEquals("1.0 GB", ProgressState.bytes(1024L * 1024 * 1024));
     }
 
+    /** {@code "4m 0s left"} reads as a precision a windowed estimate has not got. */
+    @Test
+    public void aZeroSmallerUnitIsDropped() {
+        assertTrue(bytes(1, 100, 240).summary().endsWith("· 4m left"));
+        assertTrue(bytes(1, 100, 990).summary().endsWith("· 16m 30s left"));
+        assertTrue(bytes(1, 100, 7200).summary().endsWith("· 2h left"));
+        assertTrue(bytes(1, 100, 17_940).summary().endsWith("· 4h 59m left"));
+    }
+
+    /** No estimate, no claim — and a finished transfer has nothing left to say about time. */
+    @Test
+    public void anAbsentEstimateIsSimplyNotShown() {
+        assertNull("nothing has arrived", bytes(0, 1000, 30).summary());
+        assertEquals("9.8 KB of 9.8 KB", bytes(10_000, 10_000, 30).summary());
+        assertEquals("2.0 MB", bytes(2L * 1024 * 1024, -1, 30).summary());
+    }
+
     /**
-     * <b>The estimate is suppressed until it can be made honestly</b>, and again once it is meaningless.
+     * <b>The readout does not change because a frame went past.</b>
      *
-     * <p>An ETA from the first two chunks is a guess with a decimal point on it, and "0s left" on a
-     * finished transfer is noise. Both read as the number being wrong rather than as it being withheld.
+     * <p>Reported from a client as "39s, 40s, 39s, 38s". A summary computed against {@code now} had a
+     * frozen {@code done} over a growing elapsed, so it drifted up between reports and snapped back at
+     * each one. It is a pure function of the reading now, which is what makes that impossible.</p>
      */
     @Test
-    public void theEstimateIsWithheldWhenItWouldBeInvented() {
-        assertNull("nothing has moved yet", bytes(0, 1000).summary(START + 5_000));
-        assertEquals("under a second of evidence is not an estimate",
-                "1.0 KB of 9.8 KB", bytes(1024, 10_000).summary(START + 200));
-        assertEquals("and a finished transfer has nothing left",
-                "9.8 KB of 9.8 KB", bytes(10_000, 10_000).summary(START + 5_000));
+    public void theReadoutIsAPropertyOfTheReadingAndNotOfTheFrame() {
+        ProgressState reading = bytes(5L * 1024 * 1024, 10L * 1024 * 1024, 10);
+        String first = reading.summary();
+        for (int frame = 0; frame < 60; frame++) {
+            assertEquals(first, reading.summary());
+        }
+        assertNotEquals(first, bytes(6L * 1024 * 1024, 10L * 1024 * 1024, 8).summary());
     }
 
-    /** Average rate, not instantaneous: half in ten seconds means about ten seconds to go. */
+    /**
+     * <b>The estimate changes about once a second, however often work is reported.</b>
+     *
+     * <p>wget's {@code ETA_REFRESH_INTERVAL}, and the half that was missing while the measurement was
+     * being smoothed three different ways: <i>"Don't refresh the ETA too often to avoid jerkiness in
+     * predictions."</i> Reports here fire per 64 KB — hundreds a second on a fast link — and an estimate
+     * recomputed on each is a number nobody can read however good the underlying rate is.</p>
+     */
     @Test
-    public void theEstimateIsTheAverageRateSoFar() {
-        assertEquals("5.0 MB of 10.0 MB · 10s left",
-                bytes(5L * 1024 * 1024, 10L * 1024 * 1024).summary(START + 10_000));
-    }
+    public void theEstimateIsRefreshedAboutOncePerSecond() {
+        AtomicLong clock = new AtomicLong(START);
+        JobContext context = new JobContext(clock::get);
+        Progress progress = context.progress();
+        progress.begin("Downloading", 100_000_000L, Progress.Unit.BYTES);
 
-    @Test
-    public void longEstimatesReadInMinutesAndHours() {
-        // 1 MB in 10s of a 100 MB file -> 990s, which is 16m 30s.
-        String minutes = bytes(1024L * 1024, 100L * 1024 * 1024).summary(START + 10_000);
-        assertTrue(minutes, minutes.endsWith("16m 30s left"));
+        // A hundred reports inside one second must not move the estimate.
+        long done = 0;
+        for (int report = 0; report < 100; report++) {
+            clock.addAndGet(5);
+            done += 65_536;
+            progress.advance(done);
+        }
+        assertEquals("no estimate before the first refresh is due", -1L,
+                context.progressState().secondsRemaining());
 
-        // 1 MB in 60s of a 300 MB file -> 17940s, which is 4h 59m.
-        String hours = bytes(1024L * 1024, 300L * 1024 * 1024).summary(START + 60_000);
-        assertTrue(hours, hours.endsWith("4h 59m left"));
-    }
+        clock.addAndGet(1000);
+        done += 65_536;
+        progress.advance(done);
+        long first = context.progressState().secondsRemaining();
+        assertTrue("an estimate exists once a second has passed: " + first, first > 0);
 
-    /** An indeterminate transfer still says how much has arrived, which is all it honestly can. */
-    @Test
-    public void anIndeterminateTransferReportsWhatHasArrived() {
-        assertEquals("2.0 MB", bytes(2L * 1024 * 1024, -1).summary(START + 5_000));
+        for (int report = 0; report < 50; report++) {
+            clock.addAndGet(5);
+            done += 65_536;
+            progress.advance(done);
+        }
+        assertEquals("and it is held steady until the next refresh is due",
+                first, context.progressState().secondsRemaining());
     }
 }
