@@ -1,7 +1,7 @@
 package com.crystalgui.mc;
 
 import com.crystalgraphics.platform.CgPlatform;
-import com.crystalgui.language.platform.ScriptPlatforms;
+import com.crystalgui.language.platform.ScriptServices;
 import com.crystalgui.mc.client.CgUiAutoTest;
 import com.crystalgui.mc.client.CgUiInput;
 import com.crystalgui.mc.platform.service.script.ScriptService1710;
@@ -19,7 +19,7 @@ public class ClientProxy extends CommonProxy {
     @Override
     public void preInit() {
         super.preInit();
-        // INTO THE PLATFORM STACK, not beside it. `ScriptPlatforms.SERVICE` is a `CgService` slot, so
+        // INTO THE PLATFORM STACK, not beside it. `ScriptServices.SERVICE` is a `CgService` slot, so
         // this is the same registry every other platform service goes through and `CgService.declared()`
         // can print it alongside them -- rather than a second, parallel registry a loader has to know to
         // look for. Registration is a statement of facts about this platform (a byte route, a cache
@@ -28,7 +28,7 @@ public class ClientProxy extends CommonProxy {
         // CLIENT-side only because of ONE member: `cacheRoot()` reads `Minecraft.getMinecraft().mcDataDir`.
         // The other four are installation-level, so when server-side scripting lands this moves to
         // CommonProxy and that one method grows a side-aware answer.
-        CgPlatform.provide(ScriptPlatforms.SERVICE, new ScriptService1710());
+        CgPlatform.provide(ScriptServices.SERVICE, new ScriptService1710());
         CgUiInput.register();
         CgUiAutoTest.register();
     }

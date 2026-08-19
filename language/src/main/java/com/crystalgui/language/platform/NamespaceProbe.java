@@ -16,7 +16,7 @@ package com.crystalgui.language.platform;
  *
  * <h3>It reads through the same byte source as the compiler</h3>
  *
- * <p>Deliberately, and it is the reason this is data on {@link ScriptPlatform} rather than a check
+ * <p>Deliberately, and it is the reason this is data on {@link ScriptService} rather than a check
  * somebody writes against the filesystem: the disk view lies on every Minecraft platform — 1.7.10
  * production ships Notch-obfuscated jars whose classes are remapped <em>as they load</em>. A probe that
  * read a file could therefore answer differently from what the compiler will later resolve against,

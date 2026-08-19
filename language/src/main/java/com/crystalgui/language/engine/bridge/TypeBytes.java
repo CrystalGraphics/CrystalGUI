@@ -12,10 +12,10 @@ import com.crystalgraphics.platform.CgPlatform;
  * <em>as they load</em>, and every platform runs transformers that add members no class file on disk
  * has. So the compiler has to be able to ask for bytes rather than for a path.</p>
  *
- * <p><b>It cannot ask the platform directly.</b> {@code ScriptPlatform} lives in
+ * <p><b>It cannot ask the platform directly.</b> {@code ScriptService} lives in
  * {@code language.platform} and {@code ReadableView} in {@code language.map}, and neither package is
  * parent-first — so a child-side class naming one gets the band loader's own copy, with its own statics.
- * That failure is silent and total: {@code CgPlatform.provide(ScriptPlatforms.SERVICE, …)} runs on the host, the compiler
+ * That failure is silent and total: {@code CgPlatform.provide(ScriptServices.SERVICE, …)} runs on the host, the compiler
  * reads a different registry, finds nothing, and quietly resolves against files as though no platform
  * were installed. Everything works and nothing is live.</p>
  *

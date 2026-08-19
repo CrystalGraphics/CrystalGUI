@@ -1,8 +1,8 @@
 package com.crystalgui.language.engine;
 
-import com.crystalgui.language.platform.ScriptPlatform;
+import com.crystalgui.language.platform.ScriptService;
 import com.crystalgraphics.platform.CgPlatform;
-import com.crystalgui.language.platform.ScriptPlatforms;
+import com.crystalgui.language.platform.ScriptServices;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -222,7 +222,7 @@ public final class EngineHost implements Closeable {
      *
      * <h3>All three answers are legitimate deployments</h3>
      *
-     * <p>Extraction needs somewhere to write, which is {@link ScriptPlatform#cacheRoot()} — so a process
+     * <p>Extraction needs somewhere to write, which is {@link ScriptService#cacheRoot()} — so a process
      * with no platform registered simply has no second candidate, exactly as before this existed. And a
      * jar that bundles no band yields an empty listing rather than an error: shipping the editor without
      * the engines is a supported build, and it degrades to grammar-only colouring like every other
@@ -240,7 +240,7 @@ public final class EngineHost implements Closeable {
     }
 
     private static EngineSource bundledSource() {
-        Path cacheRoot = CgPlatform.get(ScriptPlatforms.SERVICE).cacheRoot();
+        Path cacheRoot = CgPlatform.get(ScriptServices.SERVICE).cacheRoot();
         if (cacheRoot == null) return EngineSource.NONE;
         return EngineSource.extractedFrom(EngineHost.class.getClassLoader(),
                 BUNDLED_ENGINES_ROOT, cacheRoot.resolve("engines"));

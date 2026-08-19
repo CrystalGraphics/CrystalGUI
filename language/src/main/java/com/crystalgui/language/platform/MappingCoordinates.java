@@ -10,7 +10,7 @@ import java.util.Map;
  * Which mapping artifact an environment needs — <b>data, not behaviour</b>.
  *
  * <p>A platform states the coordinates; {@code language/} does the fetching, verifying, caching and
- * parsing. That split is the whole point of {@link ScriptPlatform}: a second loader contributes one of
+ * parsing. That split is the whole point of {@link ScriptService}: a second loader contributes one of
  * these rather than a second copy of the acquisition logic.</p>
  *
  * <h3>The version is pinned here, never discovered</h3>

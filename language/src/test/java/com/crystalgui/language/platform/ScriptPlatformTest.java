@@ -22,22 +22,22 @@ import static org.junit.Assert.assertTrue;
  * and that path has to be as real as the registered one. A null slipping out of here would be found by
  * whichever caller forgot to check, which is the failure this pins against.</p>
  */
-public class ScriptPlatformTest {
+public class ScriptServiceTest {
 
     @After
     public void restoreDefault() {
-        CgPlatform.provide(ScriptPlatforms.SERVICE, null);
+        CgPlatform.provide(ScriptServices.SERVICE, null);
     }
 
     @Test
     public void withNothingRegisteredTheCurrentPlatformIsNoneRatherThanNull() {
-        assertSame(ScriptPlatform.NONE, CgPlatform.get(ScriptPlatforms.SERVICE));
+        assertSame(ScriptService.NONE, CgPlatform.get(ScriptServices.SERVICE));
     }
 
     /** Every member of NONE answers, so no caller has to special-case the absent platform. */
     @Test
     public void noneAnswersEveryMember() {
-        ScriptPlatform none = ScriptPlatform.NONE;
+        ScriptService none = ScriptService.NONE;
         assertNotNull("liveBytes", none.liveBytes());
         assertNotNull("cacheRoot", none.cacheRoot());
         assertTrue("mappings should be NONE", none.mappings().isNone());
@@ -47,8 +47,8 @@ public class ScriptPlatformTest {
     /** NONE reads the classloader, which is what makes it work in a plain JVM. */
     @Test
     public void nonesByteSourceReadsItsOwnClasses() throws Exception {
-        byte[] bytes = ScriptPlatform.NONE.liveBytes()
-                .bytesOf("com/crystalgui/language/platform/ScriptPlatform");
+        byte[] bytes = ScriptService.NONE.liveBytes()
+                .bytesOf("com/crystalgui/language/platform/ScriptService");
         assertNotNull("NONE could not read a class it plainly ships", bytes);
         assertTrue("not a class file", bytes.length > 4
                 && (bytes[0] & 0xFF) == 0xCA && (bytes[1] & 0xFF) == 0xFE);
@@ -56,15 +56,15 @@ public class ScriptPlatformTest {
 
     @Test
     public void registeringNullFallsBackRatherThanStoringIt() {
-        CgPlatform.provide(ScriptPlatforms.SERVICE, null);
-        assertSame(ScriptPlatform.NONE, CgPlatform.get(ScriptPlatforms.SERVICE));
+        CgPlatform.provide(ScriptServices.SERVICE, null);
+        assertSame(ScriptService.NONE, CgPlatform.get(ScriptServices.SERVICE));
     }
 
     @Test
     public void aRegisteredPlatformIsWhatCurrentAnswers() {
-        ScriptPlatform fake = fakePlatform(Paths.get("somewhere"));
-        CgPlatform.provide(ScriptPlatforms.SERVICE, fake);
-        assertSame(fake, CgPlatform.get(ScriptPlatforms.SERVICE));
+        ScriptService fake = fakePlatform(Paths.get("somewhere"));
+        CgPlatform.provide(ScriptServices.SERVICE, fake);
+        assertSame(fake, CgPlatform.get(ScriptServices.SERVICE));
     }
 
     /**
@@ -100,11 +100,11 @@ public class ScriptPlatformTest {
         assertNull(coordinates.digestOf("fields.csv"));
     }
 
-    private static ScriptPlatform fakePlatform(final Path cacheRoot) {
-        return new ScriptPlatform() {
+    private static ScriptService fakePlatform(final Path cacheRoot) {
+        return new ScriptService() {
             @Override
             public com.crystalgui.language.map.ReadableView.ByteSource liveBytes() {
-                return ScriptPlatform.NONE.liveBytes();
+                return ScriptService.NONE.liveBytes();
             }
 
             @Override

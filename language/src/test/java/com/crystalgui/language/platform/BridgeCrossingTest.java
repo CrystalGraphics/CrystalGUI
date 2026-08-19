@@ -21,7 +21,7 @@ import static org.junit.Assert.assertSame;
  * <p>{@code EngineClassLoader} is child-first for everything outside {@code java.*}, the bridge package
  * and {@code com.crystalgui.text.*}. So a compiler-side class that names a host class does not fail —
  * it gets the band's own copy, complete with its own statics. For anything holding a registry that is
- * total and invisible: {@code CgPlatform.provide(ScriptPlatforms.SERVICE, …)} runs on the host, the compiler reads a
+ * total and invisible: {@code CgPlatform.provide(ScriptServices.SERVICE, …)} runs on the host, the compiler reads a
  * different static, finds nothing, and resolves from files as though no platform were installed.</p>
  *
  * <p>The first live-name-environment implementation did exactly that and looked entirely correct —
@@ -44,7 +44,7 @@ public class BridgeCrossingTest {
     /**
      * A host class is a DIFFERENT class inside the band — which is why a static registry cannot cross.
      *
-     * <p>Asserting the failure mode rather than trusting the rule. {@code ScriptPlatforms} and
+     * <p>Asserting the failure mode rather than trusting the rule. {@code ScriptServices} and
      * {@code ReadableView} are the two the compiler most obviously wants and most obviously must not
      * take: the first keeps the registry, the second holds the mapping and the ASM remapper.</p>
      */
@@ -55,10 +55,10 @@ public class BridgeCrossingTest {
             ClassLoader band = host.adapter("com.crystalgui.language.java.ecj.EcjScriptCompiler",
                     ScriptCompiler.class).getClass().getClassLoader();
 
-            assertNotSame("ScriptPlatforms crossed intact — then the registry would be shared and this "
+            assertNotSame("ScriptServices crossed intact — then the registry would be shared and this "
                             + "whole test is moot; if that is now true, PARENT_FIRST changed",
-                    ScriptPlatforms.class,
-                    Class.forName(ScriptPlatforms.class.getName(), false, band));
+                    ScriptServices.class,
+                    Class.forName(ScriptServices.class.getName(), false, band));
             assertNotSame("ReadableView crossed intact",
                     ReadableView.class, Class.forName(ReadableView.class.getName(), false, band));
         } finally {

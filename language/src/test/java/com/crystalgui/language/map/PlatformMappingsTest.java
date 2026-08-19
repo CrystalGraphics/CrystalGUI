@@ -2,9 +2,9 @@ package com.crystalgui.language.map;
 
 import com.crystalgui.language.platform.MappingCoordinates;
 import com.crystalgui.language.platform.NamespaceProbe;
-import com.crystalgui.language.platform.ScriptPlatform;
+import com.crystalgui.language.platform.ScriptService;
 import com.crystalgraphics.platform.CgPlatform;
-import com.crystalgui.language.platform.ScriptPlatforms;
+import com.crystalgui.language.platform.ScriptServices;
 
 import org.junit.After;
 import org.junit.Before;
@@ -31,7 +31,7 @@ import static org.junit.Assert.assertTrue;
  * because a probe that always answered "readable" would pass in dev — where the answer is right — and
  * ship a client that never translates a name.</p>
  *
- * <p>The probe reads through {@link ScriptPlatform#liveBytes()}, so a fake platform serving synthesized
+ * <p>The probe reads through {@link ScriptService#liveBytes()}, so a fake platform serving synthesized
  * class files exercises exactly the path a real one takes.</p>
  */
 public class PlatformMappingsTest {
@@ -52,7 +52,7 @@ public class PlatformMappingsTest {
     @Before
     @After
     public void forget() {
-        CgPlatform.provide(ScriptPlatforms.SERVICE, null);
+        CgPlatform.provide(ScriptServices.SERVICE, null);
         PlatformMappings.resetForTesting();
     }
 
@@ -68,7 +68,7 @@ public class PlatformMappingsTest {
 
     /** A platform whose runtime declares {@code member} and whose mappings live in {@code upstream}. */
     private void register(String member, Path cacheRoot, MappingCoordinates coordinates) {
-        CgPlatform.provide(ScriptPlatforms.SERVICE, new ScriptPlatform() {
+        CgPlatform.provide(ScriptServices.SERVICE, new ScriptService() {
             @Override
             public com.crystalgui.language.map.ReadableView.ByteSource liveBytes() {
                 return name -> WORLD.equals(name) ? classDeclaring(member) : null;
@@ -153,7 +153,7 @@ public class PlatformMappingsTest {
     @Test
     public void anUnreadableProbeDoesNotFetch() throws IOException {
         Path cache = folder.newFolder("cache").toPath();
-        CgPlatform.provide(ScriptPlatforms.SERVICE, new ScriptPlatform() {
+        CgPlatform.provide(ScriptServices.SERVICE, new ScriptService() {
             @Override
             public com.crystalgui.language.map.ReadableView.ByteSource liveBytes() {
                 return name -> null;

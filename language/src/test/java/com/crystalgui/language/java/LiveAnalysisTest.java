@@ -15,9 +15,9 @@ import com.crystalgui.language.map.PlatformMappings;
 import com.crystalgui.language.map.ReadableView;
 import com.crystalgui.language.platform.MappingCoordinates;
 import com.crystalgui.language.platform.NamespaceProbe;
-import com.crystalgui.language.platform.ScriptPlatform;
+import com.crystalgui.language.platform.ScriptService;
 import com.crystalgraphics.platform.CgPlatform;
-import com.crystalgui.language.platform.ScriptPlatforms;
+import com.crystalgui.language.platform.ScriptServices;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.lang.SymbolInfo;
@@ -50,7 +50,7 @@ import static org.junit.Assert.fail;
  * red names, no completion, and a quick fix that could not offer the import because the type index had
  * never heard of the class.</p>
  *
- * <p>The fixture serves a class through {@link ScriptPlatform#liveBytes()} that is <b>on no classpath at
+ * <p>The fixture serves a class through {@link ScriptService#liveBytes()} that is <b>on no classpath at
  * all</b>. Nothing but the live route can resolve it, so this fails outright if the analyser falls back
  * to {@code ASTParser} — which is precisely what it did before, and what it still does everywhere no
  * platform is registered.</p>
@@ -65,7 +65,7 @@ public class LiveAnalysisTest {
     @Before
     @After
     public void forget() {
-        CgPlatform.provide(ScriptPlatforms.SERVICE, null);
+        CgPlatform.provide(ScriptServices.SERVICE, null);
         PlatformMappings.resetForTesting();
     }
 
@@ -81,7 +81,7 @@ public class LiveAnalysisTest {
     }
 
     private void registerPlatform() {
-        CgPlatform.provide(ScriptPlatforms.SERVICE, new ScriptPlatform() {
+        CgPlatform.provide(ScriptServices.SERVICE, new ScriptService() {
             @Override
             public ReadableView.ByteSource liveBytes() {
                 return name -> OWNER.equals(name) ? onlyInMemory() : null;

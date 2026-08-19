@@ -2,9 +2,9 @@ package com.crystalgui.mc.client;
 
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.language.java.classpath.HostClasspath;
-import com.crystalgui.language.platform.ScriptPlatform;
+import com.crystalgui.language.platform.ScriptService;
 import com.crystalgraphics.platform.CgPlatform;
-import com.crystalgui.language.platform.ScriptPlatforms;
+import com.crystalgui.language.platform.ScriptServices;
 import com.crystalgui.language.run.ScriptRuntime;
 import com.crystalgui.language.run.view.ScriptWorkbench;
 import com.crystalgui.text.TextBuffer;
@@ -308,8 +308,8 @@ public final class CgUiAutoTest {
         if (!ENABLED || BYTES_PROBE == null || bytesProbed) return;
         bytesProbed = true;
         try {
-            ScriptPlatform platform = CgPlatform.get(ScriptPlatforms.SERVICE);
-            if (platform == ScriptPlatform.NONE) {
+            ScriptService platform = CgPlatform.get(ScriptServices.SERVICE);
+            if (platform == ScriptService.NONE) {
                 CrystalGuiCore.LOGGER.error("CGUI AUTOTEST bytes: no platform registered");
                 return;
             }

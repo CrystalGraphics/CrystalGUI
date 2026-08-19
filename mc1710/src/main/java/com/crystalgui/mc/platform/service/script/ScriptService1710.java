@@ -3,7 +3,7 @@ package com.crystalgui.mc.platform.service.script;
 import com.crystalgui.language.map.ReadableView;
 import com.crystalgui.language.platform.MappingCoordinates;
 import com.crystalgui.language.platform.NamespaceProbe;
-import com.crystalgui.language.platform.ScriptPlatform;
+import com.crystalgui.language.platform.ScriptService;
 
 import net.minecraft.client.Minecraft;
 
@@ -15,11 +15,11 @@ import java.nio.file.Path;
  *
  * <p><b>There is deliberately no logic here.</b> Fetching, verifying, caching, parsing, remapping,
  * namespace detection and compilation all live in {@code language/}, once — this class exists so a
- * second loader is an implementation of {@link ScriptPlatform} rather than a second copy of that work.
+ * second loader is an implementation of {@link ScriptService} rather than a second copy of that work.
  * If anything in here grows past "state a fact about this platform", it belongs behind the interface
  * instead.</p>
  */
-public final class ScriptService1710 implements ScriptPlatform {
+public final class ScriptService1710 implements ScriptService {
 
     /**
      * MCP, matching {@code mc1710/gradle.properties} — {@code channel = stable},
