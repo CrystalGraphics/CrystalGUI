@@ -94,7 +94,9 @@ public record CompletionItem(String label, SymbolKind kind, @Nullable String det
          * pretend to be: it marks where the caret lands, which is the whole of what accepting a method
          * needs ({@code println(|)}) and none of what a template needs. {@code $1}/{@code $2} tab stops
          * arrive with rename, because both want the same linked-edit machinery and building it twice is
-         * how the two come to behave differently — §18.4's reasoning, unchanged.</p>
+         * how the two come to behave differently — §18.4's reasoning, unchanged. <b>That is M14</b>,
+         * which exists because this sentence and §18.4's were a promise with no milestone behind them:
+         * "later" resolves to nothing unless something owns it.</p>
          *
          * <p>An unimplemented placeholder is therefore inserted <em>literally</em>, which is wrong in a way
          * somebody reports rather than wrong in a way that silently swallows text.</p>

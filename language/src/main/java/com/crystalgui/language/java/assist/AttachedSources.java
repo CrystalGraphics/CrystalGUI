@@ -1,5 +1,9 @@
 package com.crystalgui.language.java.assist;
 
+import com.crystalgui.language.java.classpath.ClassFileParameterNames;
+
+import javax.annotation.Nullable;
+
 import com.crystalgui.language.java.ecj.EcjOptions;
 import org.eclipse.jdt.core.dom.ASTParser;
 import org.eclipse.jdt.core.dom.CompilationUnit;
@@ -67,9 +71,36 @@ public final class AttachedSources {
      */
     private static final int MAX_UNITS = 24;
 
+    /**
+     * Parameter names read straight off the class file — the fallback when no source is attached.
+     *
+     * <p>Here rather than anywhere else because this class already <em>is</em> "where to look when the
+     * unit being analysed does not declare the symbol", and it is already cached per classpath. The two
+     * answer the same question from opposite ends: source attachment quotes the declaration somebody
+     * wrote, and this reads the names the compiler kept. Quoting wins where both exist, since it carries
+     * the javadoc and the real layout as well.</p>
+     */
+    private final ClassFileParameterNames parameterNames;
+
     private AttachedSources(SourceArchives archives, String[] classpath) {
         this.archives = archives;
         this.classpath = classpath;
+        this.parameterNames = ClassFileParameterNames.forClasspath(java.util.Arrays.asList(classpath));
+    }
+
+    /**
+     * The declared names of a classpath method's parameters, or null.
+     *
+     * @param erasedParameters each parameter's erased type in binary form — the spelling the class
+     *                         file uses, so an array is {@code java.lang.String[]} and a type variable
+     *                         has already become its bound
+     * @see ClassFileParameterNames
+     */
+    @Nullable
+    public List<String> parameterNamesOf(@Nullable String ownerBinaryName,
+                                         @Nullable String methodName,
+                                         @Nullable List<String> erasedParameters) {
+        return parameterNames.namesOf(ownerBinaryName, methodName, erasedParameters);
     }
 
     /** One instance per classpath, built on first use. */

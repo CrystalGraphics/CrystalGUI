@@ -34,7 +34,8 @@ import java.util.List;
  * classloader through the transformer chain, per platform, and feeding them to the compiler means an
  * {@code INameEnvironment} rather than a directory — no writing, no staleness, and it works for a class
  * whose bytes only exist because a mixin produced them. That is the piece still outstanding, and it
- * cannot be written or validated without the platform. The remapping itself — the part with the hard
+ * cannot be written or validated without the platform — <b>it is M12's live name environment</b>, named
+ * here because an audit read this paragraph as an unowned improvement and nearly scheduled it twice. The remapping itself — the part with the hard
  * logic — is shared by both routes and is here.</p>
  */
 public final class ReadableView {

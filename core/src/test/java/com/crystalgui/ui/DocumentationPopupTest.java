@@ -233,15 +233,41 @@ public class DocumentationPopupTest extends UiTestBase {
      *
      * <p>The keyword bands with the modifiers because that is what it is: {@code class} is part of the
      * declaration, not a reference to a type.</p>
+     *
+     * <h3>And the NAME is banded as a type, which this used to assert the opposite of</h3>
+     *
+     * <p>It expected {@code HL_NAME}, which resolves to {@code --syntax-variable} — right for a field or
+     * a local and wrong for the thing being declared. A hovered class rendered its own name in the local
+     * colour, three lines under an editor drawing that same word as a type. The owner band one row up had
+     * already settled this and says how: it sets the <em>editor's</em> capture names rather than a pair
+     * only this popup uses, so one scheme colours both.</p>
      */
     @Test
-    public void aTypeIsDeclaredWithItsKeywordRatherThanWithATypeName() {
+    public void aTypeIsDeclaredWithItsKeywordAndItsNameReadsAsAType() {
         show(new SymbolInfo("Host", SymbolKind.CLASS, null, "com.example", null, Set.of(), null));
         assertEquals("class Host", popup.definitionText());
         assertTrue("a declaration keyword is not a type reference",
                 ranges(DocumentationPopup.HL_TYPE).isEmpty());
         assertEquals(List.of(TextRange.of(0, 5)), ranges(DocumentationPopup.HL_MODIFIER));
-        assertEquals(List.of(TextRange.of(6, 10)), ranges(DocumentationPopup.HL_NAME));
+        assertTrue("a class name still bands as a variable, so it draws in the local colour",
+                ranges(DocumentationPopup.HL_NAME).isEmpty());
+        assertEquals("the name must carry the editor's own `type` capture, or no scheme reaches it",
+                List.of(TextRange.of(6, 10)), ranges("type"));
+    }
+
+    /**
+     * A <b>field</b>'s name still bands as {@code HL_NAME}, which is the half the change above must not
+     * take with it — a variable's name is a variable, and only a declared TYPE reads as a type.
+     */
+    @Test
+    public void aFieldsNameIsStillAVariable() {
+        show(field("count", "int"));
+        assertTrue("a field's name was banded as a type",
+                ranges("type").stream().noneMatch(r -> r.equals(
+                        TextRange.of(popup.definitionText().indexOf("count"),
+                                popup.definitionText().indexOf("count") + "count".length()))));
+        assertFalse("a field's name lost its banding altogether",
+                ranges(DocumentationPopup.HL_NAME).isEmpty());
     }
 
     /**
@@ -260,13 +286,17 @@ public class DocumentationPopupTest extends UiTestBase {
     }
 
     /**
-     * The body band is hidden rather than empty while no engine reports documentation — which is every
-     * symbol today. An empty band is a gap that reads as a rendering failure.
+     * The body band is hidden rather than empty when there is no documentation to show.
+     *
+     * <p>This used to read "which is every symbol today", and that stopped being true at M13 §25.6 —
+     * the Java engine populates {@code documentation} now. The rule it pins did not change: a symbol
+     * with no doc comment still gets no band, because an empty one is a gap that reads as a rendering
+     * failure. The widget was always ready for this; nothing here needed editing but the sentence.</p>
      */
     @Test
     public void theBodyBandIsHiddenWithNoDocumentationAndShownWithSome() {
         show(field("x", "int"));
-        assertFalse("no engine populates documentation yet, so the band must not be drawn",
+        assertFalse("a symbol with no documentation must not draw the band",
                 popup.isBodyShown());
 
         show(field("x", "int").withDocumentation("Holds the thing."));

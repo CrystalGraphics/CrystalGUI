@@ -156,6 +156,45 @@ public class JsSandboxTest {
                 restricted.membersOf(allowed.type(), 0).isEmpty());
     }
 
+    /**
+     * <b>The hover.</b> The fourth surface §21.9 names, and the one nothing was asking about.
+     *
+     * <p>The governance row reads "a refused type is absent from execution, completion, <b>hover</b> and
+     * index in the same test". Three of those had a case here and hover did not — so the row was
+     * claiming coverage that did not exist, which is worse than a row admitting a gap. The gate was
+     * real ({@code InteropResolver.describe} consults the policy on its second line); nothing had ever
+     * checked it, so a regression there would have been invisible in the surface a user reaches by
+     * moving the mouse.</p>
+     *
+     * <p>And the control matters as much as the subject. A hover that answered nothing for
+     * <em>everything</em> would pass the first assertion perfectly — that is not a narrowed policy, it
+     * is a broken resolver.</p>
+     */
+    @Test
+    public void aRefusedClassDoesNotDescribeItselfOnHover() {
+        Assume.assumeTrue(JavaLanguage.isAvailable());
+        String source = "var s = Java.type('" + REFUSED + "');\n"
+                + "var a = Java.type('" + ALLOWED + "');\n";
+
+        Analysis open = analyse(source);
+        SymbolInfo beforeRestriction = open.resolveAt(source.indexOf("s ="));
+        Assume.assumeNotNull("the interop tier answered nothing even unrestricted, so this test would "
+                + "pass for the wrong reason", beforeRestriction);
+
+        restrictToJavaUtil();
+        Analysis restricted = analyse(source);
+
+        SymbolInfo refused = restricted.resolveAt(source.indexOf("s ="));
+        assertTrue("a refused class described itself on hover, in the one surface reached by moving "
+                        + "the mouse rather than by asking",
+                refused == null || refused.type() == null);
+
+        SymbolInfo allowed = restricted.resolveAt(source.indexOf("a ="));
+        assertNotNull("the control class stopped describing itself too -- the resolver is not "
+                + "narrowing, it is answering nothing", allowed);
+        assertNotNull("...and it lost its TYPE, which is the half the hover draws", allowed.type());
+    }
+
     /** <b>The completion list.</b> Absent from it, rather than offered and then refused. */
     @Test
     public void aRefusedClassIsNotOfferedInsideJavaType() {

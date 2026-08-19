@@ -43,7 +43,7 @@ baked and a scheme switch would not reach them.
 | 24.5 | `locals.scm` | **done** — `LocalScopes`. Grammar-tier and refining only the CATCH-ALL within it, which the existing GLSL colour tests caught: `PI` is `@constant` because a rule tested its spelling, and a `@local.definition.var` arriving later overwrote it purely by being last |
 | 24.3 | `folds.scm` | **done** — on `TreeSitterTokenizer`, which already owns the tree; a separate provider means a second parse per keystroke, and the two disagreeing for exactly the frames a fold arrow is clicked in |
 | 24.4 | `indents.scm` | **done** — `IndentationProvider` (levels, never characters) + `TreeIndents`, Neovim's dialect. `@indent.align` read and ignored: it needs a column |
-| 24.1 | The popup's **footer** band | **not built** — the one exit criterion of 24.1 that is unmet, and now the only item left in M11 |
+| 24.1 | The popup's **footer** band | **done** — the declaration's file, plus a pencil running `editor.goToDefinition`. **It hides when the declaration is in the document you are already reading**, which answers the objection that deleted the first version rather than working around it: that one read "this file" for the common case and so said less than the owner band above it. No kebab — §24.1's four entries for it are settings that do not exist |
 
 ### The licence fork, resolved — nvim-treesitter, Apache-2.0
 
@@ -189,7 +189,13 @@ From the reference and from JetBrains' own docs, top to bottom:
 The kebab is the options menu — font size, show the toolbar, `Show on Mouse Move`, and
 `Download documentation` for a library with no sources attached.
 
-**The body is empty for us today, and that is fine.** `EcjSourceAnalyzer` never populates
+**✅ The body is filled now — M13 §25.6, and the prediction below held exactly.** `EcjOptions` enables
+doc-comment support, `JavaDocs` renders the node and `JavaSignatures.documentationOf` finds it here or in
+an attached source, inheriting an override's from its supertype. **No widget change was needed**, which
+is what the paragraph as written predicted and is the reason the popup was built in this order. The
+original text follows, because the reasoning is what made that true rather than lucky.
+
+~~**The body is empty for us today, and that is fine.**~~ `EcjSourceAnalyzer` never populates
 `documentation` — grep confirms it: the field is declared on the seam and no engine fills it.
 The reference image has no Javadoc in it either; what it shows is the *definition* and the
 *location*, both of which we can render from what `SymbolInfo` already carries. So the popup ships

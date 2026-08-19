@@ -495,11 +495,21 @@ public class JavaSignatureTest {
      * a <b>directory classpath entry</b>: source discovery looks beside jars and this is not one, which
      * is the same shape production hits and needs no fixture jar built.</p>
      *
-     * <p>The observable is the <b>missing parameter name</b>. That is not a detail chosen for
-     * convenience — it is the one difference visible from outside between the two paths, because a class
-     * file does not carry names and a source file does. Asserting it here and its opposite in
-     * {@link #aClasspathMethodIsQuotedFromItsAttachedSource} pins the boundary from both sides; either
-     * alone passes against "always assembled" or "always quoted".</p>
+     * <h3>The observable used to be the MISSING parameter name, and M13 §25.1 took it away</h3>
+     *
+     * <p>This test read: "a class file does not carry names and a source file does", and used the absent
+     * name as the one difference visible from outside between the two paths. <b>The premise was
+     * false</b>, and it is the belief §25.1 exists to correct — names <em>survive compilation</em>, in
+     * the {@code LocalVariableTable} for anything with a body and in {@code MethodParameters} for
+     * anything built with {@code -parameters}. Our own classes carry theirs today because Gradle passes
+     * {@code -g}, which is why this fixture, pointed at our own class <em>directory</em>, now assembles
+     * {@code detect(ClassLoader loader)} where it used to assemble {@code detect(ClassLoader)}.</p>
+     *
+     * <p>So the assertion inverts, exactly as {@link #aClasspathMethodIsQuotedFromItsAttachedSource}'s
+     * did when {@code AttachedSources} landed — both were pinning a gap as though it were a design.
+     * <b>What remains different is what a quote carries that an assembly cannot invent</b>: the author's
+     * own layout, and their javadoc when the engine populates it. The parameter name is no longer one of
+     * those things, and a test asserting it were would now be pinning the wrong boundary.</p>
      */
     @Test
     public void aSymbolWithNoAttachedSourceIsAssembledInstead() {
@@ -518,9 +528,9 @@ public class JavaSignatureTest {
                 signature.text().contains("detect("));
         assertTrue("the parameter's type belongs there: <" + signature.text() + ">",
                 signature.text().contains("ClassLoader"));
-        assertTrue("a class file carries no parameter names, so there is none to show: <"
+        assertTrue("the class file's own parameter name did not reach the assembled signature: <"
                         + signature.text() + ">",
-                signature.text().contains("detect(ClassLoader)"));
+                signature.text().contains("detect(ClassLoader loader)"));
     }
 
     /** Where this test's own classes live — a directory, and one with no sources beside it. */

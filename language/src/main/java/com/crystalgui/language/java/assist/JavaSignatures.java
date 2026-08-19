@@ -34,6 +34,8 @@ import org.eclipse.jdt.core.dom.VariableDeclarationExpression;
 import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
 import org.eclipse.jdt.core.dom.VariableDeclarationStatement;
 
+import javax.annotation.Nullable;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
@@ -296,17 +298,27 @@ public final class JavaSignatures {
     }
 
     /**
-     * {@code (@Nullable String x, int count)} — with real names when this file declares the method.
+     * {@code (@Nullable String x, int count)} — with real names wherever they can be found.
      *
-     * <p><b>Names only when the declaration is in this unit.</b> {@code IMethodBinding} exposes
-     * parameter types and not names, because a class read off the classpath genuinely has none unless
-     * it was built with {@code -parameters}; the names live on the {@code MethodDeclaration}, which
-     * exists only for source. IntelliJ shows {@code x} for {@code println} because it has the JDK
-     * sources attached, and falls back to types exactly as this does when it does not.</p>
+     * <h3>This paragraph has been wrong twice, in opposite directions</h3>
      *
-     * <p>So a classpath method reads {@code println(String)} and one in the open file reads
-     * {@code println(String x)}. That difference is real information — it says where the source is —
-     * rather than an inconsistency to paper over with {@code arg0}.</p>
+     * <p>It first read <em>"names only when the declaration is in this unit"</em>, on the reasoning that
+     * {@code IMethodBinding} exposes types and not names and the names live on a
+     * {@code MethodDeclaration} that exists only for source. Both halves are true and the conclusion was
+     * not. <b>{@code AttachedSources}</b> found the source — a {@code -sources.jar} beside a jar, or the
+     * JDK's own {@code src.zip} — and the classpath case started quoting names like any other.</p>
+     *
+     * <p>Then it read that a class file <em>"genuinely has none unless it was built with
+     * {@code -parameters}"</em>, which sent M13 §25.1 looking in the wrong place for a session.
+     * <b>Names survive compilation.</b> {@code ArrayList.add} carries {@code e} in its
+     * {@code LocalVariableTable} and our own jar carries its names today, because Gradle passes
+     * {@code -g}. {@code -parameters} is needed for one shape only — an abstract or interface method,
+     * which has no {@code Code} attribute and therefore no table.</p>
+     *
+     * <p>So the fallback chain is: this unit's declaration, then an attached source's, then the class
+     * file itself ({@link ClassFileParameterNames}). Types-only is what is left when all three miss,
+     * which is an obfuscated jar or a stripped one — and it is a real answer rather than a shortfall,
+     * because {@code arg0} would be worse than nothing.</p>
      */
     private void appendParameters(Signature.Builder out, IMethodBinding method, boolean broken) {
         out.append("(", "punctuation.bracket");
@@ -358,8 +370,65 @@ public final class JavaSignatures {
             ITypeBinding owner = method.getDeclaringClass();
             declaration = owner == null ? null : unit.findDeclaringNode(owner);
         }
-        if (declaration == null) return null;
-        return namesOf(structuralList(declaration, "recordComponents"));
+        if (declaration == null) return fromTheClassFile(method);
+        List<String> declared = namesOf(structuralList(declaration, "recordComponents"));
+        return declared != null ? declared : fromTheClassFile(method);
+    }
+
+    /**
+     * The names the <b>compiler kept</b>, for a method this unit does not declare.
+     *
+     * <p>The gap this closes had been read as unclosable: source attachment is what names a classpath
+     * method's parameters, and {@code src.zip} ships with a JDK and not with a JRE, so most players were
+     * always going to see types only. That reasoning was about the wrong artefact. <b>Names survive
+     * compilation</b> — measured, on the running JDK: {@code ArrayList.add} carries {@code e} and
+     * {@code String.format} carries {@code format} and {@code args}, and our own jar carries its names
+     * today because Gradle passes {@code -g} by default.</p>
+     *
+     * <p>Second, not first. A quoted declaration out of a real {@code -sources.jar} carries the javadoc
+     * and the author's own layout; this carries names. Where both exist the quote is strictly better, so
+     * this only ever runs where the quote could not.</p>
+     *
+     * @see ClassFileParameterNames for the three silent traps in reading them
+     */
+    @Nullable
+    private List<String> fromTheClassFile(IMethodBinding method) {
+        if (attached == null || method == null) return null;
+        ITypeBinding owner = method.getDeclaringClass();
+        if (owner == null) return null;
+        String ownerName = owner.getErasure() == null ? null : owner.getErasure().getBinaryName();
+        if (ownerName == null) return null;
+
+        ITypeBinding[] types = method.getParameterTypes();
+        if (types.length == 0) return null;
+        List<String> erased = new ArrayList<>(types.length);
+        for (ITypeBinding type : types) {
+            String name = erasedNameOf(type);
+            if (name == null) return null;
+            erased.add(name);
+        }
+        return attached.parameterNamesOf(ownerName,
+                method.isConstructor() ? "<init>" : method.getName(), erased);
+    }
+
+    /**
+     * A type as the class file spells it.
+     *
+     * <p>Two divergences from {@code getBinaryName()} alone, and both would silently fail to match.
+     * An <b>array</b> is {@code [Ljava/lang/String;} in JDT's binary name and {@code java.lang.String[]}
+     * in the class file's own vocabulary. And a <b>type variable</b> has to be erased first, or
+     * {@code List.add(E)} looks for a parameter of type {@code E} where the descriptor says
+     * {@code java.lang.Object}.</p>
+     */
+    @Nullable
+    private static String erasedNameOf(ITypeBinding type) {
+        if (type == null) return null;
+        if (type.isArray()) {
+            String component = erasedNameOf(type.getComponentType());
+            return component == null ? null : component + "[]";
+        }
+        ITypeBinding erasure = type.getErasure();
+        return erasure == null ? null : erasure.getBinaryName();
     }
 
     private static List<String> namesOf(List<?> declarations) {
@@ -561,6 +630,98 @@ public final class JavaSignatures {
         return new JavaSignatures(source.unit, source.text, nameCaptures).quotedNode(declaration);
     }
 
+    /**
+     * The doc comment for a binding, <b>inherited when it has none of its own</b> — M13 §25.6.
+     *
+     * <p>The same two-step lookup {@link #quoted} does, because it is the same question about the same
+     * node: this unit's tree first, then the attached source for a classpath symbol. Written beside it
+     * rather than folded into it — one walk, two extractions — since a signature and a doc comment are
+     * wanted in different places and only sometimes together.</p>
+     *
+     * <h3>Inheritance is not a refinement, it is what stops this looking broken</h3>
+     *
+     * <p>An overriding method usually carries {@code @Override} and no doc of its own. Without walking
+     * to the supertype a large fraction of methods render an empty body, and an empty body reads as the
+     * feature not working rather than as the method having nothing to say. Java's own tooling does the
+     * same walk for a bare {@code {@inheritDoc}} and for no comment at all, and so does IntelliJ.</p>
+     *
+     * <p>Superclass before interfaces, which is Java's own resolution order, and breadth-first with a
+     * bound: a deep hierarchy is a hover, not a search.</p>
+     */
+    @Nullable
+    public String documentationOf(@Nullable IBinding binding) {
+        String own = docTextOf(binding);
+        if (own != null) return own;
+        if (!(binding instanceof IMethodBinding)) return null;
+        return inheritedDocOf((IMethodBinding) binding);
+    }
+
+    /** How far up a hierarchy to look for an inherited comment. Deeper than any real API, cheaper than a search. */
+    private static final int MAX_DOC_HOPS = 6;
+
+    @Nullable
+    private String inheritedDocOf(IMethodBinding method) {
+        ITypeBinding declaring = method.getDeclaringClass();
+        if (declaring == null) return null;
+        List<ITypeBinding> queue = new ArrayList<>();
+        addSupertypes(declaring, queue);
+        for (int hop = 0; hop < MAX_DOC_HOPS && hop < queue.size(); hop++) {
+            ITypeBinding candidate = queue.get(hop);
+            if (candidate == null) continue;
+            for (IMethodBinding above : candidate.getDeclaredMethods()) {
+                if (!method.overrides(above) && !above.isSubsignature(method)) continue;
+                String inherited = docTextOf(above);
+                if (inherited != null) return inherited;
+            }
+            addSupertypes(candidate, queue);
+        }
+        return null;
+    }
+
+    private static void addSupertypes(ITypeBinding type, List<ITypeBinding> into) {
+        // THE SUPERCLASS FIRST, which is Java's own order for resolving an inherited comment.
+        ITypeBinding parent = type.getSuperclass();
+        if (parent != null && !into.contains(parent)) into.add(parent);
+        for (ITypeBinding each : type.getInterfaces()) {
+            if (each != null && !into.contains(each)) into.add(each);
+        }
+    }
+
+    /** A binding's own comment, from this unit or from its attached source, rendered. */
+    @Nullable
+    private String docTextOf(@Nullable IBinding binding) {
+        if (binding == null) return null;
+        String here = renderedDocOf(unit == null ? null : unit.findDeclaringNode(binding));
+        if (here != null) return here;
+        if (attached == null) return null;
+
+        String topLevel = topLevelSourceName(binding);
+        if (topLevel == null) return null;
+        AttachedSources.Attached source = attached.unitFor(topLevel);
+        if (source == null || source.unit == null) return null;
+        String key = declarationKeyOf(binding);
+        if (key == null) return null;
+        return renderedDocOf(source.unit.findDeclaringNode(key));
+    }
+
+    /**
+     * The comment on a declaring node.
+     *
+     * <p>A field's declaring node is its {@code VariableDeclarationFragment} and the comment belongs to
+     * the {@code FieldDeclaration} above it — the same off-by-one-level the signature path has to
+     * handle, arriving here from the other direction.</p>
+     */
+    @Nullable
+    private static String renderedDocOf(@Nullable ASTNode declaration) {
+        for (ASTNode at = declaration; at != null; at = at.getParent()) {
+            if (at instanceof BodyDeclaration) {
+                return JavaDocs.render(((BodyDeclaration) at).getJavadoc());
+            }
+            if (at instanceof CompilationUnit) return null;
+        }
+        return null;
+    }
+
     /** Which of the two quoting shapes a declaring node is, or null if it is neither. */
     private Signature quotedNode(ASTNode declaration) {
         if (declaration instanceof VariableDeclarationFragment) return quotedFragment(declaration);
@@ -668,10 +829,12 @@ public final class JavaSignatures {
         // the one band meant to hold a single declaration, sitting directly above the band whose
         // whole purpose is documentation.
         //
-        // Skipped by READING THE TEXT rather than by asking getJavadoc(), which answers null unless
-        // the parser was configured with doc-comment support -- and it still is not, so the node
-        // covered the comment while the accessor denied it existed. Scanning also catches the ordinary
-        // `//` and `/* */` comments a Javadoc node would never have represented.
+        // Skipped by READING THE TEXT rather than by asking getJavadoc(). That began as a workaround --
+        // the parser had no doc-comment support, so the node covered the comment while the accessor
+        // denied it existed -- and `EcjOptions` turns that support on now (M13 §25.6). The scan stays,
+        // because it was always doing the wider job: an ordinary `//` or `/* */` comment above a
+        // declaration is not a Javadoc node and never would have been, and it has to be stepped over
+        // just the same.
         from = skipLeadingComments(from, end);
         if (from >= end) return null;
 

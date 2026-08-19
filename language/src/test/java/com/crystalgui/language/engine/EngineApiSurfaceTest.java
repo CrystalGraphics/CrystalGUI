@@ -56,6 +56,23 @@ public class EngineApiSurfaceTest {
         }
     }
 
+    /**
+     * A method an adapter <b>overrides</b> rather than calls, and which may therefore be protected.
+     *
+     * <p>{@code ContextFactory.observeInstructionCount} is the kill switch's entry point and is
+     * {@code protected}, so {@code getMethod} does not see it at all — a public-only check reports it
+     * missing on every band, which is a failing test that says nothing. {@code getDeclaredMethod} asks
+     * the question actually being asked: is this member here, at this signature, for a subclass to
+     * override.</p>
+     */
+    private static void requireOverridableMethod(Class<?> owner, String name, Class<?>... parameters) {
+        try {
+            assertNotNull(owner.getDeclaredMethod(name, parameters));
+        } catch (NoSuchMethodException absent) {
+            fail("missing (overridable) " + owner.getName() + "." + name);
+        }
+    }
+
     private static void requireMethod(Class<?> owner, String name, Class<?>... parameters) {
         try {
             Method method = owner.getMethod(name, parameters);
@@ -166,6 +183,91 @@ public class EngineApiSurfaceTest {
                 require(loader, "org.mozilla.javascript.EvaluatorException");
                 require(loader, "org.mozilla.javascript.ErrorReporter");
                 require(loader, "org.mozilla.javascript.ScriptableObject");
+            } finally {
+                loader.close();
+            }
+        }
+    }
+
+    /**
+     * <b>The surface M10 added, which this test was supposed to gain and did not.</b>
+     *
+     * <p>`plan_m10.md` §15 step 11 says step 2 "extends it with the parser and interop surface … so a
+     * band bump fails the build rather than the popup". It was never done, and the block above still
+     * pins only what M5 needed — seven types about evaluating a string. Everything the editor is built
+     * on arrived afterwards and was pinned by nothing.</p>
+     *
+     * <p>Which matters in a specific way rather than a general one. This module compiles against band
+     * 8's Rhino and runs against the host's, and a member that exists on one and not the other does not
+     * fail at build time: it throws {@code NoSuchMethodError} at the first hover on the band nobody
+     * develops on. That has now happened four times — {@code ObjectProperty.getLeft}, {@code Token}
+     * constants, {@code CatchClause.getVarName}, {@code NativeJavaObject}'s three-argument constructor.
+     * Each was found by a person running it. This is the check that would have found them.</p>
+     *
+     * <p>Separate from the block above rather than folded into it, because the two answer different
+     * questions: that one is "can this band evaluate a script", which is M5's floor, and this is "can
+     * this band drive an editor", which is M10's.</p>
+     */
+    @Test
+    public void everyBandCarriesTheRhinoApiTheEDITORUses() throws IOException {
+        for (EngineBand band : EngineBand.values()) {
+            EngineClassLoader loader = loaderFor(band);
+            try {
+                // The IDE-mode parse: what produces a tree from broken source, and its problem list.
+                Class<?> environs = require(loader, "org.mozilla.javascript.CompilerEnvirons");
+                requireMethod(environs, "setIdeMode", boolean.class);
+                requireMethod(environs, "setRecordingComments", boolean.class);
+                requireMethod(environs, "setRecordingLocalJsDocComments", boolean.class);
+                Class<?> parser = require(loader, "org.mozilla.javascript.Parser");
+                Class<?> errorReporter = require(loader, "org.mozilla.javascript.ErrorReporter");
+                requireMethod(parser, "parse", String.class, String.class, int.class);
+
+                // The tree the whole editor reads.
+                Class<?> astRoot = require(loader, "org.mozilla.javascript.ast.AstRoot");
+                Class<?> astNode = require(loader, "org.mozilla.javascript.ast.AstNode");
+                requireMethod(astNode, "getAbsolutePosition");
+                requireMethod(astNode, "getLength");
+                requireMethod(astNode, "getParent");
+                requireMethod(astNode, "toSource");
+                requireMethod(astRoot, "getComments");
+                // `visit` IS THE ONE READING TRUE ON BOTH BANDS -- a node's parts are fields on one and
+                // child-list entries on the other, so `getFirstChild()` answers null for half the tree.
+                requireMethod(astNode, "visit",
+                        require(loader, "org.mozilla.javascript.ast.NodeVisitor"));
+                requireMethod(astNode, "getJsDoc");
+
+                // The scopes the semantic colouring is derived from.
+                Class<?> scope = require(loader, "org.mozilla.javascript.ast.Scope");
+                requireMethod(scope, "getSymbolTable");
+                require(loader, "org.mozilla.javascript.ast.Symbol");
+
+                // The nodes the fix catalog and the compatibility band locate by type.
+                for (String node : new String[] {"FunctionNode", "FunctionCall", "NewExpression",
+                        "PropertyGet", "ElementGet", "ObjectLiteral", "ObjectProperty", "ArrayLiteral",
+                        "InfixExpression", "Name", "StringLiteral", "NumberLiteral", "KeywordLiteral",
+                        "VariableDeclaration", "VariableInitializer", "IfStatement", "ForLoop",
+                        "ForInLoop", "WhileLoop", "Loop", "Block", "Comment", "BreakStatement",
+                        "ReturnStatement", "ExpressionStatement", "ParenthesizedExpression"}) {
+                    require(loader, "org.mozilla.javascript.ast." + node);
+                }
+
+                // Execution: the kill switch, the loader seam, and the wrapping the membrane overrides.
+                Class<?> factory = require(loader, "org.mozilla.javascript.ContextFactory");
+                requireOverridableMethod(factory, "observeInstructionCount",
+                        require(loader, "org.mozilla.javascript.Context"), int.class);
+                Class<?> context = require(loader, "org.mozilla.javascript.Context");
+                requireMethod(context, "setApplicationClassLoader", ClassLoader.class);
+                requireMethod(context, "setInstructionObserverThreshold", int.class);
+                Class<?> wrapFactory = require(loader, "org.mozilla.javascript.WrapFactory");
+                requireMethod(wrapFactory, "wrapJavaClass",
+                        require(loader, "org.mozilla.javascript.Context"),
+                        require(loader, "org.mozilla.javascript.Scriptable"), Class.class);
+                Class<?> rhinoException = require(loader, "org.mozilla.javascript.RhinoException");
+                requireMethod(rhinoException, "getScriptStack");
+                Class<?> wrapper = require(loader, "org.mozilla.javascript.Wrapper");
+                requireMethod(wrapper, "unwrap");
+                require(loader, "org.mozilla.javascript.NativeJavaObject");
+                require(loader, "org.mozilla.javascript.SymbolScriptable");
             } finally {
                 loader.close();
             }

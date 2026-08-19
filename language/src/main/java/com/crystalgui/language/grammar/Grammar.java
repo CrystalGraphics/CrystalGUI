@@ -5,8 +5,11 @@ import com.crystalgui.text.syntax.Language;
 
 import org.treesitter.TSLanguage;
 
+import com.crystalgui.language.js.rhino.JsImports;
+
 import java.util.List;
 import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 
 
 /**
@@ -145,8 +148,57 @@ public enum Grammar {
         // but only this table knows which directory to read, and a tokenizer built from a bare query
         // string (every test, and every injected child) has no directory and simply has no families.
         tokenizer.readFamiliesFrom(this);
+        // AND WHATEVER THIS GRAMMAR CANNOT PARSE, if its language has said so. @see #filterSourceWith
+        if (sourceFilter != null) tokenizer.filterSourceWith(sourceFilter);
         if (hasInjections()) tokenizer.withInjections(this, scheduler);
         return tokenizer;
+    }
+
+    /**
+     * Text this grammar cannot parse, neutralised before it sees it — <b>length-preserving, always</b>.
+     *
+     * <h3>Why a grammar corrector lives here and not in the language</h3>
+     *
+     * <p>The instinct is the other way round: a JavaScript file may carry {@code import a.b.C;} because
+     * <em>this engine</em> supports it, so surely the JavaScript side should install the filter. It
+     * cannot. {@code ExecutionNeedsNoGrammarTest} scans our own bytecode and forbids
+     * {@code language.js} — with {@code .java}, {@code .run}, {@code .map} and {@code .engine} — from
+     * naming this package at all, because a dedicated server runs scripts and must not load five
+     * platform natives to do it. <b>The dependency can only point this way.</b></p>
+     *
+     * <p>Which is no worse a home than it first looks. This package already carries per-language grammar
+     * corrections — {@code Queries} has one for JavaScript's own method call, captured by the vendored
+     * query as a declaration — and this is the same kind of fact: what a shipped grammar gets wrong
+     * about a language, stated once, beside the grammar it is wrong about.</p>
+     *
+     * <h3>The damage a filter prevents is not local</h3>
+     *
+     * <p>Measured, not assumed: the same file parsed with and without a leading {@code import} colours
+     * {@code var} as {@code keyword} in one and {@code variable} in the other, and {@code TEXT_MATERIAL}
+     * as {@code property} against {@code constructor}. Tree-sitter reads {@code import} as an ES module
+     * declaration expecting a string or a {@code from}, and the recovery it does instead reaches the
+     * whole document — one unparseable line at the top, and nothing below it is coloured correctly.</p>
+     *
+     * <p><b>Length-preserving, and enforced.</b> {@code TreeSitterTokenizer} throws on a filter that
+     * changes the length, because every offset it reports is an offset into what it parsed and the editor
+     * reads them as offsets into the document. See that class for what happens otherwise.</p>
+     *
+     * <p>Applied to tokenizers built AFTER it is set, so a host installing its own must do so before it
+     * opens a document. The one we ship is installed below, at class init, and cannot be late.</p>
+     */
+    private volatile UnaryOperator<String> sourceFilter;
+
+    static {
+        // THE ONE WE SHIP. `JsImports` is pure text over `String`s -- no Rhino, no natives -- so naming
+        // it here loads a regex and nothing else. It is the SAME blanking the executor and the analyser
+        // run on, deliberately: two copies of this rule would agree right up until the first one was
+        // fixed.
+        JAVASCRIPT.filterSourceWith(JsImports::blank);
+    }
+
+    /** @see #sourceFilter */
+    public void filterSourceWith(UnaryOperator<String> filter) {
+        this.sourceFilter = filter;
     }
 
     /** A fresh parser for this grammar — this is where the native is actually loaded. */

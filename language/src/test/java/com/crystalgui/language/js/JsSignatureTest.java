@@ -117,9 +117,21 @@ public class JsSignatureTest {
         assertEquals("count", signatureOf("function f(count) { return count; }\n", "count"));
     }
 
+    /**
+     * <b>By its simple name</b>, which this used to assert the opposite of.
+     *
+     * <p>It expected {@code java.util.ArrayList} — and a type that came back from a MEMBER lookup was
+     * already displayed short, so one popup showed {@code var list: java.util.ArrayList} directly above
+     * {@code var text: CgMaterial}. Two conventions decided by which tier happened to answer.</p>
+     *
+     * <p>Short is the one to keep: it is what the Java engine renders for the identical declaration, and
+     * the package is not lost — it is in the owner band above, which is that band's whole purpose.
+     * Only the DISPLAY is short; {@code qualifiedName()} still carries the binary name, which is what
+     * every member lookup and policy check is keyed on.</p>
+     */
     @Test
-    public void aJavaTypedDeclarationNamesTheJavaClass() {
-        assertEquals("var list: java.util.ArrayList",
+    public void aJavaTypedDeclarationNamesTheJavaClassSimply() {
+        assertEquals("var list: ArrayList",
                 signatureOf("var list = new java.util.ArrayList();\n", "list"));
     }
 

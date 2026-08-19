@@ -345,6 +345,12 @@ final class EditorLanguageFeatures {
             closeQuickDocumentation();
             showCodeActionsAt(offset);
         }));
+        // THE FOOTER'S PENCIL. The popup closes first: go-to-definition moves the caret, and a
+        // documentation box left open over the destination describes the symbol you have just left.
+        popupActions.add(docPopup.onGoToDeclaration.connect(() -> {
+            closeQuickDocumentation();
+            goToDefinition();
+        }));
         requestCodeActions(offset, available -> {
             if (docPopup != null && docPopup.isOpen()) {
                 docPopup.setProblem(problems, worthTheBand(problems, available));

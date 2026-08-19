@@ -85,8 +85,12 @@ public final class TypeIndex {
      * <p>The cap exists so a pathological classpath degrades into a smaller index rather than into a stalled
      * editor — and it is logged when hit, because an index that silently stops halfway looks like a missing
      * type rather than a truncated scan.</p>
+     *
+     * <p>Public because it is the number §7.3's memory budget has to be checked against: the budget is
+     * about a FULL index rather than about whichever classpath a machine happens to have, and this is
+     * what a full one means. @see TypeIndexScaleBenchmark</p>
      */
-    private static final int MAX_TYPES = 60_000;
+    public static final int MAX_TYPES = 60_000;
 
     /** Kept to a handful so the popup is not a wall of near-identical names. */
     private static final int MAX_RESULTS = 40;
@@ -231,6 +235,23 @@ public final class TypeIndex {
      * consumer that took the whole answer would be building thirty thousand completion rows to show
      * twenty. Truncation is reported so the session asks again as the query narrows.</p>
      */
+    /**
+     * How many types the scan found — a question <em>about</em> the index, not a way past it.
+     *
+     * <p>Every other public method is bounded by {@link #MAX_RESULTS}, deliberately, so none of them can
+     * answer this: {@code allUnder("java")} stops at forty because a consumer taking the whole answer
+     * would be building thirty thousand rows to show twenty. That left the size unobservable, and this
+     * class's own comments assert "fifty thousand entries" in three places with nothing having counted
+     * them. Builds the index if it has not been built.</p>
+     *
+     * <p>Cheap and honest to expose: it returns an {@code int}, hands out no {@link Entry}, and is what
+     * {@code TypeIndexScaleBenchmark} reads to answer §23 row 7.</p>
+     */
+    public int size() {
+        ensureBuilt();
+        return entries.size();
+    }
+
     public Match allUnder(String qualifiedPrefix) {
         if (qualifiedPrefix == null || qualifiedPrefix.isEmpty()) return new Match(List.of(), false);
         ensureBuilt();

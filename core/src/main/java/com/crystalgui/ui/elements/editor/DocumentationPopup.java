@@ -2,6 +2,8 @@ package com.crystalgui.ui.elements.editor;
 
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.lang.Signature;
+import com.crystalgui.fs.Resource;
+import com.crystalgui.text.lang.DeclarationSite;
 import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.text.lang.SymbolKind;
 import com.crystalgui.text.lang.SymbolModifier;
@@ -60,10 +62,13 @@ import javax.annotation.Nullable;
  * here: the band arrives when an engine reports structured doc, and no widget change is needed to hold a
  * place for it.</p>
  *
- * <p><b>The body is empty for every symbol today</b>, because no engine populates {@code documentation}
- * yet. That is fine and is why the work was ordered this way round: the definition and the location are
- * both derivable from what {@code SymbolInfo} already carries, so the popup is useful on day one and grows
- * a body without being touched. It hides the band rather than showing an empty one.</p>
+ * <p><b>The body was empty for every symbol until M13 §25.6</b>, because no engine populated
+ * {@code documentation} — and the popup shipped anyway, which is why the work was ordered this way
+ * round: the definition and the location are both derivable from what {@code SymbolInfo} already
+ * carries, so the box was useful on day one and grew a body <b>without a widget change</b>, exactly as
+ * this paragraph predicted. The Java engine now fills it from the doc comment, here or in an attached
+ * source, inheriting an override's from its supertype. It still hides the band rather than showing an
+ * empty one, which is what a symbol with no comment gets.</p>
  *
  * <h3>{@code Popover}, in {@code AUTO} — and not a {@code Tooltip}</h3>
  *
@@ -84,6 +89,57 @@ public final class DocumentationPopup extends Popover {
     public static final String DEFINITION_CLASS = "__doc-definition__";
     public static final String DEFINITION_BOX_CLASS = "__doc-definition-box__";
     public static final String BODY_CLASS = "__doc-body__";
+
+    /**
+     * The rule between the definition and the prose — IntelliJ draws one and it earns its line.
+     *
+     * <p>The two bands are different <em>kinds</em> of thing: one is code, syntax-coloured and
+     * read a token at a time, and the other is prose. Without a rule they read as one block whose
+     * colours change halfway, which is what the gap alone gave.</p>
+     *
+     * <p><b>An element, not a border.</b> A one-sided {@code border-width-*} either draws all four
+     * edges or none, never the one named — the invariant `statusbarview` learned and spells with a
+     * `__status-sep__` of its own.</p>
+     */
+    public static final String SEPARATOR_CLASS = "__doc-separator__";
+
+    /**
+     * The bottom band — <b>where the declaration lives</b>, and a pencil to go there.
+     *
+     * <h3>It was deleted once, and the objection was right</h3>
+     *
+     * <p>The first version read {@code this file} for anything declared in the open document — the
+     * common case — which says strictly less than the owner band directly above it. The sheet's own
+     * comment recorded that and removed the band rather than leave it, noting IntelliJ names the
+     * <em>module</em> instead and we have no notion of one.</p>
+     *
+     * <p>That is still true, and it is not the fix. <b>The band hides when the declaration is in the
+     * document you are already reading</b>, which is the same rule the body band follows and answers
+     * the objection at its root: a band that would say nothing does not appear. What is left is the
+     * case where it says something no other band does — the symbol is declared somewhere else, and
+     * this is the only place that names where.</p>
+     *
+     * <h3>A pencil, and deliberately no kebab</h3>
+     *
+     * <p>The pencil runs {@code editor.goToDefinition} — the same command Ctrl+B and Ctrl+Click run,
+     * with a different affordance, which is what §24.1 says it is for. A distinct target rather than
+     * making the whole row clickable, because the row's other half is a filename and a filename reads
+     * as information rather than as a button.</p>
+     *
+     * <p><b>No kebab.</b> §24.1's anatomy has one beside the pencil and names its four entries: font
+     * size, show-the-toolbar, Show-on-Mouse-Move and Download-documentation — <b>settings that do not
+     * exist</b>. A kebab opening an empty menu is the shape this class already warns about one band up:
+     * an affordance offering nothing from a list of perfectly good options. It arrives with the first
+     * setting that is real.</p>
+     */
+    public static final String FOOTER_CLASS = "__doc-footer__";
+
+    public static final String FOOTER_ICON_CLASS = "__doc-footer-icon__";
+
+    public static final String FOOTER_TEXT_CLASS = "__doc-footer-text__";
+
+    /** Go-to-definition with a different affordance — the same command Ctrl+B and Ctrl+Click run. */
+    public static final String FOOTER_EDIT_CLASS = "__doc-footer-edit__";
     public static final String PROBLEM_CLASS = "__doc-problem__";
     public static final String PROBLEM_MESSAGE_CLASS = "__doc-problem-message__";
     public static final String PROBLEM_ACTIONS_CLASS = "__doc-problem-actions__";
@@ -154,6 +210,20 @@ public final class DocumentationPopup extends Popover {
     private final UIElement definition = new UIElement();
     private final List<UIText> definitionLines = new ArrayList<>();
     private String definitionText = "";
+    /** @see #SEPARATOR_CLASS */
+    private final UIElement separator = new UIElement();
+
+    /** @see #FOOTER_CLASS */
+    private final UIElement footerRule = new UIElement();
+
+    private final UIElement footerRow = new UIElement();
+
+    private final UIElement footerIcon = new UIElement();
+
+    private final UIText footerText = new UIText("");
+
+    private final UIElement footerEdit = new UIElement();
+
     private final UIText body = new UIText("");
 
     /**
@@ -250,6 +320,26 @@ public final class DocumentationPopup extends Popover {
         // white-space and adding text-overflow each changed the SYMPTOM and none of them fixed it.
 
         ownerText.forceSelfSizeWidth();
+        separator.addClass(SEPARATOR_CLASS);
+        separator.setHitTest(false);
+
+        footerRule.addClass(SEPARATOR_CLASS);
+        footerRule.setHitTest(false);
+        footerRow.addClass(FOOTER_CLASS);
+        footerIcon.addClass(FOOTER_ICON_CLASS);
+        footerIcon.setHitTest(false);
+        footerText.addClass(FOOTER_TEXT_CLASS);
+        footerText.setHitTest(false);
+        footerEdit.addClass(FOOTER_EDIT_CLASS);
+        // ON THE MOUSE-DOWN, for the reason the problem actions are: this popup is light-dismissable, so
+        // a press closes it and the row is gone before any mouse-up could arrive.
+        footerEdit.onMouseDown.attachListener((element, event) -> {
+            onGoToDeclaration.emit();
+            event.stopPropagation();
+        }, false, true);
+        footerRow.addInternalChild(footerIcon);
+        footerRow.addInternalChild(footerText);
+        footerRow.addInternalChild(footerEdit);
         body.addClass(BODY_CLASS);
 
         problemMessage.addClass(PROBLEM_MESSAGE_CLASS);
@@ -293,7 +383,10 @@ public final class DocumentationPopup extends Popover {
         addInternalChild(problemRow);
         addInternalChild(ownerRow);
         addInternalChild(definition);
+        addInternalChild(separator);
         addInternalChild(body);
+        addInternalChild(footerRule);
+        addInternalChild(footerRow);
 
         // Enter and Leave do NOT bubble, but one is dispatched to every element in the entered and left
         // chain -- so this fires for the pointer arriving anywhere inside, including on the footer's
@@ -307,6 +400,16 @@ public final class DocumentationPopup extends Popover {
             new com.crystalgui.core.signal.Signal.Value<>();
 
     /** "More actions…" — the host opens the full list, because only it knows where to put it. */
+    /**
+     * The footer's pencil was pressed — go to where the symbol is declared.
+     *
+     * <p>A signal rather than a command run from here, like every other action on this popup: the widget
+     * knows a pencil was pressed and nothing else. Which command that is belongs to the editor, which is
+     * where the keymap already resolves Ctrl+B.</p>
+     */
+    public final com.crystalgui.core.signal.Signal.Action onGoToDeclaration =
+            new com.crystalgui.core.signal.Signal.Action();
+
     public final com.crystalgui.core.signal.Signal.Action onMoreActions =
             new com.crystalgui.core.signal.Signal.Action();
 
@@ -532,7 +635,10 @@ public final class DocumentationPopup extends Popover {
         ownerRow.setDisplayed(false);
         definition.setDisplayed(false);
         bodyShown = false;
+        separator.setDisplayed(false);
         body.setDisplayed(false);
+        footerRule.setDisplayed(false);
+        footerRow.setDisplayed(false);
         setProblem(problems, List.of());
     }
 
@@ -560,7 +666,10 @@ public final class DocumentationPopup extends Popover {
         ownerRow.setDisplayed(false);
         definition.setDisplayed(false);
         bodyShown = false;
+        separator.setDisplayed(false);
         body.setDisplayed(false);
+        footerRule.setDisplayed(false);
+        footerRow.setDisplayed(false);
         setProblem(problems, List.of());
     }
 
@@ -634,8 +743,13 @@ public final class DocumentationPopup extends Popover {
         // HIDDEN, not empty. An empty band is a gap under the definition that looks like a rendering
         // failure; no band is a popup that is simply shorter.
         bodyShown = docs != null && !docs.isBlank();
+        // THE RULE FOLLOWS THE BAND IT DIVIDES. Left visible with no body under it, it draws a line
+        // across the bottom of the popup that reads as a band which failed to load -- the same reason
+        // the body itself hides rather than showing empty.
+        separator.setDisplayed(bodyShown);
         body.setDisplayed(bodyShown);
         body.setText(docs == null ? "" : docs);
+        renderFooter(symbol);
     }
 
     /**
@@ -755,6 +869,32 @@ public final class DocumentationPopup extends Popover {
      * moved into those characters. That is the failure {@code UIText}'s own note records: not a stale
      * colour, a colour over the wrong text entirely.</p>
      */
+    /**
+     * The bottom band, shown only when it has somewhere to point.
+     *
+     * <p>{@code DeclarationSite.resource == null} means <b>this document</b> — a local, a parameter, a
+     * field of the class being edited, and every symbol a script declares about itself. That is the
+     * common case, and naming it "this file" is what got the band deleted the first time: it said less
+     * than the owner band directly above it. So it hides, exactly as the body does when there is no
+     * documentation, and what is left is the case no other band covers.</p>
+     *
+     * @see #FOOTER_CLASS
+     */
+    private void renderFooter(SymbolInfo symbol) {
+        DeclarationSite site = symbol == null ? null : symbol.declaration();
+        Resource resource = site == null ? null : site.resource();
+        boolean elsewhere = resource != null;
+        footerRule.setDisplayed(elsewhere);
+        footerRow.setDisplayed(elsewhere);
+        if (!elsewhere) {
+            footerText.setText("");
+            return;
+        }
+        // THE NAME, not the whole path. A popup is not a place to read a path from -- what a reader
+        // wants is which file, and the pencil is what takes them to it.
+        footerText.setText(resource.name());
+    }
+
     private void renderDefinition(SymbolInfo symbol) {
         // EVERY name cleared, on every path -- see the note above. The engine-rendered path and the
         // assembled one use different name sets, so a symbol switching between them would otherwise carry
@@ -923,7 +1063,31 @@ public final class DocumentationPopup extends Popover {
         if (typeRange != null) only.highlights().set(HL_TYPE, typeRange);
         // Conditional like the two above it, and safe for the same reason: layOutSignatureLines clears
         // every band on every line before any is set, so an unset name cannot leave the previous symbol's.
-        if (nameRange != null) only.highlights().set(HL_NAME, nameRange);
+        //
+        // AND A TYPE'S NAME IS A TYPE. `HL_NAME` resolves to --syntax-variable, which is right for a
+        // field or a local and wrong for the thing being declared: hovering a class rendered
+        // `public class CgTextRenderer` with the name in the local colour, three lines under an editor
+        // drawing that same word as a type. The owner band directly above had already solved this and
+        // says how -- it sets the EDITOR's capture names rather than a pair only this popup uses, so one
+        // scheme colours both and a scheme switch cannot leave the box behind.
+        //
+        // `type` first and the specific capture second, which is the owner band's shape exactly: a kind
+        // whose own capture no scheme styles still lands on a real colour rather than on body text.
+        if (nameRange != null) {
+            String capture = declarationKeyword == null ? null : captureFor(symbol.kind());
+            if (capture == null) {
+                only.highlights().set(HL_NAME, nameRange);
+            } else {
+                only.highlights().set("type", nameRange);
+                if (!"type".equals(capture)) only.highlights().set(capture, nameRange);
+            }
+        }
+    }
+
+    /** A kind's own capture name, or null when it is not a type being declared. */
+    @Nullable
+    private static String captureFor(@Nullable SymbolKind kind) {
+        return kind == null ? null : kind.captureName();
     }
 
     /**

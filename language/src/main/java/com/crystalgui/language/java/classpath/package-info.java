@@ -1,5 +1,5 @@
 /**
- * What a script is compiled and completed <b>against</b> — the classpath, and the two things that are
+ * What a script is compiled and completed <b>against</b> — the classpath, and the three things that are
  * on it without being files.
  *
  * <p>{@code HostClasspath} is the running process's own classpath rather than a declared one, because a
@@ -7,6 +7,12 @@
  * on that classpath, so an unimported one can be offered and imported on accept. {@code ReflectionOverlay}
  * is the gap in the premise: a classpath is a list of files, and a class generated at runtime has no
  * file at all.</p>
+ *
+ * <p>{@code ClassFileParameterNames} is the fourth, and it is here for the same reason the index is:
+ * it answers a question about the classpath by <em>reading its bytes</em> rather than by loading
+ * anything. A method's parameter names survive compilation — in the {@code LocalVariableTable} for
+ * anything with a body, in {@code MethodParameters} for anything built with {@code -parameters} — so a
+ * hover can show them with no source attached and nothing shipped.</p>
  *
  * <p><b>Nothing here names a JDT type</b>, which is what lets the index be built once and shared by the
  * Java engine, the JavaScript engine's interop tier, and the import corrections — three consumers on two
