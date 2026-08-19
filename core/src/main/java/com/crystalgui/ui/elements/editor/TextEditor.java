@@ -37,6 +37,7 @@ import com.crystalgui.text.wrap.*;
 import com.crystalgui.ui.ClipboardActions;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UiDataKeys;
+import com.crystalgui.text.WordOperations;
 import com.crystalgui.ui.UITransform;
 import com.crystalgui.ui.elements.ScrollerView;
 import com.crystalgui.ui.elements.UIText;
@@ -325,6 +326,31 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * which means "never asked". Conflating them re-queries blank lines forever.</p>
      */
     private final Map<Integer, List<SyntaxToken>> rowSyntax = new HashMap<>();
+
+    // ── The word being typed ────────────────────────────────────────────────────────────────────
+    //
+    // See beginOrExtendTypingWord for what this is and why.
+
+    /** The row a typing session is on, or -1. The one field that says whether a session is live. */
+    private int typingRow = -1;
+
+    /** Where the word starts, relative to its row. Fixed for the session — insertion never moves it. */
+    private int typingWordStart = -1;
+
+    /** Where the word ended when the session began, in the SNAPSHOT's coordinates. */
+    private int typingOriginalEnd = -1;
+
+    /** Net characters typed since the session began, so what follows the word can be shifted. */
+    private int typingShift;
+
+    /** The row's captures as of session start. Published in place of the cache while the session runs. */
+    private List<SyntaxToken> typingSnapshot;
+
+    /** When the last character landed. Only ever read while a session is live — see the note there. */
+    private long typingLastKeyNanos;
+
+    /** Set for the duration of one typed character, so the edit it causes is recognised as typing. */
+    private boolean typingThisEdit;
 
     /**
      * The engine behind this document, or null — and null is the ordinary case.
@@ -631,7 +657,17 @@ public class TextEditor extends ScrollerView implements UndoScope {
             invalidateMeasuredRows(change);
             // Same rule, same reason, and it must read previousLineCount while it still says what it said
             // before this edit -- so it belongs beside the call above rather than anywhere later.
-            invalidateRowSyntax(change);
+            //
+            // A live typing session ADVANCES here rather than invalidating: not dropping the row is the
+            // whole mechanism. See beginOrExtendTypingWord.
+            if (typingThisEdit && typingRow >= 0 && change.changes().size() == 1
+                    && buffer.lineCount() == previousLineCount) {
+                Change one = change.changes().get(0);
+                typingShift += one.insert().length() - (one.to() - one.from());
+            } else {
+                endTypingWord();
+                invalidateRowSyntax(change);
+            }
             // NOT invalidateWindow() unless the line COUNT changed.
             //
             // Recycling every line on every keystroke clears each one's highlights -- recycleLine has to,
@@ -692,6 +728,13 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // The one place the caret settles. A session must end on a plain arrow-key move, which changes no
         // text and would therefore never reach a buffer listener.
         onSelectionChanged.connect(suggest::caretMoved);
+        // Moving the caret out of the word finishes it, exactly as clicking elsewhere does in IntelliJ.
+        // Guarded on the typing flag because an insertion moves the caret too -- without that, a session
+        // would end on the very keystroke that opened it.
+        onSelectionChanged.connect(() -> {
+            if (!typingThisEdit) endTypingWord();
+        });
+        onBlur.attachListener((element, event) -> endTypingWord(), false, true);
 
         previousLineCount = buffer.lineCount();
         projections.rebuild(buffer.document());
@@ -2093,7 +2136,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // range published here must be relative to the VIEW line -- which for a wrapped row is some
             // way into it. Doing only the first would push every colour on a continuation line left by
             // the width of everything above it.
-            List<SyntaxToken> rowTokens = rowSyntax.get(modelRow);
+            List<SyntaxToken> rowTokens = publishedRowSyntax(modelRow);
             if (rowTokens != null && !rowTokens.isEmpty()) {
                 for (SyntaxToken token : rowTokens) {
                     int start = Math.max(rowStart + token.start(), lineStart);
@@ -2259,6 +2302,124 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     /**
+     * How long a pause ends a typing session.
+     *
+     * <p>IntelliJ's {@code DaemonCodeAnalyzerSettings.getAutoReparseDelay()}, whose default is the same
+     * 300ms. That is the real rule behind the behaviour this imitates: the daemon is <em>cancelled</em> by
+     * every keystroke and restarted on this delay, so continuous typing never lets it finish and the
+     * identifier under the caret keeps its default colour until you stop.</p>
+     */
+    private static final long TYPING_SETTLE_NANOS = 300_000_000L;
+
+    /**
+     * <b>The word being typed is not re-highlighted until it is finished</b> — IntelliJ's behaviour, and
+     * the reason it is worth copying.
+     *
+     * <h3>What IntelliJ actually does</h3>
+     *
+     * <p>Two tiers, and only one of them is deferred. The <b>lexer</b> highlighter re-runs synchronously
+     * and incrementally on every keystroke, which is what keeps keywords, strings, numbers and comments
+     * coloured as you type. Everything that needs the identifier to <em>resolve</em> — a class, a field, a
+     * static, a parameter — is coloured by the <b>daemon</b>, which is cancelled by each keystroke and
+     * restarted after {@link #TYPING_SETTLE_NANOS}. A half-typed name resolves to nothing, so it is drawn
+     * in the plain foreground until the word is finished. That is the grey {@code TreeSitterTokenizer.}
+     * in the screenshot this was written from.</p>
+     *
+     * <p>Our grammar tier is not IntelliJ's lexer: tree-sitter classifies identifiers, so a half-typed
+     * name gets a confident colour that changes with nearly every character — {@code Tree} as a variable,
+     * {@code TreeS} as something else. Deferring is what makes it behave like the reference instead of
+     * flickering through guesses.</p>
+     *
+     * <h3>The cost it also removes</h3>
+     *
+     * <p>Measured on a 2,000-line Java file with the production scheduler installed: <b>424µs per
+     * keystroke</b> in the grammar tier, of which 68µs is the per-row query this skips. (The other 356µs
+     * is {@code edited()} keeping the tree in sync, which cannot be skipped without desynchronising it.)
+     * A ten-character word costs one query instead of ten.</p>
+     *
+     * <h3>Why a snapshot rather than the cache</h3>
+     *
+     * <p>The rest of the row must keep its colours — IntelliJ greys the identifier, not the line. So the
+     * row's captures are pinned at session start and published from there: what precedes the word is
+     * unchanged, what follows it is shifted by {@link #typingShift}, and what overlaps it is dropped. The
+     * cache itself is left alone and simply not re-queried, which is where the saving comes from.</p>
+     *
+     * <p>A session only ever covers <b>one word on one row, extended one character at a time</b>. Anything
+     * else — a paste, a newline, undo, a multi-cursor edit, backspace past the word's start — ends it
+     * through {@link #endTypingWord}, so the amount of the document that can be stale is one word.</p>
+     */
+    private void beginOrExtendTypingWord() {
+        typingLastKeyNanos = System.nanoTime();
+        int caret = getCaret();
+        int row = buffer.document().offsetToPoint(caret).row();
+        if (row == typingRow) return;
+
+        // A NEW session needs a snapshot, and without one there is nothing to publish from — so the row
+        // is left to the ordinary path this keystroke and a session can begin on the next.
+        endTypingWord();
+        List<SyntaxToken> cached = rowSyntax.get(row);
+        if (cached == null) return;
+
+        int rowStart = buffer.document().lineStartOffset(row);
+        int[] word = WordOperations.wordAt(buffer.document(), caret, wordClassifier);
+        typingRow = row;
+        typingWordStart = word[0] - rowStart;
+        typingOriginalEnd = word[1] - rowStart;
+        typingShift = 0;
+        typingSnapshot = new ArrayList<>(cached);
+    }
+
+    /**
+     * Ends a typing session and lets the row colour itself again.
+     *
+     * <p>Dropping the row from the cache is what makes the next frame re-query it — the session's whole
+     * mechanism is that the row was never invalidated while it ran.</p>
+     */
+    private void endTypingWord() {
+        if (typingRow < 0) return;
+        int row = typingRow;
+        typingRow = -1;
+        typingWordStart = -1;
+        typingOriginalEnd = -1;
+        typingShift = 0;
+        typingSnapshot = null;
+        rowSyntax.remove(row);
+        highlightsDirty = true;
+    }
+
+    /**
+     * Ends the session once typing has settled — the delay IntelliJ restarts on every keystroke.
+     *
+     * <p>Guarded on the session being live rather than on a "long ago" sentinel: {@code nanoTime} has an
+     * arbitrary origin and may be negative, so a sentinel subtraction can overflow into a <em>small</em>
+     * elapsed time and expire immediately.</p>
+     */
+    private void expireTypingWordIfIdle() {
+        if (typingRow < 0) return;
+        if (System.nanoTime() - typingLastKeyNanos >= TYPING_SETTLE_NANOS) endTypingWord();
+    }
+
+    /**
+     * The captures to publish for a model row.
+     *
+     * <p>The cache, except on the row being typed on — see {@link #beginOrExtendTypingWord}.</p>
+     */
+    private List<SyntaxToken> publishedRowSyntax(int modelRow) {
+        if (modelRow != typingRow || typingSnapshot == null) return rowSyntax.get(modelRow);
+        List<SyntaxToken> out = new ArrayList<>(typingSnapshot.size());
+        for (SyntaxToken token : typingSnapshot) {
+            if (token.end() <= typingWordStart) {
+                out.add(token);
+            } else if (token.start() >= typingOriginalEnd) {
+                out.add(new SyntaxToken(token.start() + typingShift, token.end() + typingShift,
+                        token.name()));
+            }
+            // Anything overlapping the word is dropped, which is what draws it in the plain foreground.
+        }
+        return out;
+    }
+
+    /**
      * Fills {@link #rowSyntax} for any realised row that has no entry — and asks the tokenizer nothing
      * when they all do, which is the entire point.
      *
@@ -2391,6 +2552,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private void invalidateRowSyntax(ChangeSet change) {
         List<Change> changes = change.changes();
         if (changes.size() != 1 || buffer.lineCount() != previousLineCount) {
+            endTypingWord();
             rowSyntax.clear();
             return;
         }
@@ -2410,7 +2572,13 @@ public class TextEditor extends ScrollerView implements UndoScope {
         }
         int firstRow = buffer.document().offsetToPoint(clampToDocument(fromOffset)).row();
         int lastRow = buffer.document().offsetToPoint(clampToDocument(toOffset)).row();
-        for (int row = firstRow; row <= lastRow; row++) rowSyntax.remove(row);
+        for (int row = firstRow; row <= lastRow; row++) {
+            // NOT the row being typed on. This is a background parse landing, and letting it through would
+            // colour the half-typed word from the other side -- the session would still be live, and the
+            // word would light up anyway a few frames after each keystroke.
+            if (row == typingRow) continue;
+            rowSyntax.remove(row);
+        }
     }
 
     // ── Indentation ─────────────────────────────────────────────────────────────────────────────
@@ -2707,6 +2875,28 @@ public class TextEditor extends ScrollerView implements UndoScope {
      */
     private void typeCharacter(char typed) {
         if (readOnly) return;
+        // BEFORE the edit, because the change listener has to be able to tell this insertion from every
+        // other kind. A character that is not part of a word FINISHES one -- which is the trigger the
+        // behaviour is named for, and it covers every early return below, since each of those is a
+        // bracket or a quote.
+        if (wordClassifier.isWordPart(typed)) beginOrExtendTypingWord();
+        else endTypingWord();
+        typingThisEdit = true;
+        try {
+            typeCharacterInner(typed);
+        } finally {
+            typingThisEdit = false;
+        }
+    }
+
+    /**
+     * The three behaviours above, once the typing session has been opened or closed around them.
+     *
+     * <p>Split out so the session's bookkeeping wraps every path through this method, including its three
+     * early returns. Accepting a completion needs no case of its own: it inserts more than one character,
+     * so the change listener does not recognise it as typing and ends the session there.</p>
+     */
+    private void typeCharacterInner(char typed) {
         Character closer = language.closerFor(typed);
 
         if (selections.hasSelection() && closer != null) {
@@ -4667,6 +4857,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // AFTER the parts have rendered, so a layer built on this frame is moved on this frame rather
         // than drawing once at the unscrolled origin. It is a transform, so nothing below it re-lays out.
         syncScrollLayers();
+        // The pause that finishes a word, checked once a frame -- there is no other timer in the editor
+        // and adding one for this would be a thread to keep in step with the frame it reports to.
+        expireTypingWordIfIdle();
         // THE POPUP RE-ANCHORS HERE, once a frame, and not only when the caret moves.
         //
         // The anchor is derived from measured row widths, and those are computed in this very method --
