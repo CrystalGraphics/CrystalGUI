@@ -1063,7 +1063,31 @@ public final class DocumentationPopup extends Popover {
         if (typeRange != null) only.highlights().set(HL_TYPE, typeRange);
         // Conditional like the two above it, and safe for the same reason: layOutSignatureLines clears
         // every band on every line before any is set, so an unset name cannot leave the previous symbol's.
-        if (nameRange != null) only.highlights().set(HL_NAME, nameRange);
+        //
+        // AND A TYPE'S NAME IS A TYPE. `HL_NAME` resolves to --syntax-variable, which is right for a
+        // field or a local and wrong for the thing being declared: hovering a class rendered
+        // `public class CgTextRenderer` with the name in the local colour, three lines under an editor
+        // drawing that same word as a type. The owner band directly above had already solved this and
+        // says how -- it sets the EDITOR's capture names rather than a pair only this popup uses, so one
+        // scheme colours both and a scheme switch cannot leave the box behind.
+        //
+        // `type` first and the specific capture second, which is the owner band's shape exactly: a kind
+        // whose own capture no scheme styles still lands on a real colour rather than on body text.
+        if (nameRange != null) {
+            String capture = declarationKeyword == null ? null : captureFor(symbol.kind());
+            if (capture == null) {
+                only.highlights().set(HL_NAME, nameRange);
+            } else {
+                only.highlights().set("type", nameRange);
+                if (!"type".equals(capture)) only.highlights().set(capture, nameRange);
+            }
+        }
+    }
+
+    /** A kind's own capture name, or null when it is not a type being declared. */
+    @Nullable
+    private static String captureFor(@Nullable SymbolKind kind) {
+        return kind == null ? null : kind.captureName();
     }
 
     /**
