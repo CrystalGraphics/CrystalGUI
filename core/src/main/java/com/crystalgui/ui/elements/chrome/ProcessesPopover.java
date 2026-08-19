@@ -44,6 +44,9 @@ public class ProcessesPopover extends Popover {
     /** On a row whose cancel has been asked for and not yet acknowledged. */
     public static final String CANCELLING_CLASS = "__cancelling__";
 
+    /** The dismiss link at the foot — IntelliJ's {@code Hide processes (N)}. */
+    public static final String HIDE_CLASS = "__hide__";
+
     private final UIElement rows = new UIElement();
     private final Map<JobKey, Row> byKey = new LinkedHashMap<>();
 
@@ -60,7 +63,18 @@ public class ProcessesPopover extends Popover {
         StyleGroup.defaultPipeline(rows.getStyle().getLayoutGroup(),
                 l -> l.flexDirection(FlexDirection.COLUMN));
         addChild(rows);
+
+        // A LINK, not a button: it dismisses this popup and acts on nothing, which is the distinction
+        // both references draw. The count is in the text because that is the only thing it tells you --
+        // "hide" alone would be a control whose effect you cannot predict.
+        hide.addClass(HIDE_CLASS);
+        hide.onMouseUp.attachListener((source, event) -> {
+            if (event.isWasPressTarget()) hide();
+        }, false, false);
+        addChild(hide);
     }
+
+    private final UIText hide = new UIText("Hide processes");
 
     /**
      * Brings the list in line with {@code active}, reusing rows.
@@ -86,6 +100,8 @@ public class ProcessesPopover extends Popover {
             entry.getValue().element.removeSelf();
             return true;
         });
+
+        hide.setText("Hide processes (" + active.size() + ")");
 
         // Keep the visual order the scheduler's, without rebuilding: a row that is already in the right
         // place is left alone, so nothing under the pointer moves unless the set itself changed.

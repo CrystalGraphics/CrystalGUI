@@ -323,9 +323,34 @@ public final class JobScheduler implements Disposable {
         Iterator<Waiting<?>> iterator = due.iterator();
         while (iterator.hasNext() && running.size() < maxConcurrent) {
             Waiting<?> next = iterator.next();
+            if (!hasSlotFor(next.lane)) continue;
             waiting.remove(next.key);
             start(next);
         }
+    }
+
+    /**
+     * <b>{@link JobLane#BACKGROUND} may not take the last slot.</b>
+     *
+     * <p>{@code maxConcurrent} is scheduler-wide, so a long job holds a slot for its whole life — and
+     * background work is precisely the long kind. A 16 MB download and a classpath index are minutes
+     * between them, and an analysis wants a slot on the next keystroke.</p>
+     *
+     * <p>The starvation guard does not help here and it is worth saying why, because it looks as though it
+     * should: it promotes a job that has been <em>waiting</em> too long, and cannot evict one that is
+     * <em>running</em>. A queue of interactive work behind two downloads is not starved by ordering, it is
+     * starved by occupancy.</p>
+     *
+     * <p>So background is capped one below the pool. With a pool of one it may still run — a machine that
+     * can only do one thing at a time should do the thing that was asked for rather than nothing.</p>
+     */
+    private boolean hasSlotFor(JobLane lane) {
+        if (lane != JobLane.BACKGROUND || maxConcurrent <= 1) return true;
+        int backgroundRunning = 0;
+        for (Running inFlight : running.values()) {
+            if (inFlight.lane() == JobLane.BACKGROUND) backgroundRunning++;
+        }
+        return backgroundRunning < maxConcurrent - 1;
     }
 
     /**
@@ -349,7 +374,7 @@ public final class JobScheduler implements Disposable {
 
     private <T> void start(Waiting<T> job) {
         JobContext context = new JobContext(clockMillis);
-        running.put(job.key, new Running(context));
+        running.put(job.key, new Running(context, job.lane));
         executor.execute(() -> {
             T result = null;
             Throwable failure = null;
@@ -492,7 +517,8 @@ public final class JobScheduler implements Disposable {
                               Function<JobContext, T> work, Consumer<T> onDone) {
     }
 
-    private record Running(JobContext context) {
+    /** The lane is carried so {@link #hasSlotFor} can count occupancy without a second map. */
+    private record Running(JobContext context, JobLane lane) {
     }
 
     private record Completion<T>(JobKey key, int generation, T result, Throwable failure,

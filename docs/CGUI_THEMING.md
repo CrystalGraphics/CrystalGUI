@@ -426,6 +426,8 @@ editor scheme's.
 | `--problems-warning-fg` | `var(--warning-icon)` | base.css |
 | `--progress-cancelling-fg` | `var(--fg-disabled)` | base.css |
 | `--progress-fill-bg` | `var(--accent)` | base.css |
+| `--progress-hide-fg` | `var(--link)` | base.css |
+| `--progress-hide-hover-fg` | `var(--accent-hover)` | base.css |
 | `--progress-track-bg` | `var(--border-base)` | base.css |
 | `--prompt-bg` | `var(--surface-panel)` | base.css |
 | `--prompt-border` | `var(--border-base)` | base.css |

@@ -485,6 +485,10 @@ theme {
     /* Asked to cancel and not yet stopped. Disabled, because the control IS inert now -- the work is
      * not, which is why the bar beside it keeps its colour. */
     --progress-cancelling-fg: var(--fg-disabled);
+    /* The Processes popup's dismiss link. --link like every other link in the chrome, rather than
+     * --accent: a link is a workbench colour, and the console's hyperlink note explains why. */
+    --progress-hide-fg: var(--link);
+    --progress-hide-hover-fg: var(--accent-hover);
     /* --border-base, not --divider. A divider separates two SURFACES and only has to be visible against
      * both; these sit ON one surface, and --divider resolves within about five points of --surface-base,
      * so the rules between the readouts were technically painted and effectively absent. The third time

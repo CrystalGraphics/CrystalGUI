@@ -1,6 +1,10 @@
 package com.crystalgui.mc;
 
 import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgui.core.async.JobKey;
+import com.crystalgui.core.async.JobLane;
+import com.crystalgui.core.async.JobScheduler;
+import com.crystalgui.language.map.PlatformMappings;
 import com.crystalgui.language.platform.ScriptServices;
 import com.crystalgui.mc.client.CgUiAutoTest;
 import com.crystalgui.mc.client.CgUiInput;
@@ -29,6 +33,17 @@ public class ClientProxy extends CommonProxy {
         // The other four are installation-level, so when server-side scripting lands this moves to
         // CommonProxy and that one method grows a side-aware answer.
         CgPlatform.provide(ScriptServices.SERVICE, new ScriptService1710());
+        // MAPPINGS ACQUIRED INSIDE A JOB, so the fetch reports into the status bar instead of being a
+        // silent stall on first launch. PlatformMappings does not reach for the scheduler itself and must
+        // not: UIWindow.paintFrame is the only thing that drains it, so a dedicated server -- which runs
+        // scripts and needs readable names to compile them -- would queue the fetch for ever. Threading
+        // is the caller's decision, and this caller has a UI.
+        JobScheduler.shared().job(JobKey.of(ClientProxy.class, "mappings"), JobLane.BACKGROUND,
+                context -> {
+                    PlatformMappings.begin(context.progress());
+                    return null;
+                }).submit();
+
         CgUiInput.register();
         CgUiAutoTest.register();
     }
