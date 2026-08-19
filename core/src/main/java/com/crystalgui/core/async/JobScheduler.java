@@ -232,6 +232,11 @@ public final class JobScheduler implements Disposable {
      * <p>Bumps the generation, so a result already in flight is discarded when it lands.</p>
      */
     public void cancel(JobKey key) {
+        // MARKED, not removed. Cancellation is cooperative, so there is a real gap between asking and the
+        // worker noticing -- and a row that vanished on the click would claim the work had stopped when it
+        // had not. @see ActiveJob#cancelRequested()
+        Tracked shown = tracked.get(key);
+        if (shown != null) shown.cancelRequested = true;
         generations.merge(key, 1, Integer::sum);
         waiting.remove(key);
         Running inFlight = running.get(key);
@@ -272,7 +277,11 @@ public final class JobScheduler implements Disposable {
         deliverCompleted();
         promoteDue();
         deliverCompleted();
-        return !waiting.isEmpty() || !running.isEmpty();
+        // LAST, and on this thread. Every visibility decision -- has it earned a place on screen, has it
+        // been there long enough to leave -- is made here, where the rest of this class's decisions are
+        // made, so none of it can be reached from a worker. @see #active()
+        updateTracked(clockMillis.getAsLong());
+        return !waiting.isEmpty() || !running.isEmpty() || !tracked.isEmpty();
     }
 
     private void deliverCompleted() {
@@ -339,7 +348,7 @@ public final class JobScheduler implements Disposable {
     }
 
     private <T> void start(Waiting<T> job) {
-        JobContext context = new JobContext();
+        JobContext context = new JobContext(clockMillis);
         running.put(job.key, new Running(context));
         executor.execute(() -> {
             T result = null;
@@ -387,6 +396,94 @@ public final class JobScheduler implements Disposable {
     /** Jobs in flight. */
     public int runningCount() {
         return running.size();
+    }
+
+    // ── Progress, and what is on screen ─────────────────────────────────────────────────────────
+
+    /** How long a job must have been running before it earns a place in the chrome. @see #active() */
+    public static final long DEFAULT_SHOW_AFTER_MILLIS = 400L;
+
+    /** How long it stays once it has appeared, however fast it then finishes. @see #active() */
+    public static final long DEFAULT_MINIMUM_VISIBLE_MILLIS = 500L;
+
+    private long showAfterMillis = DEFAULT_SHOW_AFTER_MILLIS;
+    private long minimumVisibleMillis = DEFAULT_MINIMUM_VISIBLE_MILLIS;
+
+    private final Map<JobKey, Tracked> tracked = new LinkedHashMap<>();
+
+    public JobScheduler setShowAfterMillis(long millis) {
+        this.showAfterMillis = Math.max(0, millis);
+        return this;
+    }
+
+    public JobScheduler setMinimumVisibleMillis(long millis) {
+        this.minimumVisibleMillis = Math.max(0, millis);
+        return this;
+    }
+
+    /**
+     * What the chrome should be drawing, most recently begun first.
+     *
+     * <h3>Two policies, and both exist to stop the status bar flickering</h3>
+     *
+     * <p><b>A job appears only once it has called {@link Progress#begin}</b>, and only after
+     * {@link #DEFAULT_SHOW_AFTER_MILLIS}. An analysis runs on every keystroke; if everything appeared the
+     * chrome would strobe continuously, and most work finishes before anyone could read its name.</p>
+     *
+     * <p><b>And once it has appeared it stays</b> for {@link #DEFAULT_MINIMUM_VISIBLE_MILLIS}, so a job
+     * that finishes just after crossing the delay does not flash in and out.</p>
+     *
+     * <p>Most recently begun first, not by how far along: ordering by progress reorders rows under the
+     * cursor, which is the one thing a list with buttons in it must not do.</p>
+     *
+     * <p>Safe to call every frame — it allocates one list and reads volatile references. The decisions
+     * were all made in {@link #drain()}.</p>
+     */
+    public List<ActiveJob> active() {
+        if (tracked.isEmpty()) return List.of();
+        List<ActiveJob> shown = new ArrayList<>(tracked.size());
+        for (Map.Entry<JobKey, Tracked> entry : tracked.entrySet()) {
+            Tracked value = entry.getValue();
+            if (value.shownAtMillis == 0L || value.state == null) continue;
+            shown.add(new ActiveJob(entry.getKey(), value.state, value.cancelRequested));
+        }
+        shown.sort(Comparator.comparingLong((ActiveJob job) -> job.state().begunAtMillis()).reversed());
+        return List.copyOf(shown);
+    }
+
+    /**
+     * Folds this frame's running jobs into what is on screen.
+     *
+     * <p>A tracked entry outlives its job deliberately: {@link #DEFAULT_MINIMUM_VISIBLE_MILLIS} is
+     * measured from when the row appeared, so the record has to survive the job it describes. One that was
+     * never shown leaves immediately — there is nothing for a minimum to protect.</p>
+     */
+    private void updateTracked(long now) {
+        for (Map.Entry<JobKey, Running> entry : running.entrySet()) {
+            ProgressState state = entry.getValue().context().progressState();
+            if (state == null) continue;
+            Tracked value = tracked.computeIfAbsent(entry.getKey(), key -> new Tracked());
+            value.state = state;
+            value.finishedAtMillis = 0L;
+            if (value.shownAtMillis == 0L && now - state.begunAtMillis() >= showAfterMillis) {
+                value.shownAtMillis = now;
+            }
+        }
+        tracked.entrySet().removeIf(entry -> {
+            Tracked value = entry.getValue();
+            if (running.containsKey(entry.getKey())) return false;
+            if (value.shownAtMillis == 0L) return true;
+            if (value.finishedAtMillis == 0L) value.finishedAtMillis = now;
+            return now - value.shownAtMillis >= minimumVisibleMillis;
+        });
+    }
+
+    /** Mutable, owned by the UI thread, and never handed out — {@link ActiveJob} is what escapes. */
+    private static final class Tracked {
+        private ProgressState state;
+        private long shownAtMillis;
+        private long finishedAtMillis;
+        private boolean cancelRequested;
     }
 
     // ── Internals ───────────────────────────────────────────────────────────────────────────────
