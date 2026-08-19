@@ -187,6 +187,44 @@ public class EditorTypingHighlightTest extends EditorTestBase {
         assertTrue("`int`, which nobody is typing, must still be coloured", anythingCovers(4));
     }
 
+    /**
+     * <b>A word can be started from nothing</b>, which is how a session usually opens.
+     *
+     * <p>Every other test here puts the caret at the end of an existing word, and that is why the first
+     * keystroke in the harness threw: {@code WordOperations.wordAt} returns <b>null</b> when the caret is
+     * not in a word — it says so — and typing the first character of one is exactly that. The word is the
+     * empty range at the caret until a character lands in it.</p>
+     */
+    @Test
+    public void aWordCanBeStartedFromNothing() {
+        buildWithGrammar("class Thing {\n    int value;\n}\n");
+        // AFTER the semicolon: `;` before the caret, a newline at it, so neither neighbour is part of a
+        // word and `wordAt` genuinely answers null. Putting the caret before an existing word instead --
+        // the first version of this test -- looks like the same case and is not: `wordAt` finds the word
+        // AHEAD of the caret and returns a range, so it passed against the unguarded code.
+        editor.setCaret(editor.getText().indexOf("    int value;") + "    int value;".length());
+        showEditor();
+
+        type("S");
+        showEditor();
+
+        assertEquals("a word started where there was none -- and nothing thrown",
+                "    int value;S", editor.buffer().document().line(1));
+    }
+
+    /** ...and the same at the very start of a row, where there is nothing before the caret either. */
+    @Test
+    public void aWordCanBeStartedOnAnEmptyRow() {
+        buildWithGrammar("class Thing {\n\n}\n");
+        editor.setCaret(editor.getText().indexOf("class Thing {\n") + "class Thing {\n".length());
+        showEditor();
+
+        type("S");
+        showEditor();
+
+        assertEquals("S", editor.buffer().document().line(1));
+    }
+
     // ── The triggers ────────────────────────────────────────────────────────────────────────────
 
     /** Moving the caret away finishes the word, as clicking elsewhere does in IntelliJ. */
