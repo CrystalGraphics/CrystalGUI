@@ -38,6 +38,18 @@ public final class TarArchive implements Closeable {
     private final DataInputStream in;
     /** Bytes of the current entry not yet read, so {@link #next()} can skip to the next header. */
     private long remaining;
+    /**
+     * The current entry's DECLARED size, which is what its padding is computed from.
+     *
+     * <p>Kept separately from {@link #remaining} because the two stop agreeing the moment a caller reads
+     * an entry: content is padded out to a whole block, and after a full read {@code remaining} is zero,
+     * so {@code padding(remaining)} is zero and the padding is never consumed. Every header after the
+     * first read then lands mid-block — {@code isZeroBlock} says no, the size field is nonsense, and the
+     * reader walks off into the content and quietly ends. <b>It produced exactly one file out of 14,212
+     * and threw nothing.</b> The unit tests passed against it for the wrong reason: everything after the
+     * first entry turned to garbage and yielded nothing, which happened to equal the expected count.
+     */
+    private long entrySize;
     /** A GNU long-name record applies to the entry AFTER it. */
     private String pendingName;
     private boolean ended;
@@ -84,8 +96,10 @@ public final class TarArchive implements Closeable {
      */
     public Entry next() throws IOException {
         if (ended) return null;
-        skipFully(remaining + padding(remaining));
+        // WHAT IS LEFT OF THE CONTENT, PLUS THE WHOLE ENTRY'S PADDING -- see the field comment.
+        skipFully(remaining + padding(entrySize));
         remaining = 0;
+        entrySize = 0;
 
         while (true) {
             byte[] header = new byte[BLOCK];
@@ -127,6 +141,7 @@ public final class TarArchive implements Closeable {
 
             boolean file = type == '0' || type == '\0';
             remaining = file ? size : 0;
+            entrySize = file ? size : 0;
             if (!file) skipFully(size + padding(size));
             return new Entry(name, size, file);
         }
