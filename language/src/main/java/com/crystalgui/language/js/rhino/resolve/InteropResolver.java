@@ -535,8 +535,20 @@ public final class InteropResolver {
         return out.isEmpty() ? Collections.emptySet() : out;
     }
 
+    /**
+     * How a Java type is written down — <b>one implementation, asked from both sides</b>.
+     *
+     * <p>This was {@code Class.getSimpleName()} and the syntactic tier had its own, which is exactly the
+     * shape that produced two conventions in one popup: a type from a MEMBER lookup displayed short and
+     * a type from a chain displayed as its binary name, so {@code var list: java.util.ArrayList} sat one
+     * line above {@code var text: CgMaterial}. The two would also have disagreed about a nested class —
+     * {@code getSimpleName()} answers {@code Entry} where an author writes {@code Map.Entry}.</p>
+     *
+     * <p>So it delegates. {@link Class#getName()} is the binary name, which is what
+     * {@code JsTypeRef.simpleNameOf} takes, and that method owns the decision for everything: the
+     * package cut, the {@code $} of a nested class, and the JVM's array spelling.</p>
+     */
     private static String simpleName(Class<?> type) {
-        String name = type.getSimpleName();
-        return name == null || name.isEmpty() ? type.getName() : name;
+        return JsTypeRef.simpleNameOf(type.getName());
     }
 }

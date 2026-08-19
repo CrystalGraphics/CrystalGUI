@@ -487,8 +487,12 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
                 // WITH THE HOST'S BINDINGS, which is what `variable.global` is for. It was always handed
                 // the empty set, so the capture was dead and every binding a mod offers was drawn as an
                 // unresolved name -- in the one editor whose own runtime provides it.
+                // AND THE RESOLVER, so a Java member is coloured for what it IS rather than for the dot
+                // in front of it. Lazy like everything here, and the resolver caches per class, so a
+                // file mentioning one Java type asks about it once. @see RhinoSemanticTokens#markJavaMembers
                 tokens = root == null ? List.of()
-                        : RhinoSemanticTokens.of(root, scopes, hostBindings, imports);
+                        : RhinoSemanticTokens.of(root, scopes, hostBindings, imports,
+                                resolution::memberCaptureAt);
             }
             return tokens;
         }
