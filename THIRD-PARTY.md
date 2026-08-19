@@ -108,6 +108,44 @@ Three properties follow from it, and all three are enforced in code rather than 
 > it is the reference data that is missing. Recorded here as well as in `plan_m12.md` §26.13a because
 > this file is where somebody checks before a release.
 
+## OpenJDK sources (fetched, derived on the user's machine, never redistributed)
+
+Hovering `java.util.List.add` in the editor quotes the JDK authors' own declaration and javadoc instead
+of a form assembled from the binding. M13 §25.5, and it is a licence question before it is a feature one.
+
+**OpenJDK source is GPLv2 with Classpath Exception.** The exception covers *linking*, not redistributing
+a modified extract, and a body-stripped copy is arguably a derivative work. There is no LICENSE file in
+this repository at all today, so "GPL-compatible" is not established and nothing derived from OpenJDK may
+travel in any jar we build.
+
+**So nothing does, and the chain is built so that it cannot.** Three steps, in order:
+
+1. **The running JVM's own `src.zip`.** Free, already on the machine, nothing fetched.
+2. **Any other JDK installed on that machine** — `JAVA_HOME`, `JDK_HOME`, the conventional install roots,
+   the Gradle and SDKMAN toolchain caches. This is the step that fires most often in production: a modded
+   player launches on a jlink'd JRE, which carries no `src.zip`, while frequently having installed a full
+   JDK because a pack's guide told them to.
+3. **A fetch, and only when asked.** `Download JDK Sources` in the command palette. The archive is
+   downloaded **by the user's own client, over HTTPS, from whoever publishes the JDK** — we are not in the
+   distribution chain — and the body-stripping transform then runs **on that machine, for that machine**.
+   Producing a derived work for your own use is not distributing it; building the same extract at *our*
+   build time and shipping it would have been redistribution of a modified GPL work, which is exactly what
+   this arrangement refuses.
+
+The default source is Eclipse Adoptium's published `sources` artifact for the running feature version.
+`crystalgui.jdk.sources.url` overrides where it is fetched from, and `crystalgui.jdk.sources` points
+straight at a `src.zip` for anyone who would rather supply their own and fetch nothing.
+
+> **Never automatic**, and that is a licence decision as much as a bandwidth one. The engine bands and the
+> mapping data are fetched on a first launch because without them the feature does not work at all; this
+> one only improves a feature that already works, so it waits to be asked. IntelliJ's *Download
+> documentation* is the same affordance for the same reason.
+
+> **What is ours here:** `SourceHeaders` (the transform), `TarArchive` (a minimal `.tar.gz` reader, since
+> the JDK ships one for zip and not for this) and `JdkSourceExtract`. No OpenJDK code was read to write
+> any of them — the tar format is a published specification and the transform is a scanner over Java's
+> own grammar.
+
 ## Fonts
 
 The UI's default face is **JetBrains Mono**, © 2020 The JetBrains Mono Project Authors, under the
