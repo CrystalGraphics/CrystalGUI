@@ -87,10 +87,12 @@ public final class JsImports {
 
         private final String binaryName;
         private final int nameStart;
+        private final int keywordStart;
 
-        Imported(String binaryName, int nameStart) {
+        Imported(String binaryName, int nameStart, int keywordStart) {
             this.binaryName = binaryName;
             this.nameStart = nameStart;
+            this.keywordStart = keywordStart;
         }
 
         public String binaryName() {
@@ -100,6 +102,19 @@ public final class JsImports {
         /** Where the qualified name begins, in the author's own offsets. Blanking preserves them. */
         public int nameStart() {
             return nameStart;
+        }
+
+        /**
+         * Where the {@code import} keyword begins.
+         *
+         * <p>Carried because <b>nothing else can find it</b>. The statement is blanked before the parser
+         * sees it, so there is no node to colour from, and the grammar — reading the raw text — gives
+         * the word nothing either once the line stops parsing as an ES module declaration. Without this
+         * the one keyword on the line rendered as plain body text while the path beside it was coloured,
+         * which reads as the import being half-understood.</p>
+         */
+        public int keywordStart() {
+            return keywordStart;
         }
     }
 
@@ -157,7 +172,9 @@ public final class JsImports {
             String binaryName = matcher.group(2);
             String simple = simpleNameOf(binaryName);
             if (simple.isEmpty()) continue;
-            statements.add(new Imported(binaryName, matcher.start(2)));
+            // GROUP 1 STARTS AT THE KEYWORD -- the pattern anchors past leading whitespace, so its start
+            // is exactly where `import` is written.
+            statements.add(new Imported(binaryName, matcher.start(2), matcher.start(1)));
             // FIRST WINS, so a repeated import is not a redefinition. Two lines naming the same simple
             // name is an author error, and the one the editor underlines should be the second.
             imported.putIfAbsent(simple, binaryName);

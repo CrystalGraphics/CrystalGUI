@@ -1024,11 +1024,30 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                 if (field.isSynthetic()) continue;
                 if (!isVisible(field, owner, asking)) continue;
                 if (!seen.add("#" + field.getName())) continue;
-                into.add(new SymbolInfo(field.getName(),
-                        field.isEnumConstant() ? SymbolKind.ENUM_MEMBER : SymbolKind.FIELD,
+                // STATIC AND FINAL IS A CONSTANT, which this list said and the semantic-token pass a
+                // few hundred lines up has always said. **The engine was contradicting itself about one
+                // declaration**, depending on which question was asked: `Collections.EMPTY_LIST` drew as
+                // a constant under the caret in a .java file and listed as a plain field in the same
+                // file's completion popup -- and, once JavaScript started colouring members through
+                // `membersOf`, drew as a plain property in a .js file too. Same rule, one place to read
+                // it from.
+                into.add(new SymbolInfo(field.getName(), fieldKindOf(field),
                         typeRef(field.getType()), owner.getQualifiedName(), null,
                         modifiersOf(field), null));
             }
+        }
+
+        /**
+         * What kind of thing a field is — the same order the semantic pass uses.
+         *
+         * <p>Enum constant first because it is the more specific answer: every enum constant is also
+         * {@code static final}, and calling one a constant would lose which of the two it is.</p>
+         */
+        private static SymbolKind fieldKindOf(IVariableBinding field) {
+            if (field.isEnumConstant()) return SymbolKind.ENUM_MEMBER;
+            int flags = field.getModifiers();
+            return Modifier.isStatic(flags) && Modifier.isFinal(flags)
+                    ? SymbolKind.CONSTANT : SymbolKind.FIELD;
         }
 
         /**

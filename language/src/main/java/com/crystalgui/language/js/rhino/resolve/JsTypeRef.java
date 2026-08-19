@@ -4,6 +4,7 @@ import com.crystalgui.text.lang.TypeRef;
 
 import javax.annotation.Nullable;
 
+import java.util.Map;
 import java.util.List;
 
 /**
@@ -83,13 +84,63 @@ public final class JsTypeRef implements TypeRef {
 
     /** An instance of a Java class — its instance members are what it offers. */
     static JsTypeRef javaInstance(String binaryName) {
-        return new JsTypeRef(binaryName, binaryName, true, false, null);
+        return new JsTypeRef(simpleNameOf(binaryName), binaryName, true, false, null);
     }
 
     /** The Java class object itself — {@code Java.type("a.b.C")} — offering its statics. */
     static JsTypeRef javaClass(String binaryName) {
-        return new JsTypeRef(binaryName, binaryName, true, true, null);
+        return new JsTypeRef(simpleNameOf(binaryName), binaryName, true, true, null);
     }
+
+    /**
+     * What a reader is shown — {@code ArrayList}, not {@code java.util.ArrayList}.
+     *
+     * <p>Both of these used to display their binary name, so a hover read {@code var list:
+     * java.util.ArrayList} while the same popup one line down read {@code var text: CgMaterial} —
+     * because a type that came back from a MEMBER lookup was already built with a simple display name
+     * and only the ones built from a syntactic chain were not. One popup, two conventions, decided by
+     * which tier happened to answer.</p>
+     *
+     * <p>The simple name is also what the Java engine shows for the identical declaration, and what
+     * IntelliJ shows: the package is not lost, it is in the <b>owner band</b> directly above, which is
+     * the whole reason that band exists. Repeating it in the definition line spends the popup's width
+     * on something already on screen.</p>
+     *
+     * <p><b>Only the display changes.</b> {@link #qualifiedName()} keeps the binary name, which is what
+     * {@link #javaNameOf} reads and what every member lookup, policy check and probe is keyed on —
+     * shortening that would break resolution rather than tidy it.</p>
+     *
+     * <p>A nested class reads {@code Map.Entry} rather than {@code Map$Entry}: the {@code $} is the
+     * JVM's spelling and the dot is the author's, and this string is only ever shown to an author.</p>
+     */
+    static String simpleNameOf(String binaryName) {
+        if (binaryName == null || binaryName.isEmpty()) return binaryName;
+
+        // AN ARRAY IS ITS ELEMENT PLUS BRACKETS, and it arrives in the JVM's own spelling:
+        // `[Ljava.lang.String;` for one dimension, `[[I` for two of int. Handled here rather than left
+        // to the caller because this is the one place that decides how a type is written down.
+        int dimensions = 0;
+        String name = binaryName;
+        while (dimensions < name.length() && name.charAt(dimensions) == '[') dimensions++;
+        if (dimensions > 0) {
+            name = name.substring(dimensions);
+            if (name.startsWith("L") && name.endsWith(";")) {
+                name = name.substring(1, name.length() - 1);
+            } else if (!name.isEmpty()) {
+                name = PRIMITIVES.getOrDefault(name.charAt(0), name);
+            }
+        }
+
+        int lastDot = name.lastIndexOf('.');
+        String simple = lastDot < 0 ? name : name.substring(lastDot + 1);
+        simple = simple.replace('$', '.');
+        return dimensions == 0 ? simple : simple + "[]".repeat(dimensions);
+    }
+
+    /** The JVM's one-letter spellings, for the inside of an array descriptor. */
+    private static final Map<Character, String> PRIMITIVES = Map.of(
+            'Z', "boolean", 'B', "byte", 'C', "char", 'D', "double",
+            'F', "float", 'I', "int", 'J', "long", 'S', "short");
 
     /** Whether a Java class is behind this name. */
     boolean isJava() {

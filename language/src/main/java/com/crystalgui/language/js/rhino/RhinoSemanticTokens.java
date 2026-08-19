@@ -15,6 +15,7 @@ import javax.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -83,10 +84,33 @@ final class RhinoSemanticTokens {
      */
     static List<SyntaxToken> of(@Nullable AstRoot root, RhinoScopes scopes, Set<String> hostBindings,
                                 List<JsImports.Imported> imports) {
+        return of(root, scopes, hostBindings, imports, null);
+    }
+
+    /**
+     * @param members asked what a Java member access really is — null to leave every member to the
+     *                grammar. @see com.crystalgui.language.js.rhino.resolve.RhinoResolution#memberCaptureAt
+     */
+    static List<SyntaxToken> of(@Nullable AstRoot root, RhinoScopes scopes, Set<String> hostBindings,
+                                List<JsImports.Imported> imports,
+                                @Nullable java.util.function.Function<PropertyGet, String> members) {
+        // THE IMPORTED SIMPLE NAMES, because the free-name pass has to tell them from a host binding.
+        // Both are names the file never declared, and `RhinoSourceAnalyzer` merges the two lists on
+        // purpose so resolution and completion treat them alike -- but they are not alike to COLOUR.
+        Set<String> importedNames = new LinkedHashSet<>();
+        for (JsImports.Imported each : imports) {
+            String binary = each.binaryName();
+            int lastDot = binary.lastIndexOf('.');
+            String simple = lastDot < 0 ? binary : binary.substring(lastDot + 1);
+            int lastDollar = simple.lastIndexOf('$');
+            if (lastDollar >= 0) simple = simple.substring(lastDollar + 1);
+            if (!simple.isEmpty()) importedNames.add(simple);
+        }
         // MARKED EVEN WHEN THE TREE IS NULL. A file that fails to parse still has imports the author
         // can read, and colouring them is the one thing still possible for it.
-        List<SyntaxToken> all = tokensFor(root, scopes, hostBindings);
+        List<SyntaxToken> all = tokensFor(root, scopes, hostBindings, importedNames);
         markImports(imports, all);
+        markJavaMembers(root, members, all);
         all.sort(Comparator.comparingInt(SyntaxToken::start));
         return all;
     }
@@ -106,8 +130,38 @@ final class RhinoSemanticTokens {
      * {@code module}, {@code ArrayList} as {@code type} — and the two languages colouring the same line
      * differently is the thing this is here to stop.</p>
      */
+    /**
+     * What a resolved Java member actually is — {@code constant} for a {@code static final} field, and
+     * so on — rather than the {@code property} a grammar guesses from the dot.
+     *
+     * <p>The distinction a reader notices immediately: {@code CgTextRenderer.TEXT_MATERIAL} draws as a
+     * constant in a {@code .java} file and drew as a plain property in a {@code .js} one, from the same
+     * declaration. Marked only where the resolver produced an answer with a container, so a property on
+     * an ordinary object keeps the grammar's own — which is already right for it.</p>
+     */
+    private static void markJavaMembers(@Nullable AstRoot root,
+                                        @Nullable java.util.function.Function<PropertyGet, String> members,
+                                        List<SyntaxToken> tokens) {
+        if (root == null || members == null) return;
+        root.visit(node -> {
+            if (!(node instanceof PropertyGet)) return true;
+            PropertyGet access = (PropertyGet) node;
+            Name property = access.getProperty();
+            if (property == null) return true;
+            String capture = members.apply(access);
+            if (capture != null && !capture.isEmpty()) {
+                add(tokens, property.getAbsolutePosition(), property.getLength(), capture);
+            }
+            return true;
+        });
+    }
+
     private static void markImports(List<JsImports.Imported> imports, List<SyntaxToken> tokens) {
         for (JsImports.Imported each : imports) {
+            // THE KEYWORD FIRST, because nothing else marks it: the statement is blanked before the
+            // parser sees it, and the grammar gives the word nothing once the line stops parsing as an
+            // ES module declaration. `import` sat as plain body text beside a fully coloured path.
+            add(tokens, each.keywordStart(), "import".length(), "keyword");
             String name = each.binaryName();
             int lastDot = name.lastIndexOf('.');
             int at = each.nameStart();
@@ -127,7 +181,8 @@ final class RhinoSemanticTokens {
     }
 
     private static List<SyntaxToken> tokensFor(@Nullable AstRoot root, RhinoScopes scopes,
-                                               Set<String> hostBindings) {
+                                               Set<String> hostBindings,
+                                               Set<String> importedNames) {
         if (root == null) return new ArrayList<>();
         List<SyntaxToken> tokens = new ArrayList<>();
 
@@ -160,7 +215,18 @@ final class RhinoSemanticTokens {
             if (isCallTarget(free) || isInJavaChain(free, scopes)) continue;
 
             String capture;
-            if (hostBindings.contains(name)) {
+            // AN IMPORTED NAME IS A TYPE, and this has to be asked BEFORE the host-binding test.
+            //
+            // `RhinoSourceAnalyzer` merges the file's imports into the host's bindings deliberately --
+            // both are names the file never declared, and every consumer of "what is in scope" should
+            // see them alike. Colour is where they part: `world` is an INSTANCE the application handed
+            // over, and `CgTextRenderer` is a CLASS. Left to the merge, an imported Java type painted as
+            // `variable.global`, which falls back to `variable` -- the LOCAL colour -- so the same word
+            // was a type on the import line, where `markImports` marks it, and a local two rows below
+            // where it is used. One name, two colours, in a file six lines long.
+            if (importedNames.contains(name)) {
+                capture = "type";
+            } else if (hostBindings.contains(name)) {
                 capture = "variable.global";
             } else if (known.contains(name)) {
                 // BUILTIN, and the distinction from a host binding is worth drawing: one is JavaScript

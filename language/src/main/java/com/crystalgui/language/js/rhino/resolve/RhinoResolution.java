@@ -154,6 +154,48 @@ public final class RhinoResolution {
         return ((PropertyGet) parent).getProperty() == name ? (PropertyGet) parent : null;
     }
 
+    /**
+     * The capture a member access deserves, or null to leave it to the grammar — M10's deferred row.
+     *
+     * <h3>Why this was deferred, and what changed</h3>
+     *
+     * <p>§12a recorded it as "not done, deliberately": marking a resolved Java member needs a per-node
+     * interop lookup during the token walk, priced as "a bridge crossing per member access, on every
+     * keystroke". <b>The price was over-estimated.</b> Semantic tokens are built lazily, once per
+     * analysis rather than per keystroke, and {@code InteropResolver} caches a class's member list — so
+     * a file mentioning one Java type asks once and reads the answer for every access in it.</p>
+     *
+     * <p>What it buys is the thing a grammar cannot see. {@code CgTextRenderer.TEXT_MATERIAL} is a
+     * {@code static final} field, which every scheme draws differently from an ordinary property —
+     * italic, and in the constant colour. The Java engine has always drawn it that way
+     * ({@code EcjSourceAnalyzer}: static and final together make a {@code CONSTANT}), so the same member
+     * read from a {@code .js} file rendered as a plain property beside a {@code .java} file rendering it
+     * as a constant. <b>Two editors, one member, two answers</b> — which is the failure this whole
+     * interop tier exists to close.</p>
+     *
+     * <p>Null rather than a default, so a member the resolver cannot type keeps whatever the grammar
+     * guessed. A worse answer than the grammar's is the one outcome not worth having.</p>
+     */
+    public String memberCaptureAt(PropertyGet access) {
+        Name property = access == null ? null : access.getProperty();
+        if (property == null) return null;
+        // ONLY WHERE THE RECEIVER IS A JAVA TYPE, asked before anything is resolved.
+        //
+        // Two shapes fall out of this and both were wrong without it. A property on a plain object
+        // literal is already coloured correctly by the grammar, and re-stating it was a second opinion
+        // for no gain -- testing the member's container instead let it through, because an object's
+        // inferred type is a container too. And the last segment of a package chain
+        // (`java.util.ArrayList`) is a TYPE that `markJavaChains` has already marked, so resolving it
+        // here put a second token on the same range under a different name -- the exact defect that
+        // pass's own comment records being added to prevent.
+        TypeRef receiver = typeOf(access.getTarget(), access.getAbsolutePosition());
+        if (receiver == null || JsTypeRef.javaNameOf(receiver) == null) return null;
+
+        SymbolInfo member = resolveMember(access, property);
+        if (member == null || member.kind() == null) return null;
+        return member.kind().captureName();
+    }
+
     /** A property read: ask the receiver's type what it has by that name. */
     @Nullable
     private SymbolInfo resolveMember(PropertyGet access, Name property) {
@@ -222,6 +264,41 @@ public final class RhinoResolution {
         return new SymbolInfo(identifier, SymbolKind.PROPERTY, null,
                 receiver == null ? null : receiver.displayName(), null, Set.of(), null);
     }
+
+    /**
+     * What a declaration's initializer makes it — the <b>syntactic</b> answer, then the resolved one.
+     *
+     * <p>The syntactic tier reads shapes it can settle alone: {@code new java.util.ArrayList()},
+     * {@code Java.type("a.b.C")}, a bare package chain. It cannot read a <em>member</em>, so
+     * {@code var text = CgTextRenderer.TEXT_MATERIAL} typed to nothing and the hover said {@code var
+     * text} with no type at all — beside {@code var list: java.util.ArrayList} two lines up, which is
+     * what made it look arbitrary rather than absent.</p>
+     *
+     * <p>{@link #typeOf} has known how to answer this all along: a {@code PropertyGet}'s type is the
+     * type of the member it reads. It was simply never asked here — the declaration path stopped at the
+     * syntactic tier, which is the cheap one and was never meant to be the only one.</p>
+     *
+     * <h3>Re-entrancy, because a declaration can name itself</h3>
+     *
+     * <p>{@code var a = a.b;} is legal to write and types {@code a} from an expression that types from
+     * {@code a}. The syntactic tier could not recurse because it never resolved a name; this one does,
+     * so the cycle has to be cut. A declaration already being typed answers null rather than descending
+     * — which is the honest answer for a definition that depends on itself.</p>
+     */
+    @Nullable
+    private TypeRef initializerType(RhinoScopes.Declaration declared) {
+        TypeRef syntactic = inferredType(declared.initializer);
+        if (syntactic != null || declared.initializer == null) return syntactic;
+        if (!typingDeclarations.add(declared.offset)) return null;
+        try {
+            return typeOf(declared.initializer, declared.offset);
+        } finally {
+            typingDeclarations.remove(declared.offset);
+        }
+    }
+
+    /** Declaration offsets currently being typed. @see #initializerType */
+    private final java.util.Set<Integer> typingDeclarations = new java.util.HashSet<>();
 
     /**
      * The type of any expression — what a receiver's members are looked up on.
@@ -316,7 +393,7 @@ public final class RhinoResolution {
         String declaredType = doc.declaredType();
         TypeRef stated = declaredType != null ? typeNamed(declaredType)
                 : declared.kind == SymbolKind.FUNCTION ? null
-                : inferredType(declared.initializer);
+                : initializerType(declared);
 
         TypeRef live = liveTypeFor(declared, identifier);
         TypeRef type = live != null ? live : stated;
