@@ -2,17 +2,22 @@ package com.crystalgui.language.java.assist;
 
 import com.crystalgui.core.async.Progress;
 import com.crystalgui.language.cache.TarArchive;
+import org.junit.Assume;
 import org.junit.Test;
 
 import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.InputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Enumeration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.zip.GZIPOutputStream;
 import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 import java.util.zip.ZipInputStream;
 
 import static org.junit.Assert.assertEquals;
@@ -109,11 +114,15 @@ public class JdkSourceExtractTest {
         entries.put("jdk-17/src/jdk.compiler/share/classes/com/sun/tools/Nope.java", "class Nope {}");
         entries.put("jdk-17/test/jdk/java/util/ListTest.java", "class ListTest {}");
         entries.put("jdk-17/README.md", "not java");
+        // A SECOND WANTED FILE, AFTER the first -- see aFileReadInFullDoesNotDesynchroniseTheStream.
+        entries.put("jdk-17/src/java.base/share/classes/java/io/Closeable.java",
+                "package java.io;\npublic interface Closeable { void close(); }\n");
 
         byte[] zip = build(entries);
         Map<String, String> produced = readZip(zip);
 
-        assertEquals("only the wanted package survives", 1, produced.size());
+        assertEquals("both wanted files survive and nothing else does", 2, produced.size());
+        assertNotNull(produced.get("java/io/Closeable.java"));
         String list = produced.get("java/util/List.java");
         assertNotNull("the flat path a src.zip would have used", list);
         assertTrue("the javadoc is the payload", list.contains("/** An ordered collection. */"));
@@ -136,10 +145,48 @@ public class JdkSourceExtractTest {
         entries.put("src/java.base/share/classes/java/io/File.java", "package java.io; class File { int a; }");
         entries.put("src/java.base/windows/classes/java/io/File.java", "package java.io; class File { int b; }");
 
+        // A THIRD, DISTINCT wanted file after the pair, so "1" cannot be the answer a reader that
+        // stopped early would also give.
+        entries.put("src/java.base/share/classes/java/io/Reader.java", "package java.io; class Reader {}");
+
         Map<String, String> produced = readZip(build(entries));
-        assertEquals(1, produced.size());
+        assertEquals(2, produced.size());
         assertTrue("the first one wins, as a classpath would have decided",
                 produced.get("java/io/File.java").contains("int a"));
+        assertNotNull("the reader kept going past the duplicate", produced.get("java/io/Reader.java"));
+    }
+
+    /**
+     * <b>Reading an entry in full must not desynchronise the stream</b> — the padding is the entry's, not
+     * the unread remainder's.
+     *
+     * <p>Content is padded out to a whole 512-byte block. After a full read there is no remainder, so
+     * computing the padding from what is left computes zero and the padding stays in the stream: every
+     * header after the first read lands mid-block, the size field is nonsense, and the reader walks off
+     * into the content and quietly ends. <b>Measured against a real JDK source tree it produced one file
+     * out of 14,212 and threw nothing.</b></p>
+     *
+     * <p>The original fixtures passed against it <em>for the wrong reason</em> — everything after the
+     * first entry turned to garbage and yielded nothing, which happened to equal the expected count. So
+     * this asserts on several wanted files in a row, with the first deliberately not a multiple of 512.</p>
+     */
+    @Test
+    public void aFileReadInFullDoesNotDesynchroniseTheStream() throws Exception {
+        Map<String, String> entries = new LinkedHashMap<>();
+        String[] names = { "List", "Map", "Set", "Deque", "Queue" };
+        StringBuilder filler = new StringBuilder();
+        while (filler.length() < 700) filler.append("// padding to push past one block\n");
+        for (String name : names) {
+            entries.put("src/java.base/share/classes/java/util/" + name + ".java",
+                    "package java.util;\n" + filler + "public interface " + name + " { void f(); }\n");
+        }
+
+        Map<String, String> produced = readZip(build(entries));
+        assertEquals("every entry after the first was lost to the padding", names.length,
+                produced.size());
+        for (String name : names) {
+            assertNotNull(name + " went missing", produced.get("java/util/" + name + ".java"));
+        }
     }
 
     /** GNU's long-name record, which is how a real tar spells a path over 100 characters. */
@@ -161,6 +208,70 @@ public class JdkSourceExtractTest {
         assertNotNull("the long name was lost",
                 produced.get("java/util/concurrent/atomic/"
                         + "AtomicIntegerFieldUpdaterWithAnAbsurdlyLongNameToForceTheLongNameRecord.java"));
+    }
+
+    /**
+     * <b>The producer, over a REAL JDK source tree.</b>
+     *
+     * <p>This exists because the synthetic fixtures above could not have caught what it caught. The
+     * padding defect made the reader produce <b>one file out of 14,212</b> and throw nothing, and every
+     * hand-written fixture passed against it — because everything after the first entry turned to garbage
+     * and yielded nothing, which happened to equal the expected count. Real data has the property a
+     * fixture is built without: nobody chose what is in it.</p>
+     *
+     * <p>Skips where no {@code src.zip} is reachable, which is a legitimate machine — that is the whole
+     * premise of §25.5. It re-tars a couple of hundred entries into the layout an OpenJDK repository uses,
+     * so the {@code /share/classes/} rule is the one under test rather than the {@code src.zip} one.</p>
+     */
+    @Test
+    public void theProducerRunsOverARealJdkSourceTree() throws Exception {
+        File srcZip = null;
+        for (File candidate : SourceArchives.jdkSources()) {
+            if (candidate.isFile() && candidate.getName().equals("src.zip")) {
+                srcZip = candidate;
+                break;
+            }
+        }
+        Assume.assumeNotNull("no src.zip on this machine — a legitimate host, and §25.5's premise", srcZip);
+
+        ByteArrayOutputStream raw = new ByteArrayOutputStream();
+        int tarred = 0;
+        try (ZipFile zip = new ZipFile(srcZip); OutputStream gzip = new GZIPOutputStream(raw)) {
+            Enumeration<? extends ZipEntry> all = zip.entries();
+            while (all.hasMoreElements() && tarred < 200) {
+                ZipEntry entry = all.nextElement();
+                String name = entry.getName();
+                // One package, so the test stays quick. Both src.zip layouts put java/util somewhere in
+                // the path, and the module prefix (if any) is re-written away below in any case.
+                if (entry.isDirectory() || !name.endsWith(".java") || !name.contains("java/util/")) continue;
+                String flat = name.substring(name.indexOf("java/util/"));
+                if (flat.indexOf('/', "java/util/".length()) >= 0) continue;
+                try (InputStream bytes = zip.getInputStream(entry)) {
+                    writeEntry(gzip, "jdk/src/java.base/share/classes/" + flat,
+                            new String(readAll(bytes), StandardCharsets.UTF_8));
+                }
+                tarred++;
+            }
+            gzip.write(new byte[1024]);
+        }
+        Assume.assumeTrue("this src.zip has no java/util sources to read", tarred > 20);
+
+        Map<String, String> produced = readZip(buildFrom(raw.toByteArray()));
+        assertEquals("every entry must survive the round trip", tarred, produced.size());
+
+        String list = produced.get("java/util/List.java");
+        if (list != null) {
+            assertTrue("the javadoc is the whole reason for shipping this", list.contains("@param"));
+            assertTrue("the declaration is what gets quoted", list.contains("boolean add("));
+            assertTrue("and it is still Java", list.contains("public interface List"));
+        }
+    }
+
+    private static byte[] readAll(InputStream in) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        for (int read = in.read(buffer); read > 0; read = in.read(buffer)) out.write(buffer, 0, read);
+        return out.toByteArray();
     }
 
     // ── Fixture: a tar.gz, written by hand ──────────────────────────────────────────────────────
