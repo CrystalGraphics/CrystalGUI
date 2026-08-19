@@ -1,6 +1,7 @@
 package com.crystalgui.style;
 
 import com.crystalgui.style.sheet.StyleSheetRegistry;
+import com.crystalgui.text.lang.SymbolKind;
 
 import org.junit.Test;
 
@@ -12,14 +13,19 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -95,7 +101,6 @@ public class StyleGovernanceTest {
     private static List<String> structureSheets() {
         List<String> sheets = new ArrayList<>(userAgentParts());
         sheets.add("graph.css");
-        sheets.add("filetypes.css");
         sheets.add("decorations.css");
         return sheets;
     }
@@ -126,7 +131,10 @@ public class StyleGovernanceTest {
             // darkened until a sentence in it reads on the theme's surface -- which is why light's
             // --warning is an olive -- and a severity ICON wants the amber the artwork used to carry.
             // Two roles rather than one because the two jobs genuinely disagree, most visibly in light.
-            "error-icon", "warning-icon", "info-icon",
+            // success-icon appended when the Run panel needed a live mark: the same argument as the three
+            // beside it, and the set was simply incomplete -- --success is the body colour for a finished
+            // thing and too dark to read as a 10px dot.
+            "error-icon", "warning-icon", "info-icon", "success-icon",
             // Non-colour, and themeable for the same reason IntelliJ's themes set arcs and insets:
             // "Islands" IS these three plus a palette, and a flat theme is them zeroed.
             "radius-panel", "radius-control", "panel-gap");
@@ -288,6 +296,57 @@ public class StyleGovernanceTest {
     public void eachThemeAndSchemePairDefinesTheSameKeys() {
         assertSameKeys(THEMES + "crystal-dark.css", THEMES + "crystal-light.css");
         assertSameKeys(SCHEMES + "dark-plus.css", SCHEMES + "light-plus.css");
+        assertSameKeys(SCHEMES + "islands-dark.css", SCHEMES + "islands-light.css");
+    }
+
+    /**
+     * <b>Every shipped scheme defines every key, not merely every pair.</b>
+     *
+     * <p>Pairing alone is not enough once there is more than one pair: two schemes could each be
+     * internally consistent and disagree with each other, and switching between them would leave whichever
+     * token only one of them names resolving to its {@code var()} fallback — i.e. silently reverting to
+     * Dark+'s colour in the middle of an IntelliJ palette. The fallback is there so an editor with NO
+     * scheme still reads, not so a scheme can be half-written.</p>
+     */
+    @Test
+    public void everySchemeDefinesTheSameKeysAsEveryOther() {
+        List<String> schemes = shippedSchemes();
+        assertTrue("expected several schemes to compare, found " + schemes, schemes.size() > 1);
+
+        String reference = schemes.get(0);
+        for (String scheme : schemes.subList(1, schemes.size())) {
+            assertSameKeys(SCHEMES + reference, SCHEMES + scheme);
+        }
+    }
+
+    /**
+     * The schemes actually on disk — <b>discovered, never listed</b>, so adding one cannot skip these
+     * checks by being forgotten in a constant.
+     *
+     * <p>A hardcoded list is exactly what {@code StylePropertyRegistry} demonstrates going stale
+     * silently: the new entry is a one-line addition somewhere else and nothing links the two. Three of
+     * its properties were missing for a full release cycle that way.</p>
+     */
+    private static List<String> shippedSchemes() {
+        Path dir = schemesDir();
+        try (Stream<Path> files = Files.list(dir)) {
+            return files.map(path -> path.getFileName().toString())
+                    .filter(name -> name.endsWith(".css"))
+                    .sorted()
+                    .collect(Collectors.toList());
+        } catch (IOException e) {
+            throw new RuntimeException("cannot list " + dir, e);
+        }
+    }
+
+    private static Path schemesDir() {
+        String relative = "src/main/resources/assets/crystalgui/ui/schemes";
+        Path fromModule = Path.of(relative);
+        if (Files.isDirectory(fromModule)) return fromModule;
+        Path fromRoot = Path.of("core").resolve(relative);
+        assertTrue("cannot locate the schemes directory from " + Path.of("").toAbsolutePath(),
+                Files.isDirectory(fromRoot));
+        return fromRoot;
     }
 
     private static void assertSameKeys(String darkFile, String lightFile) {
@@ -316,7 +375,7 @@ public class StyleGovernanceTest {
     @Test
     public void theSchemeAndThemeAxesStayApart() {
         List<String> offences = new ArrayList<>();
-        for (String scheme : List.of("dark-plus.css", "light-plus.css")) {
+        for (String scheme : shippedSchemes()) {
             definitionsOf(load(SCHEMES + scheme)).forEach((name, value) -> {
                 if (SCHEME_TOKEN_PREFIXES.stream().noneMatch(name::startsWith)) {
                     offences.add(scheme + " defines a non-scheme token: " + name);
@@ -329,6 +388,215 @@ public class StyleGovernanceTest {
             }
         });
         assertTrue(String.join("\n", offences), offences.isEmpty());
+    }
+
+    // ── rule 7b: every capture a grammar can emit has a colour ──────────────────────────────────
+
+    /**
+     * <b>Every {@code --syntax-*} token the UA sheet reads is defined by every scheme.</b>
+     *
+     * <p>This is the highest-value check here because the failure it catches is <em>invisible</em>. A
+     * capture with no colour renders as body text, which looks exactly like a capture the grammar never
+     * produced — so "my Java has no operators highlighted" and "the grammar does not capture operators"
+     * are indistinguishable on screen, and only one of them is a bug.</p>
+     *
+     * <p>It caught six on the day it was written: {@code operator}, {@code attribute}, {@code variable},
+     * {@code constant}, {@code property} and {@code tag}. Six rules had been thought sufficient because
+     * {@code generalName()} folds a specialisation onto its stem — true, but only for names that HAVE a
+     * stem, and none of those six do.</p>
+     */
+    @Test
+    public void everySyntaxTokenTheSheetReadsIsDefinedByEveryScheme() {
+        Set<String> read = new TreeSet<>();
+        for (String part : userAgentParts()) {
+            Matcher matcher = Pattern.compile("var\\((--syntax-[a-z-]+)")
+                    .matcher(stripComments(load(STYLES + part)));
+            while (matcher.find()) read.add(matcher.group(1));
+        }
+        assertFalse("the sheet reads no --syntax-* tokens at all; the query is wrong", read.isEmpty());
+
+        List<String> offences = new ArrayList<>();
+        for (String scheme : shippedSchemes()) {
+            Set<String> defined = definitionsOf(load(SCHEMES + scheme)).keySet();
+            for (String token : read) {
+                if (!defined.contains(token)) {
+                    offences.add(scheme + " never defines " + token + ", which the UA sheet reads");
+                }
+            }
+        }
+        assertTrue(String.join("\n", offences), offences.isEmpty());
+    }
+
+    /**
+     * <b>A capture drawn in the keyword colour is drawn at the keyword weight.</b>
+     *
+     * <p>A scheme bolds "the keyword family" as one gesture, not once per capture. Eclipse Dark paints
+     * ten captures in its keyword orange and sets {@code --syntax-keyword-weight: bold}; only
+     * {@code keyword} and {@code type.builtin} read that weight, so {@code console}, {@code null},
+     * {@code true}, a GLSL {@code uniform} and an HTML tag came out orange and thin beside a bold
+     * {@code var} on the same line — the palette looking half-applied rather than deliberate.</p>
+     *
+     * <p>That is the defect {@code type.builtin}'s own comment already records from the other direction
+     * ("the whole line was bold except its return type, which reads as the one word having failed"). It
+     * was fixed for the capture somebody noticed rather than for the channel, which is exactly the shape
+     * that comes back. Stated as a rule over the shipped schemes so the eleventh capture cannot be added
+     * without it: <b>orange and bold, or neither.</b></p>
+     *
+     * <p>Keyed on the resolved COLOUR rather than on a list of capture names, because the list is the
+     * thing that goes stale — a scheme that gives {@code function.builtin} a green of its own (Eclipse
+     * Dark does) is correctly silent here, and one that later repaints it keyword-orange is caught
+     * without anybody remembering to add a row.</p>
+     */
+    @Test
+    public void everyCaptureDrawnInTheKeywordColourAlsoReadsTheKeywordWeight() {
+        Pattern rule = Pattern.compile("::highlight\\(([a-z][a-z.]*)\\)\\s*\\{([^}]*)}", Pattern.DOTALL);
+        Pattern colour = Pattern.compile("color:\\s*var\\((--syntax-[a-z-]+)");
+
+        // capture name -> (colour token, does the rule read the weight)
+        Map<String, String> colourOf = new LinkedHashMap<>();
+        Set<String> readsWeight = new LinkedHashSet<>();
+        for (String part : userAgentParts()) {
+            Matcher rules = rule.matcher(stripComments(load(STYLES + part)));
+            while (rules.find()) {
+                String name = rules.group(1);
+                String body = rules.group(2);
+                Matcher paint = colour.matcher(body);
+                if (paint.find()) colourOf.putIfAbsent(name, paint.group(1));
+                if (body.contains("--syntax-keyword-weight")) readsWeight.add(name);
+            }
+        }
+        assertFalse("no ::highlight rules were parsed at all; the query is wrong", colourOf.isEmpty());
+        assertTrue("the keyword rule itself must read the weight -- otherwise this test is vacuous",
+                readsWeight.contains("keyword"));
+
+        List<String> offences = new ArrayList<>();
+        for (String scheme : shippedSchemes()) {
+            Map<String, String> defined = definitionsOf(load(SCHEMES + scheme));
+            String keywordColour = defined.get("--syntax-keyword");
+            if (keywordColour == null) continue;
+            // ONLY WHERE THE SCHEME ACTUALLY USES THE CHANNEL. A scheme that leaves the weight `normal`
+            // has no inconsistency to see, and enforcing there would legislate palette COINCIDENCE as
+            // family membership: Islands paints `string.escape` and `function.builtin` in the same warm
+            // orange as its keywords, which is a palette with few hues rather than a claim that an escape
+            // sequence is a keyword. Written the other way round this test demanded they bold together
+            // the moment anyone set the key.
+            String weight = defined.get("--syntax-keyword-weight");
+            if (weight == null || "normal".equalsIgnoreCase(weight.trim())) continue;
+            for (Map.Entry<String, String> entry : colourOf.entrySet()) {
+                String value = defined.get(entry.getValue());
+                if (value == null || !value.equalsIgnoreCase(keywordColour)) continue;
+                if (!readsWeight.contains(entry.getKey())) {
+                    offences.add(scheme + " draws ::highlight(" + entry.getKey() + ") in the keyword"
+                            + " colour " + keywordColour + " via " + entry.getValue()
+                            + ", but that rule does not read --syntax-keyword-weight");
+                }
+            }
+        }
+        assertTrue(String.join("\n", offences), offences.isEmpty());
+    }
+
+    /**
+     * <b>Every capture name in a shipped {@code highlights.scm} is styled.</b>
+     *
+     * <p>The other half of the rule above, from the grammar's end rather than the sheet's: a new grammar
+     * introducing a capture nobody has coloured is the same invisible failure, arriving from the opposite
+     * direction. Satisfied either by a rule for the name itself or by one for its dotted general form,
+     * which is what {@code SyntaxToken.generalName()} falls back to.</p>
+     */
+    @Test
+    public void everyCaptureInAShippedGrammarHasAColour() {
+        Path queries = syntaxQueriesDir();
+        if (!Files.isDirectory(queries)) return;      // the grammar module is not in this build
+
+        Set<String> styled = new TreeSet<>();
+        for (String part : userAgentParts()) {
+            Matcher matcher = Pattern.compile("::highlight\\(([a-z.]+)\\)")
+                    .matcher(stripComments(load(STYLES + part)));
+            while (matcher.find()) styled.add(matcher.group(1));
+        }
+
+        List<String> offences = new ArrayList<>();
+        try (Stream<Path> files = Files.walk(queries)) {
+            for (Path file : files.filter(p -> p.getFileName().toString().equals("highlights.scm")).toList()) {
+                // QUOTED STRINGS STRIPPED FIRST. A query matches literal tokens by writing them out, and
+                // CSS's at-rules are literally at-signs: `"@media" @keyword` names one capture and one
+                // keyword of the language. Scanning the raw text reports @media, @charset, @import,
+                // @keyframes, @namespace and @supports as captures nobody has coloured — six failures
+                // that are all the same misreading.
+                String scm = Files.readString(file, StandardCharsets.UTF_8)
+                        .replaceAll("\"(?:[^\"\\\\]|\\\\.)*\"", "\"\"");
+                Matcher matcher = Pattern.compile("@([a-z][a-z.]*)").matcher(scm);
+                while (matcher.find()) {
+                    String capture = CAPTURE_DIALECT.getOrDefault(matcher.group(1), matcher.group(1));
+                    if (styled.contains(capture) || styled.contains(generalNameOf(capture))) continue;
+                    offences.add(file.getFileName() + " emits @" + capture
+                            + " (" + file.getParent().getFileName() + "), which nothing styles");
+                }
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        assertTrue(String.join("\n", new TreeSet<>(offences)), offences.isEmpty());
+    }
+
+    /**
+     * <b>Every {@link SymbolKind} an engine can report is a capture something colours.</b>
+     *
+     * <p>The third direction into the same rule, and the one that arrives without a grammar. A semantic
+     * token provider names its colours through {@link SymbolKind#captureName()} rather than spelling them,
+     * so that bridge is a capture producer exactly like a {@code highlights.scm} — and it is not covered by
+     * the test above, because there is no file to scan. A kind whose capture nothing styles renders the
+     * resolved symbol as body text: the engine ran, the answer was right, and the screen is unchanged.</p>
+     *
+     * <p>Runs with no engine and no grammar module present, because both sides of it are in {@code core/}.
+     * {@code LanguageSpiTest} asserts the other half — that no kind answers with an empty or malformed
+     * name — from {@code headlessTest}, where the schemes are unreachable.</p>
+     */
+    @Test
+    public void everySymbolKindNamesACaptureTheSheetColours() {
+        Set<String> styled = new TreeSet<>();
+        for (String part : userAgentParts()) {
+            Matcher matcher = Pattern.compile("::highlight\\(([a-z.]+)\\)")
+                    .matcher(stripComments(load(STYLES + part)));
+            while (matcher.find()) styled.add(matcher.group(1));
+        }
+        assertFalse("the sheet styles no highlights at all; the query is wrong", styled.isEmpty());
+
+        List<String> offences = new ArrayList<>();
+        for (SymbolKind kind : SymbolKind.values()) {
+            String capture = kind.captureName();
+            if (styled.contains(capture) || styled.contains(generalNameOf(capture))) continue;
+            offences.add("SymbolKind." + kind + " colours as @" + capture + ", which nothing styles");
+        }
+        assertTrue(String.join("\n", offences), offences.isEmpty());
+    }
+
+    /**
+     * Capture synonyms folded before the query reaches a scheme.
+     *
+     * <p><b>Mirrors {@code Queries.normalizeCaptureDialect} in the syntax module</b>, which is not on this
+     * source set's classpath — `core/` must not depend on the grammar module, which is the same rule that
+     * keeps natives out of a dedicated server. The duplication is two entries and is preferable to the
+     * alternative: giving the synonym a `--syntax-*` token of its own, which every scheme would then have
+     * to define and keep identical to the name it is a synonym for, forever.</p>
+     *
+     * <p>If this map and that method disagree, this test reports a capture as uncoloured that the engine
+     * colours fine — a false alarm rather than a missed one, which is the right way round.</p>
+     */
+    private static final Map<String, String> CAPTURE_DIALECT =
+            Map.of("delimiter", "punctuation.delimiter");
+
+    /** Mirrors {@code SyntaxToken.generalName()} — the dotted fallback a theme relies on. */
+    private static String generalNameOf(String capture) {
+        int dot = capture.lastIndexOf('.');
+        return dot <= 0 ? "" : capture.substring(0, dot);
+    }
+
+    private static Path syntaxQueriesDir() {
+        String relative = "src/main/resources/assets/crystalgui/syntax";
+        Path fromModule = Path.of("../language").resolve(relative);
+        if (Files.isDirectory(fromModule)) return fromModule;
+        return Path.of("language").resolve(relative);
     }
 
     // ── rule 8: the UA sheet's own three rules ──────────────────────────────────────────────────
@@ -393,6 +661,53 @@ public class StyleGovernanceTest {
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * <b>Every {@code font-family} entry in a shipped sheet must actually load.</b>
+     *
+     * <p>{@code font-family} here is a list of RESOURCE PATHS resolved through {@code CgIO} — not CSS
+     * family names. A stack that looks like ordinary CSS ({@code "JetBrains Mono", monospace}) therefore
+     * resolves to nothing, and {@code FontFamilyCache.build} <b>throws</b> rather than falling back:
+     * <i>"no font-family source could be loaded"</i>.</p>
+     *
+     * <p>Which makes it a crash rather than a cosmetic defect, and a <em>latent</em> one — the family is
+     * resolved the first time a widget carrying that rule is measured, so the sheet parses, every test
+     * passes, and the application dies the first time somebody opens that one panel. It shipped exactly
+     * that way on the Run console's input row: fine until a script asked for input, then the whole
+     * harness went down.</p>
+     */
+    @Test
+    public void everyShippedFontFamilyResolves() {
+        Pattern declaration = Pattern.compile("font-family\\s*:\\s*([^;}]+)");
+        List<String> broken = new ArrayList<>();
+        for (String sheet : STRUCTURE_SHEETS) {
+            String css = stripComments(load(STYLES + sheet));
+            Matcher declarations = declaration.matcher(css);
+            while (declarations.find()) {
+                for (String entry : declarations.group(1).split(",")) {
+                    String path = entry.trim().replaceAll("^[\"']|[\"']$", "").trim();
+                    if (path.isEmpty() || path.startsWith("var(")) continue;
+                    if (resolvesAsFont(path)) continue;
+                    broken.add(sheet + ": " + path);
+                }
+            }
+        }
+        assertTrue("font-family entries that load nothing — FontFamilyCache THROWS on these, so the first"
+                + " widget to be measured with one takes the application down:\n" + String.join("\n", broken),
+                broken.isEmpty());
+    }
+
+    /** {@code "namespace:path"} -> {@code /assets/namespace/path}, the way {@code CgIO} resolves one. */
+    private static boolean resolvesAsFont(String path) {
+        int colon = path.indexOf(':');
+        if (colon <= 0) return false;
+        String resource = "/assets/" + path.substring(0, colon) + "/" + path.substring(colon + 1);
+        try (InputStream in = StyleGovernanceTest.class.getResourceAsStream(resource)) {
+            return in != null;
+        } catch (IOException unreadable) {
+            return false;
+        }
+    }
 
     private static String load(String resource) {
         try (InputStream in = StyleGovernanceTest.class.getResourceAsStream(resource)) {

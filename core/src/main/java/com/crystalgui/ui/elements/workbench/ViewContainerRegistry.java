@@ -40,6 +40,21 @@ public final class ViewContainerRegistry {
     private final Map<String, String> badges = new LinkedHashMap<>();
 
     /**
+     * The style class a container's badge carries, if it wants one — VS Code's {@code IBadge} type, which
+     * exists for the same reason.
+     *
+     * <p><b>Kept beside the text rather than folded into it</b>, because the badge's own rules are shared
+     * by every container on the rail: a caller that wanted a green dot and could only send a string would
+     * have to be styled by writing the colour into {@code .__dot__}, which is the Problems count's rule
+     * too. One green run would turn every count on the rail green.</p>
+     *
+     * <p>Not on {@link #onDidChangeBadge} either — it is a {@code Pair}, and widening it would touch both
+     * rails' subscriptions to carry something they can already ask for. The style is read at the moment
+     * the signal is handled, so the two cannot disagree.</p>
+     */
+    private final Map<String, String> badgeStyles = new LinkedHashMap<>();
+
+    /**
      * A container's badge changed — {@code (containerId, text)}, with a null text meaning cleared.
      *
      * <p>VS Code's {@code IActivityService.showViewContainerActivity} is on the <em>container</em> for the
@@ -94,16 +109,43 @@ public final class ViewContainerRegistry {
 
     /** What the stripe button should show — a count, {@link #DOT}, anything short. Null clears it. */
     public void setBadge(String containerId, @Nullable String text) {
+        setBadge(containerId, text, null);
+    }
+
+    /**
+     * The same, with a style class the rail puts on the badge — see {@link #badgeStyles}.
+     *
+     * <p>The class is compared as part of "did anything change", not only the text. Without that, moving a
+     * badge from one kind to another while the text stays {@link #DOT} — a container that is both busy and
+     * has news — would be discarded as a no-op and the rail would keep the first colour forever.</p>
+     */
+    public void setBadge(String containerId, @Nullable String text, @Nullable String styleClass) {
         if (containerId == null) return;
-        String previous = badges.get(containerId);
-        if (java.util.Objects.equals(previous, text)) return;
-        if (text == null || text.isEmpty()) badges.remove(containerId);
-        else badges.put(containerId, text);
+        boolean clearing = text == null || text.isEmpty();
+        String wantedStyle = clearing ? null : styleClass;
+        if (java.util.Objects.equals(badges.get(containerId), text)
+                && java.util.Objects.equals(badgeStyles.get(containerId), wantedStyle)) {
+            return;
+        }
+        if (clearing) {
+            badges.remove(containerId);
+            badgeStyles.remove(containerId);
+        } else {
+            badges.put(containerId, text);
+            if (wantedStyle == null) badgeStyles.remove(containerId);
+            else badgeStyles.put(containerId, wantedStyle);
+        }
         onDidChangeBadge.emit(containerId, text);
     }
 
     @Nullable
     public String badgeOf(String containerId) {
         return badges.get(containerId);
+    }
+
+    /** The style class {@link #setBadge(String, String, String)} was given, or null. */
+    @Nullable
+    public String badgeStyleOf(String containerId) {
+        return badgeStyles.get(containerId);
     }
 }

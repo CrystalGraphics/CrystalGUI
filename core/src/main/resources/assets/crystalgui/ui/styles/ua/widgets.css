@@ -291,12 +291,24 @@ tabview.__right__ .__strip-bar__ {
 tabview .__panes__ {
     background: var(--tab-pane-bg, #3A3A3A);
 }
-/* THE INSET AROUND A TAB'S CONTENT. Small on purpose: it exists so the document does not sit flush
- * against the panel's edge, not to frame it — 4px read as a border once the panel around it went
- * dark, because the content and its surround were different colours with a visible band between. */
+/* NO INSET AROUND A TAB'S CONTENT — and this is the third and last value it has had. It was 4px,
+ * then 2px, on the reasoning that a document should not sit flush against the panel's edge; the
+ * right number is 0, and the two retreats were the same discovery arriving in instalments.
+ *
+ * A tab's content IS THE ISLAND'S FACE. Whatever the inset, it exposes the island around the
+ * content, and the two are different surfaces exactly when a scheme paints its own paper — so it
+ * reads as a border nobody authored, in a colour nobody chose for it. Measured before removing it:
+ * the pane sat 3px inside the group on the left, right and bottom, which at uiScale 2 is the 6
+ * physical pixels this was reported as.
+ *
+ * The remaining 1px of that 3 is NOT here and does not go away: `__panes__` carries a 1px border
+ * whose only coloured edge is the top (the one separator every panel draws — see ua/workbench.css).
+ * Border width is uniform because the paint path reads `border().left` alone, so the other three
+ * edges are the price of that hairline rather than a second inset with its own opinion.
+ *
+ * The corner is the other half of this, and it does not follow for free — see
+ * `texteditor.__file-editor__` in ua/workbench.css. */
 tabview .__pane__ {
-    padding-all: 2px;
-
     /* AND IT FILLS THE PANES BOX. Without this the pane is sized by its content, so a document inside it
      * has nothing to grow INTO — `flex-grow` divides free space, and a content-sized parent has none. The
      * editor's own fill rule was therefore correct and did nothing, which is the confusing half: the
@@ -315,8 +327,9 @@ tabview .__pane__ {
  * island draw its own corners (see the note on `.__view-content__` in ua/workbench.css).
  *
  * Free, like the island's own rounding: these do not clip, so no FBO layer is involved. A widget
- * that DOES clip its own content (texteditor) keeps square corners and is unaffected — see
- * resolveOverflowClip(). */
+ * that DOES clip its own content is not free — resolveOverflowClip() promotes a rounded clipper to
+ * the FBO mask path — which is why `texteditor` is rounded by a rule of its own, in
+ * ua/workbench.css, that also supplies the mask that path needs. */
 tabview .__pane__ > graphview,
 tabview .__pane__ > canvasview {
     border-radius: var(--radius-panel, 0px);

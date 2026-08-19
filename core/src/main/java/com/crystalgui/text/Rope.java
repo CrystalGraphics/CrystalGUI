@@ -186,12 +186,24 @@ public final class Rope implements CharSequence {
         return new TextPoint(prefix.newlines(), prefix.lastLineChars());
     }
 
-    /** The UTF-16 offset of a {@code (row, column)}, clamped into the document and onto the row. */
+    /**
+     * The UTF-16 offset of a {@code (row, column)}, clamped into the document and onto the row.
+     *
+     * <p><b>The column is clamped as a WIDTH, never computed as {@code start + column}.</b>
+     * {@link com.crystalgui.text.diagnostic.Diagnostic#onRow} deliberately says
+     * {@code Integer.MAX_VALUE} for "to the end of the line, whatever its length is" — and
+     * {@code start + Integer.MAX_VALUE} <em>overflows</em> to a negative offset, which the clamp then
+     * pulled back to {@code start}. So a whole-line range became a zero-width point at the line's
+     * indentation: drawn as a one-character squiggle in the leading whitespace, which reads as the mark
+     * being misplaced rather than as the range having collapsed. Row 0 was exempt (its start is 0, so
+     * nothing overflowed), which is the worst possible distribution — the first line of every fixture
+     * worked.</p>
+     */
     public int pointToOffset(TextPoint point) {
         int row = Math.max(0, Math.min(point.row(), lineCount() - 1));
         int start = lineStartOffset(row);
         int end = lineEndOffset(row);
-        return Math.max(start, Math.min(start + Math.max(0, point.column()), end));
+        return start + Math.min(Math.max(0, point.column()), end - start);
     }
 
     /**

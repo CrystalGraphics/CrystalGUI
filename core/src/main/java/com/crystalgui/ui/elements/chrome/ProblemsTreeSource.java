@@ -9,6 +9,7 @@ import com.crystalgui.text.diagnostic.Markers;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
@@ -153,7 +154,26 @@ public final class ProblemsTreeSource implements com.crystalgui.ui.elements.tree
         return item != null && item.isFile();
     }
 
-    /** Everything in one file that survives the current filter, in document order. */
+    /**
+     * Everything in one file that survives the current filter — <b>worst first</b>, then document order.
+     *
+     * <h3>Severity before position, and only here</h3>
+     *
+     * <p>{@code Diagnostic}'s natural order is positional and {@code DiagnosticSet} is sorted by it, which
+     * is right for the model: an editor asks "what is on this row", and a squiggle lookup wants document
+     * order. A <em>panel</em> is read top-down to decide what to fix, and an error is not one of six things
+     * to scan for — it is the reason the panel is open. Burying two syntax errors under four unused-import
+     * warnings, purely because the imports are at the top of the file, hides the only rows that stop the
+     * file compiling.</p>
+     *
+     * <p>Both references sort their view this way and leave their marker model alone, which is the same
+     * split — so this is a comparator here rather than a change to {@code compareTo}, where it would
+     * reorder every consumer that has no opinion about severity.</p>
+     *
+     * <p>{@link DiagnosticSeverity}'s own declaration order is the ranking — {@code ERROR}, {@code WARNING},
+     * {@code INFORMATION}, {@code HINT} — so this reads the enum rather than restating it. A new severity
+     * slots in wherever it is declared, which is the one place anybody would think to look.</p>
+     */
     public List<Diagnostic> matching(Resource resource) {
         // THE FILE'S NAME COUNTS AS A MATCH FOR EVERYTHING IN IT.
         //
@@ -173,6 +193,11 @@ public final class ProblemsTreeSource implements com.crystalgui.ui.elements.tree
                     && SearchMatcher.match(query, diagnostic.message(), 0) == null) continue;
             kept.add(diagnostic);
         }
+        // Document order WITHIN a severity, which is what makes the group readable once you are in it --
+        // and Diagnostic's own compareTo is exactly that, so it is the tiebreak rather than a second
+        // comparator to keep in step.
+        kept.sort(Comparator.comparingInt((Diagnostic d) -> d.severity().ordinal())
+                .thenComparing(Comparator.naturalOrder()));
         return kept;
     }
 

@@ -2,6 +2,7 @@ package com.crystalgui.text.search;
 
 import com.crystalgui.core.search.SearchMatcher;
 import com.crystalgui.core.search.SearchQuery;
+import com.crystalgui.text.Rope;
 import com.crystalgui.ui.text.TextRange;
 
 import javax.annotation.Nullable;
@@ -36,6 +37,63 @@ import java.util.regex.Pattern;
 public final class TextSearch {
 
     private TextSearch() {
+    }
+
+    /**
+     * Every match in a <b>document</b>, one line at a time.
+     *
+     * <h3>Why not simply hand the {@link Rope} to the method below</h3>
+     *
+     * <p>{@code Rope} is a {@code CharSequence}, so it compiles — and it is the slower of the two options,
+     * not the faster one. {@code Rope.charAt} is a descent of the tree with no cursor cached, so a
+     * character-by-character scan pays a branchy {@code O(log n)} per character where a {@code String}
+     * pays nothing. "Search the rope, it is a CharSequence" is the obvious move and the wrong one.</p>
+     *
+     * <p>So this searches <b>per line</b>, which is what VS Code's {@code TextModelSearch} does and what
+     * every other read in this widget already does: one row's {@code String} at a time, allocated and
+     * discarded, instead of a copy of the whole file. Two copies, in fact — the old path built the
+     * document once and then built a lowercased copy of it for a case-insensitive search, on every
+     * keystroke in the find box.</p>
+     *
+     * <p><b>A regex still gets the whole text</b>, and that is not laziness: a pattern may span lines, so
+     * feeding it one row at a time would silently stop matching anything that crosses a newline. The
+     * common case is literal and the common case is now free of copies.</p>
+     */
+    public static List<TextRange> findAll(@Nullable Rope document, @Nullable SearchQuery query) {
+        if (document == null || query == null || query.isEmpty()) return new ArrayList<>();
+        if (query.options().regex()) return findAll(document.toString(), query);
+
+        String needle = query.text();
+        // A NEEDLE WITH A NEWLINE IN IT cannot be found a line at a time, and nothing stops a user pasting
+        // one into the find box.
+        if (needle.indexOf('\n') >= 0) return findAll(document.toString(), query);
+
+        List<TextRange> matches = new ArrayList<>();
+        boolean words = query.options().wholeWords();
+        boolean matchCase = query.options().matchCase();
+        for (int row = 0; row < document.lineCount(); row++) {
+            String line = document.line(row);
+            int start = document.lineStartOffset(row);
+            int at = indexOf(line, needle, 0, matchCase);
+            while (at >= 0) {
+                // A WORD CANNOT SPAN A NEWLINE, so the line's own edges are the document's for this test.
+                if (!words || SearchMatcher.isWholeWordAt(line, at, at + needle.length())) {
+                    matches.add(TextRange.of(start + at, start + at + needle.length()));
+                }
+                at = indexOf(line, needle, at + 1, matchCase);
+            }
+        }
+        return matches;
+    }
+
+    /** {@code String.indexOf}, or its case-insensitive twin — without lowercasing anything. */
+    private static int indexOf(String haystack, String needle, int from, boolean matchCase) {
+        if (matchCase) return haystack.indexOf(needle, from);
+        int last = haystack.length() - needle.length();
+        for (int at = Math.max(0, from); at <= last; at++) {
+            if (haystack.regionMatches(true, at, needle, 0, needle.length())) return at;
+        }
+        return -1;
     }
 
     /**

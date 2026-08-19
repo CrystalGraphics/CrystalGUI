@@ -53,6 +53,44 @@ public interface SyntaxTokenizer {
         // Stateless by default. A lexer re-reads the text it is given and has nothing to update.
     }
 
+    /**
+     * Called when a tokenizer's answers have changed without the document changing — i.e. work it was
+     * doing in the background has landed.
+     *
+     * <p>Needed because {@link #tokenize} is synchronous and an expensive backend cannot be. A tree-sitter
+     * parse of a large file is far past a frame budget (measured: ~100ms cold, ~17ms per keystroke on a
+     * 5,000-line file), so an implementation may answer from a stale-but-positionally-correct tree and
+     * finish the real parse off-thread. When it lands, nothing about the <em>document</em> has changed, so
+     * no existing signal would tell the view to ask again — and the highlighting would simply stay one
+     * edit behind until the next unrelated repaint.</p>
+     *
+     * <p>Invoked on the <b>UI thread</b>. Implementations that never work in the background never call
+     * it, which is why this has a default and costs a synchronous tokenizer nothing.</p>
+     */
+    default void setInvalidationListener(InvalidationListener listener) {
+        // Synchronous by default: a lexer's answer is complete by the time tokenize() returns.
+    }
+
+    /**
+     * Told which part of the document has new answers.
+     *
+     * <p><b>The range is the whole point.</b> A consumer caching tokens per line has to re-query the
+     * lines that actually changed and no others: during a run of typing a reparse lands every few
+     * keystrokes, so "something changed, re-query everything" would put the full viewport query back on
+     * the frame at almost the rate the cache was built to avoid. tree-sitter can answer this precisely —
+     * {@code ts_tree_get_changed_ranges} compares the old tree with the new one — so throwing that away
+     * at the seam would be discarding information the backend already has.</p>
+     */
+    @FunctionalInterface
+    interface InvalidationListener {
+
+        /** Offsets into the whole document, half-open. Pass {@link #EVERYTHING} when it is not known. */
+        void tokensChanged(int fromOffset, int toOffset);
+
+        /** The honest answer when a backend cannot say what changed — re-query it all. */
+        int EVERYTHING = Integer.MAX_VALUE;
+    }
+
     /** Releases anything native. Called when the editor goes away; a no-op for pure-Java tokenizers. */
     default void close() {
     }

@@ -330,6 +330,62 @@ public class KeymapTest extends UiTestBase {
         assertEquals(List.of("edit.save"), fired);
     }
 
+    /**
+     * <b>A function key types nothing, so it fires while typing — with or without Shift.</b>
+     *
+     * <p>The guard above tests for a non-Shift modifier as a <em>proxy</em> for "this would type
+     * something". Correct for {@code Shift+B}, which is a capital B; wrong for a key that produces no
+     * character under any modifier. The consequence was total rather than marginal: <b>no
+     * {@code Shift+F<n>} binding could ever fire while an editor had focus</b>, which is the only place
+     * anyone presses one. IntelliJ's Run is Shift+F10 and works while editing; ours read as a dead key,
+     * and the diagnosis went to a harness debug binding twice before reaching the resolver.</p>
+     */
+    @Test
+    public void functionKeysFireWhileTyping() {
+        UIElement rootEl = build();
+        TextField field = new TextField();
+        rootEl.addChild(field);
+        window.getCommands().register(recording("script.run"));
+        rootEl.keymap().bind("Shift+F10", "script.run");
+
+        assertTrue("fixture must genuinely consume text input", field.consumesTextInput());
+        assertTrue(press(field, "Shift+F10"));
+        assertEquals(List.of("script.run"), fired);
+    }
+
+    /** And bare, which is the F2-rename shape. */
+    @Test
+    public void aBareFunctionKeyFiresWhileTyping() {
+        UIElement rootEl = build();
+        TextField field = new TextField();
+        rootEl.addChild(field);
+        window.getCommands().register(recording("refactor.rename"));
+        rootEl.keymap().bind("F2", "refactor.rename");
+
+        assertTrue(press(field, "F2"));
+        assertEquals(List.of("refactor.rename"), fired);
+    }
+
+    /**
+     * <b>The keypad is not a function key</b>, and a range check would have said it was.
+     *
+     * <p>{@code CgKeyCodes} is LWJGL2-shaped and the F-key codes are not contiguous: F1–F10 are 0x3B–0x44,
+     * then F11/F12 jump to 0x57/0x58. Everything in between — Num Lock, Scroll Lock, the whole numeric
+     * keypad — sits inside that gap and every one of them types. A {@code >= F1 && <= F12} test would let
+     * a bare digit binding fire into a text field, which is the bug the guard exists to prevent.</p>
+     */
+    @Test
+    public void theKeypadIsNotTreatedAsAFunctionKey() {
+        UIElement rootEl = build();
+        TextField field = new TextField();
+        rootEl.addChild(field);
+        window.getCommands().register(recording("tool.brush"));
+        rootEl.keymap().bind("NUMPAD7", "tool.brush");
+
+        assertFalse(press(field, "NUMPAD7"));
+        assertTrue(fired.isEmpty());
+    }
+
     @Test
     public void aBareKeyCanOptInToFiringWhileTyping() {
         UIElement rootEl = build();

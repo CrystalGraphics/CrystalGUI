@@ -61,6 +61,7 @@ final class FoldingDecorationsPart extends EditorViewPart {
             for (UIElement arrow : arrows) DecorationPool.hide(arrow);
             return;
         }
+        DecorationPool.show(column);
         final float columnLeft = editor.paddingLeft() + editor.gutterNumberWidth();
         final float columnWidth = editor.gutterFoldWidth();
         final float columnHeight = editor.getClientHeight();
@@ -89,7 +90,7 @@ final class FoldingDecorationsPart extends EditorViewPart {
             else arrow.removeClass(TextEditor.FOLD_COLLAPSED_CLASS);
 
             // Relative to the COLUMN, so left is 0 rather than the gutter offset.
-            final float top = editor.textOriginY() + viewLine * height - editor.getScrollTop();
+            final float top = editor.topOfViewLine(viewLine);
             StyleGroup.defaultPipeline(arrow.getStyle().getLayoutGroup(),
                     l -> l.positionType(TaffyPosition.ABSOLUTE)
                             .left(0f).top(top).width(columnWidth).height(height));
@@ -118,7 +119,9 @@ final class FoldingDecorationsPart extends EditorViewPart {
             arrows.add(arrow);
             arrowRows.add(-1);
         }
-        return arrows.get(index);
+        // BACK INTO LAYOUT. Retirement is `display: none` at IMPORTANT -- see DecorationPool.hide
+        // -- so every path that shows one of these again has to undo it.
+        return DecorationPool.show(arrows.get(index));
     }
 
     // ── Collapsed-region chips ──────────────────────────────────────────────────────────────────
@@ -161,7 +164,7 @@ final class FoldingDecorationsPart extends EditorViewPart {
             int opener = trailingOpenerIndex(rowText);
             String tail = editor.placeholderTextFor(region);
             glyph.setText(opener >= 0 ? rowText.charAt(opener) + tail : tail);
-            pushEditorFont(glyph);
+            editor.pushEditorFontTo(glyph);
 
             int endColumn = editor.projections().projectionOf(model.row()).maxColumn(model.viewLineInRow());
             // Back up over the opener and anything after it. Index-to-column is a constant shift on one
@@ -180,7 +183,7 @@ final class FoldingDecorationsPart extends EditorViewPart {
             // Centred WITHIN the row rather than filling it. A chip as tall as the line makes its text
             // look shrunken inside a slab, and the line's leading sits below the glyphs, so a full-height
             // box is not centred on the text beside it either. Hugging the text is what IntelliJ draws.
-            final float top = editor.textOriginY() + viewLine * height - editor.getScrollTop()
+            final float top = editor.topOfViewLine(viewLine)
                     + Math.max(0f, (height - box) / 2f);
 
             // NO left shift, and this reverses an earlier choice. The box begins exactly where the row
@@ -245,7 +248,9 @@ final class FoldingDecorationsPart extends EditorViewPart {
             chips.add(marker);
             chipRows.add(-1);
         }
-        return chips.get(index);
+        // BACK INTO LAYOUT. Retirement is `display: none` at IMPORTANT -- see DecorationPool.hide
+        // -- so every path that shows one of these again has to undo it.
+        return DecorationPool.show(chips.get(index));
     }
 
     /**
@@ -292,9 +297,4 @@ final class FoldingDecorationsPart extends EditorViewPart {
         return Math.min(editor.lineHeight() * 0.88f, Math.max(1f, editor.getFontSize() * 1.35f));
     }
 
-    private void pushEditorFont(UIText glyph) {
-        StyleGroup.importantPipeline(glyph.getStyle().getGeneralGroup(),
-                g -> g.fontSize(editor.getStyle().getGeneralGroup().fontSize())
-                        .fontFamily(editor.getStyle().getGeneralGroup().fontFamily()));
-    }
 }

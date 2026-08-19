@@ -1,6 +1,7 @@
 package com.crystalgui.ui.elements.editor;
 
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.text.Rope;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
@@ -51,19 +52,78 @@ final class ErrorStripePart extends EditorViewPart {
     static final String WARNING_CLASS = "__error-stripe-warning__";
     static final String INFORMATION_CLASS = "__error-stripe-information__";
 
+    /** How far off a mark a press may land and still count as a press on it, as a percent of the groove. */
+    private static final float SNAP_PERCENT = 1.2f;
+
+    /** …with a floor, because that percentage is a couple of pixels in a short editor. */
+    private static final float MIN_SNAP_PX = 5f;
+
     /**
-     * Percent of the groove's height. A single-row problem in a long file rounds to a fraction of a pixel,
-     * and a mark nobody can see is the same as no mark — so it is given a floor instead.
+     * What a mark is drawn at before the sheet has been matched — <b>not</b> the styling.
      *
-     * <p>A percentage rather than pixels so it stays proportionate at any {@code uiScale}, and so the
-     * groove's own height is the only geometry this part needs to know.</p>
+     * <p>{@code .__error-stripe__ { height: 1.2% }} in {@code ua/editor.css} is the real value. A
+     * percentage rather than pixels so it stays proportionate at any {@code uiScale}, and so the groove's
+     * own height is the only geometry this part needs to know: a single-row problem in a long file rounds
+     * to a fraction of a pixel, and a mark nobody can see is the same as no mark.</p>
+     *
+     * <p>Read rather than written for the reason {@link EditorViewPart#stylePercent} sets out — the
+     * mark's <em>top</em> is clamped against its height, so the two must be one number.</p>
      */
-    private static final float MARK_HEIGHT_PERCENT = 1.2f;
+    private static final float DEFAULT_MARK_PERCENT = 1.2f;
 
     private final List<UIElement> marks = new ArrayList<>();
 
+    /**
+     * What each pooled slot is currently marking, parallel to {@link #marks}.
+     *
+     * <p>Read at event time and never captured in a listener — a mark is reused for a different problem on
+     * every render, so a listener holding the diagnostic it was built with would navigate to whatever was
+     * in that slot the first time it was used. The same rule the gutter's fold arrows already record, and
+     * for the same reason: a listener may only be attached once, while the payload changes per frame.</p>
+     */
+    private final List<Diagnostic> marked = new ArrayList<>();
+
     ErrorStripePart(TextEditor editor) {
         super(editor);
+        editor.verticalScroller().track().onMouseDown.attachListener((element, event) -> {
+            if (goToNearestMark(element, event.getPosition().x(), event.getPosition().y())) {
+                // CONSUMED so the groove does not also jump. The Scroller's own handler is on the
+                // Scroller and fires in the BUBBLE phase for a press whose target is the track, so
+                // stopping here in the target phase is what keeps the two from both acting.
+                event.stopPropagation();
+            }
+        }, false, true);
+    }
+
+    /**
+     * A press near a mark counts as a press on it.
+     *
+     * <p>A mark is a little over one percent of the groove — around a dozen pixels in a tall
+     * window and fewer in a short one — so aiming at one is aiming at a target thinner than the pointer
+     * is precise. A miss does not do nothing, which would be forgivable: it lands on the groove, and the
+     * groove jumps proportionally, so you arrive a screenful away from the problem you were pointing at.
+     * That is the "takes me to a slightly off offset" report, and it is why the tolerance is generous.</p>
+     *
+     * <p>Nearest rather than first, because marks crowd together in a file with many problems and the one
+     * whose centre is closest is unambiguously the one being aimed at.</p>
+     */
+    private boolean goToNearestMark(UIElement track, float screenX, float screenY) {
+        var local = track.screenToLocal(screenX, screenY);
+        float tolerance = Math.max(MIN_SNAP_PX, track.getRuntimeCache().getHeight() * SNAP_PERCENT / 100f);
+        Diagnostic best = null;
+        float bestDistance = Float.MAX_VALUE;
+        for (int i = 0; i < marks.size(); i++) {
+            Diagnostic problem = marked.get(i);
+            if (problem == null) continue;
+            var box = marks.get(i).getRuntimeCache();
+            float centre = box.getY() - track.getRuntimeCache().getY() + box.getHeight() / 2f;
+            float distance = Math.abs(local.y() - centre);
+            if (distance <= tolerance && distance < bestDistance) {
+                bestDistance = distance;
+                best = problem;
+            }
+        }
+        return best != null && editor.goToDiagnostic(best);
     }
 
     @Override
@@ -81,7 +141,12 @@ final class ErrorStripePart extends EditorViewPart {
                 used = place(diagnostic, document, viewLines, used);
             }
         }
-        for (int i = used; i < marks.size(); i++) DecorationPool.hide(marks.get(i));
+        for (int i = used; i < marks.size(); i++) {
+            DecorationPool.hide(marks.get(i));
+            // CLEARED, not merely hidden. A hidden mark keeps its slot, and a stale payload there is a
+            // click that navigates to a problem that no longer exists.
+            marked.set(i, null);
+        }
     }
 
     private int place(Diagnostic diagnostic, Rope document, int viewLines, int index) {
@@ -90,16 +155,21 @@ final class ErrorStripePart extends EditorViewPart {
         int viewLine = editor.viewLineOf(offset, LineProjection.Affinity.RIGHT);
         if (viewLine < 0) return index;
 
+        UIElement mark = markAt(index);
+        marked.set(index, diagnostic);
+        index++;
+        applySeverity(mark, diagnostic.severity());
+
+        // READ FROM THE SHEET, then used for both the height and the clamp below.
+        float markPercent = stylePercent(mark, LayoutProperties.HEIGHT, DEFAULT_MARK_PERCENT);
         float fraction = Math.min(1f, viewLine / (float) viewLines);
         // Kept inside the groove: at the very bottom the mark would otherwise hang off the end and be
         // clipped to nothing, so the last problem in a file would be the one you cannot see.
-        float top = Math.min(100f - MARK_HEIGHT_PERCENT, fraction * 100f);
+        float top = Math.min(100f - markPercent, fraction * 100f);
 
-        UIElement mark = markAt(index++);
-        applySeverity(mark, diagnostic.severity());
         StyleGroup.defaultPipeline(mark.getStyle().getLayoutGroup(),
                 l -> l.positionType(TaffyPosition.ABSOLUTE)
-                        .left(0).widthPercent(100f).topPercent(top).heightPercent(MARK_HEIGHT_PERCENT));
+                        .left(0).widthPercent(100f).topPercent(top).heightPercent(markPercent));
         return index;
     }
 
@@ -121,14 +191,33 @@ final class ErrorStripePart extends EditorViewPart {
         while (marks.size() <= index) {
             UIElement mark = new UIElement();
             mark.addClass(STRIPE_CLASS);
-            // Not hit-testable yet. Click-to-navigate is a real affordance and worth having, but a mark
-            // that swallowed presses without acting on them would break dragging the thumb underneath it,
-            // which is the groove's actual job. It stays transparent until it has something to do.
-            mark.setHitTest(false);
+            // HIT-TESTABLE NOW THAT IT HAS SOMETHING TO DO. It was deliberately transparent while it did
+            // not: a mark that swallowed presses without acting on them would break dragging the thumb
+            // underneath it, which is the groove's actual job. It now navigates, so it earns the press.
             mark.markAsInternal();
+            final int slot = marks.size();
+            mark.onMouseEnter.attachListener((element, event) -> {
+                Diagnostic problem = marked.get(slot);
+                if (problem == null) return;
+                // THE MARK IS THE ANCHOR, not the pointer. It is the thing being described, it does not
+                // move while the box is open, and anchoring to it is what puts the box beside the groove
+                // instead of on top of it.
+                editor.langFeatures().showProblemPopupAt(problem, element);
+            }, false, false);
+            mark.onMouseDown.attachListener((element, event) -> {
+                Diagnostic problem = marked.get(slot);
+                if (problem == null) return;
+                editor.goToDiagnostic(problem);
+                // CONSUMED, so the press does not also reach the groove and jump the thumb to the pointer.
+                event.stopPropagation();
+            }, false, true);
             editor.verticalScroller().track().addInternalChild(mark);
             marks.add(mark);
+            marked.add(null);
         }
-        return marks.get(index);
+        // BACK INTO LAYOUT -- see DecorationPool.hide. It matters more here than for a squiggle: a retired
+        // mark is still hit-testable, so one left in the groove would answer a press about a problem it no
+        // longer marks.
+        return DecorationPool.show(marks.get(index));
     }
 }

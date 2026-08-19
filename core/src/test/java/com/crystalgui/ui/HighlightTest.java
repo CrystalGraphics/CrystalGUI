@@ -174,6 +174,44 @@ public class HighlightTest extends UiTestBase {
                 16f, text.getStyle().getGeneralGroup().fontSize(), 0.01f);
     }
 
+    /**
+     * <b>{@code font-style} and {@code font-weight} on a highlight are allowed here, and CSS forbids
+     * them.</b> A deliberate divergence, argued in full at {@code HighlightStyle.ALLOWED}.
+     *
+     * <p>The spec's rule protects a property this engine does not have: on the web a highlight is a pure
+     * overlay painted over already-laid-out text, so a wider face would move the very glyphs being
+     * highlighted. Here a highlight <em>already</em> re-shapes — a span boundary is a shaping-run
+     * boundary — so the premise is false for us, and refusing them would mean an editor colour scheme
+     * that cannot say what IntelliJ's, VS Code's and Zed's all say. Every reference scheme italicises
+     * comments.</p>
+     */
+    @Test
+    public void aHighlightMaySetItalicAndBold() {
+        UIText text = build(SENTENCE,
+                "text::highlight(comment) { font-style: italic; }"
+                        + "text::highlight(kw) { font-weight: bold; }");
+
+        var comment = window.getStyleEngine().highlightStyle(text, "comment");
+        assertTrue("italic must survive the highlight filter", comment.isItalic(false));
+        assertFalse("and must not drag bold along with it", comment.isBold(false));
+
+        var keyword = window.getStyleEngine().highlightStyle(text, "kw");
+        assertTrue(keyword.isBold(false));
+    }
+
+    /**
+     * A highlight silent about weight must not make its range lighter than the text around it — otherwise
+     * a search match inside a bold label goes thin for exactly the characters it found.
+     */
+    @Test
+    public void aHighlightThatSaysNothingAboutWeightInheritsTheElements() {
+        UIText text = build(SENTENCE, "text::highlight(hit) { color: #FF0000; }");
+        var style = window.getStyleEngine().highlightStyle(text, "hit");
+
+        assertTrue("bold carries through a highlight that does not mention it", style.isBold(true));
+        assertTrue("and so does italic", style.isItalic(true));
+    }
+
     @Test
     public void decorationWithoutColourLeavesTheTextReadable() {
         UIText text = build(SENTENCE, "text::highlight(hit) { text-decoration-line: underline; }");

@@ -155,6 +155,28 @@ public class RopeTest {
                 8, rope.pointToOffset(new TextPoint(99, 0)));
     }
 
+    /**
+     * And {@code Integer.MAX_VALUE} clamps too — the column {@code Diagnostic.onRow} actually uses.
+     *
+     * <p>Written from a live defect the test above could not see. The clamp was
+     * {@code min(start + column, end)}, and {@code start + Integer.MAX_VALUE} <b>overflows</b> to a
+     * negative offset, which the surrounding {@code max(start, …)} then pulled back to {@code start} — so
+     * a whole-line range collapsed to a zero-width point at the line's indentation. Column 99 is what the
+     * existing case used and does not overflow, and <b>row 0 is exempt</b> because its start is 0, which
+     * is why every one-line fixture agreed with the contract while every real file did not: a runtime
+     * error on line 122 of {@code Main.js} drew a one-character mark in the leading whitespace.</p>
+     */
+    @Test
+    public void aWholeLineColumnClampsRatherThanOverflowing() {
+        Rope rope = Rope.of("ab\ncdef\ngh");
+        assertEquals("row 0 always worked — its line starts at offset 0",
+                2, rope.pointToOffset(new TextPoint(0, Integer.MAX_VALUE)));
+        assertEquals("the end of row 1, not its start", 7,
+                rope.pointToOffset(new TextPoint(1, Integer.MAX_VALUE)));
+        assertEquals("the end of the last row", 10,
+                rope.pointToOffset(new TextPoint(2, Integer.MAX_VALUE)));
+    }
+
     // ── Editing ─────────────────────────────────────────────────────────────────────────────────
 
     @Test

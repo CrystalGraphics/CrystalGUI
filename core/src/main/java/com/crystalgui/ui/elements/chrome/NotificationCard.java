@@ -48,7 +48,7 @@ class NotificationCard extends UIElement {
         icon.addClass(NotificationsView.ICON_CLASS);
         // THE CLASS CARRIES THE SEVERITY, and the sheet turns it into a glyph and a colour. Writing either
         // from here would put the palette in Java, which is the split graph.css already makes for port
-        // types and filetypes.css for file icons.
+        // types, and the file icons carry their own palette.
         icon.addClass(NotificationsView.SEVERITY_PREFIX
                 + notification.getSeverity().name().toLowerCase(Locale.ROOT));
         icon.setHitTest(false);
@@ -56,6 +56,14 @@ class NotificationCard extends UIElement {
         message = new UIText(titleOf(notification));
         message.addClass(NotificationsView.MESSAGE_CLASS);
         message.setHitTest(false);
+        // SIZED BY ITS BOX, AND IT HAS TO SAY SO. The sheet gives this `flex-grow: 1; flex-shrink: 1;
+        // min-width: 0` -- it takes the row's width and wraps against it. But the auto-detect decides
+        // self-sizing from the FIRST recompute, which runs before this card has ever been laid out, reads
+        // a content box of zero, and latches "self-sizing" permanently. A self-sizing UIText shapes ONE
+        // line from the whole string, so `white-space: normal` on the message did nothing at all: the
+        // card measured one line tall while the text drew across two and was clipped by the card's own
+        // bottom edge. The timestamp beside it needs the opposite lock for the same race.
+        message.neverSelfSizeWidth();
 
         UIText time = new UIText(describeTime(notification.getTimestamp()));
         time.addClass(NotificationsView.TIME_CLASS);
@@ -79,6 +87,12 @@ class NotificationCard extends UIElement {
             UIText detail = new UIText(notification.getDetail());
             detail.addClass(NotificationsView.DETAIL_CLASS);
             detail.setHitTest(false);
+            // THE SAME LOCK THE MESSAGE NEEDS, and for the same race. The sheet gives this `width: 100%`,
+            // which the latched self-sizing width overrides at IMPORTANT -- so the detail took the width
+            // of its whole unwrapped string and ran out past the card's own border rather than wrapping
+            // inside it. A balloon is sized to its content, so this also made the CARD too narrow to
+            // contain the text it was measuring itself from.
+            detail.neverSelfSizeWidth();
             addChild(detail);
         }
 

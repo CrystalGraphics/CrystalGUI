@@ -129,6 +129,18 @@ public final class SelectionModel {
      */
     public SelectionModel mapThrough(ChangeSet change) {
         if (change == null || change.isEmpty()) return this;
+        return setAll(mapThrough(selections, change), primaryIndex);
+    }
+
+    /**
+     * The same mapping for a bare list — what an undo entry holds.
+     *
+     * <p>Static so the rule above is stated once. An undo entry records where the carets were before its
+     * edit and has no model to map them with, and re-deriving these four lines there is how the two would
+     * come to disagree about which way an empty caret leans.</p>
+     */
+    public static List<Selection> mapThrough(List<Selection> selections, ChangeSet change) {
+        if (change == null || change.isEmpty()) return List.copyOf(selections);
         List<Selection> mapped = new ArrayList<>(selections.size());
         for (Selection selection : selections) {
             if (selection.isEmpty()) {
@@ -141,7 +153,7 @@ public final class SelectionModel {
                 mapped.add(reversed ? new Selection(hi, lo) : new Selection(lo, hi));
             }
         }
-        return setAll(mapped, primaryIndex);
+        return mapped;
     }
 
     public SelectionModel clampTo(int documentLength) {

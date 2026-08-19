@@ -12,6 +12,9 @@ import com.crystalgui.ui.elements.dock.DockPanelRef;
 import com.crystalgui.ui.elements.dock.DockRegion;
 import com.crystalgui.ui.elements.dock.RegionSide;
 import com.crystalgui.ui.elements.dock.DockPath;
+import com.crystalgui.ui.SessionState;
+import com.crystalgui.ui.UIWindow;
+import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.dock.DockLayout;
 import com.crystalgui.ui.elements.dock.DockLayoutCodec;
 
@@ -152,6 +155,15 @@ public final class WorkbenchSession {
     private static final String KEY_ACTIVE = "active";
     private static final String KEY_EXPANDED = "expanded";
     private static final String KEY_FILES = "files";
+    /**
+     * Widget state that outlives the run -- {@link SessionState}, keyed by element id.
+     *
+     * <p><b>No version bump.</b> The key is purely additive: a record written before it simply has no
+     * {@code widgets} array, and every read below tolerates that. Bumping would DISCARD every existing
+     * arrangement -- see the version block above -- which is far too much to pay for one optional field.</p>
+     */
+    private static final String KEY_WIDGETS = "widgets";
+    private static final String KEY_ID = "id";
     private static final String KEY_PATH = "path";
     private static final String KEY_VIEW = "view";
 
@@ -188,6 +200,24 @@ public final class WorkbenchSession {
         this.workbench = workbench;
         this.storage = storage;
         workbench.onDidOpenDocument.connect(this::applyViewState);
+        // AT CONSTRUCTION, not on a successful restore. The store is what reads a widget back as it leaves
+        // the tree, so a first run -- which has no record to restore and would never have installed one --
+        // would lose everything closed before the first save. Idempotent, and re-asserted at both entry
+        // points below for a workbench attached after this ran.
+        installWidgetState();
+    }
+
+    /**
+     * Remembered widget state, installed on the window so {@code registerElement} can hand it out.
+     *
+     * <p>Installed lazily rather than in the constructor: a workbench is built before it is attached, so
+     * there is no window yet at that point.</p>
+     */
+    private final SessionState<JsonElement> widgetState = new SessionState<>(JsonOps.INSTANCE);
+
+    private void installWidgetState() {
+        UIWindow window = workbench.getAttachedWindow();
+        if (window != null) window.setSessionState(widgetState);
     }
 
     /** {@code session.harness.scratch.json} — flat, so {@link ConfigStorage#list} can find them to prune. */
@@ -212,6 +242,7 @@ public final class WorkbenchSession {
 
     /** The record as text, without writing it — what a test asserts on. */
     public String toJson(float viewportWidth, float viewportHeight) {
+        installWidgetState();
         StateMap<JsonElement> out = new StateMap<>(JsonOps.INSTANCE);
         out.putInt(KEY_VERSION, VERSION);
 
@@ -228,6 +259,16 @@ public final class WorkbenchSession {
         // knowable now.
         captureOpenToolWindows();
         workbench.toolWindows().encodeInto(out, KEY_TOOL_WINDOWS);
+
+        // Every opted-in widget in the tree, over the top of what came in. Reading the LIVE elements is
+        // what makes a dragged divider survive; keeping the entries nobody built is what stops a session
+        // that never opened a panel from writing that panel's state away.
+        widgetState.capture(workbench);
+        List<String> ids = new ArrayList<>(widgetState.entries().keySet());
+        out.putList(KEY_WIDGETS, ids, (entry, id) -> {
+            entry.putString(KEY_ID, id);
+            entry.putRaw(KEY_VIEW, widgetState.entries().get(id));
+        });
 
         CgPath active = workbench.activeFilePath();
         if (active != null) out.putString(KEY_ACTIVE, active.toString());
@@ -316,7 +357,7 @@ public final class WorkbenchSession {
     public boolean fromJson(String json) {
         StateMap<JsonElement> in;
         try {
-            in = new StateMap<>(JsonOps.INSTANCE, JsonParser.parseString(json));
+            in = new StateMap<>(JsonOps.INSTANCE, new JsonParser().parse(json));
         } catch (RuntimeException malformed) {
             CrystalGuiCore.LOGGER.warn("Session record could not be read; opening with the defaults",
                     malformed);
@@ -362,6 +403,11 @@ public final class WorkbenchSession {
         // there. Absent is not a failure: a record written before tool-window placements existed still has
         // a usable dock, and every panel simply falls back to its descriptor's anchor the first time it is
         // hidden -- which is exactly the first-run behaviour.
+        // BEFORE applyVisibility, which is what builds the containers -- a widget takes its state as it
+        // joins the window, so the store has to be loaded and installed before anything is built. Nothing
+        // else has to be timed: a widget built minutes later is served by the same path.
+        restoreWidgetState(in);
+
         workbench.toolWindows().clear();
         for (ToolWindowState state
                 : ToolWindowLayout.decodeFrom(in, KEY_TOOL_WINDOWS).ordered()) {
@@ -391,6 +437,30 @@ public final class WorkbenchSession {
         String active = in.getString(KEY_ACTIVE, "");
         pendingActive = active.isEmpty() ? null : parseOrNull(active);
         return true;
+    }
+
+    /**
+     * Loads the remembered widget states and installs the store on the window.
+     *
+     * <p>No application happens here and none can: the widgets are handed their state by
+     * {@code UIWindow.registerElement} as they join the tree, which for a tool window is the first time
+     * it is opened and for a widget inside one may be later still. That indirection IS the feature --
+     * see {@link SessionState}, which explains why anything applied once at startup misses most of what
+     * it is for.</p>
+     */
+    private void restoreWidgetState(StateMap<JsonElement> in) {
+        Map<String, JsonElement> entries = new LinkedHashMap<>();
+        JsonElement widgets = in.getRaw(KEY_WIDGETS);
+        if (widgets != null && widgets.isJsonArray()) {
+            for (JsonElement element : widgets.getAsJsonArray()) {
+                StateMap<JsonElement> entry = new StateMap<>(JsonOps.INSTANCE, element);
+                String id = entry.getString(KEY_ID, "");
+                JsonElement view = entry.getRaw(KEY_VIEW);
+                if (!id.isEmpty() && view != null) entries.put(id, view);
+            }
+        }
+        widgetState.load(entries);
+        installWidgetState();
     }
 
     /**

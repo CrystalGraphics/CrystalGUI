@@ -3,7 +3,13 @@ package com.crystalgui.text;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.undo.Edit;
 import com.crystalgui.core.undo.UndoStack;
+import com.crystalgui.text.decoration.DecorationSet;
+import com.crystalgui.text.diagnostic.DiagnosticSet;
+import com.crystalgui.text.decoration.TrackedRange;
 
+import org.jetbrains.annotations.Nullable;
+
+import java.util.List;
 import java.util.function.LongSupplier;
 
 /**
@@ -13,6 +19,12 @@ import java.util.function.LongSupplier;
  * widget looking at it, and keeping them out is what lets two views share one document without
  * negotiating whose caret is whose. It is also the 6.1.9 boundary in its most concrete form: what is in
  * here is what undo restores.</p>
+ *
+ * <p><b>With one exception, which both references also make: an undo ENTRY records the carets its edit
+ * was made at</b> — see {@link #edit(ChangeSet, java.util.List)}. That is not a caret the buffer has;
+ * it is a pair of offsets stored with a change, in the same way the change itself is, and it exists
+ * because an undo that restores the text without restoring the caret has moved the text out from under
+ * the user's hands. Nothing reads it but the undo path, and a view that records none still undoes.</p>
  *
  * <h3>Undo stores changes, not snapshots</h3>
  * <p>Each entry keeps the edit and its inverse, both {@link ChangeSet}s — plain data, so the stack
@@ -34,6 +46,20 @@ public final class TextBuffer {
     public final Signal.Value<ChangeSet> onChanged = new Signal.Value<>();
 
     private Rope document;
+
+    /**
+     * How many times this document has changed — the stamp every async result is compared against.
+     *
+     * <p>Monotonic, and deliberately not a hash or a timestamp: it only ever has to answer <em>"is this
+     * still the document that was snapshotted?"</em>, and equality on a counter is the cheapest honest
+     * answer. Two different edits can produce identical text (type a character, delete it) and a result
+     * computed against the text in between is still stale, which is why identity of content is the wrong
+     * question.</p>
+     *
+     * <p>It starts at 0 and is bumped by {@link #applied}, so a freshly loaded document and a heavily
+     * edited one are never confused. Nothing outside this class writes it.</p>
+     */
+    private int version;
 
     /**
      * The history, shared with the rest of the engine rather than private to this class.
@@ -146,6 +172,28 @@ public final class TextBuffer {
      * continuation of the same typing.
      */
     public void edit(ChangeSet change) {
+        edit(change, null);
+    }
+
+    /**
+     * The same, recording <b>where the carets were</b> so that undoing puts them back.
+     *
+     * <h3>Why the carets ride on the undo entry, when nothing else about the view does</h3>
+     *
+     * <p>The rule this codebase draws — document state through {@code Edit}s, view state mutated directly
+     * — is what keeps Ctrl+Z from undoing a scroll. A selection looks like view state and is the one
+     * exception both references make, because it is not the <em>view's</em>: it is a pair of offsets into
+     * this document, of exactly the kind a {@link ChangeSet} maps, and an undo that puts the text back
+     * without putting the caret back has moved the text out from under the user's hands. VS Code calls it
+     * {@code beforeCursorState} on its undo elements and Monaco the same.</p>
+     *
+     * <p>Redo does not need a second recording: re-applying the change to the carets that preceded it is
+     * where they ended up the first time, which is the same answer by construction rather than a
+     * remembered one that could disagree.</p>
+     *
+     * @param carets the selections as they stand <em>before</em> this edit, or null to record none
+     */
+    public void edit(ChangeSet change, List<Selection> carets) {
         if (change == null || change.isEmpty()) return;
         if (change.lengthBefore() != document.length()) {
             throw new IllegalArgumentException("edit applies to a document of length "
@@ -158,8 +206,92 @@ public final class TextBuffer {
         // unapplied edit would mean applying it twice. Push also clears the redo branch: keeping it
         // would let redo replay a change against a document it was never described against, which the
         // length check above would then reject at some arbitrary later point rather than here.
-        history.push(new ChangeSetEdit(this, change, inverse));
+        history.push(new ChangeSetEdit(this, change, inverse,
+                carets == null ? null : List.copyOf(carets)));
+        applied(change);
+    }
+
+    /**
+     * The single statement of "this document just changed": bump the version, then announce it.
+     *
+     * <p>Every mutation goes through here — the forward edit, and redo and undo on the recorded entry.
+     * <b>Undo and redo count.</b> They move the text as surely as typing does, so anything computed
+     * against the document before one of them is just as stale; a version that only advanced on forward
+     * edits would let a diagnostic list survive Ctrl+Z and be re-attached to text it never described.</p>
+     *
+     * <p>Bumped <em>before</em> the signal, so a listener reading {@link #version()} from inside
+     * {@code onChanged} sees the version its change produced rather than the one it replaced.</p>
+     *
+     * <p>And the decorations move <em>before</em> the signal too, for a stronger reason than tidiness: every
+     * listener here repaints, and a listener that reads a {@link TrackedRange} before it has been adjusted
+     * reads an offset into the document that this edit just replaced. There is no ordering among listeners
+     * to rely on, so the adjustment cannot be one of them.</p>
+     */
+    private void applied(ChangeSet change) {
+        version++;
+        decorations.adjust(change);
         onChanged.emit(change);
+    }
+
+    /**
+     * Announces the carets an undo or redo restores — <b>after</b> {@link #applied}, never instead of it.
+     *
+     * <p>After, because every listener on {@code onChanged} reconciles itself with the new text first, and
+     * one of them clamps selections to the document's length. Restoring before that would hand the clamp
+     * the answer to overwrite.</p>
+     */
+    private void restore(@Nullable List<Selection> carets) {
+        if (carets != null) onSelectionsRestored.emit(carets);
+    }
+
+    /**
+     * Emitted by an undo or a redo with the carets that belong to the state it just produced.
+     *
+     * <p>Separate from {@link #onChanged} rather than folded into its payload, because the two are not
+     * the same announcement: every edit changes text, and only an undo or a redo has a recorded answer
+     * about where the carets go. A listener that reads the text does not want to be told about carets it
+     * has already reconciled, and a widget with no history of its own has nothing to do here at all.</p>
+     */
+    public final Signal.Value<List<Selection>> onSelectionsRestored = new Signal.Value<>();
+
+    /**
+     * The ranges tracking this document — §17.1's primitive.
+     *
+     * <p>On the <b>document</b>, not on the editor, and it is the same boundary the undo stack draws: two
+     * split panes onto one file are one document, so a diagnostic squiggle exists once and both views paint
+     * the same one. Putting it on the widget would give the two views separate sets that drift apart the
+     * moment either is typed in.</p>
+     */
+    public DecorationSet decorations() {
+        return decorations;
+    }
+
+    private final DecorationSet decorations = new DecorationSet();
+
+    /**
+     * The problems reported about this document.
+     *
+     * <p>Here for the reason {@link #decorations} is, and it is the same reason: a diagnostic describes a
+     * <b>document</b>, exactly as an undo stack does. It lived on {@code TextEditor}, where its own
+     * javadoc called that a known compromise — two views onto one file would have had two sets, publishing
+     * two competing slices into one Problems panel and disagreeing about which version they described.</p>
+     *
+     * <p>It is also where the tracking already is: the squiggles are {@link TrackedRange}s in this
+     * buffer's decoration set, so keeping the list that produces them one layer up meant the list and its
+     * marks had different owners and different lifetimes.</p>
+     */
+    public DiagnosticSet diagnostics() {
+        return diagnostics;
+    }
+
+    private final DiagnosticSet diagnostics = new DiagnosticSet();
+
+    /**
+     * The document's current version — see the field note. Compare with {@code ==} against the version an
+     * async job snapshotted; anything else is stale and must be discarded rather than reconciled.
+     */
+    public int version() {
+        return version;
     }
 
     /**
@@ -170,17 +302,23 @@ public final class TextBuffer {
      * run again because undo has put the document back to the state the change was described
      * against.</p>
      */
-    private record ChangeSetEdit(TextBuffer buffer, ChangeSet forward, ChangeSet inverse) implements Edit {
+    private record ChangeSetEdit(TextBuffer buffer, ChangeSet forward, ChangeSet inverse,
+                                 @Nullable List<Selection> caretsBefore) implements Edit {
         @Override
         public void apply() {
             buffer.document = forward.apply(buffer.document);
-            buffer.onChanged.emit(forward);
+            buffer.applied(forward);
+            // WHERE THEY ENDED UP THE FIRST TIME, derived rather than remembered: carrying the carets
+            // that preceded the edit through the edit is the same answer, and cannot drift from it.
+            buffer.restore(caretsBefore == null ? null
+                    : SelectionModel.mapThrough(caretsBefore, forward));
         }
 
         @Override
         public void undo() {
             buffer.document = inverse.apply(buffer.document);
-            buffer.onChanged.emit(inverse);
+            buffer.applied(inverse);
+            buffer.restore(caretsBefore);
         }
 
         @Override
@@ -195,7 +333,11 @@ public final class TextBuffer {
             return new ChangeSetEdit(buffer, forward.compose(other.forward()),
                     // The inverse of "a then b" is "invert b, then invert a" — the new inverse runs
                     // first, because it is the one expressed against the document we are now in.
-                    other.inverse().compose(inverse));
+                    other.inverse().compose(inverse),
+                    // THE FIRST ONE'S CARETS. A merged step is one step, and undoing a run of typing puts
+                    // the caret where the run STARTED -- taking the later entry's would land it in the
+                    // middle of text this undo has just removed.
+                    caretsBefore);
         }
     }
 

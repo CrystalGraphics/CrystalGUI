@@ -1,0 +1,147 @@
+/* @scheme Islands Light
+ * @id     crystalgui:islands-light
+ * @kind   light
+ * @author crystalgui
+ *
+ * The light half of the Islands pair, from IntelliJ Light.
+ *
+ * It exists because a scheme without a counterpart is a trap rather than a saving: switching the theme to
+ * light and leaving a dark scheme selected gives grey-on-white comments and a nearly invisible caret, and
+ * the user's conclusion is that the light theme is broken. StyleGovernanceTest pins the two together —
+ * every key defined in one must be defined in the other, which is the same rule the themes already follow
+ * and the exact failure --editorfind-bg produced once already.
+ *
+ * The mapping decisions are Islands Dark's, inverted rather than re-argued: keywords carry the weight,
+ * class names stay at the default foreground because position already says "type", and the identifier
+ * rows stay neutral until a semantic layer can tell a parameter from a field. See islands-dark.css for
+ * why each of those is deliberate. */
+
+theme {
+    /* ── Surfaces ──
+     * Opaque here, unlike the dark pair. A light document on the light panel needs to be the LIGHTER of
+     * the two or the editor stops reading as an island at all — and at this end of the range there is no
+     * room to do that with transparency. The corners are the price, and the theme's panel is matched to
+     * it so the seam does not show. */
+    --editor-bg: #FFFFFF;
+    --editor-fg: #080808;
+    --editor-caret: #000000;
+    --editor-current-line: #F5F8FE;
+    --editor-selection-bg: #A6D2FF;
+    --editor-gutter-bg: #F7F8FA;
+    --editor-gutter-edge: #EBECF0;
+    --editor-line-number: #AEB3C2;
+    --editor-indent-guide: #EBECF0;
+    --editor-indent-guide-active: #9A9DA1;
+    --editor-whitespace: #C9CCD0;
+    --editor-ruler: #EBECF0;
+
+    /* ── Folding ── */
+    --editor-fold: #9A9DA1;
+    --editor-fold-active: #000000;
+    --editor-fold-placeholder-bg: #EBECF0;
+    --editor-fold-placeholder-fg: #6C707E;
+    --editor-fold-placeholder-hover-bg: #DFE1E5;
+    --editor-fold-placeholder-hover-fg: #000000;
+
+    /* ── The zoom indicator ── */
+    --editor-zoom-bg: #F7F8FA;
+    --editor-zoom-fg: #000000;
+    --editor-zoom-link: #2E55A3;
+    --editor-zoom-link-pressed: #1E3C78;
+
+    /* ── Find & replace, in the document ── */
+    --find-match-bg: #FFD08A;
+    --find-match-fg: #000000;
+    --search-excluded-fg: #9A9DA1;
+
+    /* The word under the caret, wherever else it appears. A GROUND and no foreground, so a marked
+     * occurrence still reads as whatever kind of token it is — VS Code's editor.wordHighlightBackground. */
+    --editor-occurrence-bg: #DCE6F0;
+
+    /* The same for the SELECTED text -- fainter still, since the selection band is already saying
+     * where the thing you picked is. VS Code's editor.selectionHighlightBackground. */
+    --editor-selection-occurrence-bg: #E8EEF4;
+
+    /* ── Syntax ── */
+    --syntax-keyword: #0033B3;
+    --syntax-keyword-control: #0033B3;
+    --syntax-keyword-operator: #0033B3;
+
+    /* Default foreground, for the reason islands-dark.css sets out: IntelliJ does not tint class names. */
+    --syntax-type: #000000;
+    --syntax-type-parameter: #007E8A;
+
+    /* AN INTERFACE AND AN ENUM, which only an engine can tell from a class -- the three are
+     * spelled identically at every use site. This scheme draws all three alike -- it overrides neither
+     * DEFAULT_INTERFACE_NAME nor ENUM_NAME, so agreeing with the class colour IS the port. */
+    --syntax-type-interface: #000000;
+    --syntax-type-enum: #000000;
+    --syntax-type-enum-style: normal;
+    --syntax-type-builtin: #0033B3;
+    --syntax-type-qualifier: #0033B3;
+
+    --syntax-function: #080808;
+    --syntax-function-builtin: #0033B3;
+    --syntax-function-special: #00627A;
+    --syntax-function-method: #00627A;
+    --syntax-function-call: #080808;
+    /* THE CALL COLOUR PLUS A SLANT, not the declaration blue. DEFAULT_STATIC_METHOD describes a
+     * static DECLARATION; a static CALL composes the call attribute -- which is
+     * DEFAULT_IDENTIFIER -- with the static italic. That is why IntelliJ draws `classify(...)`
+     * white and slanted rather than blue, and reading the attribute name alone got it wrong. */
+    --syntax-function-static: #080808;
+    --syntax-function-static-style: italic;
+
+    --syntax-string: #067D17;
+    --syntax-string-escape: #0037A6;
+    --syntax-string-special: #0037A6;
+
+    --syntax-number: #1750EB;
+    --syntax-boolean: #0033B3;
+    --syntax-constant: #871094;
+    --syntax-constant-builtin: #0033B3;
+
+    --syntax-comment: #8C8C8C;
+    --syntax-comment-doc: #8C8C8C;
+
+    /* Neutral until a semantic layer can separate them — see islands-dark.css. */
+    --syntax-variable: #000000;
+    --syntax-variable-builtin: #0033B3;
+    --syntax-variable-parameter: #000000;
+    --syntax-variable-member: #871094;
+    --syntax-variable-captured: #871094;
+    --syntax-captured-underline: #9E6294;
+    --syntax-reassigned-underline: #84868C;
+    --syntax-parameter-reassigned-underline: #84868C;
+
+    --syntax-property: #871094;
+    --syntax-attribute: #9E880D;
+    --syntax-tag: #0033B3;
+    --syntax-constructor: #080808;
+    --syntax-embedded: #080808;
+    --syntax-label: #0033B3;
+    --syntax-markup: #080808;
+
+    /* A PACKAGE PATH -- `java.util` in an import. Body text, which is what this scheme shows for a package path. */
+    --syntax-module: #080808;
+    --syntax-error: #E00000;
+    /* Reported by an ENGINE, not by a grammar -- see editor.css. Unresolved keeps the colour
+     * that says WHAT it is and takes an underline; deprecated is dimmed and struck. */
+    --syntax-unresolved: #E00000;
+    --syntax-deprecated: #8C8C8C;
+    /* Dead code — nothing reads it. Lighter than the body text, as on every light scheme. */
+    --syntax-unnecessary: #ADAFB3;
+
+    --syntax-operator: #000000;
+    --syntax-punctuation: #000000;
+    --syntax-punctuation-bracket: #000000;
+    --syntax-punctuation-delimiter: #000000;
+
+    --syntax-comment-style: italic;
+    --syntax-constant-style: italic;
+    --syntax-keyword-weight: normal;
+    --syntax-constant-weight: normal;
+    --syntax-bracket-weight: bold;
+
+    --syntax-bracket: #067D17;
+}

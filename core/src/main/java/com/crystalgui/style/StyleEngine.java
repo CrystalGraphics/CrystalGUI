@@ -1,6 +1,7 @@
 package com.crystalgui.style;
 
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.style.property.FontRelative;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StyleSlot;
 import com.crystalgui.style.sheet.StyleRule;
@@ -198,8 +199,47 @@ public final class StyleEngine {
         return forElement.getOrDefault(name, HighlightStyle.EMPTY);
     }
 
+    /**
+     * Re-runs the cascade for one element.
+     *
+     * <h3>A second pass, but only for an element that actually uses {@code em}</h3>
+     *
+     * <p>An {@code em} needs the element's <b>computed</b> {@code font-size}, and that is not known until
+     * this pass has applied the rules that might set it — nor is it enough to pick the winning
+     * {@code font-size} declaration out of the sheets, because a widget writing its own size at INLINE or
+     * IMPORTANT beats every sheet and does not appear here at all. So the first pass resolves against
+     * whatever the element's font size was, and if applying the pass changed it, the whole thing runs
+     * again against the settled value.</p>
+     *
+     * <p>Bounded at two passes rather than looped to a fixpoint. A third could only differ if a
+     * {@code font-size} were itself authored in {@code em} <em>and</em> the change moved the winner — and
+     * a self-referential font size is the one case where a fixpoint loop genuinely might not terminate.
+     * {@code replaceOrPutCandidate} no-ops on unchanged values, so the second pass costs a walk and
+     * nothing else.</p>
+     */
     private void rematch(UIElement element) {
+        float fontSize = element.getStyle().getGeneralGroup().fontSize();
+        boolean fontRelative = rematchAgainst(element, fontSize);
+        if (fontRelative) {
+            float settled = element.getStyle().getGeneralGroup().fontSize();
+            if (settled != fontSize) rematchAgainst(element, settled);
+        }
+        // WHETHER A LATER FONT-SIZE CHANGE HAS TO COME BACK HERE. Nothing else re-runs this pass, so an
+        // element whose size is written after its rules matched -- a widget imposing its own at IMPORTANT,
+        // which is what TextEditor does to its gutter on every zoom -- would keep the em pixels it was
+        // given when the sheet last matched. @see UIElement#invalidateFontRelativeStyles
+        element.setHasFontRelativeStyles(fontRelative);
+    }
+
+    /**
+     * One cascade pass, with {@code em} resolved against {@code fontSize}.
+     *
+     * @return whether any matched declaration was font-relative, i.e. whether the answer depends on
+     *         {@code fontSize} at all
+     */
+    private boolean rematchAgainst(UIElement element, float fontSize) {
         var previouslyApplied = appliedByElement.get(element);
+        boolean sawFontRelative = false;
 
         List<StyleSlot<?>> newSlots = new ArrayList<>();
         // name -> property -> winning slot. Built alongside the element's own cascade rather than in a
@@ -232,7 +272,8 @@ public final class StyleEngine {
                     // big sheet's rule #40 beat a later sheet's rule #2 purely by rule count.
                     long sourceOrder = (long) sheetIndex * SHEET_ORDER_STRIDE
                             + (long) rule.sourceOrder() * DECLARATION_ORDER_MULTIPLIER + i;
-                    var slot = toSlot(decl, origin, specificity, sourceOrder);
+                    if (isFontRelative(decl)) sawFontRelative = true;
+                    var slot = toSlot(decl, origin, specificity, sourceOrder, fontSize);
                     if (slot != null) newSlots.add(slot);
                 }
             }
@@ -265,6 +306,7 @@ public final class StyleEngine {
                 element.getStyle().putCandidates(newSlots);
             }
         }
+        return sawFontRelative;
     }
 
     /**
@@ -326,16 +368,41 @@ public final class StyleEngine {
      * cascade winner with a bogus null value, silently overriding a real lower-priority one.
      */
     @Nullable
-    @SuppressWarnings("unchecked")
     static <T> StyleSlot<T> toSlot(StyleRule.Declaration decl, StyleOrigin origin, int specificity, long sourceOrder) {
+        return toSlot(decl, origin, specificity, sourceOrder, Float.NaN);
+    }
+
+    /**
+     * @param fontSize the element's computed {@code font-size}, for resolving {@code em}. {@code NaN}
+     *                 means "not known", which leaves a font-relative value at its reference size — see
+     *                 {@link FontRelative}.
+     */
+    @Nullable
+    @SuppressWarnings("unchecked")
+    static <T> StyleSlot<T> toSlot(StyleRule.Declaration decl, StyleOrigin origin, int specificity,
+                                   long sourceOrder, float fontSize) {
         var property = (StyleProperty<T>) decl.property();
-        T value = (T) decl.value().compute();
+        T value;
+        // THE ONE PLACE AN `em` BECOMES A NUMBER. A StyleValue is parsed once and shared by every element
+        // its rule matches, so it cannot hold the answer -- this is the first point where a declaration
+        // and an element are both in hand. @see FontRelative
+        if (decl.value() instanceof FontRelative<?> relative && relative.isFontRelative()
+                && Float.isFinite(fontSize)) {
+            value = (T) relative.resolveAgainst(fontSize);
+        } else {
+            value = (T) decl.value().compute();
+        }
         if (value == null) {
             CrystalGuiCore.LOGGER.warn("Stylesheet declaration '{}: {}' failed to parse — skipping",
                     property.name, decl.value().rawValue);
             return null;
         }
         return StyleSlot.of(property, origin, specificity, sourceOrder, value);
+    }
+
+    /** Whether a matched declaration's value is an {@code em} and so needs the element's font size. */
+    private static boolean isFontRelative(StyleRule.Declaration decl) {
+        return decl.value() instanceof FontRelative<?> relative && relative.isFontRelative();
     }
 
     public List<StyleSheet> getSheets() {

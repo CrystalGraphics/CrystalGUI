@@ -355,6 +355,18 @@ workbench .__activity-bar__ .__stripe-separator__ {
     overlay-fit: contain;
 }
 
+/* THE SAME MARK, IN THE RUNNING COLOUR. IntelliJ puts `modified` over the Run tool window's stripe button
+ * while anything is executing, and the drawing above is already that icon and already `currentColor` — so
+ * a running badge is a colour and nothing else.
+ *
+ * A CLASS rather than a colour written into `.__dot__`, because that rule is shared by every container on
+ * the rail: styling the running state there would turn the Problems count green too. The class arrives
+ * through `ViewContainerRegistry.setBadge(id, text, styleClass)` and the rail SWAPS it, so a badge that
+ * changes kind does not end up wearing both. */
+.__activity-bar__ .__badge__.__dot__.__running__ {
+    color: var(--run-live-fg, #5FAD65);
+}
+
 .__region-host__ {
     flex-grow: 1;
     overflow: hidden;
@@ -605,7 +617,12 @@ quickpick ::highlight(quickpick-match) {
  * HINT is absent on purpose: it draws no band at all, so a style suggestion cannot be mistaken for a
  * compile error. See DiagnosticSeverity.
  */
+/* THE THICKNESS IS READ BACK, not merely applied. SquigglesPart asks for this value and uses it for the
+ * band's height AND for its top, because the band sits at the bottom of the line box. It was a Java
+ * constant under a note saying the sheet must not own it for exactly that reason -- which was true only
+ * while the part WROTE it. One read, two uses, and they cannot disagree. */
 .__squiggle__ {
+    height: 1px;
     z-index: -1;
 }
 
@@ -628,7 +645,11 @@ quickpick ::highlight(quickpick-match) {
  * are hidden -- observed with only two of four visible. IntelliJ dodges this by giving the stripe its own
  * lane beside the scrollbar; VS Code draws the ruler over a translucent slider. A 1.2%-tall mark over a
  * solid thumb is the cheaper version of the second and costs the thumb nothing readable. */
+/* A PERCENTAGE, so it stays proportionate at any uiScale and the groove's own height is the only
+ * geometry the part needs. Read back like the squiggle above: the mark's TOP is clamped against its
+ * height so the last problem in a file cannot hang off the end, so the two must be one number. */
 .__error-stripe__ {
+    height: 1.2%;
     z-index: 1;
     opacity: 0.85;
 }
@@ -646,27 +667,112 @@ quickpick ::highlight(quickpick-match) {
 }
 
 /* The inspection widget — the problem readout in the editor's top-right corner.
- * Position is written from Java (right/top insets, content-sized); everything else is here. */
+ *
+ * THE INSETS ARE HERE, and the part writes only `position: absolute`. Nothing is computed from either
+ * one, so unlike the squiggle and the stripe above there is nothing to read back — the part simply stops
+ * writing them. They answer two different questions and stay two declarations: `right` is "clear the
+ * scrollbar", which is a widget's width, and `top` is "sit just under the tab strip", which is a
+ * hairline. One number for both would make either wrong the first time the other changed.
+ *
+ * `right` IS A FIXED LENGTH AND MUST STAY ONE. It was tempting to derive it from the vertical bar's own
+ * thickness; that term is 0 or 8 depending on whether the content currently overflows, so a widget
+ * positioned by it jumps sideways the moment a document grows past one screenful — the same flick
+ * ZoomIndicatorPart records chasing. 8px clears the bar outright and sits the readout AGAINST the groove;
+ * it was 14 once, which left the widget floating in the middle of nothing with the scrollbar visibly
+ * beyond it, unmissable now that there is no panel edge behind it to explain the gap.
+ *
+ * Content-sized on purpose: insets only, no width. Taffy shrink-to-fits an absolutely positioned box
+ * with no definite size, so the panel never measures its own text and the readout cannot be clipped by a
+ * width computed against the wrong font.
+ *
+ * NO SURFACE OF ITS OWN. It sits over the editor's own background with nothing between, which is what
+ * IntelliJ's does: the readout is a handful of coloured glyphs and a number, and a panel behind them
+ * draws a box around something that is already legible — a chip floating over the text, competing with
+ * the first line of code for the eye. The counts carry their own colour and that is the whole widget.
+ *
+ * The padding stays: it is the clearance between the arrows and the scrollbar beside them, not the
+ * inset of a box that no longer exists. */
 .__inspection__ {
+    top: 2px;
+    right: 8px;
     flex-direction: row;
     align-items: center;
     padding-left: 6px;
     padding-right: 4px;
     padding-top: 2px;
     padding-bottom: 2px;
-    background: var(--inspection-bg, #2D2D2DE0);
-    border-radius: 3px;
     z-index: 2;
 }
 
-.__inspection-status__ {
-    font-size: 7px;
-    margin-right: 4px;
+/* ONE CHIP PER SEVERITY — an icon and its number, as IntelliJ's widget does it.
+ *
+ * It used to read "2 errors  3 warnings  1 note", which is the same information at four times the width
+ * and has to be parsed rather than glanced at. The icons are already the vocabulary the Problems panel
+ * and the error stripe use, so the widget stops being the one place a severity is spelled in words.
+ *
+ * MARGIN, NOT `gap-all`, on the panel: a chip is hidden with `display: none` when its count is zero, and
+ * a hidden child still counts for a gap — so a clean file would have carried three phantom gaps before
+ * the tick. The margin travels with the chip and disappears with it. */
+.__inspection-count__ {
+    flex-direction: row;
+    align-items: center;
+    margin-right: 5px;
 }
 
-.__inspection-clean__ .__inspection-status__ { color: var(--inspection-clean-fg, #6A9955); }
-.__inspection-errors__ .__inspection-status__ { color: var(--inspection-error-fg, #F14C4C); }
-.__inspection-warnings__ .__inspection-status__ { color: var(--inspection-warning-fg, #CCA700); }
+/* Inside a chip the two parts are one unit, so the space between them is smaller than between chips. */
+.__inspection-icon__ {
+    width: 9px;
+    height: 9px;
+    flex-shrink: 0;
+    overlay-fit: contain;
+    margin-right: 2px;
+}
+
+.__inspection-number__ {
+    font-size: 7px;
+}
+
+/* The same three glyphs and the same three colours as the Problems rows. A severity that looked
+ * different in two places would read as two different kinds of problem. */
+.__inspection-count__.severity-error .__inspection-icon__ {
+    overlay: icon("crystalgui:general/statusError");
+    color: var(--inspection-error-fg, #F14C4C);
+}
+
+.__inspection-count__.severity-warning .__inspection-icon__ {
+    overlay: icon("crystalgui:general/warningDialog");
+    color: var(--inspection-warning-fg, #CCA700);
+}
+
+.__inspection-count__.severity-info .__inspection-icon__ {
+    overlay: icon("crystalgui:general/informationDialog");
+    color: var(--inspection-info-fg, #3794FF);
+}
+
+.__inspection-count__.severity-error .__inspection-number__ {
+    color: var(--inspection-error-fg, #F14C4C);
+}
+
+.__inspection-count__.severity-warning .__inspection-number__ {
+    color: var(--inspection-warning-fg, #CCA700);
+}
+
+.__inspection-count__.severity-info .__inspection-number__ {
+    color: var(--inspection-info-fg, #3794FF);
+}
+
+/* A DRAWN SHAPE, not a glyph: the bundled font has no U+2713, and a missing glyph renders as a blank
+ * advance — so a tick spelled as text is an empty box that reads as a layout bug. The arrows below carry
+ * the same note for the same reason. */
+.__inspection-ok__ {
+    width: 9px;
+    height: 9px;
+    flex-shrink: 0;
+    margin-right: 5px;
+    overlay: shape("checkmark");
+    overlay-fit: contain;
+    color: var(--inspection-clean-fg, #6A9955);
+}
 
 /* Drawn shapes, never glyphs: MinecraftRegular.otf has no U+25B2/U+25BC and a missing glyph renders as
  * a blank advance, so a text arrow would be an empty button that reads as a layout bug. */
@@ -723,12 +829,12 @@ quickpick ::highlight(quickpick-match) {
  * `:disabled` above is for the meaningful case — there ARE problems and you are standing on the last of
  * them — where a greyed arrow says "this direction is exhausted" and the other one is still live. With
  * nothing detected there is no such thing as a direction: both are dead permanently, and two ghosts
- * beside the word "No problems" read as controls that failed to load rather than as controls with
- * nothing to do. IntelliJ's widget collapses to the check and the label for the same reason.
+ * beside a lone tick read as controls that failed to load rather than as controls with nothing to do.
+ * IntelliJ's widget collapses to the check for the same reason, which is exactly what this leaves.
  *
  * `display: none` and not opacity, because at zero opacity they would still take their slots and still
  * hit-test — a dead target you cannot see is worse than one you can. The widget shrink-wraps its row, so
- * dropping them is also what closes the gap after the label. */
+ * dropping them is also what closes the gap after the tick. */
 .__inspection-clean__ .__inspection-previous__,
 .__inspection-clean__ .__inspection-next__ {
     display: none;
@@ -1286,6 +1392,25 @@ texteditor.__file-editor__ {
     width: 100%;
     height: 0;
     flex-grow: 1;
+
+    /* ...AND ITS BOTTOM CORNERS ARE THE ISLAND'S, now that `tabview .__pane__` no longer insets it.
+     * A tab's content sits flush against the group, so the two bottom corners of the document ARE the
+     * two bottom corners of the panel — a square editor there squares off the island beneath it. The
+     * inset used to hide this: 3px of island showed around the paper, which is what read as a black
+     * border, and the curve was still visible in it.
+     *
+     * ONLY THE BOTTOM TWO. The strip is above, so the top corners belong to it and not to us.
+     *
+     * THIS IS THE FIRST ROUNDED CLIPPER WITH A TRANSPARENT SURFACE, and it found a latent hole in the
+     * engine on the way in. A radius on a clipping element promotes it to OverflowClip.MASK, whose
+     * default mask is the element's own BACKGROUND — and four of the five shipped schemes paint a
+     * deliberately transparent paper (dark-plus.css records why), so the mask was zero everywhere and
+     * would have multiplied the whole document away. Fixed where it belongs, in UIElement.maskFill:
+     * a mask that reveals nothing is never what a clip meant. Nothing is needed here but the radius.
+     *
+     * The layer pass is free at this size — 799 frames against a 785-frame baseline over ten seconds
+     * of cgui-dock, i.e. inside the run-to-run noise, and in the wrong direction. */
+    border-radius: 0 0 var(--radius-panel, 0px) var(--radius-panel, 0px);
 }
 
 /* A PANEL THAT FOLLOWS SOMETHING, rather than being it — the Inspector, which shows whichever shader
@@ -1483,6 +1608,30 @@ projectfiletree .__project-row__ .__badge__ {
 projectfiletree .__project-row__.__selected__ {
     background-color: var(--tree-selected-bg, #2F5F9E);
     color: var(--tree-selected-fg, #FFFFFF);
+}
+
+/* ── A FILE THE COMPILER HAS REJECTED ─────────────────────────────────────────────────────────────
+ *
+ * A RULE UNDER THE NAME, never the name's colour. Both references recolour a filename for VERSION
+ * CONTROL — a red name in a project tree reads as "untracked", not "broken" — so tinting it here would
+ * be saying something the reader already has a meaning for. IntelliJ marks a broken file by underlining
+ * it and leaving the name alone, which is what this does.
+ *
+ * That needed `text-decoration-color` to exist: a decoration was drawn in the glyphs' colour by
+ * construction, so "red underline, unchanged text" was not expressible. The backend's rect had carried
+ * its own ARGB since it was written and nothing upstream could say what it was.
+ *
+ * ERRORS ONLY. A decoration on a filename is read at a glance down a whole tree and its only useful
+ * question is "is this broken"; marking warnings makes most files marked most of the time. The graded
+ * answer is in the inspection widget and the Problems panel, which have room to be precise.
+ *
+ * IN THE UA SHEET rather than in `decorations.css`, because that sheet is a VCS palette a host opts
+ * into and nothing loads it today — a rule filed there is a rule that never runs. This is structural
+ * chrome, like the severity icons the Problems panel already carries here. */
+projectfiletree .__project-row__.decoration-error text,
+tab.decoration-error {
+    text-decoration-line: underline;
+    text-decoration-color: var(--decoration-error, #F14C4C);
 }
 
 

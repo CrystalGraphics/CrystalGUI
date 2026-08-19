@@ -18,7 +18,10 @@ import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
+import com.crystalgui.ui.elements.SplitView;
 import com.crystalgui.ui.elements.editor.TextEditor;
+import com.crystalgui.ui.elements.dock.DockPanelDescriptor;
+import com.crystalgui.ui.elements.dock.DockRegion;
 import com.crystalgui.ui.elements.workbench.Workbench;
 import com.crystalgui.ui.elements.workbench.WorkbenchSession;
 import com.crystalgui.ui.elements.workbench.WorkbenchSettings;
@@ -34,6 +37,7 @@ import java.util.List;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -334,6 +338,155 @@ public class WorkbenchSessionTest extends UiTestBase {
                 .set(SettingsLayer.USER, WorkbenchSettings.RESTORE_SESSION, false);
         assertFalse("the setting must be read through the scope chain, from the root",
                 second.workbench.resolve(WorkbenchSettings.RESTORE_SESSION));
+    }
+
+    // -- Widget state ----------------------------------------------------------------------------
+
+    private static final String CONSOLE = "console";
+    private static final String SPLIT_ID = "test.rail-split";
+
+    /**
+     * A tool window holding a split it builds LAZILY — the Run panel's shape, which is the case that
+     * matters.
+     *
+     * <p>Deliberately a real {@link SplitView} rather than a stub with a float on it. What is under test
+     * is that a widget describes itself through the {@code writeState} hook it already has, so a stub
+     * implementing the storage by hand would be testing the test.</p>
+     */
+    private static final class LazyPanel extends UIElement {
+        SplitView split;
+
+        void build() {
+            if (split != null) return;
+            SplitView view = new SplitView();
+            view.first(new UIElement());
+            view.second(new UIElement());
+            view.setId(SPLIT_ID);
+            view.setSessionPersistent(true);
+            split = view;
+            addChild(view);
+        }
+    }
+
+    private static LazyPanel installPanel(Harness harness) {
+        LazyPanel panel = new LazyPanel();
+        harness.workbench.registerPanel(
+                DockPanelDescriptor.singleton(CONSOLE, "Console").region(DockRegion.PANEL),
+                ref -> panel);
+        return panel;
+    }
+
+    /**
+     * <b>A widget's own state survives the session.</b>
+     *
+     * <p>The dock record says where a panel <em>is</em>; nothing in it says anything about what is inside
+     * one, because the dock deliberately does not serialize an element tree. Without this a divider
+     * somebody dragged is forgotten on every launch, and the loss is silent — the panel comes back in the
+     * right place, at the wrong width.</p>
+     *
+     * <p>Note what the restore does <b>not</b> do: it never touches the split. The state is handed over by
+     * {@code UIWindow.registerElement} as the widget joins the tree, which is the only reason a widget
+     * built after the fact can be reached at all.</p>
+     */
+    @Test
+    public void aWidgetsOwnStateComesBack() {
+        LazyPanel saved = installPanel(first);
+        first.workbench.togglePanel(CONSOLE);
+        first.settle();
+        saved.build();
+        first.settle();
+        saved.split.setPercentage(41f);
+        first.settle();
+        first.session.save(PROJECT, 1200, 800);
+
+        Harness second = build();
+        LazyPanel restored = installPanel(second);
+        assertTrue(second.session.restore(PROJECT));
+        // The panel was open when the record was written, so the restore opens it -- toggling here would
+        // SHUT it, and the split would then be built into a detached panel that never joins a window.
+        second.settle();
+        restored.build();
+        second.settle();
+
+        assertEquals("the divider did not come back", 41f, restored.split.getPercentage(), 0.5f);
+    }
+
+    /**
+     * <b>A widget built long AFTER the restore still gets its state.</b>
+     *
+     * <p>The ordinary case, not the exception. A tool window is built the first time it is opened and a
+     * widget inside one may be built later still — the Run panel's split does not exist until a script
+     * runs. Anything applied once at startup misses all of that, and misses it silently, because the
+     * widget looks correct sitting at its default.</p>
+     *
+     * <p>Saved with the panel <b>closed</b>, so the restore has nothing to build and the assertion below
+     * is about a widget that appears minutes later as far as the session is concerned.</p>
+     */
+    @Test
+    public void aWidgetBuiltAfterTheRestoreStillGetsItsState() {
+        LazyPanel saved = installPanel(first);
+        first.workbench.togglePanel(CONSOLE);
+        first.settle();
+        saved.build();
+        first.settle();
+        saved.split.setPercentage(33f);
+        first.settle();
+        first.workbench.hidePanel(CONSOLE);
+        first.settle();
+        first.session.save(PROJECT, 1200, 800);
+
+        Harness second = build();
+        LazyPanel restored = installPanel(second);
+        assertTrue(second.session.restore(PROJECT));
+        second.settle();
+        assertNull("nothing should have been built by the restore itself", restored.split);
+
+        second.workbench.togglePanel(CONSOLE);
+        second.settle();
+        restored.build();
+        second.settle();
+        assertEquals("the divider did not arrive when the split was finally built",
+                33f, restored.split.getPercentage(), 0.5f);
+    }
+
+    /**
+     * <b>Saving does not erase the state of a widget nobody built.</b>
+     *
+     * <p>Writing only what is on screen makes every save an erasure for every widget not built that
+     * session — a divider would survive exactly as long as the habit of opening its panel, and the
+     * erosion is invisible because each individual save looks correct.</p>
+     */
+    @Test
+    public void aWidgetNobodyBuiltKeepsItsStateAcrossSaves() {
+        LazyPanel saved = installPanel(first);
+        first.workbench.togglePanel(CONSOLE);
+        first.settle();
+        saved.build();
+        first.settle();
+        saved.split.setPercentage(37f);
+        first.settle();
+        first.workbench.hidePanel(CONSOLE);
+        first.settle();
+        first.session.save(PROJECT, 1200, 800);
+
+        // A whole session that never builds it, and saves.
+        Harness second = build();
+        installPanel(second);
+        assertTrue(second.session.restore(PROJECT));
+        second.settle();
+        second.session.save(PROJECT, 1200, 800);
+
+        // A third that does.
+        Harness third = build();
+        LazyPanel restored = installPanel(third);
+        assertTrue(third.session.restore(PROJECT));
+        third.settle();
+        third.workbench.togglePanel(CONSOLE);
+        third.settle();
+        restored.build();
+        third.settle();
+        assertEquals("the untouched session wrote the divider away",
+                37f, restored.split.getPercentage(), 0.5f);
     }
 
     private static void assertArrayEqualsMessage(String message, int[] expected, int[] actual) {

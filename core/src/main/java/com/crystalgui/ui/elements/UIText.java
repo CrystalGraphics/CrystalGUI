@@ -160,12 +160,43 @@ public final class UIText extends UIElement {
         });
     }
 
+    /**
+     * Throw away the measurement and take it again on the next pass.
+     *
+     * <h3>Why a caller ever needs this</h3>
+     *
+     * <p>{@link #recompute()} is the only thing that measures, and it runs from exactly two places: a
+     * text change, and {@code onLayoutChanged()} — which itself fires only on a genuine Taffy geometry
+     * change. That pair covers a label whose text or box moves, and it has a hole: an element built and
+     * populated <em>while nothing about its geometry is settled</em> can measure zero, push zero, and
+     * then never be asked again, because zero-in-zero-out is not a geometry change. It is a deadlock
+     * rather than a lag — the width stays wrong for the element's whole life.</p>
+     *
+     * <p>The font listeners above have needed the same three steps since a theme switch left boxes sized
+     * for the previous face; this is that operation named and made available, rather than a second copy
+     * of it somewhere else.</p>
+     */
+    public void invalidateMeasurement() {
+        invalidateForFontChange();
+    }
+
     private void invalidateForFontChange() {
         shapedParagraph = null;
         shadowParagraph = null;
         getStyle().removeCandidates(LayoutProperties.WIDTH, slot -> slot.origin() == StyleOrigin.IMPORTANT);
         getStyle().removeCandidates(LayoutProperties.HEIGHT, slot -> slot.origin() == StyleOrigin.IMPORTANT);
         markTreeDirty();
+        // AND MEASURE AGAIN NOW, for the same reason the text listener says it must: with no MeasureFunc,
+        // markTreeDirty() alone re-runs Taffy against whatever this element last pushed -- and having just
+        // withdrawn that, it pushes nothing, so the box resolves to zero. Zero in, zero out is not a
+        // geometry change, so onLayoutChanged() never fires and nothing ever asks for a measurement again.
+        //
+        // That is a DEADLOCK, not a lag, and it is reachable whenever the font resolves after the element
+        // was first measured -- which is every element built mid-frame, since its cascade has not run when
+        // setText measures it. The Quick Documentation popup hit it on the first hover of a process: its
+        // signature lines measured against font-size's initial value, the real size arrived from the sheet
+        // moments later, and the width stayed at zero for the popup's whole life.
+        recompute();
     }
 
     /** Text content — bindable via {@link #bindTextTo(Property)}, reusing the same data-binding
@@ -238,6 +269,26 @@ public final class UIText extends UIElement {
      */
     public UIText forceSelfSizeWidth() {
         selfSizesWidth = Boolean.TRUE;
+        return this;
+    }
+
+    /**
+     * The other half of {@link #forceSelfSizeWidth()}: this element is <b>sized by its box</b>, so the
+     * width must come from the cascade and never from the text.
+     *
+     * <p>Without it there was no way to say so, and the auto-detect answers the wrong way round for
+     * anything whose text is <em>incidental</em> to its size. The activity bar's badge is the case that
+     * found it: in its dot form the text is {@code ""} and the sheet gives it {@code width: 10px}, but the
+     * first {@code recompute()} read a not-yet-laid-out box, latched "self-sizing", and pushed a width of
+     * <b>zero</b> at IMPORTANT — which outranks the sheet permanently. The dot was attached, classed and
+     * coloured, and 0px wide, so it had never once been visible; only counted badges worked, because their
+     * text happens to be the width you want.</p>
+     *
+     * <p>Both locks exist so a caller that knows the answer can state it rather than gamble on the race —
+     * and the badge needs <em>both</em>, since a count sizes to its text and a dot to its box.</p>
+     */
+    public UIText neverSelfSizeWidth() {
+        selfSizesWidth = Boolean.FALSE;
         return this;
     }
 
@@ -474,7 +525,8 @@ public final class UIText extends UIElement {
         if (styles.isEmpty() && !baseSpanNeeded) return Collections.emptyList();
         if (styles.isEmpty()) {
             return limit <= 0 ? Collections.emptyList()
-                    : List.of(new CgStyleSpan(0, limit, bold, italic, base, 0, null, 0f));
+                    : List.of(new CgStyleSpan(0, limit, bold, italic, base, 0, null, 0f,
+                            ownDecorationColor()));
         }
 
         // Winner per character, then run-length encoded — the only way to get disjoint spans out of
@@ -502,7 +554,7 @@ public final class UIText extends UIElement {
             if (previous != null) {
                 // Anything between the last highlight and this one carries the element's own decoration.
                 if (baseSpanNeeded && runStart > uncoveredFrom) {
-                    out.add(new CgStyleSpan(uncoveredFrom, runStart, bold, italic, base, 0, null, 0f));
+                    out.add(new CgStyleSpan(uncoveredFrom, runStart, bold, italic, base, 0, null, 0f, 0));
                 }
                 out.add(toCgSpan(previous, runStart, i, shadow, bold, italic));
                 uncoveredFrom = i;
@@ -510,9 +562,22 @@ public final class UIText extends UIElement {
             runStart = here == null ? -1 : i;
         }
         if (baseSpanNeeded && uncoveredFrom < limit) {
-            out.add(new CgStyleSpan(uncoveredFrom, limit, bold, italic, base, 0, null, 0f));
+            out.add(new CgStyleSpan(uncoveredFrom, limit, bold, italic, base, 0, null, 0f,
+                    ownDecorationColor()));
         }
         return out;
+    }
+
+    /**
+     * This element's own {@code text-decoration-color}, or {@code 0} for "the text's own colour".
+     *
+     * <p>{@code 0} is the backend's sentinel as well as CSS's {@code currentColor} default, so the two
+     * agree without a translation — an underline is the glyphs' colour unless something says otherwise.</p>
+     */
+    private int ownDecorationColor() {
+        Integer color = getStyle().getGeneralGroup()
+                .getValueSave(com.crystalgui.style.property.StylePropertyRegistry.TEXT_DECORATION_COLOR);
+        return color == null ? 0 : color;
     }
 
     /** This element's own {@code text-decoration-line}, as the cascade resolved it. */
@@ -529,14 +594,19 @@ public final class UIText extends UIElement {
         // has to be darkened, or a red keyword would paint its shadow bright red.
         int color = style.color(0);
         if (shadow && color != 0) color = shadowColorFor(color);
-        // THE ELEMENT'S WEIGHT CARRIES THROUGH THE HIGHLIGHT. `::highlight()` is deliberately barred from
-        // setting bold or italic -- CSS Pseudo-Elements 4 allows it only properties that cannot reflow the
-        // text it highlights, which is why HighlightStyle has no such field. That says a highlight may not
-        // CHANGE the weight; it does not say the highlighted characters stop having one. Passing the
-        // element's own through is what keeps a bold label bold across the three characters a search
-        // happened to match.
-        return new CgStyleSpan(start, end, bold, italic, toCgDecorations(style.decorations()), color,
-                null, 0f);
+        // THE HIGHLIGHT'S OWN WEIGHT WINS, AND THE ELEMENT'S CARRIES THROUGH WHERE IT SAYS NOTHING.
+        //
+        // `::highlight()` may now set bold and italic -- a deliberate divergence from CSS Pseudo-Elements
+        // 4, argued at HighlightStyle.ALLOWED. What has not changed is the fallback: a highlight that is
+        // silent about weight must not make its range lighter than the text around it, which is what keeps
+        // a bold label bold across the three characters a search happened to match.
+        // The highlight's own decoration colour, 0 meaning "follow the text" -- CSS's currentColor
+        // default and the backend's sentinel are the same value, so there is nothing to translate.
+        // This used to be hard-coded 0 on the reasoning that a highlight sets ONE colour; a scheme that
+        // underlines a reassigned variable in a different colour from its text is the ordinary
+        // counter-example, and CgStyleSpan has carried decorationArgb all along.
+        return new CgStyleSpan(start, end, style.isBold(bold), style.isItalic(italic),
+                toCgDecorations(style.decorations()), color, null, 0f, style.decorationColor());
     }
 
     private static Set<CgTextDecoration> toCgDecorations(Set<TextDecorationLine> source) {
@@ -968,7 +1038,7 @@ public final class UIText extends UIElement {
         if (!bold && !italic) return CgTextLayout.of(probe, family).build();
         return CgTextLayout.of(
                 new CgStyledText(probe, List.of(
-                        new CgStyleSpan(0, probe.length(), bold, italic, null, 0, null, 0f))),
+                        new CgStyleSpan(0, probe.length(), bold, italic, null, 0, null, 0f, 0))),
                 resolveGroup()).build();
     }
 }

@@ -29,13 +29,27 @@ val submoduleData = listOf(
             mapOf("module" to "com.crystalgraphics:core",
                 "projectPath" to ":core"),
             mapOf("module" to "com.crystalgraphics:platform",
-                "projectPath" to ":platform"),
-            mapOf("module" to "com.crystalgraphics:crystalgraphics-mc1201-common",
-                "projectPath" to ":mc1201:common")
+                "projectPath" to ":platform")
+            // NO mc1201-common substitution. `:mc1201:common` is commented out of CrystalGraphics'
+            // own settings.gradle.kts, and a dependencySubstitution naming a project that does not
+            // exist in the target build fails CONFIGURATION outright -- "Project with path
+            // ':mc1201:common' not found in build ':CrystalGraphics'" -- for every task, including
+            // ones that have nothing to do with Minecraft. Restore it in the same edit that
+            // uncomments mc1201 there.
         ),
 
         // mc1710-specific bootstrap args injected into RunMinecraftTask by integration.gradle.kts.
-        "coremods" to listOf("com.crystalgraphics.mc.coremod.CrystalGraphicsCoremod"),
+        //
+        // NO COREMOD. CrystalGraphicsCoremod and the whole ASM redirect layer were deleted on
+        // 2026-07-31 -- see CrystalGraphics/AGENTS.md "GL state" for why the GL mirror could never be
+        // made reliable and what replaced it. `coreModClass` is correspondingly empty in
+        // CrystalGraphics/mc1710/gradle.properties.
+        //
+        // The entry outlived the class by three months and would have been a hard launch failure the
+        // next time anyone ran the client: FML reports it as a coremod class-load problem, which reads
+        // as a CrystalGraphics bug rather than as stale build config. Left as an empty list rather than
+        // deleted so the shape stays visible if a coremod is ever needed again.
+        "coremods" to listOf<String>(),
         "tweakClasses" to listOf("org.spongepowered.asm.launch.MixinTweaker"),
         "mixinConfigs" to listOf("mixins.crystalgraphics.json")
     )

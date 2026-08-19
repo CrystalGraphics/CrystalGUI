@@ -106,7 +106,7 @@ public final class FileIconTheme {
      * Which of an icon's two drawings to use.
      *
      * <p>JetBrains ships each icon twice — {@code java.svg} and {@code java_dark.svg} — because an icon
-     * carries its own palette (that is the whole reason {@code filetypes.css} does not tint it), so it
+     * carries its own palette (which is why there is no per-type colour palette any more -- `filetypes.css` was that palette, and the icons replaced it), so it
      * cannot be recoloured for a dark background the way a monochrome glyph can. The two files are
      * genuinely different drawings, not one drawing inverted.</p>
      */

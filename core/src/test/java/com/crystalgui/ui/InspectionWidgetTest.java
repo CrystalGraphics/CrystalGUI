@@ -13,6 +13,7 @@ import java.util.List;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -58,29 +59,60 @@ public class InspectionWidgetTest extends UiTestBase {
         return null;
     }
 
-    private String statusText() {
-        UIElement status = find("__inspection-status__");
-        assertNotNull("no status readout in the tree", status);
-        return ((com.crystalgui.ui.elements.UIText) status).getText();
+    /**
+     * A severity's chip, only if it is being shown.
+     *
+     * <p>The chips are built once and hidden with {@code display: none}, so they are always <em>in</em> the
+     * tree — asserting on presence alone would pass for every severity at once.</p>
+     */
+    private UIElement chip(String severityClass) {
+        for (UIElement candidate : allWith(editor, "__inspection-count__")) {
+            if (candidate.hasClass(severityClass)) {
+                return shown(candidate) ? candidate : null;
+            }
+        }
+        return null;
+    }
+
+    private static boolean shown(UIElement element) {
+        return element.getStyle().getLayoutGroup()
+                .getValueSave(com.crystalgui.style.property.layout.LayoutProperties.DISPLAY)
+                != dev.vfyjxf.taffy.style.TaffyDisplay.NONE;
+    }
+
+    /** The number beside a severity's icon. */
+    private String countOf(String severityClass) {
+        UIElement chip = chip(severityClass);
+        assertNotNull("no visible chip for " + severityClass, chip);
+        return ((com.crystalgui.ui.elements.UIText) chip.getChildren().get(1)).getText();
+    }
+
+    private static List<UIElement> allWith(UIElement element, String cssClass) {
+        List<UIElement> out = new java.util.ArrayList<>();
+        if (element.hasClass(cssClass)) out.add(element);
+        for (UIElement child : element.getChildren()) out.addAll(allWith(child, cssClass));
+        return out;
     }
 
     /**
-     * The widget is present on a clean file, saying so.
+     * The widget is present on a clean file, saying so with the tick.
      *
-     * <p>"No problems" is the most reassuring thing it says, and a readout that appeared only when
-     * something was wrong could never say it — its absence would be indistinguishable from the feature
+     * <p>That it says <em>something</em> is the point: a readout that appeared only when something was
+     * wrong could never report a clean file, and its absence would be indistinguishable from the feature
      * being broken.</p>
      */
     @Test
     public void aCleanFileSaysSoRatherThanShowingNothing() {
         build();
-        assertEquals("No problems", statusText());
+        assertTrue("a clean file should show the tick", shown(find("__inspection-ok__")));
+        assertNull("no severity chip belongs on a clean file", chip("severity-error"));
         assertNotNull("a clean file must still carry the clean class",
                 find("__inspection-clean__"));
     }
 
+    /** One chip per severity that has something, and none for the ones that do not. */
     @Test
-    public void countsArePluralisedAndZeroCategoriesAreOmitted() {
+    public void eachSeverityGetsItsOwnCountAndZeroesAreOmitted() {
         build();
         editor.diagnostics().setAll(List.of(
                 Diagnostic.error(new TextPoint(0, 0), new TextPoint(0, 3), "e1"),
@@ -88,11 +120,11 @@ public class InspectionWidgetTest extends UiTestBase {
                 Diagnostic.warning(new TextPoint(2, 0), new TextPoint(2, 3), "w")));
         settle();
 
-        String text = statusText();
-        assertTrue(text, text.contains("2 errors"));
-        assertTrue(text, text.contains("1 warning"));
-        assertFalse("a plural 's' on a count of one", text.contains("1 warnings"));
-        assertFalse("zero categories must not be listed", text.contains("note"));
+        assertEquals("2", countOf("severity-error"));
+        assertEquals("1", countOf("severity-warning"));
+        assertNull("a severity with nothing to report is absent, not a zero", chip("severity-info"));
+        assertFalse("the tick belongs only to a file with nothing at all",
+                shown(find("__inspection-ok__")));
     }
 
     /** The worst thing in the file decides the colour class, so a file with one error among many
@@ -125,7 +157,8 @@ public class InspectionWidgetTest extends UiTestBase {
         editor.diagnostics().clear();
         settle();
 
-        assertEquals("No problems", statusText());
+        assertTrue("a fixed file goes back to the tick", shown(find("__inspection-ok__")));
+        assertNull("the error chip survived the fix", chip("severity-error"));
         assertNotNull(find("__inspection-clean__"));
         assertEquals(null, find("__inspection-errors__"));
     }

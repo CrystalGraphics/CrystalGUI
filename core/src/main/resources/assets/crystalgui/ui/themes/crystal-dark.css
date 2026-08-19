@@ -2,7 +2,7 @@
  * @id     crystalgui:crystal-dark
  * @kind   dark
  * @extends —
- * @editor-scheme crystalgui:dark-plus
+ * @editor-scheme crystalgui:islands-dark
  * @author crystalgui
  *
  * The engine's default look.
@@ -51,6 +51,10 @@ theme {
     --error-icon: #E55765;
     --warning-icon: #FFAF0F;
     --info-icon: #548AF7;
+    /* COMPLETES THE ICON TIER. error, warning and info each already have a brighter variant for a small
+     * glyph, where the body colour is too dark to read at 10px; success had none because nothing drew one
+     * until the Run panel's live mark. This is the green IntelliJ puts over its Run tool window. */
+    --success-icon: #5FAD65;
 
     --link: #4A88C7;
 
@@ -113,8 +117,6 @@ theme {
     --graph-ports-bg: #26262676;
     --graph-selection-ring: #44C0FF;
     --graph-title-bg: #56565676;
-
-    --inspection-bg: #2D2D2DE0;
 
     --region-drop-bg: #3574F055;
 

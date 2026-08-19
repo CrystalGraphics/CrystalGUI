@@ -65,6 +65,66 @@ public class NotificationsViewTest extends UiTestBase {
         return ((UIText) found).getText();
     }
 
+    /**
+     * <b>A message too long for its box wraps, and the card grows to hold it.</b>
+     *
+     * <p>The sheet says a card wraps its title rather than truncating it — a notification grows downward
+     * and has no column to line up with, so truncating just loses the message. That rule did nothing at
+     * all: {@code UIText} decides whether it sizes itself from its <em>first</em> {@code recompute()},
+     * which for a card runs before the card has ever been laid out, reads a content box of zero, and
+     * latches "self-sizing" permanently. A self-sizing {@code UIText} shapes ONE line from the whole
+     * string whatever {@code white-space} says.</p>
+     *
+     * <p>So the card measured one line tall while the text drew across two, and the second was cut off by
+     * the card's own bottom edge. Nothing about it was visible to a test that asked for the text, the
+     * classes or the computed style — all of which were correct. <b>Only the box was wrong</b>, which is
+     * why this asserts on heights.</p>
+     */
+    @Test
+    public void aLongMessageWrapsAndItsCardGrows() {
+        Notifications.error("Script failed: java.util.NoSuchElementException: No line found, and then "
+                + "a good deal more text so that no plausible panel width could hold it on one line");
+        settle();
+
+        UIElement entry = entries().get(0);
+        UIElement message = entry.querySelector("." + NotificationsView.MESSAGE_CLASS);
+        assertNotNull("no message in the card", message);
+
+        float lineHeight = 9.1f;
+        float messageHeight = message.getRuntimeCache().getHeight();
+        assertTrue("the message shaped one line and overflowed instead of wrapping: h=" + messageHeight,
+                messageHeight > lineHeight * 1.5f);
+        assertTrue("the card did not grow to hold its own wrapped message: card="
+                        + entry.getRuntimeCache().getHeight() + " message=" + messageHeight,
+                entry.getRuntimeCache().getHeight() >= messageHeight);
+    }
+
+    /**
+     * <b>And the detail stays inside the card it is in.</b>
+     *
+     * <p>The same latch on the sibling element, with a different symptom because the sheet gives the
+     * detail {@code width: 100%} rather than a flex basis: a self-sizing {@code UIText} pushes its own
+     * width at IMPORTANT, which outranks the sheet, so the detail took the width of its whole unwrapped
+     * string and drew straight out through the card's border. Asserted as a containment check rather than
+     * a height one, because that is the shape this failure takes.</p>
+     */
+    @Test
+    public void aLongDetailStaysInsideItsCard() {
+        Notifications.show(Notification.warning("Disk space low")
+                .withDetail("Less than 50 MiB is left on the system partition (C:), which is not enough "
+                        + "to finish writing the index"));
+        settle();
+
+        UIElement entry = entries().get(0);
+        UIElement detail = entry.querySelector("." + NotificationsView.DETAIL_CLASS);
+        assertNotNull("no detail in the card", detail);
+
+        float detailRight = detail.getRuntimeCache().getX() + detail.getRuntimeCache().getWidth();
+        float cardRight = entry.getRuntimeCache().getX() + entry.getRuntimeCache().getWidth();
+        assertTrue("the detail ran out past the card: detail ends at " + detailRight
+                + ", card ends at " + cardRight, detailRight <= cardRight + 0.5f);
+    }
+
     /** Newest first: what you want on opening the panel is what just happened. */
     @Test
     public void theNewestNotificationIsAtTheTop() {

@@ -30,9 +30,14 @@ public class AppearanceSettingsTest {
                 WorkbenchSettings.UI_THEME.getOptions().contains("Crystal Dark"));
         assertEquals("Crystal Dark", WorkbenchSettings.UI_THEME.getDefaultValue());
 
-        assertTrue("the scheme dropdown must offer Dark+",
+        // BOTH pairs are offered, and that is the assertion worth keeping: the default moved to Islands
+        // to match the frame, and Dark+ staying in the list is what makes the scheme axis a choice rather
+        // than a rename. A user who wants VS Code's colours is one dropdown away.
+        assertTrue("the scheme dropdown must offer Islands Dark",
+                WorkbenchSettings.EDITOR_SCHEME.getOptions().contains("Islands Dark"));
+        assertTrue("and must still offer Dark+",
                 WorkbenchSettings.EDITOR_SCHEME.getOptions().contains("Dark+"));
-        assertEquals("Dark+", WorkbenchSettings.EDITOR_SCHEME.getDefaultValue());
+        assertEquals("Islands Dark", WorkbenchSettings.EDITOR_SCHEME.getDefaultValue());
     }
 
     /**

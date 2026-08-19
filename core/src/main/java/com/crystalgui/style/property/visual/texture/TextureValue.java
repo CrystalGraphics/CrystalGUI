@@ -112,7 +112,16 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
         String name = unquote(parts.get(0).trim());
         if (name.isEmpty()) return null;
 
-        CgUiSvg icon = CgUiSvg.of(FileIconTheme.toResourcePath(name));
+        // ofIcon, NOT of(toResourcePath(...)). The two differ by the light/dark variant, and this took the
+        // path that skips it -- so every `icon()` in every stylesheet drew the LIGHT file forever, and a
+        // theme swap changed nothing. It went unnoticed because the icons that existed when this was
+        // written are `currentColor` chrome marks with no dark drawing at all, where withVariant falls back
+        // to the base file and the two spellings agree. The JetBrains node icons are the opposite case:
+        // they carry baked palettes and ship as genuinely different drawings per background.
+        //
+        // ofIcon also binds the variant LATE, at draw time, so a theme swap needs nothing re-parsed --
+        // which matters here because a parsed stylesheet is cached and would otherwise hold the old one.
+        CgUiSvg icon = CgUiSvg.ofIcon(name);
         if (icon == null) return null;
 
         for (int i = 1; i < parts.size(); i++) {

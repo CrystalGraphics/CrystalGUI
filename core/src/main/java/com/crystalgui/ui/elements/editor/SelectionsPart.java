@@ -6,8 +6,6 @@ import com.crystalgui.text.wrap.LineProjection;
 import com.crystalgui.ui.UIElement;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * The highlight bands behind every selection — one per visible <b>view line</b> it covers.
@@ -19,24 +17,41 @@ import java.util.List;
  */
 final class SelectionsPart extends EditorViewPart {
 
-    private final List<UIElement> bands = new ArrayList<>();
+    /**
+     * The bands, pooled.
+     *
+     * <p>IN THE VIEWPORT, like everything else in document coordinates. Left on the editor they were
+     * scrolled by the pose translate <em>and</em> had the offset subtracted by hand, so a band sat a
+     * screenful away from the text it marked — selecting a word painted one several lines above it.</p>
+     *
+     * <p>Appended rather than inserted first: the sheet already orders these by z-index
+     * ({@code __selection__} at -1, {@code __caret__} at 1), so the caret cannot end up under its own
+     * band.</p>
+     */
+    private final DecorationPool bands;
 
     SelectionsPart(TextEditor editor) {
         super(editor);
+        this.bands = new DecorationPool(editor::textViewport, TextEditor.SELECTION_CLASS, false);
     }
 
     @Override
     void render(int firstViewLine, int lastViewLine) {
-        if (lastViewLine < firstViewLine) return;   // nothing realised yet; updateWindow will call again
-        int used = 0;
-        for (Selection selection : editor.selections().all()) {
-            used = place(selection, firstViewLine, lastViewLine, used);
+        // HIDE WHAT WE HAVE rather than returning -- see EditorViewPart.render. A pass with no window
+        // still has to retire the bands from the last one, or they mark rows that no longer exist.
+        bands.beginPass();
+        if (!hasWindow(firstViewLine, lastViewLine)) {
+            bands.endPass();
+            return;
         }
-        for (int i = used; i < bands.size(); i++) DecorationPool.hide(bands.get(i));
+        for (Selection selection : editor.selections().all()) {
+            place(selection, firstViewLine, lastViewLine);
+        }
+        bands.endPass();
     }
 
-    private int place(Selection selection, int firstViewLine, int lastViewLine, int index) {
-        if (selection.isEmpty()) return index;
+    private void place(Selection selection, int firstViewLine, int lastViewLine) {
+        if (selection.isEmpty()) return;
         float height = editor.lineHeight();
         final float pad = editor.codeLeftPad();
         // The selection's own ends resolve with the affinity that keeps a zero-width band off the line
@@ -84,35 +99,26 @@ final class SelectionsPart extends EditorViewPart {
             float right = pad + editor.xOfView(viewLine, toView.column()) - editor.getScrollLeft()
                     + (continuesPastRow ? height * 0.4f : 0f);
 
-            final float bandInk = editor.textHeight();
-            final float top = editor.textOriginY() + viewLine * height + (height - bandInk) / 2f
-                    - editor.getScrollTop();
+            // THE LINE BOX, NOT THE INK -- and the two are not the same the moment `line-height` is not 1.
+            //
+            // This inked the band at textHeight() and centred it in the row, which leaves (height -
+            // textHeight) of unpainted row on every boundary: at the shipped `line-height: 1.4` a
+            // multi-line selection came out as a stack of separate stripes with the background showing
+            // between them. IntelliJ and VS Code both paint the full line box, so a selection spanning
+            // rows is one solid shape.
+            //
+            // It also had to change for a reason independent of taste: CurrentLinePart paints the full
+            // height with no centring, so selecting the line the caret is on left the current-line band
+            // visible as a rim above and below the selection -- two decorations describing the same row
+            // and disagreeing about where it starts.
+            final float bandInk = height;
+            final float top = editor.topOfViewLine(viewLine);
             final float bandLeft = left;
             final float width = Math.max(1f, right - left);
-            StyleGroup.defaultPipeline(bandAt(index++).getStyle().getLayoutGroup(),
+            StyleGroup.defaultPipeline(bands.next().getStyle().getLayoutGroup(),
                     l -> l.positionType(TaffyPosition.ABSOLUTE)
                             .left(bandLeft).top(top).width(width).height(bandInk));
         }
-        return index;
     }
 
-    private UIElement bandAt(int index) {
-        while (bands.size() <= index) {
-            UIElement band = new UIElement();
-            band.addClass(TextEditor.SELECTION_CLASS);
-            band.setHitTest(false);
-            band.markAsInternal();
-            // IN THE VIEWPORT, like everything else in document coordinates. Left on the editor it was
-            // scrolled by the pose translate AND had the offset subtracted by hand, so the bands sat a
-            // screenful away from the text they marked -- selecting a word painted a band several lines
-            // above it.
-            //
-            // Appended rather than inserted first: the sheet already orders these by z-index
-            // (__selection__ at -1, __caret__ at 1), so the caret cannot end up under its own band, and
-            // insertInternalChildAt is not reachable on another element anyway.
-            editor.textViewport().addInternalChild(band);
-            bands.add(band);
-        }
-        return bands.get(index);
-    }
 }

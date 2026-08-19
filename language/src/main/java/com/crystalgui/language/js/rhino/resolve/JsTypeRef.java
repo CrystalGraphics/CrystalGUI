@@ -1,0 +1,187 @@
+package com.crystalgui.language.js.rhino.resolve;
+
+import com.crystalgui.text.lang.TypeRef;
+
+import javax.annotation.Nullable;
+
+import java.util.Map;
+import java.util.List;
+
+/**
+ * A JavaScript type as this engine can know one — a name, and whether a Java class is behind it.
+ *
+ * <h3>Three cases, and the third is why this is not just {@code TypeRef.of}</h3>
+ *
+ * <ul>
+ *   <li>A <b>JavaScript</b> pseudo-type: {@code string}, {@code number}, {@code Array}, {@code Object},
+ *       {@code function}. Nothing is behind the name; the members come from the standard prototype.</li>
+ *   <li>A Java <b>instance</b> — {@code new java.util.ArrayList()} — whose members are the Java engine's
+ *       answer for that class.</li>
+ *   <li>A Java <b>class object</b> — what {@code Java.type("a.b.C")} and a bare {@code java.util.List}
+ *       evaluate to. Same name, and the members are the <em>statics</em>. Encoding it as a flag rather
+ *       than as a different name keeps {@code qualifiedName()} the thing a cache should be keyed on,
+ *       which is what {@link TypeRef} asks of it.</li>
+ * </ul>
+ */
+public final class JsTypeRef implements TypeRef {
+
+    /** What a JavaScript value's type is called when there is no Java class behind it. */
+    static final String STRING = "string";
+    static final String NUMBER = "number";
+    static final String BOOLEAN = "boolean";
+    static final String FUNCTION = "function";
+    static final String ARRAY = "Array";
+    static final String OBJECT = "Object";
+    static final String REGEXP = "RegExp";
+    static final String UNDEFINED = "undefined";
+    static final String NULL = "null";
+
+    private final String display;
+    private final String qualified;
+    private final boolean java;
+    private final boolean staticSide;
+
+    /**
+     * The property names an object carries, when they are knowable — an object literal's, or a live
+     * object's own ids after a run. Empty for every other type.
+     *
+     * <p><b>Final, like everything else here.</b> It began as a field assigned after construction, which
+     * is a trap in a value type: two literals with different properties share
+     * {@code qualifiedName() == "Object"}, so anything keying a cache on the qualified name — which
+     * {@link TypeRef} explicitly asks callers to do — would hand one literal's members to another.</p>
+     */
+    private final List<String> keys;
+
+    private JsTypeRef(String display, String qualified, boolean java, boolean staticSide,
+                      @Nullable List<String> keys) {
+        this.display = display;
+        this.qualified = qualified;
+        this.java = java;
+        this.staticSide = staticSide;
+        this.keys = keys == null || keys.isEmpty() ? List.of() : List.copyOf(keys);
+    }
+
+    /** A JavaScript type that is only a name. */
+    static JsTypeRef js(String name) {
+        return new JsTypeRef(name, name, false, false, null);
+    }
+
+    /**
+     * An object whose properties are known — a literal's, or what a run found on it.
+     *
+     * <p>The names travel on the type because that is the only place they can: {@code membersOf} is handed a
+     * {@code TypeRef} and an offset, and re-deriving "which object was this" from the offset would mean the
+     * resolver answering the same question twice — once to type the receiver and once to list it.</p>
+     */
+    static JsTypeRef object(@Nullable List<String> keys) {
+        return new JsTypeRef(OBJECT, OBJECT, false, false, keys);
+    }
+
+    /** The properties this object is known to have, or empty. */
+    List<String> keys() {
+        return keys;
+    }
+
+    /** An instance of a Java class — its instance members are what it offers. */
+    static JsTypeRef javaInstance(String binaryName) {
+        return new JsTypeRef(simpleNameOf(binaryName), binaryName, true, false, null);
+    }
+
+    /** The Java class object itself — {@code Java.type("a.b.C")} — offering its statics. */
+    static JsTypeRef javaClass(String binaryName) {
+        return new JsTypeRef(simpleNameOf(binaryName), binaryName, true, true, null);
+    }
+
+    /**
+     * What a reader is shown — {@code ArrayList}, not {@code java.util.ArrayList}.
+     *
+     * <p>Both of these used to display their binary name, so a hover read {@code var list:
+     * java.util.ArrayList} while the same popup one line down read {@code var text: CgMaterial} —
+     * because a type that came back from a MEMBER lookup was already built with a simple display name
+     * and only the ones built from a syntactic chain were not. One popup, two conventions, decided by
+     * which tier happened to answer.</p>
+     *
+     * <p>The simple name is also what the Java engine shows for the identical declaration, and what
+     * IntelliJ shows: the package is not lost, it is in the <b>owner band</b> directly above, which is
+     * the whole reason that band exists. Repeating it in the definition line spends the popup's width
+     * on something already on screen.</p>
+     *
+     * <p><b>Only the display changes.</b> {@link #qualifiedName()} keeps the binary name, which is what
+     * {@link #javaNameOf} reads and what every member lookup, policy check and probe is keyed on —
+     * shortening that would break resolution rather than tidy it.</p>
+     *
+     * <p>A nested class reads {@code Map.Entry} rather than {@code Map$Entry}: the {@code $} is the
+     * JVM's spelling and the dot is the author's, and this string is only ever shown to an author.</p>
+     */
+    static String simpleNameOf(String binaryName) {
+        if (binaryName == null || binaryName.isEmpty()) return binaryName;
+
+        // AN ARRAY IS ITS ELEMENT PLUS BRACKETS, and it arrives in the JVM's own spelling:
+        // `[Ljava.lang.String;` for one dimension, `[[I` for two of int. Handled here rather than left
+        // to the caller because this is the one place that decides how a type is written down.
+        int dimensions = 0;
+        String name = binaryName;
+        while (dimensions < name.length() && name.charAt(dimensions) == '[') dimensions++;
+        if (dimensions > 0) {
+            name = name.substring(dimensions);
+            if (name.startsWith("L") && name.endsWith(";")) {
+                name = name.substring(1, name.length() - 1);
+            } else if (!name.isEmpty()) {
+                name = PRIMITIVES.getOrDefault(name.charAt(0), name);
+            }
+        }
+
+        int lastDot = name.lastIndexOf('.');
+        String simple = lastDot < 0 ? name : name.substring(lastDot + 1);
+        simple = simple.replace('$', '.');
+        return dimensions == 0 ? simple : simple + "[]".repeat(dimensions);
+    }
+
+    /** The JVM's one-letter spellings, for the inside of an array descriptor. */
+    private static final Map<Character, String> PRIMITIVES = Map.of(
+            'Z', "boolean", 'B', "byte", 'C', "char", 'D', "double",
+            'F', "float", 'I', "int", 'J', "long", 'S', "short");
+
+    /** Whether a Java class is behind this name. */
+    boolean isJava() {
+        return java;
+    }
+
+    /** Whether this is the class object rather than an instance of it. */
+    boolean isStaticSide() {
+        return staticSide;
+    }
+
+    @Override
+    public String displayName() {
+        return display;
+    }
+
+    @Override
+    public String qualifiedName() {
+        return qualified;
+    }
+
+    @Override
+    public String toString() {
+        return display;
+    }
+
+    /** Whether {@code type} came from this engine and names a Java class. */
+    static boolean isJava(TypeRef type) {
+        return type instanceof JsTypeRef && ((JsTypeRef) type).java;
+    }
+
+    /**
+     * The Java binary name a {@code TypeRef} carries, or null.
+     *
+     * <p>Accepts a plain {@link TypeRef} too — a JSDoc {@code {java.util.List}} arrives as one, and so
+     * does anything the Java engine handed back — so a dotted qualified name is taken at its word.</p>
+     */
+    static String javaNameOf(TypeRef type) {
+        if (type == null) return null;
+        if (type instanceof JsTypeRef) return ((JsTypeRef) type).java ? type.qualifiedName() : null;
+        String qualified = type.qualifiedName();
+        return qualified != null && qualified.indexOf('.') > 0 ? qualified : null;
+    }
+}

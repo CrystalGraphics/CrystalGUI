@@ -68,14 +68,41 @@ public final class FontFamilyCache {
                 ignored -> CgFontFamilyGroup.ofRegular(family));
     }
 
+    /**
+     * The first font that <b>loads</b> is the primary; the rest supply glyphs it lacks.
+     *
+     * <h3>Which is what {@code font-family} means, and was not what this did</h3>
+     *
+     * <p>It used to require {@code paths.get(0)} specifically and throw when that one file was missing,
+     * treating the tail purely as per-glyph fallback. CSS does both: the list is a preference order for
+     * <em>which face to use</em>, and a face further down also supplies codepoints the chosen one has no
+     * glyph for. Only the second half was implemented, so naming a font you might not ship was a hard
+     * crash at first paint rather than a graceful step down the list — which is exactly what a fallback
+     * list exists to prevent, and it made a stack impossible to roll out incrementally.</p>
+     *
+     * <p>The throw survives for the case it was actually protecting: <b>nothing</b> in the list loaded.
+     * A UI with no font at all is broken, and failing loudly there is right.</p>
+     */
     private static CgFontFamily build(List<String> paths, int targetPx) {
-        CgFont primary = loadFont(paths.get(0), targetPx);
+        CgFont primary = null;
+        int primaryAt = -1;
+        for (int i = 0; i < paths.size() && primary == null; i++) {
+            primary = loadFont(paths.get(i), targetPx);
+            if (primary != null) {
+                primaryAt = i;
+            } else {
+                CrystalGuiCore.LOGGER.warn(
+                        "FontFamilyCache: font-family source failed to load, trying the next: {}",
+                        paths.get(i));
+            }
+        }
         if (primary == null) {
-            throw new IllegalStateException("FontFamilyCache: primary font-family source failed to load: " + paths.get(0));
+            throw new IllegalStateException(
+                    "FontFamilyCache: no font-family source could be loaded: " + paths);
         }
 
         List<CgFont> fallbacks = new ArrayList<>();
-        for (int i = 1; i < paths.size(); i++) {
+        for (int i = primaryAt + 1; i < paths.size(); i++) {
             CgFont fallback = loadFont(paths.get(i), targetPx);
             if (fallback != null) {
                 fallbacks.add(fallback);

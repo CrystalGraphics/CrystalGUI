@@ -1,5 +1,6 @@
 package com.crystalgui.text.syntax;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import javax.annotation.Nullable;
@@ -56,6 +57,23 @@ public record Language(
     /** No comments, no pairs — plain text, where every editing aid should stay out of the way. */
     public static final Language PLAIN = new Language("plain", null, null, null, List.of());
 
+    /**
+     * Whether typing {@code c} should open a completion list — §18.1's trigger characters.
+     *
+     * <p>Derived rather than declared, because this is a <b>record</b> and a sixth component would have to
+     * be supplied at every construction site including a caller's own custom language — which is how a
+     * field ends up defaulted to the empty set everywhere except the two places somebody remembered.</p>
+     *
+     * <p>Only {@code .} today, and only for a language that has punctuation at all. It is the one trigger
+     * §18.1 names and the one every reference implementation agrees on. {@code ::}, {@code ->} and
+     * {@code @} are real triggers in real editors and are deliberately absent: each needs a provider that
+     * answers them <em>differently</em> from a plain member access, and adding the trigger before the answer
+     * exists produces a popup listing the wrong things rather than no popup at all.</p>
+     */
+    public boolean isCompletionTrigger(char c) {
+        return c == '.' && !brackets.isEmpty();
+    }
+
     /** C-family: Java, GLSL, C, and anything close enough to share the punctuation. */
     public static Language cFamily(String name) {
         return new Language(name, "//", "/*", "*/", List.of(
@@ -78,6 +96,30 @@ public record Language(
     /** GLSL — the shader graph's language, and the reason any of this exists. */
     public static final Language GLSL = cFamily("glsl");
 
+    /**
+     * JavaScript — the C family plus one pair Java does not have.
+     *
+     * <p>The backtick is a <b>self-closing pair</b> like the quotes, so typing one writes two and typing
+     * the second walks over it. It is spelled here rather than derived because {@link #cFamily} is shared
+     * with Java and GLSL, where a backtick is not a delimiter at all — adding it there would auto-close a
+     * character those languages treat as ordinary.</p>
+     *
+     * <p>It does <b>not</b> indent, for the same reason the quotes do not: a template literal's body is
+     * text, and an auto-indent that treated it as a block would reflow the string. That the body can
+     * contain <code>${…}</code> and therefore real code is true and does not change the answer — the
+     * braces inside it are their own pair, and they indent.</p>
+     */
+    public static final Language JAVASCRIPT = javaScript();
+
+    private static Language javaScript() {
+        // DERIVED FROM cFamily rather than spelled out, because this record's own note says brackets are
+        // stated once: a second copy of the five C pairs is a second copy to get wrong.
+        Language c = cFamily("javascript");
+        List<BracketPair> pairs = new ArrayList<>(c.brackets());
+        pairs.add(new BracketPair('`', '`', false));
+        return new Language(c.name(), c.lineComment(), c.blockCommentStart(), c.blockCommentEnd(), pairs);
+    }
+
     /** @see #JAVA */
     public static Language java() {
         return JAVA;
@@ -86,6 +128,11 @@ public record Language(
     /** @see #GLSL */
     public static Language glsl() {
         return GLSL;
+    }
+
+    /** @see #JAVASCRIPT */
+    public static Language javascript() {
+        return JAVASCRIPT;
     }
 
     public boolean hasLineComment() {
@@ -104,6 +151,54 @@ public record Language(
             if (pair.open() == opener) return pair.close();
         }
         return null;
+    }
+
+    /** The opening character for {@code closer}, or {@code null} if it does not close anything. */
+    @Nullable
+    public Character openerFor(char closer) {
+        for (BracketPair pair : brackets) {
+            if (pair.close() == closer) return pair.open();
+        }
+        return null;
+    }
+
+    /**
+     * The universal three, for a language that declares no pairs of its own.
+     *
+     * <p>{@link #PLAIN} is the case, and it is not a rare one — it is what an editor has before anybody
+     * tells it what it is looking at.</p>
+     */
+    private static final String FALLBACK_OPENERS = "([{";
+    private static final String FALLBACK_CLOSERS = ")]}";
+
+    /**
+     * As {@link #closerFor}, but <b>falling back to {@code ( [ &#123;</b>} when this language declares no
+     * pairs at all.
+     *
+     * <h3>Structural, and deliberately not what auto-closing asks</h3>
+     *
+     * <p>Two questions live on these pairs and they need different answers for a language that has not
+     * declared any. <b>Auto-closing puts a CHARACTER into the document</b> and must never guess — typing
+     * {@code (} in a file nobody has identified should produce {@code (}, not {@code ()}. <b>Matching and
+     * indenting are structural</b>: they draw a highlight and they insert whitespace, and every
+     * brace-shaped text on earth wants them whether or not the editor has been told what it is reading.</p>
+     *
+     * <p>A language that <em>does</em> declare pairs overrides the fallback entirely, so a Lisp with only
+     * parentheses correctly ignores a brace rather than inheriting one.</p>
+     */
+    @Nullable
+    public Character structuralCloserFor(char opener) {
+        if (!brackets.isEmpty()) return closerFor(opener);
+        int at = FALLBACK_OPENERS.indexOf(opener);
+        return at < 0 ? null : FALLBACK_CLOSERS.charAt(at);
+    }
+
+    /** The reverse of {@link #structuralCloserFor}, with the same fallback. */
+    @Nullable
+    public Character structuralOpenerFor(char closer) {
+        if (!brackets.isEmpty()) return openerFor(closer);
+        int at = FALLBACK_CLOSERS.indexOf(closer);
+        return at < 0 ? null : FALLBACK_OPENERS.charAt(at);
     }
 
     /** Whether {@code c} closes a pair — including the quotes, which close themselves. */

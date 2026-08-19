@@ -7,8 +7,6 @@ import com.crystalgui.text.wrap.ProjectedLines;
 import com.crystalgui.ui.UIElement;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * One element per caret, plus the blink.
@@ -25,7 +23,7 @@ import java.util.List;
 final class ViewCursorsPart extends EditorViewPart {
 
     /** Pooled — a multi-caret edit that shrinks back to one must not churn elements every keystroke. */
-    private final List<UIElement> carets = new ArrayList<>();
+    private final DecorationPool carets;
 
     /**
      * Blink period in seconds — one full off-and-on cycle. Chromium's is 1.06s; the exact number is less
@@ -37,6 +35,7 @@ final class ViewCursorsPart extends EditorViewPart {
 
     ViewCursorsPart(TextEditor editor) {
         super(editor);
+        this.carets = new DecorationPool(editor::textViewport, TextEditor.CARET_CLASS, false);
     }
 
     /** Seconds per full blink cycle; {@code 0} keeps the caret solid. */
@@ -67,7 +66,7 @@ final class ViewCursorsPart extends EditorViewPart {
         if (wanted == shown) return;
         shown = wanted;
         final float opacity = wanted ? 1f : 0f;
-        for (UIElement caret : carets) {
+        for (UIElement caret : carets.all()) {
             StyleGroup.importantPipeline(caret.getStyle().getGeneralGroup(), g -> g.opacity(opacity));
         }
     }
@@ -77,20 +76,23 @@ final class ViewCursorsPart extends EditorViewPart {
         blinkClock = 0f;
         if (shown) return;
         shown = true;
-        for (UIElement caret : carets) {
+        for (UIElement caret : carets.all()) {
             StyleGroup.importantPipeline(caret.getStyle().getGeneralGroup(), g -> g.opacity(1f));
         }
     }
 
     @Override
     void render(int firstViewLine, int lastViewLine) {
-        if (lastViewLine < firstViewLine) return;   // nothing realised yet; updateWindow will call again
-        int used = 0;
-        for (Selection selection : editor.selections().all()) used = place(selection, used);
+        carets.beginPass();
+        if (!hasWindow(firstViewLine, lastViewLine)) {
+            carets.endPass();
+            return;
+        }
+        for (Selection selection : editor.selections().all()) place(selection);
         // Anything left over from a larger set of carets is collapsed rather than removed: these are
         // pooled, and a multi-caret edit that shrinks back to one would otherwise churn elements every
         // keystroke.
-        for (int i = used; i < carets.size(); i++) DecorationPool.hide(carets.get(i));
+        carets.endPass();
     }
 
     /**
@@ -103,36 +105,58 @@ final class ViewCursorsPart extends EditorViewPart {
      * worse still — at uiScale 2 a 1px caret is two physical pixels and a Minecraft {@code i} is barely
      * wider than that, so a centred caret buries the letter.</p>
      */
-    private int place(Selection selection, int index) {
+    private void place(Selection selection) {
         float height = editor.lineHeight();
         final float ink = editor.textHeight();
-        final float caretWidth = Math.max(1f, editor.getStyle().getGeneralGroup().caretWidth());
+        final float caretWidth = widthFor(selection);
         // LEFT affinity: a caret that arrived at a wrap point by moving forwards or by pressing End
         // belongs at the end of the line it came from, not blinking at the start of the next one. This is
         // the single most visible way a soft-wrap caret goes wrong, and the reason Affinity exists.
         ProjectedLines.ViewPosition view = editor.projections().toViewPosition(
                 editor.buffer().document(), selection.head(), LineProjection.Affinity.LEFT);
+        // THE SHIFT IS THE BAR'S, not every caret's. A line caret is drawn just left of the boundary for
+        // the bitmap-font reason above; a block and an underline COVER the character at the caret, so
+        // shifting them by their own width would put them over the character before it.
+        final float boundaryShift = editor.getCaretStyle() == TextEditor.CaretStyle.LINE ? caretWidth : 0f;
         final float left = editor.codeLeftPad() + editor.xOfView(view.viewLine(), view.column())
-                - caretWidth - editor.getScrollLeft();
-        final float top = editor.textOriginY() + view.viewLine() * height + (height - ink) / 2f
-                - editor.getScrollTop();
+                - boundaryShift - editor.getScrollLeft();
+        final float top = editor.topOfViewLine(view.viewLine()) + (height - ink) / 2f;
 
-        UIElement caret = caretAt(index);
+        final float caretHeight = editor.getCaretStyle() == TextEditor.CaretStyle.UNDERLINE
+                ? Math.max(1f, editor.getStyle().getGeneralGroup().caretWidth()) : ink;
+        final float caretTop = editor.getCaretStyle() == TextEditor.CaretStyle.UNDERLINE
+                ? top + ink - caretHeight : top;
+
+        UIElement caret = carets.next();
         StyleGroup.importantPipeline(caret.getStyle().getLayoutGroup(),
                 l -> l.positionType(TaffyPosition.ABSOLUTE)
-                        .left(left).top(top).width(caretWidth).height(ink));
-        return index + 1;
+                        .left(left).top(caretTop).width(caretWidth).height(caretHeight));
     }
 
-    private UIElement caretAt(int index) {
-        while (carets.size() <= index) {
-            UIElement caret = new UIElement();
-            caret.addClass(TextEditor.CARET_CLASS);
-            caret.setHitTest(false);
-            caret.markAsInternal();
-            editor.textViewport().addInternalChild(caret);
-            carets.add(caret);
-        }
-        return carets.get(index);
+    /**
+     * How wide the caret is — the whole of what a caret STYLE amounts to here.
+     *
+     * <h3>A block is one character wide, and that character has to be measured</h3>
+     *
+     * <p>Not the space advance and not a fixed fraction of the font size: this editor draws proportional
+     * fonts, so a block over {@code i} and a block over {@code W} are different widths and a single
+     * number is wrong for one of them. {@code widthOf} is the same prefix measurement the caret's own x
+     * comes from, which is what keeps the block sitting exactly on the glyph rather than beside it.</p>
+     *
+     * <p>At the end of a line there is no character to cover, so a block falls back to a line — a block
+     * drawn over nothing is a rectangle floating past the last glyph.</p>
+     */
+    private float widthFor(Selection selection) {
+        float line = Math.max(1f, editor.getStyle().getGeneralGroup().caretWidth());
+        if (editor.getCaretStyle() == TextEditor.CaretStyle.LINE) return line;
+
+        int caret = selection.head();
+        int row = editor.buffer().offsetToPoint(caret).row();
+        int column = caret - editor.buffer().document().lineStartOffset(row);
+        String text = editor.buffer().line(row);
+        if (column >= text.length()) return line;
+        float advance = editor.widthOf(row, column + 1) - editor.widthOf(row, column);
+        return advance > 0f ? advance : line;
     }
+
 }

@@ -18,7 +18,72 @@ dependencies {
     testAnnotationProcessor("org.projectlombok:lombok:1.18.44")
     testImplementation("junit:junit:4.13.2")
 
-    // Taffy
+    // CrystalGraphics, at COMPILE time only.
+    //
+    // integration.gradle.kts already adds the crystalgraphics MOD as `devOnlyNonPublishable`, which puts
+    // it on the dev RUN classpath and not the compile one -- so `com.crystalgraphics.platform.*` and
+    // `com.crystalgraphics.api.render.*` were invisible to javac while being present at runtime, which
+    // reads as a missing dependency when it is really a missing configuration.
+    //
+    // compileOnly and never `api`/`implementation`, exactly as :core declares them: CrystalGraphics is
+    // the parent MOD and is always present at runtime, so bundling any of it here would ship a second
+    // copy of classes the crystalgraphics jar already provides -- and two copies of CgPlatform means two
+    // registries, one of which is empty.
+    compileOnly("com.crystalgraphics:core:1.0.0")
+    compileOnly("com.crystalgraphics:platform:1.0.0")
+
+    // The language stack -- tree-sitter grammars and the ECJ/Rhino engine bands.
+    //
+    // compileOnly for the same reason :core is: :language compiles to Java 21 bytecode, and FML's
+    // ModDiscoverer opens every jar on the dev run classpath with asm-debug-all-5.0.3, which cannot read
+    // it. The classes reach runtime through the shadow jar, downgraded by jvmdg.
+    compileOnly project(':language')
+
+    // ASM: SHADED, and required at RUNTIME by :language — which nothing was shipping.
+    //
+    // :language declares these `api`, but this module takes :language as `compileOnly` and the shadow jar
+    // bundles :language's CLASS FILES only, so ASM reached the mod jar through no route at all. Six
+    // classes need it and three are unavoidable: ReadableView (the §15.5 remap), Safepoints (the
+    // stop-injection every script is rewritten by) and RefusedTypes (the sandbox's constant-pool scan).
+    // So NO .java script could ever have run here — it died with NoClassDefFoundError on
+    // org/objectweb/asm/commons/ClassRemapper, and the failure moved earlier when the in-memory compiler
+    // landed rather than being introduced by it. JavaScript was unaffected, which is what made it look
+    // like a Java-specific defect.
+    //
+    // RELOCATED, AND THAT IS LOAD-BEARING RATHER THAN INCIDENTAL. LaunchWrapper ships
+    // asm-debug-all-5.0.3 and `org.objectweb.asm.` is in LaunchClassLoader's parent-first exclusion
+    // list, so an unrelocated bundle would ALWAYS lose to 5.0.3 — which predates `ClassRemapper`
+    // entirely (it is `RemappingClassAdapter` there). Relocating puts our 9.10 in a package nothing else
+    // claims, so the two coexist instead of one silently winning.
+    //
+    // Safe to relocate, unlike JOML below: no ASM type appears in a signature any OTHER jar defines.
+    // :core does not reference ASM at all (checked), and CrystalGraphics does not ship it — every
+    // reference is inside :language, whose classes are rewritten by the same relocation.
+    shadowImplementation("org.ow2.asm:asm:${asmVersion}")
+    shadowImplementation("org.ow2.asm:asm-commons:${asmVersion}")
+    shadowImplementation("org.ow2.asm:asm-tree:${asmVersion}")
+
+    // Taffy: SHADED, because nothing else ships it. CrystalGUI is the only consumer -- UIElement and
+    // ElementStyle hold TaffyStyle/NodeId fields and no Taffy type ever crosses into CrystalGraphics --
+    // so relocating it can only rewrite references this jar also owns.
     shadowImplementation("dev.vfyjxf:taffy:${taffy_version}")
-    shadowImplementation("org.joml:joml:${jomlVersion}")
+
+    // JOML: compileOnly, and it MUST NOT be shadowImplementation.
+    //
+    // `shadowImplementation` RELOCATES -- dependencies.gradle's own header says "included in your jar
+    // under a renamed package name" -- and the relocation rewrites every reference in the bundled
+    // classes, including references to CrystalGraphics API whose signatures mention JOML types. So
+    // CgUiPaintContext went looking for:
+    //
+    //     CgFrameData.viewMatrix : Lcom/crystalgui/shadow/org/joml/Matrix4f;
+    //
+    // while CrystalGraphics ships org/joml unrelocated and declares it Lorg/joml/Matrix4f;. The field
+    // descriptor is part of resolution, so that is a NoSuchFieldError -- naming a field that plainly
+    // exists in both jars, which is what makes it read as a stale build rather than a shading problem.
+    //
+    // THE RULE: a library whose types appear in a cross-module signature can never be relocated by one
+    // side of that boundary. CrystalGraphics is the parent mod and always present, so JOML is simply
+    // provided -- the same treatment com.crystalgraphics:core and :platform get above, and what
+    // core/build.gradle.kts already does with its own compileOnly("org.joml:joml").
+    compileOnly("org.joml:joml:${jomlVersion}")
 }

@@ -17,6 +17,8 @@ import com.crystalgui.render.texture.CgUiRoundedRect;
 import com.crystalgui.render.texture.CgUiSprite;
 import com.crystalgui.style.ElementStyle;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.style.StyleOrigin;
+import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.GeneralGroup;
 import com.crystalgui.style.LayoutGroup;
 import com.crystalgui.style.property.StylePropertyRegistry;
@@ -624,6 +626,23 @@ public class UIElement implements SettingsScope, DataProvider {
         readState(in);
     }
 
+    /**
+     * Whether this element's {@link #writeState} survives the application closing — see
+     * {@link SessionState}.
+     *
+     * <p>Opt-in, and the alternative was considered: persisting everything that has an id would need no
+     * flag at all, but an id is set for {@code querySelector} and for CSS as often as for identity, and
+     * silently restoring a {@code TextField}'s text because somebody named it is a surprise nobody can
+     * search for. One boolean makes the intent explicit and reuses the state hook the widget already
+     * has.</p>
+     *
+     * <p><b>An {@link #setId(String) id} is required</b> and must be stable across runs — it is the only
+     * thing tying a payload to a widget that may not exist yet. Set it on the element that <em>owns</em>
+     * the state, which for a composite is usually an internal child rather than the widget.</p>
+     */
+    @Getter @Setter
+    private boolean sessionPersistent = false;
+
     // ── Networking ───────────────────────────────────────────────────────────
 
     /** Assigned by a session in document order; {@code -1} until then. See {@code NetworkIds}. */
@@ -948,6 +967,24 @@ public class UIElement implements SettingsScope, DataProvider {
         return false;
     }
 
+    /**
+     * Takes focus <b>as a pointer would</b> — no ring, no scroll. A no-op with no window attached.
+     *
+     * <p>Exists so a caller can ask for the non-ringing focus without naming {@code UIInputHandler}, which
+     * implements {@code CgSystemInput} — a CrystalGraphics <b>platform</b> type that {@code core} takes as
+     * {@code compileOnly} and therefore does not pass on. Reaching the handler from another module
+     * therefore fails to compile on a supertype nobody meant to depend on, and the useful half of that
+     * dependency is one method.</p>
+     *
+     * <p>Deliberately <em>not</em> a wrapper for the programmatic {@code requestFocus} as well: that one
+     * rings and scrolls, and the choice between them is a real decision every caller has to make rather
+     * than a default worth hiding behind a convenience.</p>
+     */
+    public void requestPointerFocus() {
+        UIWindow window = getAttachedWindow();
+        if (window != null) window.getInputHandler().requestPointerFocus(this);
+    }
+
     public boolean focusable() {
         return this.isEnabled() && this.getFocusPolicy() != FocusPolicy.NONE
                 && this.style.taffyBridge.style.display != TaffyDisplay.NONE
@@ -1042,6 +1079,75 @@ public class UIElement implements SettingsScope, DataProvider {
     /** The resize handles, present only while {@code resize} is not {@code none}. Which ones exist
      * depends on the axes the mode allows -- see {@link UIResizer.Handle}. */
     private final List<UIResizer> resizers = new ArrayList<>();
+
+    // ── Which axes the user has taken over ──────────────────────────────────
+
+    /**
+     * Whether a drag on a resize handle has claimed this element's <b>width</b>. @see #isUserSizedHeight
+     */
+    public boolean isUserSizedWidth() {
+        return userSizedWidth;
+    }
+
+    /**
+     * Whether a drag has claimed this element's <b>height</b>.
+     *
+     * <h3>Why an element records this at all</h3>
+     *
+     * <p>{@link UIResizer} writes at <b>INLINE</b> origin, deliberately and per spec — a user resize
+     * writes the style attribute "without {@code !important}", so an author's rule still wins. Every
+     * other piece of geometry this engine writes from code uses <b>IMPORTANT</b>, which beats it.</p>
+     *
+     * <p>So a widget that sizes itself — a popup measuring its content, a panel fitting its rows —
+     * silently defeats the resizer on whatever axis it writes, and does it <em>every frame</em>. The
+     * failure is worse than a dead handle: {@code CompletionPopup} could be dragged taller because
+     * nothing else wrote its height, and could not be dragged wider at all, which reads as a broken
+     * widget rather than an unsupported gesture. It hand-rolled the entire drag to escape the fight.</p>
+     *
+     * <p>The fix is not to raise the resizer's origin — that would put a drag above an author's
+     * {@code !important} and invert the ladder. It is for the widget to <b>stop writing an axis the
+     * user has taken over</b>, which is one condition rather than a re-implemented gesture, and which
+     * this is the flag for.</p>
+     */
+    public boolean isUserSizedHeight() {
+        return userSizedHeight;
+    }
+
+    private boolean userSizedWidth, userSizedHeight;
+
+    /**
+     * Called by {@link UIResizer} as a drag writes each axis.
+     *
+     * <p><b>Records only; it does not clear anything.</b> Withdrawing the IMPORTANT declarations on this
+     * axis would let the handle beat the widget — and would beat an <em>author's</em> {@code !important}
+     * in the same stroke, because the two live in one origin bucket and nothing distinguishes them.
+     * That is the inversion the ladder exists to prevent, and {@code ResizeTest} pins it.</p>
+     *
+     * <p>So a widget whose size the user may take writes that size at a <b>lower</b> origin rather than
+     * expecting the resizer to outrank it — see {@code CompletionPopup}, which writes its measured size
+     * through {@code defaultPipeline} for exactly this reason. Then the ladder does the work unaided:
+     * author {@code !important} beats the drag, the drag beats the widget's own measurement.</p>
+     */
+    void markUserSized(boolean width, boolean height) {
+        userSizedWidth |= width;
+        userSizedHeight |= height;
+    }
+
+    /**
+     * Hands both axes back to the layout — what a widget calls when its own sizing should apply again.
+     *
+     * <p><b>Removes the INLINE declarations too</b>, and it has to: clearing the flag alone would let the
+     * widget write its size again while the dragged one sat underneath at the same origin, so whichever
+     * ran last would win and the result would flicker between them. A popup that must open at its content
+     * size every time — which is what "the menu must not keep its old size" means — needs the declaration
+     * gone, not merely outranked.</p>
+     */
+    public void clearUserSizing() {
+        userSizedWidth = false;
+        userSizedHeight = false;
+        getStyle().removeCandidates(LayoutProperties.WIDTH, slot -> slot.origin() == StyleOrigin.INLINE);
+        getStyle().removeCandidates(LayoutProperties.HEIGHT, slot -> slot.origin() == StyleOrigin.INLINE);
+    }
     private Resize resizeMode = Resize.NONE;
 
     /**
@@ -1404,11 +1510,27 @@ public class UIElement implements SettingsScope, DataProvider {
 
     /** How far this can scroll before hitting the end; 0 when the content fits. */
     public float getMaxScrollLeft() {
-        return Math.max(0f, getScrollWidth() - getClientWidth());
+        return atLeastZero(getScrollWidth() - getClientWidth());
     }
 
     public float getMaxScrollTop() {
-        return Math.max(0f, getScrollHeight() - getClientHeight());
+        return atLeastZero(getScrollHeight() - getClientHeight());
+    }
+
+    /**
+     * {@code Math.max(0, x)} that also answers zero for a non-finite {@code x}.
+     *
+     * <p><b>{@code Math.max} propagates NaN</b>, so the obvious spelling of "never negative" does not
+     * make the guarantee it appears to: a content or client size that is NaN — an unmeasured viewport, a
+     * font that has not resolved, a line height computed from either — comes straight back out of the
+     * clamp, is stored as the scroll offset, and then poisons every layout that subtracts it. Nothing
+     * throws; a whole document simply stacks its rows at one y.</p>
+     *
+     * <p>A scroll extent is never legitimately NaN, so answering zero is not a guess — it is the same
+     * answer as "there is nothing to scroll", which is what an element with no measurable content has.</p>
+     */
+    private static float atLeastZero(float value) {
+        return value > 0f ? value : 0f;
     }
 
     /** Where the scroll is heading. Equal to {@link #getScrollTop()} unless a smooth scroll is in
@@ -1448,8 +1570,11 @@ public class UIElement implements SettingsScope, DataProvider {
      */
     public UIElement setScrollImmediate(float left, float top) {
         if (!isScrollContainer()) return this;
-        this.targetScrollLeft = Math.max(0f, Math.min(getMaxScrollLeft(), left));
-        this.targetScrollTop = Math.max(0f, Math.min(getMaxScrollTop(), top));
+        // CLAMPED WITH THE NaN-SAFE FLOOR, and the ordering matters: Math.min(NaN, x) is NaN, so a caller
+        // handing in a non-finite offset -- or a max computed from an unmeasured box -- would otherwise be
+        // stored verbatim however careful the clamp looked. @see #atLeastZero
+        this.targetScrollLeft = atLeastZero(Math.min(getMaxScrollLeft(), left));
+        this.targetScrollTop = atLeastZero(Math.min(getMaxScrollTop(), top));
         return applyScrollOffset(targetScrollLeft, targetScrollTop);
     }
 
@@ -1530,8 +1655,27 @@ public class UIElement implements SettingsScope, DataProvider {
      */
     public void scrollIntoView() {
         var self = getRuntimeCache();
-        for (UIElement ancestor = getParent(); ancestor != null; ancestor = ancestor.getParent()) {
+        UIElement child = this;
+        for (UIElement ancestor = getParent(); ancestor != null;
+                child = ancestor, ancestor = ancestor.getParent()) {
             if (!ancestor.isScrollContainer()) continue;
+            // A SCROLL-EXEMPT SUBTREE IS NOT CONTENT TO SCROLL TO, which is the second half of what
+            // setScrollExempt already promises and the one place that had not implemented it --
+            // getScrollWidth and getScrollHeight both do. An exempt child does not move with this
+            // ancestor's content (see the transform chain, which skips the offset for exactly this
+            // flag), so it is already where it will be drawn and "revealing" it is meaningless.
+            //
+            // Scrolling to it is worse than meaningless: it reveals the element's LAYOUT position, and
+            // an overlay pinned with `top: 0` lives at the top of the DOCUMENT. The editor's find bar is
+            // one, so focusing its input -- which Popover.hide does on every hover-doc dismissal, through
+            // requestFocus's "already focused, but may have been scrolled away since" branch -- scrolled
+            // a file from line 429 to line 1. Not to zero, but to 6: the field's own inset inside the
+            // bar, which is what made it look like a scroll bug rather than a reveal.
+            //
+            // Tested on the CHILD this ancestor was reached through, because that is what the transform
+            // chain tests -- the flag exempts an element from its PARENT's scroll, so an outer scroller
+            // still moves the whole subtree and must still be able to reveal it.
+            if (child.scrollExempt) continue;
 
             var box = ancestor.getRuntimeCache();
             float border = ancestor.getTaffyLayout().border().left;
@@ -1852,6 +1996,40 @@ public class UIElement implements SettingsScope, DataProvider {
         return getTaffyTree().getLayout(this.taffyNodeId);
     }
 
+    /**
+     * This element's top-left in the window's <b>logical</b> coordinates — the space {@code left} and
+     * {@code top} are written in.
+     *
+     * <h3>The layout chain, deliberately, and not {@code localToWorld}</h3>
+     *
+     * <p>{@code RuntimeCache.localToWorld} answers a different question and is the tempting wrong one for
+     * this. It is in <em>surface</em> pixels, with the root transform baked in — so handing its output to a
+     * style write scales the offset by {@code uiScale} a second time. And it is populated during
+     * {@code drawSubtree}, so anything asking before this element has painted reads an identity matrix and
+     * gets the window's corner. Both faults place a box neatly somewhere wrong, which is far harder to spot
+     * than a box that is obviously broken.</p>
+     *
+     * <p>The trade is that this <b>ignores {@code transform:}</b>. That is the right answer for positioning a
+     * sibling overlay against a box, and the wrong one for hit-testing — which is why the transform chain
+     * stays the definition for anything that has to agree with what was drawn.</p>
+     */
+    public final float getWindowX() {
+        float x = 0f;
+        for (UIElement walk = this; walk != null && walk.parent != null; walk = walk.parent) {
+            x += walk.getTaffyLayout().location().x;
+        }
+        return x;
+    }
+
+    /** The vertical half of {@link #getWindowX()}. */
+    public final float getWindowY() {
+        float y = 0f;
+        for (UIElement walk = this; walk != null && walk.parent != null; walk = walk.parent) {
+            y += walk.getTaffyLayout().location().y;
+        }
+        return y;
+    }
+
     protected final float getLayoutY() {
         return (parent == null ? (attachedWindow == null ? 0 : attachedWindow.getTopPos()) : getTaffyLayout().location().y);
     }
@@ -1903,6 +2081,36 @@ public class UIElement implements SettingsScope, DataProvider {
         // children keep a stale match forever and never visually react to the root's
         // hover/press/checked state.
         for (UIElement child : children) child.invalidateStyleMatch();
+    }
+
+    /**
+     * Whether any rule matching this element was authored in {@code em}. Set by the cascade.
+     *
+     * @see com.crystalgui.style.property.FontRelative
+     */
+    private boolean hasFontRelativeStyles;
+
+    /** Told by {@code StyleEngine.rematch} whether this element's rules use {@code em}. */
+    public void setHasFontRelativeStyles(boolean value) {
+        this.hasFontRelativeStyles = value;
+    }
+
+    /**
+     * Re-matches this element because its {@code font-size} changed and an {@code em} depends on it.
+     *
+     * <p>Public because the {@code font-size} property's listener lives in the style package and this is
+     * the whole of what it needs; narrow enough that it cannot become a way to force a cascade for other
+     * reasons. It is a no-op for an element with no {@code em} in any matching rule — which is nearly
+     * every element, so the ordinary cost of a font-size change is one field read.</p>
+     *
+     * <p>Deliberately <b>not</b> recursive, unlike {@link #invalidateStyleMatch}. An {@code em} is
+     * relative to the element's <em>own</em> font size, and a descendant's own size is a candidate on
+     * that descendant — which the same listener will see if it changes. Recursing would re-match a
+     * subtree on every zoom for no gain.</p>
+     */
+    public void invalidateFontRelativeStyles() {
+        if (!hasFontRelativeStyles || attachedWindow == null) return;
+        attachedWindow.getStyleEngine().markDirty(this);
     }
 
     // ── Paint ────────────────────────────────────────────────────────────────
@@ -2123,11 +2331,10 @@ public class UIElement implements SettingsScope, DataProvider {
             return;
         }
 
-        RectFill fill = resolveRoundedFill(d);
         // Opaque white is CORRECT here and must stay, despite being the literal that caused the
         // rounded-background bug: this builds a MASK, where white means "fully reveal". A mask with no
         // resolvable drawable should reveal the element's whole rounded shape, not hide it.
-        if (fill == null) fill = new ColorFill(0xFFFFFFFF);
+        RectFill fill = maskFill(d);
 
         CgUiRoundedRect mask = buildFillOnlyRoundedRect(radii, fill);
         if (borderWidthPx > 0f) {
@@ -2306,6 +2513,36 @@ public class UIElement implements SettingsScope, DataProvider {
             return sprite.hasBorder() ? new NineSliceFill(sprite) : new TextureFill(texture);
         }
         return null;
+    }
+
+    /**
+     * The fill a default mask is drawn with — <b>never one that reveals nothing.</b>
+     *
+     * <p>The rule was already stated at the call site ("a mask with no resolvable drawable should reveal
+     * the element's whole rounded shape, not hide it") and enforced only for a {@code null} fill, which
+     * {@link #resolveRoundedFill} returns for the shared {@link CgUiDrawable#EMPTY} instance alone. An
+     * <em>authored</em> transparent background does not go through that identity: {@code background:
+     * #00000000} parses to a fresh {@link CgUiQuad}, so it resolved to a real {@code ColorFill} with zero
+     * alpha and masked every child away.</p>
+     *
+     * <p>So {@code background: none} and {@code background: #00000000} — which the drawable parser itself
+     * documents as the same thing wearing different clothes — behaved <b>oppositely</b> the moment an
+     * element both clipped and had a corner radius: one revealed its subtree, the other erased it. The
+     * hole stayed latent only because every rounded clipper shipped so far paints an opaque surface;
+     * the first transparent one would have rendered blank with nothing to look at but an empty box.</p>
+     *
+     * <p>Package-private so the rule can be asserted directly. It cannot be observed any other way — the
+     * failure is invisible until something paints, and then it is total.</p>
+     *
+     * @return whether masking with this drawable would erase the subtree rather than clip it
+     */
+    static boolean revealsNothing(CgUiDrawable drawable) {
+        RectFill fill = resolveRoundedFill(drawable);
+        return fill == null || fill instanceof ColorFill(int colorArgb) && (colorArgb >>> 24) == 0;
+    }
+
+    private static RectFill maskFill(CgUiDrawable drawable) {
+        return revealsNothing(drawable) ? new ColorFill(0xFFFFFFFF) : resolveRoundedFill(drawable);
     }
 
     /** Builds a fill-only {@link CgUiRoundedRect} (no border) — used for the mask

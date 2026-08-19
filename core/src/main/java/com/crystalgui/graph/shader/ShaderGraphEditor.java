@@ -1285,7 +1285,7 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
         boolean blank = text.trim().isEmpty();
         GraphDocument loaded = blank
                 ? new GraphDocument()
-                : GraphCodecs.DOCUMENT.decode(JsonOps.INSTANCE, JsonParser.parseString(text));
+                : GraphCodecs.DOCUMENT.decode(JsonOps.INSTANCE, new JsonParser().parse(text));
         graph.load(loaded);
         restoreView();
         if (blank) {

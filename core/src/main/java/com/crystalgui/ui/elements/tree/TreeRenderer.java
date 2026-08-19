@@ -27,4 +27,14 @@ public interface TreeRenderer<T> {
 
     default void unbind(UIElement template) {
     }
+
+    /**
+     * What Copy puts on the clipboard for {@code item}. @see ListRenderer#copyTextFor
+     *
+     * <p>Takes the item rather than the flattened row: depth and expandedness are how the list is
+     * displaying it, not what it is.</p>
+     */
+    default String copyTextFor(T item) {
+        return String.valueOf(item);
+    }
 }

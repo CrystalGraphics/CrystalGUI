@@ -44,6 +44,13 @@ public final class ChromeCommands {
      * feature rather than a palette one.</p>
      */
     public static void register() {
+        // EVERY LIST AND TREE GETS A RIGHT-CLICK COPY, from one place. See ListView's hook for why the
+        // list cannot do this itself and why a per-widget opt-in was the wrong shape.
+        ContextMenu.installDefaultForLists(CommandRegistry.global());
+
+        // The Problems panel's own three rows -- see ProblemsCommands on why they are commands.
+        ProblemsCommands.register();
+        
         CommandRegistry.global().contribute(ChromeCommands.class, registry ->
                 registry.register(Command.of(SHOW_COMMANDS, "Show All Commands")
                         .binding("Mod+Shift+P", "Mod+Shift+A")

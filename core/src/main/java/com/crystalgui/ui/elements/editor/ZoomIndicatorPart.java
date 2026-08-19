@@ -115,11 +115,32 @@ final class ZoomIndicatorPart extends EditorViewPart {
     @Override
     void render(int firstViewLine, int lastViewLine) {
         if (panel == null) return;
+        // NOTHING TO PLACE WHILE IT IS HIDDEN, and this runs every frame for as long as the part exists.
+        // Both label widths are SHAPED text measurements, so an indicator nobody has summoned was paying
+        // for two of them sixty times a second -- the same trap the gutter's digit and the editor's space
+        // advance each record, arrived at from the third direction.
+        if (!panel.hasClass(TextEditor.SHOWN_CLASS)) return;
+        // AND ONLY WHEN SOMETHING IT MEASURES HAS MOVED. The two labels change on a zoom gesture and the
+        // chrome size on a theme change; between those the answer is last frame's.
+        final float chrome = label.getStyle().getGeneralGroup().fontSize();
+        String key = label.getText() + ' ' + resetButton.getText() + ' ' + chrome
+                + ' ' + editor.getClientWidth();
+        if (key.equals(placedKey)) return;
+        placedKey = key;
+        // THE THREE MULTIPLIERS BELOW STAY IN JAVA, and `em` does not retire them -- which is worth
+        // saying, because at first look they are exactly what `em` is for.
+        //
+        // They are multiples of the LABEL's font size, and the panel's `em` would resolve against the
+        // PANEL's -- two different elements, since font-size does not effectively inherit here. They
+        // happen to be the same number today (the sheet pins the label at 10 and ua/core.css gives the
+        // panel 10), so an `em` here would be right by coincidence and would quietly stop being right
+        // the first time a theme restyled the label. And the width they contribute to is measured
+        // shaped text, which no sheet can compute at all.
+        //
         // THE INDICATOR'S OWN SIZE, from the sheet -- never the editor's. It is chrome describing the
         // text, not part of it, so scaling it with the zoom made it unreadable at 4px and oversized at 40.
         // IntelliJ's stays put for the same reason. The widget pushes no font here at all; it reads what
         // the cascade gave the label and measures against that.
-        final float chrome = label.getStyle().getGeneralGroup().fontSize();
         // Measured from both children, because the reset button's label changes with the default size and
         // a box narrower than its content clips it -- the same definite-width rule the lines follow.
         final float width = textWidthOf(label.getText(), chrome)
@@ -146,6 +167,9 @@ final class ZoomIndicatorPart extends EditorViewPart {
                 l -> l.positionType(TaffyPosition.ABSOLUTE)
                         .left(left).bottom(bottom).width(width).height(height));
     }
+
+    /** What the last placement was computed from — see {@link #render}. */
+    private String placedKey = "";
 
     /** The shaped width of a string at a given size, in the editor's family. */
     private float textWidthOf(String text, float size) {

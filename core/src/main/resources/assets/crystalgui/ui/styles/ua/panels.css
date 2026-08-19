@@ -447,6 +447,45 @@ problemspanel .__problem__:hover {
     background: var(--list-hover-bg, #2A2D2E);
 }
 
+/* THE SELECTED ROW, and its absence is why clicking a problem did nothing visible.
+ *
+ * `ListView` puts `__selected__` on the row and every tree styles it **scoped to its own tag** —
+ * `projectfiletree .__project-row__.__selected__`, `navigatorview treeview .__row__.__selected__`,
+ * `quickpick .__row__.__selected__`. This panel was simply never given one, so selection was working
+ * perfectly and painting nothing: a click focused the row, selected it, and left the panel looking
+ * completely inert. Indistinguishable from a dead widget, and it sent two rounds of debugging at the
+ * input layer before anyone asked whether the state was merely invisible.
+ *
+ * SELECTION WINS OVER HOVER where both apply, spelled as an explicit compound. The two are the same
+ * kind of signal — a filled row — so at equal specificity they take turns being wrong, and the pointer
+ * resting on the selected row must not repaint it as merely hovered. `projectfiletree` answers this by
+ * dropping hover altogether (IntelliJ's Project view has no hover state); `quickpick` answers it with
+ * the compound below. This panel already ships hover, so it takes quickpick's answer rather than
+ * losing an affordance to gain consistency with the other tree.
+ *
+ * THE BASE RULE IS THE UNFOCUSED ONE, and that ordering is the whole trick — see the focused pair
+ * below. A selection is a statement about where a keystroke will land, so a panel that does not own
+ * focus must not make it in the same voice as one that does. Exactly what the tabs already do with
+ * --tab-active-bg against --tab-focused-bg. */
+problemspanel .__problem__.__selected__,
+problemspanel .__problem__.__selected__:hover {
+    background: var(--list-selected-inactive-bg, #2E3033);
+}
+
+/* ...AND THE PANEL THAT OWNS FOCUS GETS THE REAL COLOUR.
+ *
+ * `:focus-within` is the signal — the focus owner having an ancestor — and it is registered in
+ * `PseudoClasses` precisely so any container can ask it; the tabs' own rule records the two wrong turns
+ * (`dockgroup.__active__`, then a hand-maintained `__focused__` class) taken before landing here.
+ *
+ * Scoped to `problemspanel` rather than to the `viewcontainer` around it, deliberately: the panel is the
+ * thing whose focus this is about, the rule then holds wherever it is hosted, and a test can build one
+ * without a dock. */
+problemspanel:focus-within .__problem__.__selected__,
+problemspanel:focus-within .__problem__.__selected__:hover {
+    background: var(--list-selected-bg, #04395E);
+}
+
 /* Same class convention, same three glyphs, as the notification cards — a severity is a severity, and a
  * second palette for it would drift the first time either was touched. */
 problemspanel .__problem__ .__severity__ {
@@ -471,10 +510,21 @@ problemspanel .__problem__ .__severity__.severity-error {
     color: var(--problems-error-fg, #DB5C5C);
 }
 
+/* THE TRAILING SLOT FOLLOWS THE TEXT, not the row's edge — `:17` on a problem, the count on a file
+ * heading. Growing the message pushes whatever comes after it to the far right of a wide panel, where it
+ * reads as a column of its own rather than as a fact about the line beside it; at any real panel width
+ * that is most of a screen away from the message it belongs to.
+ *
+ * This rule was already written once, scoped to `.__problem-file__` so only the heading's count came
+ * back — the problem rows underneath kept pushing their line number away, which is the half you actually
+ * read. It belongs on both, so it is stated once here and the heading-only copy is gone.
+ *
+ * `flex-shrink` stays 1: with nothing growing, a long message is sized to its own content and simply
+ * shrinks when the row runs out of room, ellipsising as before with the line number still on screen. */
 problemspanel .__problem__ .__message__ {
     font-size: 7px;
     color: var(--problems-message-fg, #DFE1E5);
-    flex-grow: 1;
+    flex-grow: 0;
     flex-shrink: 1;
     min-width: 0px;
     text-overflow: ellipsis;
@@ -498,13 +548,15 @@ problemspanel .__problem__ .__line__ {
 }
 
 /* A TAGGED PROBLEM IS DRAWN DIFFERENTLY, not ranked differently — LSP's DiagnosticTag, VS Code's
- * MarkerTag. Unused code fades and deprecated code is struck through, and both keep whatever severity
- * their producer gave them; folding these into the severity ladder would force a choice between showing a
- * squiggle you cannot act on and losing the rendering entirely. */
-.__problem__.tag-unnecessary .__message__ {
-    color: var(--problems-unnecessary-fg, #6B6E76);
-}
-
+ * MarkerTag. Deprecated code is struck through and keeps whatever severity its producer gave it; folding
+ * that into the severity ladder would force a choice between showing a squiggle you cannot act on and
+ * losing the rendering entirely.
+ *
+ * UNNECESSARY IS NOT DIMMED HERE, and that is the difference between the two surfaces. In the text the
+ * fade IS the report — it says "nothing reads this" in place of a mark. A row in this panel is not the
+ * code; it is a LIST OF THINGS TO DO, every entry equally worth reading, and dimming three of five rows
+ * says they matter less rather than that the code they point at is dead. IntelliJ's panel lists an unused
+ * import at full strength for the same reason. The tag is still carried — the editor draws it. */
 .__problem__.tag-deprecated .__message__ {
     text-decoration-line: line-through;
 }
@@ -521,12 +573,19 @@ problemspanel .__problem__.__problem-file__ .__message__ {
 }
 
 /* THE FOLDER, beside the filename — VS Code's second column, dim because it disambiguates rather than
- * identifies. The same slot carries `:591` on a problem row, which is why one rule serves both. */
+ * identifies. The same slot carries `:591` on a problem row, which is why one rule serves both.
+ *
+ * NO PADDING OF ITS OWN. The row already sets `gap-all: 6px`, which applies between EVERY pair of
+ * children — so a padding here is added to a gap that is already there, and the number drifted ten
+ * pixels off the message it belongs to. It is not a separate column: a message and its line number are
+ * one location, read as one thing, and IntelliJ sets them a single space apart. The 6px that remains is
+ * the row's gap, and cancelling that for this one pair would take a negative margin here rather than a
+ * change to the row — the gap is wanted between the icon and the message. */
 problemspanel .__problem__ .__line__ {
     font-size: 7px;
     color: var(--problems-tree-line-fg, #6B6E76);
     flex-shrink: 0;
-    padding-left: 4px;
+    padding-left: -3px;
 }
 
 /* HOW MANY PROBLEMS ARE IN THIS FILE. Trailing, so it sits at a fixed place down the column rather than
@@ -561,9 +620,538 @@ problemspanel .__problem__.__leaf__ .__twisty__ {
     overlay: none;
 }
 
-/* THE COUNT FOLLOWS THE FILENAME, not the row's trailing edge. Growing the label pushes it to the far
- * right of a wide panel, where it reads as a column of its own rather than as a fact about the file
- * beside it -- and at this panel's width that is most of a screen away from the name it belongs to. */
-problemspanel .__problem__.__problem-file__ .__message__ {
-    flex-grow: 0;
+
+/* ── Run console ─────────────────────────────────────────────────────────────────────────────────────
+ *
+ * A TEXT AREA, not a list. This was a virtualised list of rows first, and the disproof was selection: an
+ * IDE console lets you drag from the middle of one line to the middle of another and copy exactly that,
+ * which a row-based list cannot express because its selection unit is the row. So the transcript is a
+ * read-only `texteditor`, and everything below that used to style rows is gone with them.
+ *
+ * The rules live here rather than in a sheet of their own because the widget is a panel and this is the
+ * panel part of the user-agent sheet. It is authored in `language/` -- a selector that matches nothing
+ * costs nothing, and the alternative is a second sheet somebody has to remember to install. */
+runpanel {
+    width: 100%;
+    /* The fill idiom, and it is the whole reason this measures at all: flex-shrink defaults to 0 here,
+     * so a grow-1 child with no basis keeps its content size and overhangs its parent. */
+    height: 0;
+    flex-grow: 1;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* The rail and the transcript, side by side. A plain ROW rather than a SplitView: a split cannot go below
+ * two panes, so "no rail until there is something to choose between" would have to be a pane sized to
+ * nothing -- which applySplit cannot express, since it writes flex-grow and that only divides FREE space.
+ * Attaching and detaching one child of a row says it exactly, and costs no divider nobody asked for. */
+runpanel .__run-body__ {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+    flex-direction: row;
+    overflow: hidden;
+}
+
+/* The rail and its toolbar, as one column. IntelliJ puts the RUN controls in a horizontal bar above the
+ * tree and the CONSOLE controls in a vertical stripe beside the output, and the split is not decorative:
+ * rerun and stop act on a SCRIPT, which is what the rail lists, while wrap and scroll act on the
+ * TRANSCRIPT. Each toolbar sits with the thing it operates on. */
+runpanel .__run-left__ {
+    flex-direction: column;
+    /* FILLS ITS PANE now that a SplitView owns the width. The minimum is stated HERE rather than on the
+     * pane, because `split.first()` is the `__split-pane__` wrapper the SplitView makes for itself -- the
+     * divider's clamp reads the pane's CONTENT, so a rule on the wrapper lands one level above where it
+     * looks and the drag can take the rail below its own minimum. */
+    width: 100%;
+    height: 100%;
+    min-width: 150px;
+    background-color: var(--run-rail-bg, #191A1C);
+    /* NO BORDER ON THIS EDGE. The SplitView's own divider is the boundary now, and a `border-width-right`
+     * here would draw nothing anyway -- the paint path takes `border().left` as its stroke width, so
+     * naming any other edge resolves and draws nothing at all. */
+}
+
+/* The run controls, on a strip spanning the panel directly under its header -- IntelliJ's arrangement,
+ * and it is about what the controls BELONG to: rerun and stop act on the run as a whole, so they sit
+ * above everything the run produced rather than inside the list of scripts. Its own separator, the same
+ * weight as the header's, so the strip reads as a band and not as the first row of the rail. */
+runpanel .__run-bar__ {
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+    width: 100%;
+    /* THE PANEL HEADER'S OWN HEIGHT, read from the same token rather than guessed at, so the two bands
+     * above the transcript are the same weight and stay that way if a theme changes one. */
+    height: var(--panel-header-h, 22px);
+    padding-left: 2px;
+    /* NO GAP. The buttons carry their own padding, so a gap on top of it separates the GLYPHS by padding
+     * + gap + padding -- three sources for one visual distance, and tuning the one named "gap" moves it
+     * least. Tightening is the button box's job; see `.__run-action__`. */
+    gap-all: 0;
+}
+
+/* The rule under it. An ELEMENT and not a border: the paint path takes `border().left` as the stroke
+ * width and strokes a uniform box, so a bottom-only hairline resolves, lays out and draws NOTHING. The
+ * find bar paid for that once and `statusbarview` spells its separators this way for the same reason. */
+runpanel .__run-sep__ {
+    width: 100%;
+    height: 1px;
+    flex-shrink: 0;
+    background-color: var(--run-rail-border, #303236);
+}
+
+runpanel .__run-rerun__ {
+    overlay: icon("crystalgui:general/action/rerun");
+}
+
+runpanel .__run-rail__ {
+    width: 100%;
+    /* THE FILL IDIOM IN A COLUMN -- a basis of zero and grow, or the rail keeps its content size and
+     * overhangs the column by however many scripts have run. */
+    height: 0;
+    flex-grow: 1;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+runpanel .__run-rail__ listview {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+}
+
+runpanel .__run-rail__ .__row__ {
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    height: 22px;
+    padding-left: 6px;
+    padding-right: 6px;
+    gap-all: 6px;
+}
+
+runpanel .__run-rail__ .__row__:hover {
+    background-color: var(--run-rail-hover-bg, #2E3033);
+}
+
+runpanel .__run-rail__ .__row__.__selected__ {
+    background-color: var(--run-rail-selected-bg, #2E436E);
+}
+
+/* The state mark. AN ICON WHERE AN ICON SAYS IT BETTER, and a dot where it does not.
+ *
+ * Finished and failed are the two states with a settled, universally-read symbol -- a tick and an error
+ * badge -- and both are ENDINGS, which is what a reader scanning a finished list is looking for. The live
+ * states have no such symbol: a spinner would be the obvious one and is wrong here, because a script that
+ * is LIVE has handlers registered and is executing nothing (see RunRail). So they stay a plain dot, whose
+ * only claim is "this one is still on".
+ *
+ * The box is the icon's size, and the dot states shrink INSIDE it rather than the box changing -- a mark
+ * that moved the name left or right depending on state would make the column ripple as scripts finish. */
+runpanel .__run-rail__ .__run-rail-glyph__ {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    overlay-fit: contain;
+}
+
+runpanel .__run-rail__ .__run-rail-glyph__.runstate-running,
+runpanel .__run-rail__ .__run-rail-glyph__.runstate-live,
+runpanel .__run-rail__ .__run-rail-glyph__.runstate-stopped,
+runpanel .__run-rail__ .__run-rail-glyph__.runstate-compiled {
+    width: 6px;
+    height: 6px;
+    margin-left: 3px;
+    margin-right: 3px;
+    border-radius: 3px;
+    background-color: var(--run-rail-idle, #6B6B6B);
+}
+
+runpanel .__run-rail__ .__run-rail-glyph__.runstate-running,
+runpanel .__run-rail__ .__run-rail-glyph__.runstate-live {
+    background-color: var(--run-live-fg, #5FAD65);
+}
+
+runpanel .__run-rail__ .__run-rail-glyph__.runstate-stopped {
+    background-color: var(--run-rail-stopped, #FFAF0F);
+}
+
+/* THE TICK CARRIES ITS OWN COLOUR and the error badge does NOT, which is not a distinction anybody would
+ * guess from the file names. `greenCheckmark.svg` names its green; `errorDialog.svg` fills its disc with
+ * `currentColor`, so it takes whatever `color` resolves to at the element — and `color` inherits, so on a
+ * rail row that is the row's near-white text. A failed script was marked with a plain white disc: not
+ * obviously an icon at all, and certainly not an error.
+ *
+ * The Problems panel's own severity rule pairs the same icon with a colour for exactly this reason (see
+ * `.__severity__.severity-error` above). `--run-rail-failed` was declared for this and never used. */
+runpanel .__run-rail__ .__run-rail-glyph__.runstate-finished {
+    overlay: icon("crystalgui:general/greenCheckmark");
+}
+
+/* THE SAME ARTWORK THE PROBLEMS PANEL USES, which is `statusError` and not `errorDialog`. They are two
+ * drawings of one idea and they do not read alike: `errorDialog` is a disc with a white exclamation
+ * PAINTED on it, while `statusError` is a single `currentColor` path with the exclamation CUT OUT of it,
+ * so the mark takes the colour of whatever is behind — dark on a dark row. Two error marks a few pixels
+ * apart in the same window, one with a white bang and one with a black one, read as two different
+ * severities rather than as one severity drawn twice. */
+runpanel .__run-rail__ .__run-rail-glyph__.runstate-failed {
+    overlay: icon("crystalgui:general/statusError");
+    color: var(--run-rail-failed, #DB5C5C);
+}
+
+/* THE FILL IDIOM IN A ROW is `width: 0; flex-grow: 1` -- neither flex-grow alone nor width: 100% works,
+ * and flex-shrink defaults to 0 here so without a basis of zero the name keeps its content size and
+ * pushes the duration off the end. */
+runpanel .__run-rail__ .__run-rail-name__ {
+    width: 0;
+    flex-grow: 1;
+    font-size: 9px;
+    color: var(--run-rail-fg, #BCBEC4);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* The elapsed time, quieter than the name. It ticks, so it must not compete with the thing it qualifies --
+ * a counter as loud as the filename makes the rail look like it is changing when only a clock is. */
+runpanel .__run-rail__ .__run-rail-time__ {
+    flex-shrink: 0;
+    font-size: 8px;
+    color: var(--run-rail-time-fg, #6B6B6B);
+    white-space: nowrap;
+}
+
+/* The transcript. It IS a `texteditor` -- a plain one, configured, not a subclass -- so it already
+ * carries the editor's monospace family, the document's surface and ink, the caret and the selection
+ * band. That is the whole point of repurposing: a console inherits every decision the editor has already
+ * made about drawing text, including the ones nobody remembers making.
+ *
+ * It was a SUBCLASS first and the panel came up blank on a paler background than the editor above it.
+ * A widget's cascade identity is its tag and a tag is its lowercased class name, so `runconsoleview`
+ * matched none of the twelve `texteditor` rules -- no surface colour, no font, no line height. Nothing
+ * below compensates for that; the fix was to stop subclassing. */
+/* THE SPLIT IS A FLEX ITEM TOO, and it is in the body's ROW -- so it takes the row idiom, `width: 0;
+ * flex-grow: 1`, exactly as the bare console did before it moved in here.
+ *
+ * A `splitview` is `width: 100%` by default, which in a row means "as wide as the body" and leaves the
+ * 26px control stripe beside it nothing at all -- and `flex-shrink` defaults to 0 here, so the stripe is
+ * not squeezed, it is pushed clean outside the box. The buttons did not move or restyle; they were
+ * off-screen. */
+runpanel .__run-body__ > splitview {
+    width: 0;
+    flex-grow: 1;
+    height: 100%;
+}
+
+/* A PANE IS A FLEX COLUMN whatever the split's orientation, so its child grows by HEIGHT -- reasoning
+ * from the split instead ("this one is horizontal, so grow by width") collapses whichever guess is wrong,
+ * and it fails as a sibling problem rather than a sizing one. */
+runpanel splitview .__split-pane__ {
+    flex-direction: column;
+}
+
+/* NO WRAPPER AROUND THE TRANSCRIPT. One was tried, to give the `System.in` row somewhere to sit under
+ * the output rather than across the whole panel, and it cost a session: the transcript stopped rendering
+ * entirely, in both the split and the no-split case, with nothing wrong with the wrapper's own box that
+ * an isolated layout probe could reproduce. The input row lives in the split's second pane instead --
+ * already a flex column, already laid out correctly, and always present when a script can be blocked on
+ * a read. @see RunPanel#refreshInput */
+runpanel .__run-console__ {
+    /* IN A SPLIT PANE, WHICH IS A FLEX COLUMN -- whatever the split's orientation. So this is the COLUMN
+     * fill idiom and not the row one: `width: 100%; height: 0; flex-grow: 1`.
+     *
+     * It was `width: 0` while the console sat in a plain row beside the rail, and moving it into the pane
+     * without turning the idiom round left it exactly zero pixels wide -- the rail rendered, the divider
+     * dragged, and the transcript was simply not there. Reasoning from the split ("this one is
+     * horizontal, so grow by width") is the same mistake in a different hat. */
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+}
+
+/* NO INSPECTION WIDGET. It reports what the analysis found in the document, and a console's document is
+ * output -- nothing analyses it, so the widget can only ever show its clean mark: a green tick in the
+ * corner of a transcript, permanently, meaning nothing. Scoped to the console class so a real editor
+ * keeps its own. */
+runpanel .__run-console__ .__inspection__ {
+    display: none;
+}
+
+/* THE POINTER OVER A NAVIGABLE SPAN. Written as a class the view swaps rather than a `cursor` set from
+ * Java, which agrees with the house rule and is also the only option: `CgCursor` lives in CrystalGraphics'
+ * platform module, which `core` takes as `compileOnly` and so does not pass on to `language/`.
+ *
+ * The underline itself is NOT here — it belongs to the `link` capture in the colour scheme, so a console
+ * hyperlink is coloured by the same scheme as everything else the editor draws. */
+runpanel .__run-console__.__over-link__ {
+    cursor: pointer;
+}
+
+/* A NAVIGABLE SPAN — `Foo.java:42` inside a stack frame.
+ *
+ * Underlined ALWAYS, not on hover, which is what IntelliJ's console does and here is also what the
+ * machinery allows: the editor caches tokens per row and clears that cache wholesale, so restyling one
+ * span under the pointer would discard every realised row's tokens on every mouse move. Hover changes the
+ * cursor and nothing else.
+ *
+ * Scoped under `runpanel` rather than added to the scheme's global capture list, because `link` is emitted
+ * by the console's tokenizer and by nothing else — a global rule would be a promise to colour something no
+ * other producer makes. The colour is still a `var`, so a theme can take it over without this moving. */
+runpanel .__run-console__ .__syntax__::highlight(link) {
+    color: var(--run-link-fg, #4A88C7);
+    text-decoration-line: underline;
+}
+
+/* WHERE A RUN BEGINS. Two runs of one script print the same thing twice, so the seam between them is the
+ * only thing saying where the last one ended -- and it used to be the same faded grey as the line that
+ * closed the run before it, in a transcript that already has quiet lines in it. A reader had to parse the
+ * text to find a boundary that should be visible while scrolling past.
+ *
+ * So the pair is a HEADING and a FOOTNOTE: the opening line is coloured to be found, and the closing one
+ * stays `comment` grey because it is a remark about a run already read. The blank line above it does the
+ * rest -- vertical space is what every terminal and log viewer uses to mean "a new section", and it needs
+ * no glyph anybody's font might lack.
+ *
+ * The accent rather than the link colour, though both are blue: a link is UNDERLINED and this is not,
+ * which is the distinction that matters when one of them is clickable and the other is a caption. */
+runpanel .__run-console__ .__syntax__::highlight(run.start) {
+    color: var(--run-boundary-fg, #3574F0);
+}
+
+/* WHAT THE READER TYPED. It is in the transcript because a terminal echoes -- without it the exchange
+ * reads as the script having answered its own question -- but it is the one line in a console that did
+ * not come from the program, and drawing it like output makes a conversation indistinguishable from a
+ * monologue. IntelliJ colours its own input echo green for exactly this.
+ *
+ * ITALIC AS WELL AS COLOURED, because colour alone is not a distinction everybody can see. `font-style`
+ * reaches the glyphs here for the same reason it does on `comment`: the editor draws its captures as
+ * styled spans, and the two faces are synthesised from the one family. (The engine's warning about
+ * weight and style painting nothing is about the PLAIN text path -- a `TextField`, or a `UIText` drawing
+ * an unspanned string -- not about this one.) */
+runpanel .__run-console__ .__syntax__::highlight(run.input) {
+    color: var(--run-input-fg, #6A9955);
+    font-style: italic;
+}
+
+/* The controls, as a vertical stripe on the console's TRAILING edge -- IntelliJ's console keeps them
+ * there and the reason is space: a full-width bar spends 22px of height to hold four glyphs, on a panel
+ * whose entire job is showing as many lines as it can. A stripe spends 24px of width instead, next to a
+ * transcript that already has room at the right of most lines. */
+runpanel .__run-stripe__ {
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+    /* Just wide enough for a button and a hair either side -- an 18px button in a 20px column. It was
+     * 26px, which put 7px of dead ground beside a 12px glyph and read as a wide empty band rather than a
+     * column of controls. IntelliJ's is the button's width and nothing more. */
+    width: 20px;
+    height: 100%;
+    padding-top: 2px;
+    gap-all: 0;
+    /* NO BORDER AND NO FILL OF ITS OWN.
+     *
+     * `border-width-left: 1px` here drew a grey frame around the whole stripe -- top, right and bottom
+     * included -- because the paint path takes `border().left` as the stroke width and strokes a UNIFORM
+     * box. That is the same property that makes a bottom-only hairline draw NOTHING: name the left and
+     * you get all four sides, name any other and you get none. Two opposite wrong results from one
+     * mistake, and only the left-hand spelling looks like it is working.
+     *
+     * The fill went with it. IntelliJ's console stripe sits on the panel's own ground -- a band of its own
+     * colour makes it read as a separate region rather than as controls belonging to the transcript. */
+}
+
+/* A console control is a glyph, not a labelled button. `min-height` is a DIFFERENT PROPERTY from
+ * `height`, so the base `button` rule's minimum wins at any specificity until it is cleared here --
+ * which is what held earlier attempts at a compact toggle open at 14px through three rounds of shrinking
+ * `height`. The padding has to go for the same reason.
+ *
+ * THE DRAWING IS 12px AND THE TARGET IS 20px, which is what the padding is for. `overlay-fit: contain`
+ * scales the artwork to the box it is given, so a 20px button drew a 20px glyph -- huge beside 9px row
+ * text. `overlay-origin: content-box` moves that box inside the padding, which shrinks and centres the
+ * drawing without shrinking the thing you have to hit. */
+runpanel .__run-action__ {
+    /* 18px BOX AROUND A 12px GLYPH. The padding is what actually sets the spacing between two icons --
+     * 3px below one and 3px above the next -- so this is the number to change when they look loose, not
+     * the parent's `gap-all`. The glyph size is held at 12 by the content box: 18 - 3 - 3.
+     *
+     * `min-height`/`min-width` are cleared because `button` carries `min-height: 14px` in the base sheet,
+     * and a minimum is a DIFFERENT PROPERTY from a height -- it wins at any specificity without ever
+     * appearing to compete, which is how three rounds of shrinking `height` once changed nothing. */
+    width: 18px;
+    height: 18px;
+    min-height: 0;
+    min-width: 0;
+    padding-all: 3px;
+    flex-shrink: 0;
+    background: none;
+    color: var(--run-action-fg, #9DA0A8);
+    overlay-origin: content-box;
+    overlay-fit: contain;
+}
+
+/* `background` and `background-color` are separate properties, and a rule setting only the colour is
+ * painted over by whatever drawable won -- which is how a placeholder red survived on a hover state for
+ * a whole release. Both, every time. */
+runpanel .__run-action__:hover {
+    background: none;
+    background-color: var(--run-action-hover-bg, #2E3033);
+    color: var(--run-action-hover-fg, #DFE1E5);
+}
+
+/* AFTER the hover rule, because `:disabled` and `:hover` are both one pseudo-class and therefore tie on
+ * specificity -- the later rule wins. A Stop that lights up while dead is the exact thing that teaches
+ * people a control does nothing. */
+runpanel .__run-action__:disabled,
+runpanel .__run-action__:disabled:hover {
+    background: none;
+    background-color: transparent;
+    color: var(--run-action-disabled-fg, #5A5D63);
+}
+
+/* RERUN AND STOP SWAP THEIR ARTWORK, because `color` cannot reach them.
+ *
+ * Both are JetBrains' own drawings and carry their own palette -- `#208A3C` green, `#DB3B4B` red, baked
+ * into the file. `currentColor` is bound at draw time and a hard fill is not, so the rule above dimmed
+ * every glyph in the panel except the two that most needed it: a dead Rerun stayed as green as a live
+ * one, and Stop stayed red with nothing to stop. Nothing in the cascade was wrong and nothing was
+ * missing, which is why it read as the enablement not working at all.
+ *
+ * The disabled twins are the same geometry recoloured to `currentColor`, so THEY take the tone above --
+ * one file serves any future state rather than one file per state per theme. `overlay-fit` is inherited
+ * from the base rule and deliberately not repeated. */
+runpanel .__run-rerun__:disabled {
+    overlay: icon("crystalgui:general/action/rerunDisabled");
+}
+
+runpanel .__run-stop__:disabled {
+    overlay: icon("crystalgui:general/action/stopDisabled");
+}
+
+/* NO `.__run-filter__` RULES. The head carried a `dropdown` picking which script's output to show, and
+ * the rail replaced it rather than joining it -- both answer the same question, and two controls for one
+ * question is the arrangement where they drift apart. The rules outlived the widget by a release, which
+ * is how a stylesheet comes to describe a UI nobody can see. */
+
+runpanel .__run-stop__ {
+    overlay: icon("crystalgui:general/action/stop");
+    overlay-fit: contain;
+}
+
+runpanel .__run-clear__ {
+    overlay: icon("crystalgui:general/action/delete");
+}
+
+runpanel .__run-wrap__ {
+    overlay: icon("crystalgui:general/action/softWrap");
+    overlay-fit: contain;
+}
+
+/* A TOGGLE THAT IS ON, said with a class the widget writes rather than `:checked` -- the engine
+ * re-evaluates a pseudo-class on its terms, and both of these are states the panel PULLS once a frame
+ * from what it is a view of. That distinction has cost a round here before.
+ *
+ * Written against `.__run-action__` rather than one button at a time, because there are now two of them:
+ * soft wrap, and the tail-follow lock behind Scroll to End. IntelliJ's console draws both the same way,
+ * and a per-button rule is how the second one comes to look different from the first. */
+runpanel .__run-action__.__on__ {
+    background: none;
+    background-color: var(--run-action-hover-bg, #2E3033);
+    color: var(--run-action-hover-fg, #DFE1E5);
+}
+
+runpanel .__run-end__ {
+    overlay: icon("crystalgui:general/action/scrollDown");
+    overlay-fit: contain;
+}
+
+/* The System.in row. Present only while something is actually blocked on a read, so it needs no empty
+ * state and no label: a field that appears IS the prompt. Monospace, because what is typed becomes a
+ * line of the transcript and would otherwise jump fonts the moment it was echoed. */
+runpanel .__run-input__ {
+    /* FULL WIDTH AND NO MARGIN. `box-sizing` is border-box here, which covers padding and border and
+     * NOT margin -- so `width: 100%` beside a 6px margin each side is 100% of the content box PLUS 12px:
+     * shifted 6px right and spilling 6px past the panel, which is exactly how it first shipped. The row
+     * spans the panel like a terminal's input does, and its left edge lines up with the transcript. */
+    width: 100%;
+    flex-shrink: 0;
+    height: 20px;
+    min-height: 0;
+    /* RESOURCE PATHS, not CSS family names. `font-family` here resolves each entry through CgIO, so a
+     * stack of familiar-looking names -- "JetBrains Mono", monospace -- loads nothing and FontFamilyCache
+     * throws rather than falling back, taking the whole harness down the first time a script asked for
+     * input. The same two entries the editor above uses, so the line typed and the line echoed into the
+     * transcript are the same face; the sans behind covers glyphs the mono lacks. */
+    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf",
+                 "crystalgraphics:IBMPlexSans-Regular.ttf";
+    font-size: 10px;
+    background-color: var(--field-bg, #131416);
+    color: var(--field-fg, #DFE1E5);
+    /* THE EDGE THAT SAYS "answer here". A console's input is the one place in the panel that takes typing,
+     * and without a border it reads as another row of output that happens to have a caret. */
+    border-width: 1px;
+    border-color: var(--accent, #3574F0);
+}
+
+/* WHAT THE PANEL SAYS BEFORE ANYTHING HAS RUN.
+ *
+ * A blank rectangle is not a neutral answer -- it reads as broken, on the panel most likely to be opened
+ * first because the activity bar has a button for it. IntelliJ centres a note here and so does every VS
+ * Code panel with a precondition; the Problems view in this application already does.
+ *
+ * ABSOLUTE AND INSET TO NOTHING, so it sits over the console's own surface rather than beside it: the
+ * transcript is empty by definition here, so there is nothing to displace, and laying the note out in
+ * the flow would give the console a share of the height it does not need. `.__run-empty__` is a child of
+ * the body, whose containing block it fills. */
+runpanel .__run-empty__ {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+/* THE BLOCK IS CENTRED; ITS LINES ARE NOT.
+ *
+ * One container cannot say both. `align-items: center` on the column above centres each line
+ * INDIVIDUALLY, so every line's left edge lands at a different x -- the two dashes stop lining up with
+ * each other and the heading sits indented between them. IntelliJ's note is a left-aligned block that
+ * happens to be centred, which is why its dashes form a column.
+ *
+ * So this one shrinks to its widest line and aligns its children to that edge, and the one above centres
+ * it. No width: a flex item with no size and `flex-shrink: 0` (the default here) takes its content size,
+ * which is exactly the widest line. */
+runpanel .__run-empty-lines__ {
+    flex-direction: column;
+    align-items: flex-start;
+    gap-all: 3px;
+}
+
+/* `font-size` DOES NOT INHERIT -- `default.css` opens with `* { font-size: 10 }`, which is a candidate at
+ * STYLESHEET origin on every element, and inheritance only applies where there is no candidate at any
+ * origin. So each line states its own, and a rule on the container above would silently do nothing. */
+runpanel .__run-empty-head__ {
+    font-size: 10px;
+    color: var(--run-empty-fg, #6B6B6B);
+    white-space: nowrap;
+}
+
+runpanel .__run-empty-line__ {
+    font-size: 10px;
+    color: var(--run-empty-fg, #6B6B6B);
+    white-space: nowrap;
+}
+
+/* The ring's eviction notice. Never hidden when non-empty: a transcript that quietly begins in the
+ * middle reads as the console having missed something. */
+runpanel .__run-notice__ {
+    width: 100%;
+    flex-shrink: 0;
+    padding-left: 6px;
+    padding-right: 6px;
+    color: var(--run-notice-fg, #7A7A7A);
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }

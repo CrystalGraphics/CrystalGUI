@@ -1,9 +1,12 @@
 package com.crystalgui.ui.elements.editor;
 
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.text.Rope;
+import com.crystalgui.text.decoration.TrackedRange;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
+import com.crystalgui.text.diagnostic.DiagnosticTag;
 import com.crystalgui.text.wrap.LineProjection;
 import com.crystalgui.ui.UIElement;
 import dev.vfyjxf.taffy.style.TaffyPosition;
@@ -30,13 +33,20 @@ import java.util.List;
  * compile error — VS Code renders hints only as a lightbulb for the same reason. The band is skipped here
  * rather than made transparent in CSS so it costs no element at all.</p>
  *
- * <h3>Positions are converted here, against the live buffer</h3>
+ * <h3>Positions come from {@link TrackedRange}, not from the diagnostic</h3>
  *
- * <p>{@link Diagnostic} stores row/column because that is what every compiler reports and because a row
- * survives edits elsewhere in the file. The offset it corresponds to is a property of the <em>current</em>
- * document, so it is resolved at render time and clamped to the row that exists now. A diagnostic naming a
- * row past the end of a shrunken buffer is dropped for this frame rather than throwing — it describes a
- * document that no longer exists, and the next compile will replace it.</p>
+ * <p>They used to be converted here, row/column against the live buffer, every frame. That is correct only
+ * at the instant the analysis landed: 300ms of typing later, every mark below the caret pointed at text it
+ * was never about. It did not look like a bug — the squiggles were merely under the wrong words, and the
+ * next compile put them back — which is what made it read as the analyser lagging.</p>
+ *
+ * <p>Now the offsets are maintained by the document (§17.1) and read straight out. The part does no
+ * conversion at all, which also means there is no second copy of the clamping rules to drift.</p>
+ *
+ * <p><b>A range that collapsed because its text was deleted draws nothing.</b> A zero-width diagnostic is
+ * legitimate — "expected ';'" points between two characters and is widened to one so it can be seen — but a
+ * range whose word was deleted would be widened into a mark over whatever moved into its place, which is a
+ * squiggle on innocent text. {@link TrackedRange#collapsedByEdit()} is what tells the two apart.</p>
  */
 final class SquigglesPart extends EditorViewPart {
 
@@ -55,21 +65,31 @@ final class SquigglesPart extends EditorViewPart {
     void render(int firstViewLine, int lastViewLine) {
         int used = 0;
         if (lastViewLine >= firstViewLine) {
-            for (Diagnostic diagnostic : editor.diagnostics().all()) {
-                if (diagnostic.severity() == DiagnosticSeverity.HINT) continue;
-                used = place(diagnostic, firstViewLine, lastViewLine, used);
+            for (TrackedRange tracked
+                    : editor.buffer().decorations().inLane(TextEditor.DIAGNOSTIC_LANE)) {
+                Diagnostic diagnostic = tracked.payload(Diagnostic.class);
+                if (diagnostic == null || diagnostic.severity() == DiagnosticSeverity.HINT) continue;
+                // DEAD WEIGHT IS FADED, NOT UNDERLINED -- and never both. The fade IS this diagnostic's
+                // rendering: it says "nothing reads this" in place of a mark, which is the whole reason
+                // DiagnosticTag exists apart from severity. Drawing a band under it as well put a yellow
+                // line under every unused import beneath text that was already grey -- two marks for one
+                // fact, and the second one saying "something is wrong here" about code whose only fault is
+                // that it is unread. IntelliJ greys an unused import and underlines nothing.
+                if (diagnostic.hasTag(DiagnosticTag.UNNECESSARY)) continue;
+                // See the class note: born-empty is a real mark, collapsed-by-edit is a mark whose text is
+                // gone. Widening the second one paints over whatever took its place.
+                if (tracked.collapsedByEdit()) continue;
+                used = place(tracked, diagnostic, firstViewLine, lastViewLine, used);
             }
         }
         for (int i = used; i < bands.size(); i++) DecorationPool.hide(bands.get(i));
     }
 
-    private int place(Diagnostic diagnostic, int firstViewLine, int lastViewLine, int index) {
+    private int place(TrackedRange tracked, Diagnostic diagnostic,
+                      int firstViewLine, int lastViewLine, int index) {
         Rope document = editor.buffer().document();
-        int lastRow = document.lineCount() - 1;
-        if (diagnostic.start().row() > lastRow) return index;
-
-        int from = offsetOf(document, diagnostic.start().row(), diagnostic.start().column());
-        int to = offsetOf(document, Math.min(diagnostic.end().row(), lastRow), diagnostic.end().column());
+        int from = Math.min(tracked.from(), document.length());
+        int to = Math.min(tracked.to(), document.length());
         // A zero-width diagnostic still has to be visible -- "expected ';'" points between two characters,
         // and a band of width 0 is a band nobody can see. One character's worth is the smallest honest mark.
         if (to <= from) to = Math.min(document.length(), from + 1);
@@ -97,34 +117,31 @@ final class SquigglesPart extends EditorViewPart {
             float left = pad + editor.xOfView(viewLine, fromView.column()) - editor.getScrollLeft();
             float right = pad + editor.xOfView(viewLine, toView.column()) - editor.getScrollLeft();
             float width = Math.max(1f, right - left);
-            // Under the text rather than through it: the band sits at the bottom of the line box, so it
-            // never overlaps a glyph and never fights the selection band drawn behind the same characters.
-            float top = editor.textOriginY() + viewLine * height + height - SQUIGGLE_HEIGHT
-                    - editor.getScrollTop();
 
             UIElement band = bandAt(index++);
             applySeverity(band, diagnostic.severity());
+            // READ FROM THE SHEET, then used for both the height and the top -- see below.
+            float thickness = styleSize(band, LayoutProperties.HEIGHT, DEFAULT_THICKNESS);
+            // Under the text rather than through it: the band sits at the bottom of the line box, so it
+            // never overlaps a glyph and never fights the selection band drawn behind the same characters.
+            float top = editor.topOfViewLine(viewLine) + height - thickness;
             StyleGroup.defaultPipeline(band.getStyle().getLayoutGroup(),
                     l -> l.positionType(TaffyPosition.ABSOLUTE)
-                            .left(left).top(top).width(width).height(SQUIGGLE_HEIGHT));
+                            .left(left).top(top).width(width).height(thickness));
         }
         return index;
     }
 
-    /** Logical px. Here rather than in the sheet because the band's TOP is computed from it, and a height
-     * the cascade could change independently would put the underline somewhere other than the bottom of
-     * the line. The sheet still owns the colour. */
-    private static final float SQUIGGLE_HEIGHT = 1f;
-
-    /** Resolves a row/column against the document as it is now, clamping a column past the end of its row —
-     * which is what {@link Diagnostic#onRow} deliberately produces. */
-    private static int offsetOf(Rope document, int row, int column) {
-        int clampedRow = Math.max(0, Math.min(row, document.lineCount() - 1));
-        int rowStart = document.lineStartOffset(clampedRow);
-        int rowEnd = document.lineEndOffset(clampedRow);
-        if (column >= rowEnd - rowStart) return rowEnd;
-        return rowStart + Math.max(0, column);
-    }
+    /**
+     * What the band is drawn at when the sheet has not been matched yet — <b>not</b> the styling.
+     *
+     * <p>{@code .__squiggle__ { height: 1px }} in {@code ua/editor.css} is the real value. This used to be
+     * a Java constant under a note defending it: the band's <em>top</em> is computed from its height, so a
+     * height the cascade could change independently would put the underline somewhere other than the
+     * bottom of the line box. True, and true only of a value the part <b>writes</b> — reading it once and
+     * using it for both is what makes the two incapable of disagreeing, whatever a theme says.</p>
+     */
+    private static final float DEFAULT_THICKNESS = 1f;
 
     /** Set AND cleared, all three, because bands are recycled — a band that underlined an error and is
      * reused for a warning would otherwise carry both classes and take whichever the cascade preferred. */
@@ -151,6 +168,9 @@ final class SquigglesPart extends EditorViewPart {
             editor.textViewport().addInternalChild(band);
             bands.add(band);
         }
-        return bands.get(index);
+        // BACK INTO LAYOUT. Retirement is `display: none` at IMPORTANT -- see DecorationPool.hide for why
+        // a zero box alone cannot survive a sheet that sizes this class -- so taking a band out of the
+        // pool has to undo it.
+        return DecorationPool.show(bands.get(index));
     }
 }

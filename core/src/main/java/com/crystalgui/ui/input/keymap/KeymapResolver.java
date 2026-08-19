@@ -81,6 +81,25 @@ public final class KeymapResolver {
      *         case the caller must treat the key as consumed and not fall through to Tab traversal or
      *         Space/Enter activation.
      */
+    /**
+     * Whether a stroke is safe to fire while a text control has focus.
+     *
+     * <p>The guard exists so an application binding cannot steal a keystroke somebody is typing. Two
+     * things make a stroke unable to type: a real modifier (Ctrl/Alt/Super -- <b>not</b> Shift, which just
+     * makes a capital), or a key that produces no character at all.</p>
+     *
+     * <p>The second half was missing, and it is not an edge case: it meant <b>no {@code Shift+F<n>}
+     * binding could fire while an editor had focus</b>, which is the only place anybody presses one.
+     * IntelliJ runs on Shift+F10 from inside the editor; ours resolved to nothing and read as a dead key
+     * -- the search went to a harness debug binding twice before landing here.</p>
+     *
+     * <p>Function keys are the whole of the gap in practice: the other non-typing keys (arrows, Home,
+     * Enter, Escape) are consumed by the focused control before the keymap is ever asked.</p>
+     */
+    private static boolean escapesTypingGuard(KeyStroke stroke) {
+        return stroke.hasNonShiftModifier() || stroke.isFunctionKey();
+    }
+
     public boolean resolve(@Nullable UIElement focused, KeyStroke stroke, KeyEventType type,
                            long nowMillis) {
         return resolve(focused, stroke, type, nowMillis, false);
@@ -153,7 +172,7 @@ public final class KeymapResolver {
             for (KeyBinding binding : keymap.bindings()) {
                 if (binding.getEventType() != type) continue;
                 if (!binding.getChord().startsWith(attempt)) continue;
-                if (typing && !binding.isAllowedWhileTyping() && !stroke.hasNonShiftModifier()) continue;
+                if (typing && !binding.isAllowedWhileTyping() && !escapesTypingGuard(stroke)) continue;
 
                 if (binding.getChord().length() > attempt.size()) {
                     // A longer chord is still in the running: remember the prefix, but keep scanning in
@@ -189,7 +208,7 @@ public final class KeymapResolver {
             if (userBound.contains(binding.getCommandId())) continue;
             if (binding.getEventType() != type) continue;
             if (!binding.getChord().startsWith(attempt)) continue;
-            if (typing && !binding.isAllowedWhileTyping() && !stroke.hasNonShiftModifier()) continue;
+            if (typing && !binding.isAllowedWhileTyping() && !escapesTypingGuard(stroke)) continue;
             if (binding.getChord().length() > attempt.size()) {
                 prefixMatched = true;
                 continue;
@@ -256,7 +275,7 @@ public final class KeymapResolver {
                 // and nothing has ever wanted one — space-to-pan is the whole use case.
                 if (binding.getChord().length() != 1) continue;
                 if (!binding.getChord().at(0).equals(stroke)) continue;
-                if (typing && !binding.isAllowedWhileTyping() && !stroke.hasNonShiftModifier()) continue;
+                if (typing && !binding.isAllowedWhileTyping() && !escapesTypingGuard(stroke)) continue;
                 if (fire(binding, focused)) return true;
             }
         }

@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.workbench.document;
 
+import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.notify.StatusBar;
 import com.crystalgui.core.notify.StatusBarAlignment;
 import com.crystalgui.core.notify.StatusBarEntry;
@@ -33,7 +34,7 @@ import java.util.List;
  * keeps that baseline now, because it is the thing that does the reading and writing.</p>
  */
 public record TextFileDocument(TextEditor editor, Resource resource)
-        implements FileDocument, DocumentViewState {
+        implements FileDocument, DocumentViewState, Disposable {
 
     /** Keys of the stored view state. Short because there is one entry per open file per session. */
     private static final String CARET = "caret";
@@ -145,7 +146,7 @@ public record TextFileDocument(TextEditor editor, Resource resource)
         return ending == LineEnding.CRLF ? "CRLF (Windows)" : "LF (Unix and macOS)";
     }
 
-    /** The editor's own set — a text document's problems are the editor's to keep. */
+    /** The BUFFER's set, reached through the editor — a document's problems belong to its document. */
     @Override
     public DiagnosticSet diagnostics() {
         return editor.diagnostics();
@@ -216,6 +217,31 @@ public record TextFileDocument(TextEditor editor, Resource resource)
         // setScrollImmediate, not setScrollTop: the smooth-scroll path would animate from 0 to wherever
         // the file was left, so reopening a file scrolls itself down in front of you.
         if (scroll > 0f) editor.setScrollImmediate(editor.getScrollLeft(), scroll);
+    }
+
+    /**
+     * Releases the parse tree and the engine when the document ends.
+     *
+     * <h3>Nothing did this, and the leak was invisible for the same reason all of these are</h3>
+     *
+     * <p>{@code SyntaxTokenizer.close()} has existed since the seam did, and the tree-sitter backend's
+     * own test opens and closes a hundred documents to prove it releases natives. Nothing in the
+     * application ever called it: {@code OpenDocuments.close} disposes a document that implements
+     * {@link Disposable}, and this record did not — so a text document's parse tree, its query cursor and
+     * its parser survived until the process ended. The graph editor was covered because it holds GPU
+     * memory somebody noticed; a native parse tree is the same problem without a visible symptom.</p>
+     *
+     * <p><b>Here rather than on the widget</b>, because a widget's teardown is the wrong event: the dock
+     * rebuilds every panel on every split and drag, so freeing the tree there would release it for a
+     * document that is still open and rebuild it on the next frame. The document is what ends.</p>
+     *
+     * <p><b>What is still not covered</b>, stated because it would otherwise read as fixed: closing a tab
+     * does not reach {@code OpenDocuments.close} yet — only deleting or moving the file does — so this
+     * runs on the paths that exist today and will cover tab-close when the dock routes it.</p>
+     */
+    @Override
+    public void dispose() {
+        editor.disposeLanguage();
     }
 
     /** {@code "3,17,42"} — one string rather than a list of one-field maps, which is what a list costs. */
