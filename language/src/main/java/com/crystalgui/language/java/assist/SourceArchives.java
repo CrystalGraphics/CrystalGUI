@@ -66,7 +66,56 @@ public final class SourceArchives {
 
     /** The archives a classpath resolves to, in the order they will be searched. */
     static SourceArchives over(List<String> classpath) {
-        return new SourceArchives(discover(classpath));
+        List<Archive> archives = discover(classpath);
+        announce(archives);
+        return new SourceArchives(archives);
+    }
+
+    /**
+     * One line saying what was found — because <b>attached and unattached look the same</b>.
+     *
+     * <p>The engine's own rule, applied here: a capability that can be silently skipped has to say it is
+     * on. A quoted declaration and an assembled one are both plausible renderings of the same member, so
+     * a {@code src.zip} that was looked for in the wrong place produces a popup nobody reports — it just
+     * reads as the popup being a bit thin. There is nothing to search a log for either, because nothing
+     * failed.</p>
+     *
+     * <p>Cheap enough to be unconditional: {@code over} is called once per (classpath, JDK archive) pair
+     * and the result is cached for the session, so this is one line at the first hover and never again.
+     * The <b>platform</b> archives are named individually because which one answered is the whole
+     * question; the {@code -sources.jar}s are counted, because a modded classpath has hundreds and
+     * listing them would bury the answer.</p>
+     */
+    private static void announce(List<Archive> archives) {
+        int libraries = 0;
+        int platforms = 0;
+        boolean bundled = false;
+        String first = null;
+        for (Archive archive : archives) {
+            if (archive instanceof ResourceArchive) {
+                bundled = true;
+            } else if (archive.platform()) {
+                platforms++;
+                // THE PATH, not toString(): "src.zip" is the answer to a different question -- which
+                // JDK answered is the whole point, and every candidate is called the same thing.
+                if (first == null) first = ((ZipArchive) archive).path();
+            } else {
+                libraries++;
+            }
+        }
+        StringBuilder line = new StringBuilder("[crystalgui] source attachment: ");
+        if (platforms == 0) {
+            line.append("no JDK sources found");
+        } else {
+            // THE FIRST ONE AND A COUNT. A developer's machine turned out to hold TEN -- the toolchain
+            // caches alone are half of that -- and listing them buries the one fact worth reading. The
+            // first is the one asked first, and they are asked in order until one has the file.
+            line.append("JDK ").append(first);
+            if (platforms > 1) line.append(" (+").append(platforms - 1).append(" more)");
+        }
+        line.append(libraries == 0 ? ", no library sources" : ", " + libraries + " library source jars");
+        line.append(bundled ? ", ours bundled" : ", ours NOT bundled");
+        System.err.println(line);
     }
 
     /** A source file and <b>which kind of archive it came out of</b>, which decides how it is parsed. */
@@ -428,6 +477,11 @@ public final class SourceArchives {
         @Override
         public boolean platform() {
             return platform;
+        }
+
+        /** Where this archive is — the only thing that distinguishes one {@code src.zip} from another. */
+        String path() {
+            return file.getAbsolutePath();
         }
 
         /** Visible for testing — how many source files this archive offers. */
