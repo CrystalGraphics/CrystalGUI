@@ -112,6 +112,7 @@ public final class JsLanguage {
         // THE POLICY REACHES A FRESHLY OPENED ANALYSER. A host that restricted before registering -- or
         // that registers twice -- must not end up with an analyser obeying allow-all.
         analyzer.restrictTo(policy::allowsClass);
+        analyzer.restrictMembersTo(policy::allowsMember);
         // AND THE COMPATIBILITY BAND REACHES A FRESHLY OPENED ANALYSER, for the reason the policy above
         // does: a host that set it before registering must not end up with an analyser warning about
         // nothing.
@@ -166,7 +167,10 @@ public final class JsLanguage {
      */
     public static synchronized void restrictTo(@Nullable ScriptPolicy target) {
         policy = target == null ? ScriptPolicy.allowAll() : target;
-        if (analyzer != null) analyzer.restrictTo(policy::allowsClass);
+        if (analyzer != null) {
+            analyzer.restrictTo(policy::allowsClass);
+            analyzer.restrictMembersTo(policy::allowsMember);
+        }
     }
 
     /** The policy every JavaScript surface obeys. */
