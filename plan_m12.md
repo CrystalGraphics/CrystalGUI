@@ -1232,6 +1232,36 @@ Costs, stated: `language/` gains `compileOnly` on `com.crystalgraphics:platform`
 CrystalGraphics dependency at all before. Defensible (pure SPI, `core` takes it the same way, present on
 every host including a dedicated server) and deliberate rather than noticed later.
 
+### Finding 2 — only band 8 is bundled, and 1.7.10 on Java 17 is a real configuration ◐ decided, not built
+
+`EngineBand.detect()` keys purely on the host JVM and `forFeatureVersion` returns the highest band at or
+below it, with **no fallback downward anywhere**. GTNH ships lwjgl3ify and players do run 1.7.10 on 17+.
+On such a client `bundledSource()` looks for `assets/crystalgui/engines/17/`, finds no index, and returns
+empty — one stderr line, and the whole language stack degrades to grammar-only colouring. The same class
+of defect as the one that cost this phase an evening: invisible on the host that builds it.
+
+Shipping all three bands is 41 MB and was rejected. The numbers say why it need not be: the irreducible
+core (jdt.core + ecj + rhino) is 8.4–9.3 MB per band, and the rest is Eclipse platform closure we never
+touch — **`jna` + `jna-platform` alone are 3.4 MB of band 17**, pulled in by `core.resources`, which is
+the workspace layer this engine never opens.
+
+Decided:
+
+- **Trim the closure**, verified twice — a constant-pool reachability scan (the idiom
+  `ExecutionNeedsNoGrammarTest` already uses: *a reference in the constant pool is the real question*),
+  then `smokeEngineBands` proving it on a real JVM of each band's era.
+- **Drop band 11 from the shipped set.** lwjgl3ify targets 17+, vanilla is 8; Java 11–16 on 1.7.10 is not
+  a configuration anyone ships. Keep it for dev and tests.
+- **Bundling becomes a build flag** (`-PcgBundleBands`), defaulting to **band 8 for 1.7.10**.
+- **Download is the fallback, not the mechanism** — a third `EngineSource` behind
+  `firstOf(configured, bundled, downloaded)`, which already returns the first non-empty answer and so
+  needs no change. Unlike the mapping data, **Maven Central publishes a `.sha1` per artifact**, so these
+  can be digest-pinned properly; `CacheFiles.install` already takes one.
+
+The progress UI that download needs is planned in
+[`CrystalGUI_P6.1.13_PROGRESS_PLAN.md`](CrystalGUI_P6.1.13_PROGRESS_PLAN.md), which also takes the MCP
+mapping fetch off the bare `new Thread` it runs on today.
+
 ### Carried forward, not fixed
 
 - **`cacheRoot()` is the only client-shaped member** of `ScriptService1710` — it reads
