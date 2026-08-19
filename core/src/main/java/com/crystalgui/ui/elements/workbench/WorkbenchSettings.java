@@ -45,8 +45,21 @@ public final class WorkbenchSettings {
 
     // ── Explorer ────────────────────────────────────────────────────────────────────────────────
 
+    /**
+     * <b>Off by default</b>, which is IntelliJ's posture rather than VS Code's.
+     *
+     * <p>VS Code ships {@code explorer.autoReveal} on and IntelliJ ships "Always Select Opened File" off,
+     * so the default is a choice rather than a copy. Off, because on it <b>couples the tree to the tab
+     * strip</b>: every switch between editors moves the tree's selection and scrolls it, so a tree you
+     * were reading loses your place for a reason you did not ask for.</p>
+     *
+     * <p>It also had a second-order cost that reads as a different bug entirely. Revealing refreshes the
+     * tree, and a {@code ListView} refresh reattaches focus to its focused row — so closing a tab, which
+     * detaches the focused editor and leaves the focus owner null, ended with the PROJECT TREE focused. It
+     * was reported as "Ctrl+W focuses the explorer", and nothing about closing a tab is what did it.</p>
+     */
     public static final Setting<Boolean> AUTO_REVEAL =
-            Setting.bool("explorer.autoReveal", "Reveal the active file", true)
+            Setting.bool("explorer.autoReveal", "Reveal the active file", false)
                     .description("Select the file being edited in the tree as you move between tabs.");
 
     public static final Setting<Boolean> CONFIRM_DELETE =
