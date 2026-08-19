@@ -492,6 +492,10 @@ public class Workbench extends UIElement {
         // Not registered on a Disposable: the signal belongs to the dock, this workbench owns the dock, so
         // the subscription cannot outlive either -- an ownership registration here would be ceremony.
         dock.onDidChangeActivePanel.connect(panel -> {
+            // THE MOMENT THE REBUILD HAS HAPPENED, which is what a close was waiting for. The frame
+            // countdown below is a backstop for the case this signal never comes -- closing a tab that
+            // was not the active one leaves the active panel where it was and announces nothing.
+            focusActiveEditorAfterClose();
             revealActiveFile();
             rebindProblems();
             bindStatusToActiveTab();
@@ -1001,11 +1005,17 @@ public class Workbench extends UIElement {
     /**
      * How many frames a close may take to settle before the focus request is dropped.
      *
-     * <p>Small on purpose: this is covering an ordering between two tickers, not waiting for I/O. If the
-     * dock has not produced an active editor within a handful of frames there is nothing to focus, and
-     * holding the request open would mean pouncing on the first vacancy that appeared long afterwards.</p>
+     * <p>Bounded on purpose: this is covering an ordering between two tickers, not waiting for I/O, and
+     * holding the request open indefinitely would mean pouncing on the first vacancy that appeared long
+     * afterwards.</p>
+     *
+     * <p><b>Twelve rather than four, and the difference was a flaky test.</b> Four covered the ordering on
+     * an idle JVM and not on a loaded one: {@code closingTheFocusedTabFocusesTheEditorThatReplacesIt}
+     * passed alone and failed in the full suite, which is the shape of a race rather than of a wrong
+     * answer. The rebuild is what is being waited for and it takes as long as it takes; the bound exists
+     * to stop the request outliving the close, not to express how long a rebuild should need.</p>
      */
-    private static final int FOCUS_AFTER_CLOSE_FRAMES = 4;
+    private static final int FOCUS_AFTER_CLOSE_FRAMES = 12;
 
     public TextEditor activeEditor() {
         return activeDocument() instanceof TextFileDocument text ? text.editor() : null;

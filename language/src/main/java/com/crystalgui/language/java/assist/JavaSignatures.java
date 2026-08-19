@@ -129,6 +129,40 @@ public final class JavaSignatures {
     private static final int MAX_SIGNATURE_LINE = 72;
 
     public Signature of(IBinding binding, SymbolKind kind, String name) {
+        // A TYPE DECLARATION IS ASSEMBLED, NEVER QUOTED, and it is the one shape where the quote is worth
+        // less than the render.
+        //
+        // Quoting is faithful to the AUTHOR, which is what makes it right for a method: the parameter
+        // names, the line the author broke a long list on, the annotations as written. A class
+        // declaration's supertype list has no such content -- it is a set, and where the JDK's own source
+        // happens to break it is that file's house style rather than anything a reader of this popup
+        // benefits from. `String.java` breaks it as
+        //
+        //     public final class String
+        //         implements java.io.Serializable, Comparable<String>, CharSequence,
+        //                    Constable, ConstantDesc {
+        //
+        // which is a 69-character line, and the popup is sized by its widest signature line -- so quoting
+        // it made the box half again as wide as it needed to be, with the prose beside it inheriting the
+        // width. IntelliJ renders one interface per line for exactly this reason, and that layout is what
+        // `appendSupertypes` already produces when it is asked to break. It simply was never asked,
+        // because the quote returned first.
+        //
+        // BROKEN WHENEVER THERE IS A LIST TO BREAK -- two or more supertype entries -- rather than only
+        // when the flat form overruns. A list is the part a reader scans, and stacking it is what makes
+        // the popup as narrow as its longest single entry instead of as wide as all of them.
+        //
+        // ONE ENTRY STAYS FLAT, and that is not a special case for its own sake: `class Script implements
+        // Serializable` is a sentence rather than a list, and breaking it costs a line to say nothing. It
+        // still falls back to the broken form if it happens to be long, which is the rule everything else
+        // here follows.
+        if (binding instanceof ITypeBinding type && !type.isTypeVariable()) {
+            if (supertypeEntries(type) > 1) return render(binding, kind, name, true);
+            Signature single = render(binding, kind, name, false);
+            return longestLine(single.text()) <= MAX_SIGNATURE_LINE ? single
+                    : render(binding, kind, name, true);
+        }
+
         // QUOTED FIRST, AND NEVER RE-WRAPPED. The author chose that layout; MAX_SIGNATURE_LINE is a rule
         // for text this class invents, not for text it copies, and applying it to a quote would only
         // re-render the identical slice. Hoisted out of the three branches below when quoting learned to
@@ -146,6 +180,25 @@ public final class JavaSignatures {
         // declaration and breaks parameter lists that would have fit comfortably.
         return longestLine(flat.text()) <= MAX_SIGNATURE_LINE ? flat
                 : render(binding, kind, name, true);
+    }
+
+    /**
+     * How many supertypes this declaration names — what decides whether the list is stacked.
+     *
+     * <p>Counted on the same terms {@code appendSupertypes} prints on, or the two would disagree about
+     * whether there is a list: {@code extends Object} is on every class and in no source file, and an
+     * enum's and an interface's implicit supertype are the same story.</p>
+     */
+    private static int supertypeEntries(ITypeBinding type) {
+        int entries = 0;
+        ITypeBinding superclass = type.getSuperclass();
+        if (superclass != null && !"java.lang.Object".equals(superclass.getQualifiedName())
+                && !type.isEnum() && !type.isInterface()) {
+            entries++;
+        }
+        ITypeBinding[] interfaces = type.getInterfaces();
+        if (interfaces != null) entries += interfaces.length;
+        return entries;
     }
 
     private static int longestLine(String text) {

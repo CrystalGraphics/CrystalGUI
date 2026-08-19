@@ -14,6 +14,7 @@ import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Popover;
 import com.crystalgui.text.lang.CodeAction;
+import com.crystalgui.ui.elements.ScrollerView;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.text.TextRange;
@@ -89,6 +90,17 @@ public final class DocumentationPopup extends Popover {
     public static final String DEFINITION_CLASS = "__doc-definition__";
     public static final String DEFINITION_BOX_CLASS = "__doc-definition-box__";
     public static final String BODY_CLASS = "__doc-body__";
+
+    /**
+     * The scrolling region — everything except the quick-fix band at the top.
+     *
+     * <p><b>The declaration scrolls with the prose, and the problem does not.</b> Only the body used to
+     * scroll, which put a scrollbar inside a band rather than on the popup: a long {@code implements}
+     * list pushed the documentation down and there was no way to reach what it pushed off. The quick-fix
+     * band stays out of it because it is the one part you act on rather than read — scrolling an action
+     * out of reach is how a popup comes to have a button nobody can press.</p>
+     */
+    public static final String SCROLL_CLASS = "__doc-scroll__";
 
     /**
      * The rule between the definition and the prose — IntelliJ draws one and it earns its line.
@@ -225,6 +237,9 @@ public final class DocumentationPopup extends Popover {
     private final UIElement footerEdit = new UIElement();
 
     private final UIText body = new UIText("");
+
+    /** @see #SCROLL_CLASS */
+    private final ScrollerView scroller = new ScrollerView();
 
     /**
      * The problem section — message, then the one action worth showing without being asked.
@@ -381,10 +396,16 @@ public final class DocumentationPopup extends Popover {
         // the declaration is what you were looking at. A popup that shows one instead of the other
         // regresses hover for every symbol that happens to carry a warning.
         addInternalChild(problemRow);
-        addInternalChild(ownerRow);
-        addInternalChild(definition);
-        addInternalChild(separator);
-        addInternalChild(body);
+        // EVERYTHING ELSE GOES INSIDE THE SCROLLER, in the order it was in. @see #SCROLL_CLASS
+        //
+        // The footer stays outside it and pinned: it is an action bar, and IntelliJ keeps its own at the
+        // bottom of the popup rather than at the bottom of the document.
+        scroller.addClass(SCROLL_CLASS);
+        scroller.addChild(ownerRow);
+        scroller.addChild(definition);
+        scroller.addChild(separator);
+        scroller.addChild(body);
+        addInternalChild(scroller);
         addInternalChild(footerRule);
         addInternalChild(footerRow);
 
