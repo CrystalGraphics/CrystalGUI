@@ -87,51 +87,101 @@ file, where 9 and 10 turned out to be already implemented and only 13 was real. 
 
 ---
 
-## 3. The markup layer — the shape of it
+## 3. How the references do it, and what may be ported
 
-### 3.1 The seam has to change
+*Written from knowledge of these implementations rather than from reading their source: this repository
+has no IntelliJ or VS Code checkout and the session had no network. Everything below that is a claim
+about their code is marked as such, and the design does not depend on any of it being exact.*
 
-`SymbolInfo.documentation` is a `String` and the popup draws it into one `UIText`. Neither can carry
-a code block. Something structured has to cross, and it must obey the rules the seam already has:
-`core/` may not know what Java is, the child side of the engine bridge may name only JDK types and
-`com.crystalgui.text.*`, and every engine has to be able to produce it — JavaScript's JSDoc renders
-the same shapes.
+### 3.1 IntelliJ
 
-The candidate is a small document model in `com.crystalgui.text.lang` — a list of blocks, each a
-paragraph, a code block, or a list, with inline runs carrying an optional style (plain, code, link).
-Deliberately **not** an HTML DOM: the popup does not need one, and a general tree invites a general
-renderer.
+One class does the work: **`JavaDocInfoGenerator`** (`java-impl`). It walks the PSI doc comment and
+*emits HTML into a StringBuilder* — `<p>`, `<pre>`, `<code>`, `<a href="psi_element://...">` — resolving
+`{@code}`, `{@link}`, `{@literal}`, `{@value}` and the block tags as it goes. The result is handed to a
+Swing HTML view (`JEditorPane` with a `StyledEditorKit`), which does the layout, the code-block
+background and the link handling. `DocumentationHtmlUtil` supplies the stylesheet.
 
-### 3.2 What has to be parsed
+So IntelliJ does not parse the javadoc HTML at all in the general case: it **passes it through** into a
+renderer that already speaks HTML, and only interprets the javadoc-specific tags. The HTML parsing is
+Swing's.
 
-Javadoc's HTML is a small, badly-specified subset in practice. The tags that actually appear in the
-JDK and in real code:
+### 3.2 VS Code
 
-- Block: `<p>`, `<pre>`, `<ul>`/`<ol>`/`<li>`, `<blockquote>`, `<h1>`–`<h6>`, `<table>` (rare)
-- Inline: `<code>`, `<tt>`, `<b>`/`<strong>`, `<i>`/`<em>`, `<a href>`, `<br>`
-- Entities: `&lt;`, `&gt;`, `&amp;`, `&nbsp;`, `&#NN;`
+VS Code's Java hover is not VS Code's code. It is Red Hat's `vscode-java` talking to **Eclipse JDT
+Language Server**, which converts the javadoc to **Markdown** (`JavaDoc2MarkdownConverter`, over
+**jsoup** for the HTML) and sends that over LSP. VS Code then renders the Markdown with `marked` and its
+own `MarkdownRenderer`, which is where the code fences get their background and their syntax colouring.
 
-Plus the Javadoc tags `JavaDocs` already resolves: `{@code}`, `{@literal}`, `{@link}`,
-`{@linkplain}`, `{@value}`, and the block tags `@param`, `@return`, `@throws`, `@see`, `@since`,
-`@deprecated`.
+So VS Code's architecture is: *javadoc HTML → Markdown → structured render*. The middle step exists
+because LSP's `MarkupContent` carries Markdown, not because Markdown is the better model.
 
-**`<pre>` is the one that must not be normalised.** Whitespace inside it is content; everywhere else
-it is not. That is the whole reason `collapse()` cannot stay as a final pass over the output.
+### 3.3 What that means for us
 
-### 3.3 Syntax colouring inside a code block
+**Neither passes an HTML string to a layout engine that speaks HTML, because we do not have one.** Our
+popup lays out real elements, and a code block has to become an element with a background and coloured
+spans. Both references end at a renderer that already does that for them; we have to produce the thing
+their renderer consumes.
 
-The popup already draws coloured code — the signature band uses the editor's capture scheme through
-`.__syntax__`. A doc code block is the same problem with a different source, so the colouring should
-come from the same tokenizer rather than a second one. That is a real constraint on where the model
-is built: the engine knows the language, `core/` does not.
+So the shape that fits is IntelliJ's *emitter* with VS Code's *structured target*: walk the doc comment,
+resolve the javadoc tags, and emit into a small document model instead of into HTML or Markdown. That is
+what `JavaDocs` already does — it emits into a `StringBuilder`. The change is the target, plus the HTML
+subset it currently discards.
 
-### 3.4 What is deliberately out of scope
+### 3.4 Licensing, which decides what "port" can mean
 
-- `<table>` beyond the simplest two-column form. It appears in a handful of JDK classes and a table
-  layout in a hover popup is a project of its own.
-- Images. Javadoc supports `<img>`; a popup that fetches from disk to render a hover is not worth it.
-- Arbitrary HTML. Anything unrecognised degrades to its text, which is what stripping already does
-  and is the right failure.
+The repository already takes this seriously (`THIRD-PARTY.md`, `ui/icons/ATTRIBUTION.md`) and the answer
+differs per reference:
+
+| Source | Licence | What we may do |
+|---|---|---|
+| IntelliJ IDEA Community | **Apache 2.0** | Port, with the licence, a NOTICE and a statement of modifications. Precedent: the IntelliJ Platform file-type icons already ship this way |
+| Eclipse JDT / JDT LS | **EPL 2.0** | Weak copyleft — a port makes *those files* EPL. A real decision, not a formality |
+| VS Code / Monaco | MIT | Port freely with attribution — but its javadoc handling is not its own code, see §3.2 |
+| jsoup (what JDT LS parses with) | MIT | Portable, but it is a full HTML5 parser and a dependency, not a snippet |
+| **WHATWG HTML tokenizer** | **a specification** | Implementable by anyone; no licence encumbrance at all |
+
+**The generic HTML layer therefore follows the WHATWG tokenizer's state machine**, whose states are named
+in the spec and which is what jsoup, every browser and every serious parser implement. "Do not reinvent"
+is satisfied by following the specified state machine rather than inventing an ad-hoc scanner — and it is
+the only option here that is both a real reference and free of an obligation this repository has not
+already taken on.
+
+**The javadoc-specific half — which tag means what — follows IntelliJ**, which is Apache 2.0 and portable
+with attribution if any of it is copied verbatim. In practice what transfers is the *rules*, and
+`JavaDocs` already implements several of them.
+
+### 3.5 The two pieces
+
+**`com.crystalgui.text.markup`** — generic, reusable, and the thing this plan is really about. A
+tokenizer over the HTML subset plus a small document model:
+
+- `MarkupDocument` — a list of blocks
+- `MarkupBlock` — paragraph, code, list, heading, quote
+- `MarkupSpan` — a run of text with a style (plain, code, emphasis, strong, link) and an optional target
+
+Deliberately **not** an HTML DOM. The popup does not need one, a general tree invites a general renderer,
+and the model has to be producible by JSDoc and by a shader-graph node description too.
+
+**`language/java/assist/JavaDocs`** — keeps owning what a javadoc *tag* means, and emits into the model
+instead of into a string.
+
+### 3.6 What has to be handled
+
+Block: `<p>`, `<pre>`, `<ul>`/`<ol>`/`<li>`, `<blockquote>`, `<h1>`–`<h6>`.
+Inline: `<code>`, `<tt>`, `<b>`/`<strong>`, `<i>`/`<em>`, `<a href>`, `<br>`.
+Entities: named (`&lt;` `&gt;` `&amp;` `&nbsp;` `&quot;`) and numeric (`&#NN;`, `&#xNN;`).
+Javadoc: `{@code}`, `{@literal}`, `{@link}`, `{@linkplain}`, `{@value}`, `{@inheritDoc}`, and the block
+tags `@param`, `@return`, `@throws`, `@see`, `@since`, `@deprecated`.
+
+**`<pre>` is the one that must not be normalised.** Whitespace inside it is content; everywhere else it
+is collapsible. That is the whole reason `collapse()` cannot survive as a final pass over the output.
+
+### 3.7 Deliberately out of scope
+
+- `<table>` beyond the simplest two-column form. A table layout in a hover popup is a project of its own.
+- Images. A popup that reads from disk to render a hover is not worth it.
+- Arbitrary HTML. Anything unrecognised degrades to its text, which is what stripping already does and
+  is the right failure.
 
 ---
 
