@@ -603,7 +603,20 @@ tasks.register("smokeEngineBands") {
 
 // Part of `check`, not a thing to remember. The failure it catches -- a jar that cannot load on its own
 // band's JVM -- is invisible on the machine that introduces it, so it has to run without being asked.
-tasks.named("check") { dependsOn("checkEngineBands") }
+//
+// AND THE SMOKES TOO, for the same reason with more force. `checkEngineBands` reads class-file majors,
+// which proves a jar is loadable and nothing about what it DOES; `smokeEngineBands` starts a JVM of each
+// band's own era and makes the engine answer real questions on it. That is the only place in this build
+// where anything runs on Java 8 -- and a 1.7.10 client is Java 8, so it is the only place a divergence
+// between an archive class library and a jrt image can be seen at all.
+//
+// It was opt-in until a defect made the point: JDT's DOM returned an EMPTY member list for every binary
+// class in the game, silently, because it caught its own exception and logged it without a stack. Nothing
+// in `check` could see it, the harness could not reproduce it, and it took a probe inside a running
+// client to find. A guard nobody runs is a guard that is not there.
+//
+// Cost is seconds (band 8 smoke: ~2s). It does need a Java 8 toolchain, which Gradle provisions.
+tasks.named("check") { dependsOn("checkEngineBands", "smokeEngineBands") }
 
 tasks.register("checkEngineBands") {
     group = "verification"

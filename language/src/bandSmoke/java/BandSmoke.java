@@ -50,6 +50,7 @@ public final class BandSmoke {
             rhinoEvaluates(engines);
             rhinoClassShutterRefuses(engines);
             jdtResolvesABindingAgainstTheRunningVm(engines);
+            jdtReportsTheMEMBERSOfATypeFromTheClassLibrary(engines);
             jdtRecoversBindingsFromBrokenSource(engines);
             jdtCompilesAndTheScriptActuallyRuns(engines);
         } finally {
@@ -180,6 +181,61 @@ public final class BandSmoke {
         String qualified = qualifiedNameOf(engines, typeOfFirstField(engines, unit));
         check("jdt resolves a generic type against the running VM",
                 "java.util.List<java.lang.String>".equals(qualified), qualified);
+    }
+
+    /**
+     * <b>A resolved type is asked for its MEMBERS, not merely for its name.</b>
+     *
+     * <h3>The check above passes while the editor is empty</h3>
+     *
+     * <p>Resolution and member enumeration are separate operations and they fail separately. A defect
+     * shipped that left the first perfect and the second silent: {@code getDeclaredMethods()} threw
+     * internally, JDT's DOM caught it — the method wraps its work in {@code catch (RuntimeException)} —
+     * logged a line with no stack, and returned an <b>empty array</b>. Every completion popup in the game
+     * was empty while every script compiled and ran, and the check above went on reporting
+     * {@code java.util.List<java.lang.String>} throughout.</p>
+     *
+     * <h3>Why it has to be a CLASS out of an ARCHIVE, on this JVM in particular</h3>
+     *
+     * <p>The cause was a name environment whose classpath was closed before the bindings were read.
+     * {@code FileSystem.cleanup()} closes each {@code ClasspathJar} and nulls its handle; the next
+     * {@code getModulesDeclaringPackage} rebuilds its package cache from that null and throws. So it
+     * only bites where the class library is an <b>archive</b> — which is Java 8 and {@code rt.jar}, and
+     * from 9 onward is a jrt image that survives the same call untouched. <b>This program is the only
+     * place in the build that runs on such a JVM.</b></p>
+     *
+     * <p>An INTERFACE would not catch it either: JDT synthesises interface members rather than reading
+     * them off the binding, so {@code Comparable} answered correctly while {@code String} answered with
+     * nothing. Hence {@code ArrayList}, and hence a member only {@code ArrayList} declares — an
+     * inherited one would come from a supertype that had already resolved.</p>
+     */
+    private static void jdtReportsTheMEMBERSOfATypeFromTheClassLibrary(ClassLoader engines)
+            throws Exception {
+        Object unit = parse(engines,
+                "public class Smoke {\n"
+                        + "    java.util.ArrayList<String> made = new java.util.ArrayList<String>();\n"
+                        + "}\n");
+
+        Object type = typeOfFirstField(engines, unit);
+        if (type == null) {
+            check("jdt reports the members of a class-library type", false, "no binding for the field");
+            return;
+        }
+
+        Class<?> typeBinding = Class.forName("org.eclipse.jdt.core.dom.ITypeBinding", true, engines);
+        Class<?> methodBinding = Class.forName("org.eclipse.jdt.core.dom.IMethodBinding", true, engines);
+        Object[] declared = (Object[]) typeBinding.getMethod("getDeclaredMethods").invoke(type);
+
+        check("jdt reports the members of a class-library type at all", declared.length > 0,
+                Integer.valueOf(declared.length));
+
+        boolean own = false;
+        for (Object method : declared) {
+            // ArrayList's own, so an answer assembled purely from supertypes fails rather than passes.
+            if ("ensureCapacity".equals(methodBinding.getMethod("getName").invoke(method))) own = true;
+        }
+        check("jdt reports a member the type itself declares", own,
+                own ? null : "only inherited members came back from " + declared.length);
     }
 
     /**
