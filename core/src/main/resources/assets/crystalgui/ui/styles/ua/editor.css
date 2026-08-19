@@ -1593,6 +1593,16 @@ documentationpopup .__doc-body__ {
     overflow: auto;
     max-width: 440px;
     max-height: 220px;
+    /* LOOSER THAN THE BANDS ABOVE IT, and the two want opposite things.
+     *
+     * The popup declares `line-height: 1.15` on itself so it reaches every band -- that number was chosen
+     * for the DECLARATION, which is a short stack of code lines where a generous line box reads as the
+     * popup being loose. Prose is the other case: a paragraph of running text set at 1.15 is a block with
+     * no air in it, and the eye loses its place returning to the left margin. IntelliJ sets its
+     * documentation body noticeably looser than its signature for exactly this reason.
+     *
+     * Scoped here rather than raised on the popup, or the declaration goes back to being tall. */
+    line-height: 1.45;
 }
 
 /* THE BOTTOM BAND, back — and the objection that removed it is answered rather than worked around.
