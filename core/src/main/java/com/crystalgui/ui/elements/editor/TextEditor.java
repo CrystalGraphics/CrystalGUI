@@ -2361,10 +2361,16 @@ public class TextEditor extends ScrollerView implements UndoScope {
         if (cached == null) return;
 
         int rowStart = buffer.document().lineStartOffset(row);
+        // NULL means there is no word here YET, and that is the commonest way a session opens: the very
+        // first character of one, typed into a gap. `wordAt` documents the null and every test written
+        // for this put the caret at the end of an EXISTING word, so the first keystroke in the harness
+        // threw. The word is then the empty range at the caret, and it grows from there.
         int[] word = WordOperations.wordAt(buffer.document(), caret, wordClassifier);
+        int wordStart = word == null ? caret : word[0];
+        int wordEnd = word == null ? caret : word[1];
         typingRow = row;
-        typingWordStart = word[0] - rowStart;
-        typingOriginalEnd = word[1] - rowStart;
+        typingWordStart = wordStart - rowStart;
+        typingOriginalEnd = wordEnd - rowStart;
         typingShift = 0;
         typingSnapshot = new ArrayList<>(cached);
     }
