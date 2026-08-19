@@ -146,6 +146,26 @@ straight at a `src.zip` for anyone who would rather supply their own and fetch n
 > any of them — the tar format is a published specification and the transform is a scanner over Java's
 > own grammar.
 
+## Chromium — `RateEstimator` (BSD-3-Clause)
+
+`core/src/main/java/com/crystalgui/core/async/RateEstimator.java` is a port of Chromium's download rate
+estimator — `components/download/public/common/rate_estimator.h` and its implementation under
+`components/download/internal/common/` — Copyright The Chromium Authors, licensed BSD-3-Clause.
+
+A fixed ring of one-second buckets, ten of them, giving a rate over a ten-second sliding window, with the
+divisor counting only the buckets that have actually been populated so an early reading is not divided by
+a window that has not elapsed.
+
+**Ported rather than written, after three home-grown attempts failed in front of a user.** A cumulative
+average cannot track a throughput that changes; an exponential moving average tracks it far too well and
+yo-yos. `AGENTS.md`'s *"Port, don't reinvent"* rule names exactly this class of problem, and both
+references consulted — Chromium and wget — independently land on a sliding window.
+
+> **wget's `progress.c` is GPL-3.0 and none of its code is here.** What was taken from it is one design
+> idea, stated in its own comment: *"Don't refresh the ETA too often to avoid jerkiness in predictions.
+> This allows ETA to change approximately once per second."* That throttle lives in `JobContext` and is
+> written from scratch. The same read-for-shape-only rule this repository already applies to Zed.
+
 ## Fonts
 
 The UI's default face is **JetBrains Mono**, © 2020 The JetBrains Mono Project Authors, under the

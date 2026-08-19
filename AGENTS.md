@@ -1256,7 +1256,8 @@ wrong, and each was learned by shipping to millions of users. Four from `text/cu
 | Source | Licence | What you may do |
 |---|---|---|
 | VS Code / Monaco, CodeMirror 6 | **MIT** | **Port the code.** Attribute in the class javadoc, naming the source file. |
-| **Zed** | **GPL-3.0** | **Read for shape only.** Copying it would impose GPL on this repository. `Rope`/`TextSummary` take `SumTree`'s *design*; not a line of its code. |
+| **Chromium** | **BSD-3-Clause** | **Port the code.** Attribute in the class javadoc and in `THIRD-PARTY.md`. `RateEstimator` is one. |
+| **Zed**, **wget** | **GPL** | **Read for shape only.** Copying would impose GPL on this repository. `Rope`/`TextSummary` take `SumTree`'s *design*; the progress channel takes wget's *refresh the ETA about once a second" and not a line of its code. |
 
 ### Port the module boundaries too
 

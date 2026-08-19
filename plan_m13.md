@@ -165,6 +165,12 @@ And both rules already exist in the engine:
 So this is a build-time application of decisions the engine has already made, not new judgement. That is
 what makes it safe to apply to somebody else's source tree.
 
+> **Measured after building it: the strip removes 27%, not the majority this section assumes.** The kept
+> packages are javadoc-heavy — 23.0 MB of text becomes 16.8 MB — because javadoc is precisely what is
+> being kept. Against a 110 MB fetch it is worth about 1.3 MB of cache. It is retained (built, tested,
+> and verified to leave every javadoc tag intact) but its justification is weaker than written here,
+> and it is the one thing making the cached extract differ in content from a real `src.zip`.
+
 **Used where size or licence demands it, skipped where they do not.** Our own sources are small enough to
 ship whole, and shipping them whole is *better* — full bodies mean the quoted declaration keeps the
 author's real layout. The transform is what makes the JDK viable at all.

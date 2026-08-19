@@ -173,7 +173,7 @@ public class ProcessesPopover extends Popover {
             // Into the existing line because the two are the same KIND of thing (secondary, about this
             // one job) and a third row would push the bar down and make every row taller for the jobs
             // that have no readout at all.
-            String summary = job.state().summary(System.currentTimeMillis());
+            String summary = job.state().summary();
             String detailed = job.state().detail();
             if (summary != null) {
                 detailed = detailed.isEmpty() ? summary : detailed + " · " + summary;

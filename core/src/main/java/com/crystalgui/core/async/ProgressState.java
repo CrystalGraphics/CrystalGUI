@@ -21,15 +21,28 @@ package com.crystalgui.core.async;
  * @param done        units completed, against {@link #total}
  * @param total       total units, or negative for indeterminate
  * @param begunAtMillis when {@link Progress#begin} was called, on the scheduler's clock
+ * @param updatedAtMillis when THIS reading was taken, on the same clock — the pair with
+ *                    {@link #begunAtMillis} is what makes a rate a property of the reading rather than of
+ *                    the frame that draws it. See {@link #summary}
  * @param unit        what {@link #done} and {@link #total} are counting, which is the only thing that
  *                    lets a reader render them — see {@link #summary}
+ * @param secondsRemaining the estimate, or negative when there is not one yet. <b>Decided by
+ *                    {@link JobContext}, not derived here</b> — it comes off a sliding-window
+ *                    {@link RateEstimator} and is refreshed about once a second, so it is a value the
+ *                    reading carries rather than something a reader recomputes
  */
 public record ProgressState(String what, String detail, long done, long total, long begunAtMillis,
-                            Progress.Unit unit) {
+                            long updatedAtMillis, Progress.Unit unit, long secondsRemaining) {
 
     /** Counting things, which is the ordinary case and needs no readout. */
     public ProgressState(String what, String detail, long done, long total, long begunAtMillis) {
-        this(what, detail, done, total, begunAtMillis, Progress.Unit.ITEMS);
+        this(what, detail, done, total, begunAtMillis, begunAtMillis, Progress.Unit.ITEMS, -1L);
+    }
+
+    /** A reading with no estimate yet — the first one, before there is anything to measure against. */
+    public ProgressState(String what, String detail, long done, long total, long begunAtMillis,
+                         long updatedAtMillis, Progress.Unit unit) {
+        this(what, detail, done, total, begunAtMillis, updatedAtMillis, unit, -1L);
     }
 
     /** No total to measure against, so a bar cannot be drawn — a stripe is. */
@@ -73,40 +86,44 @@ public record ProgressState(String what, String detail, long done, long total, l
      * <p>Null for {@link Progress.Unit#ITEMS}, because a count of files is what the bar and the detail line
      * already say and repeating it as "412 of 1178 items" adds nothing.</p>
      *
-     * @param nowMillis the same clock {@link #begunAtMillis} was taken on
+     * <h3>It takes no clock, and that is the fix for a real defect</h3>
+     *
+     * <p>It used to take {@code now}. Bytes arrive on a threshold and frames arrive sixty times a second,
+     * so between two reports {@code done} was frozen while the elapsed time grew — the rate fell, the
+     * estimate climbed, and the next report snapped it back down. Observed as <b>"39s, 40s, 39s, 38s"</b>,
+     * a sawtooth that reads as the number being made up.</p>
+     *
+     * <p>An estimate is a property of <em>a reading</em>, not of the moment somebody looks at it. Both
+     * timestamps are on the state, so this is a pure function of the state and it changes only when the
+     * reading does — once per report, monotonically as the average converges.</p>
      */
-    public String summary(long nowMillis) {
+    public String summary() {
         if (unit != Progress.Unit.BYTES) return null;
         if (done <= 0) return null;
         String transferred = bytes(done);
         if (isIndeterminate()) return transferred;
 
         StringBuilder out = new StringBuilder(transferred).append(" of ").append(bytes(total));
-        String left = remaining(nowMillis);
-        if (left != null) out.append(" · ").append(left);
+        // AND THE ESTIMATE THIS READING WAS GIVEN. Nothing is computed here -- a reader that worked out
+        // its own answer from `now` is what made this sawtooth between reports in the first place.
+        if (secondsRemaining > 0 && done < total) {
+            out.append(" · ").append(duration(secondsRemaining));
+        }
         return out.toString();
     }
 
-    /**
-     * How long is left at the average rate so far, or null while that cannot be said honestly.
-     *
-     * <p><b>Average, not instantaneous.</b> An instantaneous rate over one report interval is mostly noise
-     * on a connection that stalls and bursts, and it makes the number jump about in a way that reads as
-     * broken. The average settles, which is what somebody deciding whether to wait actually wants.</p>
-     *
-     * <p>Suppressed for the first second and once the numbers say it is done — an estimate from two
-     * chunks is a guess with a decimal point on it, and "0s left" on a finished transfer is noise.</p>
-     */
-    private String remaining(long nowMillis) {
-        long elapsed = nowMillis - begunAtMillis;
-        if (elapsed < 1000L || done >= total) return null;
-        double perMilli = (double) done / (double) elapsed;
-        if (perMilli <= 0d) return null;
-        long seconds = (long) ((total - done) / perMilli / 1000d);
-        if (seconds < 1) return null;
+    /** {@code 45s left}, {@code 4m left}, {@code 1h 12m left}. */
+    private static String duration(long seconds) {
+        // A ZERO SMALLER UNIT IS DROPPED: "4m", not "4m 0s". The pair reads as a precision an estimate
+        // over a sliding window has not got.
         if (seconds < 60) return seconds + "s left";
-        if (seconds < 3600) return (seconds / 60) + "m " + (seconds % 60) + "s left";
-        return (seconds / 3600) + "h " + ((seconds % 3600) / 60) + "m left";
+        if (seconds < 3600) return withUnits(seconds / 60, seconds % 60, "m", "s");
+        return withUnits(seconds / 3600, (seconds % 3600) / 60, "h", "m");
+    }
+
+    private static String withUnits(long large, long small, String largeUnit, String smallUnit) {
+        return small == 0 ? large + largeUnit + " left"
+                : large + largeUnit + " " + small + smallUnit + " left";
     }
 
     /**
