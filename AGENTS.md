@@ -1540,6 +1540,7 @@ three-phase event types are in `ui/event/` — there is no `core/event/` package
 | `ui/icons/filetypes/*.svg` | 50 IntelliJ Platform icons (Apache 2.0), filled, 16px, carrying their own palette. What the file tree draws. |
 | `ui/icons/default.json` | The default file-icon theme: extension/name → icon. Colour is deliberately not in it. |
 | `ui/icons/ATTRIBUTION.md` | **An obligation, not documentation** — MIT and Apache 2.0 both require notices to travel with the distribution. Indexed from the repo-root `THIRD-PARTY.md`. |
+| `sources/**` | **Not in `src/main/resources` — injected by `tasks.jar`** (M13 §25.4), so it exists only in the built jar. 601 `.java` files, 1.84 MB, read by `SourceArchives.ResourceArchive` so the documentation popup quotes an author's real declaration and javadoc instead of reassembling one from the binding. **The prefix is a contract, not a private path**: a jar contributes its own sources by shipping them at `assets/<its namespace>/sources/` and adding that namespace to `SourceArchives.BUNDLED_PREFIXES` — CrystalGraphics does exactly this under `assets/crystalgraphics/`, and one per project rather than one shared directory because CG is used by mods with no CrystalGUI in the pack. |
 | `ui/sprites/ore.json` | Sprite definitions backing `ore.css`. |
 | `textures/gui/ore_styles.png` | Ore theme atlas. |
 | `textures/gui/gdp_styles.png` | **Unreferenced by any code today.** |

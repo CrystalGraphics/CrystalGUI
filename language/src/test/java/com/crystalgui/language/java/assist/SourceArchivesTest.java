@@ -318,6 +318,33 @@ public class SourceArchivesTest {
         assertTrue("that is not UIElement", text.contains("public class UIElement"));
     }
 
+    /**
+     * <b>CrystalGraphics ships its own, under its own namespace</b> — and the reader needed no change.
+     *
+     * <p>That is the property worth pinning. A script author reaches for {@code CgPlatform} and
+     * {@code CgMaterial} as readily as for {@code UIElement}, and the whole mechanism for making a jar's
+     * declarations quotable is: put the sources at {@code assets/<namespace>/sources/} and add the
+     * namespace to {@code BUNDLED_PREFIXES}. No code in this class knows anything about CrystalGraphics.</p>
+     *
+     * <p>Its own namespace rather than ours because it is a standalone library — mods depend on it with no
+     * CrystalGUI in the pack, and shipping them an {@code assets/crystalgui/} directory would be claiming
+     * a namespace it does not own.</p>
+     */
+    @Test
+    public void crystalGraphicsShipsItsSourcesTooAndUnderItsOwnNamespace() {
+        List<SourceArchives.Archive> archives =
+                SourceArchives.discover(List.of(), SourceArchives.class.getClassLoader());
+        String text = null;
+        for (SourceArchives.Archive archive : archives) {
+            if (!(archive instanceof SourceArchives.ResourceArchive)) continue;
+            String found = archive.read("com/crystalgraphics/platform/CgPlatform.java");
+            if (found != null) text = found;
+        }
+        assertNotNull("CrystalGraphics' sources are not in its jar — see tasks.jar in "
+                + "CrystalGraphics/platform/build.gradle.kts", text);
+        assertTrue("that is not CgPlatform", text.contains("class CgPlatform"));
+    }
+
     private static void writeSourceJar(File jar, String entry, String content) throws Exception {
         try (ZipOutputStream zip = new ZipOutputStream(new FileOutputStream(jar))) {
             zip.putNextEntry(new ZipEntry(entry));
