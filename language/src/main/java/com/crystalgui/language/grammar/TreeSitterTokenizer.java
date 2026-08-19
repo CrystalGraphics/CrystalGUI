@@ -773,6 +773,28 @@ public final class TreeSitterTokenizer
      * comparison itself fails: over-reporting is merely slow, and under-reporting leaves stale colour on
      * screen with nothing left to correct it.</p>
      */
+    /**
+     * Whether the smallest node covering this range had to be recovered around.
+     *
+     * <p>{@code hasError} is a flag the parser sets on a node when it or anything below it is an
+     * {@code ERROR}, so this is a field read rather than a walk. Asked of the <b>smallest node covering
+     * the range</b>, which is what scopes it: a broken statement elsewhere in the file leaves this row's
+     * own node clean, while a row swallowed by the recovery around an unfinished statement above it does
+     * not.</p>
+     */
+    @Override
+    public boolean recoveredAround(int fromOffset, int toOffset) {
+        if (tree == null) return false;
+        try {
+            TSNode node = tree.getRootNode()
+                    .getDescendantForByteRange(offsets.toUtf8(fromOffset), offsets.toUtf8(toOffset));
+            return node != null && !node.isNull() && node.hasError();
+        } catch (RuntimeException outOfRange) {
+            // A range the current tree does not cover -- it is mid-edit. Not a reason to hold anything.
+            return false;
+        }
+    }
+
     private void announceChanged(TSTree replaced, TSTree parsed, Utf8Offsets newOffsets) {
         if (replaced == null) {
             invalidationListener.tokensChanged(0, InvalidationListener.EVERYTHING);

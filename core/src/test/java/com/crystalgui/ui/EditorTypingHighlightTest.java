@@ -48,6 +48,14 @@ public class EditorTypingHighlightTest extends EditorTestBase {
         InvalidationListener listener;
         boolean recovering;
 
+        /** The half-open offset span the parser had to recover around, or {@code null} for none. */
+        int[] recovered;
+
+        @Override
+        public boolean recoveredAround(int fromOffset, int toOffset) {
+            return recovered != null && fromOffset < recovered[1] && recovered[0] < toOffset;
+        }
+
         @Override
         public List<SyntaxToken> tokenize(Rope document, int from, int to) {
             queries++;
@@ -222,6 +230,46 @@ public class EditorTypingHighlightTest extends EditorTestBase {
 
         assertTrue("a refused announcement must not be forgotten", tokenizer.queries > 0);
         assertTrue("and it is applied once typing stops", highlightedOn(2).isEmpty());
+    }
+
+    /**
+     * <b>An unfinished statement may not recolour the line below it</b> — and may not hold the rest of the
+     * file either.
+     *
+     * <p>The case behind this: typing {@code Stri} with no semicolon repainted the {@code return} on the
+     * next line, and adding the semicolon put it back. The parse is not wrong — that is what the grammar
+     * says about incomplete text — it is just less useful than the colours that row already had. A lexer
+     * would not do it, which is why IntelliJ does not: a half-written token cannot change how the next
+     * line lexes, but it very much changes how the file parses.</p>
+     *
+     * <p><b>Both halves are the test.</b> Declining the reclassification is easy; declining it only inside
+     * the recovery is the part worth pinning, because the obvious rule — "does this file parse" — is false
+     * for nearly every file being edited and would freeze the colours of the whole document whenever
+     * anything anywhere was unfinished.</p>
+     */
+    @Test
+    public void aRecoveredRegionDoesNotRepaintTheRowsItSwallowsButLeavesTheRestAlone() {
+        buildWithGrammar();
+        caretAfterValue();
+        List<TextRange> swallowed = highlightedOn(2);
+        List<TextRange> faraway = highlightedOn(0);
+        assertFalse("row 2 has colours to lose", swallowed.isEmpty());
+        assertFalse("row 0 has colours to lose", faraway.isEmpty());
+
+        // Typing settles, and the statement is still unfinished: the parser recovers around row 1 and
+        // swallows row 2 with it, while row 0 is nowhere near it.
+        type("Counter");
+        waitForSettle();
+        int row2Start = editor.buffer().document().lineStartOffset(2);
+        tokenizer.recovered = new int[] {editor.buffer().document().lineStartOffset(1),
+                row2Start + editor.buffer().document().line(2).length()};
+        tokenizer.recovering = true;
+        tokenizer.listener.tokensChanged(0, SyntaxTokenizer.InvalidationListener.EVERYTHING);
+        showEditor();
+        showEditor();
+
+        assertEquals("the row the recovery swallowed keeps what it had", swallowed, highlightedOn(2));
+        assertTrue("a row outside it must still take the new answer", highlightedOn(0).isEmpty());
     }
 
     /**

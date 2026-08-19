@@ -2428,16 +2428,26 @@ public class TextEditor extends ScrollerView implements UndoScope {
         int spanEnd = clampToDocument(buffer.document().lineStartOffset(lastMissing)
                 + buffer.line(lastMissing).length());
 
-        // Seed every row in the span as "queried, nothing found" FIRST. A row with no captures at all --
-        // a blank line, a line of punctuation the grammar does not name -- would otherwise stay absent and
-        // be re-queried on every single refresh, which is the cache failing exactly where it looks like it
-        // is working.
+        // Seed every row THIS PASS IS FILLING as "queried, nothing found" first. A row with no captures
+        // at all -- a blank line, a line of punctuation the grammar does not name -- would otherwise stay
+        // absent and be re-queried on every single refresh, which is the cache failing exactly where it
+        // looks like it is working.
+        //
+        // A row already in the cache is NOT one of them, and the distinction only started to matter when
+        // rows began surviving an invalidation on purpose (see keepsColoursThroughRecovery). The span runs
+        // from the first missing row to the last, so it sweeps past rows that are present; seeding those
+        // too threw away exactly the colours that had just been kept, and it did it one frame later, which
+        // made it look as though the keeping had never happened.
+        Set<Integer> filling = new HashSet<>();
         for (int row = firstMissing; row <= lastMissing; row++) {
+            if (rowSyntax.containsKey(row)) continue;
             rowSyntax.put(row, new ArrayList<>());
+            filling.add(row);
         }
+        if (filling.isEmpty()) return;
 
         for (SyntaxToken token : tokenizer.tokenize(buffer.document(), spanStart, spanEnd)) {
-            distributeToRows(token, firstMissing, lastMissing);
+            distributeToRows(token, firstMissing, lastMissing, filling);
         }
 
         // SEMANTIC TOKENS LAND SECOND AND WIN. Both sources speak the same capture vocabulary and describe
@@ -2457,10 +2467,10 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // true things about one range, drawn as a colour and a strike-through by two different rules.
         List<SyntaxToken> semanticTokens = semantic.tokensIn(spanStart, spanEnd);
         for (SyntaxToken token : semanticTokens) {
-            clearGrammarUnder(token, firstMissing, lastMissing);
+            clearGrammarUnder(token, firstMissing, lastMissing, filling);
         }
         for (SyntaxToken token : semanticTokens) {
-            distributeToRows(token, firstMissing, lastMissing);
+            distributeToRows(token, firstMissing, lastMissing, filling);
         }
     }
 
@@ -2473,11 +2483,12 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * walk the list in — the same class of bug as the capture-precedence one, and just as invisible,
      * since both names are legitimate and both resolve to a real colour.</p>
      */
-    private void clearGrammarUnder(SyntaxToken token, int firstRow, int lastRow) {
+    private void clearGrammarUnder(SyntaxToken token, int firstRow, int lastRow, Set<Integer> filling) {
         int startRow = buffer.document().offsetToPoint(clampToDocument(token.start())).row();
         int endRow = buffer.document().offsetToPoint(
                 clampToDocument(Math.max(token.start(), token.end() - 1))).row();
         for (int row = Math.max(startRow, firstRow); row <= Math.min(endRow, lastRow); row++) {
+            if (!filling.contains(row)) continue;
             List<SyntaxToken> bucket = rowSyntax.get(row);
             if (bucket == null) continue;
             int rowStart = buffer.document().lineStartOffset(row);
@@ -2496,10 +2507,11 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * one. Storing it only under the row it starts on leaves every row after the first uncoloured, which
      * reads as the comment ending early rather than as a cache bug.</p>
      */
-    private void distributeToRows(SyntaxToken token, int firstRow, int lastRow) {
+    private void distributeToRows(SyntaxToken token, int firstRow, int lastRow, Set<Integer> filling) {
         int startRow = buffer.document().offsetToPoint(clampToDocument(token.start())).row();
         int endRow = buffer.document().offsetToPoint(clampToDocument(Math.max(token.start(), token.end() - 1))).row();
         for (int row = Math.max(startRow, firstRow); row <= Math.min(endRow, lastRow); row++) {
+            if (!filling.contains(row)) continue;
             List<SyntaxToken> bucket = rowSyntax.get(row);
             if (bucket == null) continue;
             int rowStart = buffer.document().lineStartOffset(row);
@@ -2557,6 +2569,30 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     /**
+     * Whether a row should keep the colours it has rather than take the ones a recovered parse offers.
+     *
+     * <p><b>Only a row the user has not touched, and only inside the recovery.</b> The line being written
+     * takes whatever the parser says about it — that is the line whose colours are genuinely in question,
+     * and it is the one that goes plain while it is unfinished. What it may not do is drag its neighbours
+     * with it: an unfinished statement makes the parser recover, and the recovery re-classifies the rows
+     * it swallows, so the line below the one you are writing changed colour and changed back when you
+     * added the semicolon.</p>
+     *
+     * <p>Scoped through {@link SyntaxTokenizer#recoveredAround} rather than "does this file parse",
+     * because the second is false for almost every file that is being edited and would hold the colours of
+     * the whole document whenever anything anywhere was unfinished.</p>
+     *
+     * <p>A row with nothing cached has nothing to keep, so it is always queried — otherwise scrolling into
+     * a region near an unfinished statement would show blank rows.</p>
+     */
+    private boolean keepsColoursThroughRecovery(int row) {
+        List<SyntaxToken> existing = rowSyntax.get(row);
+        if (existing == null || existing.isEmpty()) return false;
+        int rowStart = buffer.document().lineStartOffset(row);
+        return tokenizer.recoveredAround(rowStart, rowStart + buffer.line(row).length());
+    }
+
+    /**
      * Records that a backend has new answers for a range — what it reports when a background parse lands.
      *
      * <p><b>Recorded rather than applied.</b> A parse that finishes while the caret is mid-word is a
@@ -2565,19 +2601,20 @@ public class TextEditor extends ScrollerView implements UndoScope {
      */
     private void invalidateRowSyntax(int fromOffset, int toOffset) {
         highlightsDirty = true;
-        if (toOffset >= SyntaxTokenizer.InvalidationListener.EVERYTHING || fromOffset <= 0 && toOffset >= buffer.length()) {
-            if (editing) {
-                for (int row = 0; row < buffer.lineCount(); row++) staleRows.add(row);
-            } else {
-                rowSyntax.clear();
-            }
+        if (toOffset >= SyntaxTokenizer.InvalidationListener.EVERYTHING
+                || fromOffset <= 0 && toOffset >= buffer.length()) {
+            // OVER WHAT IS CACHED, not over every row in the document: a row nobody has looked at has
+            // nothing to invalidate, and walking a 20,000-line file to say so costs a lineStartOffset per
+            // row on an announcement that arrives every few keystrokes.
+            if (editing) staleRows.addAll(rowSyntax.keySet());
+            else rowSyntax.keySet().removeIf(row -> !keepsColoursThroughRecovery(row));
             return;
         }
         int firstRow = buffer.document().offsetToPoint(clampToDocument(fromOffset)).row();
         int lastRow = buffer.document().offsetToPoint(clampToDocument(toOffset)).row();
         for (int row = firstRow; row <= lastRow; row++) {
             if (editing) staleRows.add(row);
-            else rowSyntax.remove(row);
+            else if (!keepsColoursThroughRecovery(row)) rowSyntax.remove(row);
         }
     }
 
