@@ -152,6 +152,17 @@ val engineBand17: Configuration by configurations.creating { isCanBeConsumed = f
 dependencies {
     api(project(":core"))
 
+    // THE PLATFORM SPI, so `language` can declare a CgService slot rather than a registry of its own.
+    //
+    // `compileOnly`, exactly as `core` takes it: this is pure SPI with no GL calls and no context
+    // requirement, and it ships inside every loader jar -- so wherever `language` runs, it is already
+    // there. It is on the headless classpath for the same reason.
+    //
+    // The alternative was a second static registry (`ScriptPlatforms` used to be one), and that shape
+    // has been paid for before: two registries let a loader wire up one and forget the other, which is
+    // a working backend beside a dead service with nothing to report it. @see CgService
+    compileOnly("com.crystalgraphics:platform:1.0.0")
+
     // Checked in under lib/ rather than resolved. The official `jtreesitter` needs JDK 23+ and the
     // Foreign Function & Memory API, which a Java 8 bytecode target cannot use, so these come from a fork
     // of `tree-sitter-ng` that is JNI-based and compiles to Java 8. They used to be read from a local
@@ -169,6 +180,10 @@ dependencies {
     implementation(files(rootProject.file("lib/tree-sitter/tree-sitter-xml-0.7.0.jar")))
 
     testImplementation("junit:junit:4.13.2")
+    // The SPI is compileOnly above, which is not on the test classpath -- and `ScriptPlatforms` names
+    // `CgService`, so a test loading it would fail at class init without this. `core` takes it the same
+    // way and for the same reason.
+    testImplementation("com.crystalgraphics:platform:1.0.0")
 
     // @Nullable, the same way `core/` gets it and for the same reason -- javax.annotation is not on the
     // module path from JDK 11. **compileOnly is the mitigation, not an oversight**: the package only
