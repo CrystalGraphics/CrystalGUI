@@ -12,7 +12,11 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Enumeration;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.zip.GZIPOutputStream;
@@ -272,6 +276,57 @@ public class JdkSourceExtractTest {
         byte[] buffer = new byte[8192];
         for (int read = in.read(buffer); read > 0; read = in.read(buffer)) out.write(buffer, 0, read);
         return out.toByteArray();
+    }
+
+    /**
+     * <b>A fetch that fails still announces itself.</b>
+     *
+     * <p>Reported from the harness as "I ran the command and nothing happened", and it was two defects
+     * stacked. {@code acquire} asked the server for the download's <em>size</em> before calling
+     * {@code Progress.begin}, so no bar existed until a request had completed — fifteen seconds of
+     * nothing against a host that does not answer. And the scheduler only draws a job after 400 ms, so a
+     * fetch that failed <em>fast</em> was never drawn either. Between them, every failure was silent.</p>
+     *
+     * <p>So the assertion is about ORDER, not about the download: begin is called before anything can
+     * block, which is the only property that makes the bar mean "I am trying" rather than "I have
+     * already succeeded in connecting".</p>
+     */
+    @Test
+    public void aFetchAnnouncesItselfBeforeItCanBlock() throws Exception {
+        List<String> announced = new ArrayList<>();
+        Progress recorder = new Progress() {
+            @Override
+            public void begin(String what, long total, Progress.Unit unit) {
+                announced.add("begin:" + what);
+            }
+
+            @Override
+            public void advance(long done) {
+            }
+
+            @Override
+            public void detail(String item) {
+                announced.add("detail:" + item);
+            }
+        };
+
+        Path cache = Files.createTempDirectory("cgui-jdk-announce");
+        String saved = System.getProperty(JdkSourceExtract.URL_PROPERTY);
+        try {
+            // A url that fails as fast as anything can, so the ONLY reason begin could have been reached
+            // is that it comes first.
+            System.setProperty(JdkSourceExtract.URL_PROPERTY,
+                    new File(cache.toFile(), "absent.tar.gz").toURI().toString());
+            JdkSourceExtract.Result result = JdkSourceExtract.acquire(cache, recorder);
+
+            assertEquals(JdkSourceExtract.State.UNAVAILABLE, result.state());
+            assertFalse("the fetch reported nothing at all", announced.isEmpty());
+            assertTrue("the work must be announced before it can block, not after",
+                    announced.get(0).startsWith("begin:"));
+        } finally {
+            if (saved == null) System.clearProperty(JdkSourceExtract.URL_PROPERTY);
+            else System.setProperty(JdkSourceExtract.URL_PROPERTY, saved);
+        }
     }
 
     // ── Fixture: a tar.gz, written by hand ──────────────────────────────────────────────────────

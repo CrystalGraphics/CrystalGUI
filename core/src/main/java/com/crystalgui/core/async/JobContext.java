@@ -100,9 +100,9 @@ public final class JobContext {
      */
     private final Progress reporter = new Progress() {
         @Override
-        public void begin(String what, long total) {
-            progressState = new ProgressState(
-                    what == null ? "" : what, "", 0L, total, clockMillis.getAsLong());
+        public void begin(String what, long total, Progress.Unit unit) {
+            progressState = new ProgressState(what == null ? "" : what, "", 0L, total,
+                    clockMillis.getAsLong(), unit == null ? Progress.Unit.ITEMS : unit);
         }
 
         @Override
@@ -112,7 +112,7 @@ public final class JobContext {
             // whose owner never announced it should not throw from a progress call.
             if (current == null) return;
             progressState = new ProgressState(current.what(), current.detail(), done,
-                    current.total(), current.begunAtMillis());
+                    current.total(), current.begunAtMillis(), current.unit());
         }
 
         @Override
@@ -120,7 +120,7 @@ public final class JobContext {
             ProgressState current = progressState;
             if (current == null) return;
             progressState = new ProgressState(current.what(), item == null ? "" : item,
-                    current.done(), current.total(), current.begunAtMillis());
+                    current.done(), current.total(), current.begunAtMillis(), current.unit());
         }
     };
 

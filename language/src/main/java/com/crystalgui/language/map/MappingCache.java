@@ -127,7 +127,12 @@ public final class MappingCache {
                 continue;
             }
             try {
-                if (!CacheFiles.install(target, Downloads.open(coordinates.urlOf(fileName)), digest)) {
+                // NO `reporting` HERE ON PURPOSE. PlatformMappings has already announced this as a
+                // SWEEP -- the two CSVs are small and their host declares no length worth trusting, so a
+                // bar would be invented rather than measured -- and a second announce from inside would
+                // retarget the very thing that decided a sweep was the honest answer.
+                if (!Downloads.from(coordinates.urlOf(fileName))
+                        .verifying(digest).into(target)) {
                     return new Result(State.UNAVAILABLE, MappingSet.IDENTITY,
                             fileName + " did not match its expected digest and was discarded; "
                                     + "runtime names will be shown as they are");

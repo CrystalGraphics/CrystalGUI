@@ -163,7 +163,22 @@ public class ProcessesPopover extends Popover {
                 label.setText(what);
             }
 
-            String item = job.state().detail();
+            // THE TRANSFER READOUT, COMPOSED INTO THE DETAIL LINE rather than given a widget of its own.
+            //
+            // A determinate bar with no numbers says how far along and not how big, how fast or how long
+            // is left, which are the three things somebody watching a download wants. The state renders
+            // it — the chrome cannot, because `done` and `total` are just longs here and a job stepping
+            // through 1,178 files would come out as "12 of 1178 bytes". @see ProgressState#summary
+            //
+            // Into the existing line because the two are the same KIND of thing (secondary, about this
+            // one job) and a third row would push the bar down and make every row taller for the jobs
+            // that have no readout at all.
+            String summary = job.state().summary(System.currentTimeMillis());
+            String detailed = job.state().detail();
+            if (summary != null) {
+                detailed = detailed.isEmpty() ? summary : detailed + " · " + summary;
+            }
+            final String item = detailed;
             if (!item.equals(shownDetail)) {
                 shownDetail = item;
                 detail.setText(item);
