@@ -246,47 +246,26 @@ public interface EngineSource {
                 }
                 if (missing.isEmpty()) return urlsOf(present);
 
-                // TOTALLED FIRST, so the bar is determinate from its first frame rather than switching
-                // from a sweep once the first HEAD comes back. A length nobody will give us is -1, and
-                // -1 is exactly what begin() takes to mean indeterminate -- so it passes straight through.
-                long total = 0;
+                // ONE BATCH, ONE BAR. Sizes are totalled first so it is determinate from its first
+                // frame, each artifact names itself on the detail line, and a failure abandons the set
+                // rather than leaving a partial band -- which loads and then fails on a class nobody can
+                // explain. All of that is Downloads.Batch's, not this method's: it was fifty lines here
+                // and the next consumer would have written them again.
+                List<Downloads.Artifact> artifacts = new ArrayList<>(missing.size());
                 for (EngineManifest row : missing) {
-                    long length = Downloads.lengthOf(row.url());
-                    if (length < 0) {
-                        total = -1;
-                        break;
-                    }
-                    total += length;
+                    artifacts.add(new Downloads.Artifact(row.fileName(), row.url(), row.md5()));
                 }
-                progress.begin("Downloading Java engine (band "
-                        + band.minimumFeatureVersion() + ")", total);
-
-                long done = 0;
-                for (EngineManifest row : missing) {
-                    // PER FILE, not per chunk. Each report allocates a state so a reader sees a consistent
-                    // one, and a report per 8 KB block is thousands of allocations feeding a bar that
-                    // redraws sixty times a second.
-                    progress.detail(row.fileName());
-                    Path target = directory.resolve(row.fileName());
-                    try (InputStream bytes = Downloads.open(row.url())) {
-                        if (!CacheFiles.install(target, bytes, row.md5())) {
-                            System.err.println("[crystalgui] " + row.fileName()
-                                    + " did not match its expected digest; band "
-                                    + band.minimumFeatureVersion() + " was not acquired");
-                            return Collections.emptyList();
-                        }
-                    } catch (IOException unreachable) {
-                        System.err.println("[crystalgui] could not fetch " + row.fileName() + " ("
-                                + unreachable + "); band " + band.minimumFeatureVersion()
-                                + " was not acquired and the editor will colour but not analyse");
-                        return Collections.emptyList();
-                    }
-                    present.add(target);
-                    if (total > 0) {
-                        done += Math.max(0, target.toFile().length());
-                        progress.advance(done);
-                    }
+                Downloads.Batch.Result fetched = Downloads.batch(artifacts)
+                        .named("Downloading Java engine (band " + band.minimumFeatureVersion() + ")")
+                        .reporting(progress)
+                        .into(directory);
+                if (!fetched.complete()) {
+                    System.err.println("[crystalgui] band " + band.minimumFeatureVersion()
+                            + " was not acquired (" + fetched
+                            + "); the editor will colour but not analyse");
+                    return Collections.emptyList();
                 }
+                for (EngineManifest row : missing) present.add(directory.resolve(row.fileName()));
                 return urlsOf(present);
             }
 

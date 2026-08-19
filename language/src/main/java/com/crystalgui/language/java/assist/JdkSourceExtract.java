@@ -2,11 +2,11 @@ package com.crystalgui.language.java.assist;
 
 import com.crystalgui.core.async.Progress;
 import com.crystalgui.language.cache.CacheFiles;
+import com.crystalgui.language.cache.Download;
 import com.crystalgui.language.cache.Downloads;
 import com.crystalgui.language.cache.TarArchive;
 
 import java.io.ByteArrayOutputStream;
-import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -205,17 +205,19 @@ public final class JdkSourceExtract {
 
         Path scratch = target.resolveSibling(target.getFileName() + ".building");
         try {
+            // THE DESCRIBED FORM. Announcing before the connect, retargeting once the response says how
+            // big it is, counting the bytes past and rate-limiting the reports are all Downloads' now --
+            // this class had its own Counting stream and its own begin/retarget dance, and the next
+            // consumer would have had a second copy of both.
             Files.createDirectories(target.getParent());
-            long total = Downloads.lengthOf(url);
-            progress.begin("Downloading JDK sources", total);
-            progress.detail("Java " + feature);
 
             int written;
-            try (InputStream network = Downloads.open(url);
-                 InputStream counted = new Counting(network, progress);
-                 TarArchive archive = TarArchive.gzip(counted);
+            try (Download download = Downloads.from(url)
+                         .named("Downloading JDK sources").reporting(progress).open();
+                 TarArchive archive = TarArchive.gzip(download.stream());
                  OutputStream file = Files.newOutputStream(scratch);
                  ZipOutputStream out = new ZipOutputStream(file)) {
+                progress.detail("Java " + feature);
                 written = build(archive, out, progress);
             }
             if (written == 0) {
@@ -303,36 +305,6 @@ public final class JdkSourceExtract {
             if (name.startsWith(wanted)) return name;
         }
         return null;
-    }
-
-    /** Turns bytes off the network into a moving bar. The gzip and tar layers above never see it. */
-    private static final class Counting extends FilterInputStream {
-        private final Progress progress;
-        private long read;
-
-        Counting(InputStream in, Progress progress) {
-            super(in);
-            this.progress = progress;
-        }
-
-        @Override
-        public int read() throws IOException {
-            int one = super.read();
-            if (one >= 0) advance(1);
-            return one;
-        }
-
-        @Override
-        public int read(byte[] buffer, int offset, int length) throws IOException {
-            int count = super.read(buffer, offset, length);
-            if (count > 0) advance(count);
-            return count;
-        }
-
-        private void advance(int count) {
-            read += count;
-            progress.advance(read);
-        }
     }
 
     /** Visible for testing — the bytes of a zip built from one archive, without touching disk. */

@@ -315,14 +315,13 @@ the body is prose and may be baked; the signature is code and may not.
   "no source found".
 - ✅ A javadoc body renders for a symbol with a doc comment, and for an `@Override` with none via
   `{@inheritDoc}`.
-- ◐ The JDK producer is absent from the jar; with it fetched, `List.add` shows both its parameter name and
-  its prose. **The first half holds by construction and the second is verified everywhere except the URL.**
-  The producer has been run over a real JDK 17 source tree, through a `file:` URL, end to end: **1,281
-  files, 3.72 MB, 1.5 s**, `java/util/List.java` present with its `@param` prose and `boolean add(` intact
-  and its bodies gone. That is against `plan_m13.md`'s own prediction of 1,256 files and ≤4.2 MB. What is
-  still untested is one string: nothing in this build reaches the network, so the upstream URL's shape
-  comes from Adoptium's published API rather than from a request anybody has made. The failure mode is one
-  reported line, and `crystalgui.jdk.sources.url` is the answer if it has moved.
+- ✅ The JDK producer is absent from the jar; with it fetched, `List.add` shows both its parameter name and
+  its prose. **Verified in a real client, against the real upstream**: the Adoptium `sources` artifact for
+  Java 21 downloaded, stripped and installed to `crystalgui-cache/jdk-sources/jdk-21-sources.zip` —
+  **4.33 MB, 1,178 entries**, `java/util/List.java` carrying its `@param` prose and `boolean add(` with the
+  bodies gone. That closes the one caveat this row carried: nothing in the build reaches the network, so
+  the URL's shape had been taken from Adoptium's published API rather than from a request anybody had made.
+  Somebody has now made it.
 
 > **The real tree is now a test, and it is there because it earned its place.** `TarArchive.next()` skipped
 > `padding(remaining)` — correct until a caller reads an entry, after which `remaining` is zero, so the
