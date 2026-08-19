@@ -1,6 +1,15 @@
 # P6.1.13 — Progress: long work that the user can see, and stop
 
-**Status:** planned, not started · **Planned:** 2026-08-19
+**Status:** planned, not started · **Planned:** 2026-08-19 · **Revised:** 2026-08-19 (see below)
+
+> **Revision, same day.** The first draft was reviewed against the question *"is this ready to
+> implement?"* and it was not. Six gaps, and two of them were the kind this plan criticises elsewhere:
+> **the download transport was unspecified** while a working one already sat private in `MappingCache`,
+> and **"digest-verified" had no mechanism behind it** — precisely the aspirational-pin situation the MCP
+> mapping data is in. Also corrected: per-field volatiles do not give a consistent snapshot (D17), there
+> was no failure path at all (D18), no record lifecycle or cancel-pending state (D19, D20), and
+> `maxConcurrent` turns out to be **global**, so a long download starves interactive work (D14 — the one
+> item here that changes shared machinery). D14–D21 are the result.
 
 The engine-band download decision (see `plan_m12.md` §26.14 and the band-size analysis) needs a progress
 UI, and so does P6.1.10's chunked transfer, and so does something that already ships and is silent today.
@@ -173,6 +182,14 @@ Three properties worth naming:
 | **D11** | The popup | **A `Popover`** listing every active job with its own bar and cancel, placed by `AnchoredPlacement` |
 | **D12** | Ordering | **Most recently begun first.** Not by progress, which reorders under the cursor |
 | **D13** | Nesting | **Flat in v1.** Sub-progress is where the fraction bugs live; a phase name (`detail`) covers the cases we have |
+| **D14** | Lane and slots | **`BACKGROUND`, and the scheduler must reserve a slot.** `maxConcurrent` is *global* — `running.size() >= maxConcurrent` — so a multi-minute download holds a slot the analyser needs on the next keystroke. The 2 s starvation guard promotes a *waiting* job; it cannot evict a running one. Cap concurrent `BACKGROUND` jobs **below** `maxConcurrent` so interactive work always has somewhere to go |
+| **D15** | Transport | **Extract `MappingCache.open` into a shared helper**, do not write a second one. It is already `URLConnection` with a 15 s connect/read timeout and redirects followed. `java.net.http.HttpClient` is **not an option** — the client runs on Java 8, so this is not a bytecode-target question, the class is absent at runtime |
+| **D16** | Digest provenance | **A Gradle task hashes the artifacts Gradle resolved** and writes them into a shipped resource; the download verifies fetched bytes against that. *Not* by reading Maven's published `.sha1`: hashing what we built against pins the exact bytes that were tested, needs no network at build time, and is checkable offline. **MD5**, because that is what `CacheFiles` computes — see the honesty note below |
+| **D17** | Snapshot consistency | **One volatile reference to an immutable state, swapped on change.** Per-field volatiles do not give a consistent read — the UI can take `done` from after a write and `total` from before it, and render `done > total`. Swapping allocates, so it is **rate-limited at the source**: bytes accumulate in a local, the state is swapped on a time or byte threshold. The two halves are one decision |
+| **D18** | Failure | **A failed job raises a notification** through `NotificationsView`; the row does not simply vanish. Silent failure is the defect class this audit keeps finding |
+| **D19** | Record lifecycle | Created at `submit()`, **visible** only after `begin()` plus D8's delay, removed when the `Job` settles. So a job that reports nothing is tracked and never drawn |
+| **D20** | Cancel-pending | The row **greys and keeps its bar** until the worker notices; `×` is idempotent. Cancellation is cooperative, so the gap is real and must look deliberate |
+| **D21** | Which job is inline | The most recently **begun** visible one — the same order D12 gives the popup, so the inline job is always the popup's first row and the eye does not have to re-find it |
 
 ---
 
@@ -194,12 +211,55 @@ public interface Progress {
 
 ### The record, and why the UI pulls
 
-The scheduler keeps one record per job with `volatile` fields (`what`, `detail`, `done`, `total`,
-`begunAtMillis`). `Progress` writes them from the worker. `JobScheduler.active()` returns an immutable
-snapshot, and the status bar reads it **during its own frame** like any other widget.
+The scheduler keeps one record per job holding **a single `volatile` reference to an immutable
+`ProgressState`** (`what`, `detail`, `done`, `total`, `begunAtMillis`). `Progress` builds a new state and
+swaps the reference; `JobScheduler.active()` reads references and returns a list. The status bar reads it
+**during its own frame** like any other widget.
+
+One reference and not five volatile fields, because five give no consistent read: the UI can take `done`
+from after a write and `total` from before it, and draw a bar past its end. A swap is atomic, so a reader
+sees one whole state or the previous one.
+
+That allocates, which is why **reporting is rate-limited at the source**: a transfer accumulates bytes in
+a local and swaps on a time or byte threshold, not per chunk. The two constraints are one decision (D17) —
+solve them apart and one of them comes back.
 
 No signal is emitted from a worker thread, because there is no signal. That is not fastidiousness — see
 [Risks](#risks).
+
+### The transport, and where digests come from
+
+There is already a downloader: `MappingCache.open(url)` — `URLConnection`, 15 s connect and read timeout,
+redirects followed — and `CacheFiles.install(target, stream, md5)` already writes through a `.part` and
+verifies. **Extract the transport, do not write a second one.** `java.net.http.HttpClient` is unavailable:
+the client runs on Java 8, so this is not a bytecode-target question, the class is absent at runtime.
+
+The digests are the part that does not exist yet, and the mapping data is the cautionary example — its
+machinery is complete (`MappingCoordinates.digestOf`, `CacheFiles` verification) and it has **no digests to
+put in it**, because upstream publishes none. For the bands we can do better than upstream:
+
+> **A Gradle task hashes the artifacts Gradle already resolved** and writes them into a shipped resource
+> beside the band index. Not by fetching Maven's published `.sha1` — hashing the resolved file pins *the
+> exact bytes this build was tested against*, needs no network at build time, and can be checked offline.
+
+**Honesty about what that buys.** `CacheFiles` computes **MD5**, so this is a corruption-and-drift check —
+a truncated transfer, a mirror serving something else, a half-written cache entry. It is **not** a security
+boundary and must not be described as one; authenticity comes from HTTPS to Maven Central. Recorded here
+because a digest in a plan reads like a signature to whoever skims it.
+
+### Failure, and the states a row can be in
+
+A job that throws raises a notification through `NotificationsView` and the row leaves. Silent
+disappearance is indistinguishable from success, which is the exact defect class this audit keeps finding.
+
+| State | Row |
+|---|---|
+| submitted, no `begin()` | tracked, **not drawn** (D19) |
+| `begin()`, inside the delay | tracked, not drawn (D8) |
+| running | text, bar, `×` |
+| cancel requested | **greyed, bar retained** until the worker notices (D20) |
+| failed | leaves, and a notification appears (D18) |
+| done | leaves, after the minimum visible time (D9) |
 
 ### The widgets
 
@@ -240,10 +300,16 @@ result in flight is discarded. The worker notices at its next `throwIfCancelled(
 2. **Chrome strobe.** `JobScheduler` runs an analysis on every keystroke. If every job appeared, the status
    bar would flicker continuously. D8 and D9 are the whole answer, and they are the two most likely things
    to be got wrong.
-3. **Reporting cost.** A `detail()` per 8 KB chunk is ~2,000 string allocations for a 16 MB download, on a
-   worker, for a bar that redraws 60 times a second. Reports must be rate-limited at the source — bytes
-   accumulate, text changes per *file*, not per chunk.
-4. **A 16 MB fetch must not block the editor opening.** It is a `Job`, it degrades to grammar-only
+3. **Reporting cost, and it collides with consistency.** A report per 8 KB chunk is ~2,000 allocations for
+   a 16 MB download, on a worker, feeding a bar that redraws 60 times a second. But the fix for *tearing*
+   (D17) is to allocate an immutable state and swap it — so "allocate less" and "allocate a snapshot" pull
+   against each other. They are resolved together: accumulate in locals, swap on a threshold. Stated as one
+   risk because treating them separately is how one of them gets solved and the other reintroduced.
+4. **A long job holds a global slot.** `maxConcurrent` is scheduler-wide, so a download in `BACKGROUND`
+   occupies a slot the analyser wants on the next keystroke, and the starvation guard cannot evict it. D14
+   is the answer and it is a change to `JobScheduler`, not to this feature — which makes it the one item
+   here that touches shared machinery.
+5. **A 16 MB fetch must not block the editor opening.** It is a `Job`, it degrades to grammar-only
    colouring while it runs, and the editor opens regardless. That is a property of where the download is
    started, not of this API — noted here because it is the failure the API makes tempting.
 
@@ -256,7 +322,10 @@ result in flight is discarded. The worker notices at its next `throwIfCancelled(
 | 1 | `Progress` + `NONE` + `JobContext.progress()` + the per-job record | Headless, no UI, fully testable |
 | 2 | `JobScheduler.active()` snapshot, D8/D9 timing | The policy, with a fake clock — before anything draws |
 | 3 | **Move `PlatformMappings` onto `JobScheduler`** and report | The consumer that already ships. Fixes the bare thread in the same change |
-| 4 | `EngineSource.downloadedFrom(...)` — digest-verified, reporting | The decision that prompted this. Maven Central publishes `.sha1`, so unlike the mappings this can be properly pinned |
+| 3b | **`JobScheduler` reserves a slot** for non-`BACKGROUND` work (D14) | Touches shared machinery, so it lands on its own and before anything long-running uses the pool |
+| 3c | Extract the transport out of `MappingCache` (D15) | Shared by steps 3 and 4; extracting it while step 3 is fresh is cheaper than after |
+| 4a | **Gradle task: hash the resolved band artifacts into a shipped resource** (D16) | Without it "digest-verified" is aspirational — the mapping data's exact situation |
+| 4b | `EngineSource.downloadedFrom(...)` — verifying against 4a, reporting through `Progress` | The decision that prompted this plan |
 | 5 | `ProgressBar` + `default.css` | First pixels |
 | 6 | The status-bar item | D10 |
 | 7 | `ProcessesPopover` | D11 |
@@ -279,4 +348,14 @@ Testing the spine, per the project's rule — never pixel geometry.
 - **Cancel reaches the worker** — `cancel(key)` then `throwIfCancelled()` throws.
 - **No listener on a worker thread**, asserted structurally: `active()` is a snapshot and `Progress` has
   no subscribe method to misuse.
-- **Headless throughout.** Steps 1–4 need no GL and no window; the harness covers the drawing.
+- **A torn state is unrepresentable**, not merely unobserved: `active()` hands back whole `ProgressState`
+  objects, so there is no interleaving to test for — asserted by the shape, and stated here so nobody
+  "optimises" it back into separate fields.
+- **A failing job notifies**, and its row leaves.
+- **A cancelled row keeps its bar** until the worker acknowledges.
+- **A `BACKGROUND` job cannot occupy the last slot** (D14) — submit `maxConcurrent` long jobs, then assert
+  an `INTERACTIVE` one still starts.
+- **The digest resource matches the bundled jars** — a build-time check, so a re-pin that forgets to
+  regenerate fails the build rather than a player's first launch.
+- **Headless throughout**, in `core/headlessTest` for the channel and the scheduler (`core/async` needs no
+  GL) and `language/test` for the download; the harness covers the drawing.

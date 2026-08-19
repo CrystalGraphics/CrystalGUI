@@ -1255,8 +1255,10 @@ Decided:
 - **Bundling becomes a build flag** (`-PcgBundleBands`), defaulting to **band 8 for 1.7.10**.
 - **Download is the fallback, not the mechanism** — a third `EngineSource` behind
   `firstOf(configured, bundled, downloaded)`, which already returns the first non-empty answer and so
-  needs no change. Unlike the mapping data, **Maven Central publishes a `.sha1` per artifact**, so these
-  can be digest-pinned properly; `CacheFiles.install` already takes one.
+  needs no change. Unlike the mapping data these can be digest-pinned properly — not by
+  fetching Maven's published `.sha1`, but by **hashing the artifacts Gradle resolved** into a shipped
+  resource, which pins the exact bytes the build was tested against and needs no network at build
+  time. `CacheFiles.install` already verifies. See P6.1.13 D16.
 
 The progress UI that download needs is planned in
 [`CrystalGUI_P6.1.13_PROGRESS_PLAN.md`](CrystalGUI_P6.1.13_PROGRESS_PLAN.md), which also takes the MCP
