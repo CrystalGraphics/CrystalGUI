@@ -2,6 +2,7 @@ package com.crystalgui.language.map;
 
 import com.crystalgui.language.platform.MappingCoordinates;
 import com.crystalgui.language.platform.NamespaceProbe;
+import com.crystalgui.core.async.Progress;
 import com.crystalgui.language.platform.ScriptService;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.language.platform.ScriptServices;
@@ -54,16 +55,79 @@ public final class PlatformMappings {
      * hold: this reference is replaced once, when a background fetch completes.</p>
      */
     public static MappingSet current() {
-        if (!started) begin();
+        if (!started) startLazily();
         return current;
     }
 
-    private static synchronized void begin() {
-        if (started) return;
-        started = true;
+    /**
+     * Acquires the mapping <b>on the calling thread</b>, reporting into {@code progress}.
+     *
+     * <p>Public so a client can drive it from a job of its own and get a progress bar for free:</p>
+     *
+     * <pre>{@code
+     * scheduler.job(key, JobLane.BACKGROUND, ctx -> {
+     *     PlatformMappings.begin(ctx.progress());
+     *     return null;
+     * }).submit();
+     * }</pre>
+     *
+     * <h3>Why this is not simply a {@code JobScheduler} job inside here</h3>
+     *
+     * <p>That was the plan and it is wrong, for a reason worth writing down: <b>{@code UIWindow.paintFrame}
+     * is the only thing that drains the scheduler.</b> A dedicated server runs scripts, needs readable
+     * names to compile them, and has no window — so a mapping fetch submitted as a job there would sit in
+     * the queue for ever and nothing would say why. Threading is therefore the caller's decision: a client
+     * calls this from a job, and anything headless gets the lazy daemon-thread path below.</p>
+     *
+     * <p>Idempotent. The second caller returns immediately rather than fetching again.</p>
+     */
+    public static void begin(Progress progress) {
+        synchronized (PlatformMappings.class) {
+            if (started) return;
+            started = true;
+        }
+        ScriptService needsFetch = decide();
+        if (needsFetch != null) fetch(needsFetch, progress == null ? Progress.NONE : progress);
+    }
+
+    /** The lazy path: a daemon thread, so a first {@code current()} never blocks its caller. */
+    /**
+     * The lazy path: a daemon thread, so a first {@code current()} never blocks its caller.
+     *
+     * <p>Daemon, because mapping data must never be the reason a game cannot exit. One-shot, because there
+     * is exactly one artifact to acquire per process.</p>
+     */
+    private static void startLazily() {
+        ScriptService needsFetch;
+        synchronized (PlatformMappings.class) {
+            if (started) return;
+            started = true;
+        }
+        // THE DECISION INLINE, THE FETCH ON A THREAD. A mapping already cached is applied before this
+        // returns, so the caller's very next current() sees it -- which is the difference between the
+        // editor opening with readable names and opening with runtime ones and correcting itself.
+        needsFetch = decide();
+        if (needsFetch == null) return;
+
+        // Daemon, because mapping data must never be the reason a game cannot exit. One-shot, because
+        // there is exactly one artifact to acquire per process.
+        Thread worker = new Thread(() -> fetch(needsFetch, Progress.NONE), "crystalgui-mappings");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    /**
+     * The DECISION, always synchronous. Returns the platform when a network fetch is still needed.
+     *
+     * <p>Split from the fetch because a mapping already in the cache must be applied <b>before the first
+     * analysis</b>, on whatever thread asked — otherwise the editor shows runtime names and then silently
+     * changes its mind a moment later, which reads as the names being unstable rather than as a load
+     * having completed. Only the network half is worth moving off the caller.</p>
+     */
+    private static ScriptService decide() {
 
         ScriptService platform = CgPlatform.get(ScriptServices.SERVICE);
-        if (platform == ScriptService.NONE) return;
+        if (platform == ScriptService.NONE) return null;
 
         NamespaceProbe probe = platform.namespaceProbe();
         MappingCoordinates coordinates = platform.mappings();
@@ -75,19 +139,19 @@ public final class PlatformMappings {
                     + (probe.isNone() ? "no namespace probe" : "no mapping coordinates")
                     + " on " + platform.getClass().getName()
                     + "; runtime names will be shown as they are");
-            return;
+            return null;
         }
 
         Boolean readable = isReadable(platform, probe);
         if (readable == null) {
             System.err.println("[crystalgui] could not read " + probe.internalName()
                     + " to tell which namespace this runtime speaks; assuming it is already readable");
-            return;
+            return null;
         }
         if (readable) {
             System.err.println("[crystalgui] the runtime already speaks readable names ("
                     + probe.internalName() + " declares " + probe.readableMember() + ")");
-            return;
+            return null;
         }
 
         if (MappingCache.isComplete(coordinates, platform.cacheRoot())) {
@@ -95,19 +159,25 @@ public final class PlatformMappings {
             // before the first analysis avoids a window where the editor shows runtime names and then
             // silently changes its mind.
             apply(MappingCache.load(coordinates, platform.cacheRoot()));
-            return;
+            return null;
         }
 
-        // A DAEMON THREAD rather than a scheduler, and rather than the caller's thread. A network fetch
-        // reached from a language's register() would sit inside initGui and stall the client for as long
-        // as an unreachable host takes to time out. Daemon, because mapping data must never be the reason
-        // a game cannot exit -- and one-shot, because there is exactly one artifact to acquire per
-        // process. A JobScheduler would be the tidier home and lives above this layer; reaching up for it
-        // would invert the dependency for a single thread.
-        Thread fetch = new Thread(() -> apply(MappingCache.load(coordinates, platform.cacheRoot())),
-                "crystalgui-mappings");
-        fetch.setDaemon(true);
-        fetch.start();
+        // Everything above was free. What is left is the network, and only the caller knows where that
+        // should run -- so it is handed back rather than done here. @see #begin @see #startLazily
+        return platform;
+    }
+
+    /**
+     * The network half, on whatever thread the caller chose.
+     *
+     * <p>Indeterminate: the two CSVs are small and their host declares no length worth trusting, so a
+     * sweep is honest where a bar would be invented.</p>
+     */
+    private static void fetch(ScriptService platform, Progress progress) {
+        MappingCoordinates coordinates = platform.mappings();
+        progress.begin("Downloading Minecraft mappings", -1);
+        progress.detail(coordinates.cacheKey());
+        apply(MappingCache.load(coordinates, platform.cacheRoot()));
     }
 
     private static void apply(MappingCache.Result result) {

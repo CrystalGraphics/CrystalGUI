@@ -1,5 +1,7 @@
 package com.crystalgui.language.engine;
 
+import com.crystalgui.language.cache.Downloads;
+import com.crystalgui.core.async.Progress;
 import com.crystalgui.language.cache.CacheFiles;
 
 import java.io.File;
@@ -196,6 +198,107 @@ public interface EngineSource {
             @Override
             public String toString() {
                 return "EngineSource.extractedFrom(" + resourceRoot + " -> " + into + ")";
+            }
+        };
+    }
+
+    /**
+     * Fetches a band from the URLs in its shipped manifest, into {@code into}.
+     *
+     * <h3>The fallback, not the mechanism</h3>
+     *
+     * <p>Bundled first, this second. A jar carries the band its own platform runs — band 8 for 1.7.10 — so
+     * the ordinary launch needs no network at all; this exists for the host whose band is not that one,
+     * which on 1.7.10 means lwjgl3ify and GTNH. Offline, it answers empty and the editor colours without
+     * analysing, exactly as it does when nothing is bundled.</p>
+     *
+     * <h3>Verified against the manifest's digest, and that is worth more than it looks</h3>
+     *
+     * <p>Unlike the mapping data — whose upstream publishes no checksums, so its digests are still an open
+     * item — these are hashed at build time from the artifacts Gradle resolved. So a fetched jar is
+     * checked against the exact bytes the build was tested with, and {@code CacheFiles.install} writes
+     * through a {@code .part} and deletes on mismatch, so a bad transfer leaves nothing behind to be
+     * mistaken for a good one next launch.</p>
+     *
+     * <p><b>All or nothing.</b> A band is a classpath: fifteen jars that resolve each other. A partial set
+     * is worse than none, because the engine opens and then fails on whichever class was in the jar that
+     * did not arrive — so one failure abandons the whole band and says so.</p>
+     */
+    static EngineSource downloadedFrom(ClassLoader loader, String resourceRoot, Path into,
+                                       Progress progress) {
+        return new EngineSource() {
+            @Override
+            public List<URL> jarsFor(EngineBand band) throws IOException {
+                String prefix = resourceRoot + "/" + band.minimumFeatureVersion() + "/";
+                List<EngineManifest> rows = EngineManifest.listing(loader, prefix);
+                if (rows.isEmpty()) return Collections.emptyList();
+
+                Path directory = into.resolve(String.valueOf(band.minimumFeatureVersion()));
+                List<Path> present = new ArrayList<>(rows.size());
+                List<EngineManifest> missing = new ArrayList<>();
+                for (EngineManifest row : rows) {
+                    Path target = directory.resolve(row.fileName());
+                    if (CacheFiles.isValid(target, row.md5())) {
+                        present.add(target);
+                    } else {
+                        missing.add(row);
+                    }
+                }
+                if (missing.isEmpty()) return urlsOf(present);
+
+                // TOTALLED FIRST, so the bar is determinate from its first frame rather than switching
+                // from a sweep once the first HEAD comes back. A length nobody will give us is -1, and
+                // -1 is exactly what begin() takes to mean indeterminate -- so it passes straight through.
+                long total = 0;
+                for (EngineManifest row : missing) {
+                    long length = Downloads.lengthOf(row.url());
+                    if (length < 0) {
+                        total = -1;
+                        break;
+                    }
+                    total += length;
+                }
+                progress.begin("Downloading Java engine (band "
+                        + band.minimumFeatureVersion() + ")", total);
+
+                long done = 0;
+                for (EngineManifest row : missing) {
+                    // PER FILE, not per chunk. Each report allocates a state so a reader sees a consistent
+                    // one, and a report per 8 KB block is thousands of allocations feeding a bar that
+                    // redraws sixty times a second.
+                    progress.detail(row.fileName());
+                    Path target = directory.resolve(row.fileName());
+                    try (InputStream bytes = Downloads.open(row.url())) {
+                        if (!CacheFiles.install(target, bytes, row.md5())) {
+                            System.err.println("[crystalgui] " + row.fileName()
+                                    + " did not match its expected digest; band "
+                                    + band.minimumFeatureVersion() + " was not acquired");
+                            return Collections.emptyList();
+                        }
+                    } catch (IOException unreachable) {
+                        System.err.println("[crystalgui] could not fetch " + row.fileName() + " ("
+                                + unreachable + "); band " + band.minimumFeatureVersion()
+                                + " was not acquired and the editor will colour but not analyse");
+                        return Collections.emptyList();
+                    }
+                    present.add(target);
+                    if (total > 0) {
+                        done += Math.max(0, target.toFile().length());
+                        progress.advance(done);
+                    }
+                }
+                return urlsOf(present);
+            }
+
+            private List<URL> urlsOf(List<Path> jars) throws IOException {
+                List<URL> urls = new ArrayList<>(jars.size());
+                for (Path jar : jars) urls.add(jar.toUri().toURL());
+                return urls;
+            }
+
+            @Override
+            public String toString() {
+                return "EngineSource.downloadedFrom(" + resourceRoot + " -> " + into + ")";
             }
         };
     }

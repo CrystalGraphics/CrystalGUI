@@ -1227,15 +1227,27 @@ progressbar .__fill__ {
     border-radius: 4px;
 }
 
+/* WIDTH FIRST, then alignment. text-align centres text within the element's box, and a UIText in a
+ * column is sized to its own content -- so there is nothing to centre within and the rule reads as
+ * having been ignored. The fill idiom is the answer here as everywhere: width 0, grow 1. */
 .__processes__ .__title__ {
     font-size: 9px;
     color: var(--menu-fg, #BBBBBB);
+    width: 0;
+    flex-grow: 1;
     text-align: center;
+    margin-bottom: 4px;
 }
 
+/* Inter-row separation must clearly exceed intra-row, or the rows read as one block: a row's own parts
+ * are 3px apart and the rows 12px, so the eye groups by proximity the way it should. Padding on the row
+ * rather than a gap on the list, because a gap applies between EVERY pair of children and the list has a
+ * title above it that wants its own spacing. */
 .__processes__ .__process-row__ {
     flex-direction: column;
-    gap-all: 4px;
+    gap-all: 3px;
+    padding-top: 6px;
+    padding-bottom: 6px;
 }
 
 .__processes__ .__process-row__ .__label__ {
@@ -1278,4 +1290,19 @@ progressbar .__fill__ {
 
 .__processes__ .__process-row__.__cancelling__ .__cancel__ {
     color: var(--progress-cancelling-fg, #4E5254);
+}
+
+/* The foot: IntelliJ's "Hide processes (N)". A link, not a button -- it dismisses a popup rather than
+ * acting on anything, which is the distinction both references draw. */
+.__processes__ .__hide__ {
+    font-size: 9px;
+    color: var(--progress-hide-fg, #548AF7);
+    width: 0;
+    flex-grow: 1;
+    text-align: center;
+    margin-top: 4px;
+}
+
+.__processes__ .__hide__:hover {
+    color: var(--progress-hide-hover-fg, #6B9BF8);
 }

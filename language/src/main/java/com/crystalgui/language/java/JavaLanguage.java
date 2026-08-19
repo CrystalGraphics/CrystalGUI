@@ -57,6 +57,7 @@ public final class JavaLanguage {
 
     private static JavaEngine engine;
     private static JobScheduler scheduler;
+    private static EngineSource source;
 
     private JavaLanguage() {
     }
@@ -81,17 +82,10 @@ public final class JavaLanguage {
         // THE BAND'S LOADER IS SHARED, not opened here: Rhino ships in the same band as ECJ, and a
         // JavaScript language registering after this one reaches its adapters through the same host.
         // Opening a loader per language would be two copies of twenty jars for one process.
-        EngineHost host = EngineHost.shared(source);
-        if (host == null) return false;
-        try {
-            engine = JavaEngine.over(host);
-        } catch (RuntimeException unavailable) {
-            System.err.println("[crystalgui] the Java engine did not open; the editor will colour but "
-                    + "not analyse: " + unavailable);
-            return false;
-        }
-
         JavaLanguage.scheduler = scheduler;
+        JavaLanguage.source = source;
+        // ATTEMPTED, NOT REQUIRED -- everything below registers whether or not it opened. @see #engine()
+        openEngine();
         List<String> classpath = HostClasspath.detect();
 
         // THE EXISTING ENTRY, WITH SERVICES ADDED -- not a new one. `.java` already resolves to a
@@ -118,18 +112,41 @@ public final class JavaLanguage {
         // Inside the lambda because a provider is invoked when a workbench opens, which is later than
         // registration -- and later is what gives a first launch's background fetch time to land.
         ScriptRuntimes.contribute(Language.JAVA, cacheRoot -> {
+            JavaEngine ready = engine();
+            if (ready == null) return null;
             MappingSet mappings = PlatformMappings.current();
-            return new ScriptHost(engine,
+            return new ScriptHost(ready,
                     cacheRoot == null ? ScriptCache.inMemory() : ScriptCache.directory(cacheRoot),
                     mappings, mappings.isIdentity() ? "identity" : "mapped",
                     JavaLanguage.class.getClassLoader(), classpath);
         });
-        return true;
+        return engine != null;
+    }
+
+
+    private static void openEngine() {
+        if (engine != null) return;
+        // THE BAND'S LOADER IS SHARED, not opened here: Rhino ships in the same band as ECJ, and a
+        // JavaScript language registering after this one reaches its adapters through the same host.
+        // Opening a loader per language would be two copies of twenty jars for one process.
+        EngineHost host = EngineHost.shared(source);
+        if (host == null) return;
+        try {
+            engine = JavaEngine.over(host);
+        } catch (RuntimeException unavailable) {
+            System.err.println("[crystalgui] the Java engine did not open; the editor will colour but "
+                    + "not analyse: " + unavailable);
+        }
     }
 
     private static LanguageServices servicesFor(TextBuffer buffer, Resource resource,
                                                 List<String> classpath) {
-        return new JavaLanguageServices(buffer, engine, scheduler, classNameFor(resource), classpath);
+        JavaEngine ready = engine();
+        // NULL RATHER THAN A BROKEN SERVICES OBJECT. No engine is a legitimate deployment -- the editor
+        // colours from the grammar and analyses nothing -- and it is the state a first launch is in while
+        // the band is still arriving.
+        if (ready == null) return null;
+        return new JavaLanguageServices(buffer, ready, scheduler, classNameFor(resource), classpath);
     }
 
     /**
@@ -188,8 +205,27 @@ public final class JavaLanguage {
         return policy;
     }
 
-    /** The shared engine, or null when none opened. */
+    /**
+     * The engine, opened on first use and <b>retried until it opens</b>.
+     *
+     * <h3>Why this is not resolved once at registration</h3>
+     *
+     * <p>It was, and a completed download would never have been used. {@code EngineHost.shared} returns
+     * null <em>without caching the failure</em>, so a retry works — but this class resolved the engine
+     * once during {@code register()} and, worse, returned early when it failed, so the services factory
+     * was never registered either. A band arriving two minutes into a session would have downloaded,
+     * verified, extracted, reported progress the whole way, and then sat unused with nothing to say why.
+     * </p>
+     *
+     * <p>Resolving here costs a null check per document open and retries for free, because a document
+     * cannot open before a workbench exists and a workbench is later than registration.</p>
+     *
+     * <p><b>What it does not fix:</b> an editor already open when the band lands still has no analysis
+     * until its document is reopened. Re-attaching services to a live document is
+     * {@code TextFileDocument}'s business, and this is deliberately not that.</p>
+     */
     public static synchronized JavaEngine engine() {
+        if (engine == null) openEngine();
         return engine;
     }
 

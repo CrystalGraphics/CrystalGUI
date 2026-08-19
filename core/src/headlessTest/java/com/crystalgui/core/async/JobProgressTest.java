@@ -213,6 +213,64 @@ public class JobProgressTest {
         finishAndCollect(scheduler, second);
     }
 
+    // ── Slots ───────────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * <b>Background work cannot occupy the last slot.</b>
+     *
+     * <p>{@code maxConcurrent} is scheduler-wide and background jobs are the long kind, so without this a
+     * download and an index hold the pool for minutes while an analysis waits on the next keystroke. The
+     * starvation guard cannot help: it promotes a job that has waited too long and cannot evict one that
+     * is running.</p>
+     */
+    @Test
+    public void backgroundWorkLeavesASlotForInteractive() {
+        JobScheduler scheduler = new JobScheduler(THREADS, clock, 2);
+        // Submitted directly rather than through live(), which waits for the worker to start -- and the
+        // whole point here is that the SECOND one deliberately does not.
+        CountDownLatch release = new CountDownLatch(1);
+        for (String name : new String[]{"bg-one", "bg-two"}) {
+            scheduler.job(key(name), JobLane.BACKGROUND, context -> {
+                try {
+                    release.await();
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+                return name;
+            }).submit();
+        }
+        scheduler.drain();
+
+        // Two background jobs, a pool of two -- only ONE may be running, so the other is still waiting.
+        assertEquals("background took the whole pool", 1, scheduler.runningCount());
+
+        List<String> ran = new ArrayList<>();
+        scheduler.job(JobKey.of(JobProgressTest.class, "interactive"), JobLane.INTERACTIVE,
+                context -> {
+                    ran.add("interactive");
+                    return "done";
+                }).submit();
+        for (int attempt = 0; attempt < 200 && ran.isEmpty(); attempt++) {
+            scheduler.drain();
+            try {
+                Thread.sleep(1);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        }
+        assertFalse("interactive work could not get a slot", ran.isEmpty());
+        release.countDown();
+    }
+
+    /** A pool of one still runs background work — doing nothing would be worse than doing it. */
+    @Test
+    public void aSingleSlotPoolStillRunsBackgroundWork() {
+        JobScheduler scheduler = new JobScheduler(THREADS, clock, 1);
+        Held only = live(scheduler, "bg-alone", 100);
+        assertEquals(1, scheduler.runningCount());
+        finishAndCollect(scheduler, only);
+    }
+
     // ── The state itself ────────────────────────────────────────────────────────────────────────
 
     /** Never null, so a job never branches on whether anyone is watching. */

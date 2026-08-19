@@ -1,6 +1,7 @@
 package com.crystalgui.language.map;
 
 import com.crystalgui.language.cache.CacheFiles;
+import com.crystalgui.language.cache.Downloads;
 import com.crystalgui.language.map.format.MappingFiles;
 import com.crystalgui.language.platform.MappingCoordinates;
 
@@ -94,8 +95,6 @@ public final class MappingCache {
     }
 
     /** Long enough for a slow connection, short enough that an unreachable host does not hang a launch. */
-    private static final int TIMEOUT_MILLIS = 15_000;
-
     private MappingCache() {
     }
 
@@ -128,7 +127,7 @@ public final class MappingCache {
                 continue;
             }
             try {
-                if (!CacheFiles.install(target, open(coordinates.urlOf(fileName)), digest)) {
+                if (!CacheFiles.install(target, Downloads.open(coordinates.urlOf(fileName)), digest)) {
                     return new Result(State.UNAVAILABLE, MappingSet.IDENTITY,
                             fileName + " did not match its expected digest and was discarded; "
                                     + "runtime names will be shown as they are");
@@ -172,16 +171,6 @@ public final class MappingCache {
      * redirects, and a connection that does not follow one reports a 302 body as the file. That failure
      * arrives as a digest mismatch, which reads as corruption rather than as a redirect.</p>
      */
-    private static InputStream open(String url) throws IOException {
-        URLConnection connection = new URL(url).openConnection();
-        connection.setConnectTimeout(TIMEOUT_MILLIS);
-        connection.setReadTimeout(TIMEOUT_MILLIS);
-        if (connection instanceof HttpURLConnection) {
-            ((HttpURLConnection) connection).setInstanceFollowRedirects(true);
-        }
-        return connection.getInputStream();
-    }
-
     /** Where {@code load} caches — exposed so a caller can report or clear it. */
     public static Path directoryFor(MappingCoordinates coordinates, Path cacheRoot) {
         if (coordinates == null || coordinates.isNone() || cacheRoot == null) return null;

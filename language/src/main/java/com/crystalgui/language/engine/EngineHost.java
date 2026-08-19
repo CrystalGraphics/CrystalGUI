@@ -1,5 +1,7 @@
 package com.crystalgui.language.engine;
 
+import com.crystalgui.core.async.Progress;
+
 import com.crystalgui.language.platform.ScriptService;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.language.platform.ScriptServices;
@@ -229,7 +231,18 @@ public final class EngineHost implements Closeable {
      * absence in this stack.</p>
      */
     public static EngineSource defaultSource() {
-        return EngineSource.firstOf(configuredSource(), bundledSource());
+        return defaultSource(Progress.NONE);
+    }
+
+    /**
+     * The same, reporting a download into {@code progress}.
+     *
+     * <p>{@code firstOf} takes the first NON-EMPTY answer, so the download is only ever reached by a host
+     * whose band is not the bundled one — no ordinary launch touches the network, and the third candidate
+     * costs a resource lookup that misses.</p>
+     */
+    public static EngineSource defaultSource(Progress progress) {
+        return EngineSource.firstOf(configuredSource(), bundledSource(), downloadedSource(progress));
     }
 
     private static EngineSource configuredSource() {
@@ -237,6 +250,15 @@ public final class EngineHost implements Closeable {
         if (configured == null || configured.trim().isEmpty()) return EngineSource.NONE;
         Path root = Path.of(configured.trim());
         return Files.isDirectory(root) ? EngineSource.directory(root) : EngineSource.NONE;
+    }
+
+    /** The fallback: fetch the band this host needs, verified against the shipped manifest. */
+    private static EngineSource downloadedSource(Progress progress) {
+        Path cacheRoot = CgPlatform.get(ScriptServices.SERVICE).cacheRoot();
+        if (cacheRoot == null) return EngineSource.NONE;
+        return EngineSource.downloadedFrom(EngineHost.class.getClassLoader(),
+                BUNDLED_ENGINES_ROOT, cacheRoot.resolve("engines"),
+                progress == null ? Progress.NONE : progress);
     }
 
     private static EngineSource bundledSource() {
