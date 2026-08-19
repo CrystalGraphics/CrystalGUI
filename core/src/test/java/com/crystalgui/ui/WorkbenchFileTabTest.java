@@ -31,6 +31,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertTrue;
 import com.crystalgui.ui.elements.dock.DockPanelDescriptor;
 import com.crystalgui.ui.elements.dock.DockPanelRef;
@@ -513,6 +514,36 @@ public class WorkbenchFileTabTest extends UiTestBase {
 
         assertSame("a close must not pull focus out of whatever the user was using",
                 elsewhere, window.getInputHandler().getFocusedElement());
+    }
+
+    /**
+     * <b>Reopening a closed file shows the LIVE document's editor, not the dead one.</b>
+     *
+     * <p>{@code DockGroup.contentFor} memoises the built element per {@link DockPanelRef}, and a ref is a
+     * VALUE — reopening the same file produces an equal one. So a closed tab left its element in the map
+     * and the reopen was handed back the editor built for the document that had just been disposed.</p>
+     *
+     * <p>It looked perfectly normal until something touched it, and then threw
+     * {@code IllegalStateException: Parser is closed} out of a frame tick — the document's dispose closes
+     * its tokenizer, and the first folding pass asked the closed parser to parse. Asserted as identity
+     * rather than by typing, because "which editor is on screen" is the actual defect and a crash is only
+     * how it happened to surface.</p>
+     */
+    @Test
+    public void reopeningAClosedFileShowsTheLiveEditor() {
+        CgPath path = CgPath.parse("mymod.proj:First.java");
+        TextEditor first = openWithContent(path);
+        assertNotNull("attached while open", first.getAttachedWindow());
+
+        workbench.dock().closePanel(workbench.refFor(path));
+        settle();
+
+        TextEditor reopened = openWithContent(path);
+
+        assertNotSame("the disposed document's editor must not come back", first, reopened);
+        assertSame("and what is on screen is what the live document owns",
+                workbench.editorFor(path), reopened);
+        assertNotNull("which has to actually be in the tree", reopened.getAttachedWindow());
     }
 
 }
