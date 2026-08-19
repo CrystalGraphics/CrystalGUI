@@ -8,7 +8,6 @@ import com.crystalgui.ui.UIFrameTicker;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.ProgressBar;
 import com.crystalgui.ui.elements.UIText;
-import com.crystalgui.ui.event.DOMEvent;
 
 import dev.vfyjxf.taffy.style.AlignItems;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
@@ -53,6 +52,7 @@ public class ProgressStatusItem extends UIElement {
     private String shownWhat = "";
     private float shownFraction = Float.NaN;
     private int shownCount = -1;
+    private boolean ticking;
 
     public ProgressStatusItem() {
         addClass(ITEM_CLASS);
@@ -82,9 +82,6 @@ public class ProgressStatusItem extends UIElement {
             event.stopPropagation();
         }, false, false);
 
-        events.getGroup(DOMEvent.ElementAdded.class)
-                .attachListener((element, event) -> startTicking(), false, false);
-
         setVisible(false);
     }
 
@@ -93,14 +90,44 @@ public class ProgressStatusItem extends UIElement {
         return false;
     }
 
+    /**
+     * Whether anything is on screen — the only observable that matters, and the one that was wrong.
+     *
+     * <p>A widget fed nothing looks exactly like a widget correctly showing nothing, so this exists to be
+     * asserted rather than looked at. @see com.crystalgui.ui.ProgressChromeTest</p>
+     */
+    public boolean isShowing() {
+        return shownCount > 0;
+    }
+
+    /** The primary line as drawn, for the same reason. */
+    public String shownLabel() {
+        return shownWhat;
+    }
+
     /** The list this item opens. Public so a test can assert against it without a click. */
     public ProcessesPopover popover() {
         return popover;
     }
 
+    /**
+     * <b>The attach hook, and {@code ElementAdded} is not it.</b>
+     *
+     * <p>{@code registerTicker} lives on {@link UIWindow}, so a ticker can only be registered once there
+     * is one. {@code DOMEvent.ElementAdded} fires when an element gains a <em>parent</em> — which for
+     * anything a widget builds in its own constructor is long before any window exists, so the one
+     * registration attempt found none and never retried. Nothing threw; the indicator simply never
+     * appeared. {@code onWindowChanged} is the moment that actually matters.</p>
+     */
+    @Override
+    protected void onWindowChanged(UIWindow previous, UIWindow current) {
+        if (current != null) startTicking();
+    }
+
     private void startTicking() {
         UIWindow window = getAttachedWindow();
-        if (window == null) return;
+        if (window == null || ticking) return;
+        ticking = true;
         window.registerTicker(new Ticker());
     }
 

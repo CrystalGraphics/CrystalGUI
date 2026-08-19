@@ -4,7 +4,6 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIFrameTicker;
 import com.crystalgui.ui.UIWindow;
-import com.crystalgui.ui.event.DOMEvent;
 
 import dev.vfyjxf.taffy.style.AlignItems;
 import dev.vfyjxf.taffy.style.FlexDirection;
@@ -66,13 +65,6 @@ public class ProgressBar extends UIElement implements UIFrameTicker {
         // take the pointer either, which lets the row it sits in stay clickable through it.
         setHitTest(false);
 
-        // ATTACHMENT IS WHEN A TICKER CAN BE REGISTERED, not construction: registerTicker lives on
-        // UIWindow and this element has none until it is in a tree. A bar built indeterminate and added
-        // later would otherwise never sweep, which reads as the animation being broken rather than as
-        // never having started.
-        events.getGroup(DOMEvent.ElementAdded.class)
-                .attachListener((element, event) -> startTicking(), false, false);
-
         setFraction(-1f);
     }
 
@@ -117,6 +109,18 @@ public class ProgressBar extends UIElement implements UIFrameTicker {
     @Override
     public boolean acceptsPublicChildren() {
         return false;
+    }
+
+    /**
+     * <b>The attach hook, and {@code ElementAdded} is not it.</b>
+     *
+     * <p>{@code registerTicker} is on {@link UIWindow}, and {@code ElementAdded} fires when this gains a
+     * PARENT — inside its owner's constructor, before any window. A bar registered there found none and
+     * never retried, so the sweep never started and nothing said why.</p>
+     */
+    @Override
+    protected void onWindowChanged(UIWindow previous, UIWindow current) {
+        if (current != null) startTicking();
     }
 
     /**
