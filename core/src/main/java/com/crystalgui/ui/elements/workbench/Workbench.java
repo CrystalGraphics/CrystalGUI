@@ -506,7 +506,7 @@ public class Workbench extends UIElement {
         dock.onDidClosePanel.connect(this::releaseClosedPanel);
         // AND THE EDITOR THAT TOOK OVER GETS THE FOCUS THE CLOSED ONE HAD. Spent a frame later -- see
         // focusActiveEditorPending.
-        dock.onDidClosePanel.connect(panel -> focusActiveEditorPending = true);
+        dock.onDidClosePanel.connect(panel -> focusActiveEditorPending = FOCUS_AFTER_CLOSE_FRAMES);
         // Tab dirty markers. Was a per-frame refreshDirtyMarkers(), which meant encoding every open
         // document -- a whole shader graph serialised sixty times a second -- to notice a marker that
         // moves when somebody types. The equality guard SURVIVES the move: the announcement means
@@ -952,7 +952,7 @@ public class Workbench extends UIElement {
      *
      * <p>@see #focusActiveEditorAfterClose</p>
      */
-    private boolean focusActiveEditorPending;
+    private int focusActiveEditorPending;
 
     /**
      * Puts the focus the closed tab held onto the editor that replaced it.
@@ -977,15 +977,35 @@ public class Workbench extends UIElement {
      * only fills a vacuum, it never takes.</p>
      */
     private void focusActiveEditorAfterClose() {
-        if (!focusActiveEditorPending) return;
+        if (focusActiveEditorPending <= 0) return;
         UIWindow window = getAttachedWindow();
         if (window == null) return;
-        focusActiveEditorPending = false;
-        if (window.getInputHandler().getFocusedElement() != null) return;
+        // SOMEBODY ELSE HAS IT, so there is no vacancy to fill and nothing more to wait for.
+        if (window.getInputHandler().getFocusedElement() != null) {
+            focusActiveEditorPending = 0;
+            return;
+        }
+        // A FEW FRAMES, not one. `requestRebuild` only sets a flag, and the dock rebuilds from its own
+        // tick -- which may run after this one. Spending the request on the first frame therefore asked
+        // `activeEditor()` before the strip had been rebuilt and the pane retargeted, got null, and threw
+        // the request away: Ctrl+W left the focus nowhere, which is exactly what it did before any of this
+        // was written. Counting down instead means the frame ordering between two tickers does not have to
+        // be assumed.
+        focusActiveEditorPending--;
         TextEditor editor = activeEditor();
         if (editor == null || editor.getAttachedWindow() == null) return;
+        focusActiveEditorPending = 0;
         window.getInputHandler().requestFocus(editor);
     }
+
+    /**
+     * How many frames a close may take to settle before the focus request is dropped.
+     *
+     * <p>Small on purpose: this is covering an ordering between two tickers, not waiting for I/O. If the
+     * dock has not produced an active editor within a handful of frames there is nothing to focus, and
+     * holding the request open would mean pouncing on the first vacancy that appeared long afterwards.</p>
+     */
+    private static final int FOCUS_AFTER_CLOSE_FRAMES = 4;
 
     public TextEditor activeEditor() {
         return activeDocument() instanceof TextFileDocument text ? text.editor() : null;

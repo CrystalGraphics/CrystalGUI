@@ -644,6 +644,10 @@ public class DockArea extends UIElement implements UIFrameTicker {
         captureDividerPositions();
         if (!layout.closePanel(panel)) return;
         requestRebuild();
+        // AND EVERY GROUP FORGETS ITS CACHED ELEMENT. contentFor memoises by DockPanelRef, which is a
+        // VALUE -- so reopening the same file produced an equal ref and got back the editor built for the
+        // document that had just been disposed. @see DockGroup#forgetContent
+        for (DockGroup group : groups.values()) group.forgetContent(panel);
         // ANNOUNCED, because until now closing a tab told nobody. Its document stayed open, its editor
         // stayed reachable, and anything it owned -- a preview pool, a renderer -- lived until the
         // process did. `Disposer` could not help, because the thing that knew the panel was gone had no
