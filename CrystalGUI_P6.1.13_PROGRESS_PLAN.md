@@ -3,13 +3,15 @@
 **Status:** planned, not started · **Planned:** 2026-08-19 · **Revised:** 2026-08-19 (see below)
 
 > **Revision, same day.** The first draft was reviewed against the question *"is this ready to
-> implement?"* and it was not. Six gaps, and two of them were the kind this plan criticises elsewhere:
+> implement?"* and it was not. Eight gaps, and two of them were the kind this plan criticises elsewhere:
 > **the download transport was unspecified** while a working one already sat private in `MappingCache`,
 > and **"digest-verified" had no mechanism behind it** — precisely the aspirational-pin situation the MCP
 > mapping data is in. Also corrected: per-field volatiles do not give a consistent snapshot (D17), there
 > was no failure path at all (D18), no record lifecycle or cancel-pending state (D19, D20), and
-> `maxConcurrent` turns out to be **global**, so a long download starves interactive work (D14 — the one
-> item here that changes shared machinery). D14–D21 are the result.
+> `maxConcurrent` turns out to be **global**, so a long download starves interactive work (D14). And the
+> largest: a completed download would never have been *used*, because `JavaLanguage` resolves its engine
+> once at registration into a static (D22). D14–D23 are the result, and two of them — D14 and D22 — change
+> machinery adjacent to this feature rather than the feature itself.
 
 The engine-band download decision (see `plan_m12.md` §26.14 and the band-size analysis) needs a progress
 UI, and so does P6.1.10's chunked transfer, and so does something that already ships and is silent today.
@@ -189,6 +191,8 @@ Three properties worth naming:
 | **D18** | Failure | **A failed job raises a notification** through `NotificationsView`; the row does not simply vanish. Silent failure is the defect class this audit keeps finding |
 | **D19** | Record lifecycle | Created at `submit()`, **visible** only after `begin()` plus D8's delay, removed when the `Job` settles. So a job that reports nothing is tracked and never drawn |
 | **D20** | Cancel-pending | The row **greys and keeps its bar** until the worker notices; `×` is idempotent. Cancellation is cooperative, so the gap is real and must look deliberate |
+| **D22** | When a late download becomes usable | **Resolve the engine per document, not once at registration.** `EngineHost.shared` already returns null *without caching the failure*, so a retry works — but `JavaLanguage.register()` resolves it once into a static, so nothing ever asks again and a band that arrives two minutes later is never used. Moving the resolve into `servicesFor` (called per document open) makes the retry free. **A change to `JavaLanguage`, not to this feature** — the second item here touching adjacent machinery, after D14 |
+| **D23** | Timings | **Show after 400 ms; keep for 500 ms once shown.** Named rather than left to the implementer, because "a short delay" is how two callers end up with two different numbers. Both are policy on the scheduler, not CSS — a starting point to tune against the real download, not a measurement |
 | **D21** | Which job is inline | The most recently **begun** visible one — the same order D12 gives the popup, so the inline job is always the popup's first row and the eye does not have to re-find it |
 
 ---
@@ -261,6 +265,14 @@ disappearance is indistinguishable from success, which is the exact defect class
 | failed | leaves, and a notification appears (D18) |
 | done | leaves, after the minimum visible time (D9) |
 
+### The one wrinkle worth stating
+
+An editor **already open** when a late download completes still has no analysis until its document is
+reopened: D22 fixes the resolve, not the already-constructed services. Re-attaching services to a live
+document is `TextFileDocument`'s business and is out of scope here. Named so it is a known limit rather
+than a bug report — and it is the ordinary case only on the very first launch of a Java-17 client, which
+is the one launch where the editor is unlikely to be open already.
+
 ### The widgets
 
 - **`ProgressBar`** in `ui/elements` — determinate and indeterminate, geometry in `default.css`,
@@ -326,6 +338,7 @@ result in flight is discarded. The worker notices at its next `throwIfCancelled(
 | 3c | Extract the transport out of `MappingCache` (D15) | Shared by steps 3 and 4; extracting it while step 3 is fresh is cheaper than after |
 | 4a | **Gradle task: hash the resolved band artifacts into a shipped resource** (D16) | Without it "digest-verified" is aspirational — the mapping data's exact situation |
 | 4b | `EngineSource.downloadedFrom(...)` — verifying against 4a, reporting through `Progress` | The decision that prompted this plan |
+| 4c | `JavaLanguage` resolves its engine per document (D22) | Without it a completed download is never used, and step 4 looks like it failed |
 | 5 | `ProgressBar` + `default.css` | First pixels |
 | 6 | The status-bar item | D10 |
 | 7 | `ProcessesPopover` | D11 |
