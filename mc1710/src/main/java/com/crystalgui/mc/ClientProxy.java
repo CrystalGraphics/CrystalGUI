@@ -4,7 +4,7 @@ import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.language.platform.ScriptPlatforms;
 import com.crystalgui.mc.client.CgUiAutoTest;
 import com.crystalgui.mc.client.CgUiInput;
-import com.crystalgui.mc.script.Mc1710ScriptPlatform;
+import com.crystalgui.mc.platform.service.script.ScriptService1710;
 
 /**
  * The client half: register the key binding and the input pump.
@@ -28,7 +28,7 @@ public class ClientProxy extends CommonProxy {
         // CLIENT-side only because of ONE member: `cacheRoot()` reads `Minecraft.getMinecraft().mcDataDir`.
         // The other four are installation-level, so when server-side scripting lands this moves to
         // CommonProxy and that one method grows a side-aware answer.
-        CgPlatform.provide(ScriptPlatforms.SERVICE, new Mc1710ScriptPlatform());
+        CgPlatform.provide(ScriptPlatforms.SERVICE, new ScriptService1710());
         CgUiInput.register();
         CgUiAutoTest.register();
     }

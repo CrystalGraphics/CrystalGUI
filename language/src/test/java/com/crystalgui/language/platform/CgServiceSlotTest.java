@@ -32,7 +32,7 @@ public class CgServiceSlotTest {
     @Before
     @After
     public void forget() {
-        ScriptPlatforms.reset();
+        CgPlatform.provide(ScriptPlatforms.SERVICE, null);
     }
 
     /** A fake that is identifiable by reference. */
@@ -78,7 +78,7 @@ public class CgServiceSlotTest {
         assertNotNull(CgPlatform.get(ScriptPlatforms.SERVICE));
         assertSame(ScriptPlatform.NONE, CgPlatform.get(ScriptPlatforms.SERVICE));
         // And through the convenience wrapper, which is what nearly every caller actually uses.
-        assertSame(ScriptPlatform.NONE, ScriptPlatforms.current());
+        assertSame(ScriptPlatform.NONE, CgPlatform.get(ScriptPlatforms.SERVICE));
     }
 
     /** Providing installs it, and {@code isProvided} distinguishes it from the fallback. */
@@ -89,7 +89,7 @@ public class CgServiceSlotTest {
 
         assertTrue(CgPlatform.isProvided(ScriptPlatforms.SERVICE));
         assertSame(installed, CgPlatform.get(ScriptPlatforms.SERVICE));
-        assertSame(installed, ScriptPlatforms.current());
+        assertSame(installed, CgPlatform.get(ScriptPlatforms.SERVICE));
     }
 
     /**
@@ -108,9 +108,9 @@ public class CgServiceSlotTest {
         CgPlatform.provide(ScriptPlatforms.SERVICE, second);
         assertSame(second, CgPlatform.get(ScriptPlatforms.SERVICE));
 
-        ScriptPlatforms.register(null);
+        CgPlatform.provide(ScriptPlatforms.SERVICE, null);
         assertFalse(CgPlatform.isProvided(ScriptPlatforms.SERVICE));
-        assertSame(ScriptPlatform.NONE, ScriptPlatforms.current());
+        assertSame(ScriptPlatform.NONE, CgPlatform.get(ScriptPlatforms.SERVICE));
     }
 
     /**

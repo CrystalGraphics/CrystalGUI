@@ -3,6 +3,7 @@ package com.crystalgui.mc.client;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.language.java.classpath.HostClasspath;
 import com.crystalgui.language.platform.ScriptPlatform;
+import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.language.platform.ScriptPlatforms;
 import com.crystalgui.language.run.ScriptRuntime;
 import com.crystalgui.language.run.view.ScriptWorkbench;
@@ -299,7 +300,7 @@ public final class CgUiAutoTest {
      * finds were put there by somebody else, for their own purposes, before this feature existed.</p>
      *
      * <p>Both sides are read through the SAME parse, so a difference cannot be an artefact of reading
-     * them differently. The live side is {@link com.crystalgui.mc.script.LaunchWrapperBytes} — exactly
+     * them differently. The live side is {@link com.crystalgui.mc.platform.service.script.LaunchWrapperBytes} — exactly
      * what the compiler's name environment asks — and the disk side is the raw pre-transform bytes
      * LaunchWrapper itself hands out.</p>
      */
@@ -307,7 +308,7 @@ public final class CgUiAutoTest {
         if (!ENABLED || BYTES_PROBE == null || bytesProbed) return;
         bytesProbed = true;
         try {
-            ScriptPlatform platform = ScriptPlatforms.current();
+            ScriptPlatform platform = CgPlatform.get(ScriptPlatforms.SERVICE);
             if (platform == ScriptPlatform.NONE) {
                 CrystalGuiCore.LOGGER.error("CGUI AUTOTEST bytes: no platform registered");
                 return;

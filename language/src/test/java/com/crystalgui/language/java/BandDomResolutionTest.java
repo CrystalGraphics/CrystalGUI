@@ -9,6 +9,7 @@ import com.crystalgui.language.map.ReadableView;
 import com.crystalgui.language.platform.MappingCoordinates;
 import com.crystalgui.language.platform.NamespaceProbe;
 import com.crystalgui.language.platform.ScriptPlatform;
+import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.language.platform.ScriptPlatforms;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.lang.CompletionItem;
@@ -55,7 +56,7 @@ public class BandDomResolutionTest {
     @Before
     @After
     public void forget() {
-        ScriptPlatforms.reset();
+        CgPlatform.provide(ScriptPlatforms.SERVICE, null);
         PlatformMappings.resetForTesting();
     }
 
@@ -73,7 +74,7 @@ public class BandDomResolutionTest {
      * fixture that takes the client's code path while resolving everything from the ordinary classpath.</p>
      */
     private void registerBarePlatform() {
-        ScriptPlatforms.register(new ScriptPlatform() {
+        CgPlatform.provide(ScriptPlatforms.SERVICE, new ScriptPlatform() {
             @Override
             public ReadableView.ByteSource liveBytes() {
                 return name -> null;

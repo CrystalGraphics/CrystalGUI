@@ -1,10 +1,10 @@
 package com.crystalgui.language.platform;
 
-import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.CgService;
 
 /**
- * The one registered {@link ScriptPlatform}, and the only way to reach it.
+ * <b>The declaration of the script-platform slot.</b> Nothing else — read and written through
+ * {@code CgPlatform}.
  *
  * <h3>A slot in the platform stack, not a registry of its own</h3>
  *
@@ -31,33 +31,17 @@ import com.crystalgraphics.platform.CgService;
 public final class ScriptPlatforms {
 
     /**
-     * The slot. Public because a loader provides into it directly:
-     * {@code ScriptPlatforms.SERVICE.provide(new Mc1710ScriptPlatform())}.
+     * The slot. The only member here, because a wrapper around it would be a second way to say the same
+     * thing — and a second way is how two callers end up disagreeing about which one is authoritative.
+     *
+     * <pre>{@code
+     * CgPlatform.provide(ScriptPlatforms.SERVICE, new ScriptService1710());  // a loader, once
+     * CgPlatform.get(ScriptPlatforms.SERVICE).liveBytes();                   // everyone else
+     * }</pre>
      */
     public static final CgService<ScriptPlatform> SERVICE =
             CgService.of("crystalgui:script-platform", ScriptPlatform.NONE);
 
     private ScriptPlatforms() {
-    }
-
-    /**
-     * Registers the running platform. Called once, from a loader's init.
-     *
-     * <p>Kept beside {@link #SERVICE} because most callers read rather than write, and a null here has
-     * always meant "back to none" — which {@code CgPlatform.provide(slot, null)} also means, so the two
-     * agree. A loader may equally call the façade directly; this is the same write.</p>
-     */
-    public static void register(ScriptPlatform platform) {
-        CgPlatform.provide(SERVICE, platform);
-    }
-
-    /** The running platform, never null. */
-    public static ScriptPlatform current() {
-        return CgPlatform.get(SERVICE);
-    }
-
-    /** Restores the no-platform default. For tests that registered a fake. */
-    public static void reset() {
-        CgPlatform.provide(SERVICE, null);
     }
 }

@@ -1,6 +1,7 @@
 package com.crystalgui.language.engine;
 
 import com.crystalgui.language.platform.ScriptPlatform;
+import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.language.platform.ScriptPlatforms;
 
 import java.io.Closeable;
@@ -239,7 +240,7 @@ public final class EngineHost implements Closeable {
     }
 
     private static EngineSource bundledSource() {
-        Path cacheRoot = ScriptPlatforms.current().cacheRoot();
+        Path cacheRoot = CgPlatform.get(ScriptPlatforms.SERVICE).cacheRoot();
         if (cacheRoot == null) return EngineSource.NONE;
         return EngineSource.extractedFrom(EngineHost.class.getClassLoader(),
                 BUNDLED_ENGINES_ROOT, cacheRoot.resolve("engines"));
