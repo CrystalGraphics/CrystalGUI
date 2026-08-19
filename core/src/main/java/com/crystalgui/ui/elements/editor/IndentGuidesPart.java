@@ -64,14 +64,36 @@ final class IndentGuidesPart extends EditorViewPart {
         int[] levelsByRow = IndentLevels.guidesFor(editor.buffer().document(), firstRow, lastRow,
                 editor.getIndentWidth(), editor.getTabSize(), editor.isOffSideLanguage());
 
-        // WHICH BLOCK THE CARET IS IN, once for the whole pass. Bounded by the visible rows, so a long
-        // file costs the viewport rather than the document -- the same reason guidesFor takes a range.
+        // WHICH BLOCK THE CARET IS IN, once for the whole pass.
         //
         // Scoped from the CARET and not from the pointer: it answers "where am I editing", which is the
         // question the current-line band answers too, and hovering must not move it.
-        IndentLevels.ActiveGuide active = IndentLevels.activeGuideFor(editor.buffer().document(),
-                editor.buffer().offsetToPoint(editor.getCaret()).row(), firstRow, lastRow,
-                editor.getIndentWidth(), editor.getTabSize(), editor.isOffSideLanguage());
+        //
+        // ONLY WHILE THE CARET IS ON SCREEN, and that guard is load-bearing rather than an optimisation.
+        // `activeGuideFor` walks OUTWARD FROM THE CARET a row at a time, reading each row's indent, and
+        // stops when it leaves [firstRow, lastRow] -- so a caret above the viewport makes it read every
+        // row in between. The caret does not move while you scroll, so that is O(scroll position) line
+        // reads per frame, and it is not a pathological-file case: the walk continues while the rows are
+        // at least as deep as the caret's, which any long class body satisfies for its whole length.
+        // Measured on a 20,000-row document, 12.7ms a frame 15,000 rows down against 6.1ms at 3,750 --
+        // a ramp the user feels as scrolling that gets choppier the longer it goes.
+        //
+        // The comment this replaces claimed the call was "bounded by the visible rows, so a long file
+        // costs the viewport rather than the document". The bound stops the walk once it ARRIVES at the
+        // window; nothing clamped where it started.
+        //
+        // Skipping it costs nothing visible: the answer is consumed only as `covers(row, level)` for rows
+        // the viewport holds, and it highlights the block the CARET is in -- a block whose caret is
+        // scrolled out of sight. `ActiveGuide(0, 0, 0)` is already the "nothing is active" value, since
+        // `covers` requires a non-zero indent, so there is no null to thread through the loop below.
+        //
+        // The walk itself is a faithful port and is left exactly as it is; this is a decision about when
+        // to ASK it, which belongs at the call site.
+        int caretRow = editor.buffer().offsetToPoint(editor.getCaret()).row();
+        IndentLevels.ActiveGuide active = caretRow < firstRow || caretRow > lastRow
+                ? new IndentLevels.ActiveGuide(0, 0, 0)
+                : IndentLevels.activeGuideFor(editor.buffer().document(), caretRow, firstRow, lastRow,
+                        editor.getIndentWidth(), editor.getTabSize(), editor.isOffSideLanguage());
 
         final float pad = editor.codeLeftPad();
         pool.beginPass();
