@@ -443,8 +443,23 @@ public class ListView<T> extends ScrollerView implements ClipboardActions {
         // AFTER updateWindow, so a row realised this frame is counted. Once a frame and no more -- see
         // getScrollWidth on why the scan may not sit behind the query.
         measureWidestRealisedRow();
+        syncFocusedClass();
         return true;
     }
+
+    /**
+     * On the list while the focus owner is inside it — what an <b>inactive selection</b> is styled from.
+     *
+     * <p>Every reference greys the selection of a list that does not have focus: the highlight answers
+     * "which row will the keys act on", and when the keys are going somewhere else it is answering a
+     * question nobody asked. Two panels both showing a saturated selection say the arrow keys will move
+     * both.</p>
+     *
+     * <p>A CLASS rather than a pseudo-class, and not for want of trying: {@code :focus-within} is not in
+     * this engine's supported set, and an unknown pseudo-class does not degrade — it POISONS the sheet it
+     * appears in. {@code SearchField.FOCUSED_CLASS} is the same answer for the same reason.</p>
+     */
+    public static final String FOCUSED_CLASS = "__focused__";
 
     private boolean ticking;
 
@@ -518,10 +533,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions {
         // Deferred by a frame, deliberately — see restoreFocusIfRealised.
         focusRestoreWanted = focusedIndex >= 0;
         
-        if (focusBlurredByRecycle) {
-            focusBlurredByRecycle = false;
-            restoreFocusIfRealised();
-        }
+        if (focusBlurredByRecycle) restoreFocusIfRealised();
     }
 
     /** Set when {@link #recycle} pooled the element that held focus — see {@link #updateWindow()}. */
@@ -1193,8 +1205,28 @@ public class ListView<T> extends ScrollerView implements ClipboardActions {
      */
     public ListView<T> setFocusedIndex(int index) {
         focusedIndex = index < 0 || index >= model.size() ? -1 : index;
-        restoreFocusIfRealised();
+        // ASKED FOR, so a vacancy is this call's to fill -- see restoreFocusIfRealised for the three
+        // paths and why only this one and the recycle may take a null owner.
+        restoreFocusIfRealised(true);
         return this;
+    }
+
+    /**
+     * Puts {@link #FOCUSED_CLASS} on iff the focus owner is inside this list.
+     *
+     * <p>Recomputed once a frame rather than driven from focus and blur EVENTS, and that is the whole
+     * reason it is reliable. Moving focus from one row to another fires a blur and a focus that both
+     * bubble here, so a listener pair has to be correct under either order — and it is not: blur-then-focus
+     * removes and re-adds, focus-then-blur removes and stays removed. Asking who holds focus has no order
+     * to get wrong. It costs one null check and a walk up the ancestor chain.</p>
+     */
+    private void syncFocusedClass() {
+        var window = getAttachedWindow();
+        UIElement focused = window == null ? null : window.getInputHandler().getFocusedElement();
+        boolean inside = focused != null && containsInSubtree(focused);
+        // addClass/removeClass no-op on an unchanged set, so a settled frame writes nothing.
+        if (inside) addClass(FOCUSED_CLASS);
+        else removeClass(FOCUSED_CLASS);
     }
 
     /** Set when the realised window changed and a focused index may need re-attaching. */
@@ -1219,6 +1251,18 @@ public class ListView<T> extends ScrollerView implements ClipboardActions {
      * {@code scrollIntoView} is correctly a no-op.</p>
      */
     private void restoreFocusIfRealised() {
+        // The two REFRESH paths -- a window change and the list's own recycle. Neither is a request for
+        // focus, so the only vacancy either may fill is the one this list made itself.
+        restoreFocusIfRealised(focusBlurredByRecycle);
+    }
+
+    /**
+     * @param mayFillAVacancy whether a focus owner of {@code null} is this call's to take. True for
+     *                        {@link #setFocusedIndex}, which is a caller ASKING, and for the list's own
+     *                        {@link #recycle}, whose blur made the vacancy. False for an ordinary refresh:
+     *                        nobody holding focus is not this list holding it.
+     */
+    private void restoreFocusIfRealised(boolean mayFillAVacancy) {
         if (focusedIndex < 0) return;
         UIElement row = realised.get(focusedIndex);
         var window = getAttachedWindow();
@@ -1235,7 +1279,25 @@ public class ListView<T> extends ScrollerView implements ClipboardActions {
         // setFocusedIndex, which landed focus on a row: the palette opened unfocused and then unfocused
         // itself again on every letter typed.
         UIElement focused = window.getInputHandler().getFocusedElement();
-        if (focused != null && !containsInSubtree(focused)) return;
+        // AND NOBODY HOLDING FOCUS IS NOT THIS LIST HOLDING IT.
+        //
+        // The guard below reads "focus is elsewhere, leave it there", and it was one case short in exactly
+        // the way it had already been short once before: `null` is not elsewhere, it is NOWHERE, and the
+        // test let it through — so a list with a focused index claimed any vacancy that appeared while it
+        // happened to refresh.
+        //
+        // Which is how closing an editor tab focused the PROJECT TREE. Ctrl+W detaches the focused editor,
+        // UIInputHandler correctly forgets it and the owner becomes null; any refresh of the tree then
+        // landed here and took the opening. Every part was doing its job, which is why it read as a
+        // close-tab bug and survived the reveal being switched off — the reveal was one trigger of a
+        // refresh, not the only one.
+        //
+        // THE ONE NULL THAT IS THIS LIST'S is the one it made: `recycle` blurs a row before pooling it, so
+        // restoring there is putting back what this list took. That is what `focusBlurredByRecycle`
+        // records, and it is spent below rather than at the call site — an attempt that finds no realised
+        // row must leave it set for the deferred attempt a frame later, or a focused row that scrolled out
+        // and back loses focus for good.
+        if (focused == null ? !mayFillAVacancy : !containsInSubtree(focused)) return;
 
         // AND NEVER OUT OF A CONTROL INSIDE A ROW. The guard above says "restore, never take" and stops
         // one step short: it asks whether focus is in this LIST, and a list is not only its rows.
@@ -1253,6 +1315,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions {
         // explorer.
         if (focused != null && !realised.containsValue(focused)) return;
 
+        focusBlurredByRecycle = false;
         if (focused != row && row.focusable()) {
             // Restoring focus to a row that scrolled back into view is the view's own doing, not the
             // user's — without the guard it would re-select that row and quietly discard whatever
