@@ -1,10 +1,13 @@
 # M12 — Platform integration: 1.7.10
 
-Detail for the M12 row in `plan_syntax.md` §20. This file covers **Phase 1 only** — getting the
-environment breathing. Phases 2+ are sketched at the end and deliberately not designed yet.
+Detail for the M12 row in `plan_syntax.md` §20. This file covers **Phases 1 through 3**, all of which
+have landed; Phase 4 is sketched at the end and deliberately not designed yet.
 
 > **Phase 1 goal, in one sentence:** press a key in a real 1.7.10 client and `CrystalEditor` opens,
 > paints, and can be typed in.
+>
+> **Phase 3 goal, in one sentence:** write `Minecraft.getMinecraft().thePlayer` in that editor, on a
+> client whose jar calls it something else entirely, and have it resolve, complete, compile and run.
 
 ## Status
 
@@ -17,6 +20,9 @@ environment breathing. Phases 2+ are sketched at the end and deliberately not de
 | 25.4 | The input pump | **done** — 1.7.10's plumbing was read rather than assumed, and it moved the pump off `GuiScreen` entirely |
 | 25.5 | Workspace, config, and the way in | **done** — real workspace under `.minecraft/crystalgui/workspace`, served over the RPC protocol, F6 keybind |
 | — | Unattended capture (`-PcgAutoTest`) | **done** — not in the original plan and should have been; see 25.9 |
+| 26 | **Phase 2** — the language stack in-game | **done** — see the Phase 2 section |
+| 26 | **Phase 3** — readable names in a live client | **done** — all eight exit criteria; see 26.13a for where each one actually stands, since two are met with honest caveats that are not ours to close |
+| — | In-client completion probe (`-PcgComplete`) | **done** — like `-PcgAutoTest`, not in the plan and should have been. It is what found a defect four layers of passing tests could not; see the dev-client section in 26.13a |
 
 ---
 
@@ -1027,7 +1033,20 @@ pixel layout or cosmetics.
 - **26.7** — probe a readable fixture and an obfuscated one, assert `IDENTITY` and non-identity
   respectively.
 - **In-client** — `-PcgAutoTest` opens a script that names a Minecraft type and captures. The mixin case
-  needs a member CrystalGraphics' own mixins add, which makes the assertion real rather than staged.
+  is real rather than staged: `MixinMinecraft.cgMixinProbe()` is a public member CrystalGraphics' own
+  mixins merge into `Minecraft`, and `-PcgScript` compiles and runs a call to it in both clients.
+- **In-client, the EDITOR rather than the compiler** — `-PcgComplete` asks the live provider for the
+  member list of four receiver shapes and logs the counts, the classpath they resolved against, and
+  whether a named member is present. Added because the two paths *had* diverged silently: every script
+  compiled and ran while every popup was empty. A row count says the receiver resolved; the `expect`
+  field says the right rows are in it.
+- **On a Java 8 JVM** — `smokeEngineBands` (now part of `check`) starts a JVM of each band's own era and
+  makes JDT resolve a type *and enumerate its members* there. It is the only place in the build that runs
+  on Java 8, which is what a 1.7.10 client is — and the difference between an archive class library and a
+  jrt image is invisible everywhere else.
+- **The lifetime invariant** — `LiveAnalysisTest.membersResolveThroughAJarAfterTheUnitIsBuilt`. A resolved
+  unit resolves its bindings lazily, so the name environment must outlive it. Verified to fail against
+  the defect by reintroducing it, which is the only thing that makes a regression test worth having.
 
 ## 26.11 What Phase 3 deliberately does not include
 
@@ -1058,23 +1077,39 @@ pixel layout or cosmetics.
 
    Determined by reading `ScriptClassLoader` rather than by running a reobfuscated client, which is what
    made it cheap; 26.8 still confirms it end to end.
-2. **ECJ internal API across three bands** — see 26.3. Mitigated by extending `smokeEngineBands`, and the
-   reason that step is second rather than later.
-3. **Transformer order and exclusions.** `getTransformers()` gives the list, but `transformName` /
-   `untransformName` are private and exclusions are not exposed. For `net.minecraft.*` in dev the names
-   are unchanged, so this is prod-only — and it surfaces as a wrong answer rather than an exception,
-   which is the shape that costs the most to find.
+2. ~~**ECJ internal API across three bands**~~ — **MEASURED, and it is stabler than feared.**
+   `CompilationUnitResolver`'s constructor, its instance `resolve`, the ten-argument `convert` and the
+   three flag constants (`RESOLVE_BINDING`=1, `STATEMENT_RECOVERY`=4, `BINDING_RECOVERY`=16) are
+   *identical* between 3.26.0 and 3.46.0. 3.46 adds an eleven-argument `convert` overload taking an
+   `IJavaProject`, which is exactly why `DomResolution` selects by **arity** rather than by name.
+   Compared with `javap` on the staged jars rather than assumed either way, while chasing a defect that
+   turned out to be ours. `smokeEngineBands` runs all three bands and is now part of `check`.
+3. ~~**Transformer order and exclusions.**~~ **SETTLED, and it cost exactly what the risk predicted.**
+   `IClassNameTransformer` is private as a *field* and public as an ordinary entry in
+   `getTransformers()`, so `LaunchWrapperBytes.renamerIn` finds it by type with no reflection into
+   privates. It was prod-only and it did surface as a wrong answer rather than an exception — every
+   Minecraft type simply looked absent, because `getClassBytes` takes the UNTRANSFORMED name and the two
+   spellings are identical in dev. Found by `runObfClient` and by nothing else; see the list under
+   26.13a.
 4. **MCP licensing.** Downloading rather than bundling is what keeps this off the critical path; if the
    terms turn out to permit redistribution, bundling becomes a simplification rather than a requirement.
    It must not block 26.3 or 26.4, which need no mapping data at all.
-5. **Cache invalidation against mixins** — see 26.4. A per-process cache is wrong in a way that only
-   appears once a mixin adds a member, i.e. not in any test that does not stage one.
+5. ~~**Cache invalidation against mixins**~~ — **a member is now staged, so this is no longer
+   hypothetical.** `MixinMinecraft.cgMixinProbe()` is a real public member merged into `Minecraft` by
+   CrystalGraphics' mixins; a script calls it and the editor offers it in both clients. The per-compile
+   cache assertion in 26.4 keeps its fake `ByteSource` (it can express "added between two compiles",
+   which a live mixin cannot), but the end-to-end case it stood in for is now exercised for real.
 
 ## 26.13a Where each exit criterion actually stands
 
-**Every step landed and both clients run the same script.** Recorded per criterion rather than as a tick,
-because three of the eight are met in substance and not in the letter, and a plan that says "done" about
-those is a plan that lies to whoever reads it next.
+**Every step landed, both clients run the same script, and all eight criteria are met.** Recorded per
+criterion rather than as a tick, because two of them carry caveats that are real and are not ours to
+close — no upstream digests exist to pin, and nobody has yet run a first launch with the network
+actually unplugged. A plan that says "done" without naming those is a plan that lies to whoever reads it
+next.
+
+*(Criterion 3 was in that list until 2026-08-19 and is now met in the letter; criterion 2's completion
+half was a human check and is now machine-verified as well.)*
 
 | # | Criterion | Status |
 |---|---|---|
@@ -1158,11 +1193,20 @@ four layers of passing tests proved nothing.
 
 ---
 
-## Phase 4+ — sketch only, not designed
+## Phase 4 — sketch only, not designed
 
-- **Phase 2 — the language stack in-game.** `:language` into the jar, native extraction, staged engine
-  bands, and the second `enableModernJavaSyntax` fight.
-- **Phase 3 — §15.5 A and C.** The live name environment reading post-transform bytes from
-  `LaunchClassLoader`, and the 1.7.10 SRG↔MCP mapping data with `params.csv` and its licences settled.
-  This is what closes **M6**.
+Phases 2 and 3 were sketched here and are now designed, built and documented above — Phase 2 in its own
+section, Phase 3 in §26. **Phase 3 is what closed M6.** What is left:
+
 - **Phase 4 — the workspace over the wire**, and `mc1201` after it.
+
+Two things worth carrying into it, both learned the expensive way in Phase 3 rather than reasoned about
+in advance:
+
+- **A client is an environment no test reproduces.** Java 8, `rt.jar` instead of a jrt image, a classpath
+  a launcher assembled, and a loader that transforms on the way in. Every defect that survived to a
+  client in this phase was invisible to the suite *and* to the harness, and each was found in minutes
+  once there was a gated probe inside the game. Build the probe early rather than reasoning from source.
+- **The compiler and the editor are different consumers of the same seam, and they fail apart.** A script
+  that runs is no evidence the popup works, and a popup that lists members is no evidence a script links.
+  Anything Phase 4 adds to that seam wants asking twice.
