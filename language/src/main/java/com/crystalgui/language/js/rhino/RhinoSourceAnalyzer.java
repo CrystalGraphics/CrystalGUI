@@ -29,6 +29,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiPredicate;
 import java.util.function.Predicate;
 import com.crystalgui.language.engine.bridge.Analysis;
 import com.crystalgui.language.js.rhino.exec.RhinoGlobals;
@@ -126,6 +127,7 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
         InteropResolver previous = interop;
         InteropResolver opened = new InteropResolver(java, classpath, releaseLevel);
         opened.restrictTo(allowsClass);
+        opened.restrictMembersTo(allowsMember);
         opened.useMemberNames(memberNames);
         interop = opened;
         if (previous != null) previous.close();
@@ -133,6 +135,9 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
 
     /** What a script may reach, or null for everything. @see JsSourceAnalyzer#restrictTo */
     private volatile Predicate<String> allowsClass;
+
+    /** Which members it may see. @see JsSourceAnalyzer#restrictMembersTo */
+    private volatile BiPredicate<String, String> allowsMember;
 
     /** How member names are shown. @see JsSourceAnalyzer#useMemberNames */
     private volatile MemberNameMapper memberNames = MemberNameMapper.IDENTITY;
@@ -142,6 +147,13 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
         memberNames = mapper == null ? MemberNameMapper.IDENTITY : mapper;
         InteropResolver current = interop;
         if (current != null) current.useMemberNames(memberNames);
+    }
+
+    @Override
+    public void restrictMembersTo(BiPredicate<String, String> policy) {
+        this.allowsMember = policy;
+        InteropResolver current = interop;
+        if (current != null) current.restrictMembersTo(policy);
     }
 
     @Override

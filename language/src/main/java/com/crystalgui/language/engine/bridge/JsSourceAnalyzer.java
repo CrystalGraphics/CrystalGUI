@@ -3,6 +3,7 @@ package com.crystalgui.language.engine.bridge;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiPredicate;
 import java.util.function.Predicate;
 
 /**
@@ -133,6 +134,21 @@ public interface JsSourceAnalyzer {
      * callable at run time, or offered and then refused, is a worse failure than either restriction alone.</p>
      */
     default void restrictTo(Predicate<String> allowsClass) {
+    }
+
+    /**
+     * Restricts which Java <b>members</b> resolution and completion may describe.
+     *
+     * <p>A {@code BiPredicate<String, String>} of (declaring class, member name) — JDK types, for the
+     * reason every other crossing here is one. Separate from {@link #restrictTo(Predicate)} rather than
+     * replacing it because the two questions have different answers: a class whose only permitted member
+     * is {@code size} is still <b>reachable</b>, or {@code size} could never be called on it, and the
+     * class predicate has to say so while this one refuses the rest.</p>
+     *
+     * <p>Defaulted to the class question alone, so an analyser that has not been taught about members
+     * degrades to the older behaviour instead of silently permitting everything.</p>
+     */
+    default void restrictMembersTo(BiPredicate<String, String> allowsMember) {
     }
 
     /**

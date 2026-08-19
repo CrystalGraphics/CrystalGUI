@@ -22,6 +22,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiPredicate;
 import java.util.function.Predicate;
 
 /**
@@ -80,6 +81,15 @@ public final class InteropResolver {
      */
     @Nullable private volatile Predicate<String> allowsClass;
 
+    /**
+     * The member half of the policy — (declaring class, member name).
+     *
+     * <p>Separate from {@link #allowsClass} because the two answers differ on purpose: a class one of
+     * whose members is permitted stays <b>reachable</b>, or that member could never be called on it — so
+     * the class predicate says yes while this one refuses everything else on it.</p>
+     */
+    @Nullable private volatile BiPredicate<String, String> allowsMember;
+
     /** How member names are shown — runtime → readable. @see MemberNameMapper */
     @Nullable private volatile MemberNameMapper memberNames;
 
@@ -112,6 +122,16 @@ public final class InteropResolver {
         return readable == null || readable.equals(member.name()) ? member : member.withName(readable);
     }
 
+    public void restrictMembersTo(@Nullable BiPredicate<String, String> policy) {
+        this.allowsMember = policy;
+        // The member caches go, for the reason the class half gives below: a cached list describes the
+        // posture that was in force when it was built.
+        synchronized (this) {
+            members.clear();
+            memberLists.clear();
+        }
+    }
+
     public void restrictTo(@Nullable Predicate<String> policy) {
         this.allowsClass = policy;
         // THE MEMBER CACHES GO, the analysis cache stays. A member list is what the policy filters, so a
@@ -120,6 +140,13 @@ public final class InteropResolver {
             members.clear();
             memberLists.clear();
         }
+    }
+
+    /** Whether one member may be described — see {@link #allowsMember}. */
+    boolean permitsMember(@Nullable String container, @Nullable String name) {
+        BiPredicate<String, String> policy = allowsMember;
+        if (policy == null || container == null || container.isEmpty() || name == null) return true;
+        return policy.test(container, name);
     }
 
     /** Package-private so {@code RhinoResolution} can filter the INFERENCE tier on the same policy. */
@@ -170,6 +197,9 @@ public final class InteropResolver {
             // AND A MEMBER WHOSE DECLARING CLASS IS REFUSED goes too, however reachable the receiver is:
             // `toString()` inherited from a refused type is still a call into it.
             if (!permits(member.container())) continue;
+            // AND THEN THE MEMBER ITSELF. Asked with the DECLARING class rather than the receiver's, so
+            // `deny java.lang.System#exit` refuses it however it was reached.
+            if (!permitsMember(member.container(), member.name())) continue;
             filtered.add(asReadable(binaryName, member));
         }
         // A CLASS WITH NO STATICS STILL HAS SOME -- `class` itself, and anything inherited from Object is
