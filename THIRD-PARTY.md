@@ -55,11 +55,17 @@ isolation `EngineClassLoader` exists for, not a coincidence.
 > **This is now a LIVE obligation, and the note here used to say it was not.** It read "nothing in this
 > build distributes an engine today … `mc1710/` and `mc1201/` are commented out of
 > `settings.gradle.kts`". Both halves stopped being true at M12: `settings.gradle.kts` carries
-> `include("mc1710")`, and that module's jar task ends `from(bundleEngineBand8)` — so **every `:mc1710`
-> jar carries band 8's fifteen jars, about 13 MB, unconditionally**, and a client with no engine staged
-> falls back to exactly those. This is the sentence the old note asked somebody to come back and change.
+> `include("mc1710")`, and that module's jar task bundles a band — **by default band 8's fifteen jars,
+> about 13 MB**, which a client with no engine staged falls back to. This is the sentence the old note
+> asked somebody to come back and change.
 >
-> **What discharges it today.** `bundleEngineBand8` is a `Sync` of *whole, unmodified jars* rather than a
+> **Which bands ship is `-PcgBundleBands`** (default `8`; also `8,17`, or `none`), so what this obligation
+> covers varies per build. And it introduces a second position beside the first: a band the jar does *not*
+> carry is **fetched by the user's client from Maven Central**, verified against a digest computed at build
+> time from the artifact Gradle resolved. We do not redistribute those — the same position the MCP mapping
+> data is in, and worth stating rather than assuming.
+>
+> **What discharges it today.** `bundleEngineBands` is a `Sync` of *whole, unmodified jars* rather than a
 > shadow or a class merge, so each artifact's own notices travel inside it — verified rather than
 > assumed: the Eclipse jars carry `about.html` and are signed, and Rhino carries `META-INF/LICENSE.txt`
 > and `META-INF/NOTICE.txt`. Nothing is repackaged, relocated or stripped, which is also what keeps the
