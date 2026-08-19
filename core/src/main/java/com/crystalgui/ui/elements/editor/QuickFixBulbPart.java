@@ -144,7 +144,7 @@ final class QuickFixBulbPart extends EditorViewPart {
                 editor.showCodeActionsAt(editor.getCaret());
                 event.stopPropagation();
             }, false, false);
-            editor.foldColumn().addInternalChild(bulb);
+            editor.foldLayer().addInternalChild(bulb);
         }
         return bulb;
     }

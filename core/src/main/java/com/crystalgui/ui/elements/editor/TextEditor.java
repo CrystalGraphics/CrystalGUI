@@ -37,6 +37,7 @@ import com.crystalgui.text.wrap.*;
 import com.crystalgui.ui.ClipboardActions;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UiDataKeys;
+import com.crystalgui.ui.UITransform;
 import com.crystalgui.ui.elements.ScrollerView;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.event.KeyboardEvent;
@@ -133,6 +134,14 @@ public class TextEditor extends ScrollerView implements UndoScope {
     public static final String WHITESPACE_CLASS = "__whitespace__";
     public static final String RULER_CLASS = "__ruler__";
     public static final String GUTTER_EDGE_CLASS = "__gutter-edge__";
+
+    /**
+     * A container that carries the scroll offset for everything inside it — see {@link #linesLayer()}.
+     *
+     * <p>One class for all three because they differ only in which axes their transform uses, and that
+     * is decided in Java where the offsets are. A sheet has nothing to say about any of them.</p>
+     */
+    public static final String SCROLL_LAYER_CLASS = "__scroll-layer__";
     public static final String TEXT_VIEWPORT_CLASS = "__text-viewport__";
     public static final String ZOOM_INDICATOR_CLASS = "__zoom-indicator__";
     public static final String ZOOM_LABEL_CLASS = "__zoom-label__";
@@ -208,6 +217,15 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     /** Clips everything drawn in document coordinates — see {@link #textViewport()}. */
     private UIElement textViewport;
+
+    /** @see #linesLayer() */
+    private UIElement linesLayer;
+
+    /** @see #gutterLayer() */
+    private UIElement gutterLayer;
+
+    /** @see #foldLayer() */
+    private UIElement foldLayer;
 
     /** Widest line realised since the last edit, font change or reprojection. */
     private float widestSeen;
@@ -1961,7 +1979,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // "scrolled by an unknown amount" and "not scrolled" are the same picture for a document that has
         // not been scrolled, and the alternative is a popup nobody can find.
         float localX = textOriginX() + xOfView(viewLine, view.column()) - finiteOrZero(getScrollLeft());
-        float localY = topOfViewLine(viewLine);
+        float localY = screenTopOfViewLine(viewLine);
         if (!Float.isFinite(localX) || !Float.isFinite(localY)) return null;
         return new float[] { getWindowX() + localX, getWindowY() + localY, lineHeight() };
     }
@@ -3567,7 +3585,26 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * somewhere new should degrade to zero rather than flatten the document.</p>
      */
     float topOfViewLine(int viewLine) {
-        return textOriginY() + viewLine * lineHeight() - finiteOrZero(getScrollTop());
+        return textOriginY() + viewLine * lineHeight();
+    }
+
+    /**
+     * <b>Where a view line's top edge is on SCREEN</b> — the same row, in the space that has been
+     * scrolled.
+     *
+     * <p>The distinction is the whole of the scroll-layer design and it is not a detail: a decoration
+     * inside {@link #linesLayer()} is positioned in <em>document</em> coordinates and moved by the
+     * layer's transform, so it must use {@link #topOfViewLine}; anything measured against the editor's
+     * own box — a popup anchor, a band that spans the viewport, a marker parented outside the layers —
+     * lives in <em>viewport</em> coordinates and must use this. Getting it backwards is silent while
+     * the document is scrolled to the top, which is exactly the state every test and every screenshot
+     * starts in.</p>
+     *
+     * <p>{@code finiteOrZero} for the reason {@link #lineHeight()} records: a NaN offset minus anything
+     * is NaN, and every row then lands at the same y with nothing having thrown.</p>
+     */
+    float screenTopOfViewLine(int viewLine) {
+        return topOfViewLine(viewLine) - finiteOrZero(getScrollTop());
     }
 
     /**
@@ -3920,6 +3957,113 @@ public class TextEditor extends ScrollerView implements UndoScope {
             addInternalChild(textViewport);
         }
         return textViewport;
+    }
+
+    /**
+     * <b>Where everything that scrolls with the text lives.</b>
+     *
+     * <h3>Why a container at all</h3>
+     *
+     * <p>{@link UIElement#applyScrollOffset} says it plainly: <em>"Position only — no relayout. The
+     * offset never reaches Taffy; it lives purely in the transform chain."</em> A scroll container moves
+     * its children by one matrix, and that is why scrolling a list costs nothing. The text viewport
+     * opts out of that — it is {@code setScrollExempt(true)} because it has to be a <em>window</em>
+     * that holds still while content moves behind it — and its own javadoc names the price: "its
+     * children no longer get the scroll translate for free and subtract the offsets by hand".</p>
+     *
+     * <p>Subtracting by hand means every realised row, every indent guide, every whitespace marker,
+     * every selection band, squiggle and caret has its {@code left} and {@code top} rewritten into the
+     * CASCADE on every frame the view moves — and cascade writes reach Taffy, so a layout pass follows.
+     * Measured side by side in one window with no GL: a scrolled frame cost <b>1,628µs</b> for the
+     * editor against <b>367µs</b> for an ordinary scroller, and the gap is work the scroller simply
+     * does not do.</p>
+     *
+     * <p>So the exemption stays on the viewport, which is what needs it, and a layer inside it takes
+     * the translate back. Children are positioned in <b>document coordinates</b> that do not change
+     * when the view moves; the layer carries one {@link UITransform}, which is layout-free by
+     * construction — Taffy never sees it. A scroll frame writes one matrix instead of several hundred
+     * style values and runs no layout at all. This is Monaco's {@code linesContent}.</p>
+     *
+     * <h3>Three of them, because there are three coordinate spaces</h3>
+     *
+     * <p>Not every decoration follows both axes, and the two that do not are documented as such where
+     * they are drawn. The current-line band "spans the viewport and does NOT move with horizontal
+     * scroll", and a ruler marks a column at a fixed screen height. So:</p>
+     *
+     * <table>
+     *   <tr><th>space</th><th>carried by</th><th>holds</th></tr>
+     *   <tr><td>document x, document y</td><td>{@code linesLayer}</td>
+     *       <td>lines, selections, indent guides, whitespace, squiggles, carets</td></tr>
+     *   <tr><td>gutter x, document y</td><td>{@link #gutterLayer()}, {@link #foldLayer()}</td>
+     *       <td>line numbers, fold arrows, the quick-fix bulb</td></tr>
+     *   <tr><td>viewport x, viewport y</td><td>nothing — the editor's own box</td>
+     *       <td>current-line bands, rulers, the collapsed-region marker</td></tr>
+     * </table>
+     *
+     * <p>The third group is the one to be careful with: it uses {@link #screenTopOfViewLine} while
+     * everything in a layer uses {@link #topOfViewLine}.</p>
+     *
+     * <h3>Stacking is preserved, and that is not automatic</h3>
+     *
+     * <p>z-index only orders siblings, so splitting one parent into layers could have reordered the
+     * whole editor. It does not, because the three spaces do not interleave: the sheet puts
+     * {@code __current-line__} at -2, {@code __selection__} and {@code __indent-guide__} at -1,
+     * {@code __line__} and {@code __whitespace__} at 0, {@code __caret__} at 1 and {@code __ruler__} at
+     * 4 — so everything moving into a layer occupies -1..1 with the viewport-space decorations strictly
+     * below and strictly above. The layer sits at 0 between them and the inner order is untouched.</p>
+     */
+    UIElement linesLayer() {
+        if (linesLayer == null) linesLayer = scrollLayer(textViewport());
+        return linesLayer;
+    }
+
+    /** The gutter's scroll layer — its numbers follow the rows. @see #linesLayer() */
+    UIElement gutterLayer() {
+        if (gutterLayer == null) gutterLayer = scrollLayer(gutter);
+        return gutterLayer;
+    }
+
+    /** The fold column's scroll layer — its arrows follow the rows. @see #linesLayer() */
+    UIElement foldLayer() {
+        if (foldLayer == null) foldLayer = scrollLayer(foldColumn());
+        return foldLayer;
+    }
+
+    /**
+     * One scroll layer, over a host that is scroll-exempt.
+     *
+     * <p><b>Hit-testing is left alone, and that is not an oversight.</b> {@code setHitTest(false)}
+     * applies to the whole SUBTREE, like CSS {@code pointer-events: none} — so switching it off here to
+     * mirror the viewport would make every fold arrow unclickable, and the fold column exists precisely
+     * because {@code gutter.setHitTest(false)} already swallowed them once. A layer inherits whatever
+     * its host decided: the text viewport is already untestable, the gutter already is, and the fold
+     * column deliberately is not.</p>
+     */
+    private UIElement scrollLayer(UIElement host) {
+        UIElement layer = new UIElement();
+        layer.addClass(SCROLL_LAYER_CLASS);
+        layer.markAsInternal();
+        host.addInternalChild(layer);
+        return layer;
+    }
+
+    /**
+     * Moves the scroll layers, once a frame.
+     *
+     * <p>The whole cost of scrolling, in three writes. {@code replaceOrPutCandidate} no-ops on an
+     * unchanged value and {@link UITransform} compares by value, so a frame that did not scroll writes
+     * nothing at all — and a frame that did writes one matrix per layer rather than two style values
+     * per decoration.</p>
+     *
+     * <p>Only what already exists: a layer is built on first use by whichever part needs it, and an
+     * editor with no gutter never makes one.</p>
+     */
+    private void syncScrollLayers() {
+        final float x = -finiteOrZero(getScrollLeft());
+        final float y = -finiteOrZero(getScrollTop());
+        if (linesLayer != null) linesLayer.setTransform(UITransform.translate(x, y));
+        if (gutterLayer != null) gutterLayer.setTransform(UITransform.translate(0f, y));
+        if (foldLayer != null) foldLayer.setTransform(UITransform.translate(0f, y));
     }
 
     /** Width of the code area — the client box, less the gutter and whatever the vertical bar covers. */
@@ -4520,6 +4664,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
             part.render(first, last);
         }
         insetHorizontalBarPastGutter();
+        // AFTER the parts have rendered, so a layer built on this frame is moved on this frame rather
+        // than drawing once at the unscrolled origin. It is a transform, so nothing below it re-lays out.
+        syncScrollLayers();
         // THE POPUP RE-ANCHORS HERE, once a frame, and not only when the caret moves.
         //
         // The anchor is derived from measured row widths, and those are computed in this very method --
@@ -4569,7 +4716,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             line.addChild(new UIText("").addClass(SYNTAX_CLASS));
         }
         layOutLine(viewLine, line);
-        if (line.getParent() == null) textViewport().addInternalChild(line);
+        if (line.getParent() == null) linesLayer().addInternalChild(line);
         return line;
     }
 
@@ -4584,7 +4731,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
      */
     private void layOutLine(int viewLine, UIElement line) {
         final float top = topOfViewLine(viewLine);
-        final float left = codeLeftPad() + carriedIndentPx(viewLine) - getScrollLeft();
+        // DOCUMENT COORDINATES. linesLayer() carries the horizontal offset for everything inside it.
+        final float left = codeLeftPad() + carriedIndentPx(viewLine);
         // A DEFINITE WIDTH IS REQUIRED. An absolutely-positioned box with no width resolves to zero, and
         // a zero-width line lays its text out as though it had no extent -- which shaved the first
         // character off every row on screen. Wide enough for the text, and at least the viewport, so a
@@ -4611,7 +4759,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // A pooled line reused for a different row would otherwise keep the old row's highlights, which
         // is worse than none: the ranges are offsets into a string that has been replaced.
         textOf(line).highlights().clear();
-        textViewport().removeInternalChild(line);
+        linesLayer().removeInternalChild(line);
         linePool.addLast(line);
     }
 

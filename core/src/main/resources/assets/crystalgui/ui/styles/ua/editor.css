@@ -219,6 +219,30 @@ texteditor .__text-viewport__ {
     z-index: 0;
 }
 
+/* THE SCROLL LAYERS — one per coordinate space, each moved by a single transform.
+ *
+ * A scroll container moves its children with one matrix and never lays out (UIElement.applyScrollOffset:
+ * "the offset never reaches Taffy; it lives purely in the transform chain"). The text viewport is
+ * scroll-exempt because it has to be a WINDOW that holds still, so its children lost that — and paid for
+ * it by rewriting every row's and every decoration's left/top into the cascade on every frame the view
+ * moved, which does reach Taffy. A layer takes the translate back: children are positioned in document
+ * coordinates that do not change while scrolling, and the layer alone moves. See TextEditor#linesLayer.
+ *
+ * Fills its host so nothing inside is clipped by the layer itself — the viewport above still clips, which
+ * is the point of it. z-index 0 puts the lines layer exactly where the lines used to sit, between the
+ * current-line band (-2) below and the rulers (4) above; the decorations inside keep their own -1..1
+ * order relative to each other, which is why splitting one parent into layers reorders nothing.
+ *
+ * No colour, no border, no padding: it is a coordinate space, not a box anyone can see. */
+texteditor .__scroll-layer__ {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+}
+
 /* Indent guides sit BEHIND the text but in front of the current-line band, so a guide still reads on the
  * row the caret is on. Deliberately dim: a guide the eye can follow when it looks for it and ignores when
  * it does not is the whole design brief, and one that competes with the code is worse than none.

@@ -30,7 +30,7 @@ final class IndentGuidesPart extends EditorViewPart {
 
     IndentGuidesPart(TextEditor editor) {
         super(editor);
-        this.pool = new DecorationPool(editor::textViewport, TextEditor.INDENT_GUIDE_CLASS, false);
+        this.pool = new DecorationPool(editor::linesLayer, TextEditor.INDENT_GUIDE_CLASS, false);
     }
 
     @Override
@@ -112,7 +112,7 @@ final class IndentGuidesPart extends EditorViewPart {
             // every unindented line: such a line has zero guides, so the run stopped wherever the code
             // reached column 0, and the letter there looked like it had cut the line.
             for (int level = 1; level < levels && pool.used() < MAX_GUIDES; level++) {
-                final float left = pad + level * step - nudge - editor.getScrollLeft();
+                final float left = pad + level * step - nudge;
                 // Past the right edge there is nothing to guide, and the elements are better spent on
                 // rows that are visible.
                 if (left > editor.textViewportWidth()) break;

@@ -115,7 +115,7 @@ final class FoldingDecorationsPart extends EditorViewPart {
                 if (row >= 0) editor.toggleFoldAt(row);
                 event.stopPropagation();
             }, false, false);
-            editor.foldColumn().addInternalChild(arrow);
+            editor.foldLayer().addInternalChild(arrow);
             arrows.add(arrow);
             arrowRows.add(-1);
         }
@@ -183,7 +183,9 @@ final class FoldingDecorationsPart extends EditorViewPart {
             // Centred WITHIN the row rather than filling it. A chip as tall as the line makes its text
             // look shrunken inside a slab, and the line's leading sits below the glyphs, so a full-height
             // box is not centred on the text beside it either. Hugging the text is what IntelliJ draws.
-            final float top = editor.topOfViewLine(viewLine)
+            // SCREEN space: the chip is parented to the editor and is scroll-exempt, so no layer moves
+            // it. @see TextEditor#screenTopOfViewLine
+            final float top = editor.screenTopOfViewLine(viewLine)
                     + Math.max(0f, (height - box) / 2f);
 
             // NO left shift, and this reverses an earlier choice. The box begins exactly where the row

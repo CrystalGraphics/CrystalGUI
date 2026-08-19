@@ -732,7 +732,7 @@ public class EditorViewTest extends EditorTestBase {
         int numbers = 0;
         for (UIElement child : allDescendants()) {
             if (!child.hasClass(TextEditor.GUTTER_CLASS)) continue;
-            for (UIElement number : child.getChildren()) {
+            for (UIElement number : descendantsOf(child)) {
                 if (number.hasClass(TextEditor.LINE_NUMBER_CLASS)) numbers++;
             }
         }
@@ -1197,7 +1197,7 @@ public class EditorViewTest extends EditorTestBase {
         UIElement number = null;
         for (UIElement child : allDescendants()) {
             if (!child.hasClass(TextEditor.GUTTER_CLASS)) continue;
-            for (UIElement candidate : child.getChildren()) {
+            for (UIElement candidate : descendantsOf(child)) {
                 if (candidate.hasClass(TextEditor.LINE_NUMBER_CLASS)
                         && candidate.getTaffyLayout().contentBoxHeight() > 0f) {
                     number = candidate;
@@ -1241,7 +1241,7 @@ public class EditorViewTest extends EditorTestBase {
         int seen = 0;
         for (UIElement child : allDescendants()) {
             if (!child.hasClass(TextEditor.GUTTER_CLASS)) continue;
-            for (UIElement number : child.getChildren()) {
+            for (UIElement number : descendantsOf(child)) {
                 if (!number.hasClass(TextEditor.LINE_NUMBER_CLASS)) continue;
                 if (number.getTaffyLayout().contentBoxHeight() <= 0f) continue;
                 seen++;
@@ -1274,7 +1274,7 @@ public class EditorViewTest extends EditorTestBase {
 
         for (UIElement child : allDescendants()) {
             if (!child.hasClass(TextEditor.GUTTER_CLASS)) continue;
-            for (UIElement number : child.getChildren()) {
+            for (UIElement number : descendantsOf(child)) {
                 if (!number.hasClass(TextEditor.LINE_NUMBER_CLASS)) continue;
                 if (number.getTaffyLayout().contentBoxHeight() > 0f) continue;
                 assertEquals("a retired number must carry no glyph",
@@ -1785,6 +1785,110 @@ public class EditorViewTest extends EditorTestBase {
                 line.getRuntimeCache().getX() > clipLeft);
     }
 
+    /**
+     * <b>The caret and the selection track the text sideways — exactly once.</b>
+     *
+     * <p>Written because the scroll-layer change broke this and nothing noticed. Everything drawn over the
+     * text moved into a layer that carries {@code -scrollLeft}, and two parts kept subtracting it
+     * themselves as well: the caret and the selection band drifted at <b>twice</b> the scroll, ending up
+     * far from the character they belong to. The whole suite stayed green, because no test asked where
+     * the caret was after scrolling sideways.</p>
+     *
+     * <p>Double compensation is the characteristic failure of moving an offset from N call sites into one
+     * container, and it is invisible at {@code scrollLeft == 0} — which is where every other fixture
+     * sits.</p>
+     */
+    @Test
+    public void theCaretTracksTheTextWhenScrollingSideways() {
+        build("x".repeat(400));
+        editor.setCaret(200);
+        showEditor();
+
+        float before = drawnX(childWithClass(TextEditor.CARET_CLASS));
+
+        editor.setScrollImmediate(30f, 0f);
+        showEditor();
+
+        assertEquals("the caret moved by exactly the scroll, not twice it",
+                before - 30f, drawnX(childWithClass(TextEditor.CARET_CLASS)), 0.5f);
+    }
+
+    /**
+     * <b>A pure scroll changes no element's laid-out position.</b> This is the whole scroll-layer design,
+     * stated as an assertion.
+     *
+     * <h3>Why this is the property worth pinning</h3>
+     *
+     * <p>The text viewport is scroll-exempt, so its children do not get the scroll translate an ordinary
+     * scroll container gives for free — and the editor used to make up for that by rewriting every row's
+     * and every decoration's {@code left} and {@code top} into the cascade on every frame the view moved.
+     * Cascade writes reach Taffy, so a layout pass followed. Measured against an ordinary scroller in the
+     * same window with no GL, that was <b>1,628µs a scrolled frame against 367µs</b>.</p>
+     *
+     * <p>Now everything inside a {@code __scroll-layer__} is positioned in <b>document</b> coordinates
+     * and the layer alone carries a {@link com.crystalgui.ui.UITransform}, which is layout-free by
+     * construction. So a scroll that does not change WHICH rows are realised must not change where any of
+     * them is laid out — and the scroll-specific cost of a frame fell to about 229µs, a 5.5x reduction.
+     * This is Monaco's {@code linesContent}.</p>
+     *
+     * <p>Deterministic on purpose. The timing that motivated it belongs in {@code EditorFrameCostTest}
+     * under {@code -Pbench} and is flaky as an assertion; <em>this</em> is the mechanism, and if a future
+     * change reintroduces a per-row rewrite the numbers would merely drift while this fails outright.</p>
+     */
+    @Test
+    public void aPureScrollMovesNothingInLayout() {
+        StringBuilder document = new StringBuilder();
+        for (int i = 0; i < 400; i++) document.append("    value ").append(i).append(NL);
+        build(document.toString());
+        showEditor();
+
+        float height = editor.lineHeight();
+        // Sub-line, so the realised set cannot change and every line keeps its view line.
+        editor.setScrollImmediate(0f, 10f * height);
+        showEditor();
+
+        java.util.List<Float> before = new java.util.ArrayList<>();
+        for (UIElement line : linesOf()) before.add(line.getRuntimeCache().getY());
+        assertTrue("lines must be on screen to say anything", before.size() > 3);
+
+        editor.setScrollImmediate(0f, 10f * height + height * 0.4f);
+        showEditor();
+
+        java.util.List<Float> after = new java.util.ArrayList<>();
+        for (UIElement line : linesOf()) after.add(line.getRuntimeCache().getY());
+        assertEquals("the same lines are realised", before.size(), after.size());
+        for (int i = 0; i < before.size(); i++) {
+            assertEquals("line " + i + " was re-laid-out by a scroll", before.get(i), after.get(i), 0.001f);
+        }
+    }
+
+    /**
+     * ...and the layer is what moved instead, by exactly the scroll.
+     *
+     * <p>The other half of the test above: "nothing moved" is also what a completely broken editor would
+     * report. Together they say the offset went somewhere, and somewhere is one transform.</p>
+     */
+    @Test
+    public void theScrollLayerCarriesTheOffsetInstead() {
+        StringBuilder document = new StringBuilder();
+        for (int i = 0; i < 400; i++) document.append("    value ").append(i).append(NL);
+        build(document.toString());
+        showEditor();
+
+        float height = editor.lineHeight();
+        // SUB-LINE, so the realised set is unchanged and linesOf().get(0) is the same row both times. A
+        // whole-line scroll would compare one row against a different one and report nonsense.
+        editor.setScrollImmediate(0f, 10f * height);
+        showEditor();
+        float drawnBefore = drawnY(linesOf().get(0));
+
+        editor.setScrollImmediate(0f, 10f * height + height * 0.4f);
+        showEditor();
+
+        assertEquals("the text moved by exactly the scroll",
+                drawnBefore - height * 0.4f, drawnY(linesOf().get(0)), 0.01f);
+    }
+
     /** Scrolling sideways moves the text towards the border rather than off a nearer edge. */
     @Test
     public void scrollingSidewaysMovesTextTowardsTheGutterBorder() {
@@ -1793,12 +1897,15 @@ public class EditorViewTest extends EditorTestBase {
 
         UIElement viewport = childWithClass(TextEditor.TEXT_VIEWPORT_CLASS);
         UIElement line = linesOf().get(0);
-        float gapBefore = line.getRuntimeCache().getX() - viewport.getRuntimeCache().getX();
+        // drawnX, not getX: a line's laid-out position is in document coordinates and the scroll layer's
+        // transform is what moves it. The property under test -- that the text moves by exactly the
+        // scroll -- is unchanged; which of the two carries the offset is what changed.
+        float gapBefore = drawnX(line) - viewport.getRuntimeCache().getX();
 
         editor.setScrollImmediate(20f, 0f);
         showEditor();
 
-        float gapAfter = linesOf().get(0).getRuntimeCache().getX() - viewport.getRuntimeCache().getX();
+        float gapAfter = drawnX(linesOf().get(0)) - viewport.getRuntimeCache().getX();
         assertEquals("the text moved by exactly the scroll", gapBefore - 20f, gapAfter, 1f);
         assertTrue("and it is now past the clip's edge, i.e. under the border", gapAfter < 0f);
     }
