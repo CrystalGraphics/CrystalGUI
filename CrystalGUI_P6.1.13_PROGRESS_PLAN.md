@@ -1,6 +1,6 @@
 # P6.1.13 — Progress: long work that the user can see, and stop
 
-**Status:** planned, not started · **Planned:** 2026-08-19 · **Revised:** 2026-08-19 (see below)
+**Status:** ✅ **built** (2026-08-19) — all eight steps, D1–D23 · **Planned:** 2026-08-19 · **Revised:** 2026-08-19 (see below)
 
 > **Revision, same day.** The first draft was reviewed against the question *"is this ready to
 > implement?"* and it was not. Eight gaps, and two of them were the kind this plan criticises elsewhere:
@@ -328,6 +328,15 @@ result in flight is discarded. The worker notices at its next `throwIfCancelled(
 ---
 
 ## Work order
+
+> **All eight steps are done.** What each turned up is recorded in the commits; three are worth carrying
+> into Phase 4. **Step 3's plan was wrong** — moving the mapping fetch onto `JobScheduler` would have
+> broken a dedicated server, because `UIWindow.paintFrame` is the only thing that drains it, so threading
+> became the caller's decision instead. **D22 was the one that mattered**: `JavaLanguage` returned early
+> when the engine failed to open, so a band arriving later would have downloaded, verified and reported
+> progress the whole way and then sat unused. And the chrome silently never appeared at first, because
+> `DOMEvent.ElementAdded` fires when an element gains a *parent* — before any window exists — so
+> `registerTicker` found none and never retried.
 
 | # | Step | Why here |
 |---|---|---|

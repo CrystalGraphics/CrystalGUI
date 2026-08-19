@@ -1,5 +1,7 @@
 package com.crystalgui.core.async;
 
+import com.crystalgui.core.notify.Notifications;
+
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -211,6 +213,48 @@ public class JobProgressTest {
         assertEquals("first", active.get(1).state().what());
         finishAndCollect(scheduler, first);
         finishAndCollect(scheduler, second);
+    }
+
+    // ── Failure ─────────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * <b>A failed job that announced itself notifies; a quiet one does not.</b>
+     *
+     * <p>Both halves matter. A download that fails after showing a bar leaves the chrome looking exactly
+     * as it does on success. And an analysis runs on every keystroke without announcing itself, so a
+     * broken one would raise a notification per character.</p>
+     */
+    @Test
+    public void anAnnouncedFailureNotifiesAndAQuietOneDoesNot() {
+        List<String> raised = new ArrayList<>();
+        Notifications.onDidChange.connect(event -> {
+            if (event.notification() != null) raised.add(event.notification().getMessage());
+        });
+        try {
+            JobScheduler scheduler = scheduler(SAME_THREAD);
+
+            scheduler.job(key("quiet-failure"), JobLane.BACKGROUND, context -> {
+                throw new IllegalStateException("no bar was ever shown");
+            }).submit();
+            scheduler.drain();
+            now += 10_000L;
+            scheduler.drain();
+            assertTrue("a job nobody could see raised a notification", raised.isEmpty());
+
+            scheduler.job(key("loud-failure"), JobLane.BACKGROUND, context -> {
+                context.progress().begin("Downloading engine band", 100);
+                throw new IllegalStateException("the mirror went away");
+            }).submit();
+            scheduler.drain();
+            now += JobScheduler.DEFAULT_SHOW_AFTER_MILLIS;
+            scheduler.drain();
+
+            assertFalse("an announced failure said nothing", raised.isEmpty());
+            assertTrue(raised.toString(),
+                    raised.stream().anyMatch(message -> message.contains("Downloading engine band")));
+        } finally {
+            Notifications.resetForTesting();
+        }
     }
 
     // ── Slots ───────────────────────────────────────────────────────────────────────────────────

@@ -194,6 +194,60 @@ val writeEngineManifests = tasks.register("writeEngineManifests") {
     }
 }
 
+/**
+ * Fails the build if band 8's bundled jars and its manifest disagree.
+ *
+ * The two are written by different tasks from the same configuration, so they can drift: a re-pin that
+ * regenerates one and not the other ships a jar whose digest describes the previous version. Nothing at
+ * runtime would notice -- the bundled band is used as-is and the manifest is only read when a band is
+ * MISSING -- so the mismatch would surface as a download that always fails its digest on some other
+ * host, which is about as far from the cause as a symptom can get.
+ *
+ * WHAT IT CAN AND CANNOT CATCH, since it depends on writeEngineManifests and therefore always compares
+ * against a freshly written file: it catches the two tasks DISAGREEING ABOUT THEIR INPUTS -- a different
+ * configuration, a filter added to one and not the other, a band bundled from one source and described
+ * from another. It cannot catch a hand-edited manifest, because the generator overwrites one before the
+ * comparison runs. That is the drift worth guarding: nobody edits these by hand, and the tasks are edited
+ * separately.
+ *
+ * Part of `check`, because a guard nobody runs is a guard that is not there.
+ */
+val checkEngineManifest = tasks.register("checkEngineManifest") {
+    group = "verification"
+    description = "Fails if band 8's bundled jars and its manifest disagree."
+    dependsOn(bundleEngineBand8, writeEngineManifests)
+    doLast {
+        val bundled = layout.buildDirectory.dir("engine-bundle/assets/crystalgui/engines/8").get().asFile
+        val manifest = layout.buildDirectory
+            .file("engine-manifests/assets/crystalgui/engines/8/manifest.txt").get().asFile
+        if (!manifest.isFile) throw GradleException("band 8 has no manifest; run writeEngineManifests")
+
+        val declared = manifest.readLines()
+            .filter { it.isNotBlank() && !it.startsWith("#") }
+            .associate { row -> row.split("|").let { it[0] to it[1] } }
+        val present = (bundled.listFiles() ?: emptyArray())
+            .filter { it.name.endsWith(".jar") }
+            .associate { jar ->
+                jar.name to MessageDigest.getInstance("MD5").digest(jar.readBytes())
+                    .joinToString("") { "%02x".format(it) }
+            }
+
+        val missing = present.keys - declared.keys
+        val extra = declared.keys - present.keys
+        val wrong = present.filter { (name, digest) -> declared[name]?.equals(digest) == false }.keys
+        if (missing.isNotEmpty() || extra.isNotEmpty() || wrong.isNotEmpty()) {
+            throw GradleException(
+                "band 8's manifest does not describe its bundled jars.\n"
+                        + "  bundled but not declared: $missing\n"
+                        + "  declared but not bundled: $extra\n"
+                        + "  declared with a stale digest: $wrong"
+            )
+        }
+    }
+}
+
+tasks.named("check") { dependsOn(checkEngineManifest) }
+
 // ECJ, Rhino and the two Eclipse platform jars the adapter names, on `downgradeJar`'s classpath.
 //
 // NOT on the compile or run classpath, and that distinction is the whole point: an engine is loaded by

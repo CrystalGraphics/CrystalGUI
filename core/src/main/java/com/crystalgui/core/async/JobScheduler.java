@@ -1,6 +1,8 @@
 package com.crystalgui.core.async;
 
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.notify.Notification;
+import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.core.dispose.Disposable;
 
 import java.util.ArrayList;
@@ -287,13 +289,14 @@ public final class JobScheduler implements Disposable {
     private void deliverCompleted() {
         Completion<?> completion;
         while ((completion = completed.poll()) != null) {
-            running.remove(completion.key);
+            Running finished = running.remove(completion.key);
             // The generation check is the whole of supersession. A result whose key has been re-submitted
             // describes a question nobody is asking any more.
             Integer current = generations.get(completion.key);
             if (current == null || current != completion.generation) continue;
             if (completion.failure != null) {
                 CrystalGuiCore.LOGGER.warn("job {} failed", completion.key, completion.failure);
+                reportFailure(finished, completion.failure);
                 continue;
             }
             try {
@@ -304,6 +307,33 @@ public final class JobScheduler implements Disposable {
                 CrystalGuiCore.LOGGER.warn("job {} completion handler failed", completion.key, failed);
             }
         }
+    }
+
+    /**
+     * A failed job that had <b>announced itself</b> raises a notification.
+     *
+     * <p>Silent disappearance is indistinguishable from success, and a download that fails after showing
+     * a bar for ten seconds is the case that makes it obvious: the bar leaves, and the only difference
+     * between that and finishing is that nothing happened.</p>
+     *
+     * <p><b>Only announced jobs.</b> The opt-in from {@link Progress#begin} again: an analysis runs on
+     * every keystroke and a broken one would otherwise raise a notification per character. If a job was
+     * never worth a place in the chrome, its failure is not worth interrupting anyone for — the log line
+     * above is the whole report.</p>
+     *
+     * <p>On the UI thread, because {@link #drain()} is.</p>
+     */
+    private void reportFailure(Running finished, Throwable failure) {
+        // FROM THE JOB'S OWN CONTEXT, not from `tracked`. A failure is delivered before updateTracked has
+        // run for that job -- and a job that fails quickly is never tracked at all -- so looking it up
+        // there finds nothing and the notification silently never happens, which is the bug this method
+        // exists to prevent wearing a different hat.
+        if (finished == null) return;
+        ProgressState announced = finished.context().progressState();
+        if (announced == null) return;
+        String reason = failure.getMessage() == null
+                ? failure.getClass().getSimpleName() : failure.getMessage();
+        Notifications.show(Notification.error(announced.what() + " failed: " + reason));
     }
 
     private void promoteDue() {
