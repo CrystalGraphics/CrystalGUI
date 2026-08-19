@@ -601,6 +601,8 @@ editor scheme's.
 | `--tree-match-fg` | `var(--fg)` | base.css |
 | `--tree-selected-bg` | `var(--accent-soft)` | base.css |
 | `--tree-selected-fg` | `var(--fg-on-accent)` | base.css |
+| `--tree-selected-inactive-bg` | `var(--surface-raised)` | base.css |
+| `--tree-selected-inactive-fg` | `var(--fg-secondary)` | base.css |
 | `--tree-twisty-fg` | `var(--fg-secondary)` | base.css |
 | `--warning` | `#CCA700` | crystal-dark.css |
 | `--warning-icon` | `#FFAF0F` | crystal-dark.css |

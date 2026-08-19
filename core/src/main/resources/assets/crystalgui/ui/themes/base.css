@@ -511,6 +511,8 @@ theme {
     --tree-editor-bg: var(--surface-recessed);
     --tree-editor-border: var(--accent);
     --tree-match-fg: var(--fg);
+    --tree-selected-inactive-bg: var(--surface-raised);
+    --tree-selected-inactive-fg: var(--fg-secondary);
     --tree-selected-bg: var(--accent-soft);
     --tree-selected-fg: var(--fg-on-accent);
     --panel-bg: var(--surface-panel);

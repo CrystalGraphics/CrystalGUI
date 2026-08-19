@@ -1605,7 +1605,22 @@ projectfiletree .__project-row__ .__badge__ {
  * Ordering could not fix it either: at equal specificity the later rule wins, so hover and selection
  * simply take turns being wrong. The answer is that a list with a selection does not need a hover state --
  * the cursor already says where the pointer is. */
+/* THE BASE RULE IS THE INACTIVE ONE, and the saturated fill is what the list wears while it has focus.
+ *
+ * Every reference greys the selection of a list that does not hold focus. The highlight answers "which row
+ * will the keys act on", so when the keys are going to an editor it is answering a question nobody asked --
+ * and with two panels both showing a saturated selection, it says the arrows will move both. IntelliJ, VS
+ * Code and every file manager draw the inactive one grey.
+ *
+ * Written this way round rather than as an `:not()` override because the engine has no `:not()`, and
+ * because the quieter state is the one a row is in most of the time. */
 projectfiletree .__project-row__.__selected__ {
+    background-color: var(--tree-selected-inactive-bg, #3A3D41);
+    color: var(--tree-selected-inactive-fg, #CCCCCC);
+}
+/* `.__focused__` is put on the list by ListView while the focus owner is inside it -- a class and not
+ * `:focus-within`, which this engine does not support and which POISONS the sheet it appears in. */
+projectfiletree .__focused__ .__project-row__.__selected__ {
     background-color: var(--tree-selected-bg, #2F5F9E);
     color: var(--tree-selected-fg, #FFFFFF);
 }
