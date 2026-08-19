@@ -64,8 +64,7 @@ final class WhitespacePart extends EditorViewPart {
             boolean continues = model.viewLineInRow() < projection.viewLineCount() - 1;
             boolean[] marked = WhitespaceMarkers.shouldMark(row, mode, editor.getTabSize(), continues);
 
-            final float top = editor.textOriginY() + viewLine * height + (height - ink) / 2f
-                    - editor.getScrollTop();
+            final float top = editor.topOfViewLine(viewLine) + (height - ink) / 2f;
             for (int column = from; column < to && pool.used() < MAX_MARKS; column++) {
                 if (!marked[column]) continue;
                 char marker = WhitespaceMarkers.markerFor(row.charAt(column));
@@ -81,9 +80,7 @@ final class WhitespacePart extends EditorViewPart {
                 // can be hundreds of markers and the pipeline is not free; a line number pays this
                 // because there are ~25 of them, a marker cannot.
                 if (markerFontKey == null || !markerFontKey.equals(fontKey)) {
-                    StyleGroup.importantPipeline(label.getStyle().getGeneralGroup(),
-                            g -> g.fontSize(editor.getStyle().getGeneralGroup().fontSize())
-                                    .fontFamily(editor.getStyle().getGeneralGroup().fontFamily()));
+                    editor.pushEditorFontTo(label);
                 }
                 StyleGroup.defaultPipeline(mark.getStyle().getLayoutGroup(),
                         l -> l.positionType(TaffyPosition.ABSOLUTE)

@@ -11,13 +11,17 @@ import com.crystalgui.fs.FilePatternMap;
 import com.crystalgui.fs.WorkspaceClient;
 import com.crystalgui.fs.WorkingCopies;
 import com.crystalgui.fs.WorkspaceFileService;
+import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.diagnostic.DiagnosticSet;
+import com.crystalgui.text.cursor.IndentationProvider;
+import com.crystalgui.text.fold.FoldingRangeProvider;
 import com.crystalgui.text.syntax.LanguageRegistry;
+import com.crystalgui.text.syntax.SyntaxTokenizer;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.chrome.Breadcrumbs;
 import com.crystalgui.ui.elements.chrome.StatusBarView;
 import com.crystalgui.ui.UIWindow;
-import com.crystalgui.ui.elements.chrome.InputDialog;
+import com.crystalgui.ui.elements.InputDialog;
 import com.crystalgui.ui.elements.chrome.NotificationBalloons;
 import com.crystalgui.ui.elements.chrome.NotificationsView;
 import com.crystalgui.ui.elements.chrome.ProblemsPanel;
@@ -41,6 +45,7 @@ import com.crystalgui.ui.elements.dock.DockPath;
 import com.crystalgui.ui.elements.dock.DockPanelRegistry;
 import com.crystalgui.ui.elements.editor.EditorCommands;
 import com.crystalgui.ui.elements.editor.TextEditor;
+import com.crystalgui.ui.elements.workbench.decoration.DiagnosticDecorations;
 import com.crystalgui.ui.elements.workbench.document.TextFileDocument;
 
 import java.util.ArrayList;
@@ -376,6 +381,20 @@ public class Workbench extends UIElement {
         // The explorer IS the workspace's undo scope. UndoScope.nearest walks outward from focus, so
         // Ctrl+Z in the tree reaches file operations and Ctrl+Z in an editor still reaches its own text.
         this.fileTree.setUndoStack(fileService.undoStack());
+        // PROBLEMS AS A DECORATION. Everything for this already existed -- the weights, the
+        // `.decoration-error` classes, the tree's own resolve-and-apply -- and nothing read Markers.
+        //
+        // Through `pendingRefresh` rather than a direct refresh, for the reason FileDecorations records:
+        // a provider can fire from inside a click handler on a row, and a widget must never rebuild the
+        // elements it is being clicked on.
+        this.fileTree.getDecorations().addProvider(new DiagnosticDecorations(markers));
+        // ONE SIGNAL, BOTH SURFACES. The tree redraws from the decorations' own announcement; the tabs
+        // have to be told, because a tab is not a decoration consumer -- it pulls a class when it is
+        // built and has no reason to look again on its own.
+        markers.onDidChange.connect(resource -> {
+            fileTree.getDecorations().invalidate();
+            syncTabDecorations();
+        });
         fileTree.onFileChosen.connect(this::openFile);
         fileTree.onFilesDropped.connect(this::dropFiles);
         // RENDERED FROM THE RESULT, never from the call site. One update path serves this client's own
@@ -397,6 +416,7 @@ public class Workbench extends UIElement {
         // someone who noticed.
         registry.setTitleProvider(this::tabTitleFor);
         registry.setIconProvider(Workbench::tabIconFor);
+        registry.setDecorationProvider(this::tabDecorationFor);
 
         // Anchors match where defaultLayout() puts them, so closing a panel and reopening it from the
         // activity bar lands it back where it was rather than somewhere merely legal.
@@ -417,7 +437,42 @@ public class Workbench extends UIElement {
             created.setLanguage(entry.language());
             // A FRESH tokenizer per document -- the interface exists for implementations holding a parse
             // tree per file, and sharing one would cross-contaminate them.
-            created.setTokenizer(entry.newTokenizer());
+            SyntaxTokenizer tokenizer = entry.newTokenizer();
+            created.setTokenizer(tokenizer);
+            // AND IF IT CAN FOLD, IT FOLDS. A tokenizer holding a parse tree already knows where a block
+            // begins and ends, which is strictly better than guessing from indentation -- and asking it
+            // costs no second parse, which a separate provider would. The indentation provider stays the
+            // default and answers for every language with no grammar behind it, which is most of them.
+            if (tokenizer instanceof FoldingRangeProvider) {
+                created.setFoldingProvider((FoldingRangeProvider) tokenizer);
+            }
+            // AND IF IT CAN SAY HOW DEEP A LINE IS, Enter asks it rather than reading the last character
+            // of the line -- which is right for a brace language and silently wrong for a `case` arm, a
+            // wrapped expression, or a nested CSS rule. Same seam, same fallback: a language with no
+            // indent query keeps the rule it had.
+            if (tokenizer instanceof IndentationProvider) {
+                created.setIndentationProvider((IndentationProvider) tokenizer);
+            }
+            // Fresh services per document too, and for the same reason one level up: they hold a compile
+            // result about THIS text. Null unless a language module registered an engine, which is the
+            // whole feature flag -- see LanguageServices. Released by TextFileDocument.dispose().
+            Resource resource = Resource.of(path);
+            created.setLanguageServices(entry.newServices(created.buffer(), resource));
+            // A CROSS-FILE jump, which the editor announces rather than performs -- see the signal's own
+            // note. Same-file jumps never arrive here because the editor already made them; this hears
+            // only what genuinely needs the workspace, and routes it through the primitive the Problems
+            // panel uses so the two cannot disagree about focus or framing.
+            created.onDefinitionChosen.connect(site -> {
+                if (site.resource() == null || !site.resource().isProject()) return;
+                TextPoint at = site.start();
+                openFile(site.resource().asPath(), () -> {
+                    TextEditor editor = activeEditor();
+                    if (editor == null) return;
+                    editor.revealAt(at);
+                    UIWindow window = getAttachedWindow();
+                    if (window != null) window.getInputHandler().requestFocus(editor);
+                });
+            });
             // No command installation here: TextEditor registers its own and binds its own chords, so a
             // document created before this workbench is attached is no longer a special case.
             // Here rather than only from WorkbenchSettings.apply: a document opened after the settings
@@ -425,7 +480,7 @@ public class Workbench extends UIElement {
             // apply to the files that happened to be open when a preference was last changed and to no
             // others -- which reads as the setting working intermittently.
             WorkbenchSettings.applyTo(this, created);
-            return new TextFileDocument(created, Resource.of(path));
+            return new TextFileDocument(created, resource);
         });
 
         dock = new DockArea(registry, defaultLayout());
@@ -527,16 +582,52 @@ public class Workbench extends UIElement {
         toolWindowManager.showPanel(PROJECT_TYPE);
         toolWindowManager.showPanel(PROBLEMS_TYPE);
 
+        // BOTH HANDLERS ARE INLINE, and deliberately not folded into one openAndReveal(CgPath, TextPoint).
+        //
+        // That helper reads as the obvious de-duplication and gives this class a navigation API in terms
+        // of a text POSITION -- which is knowledge a workbench has no business holding. It arranges panels
+        // and owns documents; where a caret goes inside one is the editor's affair, and a method here
+        // taking a TextPoint invites every future caller to route text navigation through the shell.
+        //
+        // What the two handlers actually share is `openFile(path, continuation)`, which is already the
+        // primitive and is already stated once. The four lines they each spell out are the CALLER's
+        // business -- which editor, what to do with it -- and spelling them out is what keeps the coupling
+        // pointing the right way.
         problems.onProblemChosen.connect(node -> {
-            // OPEN FIRST, THEN REVEAL. The panel is workspace-wide now, so the problem you clicked is
-            // routinely in a file that is not on screen — which is the case the panel's javadoc always
-            // described and could not produce until the index existed.
-            if (node.resource() != null && node.resource().isProject()) openFile(node.resource().asPath());
-            TextEditor editor = activeEditor();
-            if (editor == null || node.diagnostic() == null) return;
-            editor.setCaret(editor.buffer().pointToOffset(node.diagnostic().start()));
-            UIWindow window = getAttachedWindow();
-            if (window != null) window.getInputHandler().requestFocus(editor);
+            if (node.diagnostic() == null || node.resource() == null || !node.resource().isProject()) return;
+            TextPoint at = node.diagnostic().start();
+            // AS THE CONTINUATION OF THE OPEN, not as the statement after it. openFile is asynchronous for
+            // a file that is not already on screen -- it returns before client.read has come back -- so
+            // positioning on the next line acted on the editor from BEFORE the click. That is correct for
+            // a problem in the file you are already looking at and wrong for every other, which is why it
+            // read as intermittent rather than as broken.
+            openFile(node.resource().asPath(), () -> {
+                TextEditor editor = activeEditor();
+                if (editor == null) return;
+                editor.revealAt(at);
+                UIWindow window = getAttachedWindow();
+                if (window != null) window.getInputHandler().requestFocus(editor);
+            });
+        });
+
+        // SHOW QUICK-FIXES IS NAVIGATE PLUS ONE STEP, and it is spelled out here for the same reason the
+        // handler above is: which editor and what to do with it is the caller's business. The panel has
+        // no editor and must not reach for one -- it asks, and this answers.
+        //
+        // The list is opened INSIDE the continuation, after the caret has been placed: the actions are
+        // resolved from an offset, so asking before the file is open and positioned would ask about
+        // wherever the previous editor's caret happened to be.
+        problems.onQuickFixesRequested.connect(node -> {
+            if (node.diagnostic() == null || node.resource() == null || !node.resource().isProject()) return;
+            TextPoint at = node.diagnostic().start();
+            openFile(node.resource().asPath(), () -> {
+                TextEditor editor = activeEditor();
+                if (editor == null) return;
+                editor.revealAt(at);
+                UIWindow window = getAttachedWindow();
+                if (window != null) window.getInputHandler().requestFocus(editor);
+                editor.showCodeActionsAt(editor.getCaret());
+            });
         });
     }
 
@@ -780,6 +871,22 @@ public class Workbench extends UIElement {
      * blank editor with no explanation.</p>
      */
     public void openFile(CgPath path) {
+        openFile(path, null);
+    }
+
+    /**
+     * Opens a file and runs {@code onOpened} <b>once the document actually exists</b>.
+     *
+     * <p><b>The callback is the whole point, because this method has two paths and only one of them is
+     * synchronous.</b> A file already on screen is activated and returns immediately; a file that is not
+     * open goes through {@code client.read}, which is a round trip, and returns long before anything has
+     * been adopted. Every caller that wanted to do something <em>to</em> the file it just opened wrote
+     * the second statement as though the first had finished:</p>
+     * 
+     * @param onOpened run after the document is present and its tab is active, on both paths; never run
+     *                 if the read fails, since there is nothing to act on
+     */
+    public void openFile(CgPath path, @Nullable Runnable onOpened) {
         // BEFORE the already-open early return below, so re-activating a tab still promotes the file.
         // "Recent" means recently used, not recently created -- and the branch that returns early is the
         // common one once a session has been running for a while.
@@ -792,12 +899,16 @@ public class Workbench extends UIElement {
             // click that asked for it -- a widget must never rebuild the elements it is being clicked on.
             dock.syncGroups();
             dock.setActiveGroup(dock.groupFor(leaf));
+            if (onOpened != null) onOpened.run();
             return;
         }
         client.read(path, read -> {
             adoptInto(path, read.content());
             open.requestRead(path);
             open(DockInput.of(ref));
+            // AFTER open(), not before: the tab has to be the active one for activeEditor() to answer
+            // with the document this callback is about.
+            if (onOpened != null) onOpened.run();
         }, failure -> Notifications.show(openFailed(path, failure)
                 // AN ACTION, because a read failure is the case actions exist for: it is usually transient
                 // (a server round trip), the recovery is exactly what was just attempted, and without one
@@ -1213,6 +1324,38 @@ public class Workbench extends UIElement {
         if (path.isEmpty()) return null;
         String title = panel.state(DockPanelRef.TITLE, CgPath.parse(path).name());
         return isDirty(CgPath.parse(path)) ? title + DIRTY_MARKER : title;
+    }
+
+    /**
+     * How a tab is coloured — the same answer the file's row in the tree gets, from the same providers.
+     *
+     * <p>Asked of {@link FileDecorations} rather than of {@code markers} directly, and that is the point
+     * of routing it this way: a tab and a tree row showing different things about one file is precisely
+     * the disagreement a shared model exists to prevent, and everything else that decorates a file —
+     * dirty state, VCS, whatever comes next — reaches the tab for free rather than needing a second
+     * mechanism per surface.</p>
+     *
+     * <p><b>Not bubbled and not directory-resolved</b>: a tab is always a file.</p>
+     */
+    @Nullable
+    private String tabDecorationFor(DockPanelRef panel) {
+        String path = panel.state(PATH_STATE, "");
+        if (path.isEmpty()) return null;
+        // NULL IS THE ORDINARY ANSWER -- an undecorated file is the state nearly every file is in, and
+        // resolve() says so with null rather than with an empty decoration.
+        var decoration = fileTree.getDecorations().resolve(CgPath.parse(path), false);
+        return decoration == null ? null : decoration.styleClass();
+    }
+
+    /**
+     * Re-reads every open tab's decoration.
+     *
+     * <p>Through the dock's own {@code refreshPanelPresentation} rather than by walking leaves to groups
+     * to tabs — the walk {@code DockArea} explicitly warns callers off, because it keeps compiling long
+     * after the dock changes how a tab is built.</p>
+     */
+    private void syncTabDecorations() {
+        for (DockPanelRef panel : dock.allPanels()) dock.refreshPanelPresentation(panel);
     }
 
     /**

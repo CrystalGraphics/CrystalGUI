@@ -1,6 +1,9 @@
 package com.crystalgui.text.syntax;
 
 import com.crystalgui.fs.FilePatternMap;
+import com.crystalgui.fs.Resource;
+import com.crystalgui.text.TextBuffer;
+import com.crystalgui.text.lang.LanguageServices;
 
 import java.util.List;
 import java.util.function.Supplier;
@@ -63,11 +66,39 @@ import javax.annotation.Nullable;
  */
 public final class LanguageRegistry {
 
-    /** What a file is, as far as the editor is concerned. */
-    public record Entry(Language language, Supplier<SyntaxTokenizer> tokenizer) {
+    /**
+     * What a file is, as far as the editor is concerned.
+     *
+     * <h3>Three things, because "what is this file" has one answer</h3>
+     *
+     * <p>{@code services} joins the pair for the reason the pair exists at all: a switch that answers
+     * "which language" in one place and "which engine" in another is two switches that will disagree
+     * about {@code .frag}. It is <b>nullable</b>, and null is the ordinary case — five of the six shipped
+     * grammars have no engine behind them, a dedicated server has none at all, and an editor with none
+     * behaves exactly as it does today. See {@link LanguageServices} on why that absence is the whole
+     * feature flag.</p>
+     */
+    public record Entry(Language language, Supplier<SyntaxTokenizer> tokenizer,
+                        @Nullable LanguageServices.Factory services) {
+
+        /** A language with colouring but no engine — every entry until M5 lands one. */
+        public Entry(Language language, Supplier<SyntaxTokenizer> tokenizer) {
+            this(language, tokenizer, null);
+        }
 
         public SyntaxTokenizer newTokenizer() {
             return tokenizer.get();
+        }
+
+        /** Services for one document, or null when this language has no engine. */
+        @Nullable
+        public LanguageServices newServices(TextBuffer buffer, @Nullable Resource resource) {
+            return services == null ? null : services.create(buffer, resource);
+        }
+
+        /** The same entry with an engine behind it — how a language module upgrades a registration. */
+        public Entry withServices(@Nullable LanguageServices.Factory factory) {
+            return new Entry(language, tokenizer, factory);
         }
     }
 
@@ -86,6 +117,11 @@ public final class LanguageRegistry {
         // engine's own sources opened as plain text.
         Entry glsl = new Entry(Language.GLSL, KeywordTokenizer::glsl);
         registerExtensions(glsl, "glsl", "vert", "frag", "geom", "tesc", "tese", "comp", "shader");
+
+        // `.mjs` and `.cjs` beside `.js`, matching the three the JS grammar already claims -- a registry
+        // that knew fewer would open one of them as plain text with the grammar sitting right there.
+        Entry javascript = new Entry(Language.JAVASCRIPT, KeywordTokenizer::javascript);
+        registerExtensions(javascript, "js", "mjs", "cjs");
     }
 
     private LanguageRegistry() {

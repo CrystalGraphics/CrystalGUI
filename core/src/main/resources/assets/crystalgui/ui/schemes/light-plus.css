@@ -50,12 +50,81 @@ theme {
     --find-match-fg: #1F1F22;
     --search-excluded-fg: #8C8D93;
 
+    /* The word under the caret, wherever else it appears. A GROUND and no foreground, so a marked
+     * occurrence still reads as whatever kind of token it is — VS Code's editor.wordHighlightBackground. */
+    --editor-occurrence-bg: #E4E9EE;
+
+    /* The same for the SELECTED text -- fainter still, since the selection band is already saying
+     * where the thing you picked is. VS Code's editor.selectionHighlightBackground. */
+    --editor-selection-occurrence-bg: #EDF1F5;
+
     /* ── Syntax — the six general names every tokenizer falls back to ── */
     --syntax-keyword: #0000FF;
+    --syntax-keyword-control: #AF00DB;
+    --syntax-keyword-operator: #0000FF;
     --syntax-type: #267F99;
+    --syntax-type-parameter: #267F99;
+
+    /* AN INTERFACE AND AN ENUM, which only an engine can tell from a class -- the three are
+     * spelled identically at every use site. This scheme draws all three alike -- it overrides neither
+     * DEFAULT_INTERFACE_NAME nor ENUM_NAME, so agreeing with the class colour IS the port. */
+    --syntax-type-interface: #267F99;
+    --syntax-type-enum: #267F99;
+    --syntax-type-enum-style: normal;
+    --syntax-type-builtin: #0000FF;
+    --syntax-type-qualifier: #0000FF;
     --syntax-function: #795E26;
+    --syntax-function-builtin: #795E26;
+    --syntax-function-special: #795E26;
+    --syntax-function-method: #795E26;
+    --syntax-function-call: #795E26;
+    --syntax-function-static: #795E26;
+    /* VS Code does not slant a static call; stated rather than inherited, per the rule that a
+     * scheme defines every key the sheet reads. */
+    --syntax-function-static-style: normal;
     --syntax-string: #A31515;
+    --syntax-string-escape: #EE0000;
+    --syntax-string-special: #EE0000;
     --syntax-number: #098658;
+    --syntax-boolean: #0000FF;
+    --syntax-constant: #0070C1;
+    --syntax-constant-builtin: #0000FF;
     --syntax-comment: #008000;
+    --syntax-comment-doc: #008000;
+    --syntax-variable: #001080;
+    --syntax-variable-builtin: #0000FF;
+    --syntax-variable-parameter: #001080;
+    --syntax-variable-member: #001080;
+    --syntax-variable-captured: #001080;
+    --syntax-captured-underline: #0070C1;
+    --syntax-reassigned-underline: #909090;
+    --syntax-parameter-reassigned-underline: #909090;
+    --syntax-property: #001080;
+    --syntax-attribute: #E50000;
+    --syntax-tag: #800000;
+    --syntax-constructor: #267F99;
+    --syntax-embedded: #000000;
+    --syntax-label: #AF00DB;
+    --syntax-markup: #000000;
+
+    /* A PACKAGE PATH -- `java.util` in an import. Body text, which is what this scheme shows for a package path. */
+    --syntax-module: #1F1F22;
+    --syntax-error: #E51400;
+    /* Reported by an ENGINE, not by a grammar -- see editor.css. Unresolved keeps the colour
+     * that says WHAT it is and takes an underline; deprecated is dimmed and struck. */
+    --syntax-unresolved: #E51400;
+    --syntax-deprecated: #808080;
+    /* Dead code — nothing reads it. LIGHTER than the body text here, where dark schemes go darker: on
+     * white, receding means moving toward the background in the other direction. @see dark-plus.css */
+    --syntax-unnecessary: #A6A6A6;
+    --syntax-operator: #000000;
+    --syntax-punctuation: #383838;
+    --syntax-punctuation-bracket: #383838;
+    --syntax-punctuation-delimiter: #383838;
+    --syntax-comment-style: normal;
+    --syntax-constant-style: normal;
+    --syntax-keyword-weight: normal;
+    --syntax-constant-weight: normal;
+    --syntax-bracket-weight: normal;
     --syntax-bracket: #267F99;
 }

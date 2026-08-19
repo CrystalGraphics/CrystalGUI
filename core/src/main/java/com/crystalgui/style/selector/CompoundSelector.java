@@ -105,9 +105,19 @@ public record CompoundSelector(List<Part> parts) {
 
     /** {@code ::name(arg)} is listed first on purpose: the alternation is ordered, so with
      * {@code :name} ahead of it a {@code ::highlight(x)} would lex as a pseudo-class whose name
-     * began with a colon. */
+     * began with a colon.
+     *
+     * <p><b>The ARGUMENT admits a dot and the rest of the selector does not.</b> A highlight name is not
+     * a CSS identifier — it is a tree-sitter capture name, and those are dotted by convention
+     * ({@code function.builtin}, {@code punctuation.delimiter}). Outside the parentheses a dot still
+     * starts a class, which is why the two character classes differ rather than sharing one.</p>
+     *
+     * <p>Getting this wrong is not a parse warning. The argument simply failed to match, {@code ::highlight}
+     * lexed without one, and {@code Part}'s constructor threw — taking the whole sheet with it. In the
+     * user-agent sheet that means <em>nothing</em> has geometry, and the symptom is a black window with a
+     * perfectly healthy render loop, which looks like a renderer bug and is a regex.</p> */
     private static final Pattern PART_PATTERN =
-            Pattern.compile("(::[\\w-]+(?:\\([\\w-]+\\))?)|(#[\\w-]+)|(\\.[\\w-]+)|(:[\\w-]+)|(\\*)|([A-Za-z][\\w-]*)");
+            Pattern.compile("(::[\\w-]+(?:\\([\\w.-]+\\))?)|(#[\\w-]+)|(\\.[\\w-]+)|(:[\\w-]+)|(\\*)|([A-Za-z][\\w-]*)");
 
     /** Parses one combinator-free simple-selector group, e.g. {@code button#id.foo.bar:hover}. */
     public static CompoundSelector parse(String text) {

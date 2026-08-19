@@ -86,21 +86,19 @@ public class ViewContainer extends UIElement {
         // blurs before it dispatches, so a press landing on an unfocusable body clears focus outright
         // -- and the container's `:focus-within` was correctly false while the panel looked current.
         //
-        // The listener is needed as well as the policy, because click-focus targets the EXACT element
-        // hit and never walks up to a focusable ancestor (AGENTS.md; GraphNode already carries its own
-        // copy of this workaround for the same reason). So: if the press left the focus somewhere
-        // inside us, respect it -- a click on a tree row must focus the ROW -- and only claim it when
-        // it landed on nothing.
+        // THE POLICY IS NOW THE WHOLE OF IT. There used to be a bubble-phase listener here as well,
+        // because click-focus targeted the EXACT element hit and never walked up to a focusable
+        // ancestor — so a press on this container's own body focused nothing at all. `emitMouseDown`
+        // does that walk now, which is the DOM's own rule, so the press lands here by itself: a click
+        // on a tree row focuses the ROW (nearer), and a click on bare panel focuses this.
         //
-        // requestPointerFocus, never requestFocus: the latter is programmatic and therefore RINGS,
-        // which would outline the whole panel on every click -- exactly the noise :focus-visible
-        // exists to avoid.
+        // Deleted rather than left as a harmless duplicate, because it had stopped being harmless. It
+        // fired on the BUBBLE, i.e. after the target's own handlers, and claimed focus whenever focus
+        // was not inside it — which is indistinguishable from "a handler just moved focus somewhere
+        // else on purpose". Double-clicking a problem opened the file, put the caret on its line, and
+        // then had the focus dragged straight back into the panel: the caret was in the right place
+        // and the keyboard was not, which reads as the navigation not having worked at all.
         setFocusPolicy(FocusPolicy.CLICK);
-        onMouseDown.attachListener((element, event) -> {
-            UIWindow window = getAttachedWindow();
-            if (window == null || isFocusWithin()) return;
-            window.getInputHandler().requestPointerFocus(this);
-        }, false, true);
     }
 
     public String containerId() {

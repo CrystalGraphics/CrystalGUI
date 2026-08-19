@@ -26,6 +26,22 @@ licence, same "unmodified" statement, and reached through the same `FileIconThem
 convention as the file types; it is a separate directory only because a tool-window mark is not a file type
 and `default.json` should not have to say so.
 
+**`toolwindows/run.svg` is not one of them.** It is ours, drawn to Feather's geometry and stroke
+conventions the same way the severity three below are, because the set above had no run mark to take and
+reproducing one from memory would be a worse kind of copying than none. It uses `currentColor` rather than
+a fixed grey, so unlike its neighbours it needs no `_dark` companion — `withVariant` falls back to the base
+file and the colour arrives from the cascade.
+
+`nodes/java/` holds the same set's **node icons** — the badges a completion list and a structure view draw
+beside a symbol: `method`, `field`, `class`, `interface`, `enum`, `record`, `annotation`, `parameter`,
+`variable`, `constructor`, `lambda`, `exception`, and the abstract/anonymous variants of several. Same
+copyright, same licence, same "unmodified" statement, same `_dark` suffix convention.
+
+`staticMark` and `finalMark` are **overlays** rather than icons: each is drawn on its own 16x16 canvas with
+its glyph already placed in a corner — static bottom-left, final top-left — so they compose by being stacked
+over a base icon at the same size, and both can appear at once. That is JetBrains' own composition model,
+and it is why they are layered rather than scaled into a small corner box.
+
 > An earlier revision of this file described a 2021 set of 47 icons pulled from `platform/icons/src/` in
 > the `intellij-community` repository. That set was **replaced wholesale**, not extended: the 2023 icons
 > are a different drawing language — outlined and warm where the old ones were flat polygons in blue and
@@ -68,7 +84,8 @@ one file tree is the cost.
 
 <https://github.com/feathericons/feather>
 
-`folder.svg`, `file-text.svg`, `image.svg`, `code.svg`, `package.svg`, `x.svg`, and the three severity
+`folder.svg`, `file-text.svg`, `image.svg`, `code.svg`, `package.svg`, `x.svg`, `more-vertical.svg`,
+and the three severity
 marks the notification cards draw — `info.svg`, `alert-triangle.svg`, `alert-circle.svg`. Stroked, 24×24,
 authored as `stroke="currentColor"` — which is what makes them theme from the cascade for free, and why
 they are kept around as chrome marks even though the file tree now uses the IntelliJ set.
@@ -97,6 +114,34 @@ guessing at where the line falls is a worse bet than naming the source.
 Neither licence grants trademark rights — Apache 2.0 § 6 says so outright. The file-type icons above are
 JetBrains' own drawings of documents, not marks. The **IntelliJ IDEA logo is** a mark, which is why it lives
 in `core/src/test/resources/` and not here: it is the SVG renderer's torture test, not a shipped asset.
+
+## `general/action/` — IntelliJ Platform (Apache 2.0)
+
+`intentionBulb`, `addDirectory`, `addFile`, `copy`, `cut`, `delete`, `edit`, `paste`, `reformatCode`,
+`refresh`, `run`, `rerun`, `save`, `scrollDown`, `softWrap`, `stop` — action icons from the IntelliJ
+Platform, © 2000-2023 JetBrains s.r.o. and contributors, used under the Apache License 2.0.
+
+The line this directory is split along is **whether the colour carries meaning**, and it is the same line
+`general/search/` sits on the far side of.
+
+**Unmodified**, shipped with their `*_dark.svg` variants: `intentionBulb`, `addDirectory`, `addFile`,
+`copy`, `cut`, `edit`, `paste`, `reformatCode`, `refresh`, `run`, `rerun`, `save`, `stop`. These carry
+meaning in their colour — the bulb's amber glass says "there is something to do here", Stop's red says the
+button is live — and recolouring them from CSS would throw away what they are. `icon()` resolves the
+light/dark pair through `CgUiSvg.ofIcon`.
+
+**Modified**, which Apache 2.0 § 4(b) requires stating:
+
+- `delete`, `scrollDown`, `softWrap` — every hard-coded `fill="#6C707E"` replaced with
+  `fill="currentColor"`. They are chrome marks in a console's control stripe, not coloured symbols, so
+  they have to follow the theme and dim when their action is unavailable. Same change and same reason as
+  `general/search/`.
+- `rerunDisabled`, `stopDisabled` — **new files**, the geometry of `rerun` and `stop` recoloured to
+  `currentColor`, with the play triangle's pale interior dropped so the glyph reads as one flat tone.
+  They exist because the enabled pair's colour is baked in: `currentColor` is bound at draw time and a
+  hard `#DB3B4B` is not, so a CSS `color` rule dimmed every glyph in the Run panel except the two that
+  most needed it. Swapping the drawable on `:disabled` is what a hard-coded palette costs, and it is
+  JetBrains' own model — the Platform ships state variants rather than tinting one file.
 
 ## `general/search/` — IntelliJ Platform (Apache 2.0)
 

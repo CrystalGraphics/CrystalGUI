@@ -65,9 +65,12 @@ public final class HighlightRegistry {
         sorted.sort((a, b) -> Integer.compare(a.start(), b.start()));
         for (int i = 1; i < sorted.size(); i++) {
             if (sorted.get(i).start() < sorted.get(i - 1).end()) {
+                // THE NAME IS THE ONE FACT A READER NEEDS, and it was the one fact this omitted. Two
+                // offsets say a producer registered overlapping ranges; the name says WHICH producer,
+                // and there are half a dozen feeding one editor line.
                 throw new IllegalArgumentException("Ranges within one highlight must not overlap: "
-                        + sorted.get(i - 1) + " and " + sorted.get(i)
-                        + ". Use two differently-named highlights if you want both to apply.");
+                        + sorted.get(i - 1) + " and " + sorted.get(i) + " under \"" + name
+                        + "\". Use two differently-named highlights if you want both to apply.");
             }
         }
         List<TextRange> previous = byName.put(name, Collections.unmodifiableList(sorted));

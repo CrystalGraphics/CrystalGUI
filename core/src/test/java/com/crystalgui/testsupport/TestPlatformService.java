@@ -55,9 +55,14 @@ public final class TestPlatformService implements CgPlatformService {
         @Override public int translateMouseCodes(int platformCode) { return platformCode; }
         @Override public boolean isMouseDown(int localMouseCode) { return false; }
         @Override public int howManyMouseButtons() { return 3; }
-        @Override public String getClipboard() { return ""; }
-        @Override public void setClipboard(String text) { }
+        // A REAL IN-MEMORY CLIPBOARD, not a pair of stubs. Copy was unobservable while setClipboard threw
+        // its argument away, so anything that produced the wrong text produced it silently -- which is how
+        // a list shipped copying a record's generated toString, object graph and all.
+        @Override public String getClipboard() { return clipboard; }
+        @Override public void setClipboard(String text) { clipboard = text == null ? "" : text; }
     };
+
+    private static String clipboard = "";
 
     private static final TestPlatformService INSTANCE = new TestPlatformService();
 

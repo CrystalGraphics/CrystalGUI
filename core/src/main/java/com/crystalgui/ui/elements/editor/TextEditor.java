@@ -1,79 +1,57 @@
 package com.crystalgui.ui.elements.editor;
 
-import java.util.function.IntUnaryOperator;
-import java.util.function.IntFunction;
-import com.crystalgui.ui.UIWindow;
-import com.crystalgui.text.search.TextSearch;
-import com.crystalgui.text.search.SearchResults;
-import com.crystalgui.core.search.SearchQuery;
-import com.crystalgui.core.search.SearchMatcher;
-import com.crystalgui.ui.ClipboardActions;
 import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.api.text.CgShapedRun;
 import com.crystalgraphics.api.text.CgTextLayout;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
+import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.data.DataKey;
+import com.crystalgui.core.search.SearchMatcher;
+import com.crystalgui.core.search.SearchQuery;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.core.undo.UndoScope;
+import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.layout.LayoutProperties;
+import com.crystalgui.text.*;
+import com.crystalgui.text.cursor.*;
+import com.crystalgui.text.decoration.TrackedRange;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSet;
-import dev.vfyjxf.taffy.style.LengthPercentageAuto;
-import com.crystalgui.core.undo.UndoScope;
-import com.crystalgui.core.undo.UndoStack;
-import com.crystalgui.text.ChangeSet;
-import com.crystalgui.text.Change;
-import com.crystalgui.text.Selection;
-import com.crystalgui.text.SelectionModel;
-import com.crystalgui.text.TextBuffer;
-import com.crystalgui.text.syntax.SyntaxToken;
-import com.crystalgui.text.syntax.Language;
-import com.crystalgui.text.syntax.SyntaxTokenizer;
-import com.crystalgui.ui.text.HighlightRegistry;
-import com.crystalgui.ui.text.TextRange;
-import com.crystalgui.text.TextPoint;
-import com.crystalgui.text.WordClassifier;
-import com.crystalgui.text.WordOperations;
-import com.crystalgui.text.cursor.CursorColumns;
-import com.crystalgui.text.cursor.LineOperations;
-import com.crystalgui.text.cursor.MouseSelection;
-import com.crystalgui.text.cursor.MoveOperations;
-import com.crystalgui.text.cursor.TypeOperations;
-import com.crystalgui.text.wrap.LineBreaksComputer;
-import com.crystalgui.text.wrap.LineProjection;
-import com.crystalgui.text.view.IndentLevels;
-import com.crystalgui.text.view.RenderWhitespace;
-import com.crystalgui.text.view.WhitespaceMarkers;
+import com.crystalgui.text.diagnostic.DiagnosticTag;
 import com.crystalgui.text.fold.FoldingModel;
 import com.crystalgui.text.fold.FoldingRangeProvider;
 import com.crystalgui.text.fold.FoldingRegions;
-import com.crystalgui.text.fold.IndentRangeProvider;
-import javax.annotation.Nullable;
-import com.crystalgui.text.wrap.ProjectedLines;
-import com.crystalgui.text.wrap.ShapedLineBreaks;
-import com.crystalgui.text.wrap.WrapIndent;
+import com.crystalgui.text.lang.*;
+import com.crystalgui.text.search.SearchResults;
+import com.crystalgui.text.search.TextSearch;
+import com.crystalgui.text.syntax.Language;
+import com.crystalgui.text.syntax.SyntaxToken;
+import com.crystalgui.text.syntax.SyntaxTokenizer;
+import com.crystalgui.text.view.RenderWhitespace;
+import com.crystalgui.text.wrap.*;
+import com.crystalgui.ui.ClipboardActions;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UiDataKeys;
-import com.crystalgui.core.data.DataKey;
 import com.crystalgui.ui.elements.ScrollerView;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
+import com.crystalgui.ui.text.HighlightRegistry;
+import com.crystalgui.ui.text.TextRange;
+import dev.vfyjxf.taffy.style.LengthPercentageAuto;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 import lombok.Getter;
 
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Deque;
-import java.util.HashMap;
-import java.util.List;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import com.crystalgui.core.command.CommandRegistry;
+import javax.annotation.Nullable;
+import java.util.*;
+import java.util.function.IntFunction;
+import java.util.function.IntUnaryOperator;
 
 /**
  * A multi-line plain-text editor over a {@link TextBuffer}.
@@ -136,6 +114,16 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     public static final String LINE_CLASS = "__line__";
+
+    /**
+     * Opt in to the {@code ::highlight()} vocabulary of §10.1 — the forty capture-name rules every
+     * colour scheme defines.
+     *
+     * <p>A <b>capability</b>, not a part of this widget: anything drawing code coloured like code adds
+     * this class and gets the same rules. Public because the documentation popup is the second consumer
+     * and will not be the last.</p>
+     */
+    public static final String SYNTAX_CLASS = "__syntax__";
     public static final String CARET_CLASS = "__caret__";
     public static final String SELECTION_CLASS = "__selection__";
     public static final String GUTTER_CLASS = "__gutter__";
@@ -218,12 +206,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private float cachedFoldWidth;
     private float cachedCodeLeftPad;
 
-    /**
-     * The {@code font-size} in effect the first time {@link #refreshGutterMetrics} ever ran for
-     * this editor — {@code -1} until then. See {@link #gutterMetric} for why this exists.
-     */
-    private float gutterMetricBaselineFontSize = -1f;
-
     /** Clips everything drawn in document coordinates — see {@link #textViewport()}. */
     private UIElement textViewport;
 
@@ -272,12 +254,12 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /**
      * The current-line band's other half, inside the gutter.
      *
-     * <p><b>Two elements rather than one wide one</b>, because the gutter and the code area are separately
-     * stacked: the gutter paints an opaque background above the text so a long line scrolled sideways
-     * passes behind the numbers, which means a single band drawn behind everything is simply covered in
-     * the gutter region, and one drawn in front of everything hides the numbers. A band inside the gutter
-     * sits in the gutter's own stacking context — beneath its numbers, above its background — which is
-     * the only place it can be both visible and behind the digits.</p>
+     * <p><b>Two elements rather than one wide one</b>, because the gutter and the code area are separate
+     * boxes: {@link #textViewport()} is positioned at exactly the gutter's right border and clips with
+     * {@code overflow: hidden}, so a band inside it <em>cannot reach</em> the gutter however it is
+     * stacked. Drawn in front of everything instead, it hides the numbers. A band inside the gutter sits
+     * in the gutter's own stacking context — beneath its numbers, above its background — which is the
+     * only place it can be both visible and behind the digits.</p>
      */
     private final UIElement currentLineGutter = new UIElement();
 
@@ -293,17 +275,64 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private int highlightedTo = -1;
     private boolean highlightsDirty = true;
 
-    /** Search hits, in document offsets. Published under {@code ::highlight(search)}. */
-    private final List<TextRange> searchMatches = new ArrayList<>();
-    private int currentMatch = -1;
-    private String lastQuery = "";
-    private boolean lastQueryCaseSensitive;
+    /**
+     * Says the published {@code ::highlight()} ranges no longer describe the document.
+     *
+     * <p>For the subsystems that own a range set of their own — find, occurrences — since the flag itself
+     * is the editor's and the pass that reads it is too.</p>
+     */
+    void markHighlightsDirty() {
+        highlightsDirty = true;
+    }
+
+    /**
+     * Syntax tokens per MODEL row, with offsets relative to that row's start.
+     *
+     * <p>Asking the tokenizer is the single most expensive thing this class does per frame — measured at
+     * <b>3.3ms</b> for one viewport-sized query on a 5,000-line file, which is most of a 60fps frame and
+     * was being paid on every keystroke <em>and every scroll step</em>. Interning the capture names moved
+     * it by under 2%, so the cost is tree-sitter's own query execution: the only way to not pay it is to
+     * not ask.</p>
+     *
+     * <p><b>Keyed by model row, not by view line</b>, which is what makes it survive folding, wrapping and
+     * a window resize with no invalidation at all — those change which view line a row is drawn on and
+     * change nothing about the row's own tokens. It is also the key {@code measuredRows} already uses, so
+     * the two invalidate on the same rule for the same reason.</p>
+     *
+     * <p><b>Offsets are row-relative</b>, so an edit on one row does not shift every cached entry below
+     * it. Absolute offsets would have to be re-based on every keystroke, which is the work this exists to
+     * avoid, one indirection further down.</p>
+     *
+     * <p>A row present with an empty list means "queried, genuinely has no tokens" — distinct from absent,
+     * which means "never asked". Conflating them re-queries blank lines forever.</p>
+     */
+    private final Map<Integer, List<SyntaxToken>> rowSyntax = new HashMap<>();
+
+    /**
+     * The engine behind this document, or null — and null is the ordinary case.
+     *
+     * <p>Held rather than owned: the lifecycle belongs to the <em>document</em>, so the same file in two
+     * split panes is two editors sharing one of these. That is why {@link #setLanguageServices} does not
+     * close what it replaces — see its note.</p>
+     */
+    @Nullable
+    private LanguageServices languageServices;
+
+    /** The engine's diagnostics subscription, dropped when the services are replaced or disposed. */
+    @Nullable
+    private com.crystalgui.core.signal.Connection languageDiagnostics;
 
     /** The two bracket positions when the caret is on a bracket, or {@code null}. */
     private int[] bracketPair;
 
     /** One indent level, in spaces. */
     private int indentWidth = 4;
+
+    /** Whether one level is that many spaces, or a tab. @see #setInsertSpaces */
+    private boolean insertSpaces = true;
+
+    /** Whether the gutter counts from the caret rather than from the top. @see #setRelativeLineNumbers */
+    private boolean relativeLineNumbers;
 
     /**
      * What the editor needs to know about the language in order to EDIT it — comment tokens, bracket
@@ -369,6 +398,12 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /** The anchor a drag extends from, in document offsets: {@code {start, end}} of the initial unit. */
     private int[] dragAnchor;
 
+    /** Whether this drag belongs to a caret Alt+click added. @see #extendDragTo */
+    private boolean draggingAddedCaret;
+
+    /** Where a box selection was started, or -1. @see #applyColumnSelection */
+    private int columnAnchor = -1;
+
     /** Last pointer position in this element's space, for autoscroll while dragging. */
     private float pointerX, pointerY;
 
@@ -384,14 +419,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /** Spaces per tab stop. Separate from {@link #indentWidth}, exactly as VS Code separates the two. */
     private int tabSize = 4;
 
-    /**
-     * Which blocks are foldable and which are closed.
-     *
-     * <p><b>View state, not document state</b>, by the same boundary the engine draws for undo: it is how
-     * you are looking at the file, not what the file says. So it never reaches {@code UndoStack} and Ctrl+Z
-     * will not unfold — which is what VS Code and IntelliJ both do, and the same rule that keeps scroll
-     * position and selection out of the history.</p>
-     */
     // ── View parts ──────────────────────────────────────────────────────────────────────────────
     //
     // VS Code's decomposition, ported: each piece of the view owns its own elements and places them in
@@ -412,58 +439,93 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private final SquigglesPart squigglesPart = new SquigglesPart(this);
     private final ErrorStripePart errorStripePart = new ErrorStripePart(this);
     private final InspectionWidgetPart inspectionWidgetPart = new InspectionWidgetPart(this);
+    private final QuickFixBulbPart quickFixBulbPart = new QuickFixBulbPart(this);
     /** Every part, in paint order, so the frame drives one list rather than a dozen named calls. */
     private final java.util.List<EditorViewPart> viewParts = java.util.List.of(
             gutterEdgePart, indentGuidesPart, whitespacePart, rulersPart, foldingDecorationsPart,
             zoomIndicatorPart, lineNumbersPart, currentLinePart, selectionsPart, squigglesPart, errorStripePart, inspectionWidgetPart,
-            viewCursorsPart);
+            quickFixBulbPart, viewCursorsPart);
+
+    // ── Diagnostics ────────────────────────────────────────────────────────────────────────────
+    //
+    // The subsystem is EditorDiagnostics. The SET is the buffer's -- a diagnostic describes a document as
+    // an undo stack does -- and what moved out is everything that has to happen around it: the version
+    // gate, the tracked ranges, and the navigation.
+
+    private final EditorDiagnostics problems = new EditorDiagnostics(this);
+
+    /** Filing, tracking and navigating problems. */
+    EditorDiagnostics problems() {
+        return problems;
+    }
 
     /**
-     * The problems reported about this document.
+     * The problems reported about this document — <b>the buffer's</b>, not this widget's.
      *
-     * <p>Owned by the editor for now, which is a <b>known compromise</b> and worth stating so it is not
-     * mistaken for the intended shape. Diagnostics describe a <em>document</em>, exactly as an undo stack
-     * does, so two views onto one file should share a set and a file with no view open should still have
-     * one — that is what a Problems panel listing errors in unopened files requires. Moving it out is a
-     * pure relocation once there is a document type to move it to; keeping it here in the meantime is what
-     * lets the rendering half exist at all.</p>
+     * <p>It used to be a field here, under a javadoc calling that a known compromise: a diagnostic
+     * describes a document exactly as an undo stack does, so two views onto one file would have had two
+     * sets, publishing two competing slices into one Problems panel. It now lives beside
+     * {@code TextBuffer.decorations()}, which is where the squiggles' own tracked ranges already were —
+     * the list and the marks it produces had different owners and different lifetimes.</p>
      */
-    private final DiagnosticSet diagnostics = new DiagnosticSet();
-
     public DiagnosticSet diagnostics() {
-        return diagnostics;
+        return buffer.diagnostics();
+    }
+
+    /** The decoration lane every diagnostic squiggle is tracked in. @see EditorDiagnostics */
+    public static final String DIAGNOSTIC_LANE = "diagnostic";
+
+    /**
+     * The problems covering {@code offset} <b>right now</b>, nearest-first.
+     *
+     * @see EditorDiagnostics#at(int)
+     */
+    public List<Diagnostic> diagnosticsAt(int offset) {
+        return problems.at(offset);
+    }
+
+    /**
+     * Where {@code problem} is <b>now</b>, or null when nothing is tracking it.
+     *
+     * @see EditorDiagnostics#trackedRangeFor(Diagnostic)
+     */
+    @Nullable
+    public TrackedRange trackedRangeFor(@Nullable Diagnostic problem) {
+        return problems.trackedRangeFor(problem);
+    }
+
+    /**
+     * A row/column against the live document, clamping a column past its row's end.
+     *
+     * <p>Clamping rather than refusing, because {@code Diagnostic.onRow} deliberately produces a column past
+     * the end to mean "the whole row", and because a compiler occasionally reports one character past the
+     * last. Both are the same clamp and neither is worth losing a mark over.</p>
+     *
+     * <p><b>The document's own conversion, not a second copy of it.</b> This was a hand-written clamp that
+     * looked equivalent and was not: {@code rowStart + Integer.MAX_VALUE} <em>overflows</em>, so
+     * {@code Math.min(rowEnd, …)} answered a negative offset and the {@code Math.max(from, …)} at the call
+     * site pulled it back to the row's start — every whole-row diagnostic drew a one-character squiggle in
+     * the leading whitespace instead of underlining its line. {@code SquigglesTest} passed throughout,
+     * because a collapsed band is widened to one character to be visible and its width still looked
+     * plausible. @see Rope#pointToOffset, which had the same defect and is now the one definition</p>
+     */
+    int offsetOfPoint(TextPoint point) {
+        return buffer.pointToOffset(point);
     }
 
     /** Moves the caret to the next problem after it, wrapping. False when there are none. */
     public boolean goToNextProblem() {
-        return goToProblem(diagnostics.nextFrom(caretPoint()));
+        return problems.goToNext(caretPoint());
     }
 
     /** The mirror of {@link #goToNextProblem}, wrapping to the last. */
     public boolean goToPreviousProblem() {
-        return goToProblem(diagnostics.previousFrom(caretPoint()));
+        return problems.goToPrevious(caretPoint());
     }
 
-    /**
-     * Puts the caret on a diagnostic, revealing it first.
-     *
-     * <p><b>The unfold is not a convenience.</b> A row inside a collapsed region has no view line, so a
-     * caret placed on it cannot be painted, scrolled to or typed at — the same reason folding a block the
-     * caret is in has to move the caret to the block's header. Jumping to a problem hidden inside a fold
-     * without opening it leaves the editor looking focused and doing nothing, which is the worst possible
-     * answer to "take me to the error".</p>
-     *
-     * <p>The row is clamped to the live document because diagnostics are inherently stale: the set on
-     * screen describes whatever was last compiled, and the buffer may since have shrunk.</p>
-     */
+    /** Puts the caret on a diagnostic, revealing it first. @see EditorDiagnostics#goTo */
     private boolean goToProblem(@Nullable Diagnostic target) {
-        if (target == null) return false;
-        int row = Math.max(0, Math.min(target.start().row(), buffer.lineCount() - 1));
-        revealRow(row);
-        int rowStart = buffer.document().lineStartOffset(row);
-        int rowEnd = buffer.document().lineEndOffset(row);
-        setCaret(Math.min(rowEnd, rowStart + Math.max(0, target.start().column())));
-        return true;
+        return problems.goTo(target);
     }
 
     /**
@@ -475,35 +537,14 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * the set changes on every fold, and a stale answer here places a caret somewhere unpaintable.</p>
      */
     public java.util.List<FoldingModel.RowRange> hiddenRowRanges() {
-        return folding.hiddenRows();
+        return folds.hiddenRowRanges();
     }
 
     /** Opens every collapsed region hiding {@code row}. A no-op when the row is already visible, so this
      * does not disturb the fold state of a file whose problems are all in the open. */
-    private void revealRow(int row) {
-        for (FoldingModel.RowRange range : folding.hiddenRows()) {
-            if (!range.contains(row)) continue;
-            StableViewport anchor = captureFoldAnchor();
-            ensureFoldingCurrent();
-            folding.setCollapseStateUp(false, row);
-            afterFoldChange(anchor);
-            return;
-        }
+    void revealRow(int row) {
+        folds.revealRow(row);
     }
-
-
-    private final FoldingModel folding = new FoldingModel();
-
-    /**
-     * Where foldable regions come from. Indentation by default — see {@link IndentRangeProvider} for why
-     * that is Monaco's default too, and why brackets are not.
-     */
-    private FoldingRangeProvider foldingProvider = IndentRangeProvider.plain();
-
-    private boolean foldingEnabled = true;
-
-    /** Set by anything that could change the region set; drained once per frame by {@code refreshFolding}. */
-    private boolean foldingDirty = true;
 
     /**
      * The arrows' own container, sitting over the gutter's fold column.
@@ -570,6 +611,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // BEFORE reprojectAfterEdit, which is what advances previousLineCount -- this needs the count
             // as it was in order to tell a same-row edit from one that shifted every row below it.
             invalidateMeasuredRows(change);
+            // Same rule, same reason, and it must read previousLineCount while it still says what it said
+            // before this edit -- so it belongs beside the call above rather than anywhere later.
+            invalidateRowSyntax(change);
             // NOT invalidateWindow() unless the line COUNT changed.
             //
             // Recycling every line on every keystroke clears each one's highlights -- recycleLine has to,
@@ -590,7 +634,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // frame's style pass.
             forgetWidestLine();
             reprojectAfterEdit(change);
-            foldingDirty = true;
+            folds.markDirty();
             rebindRealisedLines();
             // A document that shrank can leave a selection pointing past its end, and the caret then
             // indexes a row that is not there. Clamped HERE rather than at the keystroke that caused it,
@@ -603,16 +647,33 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // undo and redo -- and offsets found against the old text describe the new one wrongly: the
             // count went stale and the highlights sat over whatever had moved into their place. Re-running
             // from this one signal is what makes undo correct without the undo path knowing about search.
-            if (lastSearch != null && !reentrantFind) {
-                reentrantFind = true;
-                try {
-                    find(lastSearch);
-                } finally {
-                    reentrantFind = false;
-                }
-            }
+            find.refreshAfterEdit();
+            // A HOVER BOX DESCRIBES AN OFFSET, and typing moves it. Dismissed rather than re-resolved,
+            // because what is on screen is now about a position that has shifted underneath it and the
+            // pointer has not asked about wherever the text ended up. A Ctrl+Q popup is left alone: it was
+            // asked for deliberately, and hideHoverDocumentation is what tells the two apart.
+            langFeatures.hover().hide();
             onChanged.emit(buffer.toString());
         });
+
+        // AN UNDO THAT MOVES THE TEXT BACK AND NOT THE CARET has moved the text out from under your
+        // hands. Every edit records where the carets were, and undo and redo hand them back here --
+        // after `onChanged` above, so this is the last word rather than something the clamp overwrites.
+        // Reported from the harness as "undo/redo don't put the caret back".
+        buffer.onSelectionsRestored.connect(restored -> {
+            if (restored.isEmpty()) return;
+            selections.setAll(restored, 0);
+            selections.clampTo(buffer.length());
+            afterSelectionChange();
+            ensureCaretVisible();
+        });
+
+        // EVERY producer's problems get tracked ranges, not only the engine's. See retrackDiagnostics.
+        diagnostics().onChanged.connect(problems::retrack);
+
+        // The one place the caret settles. A session must end on a plain arrow-key move, which changes no
+        // text and would therefore never reach a buffer listener.
+        onSelectionChanged.connect(suggest::caretMoved);
 
         previousLineCount = buffer.lineCount();
         projections.rebuild(buffer.document());
@@ -644,7 +705,26 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     public TextEditor setText(String text) {
-        String next = text == null ? "" : text;
+        // NORMALISED FIRST, and through the buffer's own loader — which is what makes this "load a file"
+        // rather than "paste a string".
+        //
+        // This did `buffer.replace(0, length, text)` raw, so a CRLF file kept its carriage returns in the
+        // document. `TextBuffer`'s constructor normalises and `load` normalises; only this path did not,
+        // and it is the one every opened file arrives through.
+        //
+        // What that looked like is worth writing down, because nothing about it says "line endings". A
+        // `\r` left on the end of a row reaches the shaper, which treats it as a PARAGRAPH BREAK exactly
+        // as it should — so every single-line row shaped as two paragraphs and reported double height.
+        // The row box stayed one line tall, `.__line__` centres its text, and centring a 26.4-tall child
+        // in a 14-tall box lifts it by 6.2px. The result was that every line of text in the file sat
+        // half a row above its own line number, while the numbers — which never carry a `\r` — were
+        // exactly right. It was reported as "the gutter drifts, but only in JavaScript", and the only
+        // reason it looked like a language was that the file which happened to be CRLF was a `.js` one.
+        //
+        // `load` also detects the ending and remembers it, so saving the file writes back what it came
+        // with instead of silently converting it — which is the other half of why this is the right call
+        // rather than a `replace` with a `normalise` in front of it.
+        String next = LineEnding.normalise(text == null ? "" : text);
         // UNCHANGED TEXT IS NOT AN EDIT, and this engine suppresses equal writes everywhere else for the
         // same reason -- Property.set, ObservableList.set and replaceOrPutCandidate all no-op on an equal
         // value, and each of them documents a feedback loop that stops settling without it.
@@ -658,9 +738,22 @@ public class TextEditor extends ScrollerView implements UndoScope {
         //
         // Compared BEFORE touching the buffer, so nothing above has already happened by the time the
         // comparison says there was nothing to do.
-        if (buffer.length() == next.length() && next.contentEquals(getText())) return this;
-        buffer.replace(0, buffer.length(), next);
-        buffer.breakUndoCoalescing();
+        // COMPARED AFTER NORMALISING, which the raw version could not do: the incoming text is what the
+        // file holds and `getText()` is what the buffer holds, so on a CRLF file they never matched and
+        // every re-read replaced the whole document -- resetting the caret and throwing away the widest
+        // measured line, which is the flicker this early-out exists to prevent.
+        //
+        // AND THE ENDING IS PART OF "unchanged". Normalising makes a CRLF document and an LF one the
+        // same TEXT, which is the point -- but they are not the same FILE, so returning early would keep
+        // the ending the buffer already had and a save would write back the wrong one. A test caught it
+        // immediately, which is the argument for having written the save half of this down at all.
+        if (buffer.length() == next.length() && next.contentEquals(getText())
+                && buffer.lineEnding() == LineEnding.detect(text == null ? "" : text)) {
+            return this;
+        }
+        // `load`, not `replace`: it normalises AND remembers the ending, so a save writes back what the
+        // file came with. It breaks undo coalescing itself.
+        buffer.load(text == null ? "" : text);
         setSelection(0, 0);
         return this;
     }
@@ -751,10 +844,79 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return buffer.offsetToPoint(getCaret());
     }
 
+    /**
+     * Scrolls until the caret is on screen.
+     *
+     * <p><b>Deliberately not part of {@link #setCaret}</b>, and this is the distinction every navigation
+     * caller has to know about: moving the caret and <em>revealing</em> it are separate acts. Typing
+     * reveals because the user is looking at the caret; a programmatic move often must not, or every
+     * background edit would yank the viewport around. So the editor's own key handlers call this and the
+     * setters do not.</p>
+     *
+     * <p>Public because navigation lives outside this widget — opening a file at a line, jumping to a
+     * definition, clicking a problem. Without it those all set a caret the viewport is nowhere near,
+     * which reads as nothing having happened at all.</p>
+     */
+    public TextEditor revealCaret() {
+        ensureCaretVisible();
+        return this;
+    }
+
+    /**
+     * Scrolls until the caret's line sits in the <b>middle</b> of the viewport — what a jump does.
+     *
+     * <p><b>A different question from {@link #revealCaret()}, not a nicer version of it.</b> Following a
+     * caret wants the <em>least</em> scrolling that works, because the reader's eye is already on it and
+     * moving the text under them is the cost; arriving somewhere new wants the most context, because they
+     * have no idea where they are yet. Minimal scrolling puts the destination hard against the top or
+     * bottom edge with the surrounding code entirely on one side, which is the worst possible framing for
+     * a line you were sent to look at.</p>
+     *
+     * <p>Both references split it the same way: Monaco has {@code revealLine} beside
+     * {@code revealLineInCenter}, IntelliJ has {@code ScrollType.MAKE_VISIBLE} beside
+     * {@code ScrollType.CENTER}. Typing must never centre — the viewport would lurch on the keystroke
+     * that crosses the halfway line and again on every one after it.</p>
+     *
+     * <p>Clamped at both ends by {@code setScrollImmediate}, so a target near the start or end of the
+     * file simply comes as close to the middle as the document allows rather than scrolling into blank
+     * space above line one.</p>
+     */
+    public TextEditor revealCaretCentred() {
+        float height = lineHeight();
+        float top = viewLineOf(getCaret(), LineProjection.Affinity.LEFT) * height;
+        // CENTRED IN THE BAND THE TEXT OCCUPIES, not in the scrollport -- the top padding is where the
+        // find bar sits, so centring through it puts the destination above the middle by half the bar.
+        // Same correction ensureCaretVisible carries, and it reduces to the old expression whenever the
+        // padding is zero.
+        float origin = textOriginY();
+        // IMMEDIATE, for the reason ensureCaretVisible gives: an eased scroll would leave the destination
+        // off screen for the length of the animation, and a jump is precisely when you are looking for it.
+        setScrollImmediate(getScrollLeft(), top - (viewportHeight() - origin - height) / 2f);
+        markTreeDirty();
+        return this;
+    }
+
+    /**
+     * Whether the caret's line is inside the band the text is meant to occupy.
+     *
+     * <p>The membership half of {@link #ensureCaretVisible()}, shared so the two cannot drift — that
+     * method still decides <em>which</em> edge to scroll to, which is a different and simpler question.
+     * The asymmetry is explained there: the far edge accounts for the top padding because the line has to
+     * fit above the bottom of the box, and the near edge does not because scrolling a line to {@code top}
+     * already places it at the first row of text rather than under the chrome above it.</p>
+     */
+    boolean caretIsInView() {
+        float height = lineHeight();
+        float top = viewLineOf(getCaret(), LineProjection.Affinity.LEFT) * height;
+        return top >= getScrollTop()
+                && top + height + textOriginY() <= getScrollTop() + viewportHeight();
+    }
+
     /** The shared tail of every selection change: end the undo run, re-place the carets, repaint. */
-    private void afterSelectionChange() {
+    void afterSelectionChange() {
         buffer.breakUndoCoalescing();
         updateBracketMatch();
+        updateOccurrences();
         highlightsDirty = true;
         viewCursorsPart.restartBlink();
         // These two EAGERLY, ahead of the frame's own pass. A caret that only moved on the next
@@ -791,7 +953,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         changes.removeIf(Change::isEmpty);
         if (changes.isEmpty()) return;
         ChangeSet edit = ChangeSet.of(buffer.length(), changes);
-        buffer.edit(edit);
+        buffer.edit(edit, selections.all());
         selections.mapThrough(edit).collapseEachToHead();
         clearGoalColumns();
         viewCursorsPart.restartBlink();
@@ -817,6 +979,14 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private void installInput() {
         events.getGroup(KeyboardEvent.Down.class).attachListener((el, event) -> {
             if (!isEnabled()) return;
+            // THE POPUP GETS THE KEYS FIRST, and only the four it owns. Arrows, Enter, Tab and Escape mean
+            // something different while a list is open, and the editor's own handler would consume them
+            // before any listener downstream could -- so the interception has to be here rather than on the
+            // popup, which never holds focus and therefore never receives a key at all.
+            if (suggest.handleKey(event.getKeyCode(), event.getModifiers())) {
+                event.stopPropagation();
+                return;
+            }
             if (handleKey(event.getKeyCode(), event.getModifiers())) {
                 event.stopPropagation();
                 return;
@@ -854,14 +1024,40 @@ public class TextEditor extends ScrollerView implements UndoScope {
             int clicks = Math.min(3, Math.max(1, event.getDetail()));
             boolean extend = CgModifiers.hasShift(CgPlatform.input().getCurrentModifiers());
             boolean addCaret = CgModifiers.hasAlt(CgPlatform.input().getCurrentModifiers());
+            int mods = CgPlatform.input().getCurrentModifiers();
 
-            if (addCaret && clicks == 1) {
+            // CTRL+CLICK IS GO-TO-DEFINITION, which the Alt branch below has named as the reason it leaves
+            // Ctrl alone since multi-caret went in. It moves the caret FIRST and resolves from there: the
+            // resolver is asked about an offset, and asking about the word under the pointer while the
+            // caret is still wherever it was would resolve the wrong name -- and would do it silently,
+            // since both are real names and both produce a plausible jump.
+            if ((CgModifiers.hasCtrl(mods) || CgModifiers.hasSuper(mods)) && !extend && clicks == 1) {
+                setCaret(offset);
+                goToDefinition();
+                event.stopPropagation();
+                return;
+            }
+
+            if (addCaret && extend && clicks == 1) {
+                // ALT+SHIFT+DRAG IS A BOX, which is VS Code's gesture for it and IntelliJ's too. Checked
+                // before the plain Alt branch below, because Alt is in both and the one with more
+                // modifiers has to win -- the other order makes this unreachable.
+                columnAnchor = offset;
+                draggingAddedCaret = false;
+                dragGranularity = 1;
+                dragAnchor = new int[] { offset, offset };
+                applyColumnSelection(offset);
+            } else if (addCaret && clicks == 1) {
                 // Alt+Click adds a caret, as in VS Code. Ctrl is left alone because Ctrl+Click is
                 // "go to definition" everywhere it appears.
                 addCaret(offset);
                 dragGranularity = 1;
                 dragAnchor = new int[] { offset, offset };
+                draggingAddedCaret = true;
+                columnAnchor = -1;
             } else {
+                columnAnchor = -1;
+                draggingAddedCaret = false;
                 dragGranularity = clicks;
                 dragAnchor = unitAt(offset, clicks);
                 if (extend) {
@@ -887,14 +1083,22 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
         events.getGroup(MouseEvent.Move.class).attachListener((el, event) -> {
             rememberPointer(event.getPosition().x(), event.getPosition().y());
+            langFeatures.hover().pointerMoved();
             if (!selecting) return;
             extendDragTo(offsetAt(event.getPosition().x(), event.getPosition().y()));
         }, false, false);
 
+        // THE POINTER LEFT THE TEXT, which is not the same as it having left the popup -- the box sits
+        // below the token, so reaching for it fires this immediately. The grace in the ticker is what
+        // makes that survivable; hiding here would make the popup unreachable.
+        onMouseLeave.attachListener((el, event) -> langFeatures.hover().cancel(), false, false);
+
         events.getGroup(MouseEvent.Up.class).attachListener((el, event) -> {
             selecting = false;
+            columnAnchor = -1;
             dragGranularity = 1;
             dragAnchor = null;
+            draggingAddedCaret = false;
         }, false, false);
     }
 
@@ -996,7 +1200,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
                 // construction rather than by two rules that have to be kept in step.
                 deleteEach(head -> new int[] {
                         ctrl ? previousWordBoundary(head)
-                             : TypeOperations.backspaceFrom(buffer.document(), head, indentWidth),
+                             : TypeOperations.backspaceFrom(
+                                     buffer.document(), head, indentWidth, language),
                         head });
                 return true;
             case CgKeyCodes.KEY_DELETE:
@@ -1009,7 +1214,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             case CgKeyCodes.KEY_TAB:
                 if (shift) outdentSelectedLines();
                 else if (selections.hasSelection()) indentSelectedLines();
-                else insertAtCaret(spaces(indentWidth));
+                else insertTabAtCarets();
                 return true;
             default:
                 return false;
@@ -1214,16 +1419,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return WordOperations.previousWordStart(buffer.document(), from, wordClassifier);
     }
 
-    /** Double-click selection, using the ported {@link WordOperations#wordAt}. */
-    private void selectWordAt(int offset) {
-        int[] word = WordOperations.wordAt(buffer.document(), offset, wordClassifier);
-        if (word == null) {
-            setCaret(offset);
-            return;
-        }
-        setSelection(word[0], word[1]);
-    }
-
     // ── Geometry ────────────────────────────────────────────────────────────────────────────────
 
     /** Seconds per full blink cycle; {@code 0} keeps the caret solid. */
@@ -1244,8 +1439,20 @@ public class TextEditor extends ScrollerView implements UndoScope {
     public float lineHeight() {
         var general = getStyle().getGeneralGroup();
         float multiplier = general.lineHeight();
-        if (multiplier <= 0f) multiplier = 1.2f;
-        return Math.max(1f, general.fontSize() * multiplier);
+        // `!(x > 0)` RATHER THAN `x <= 0`, and that is the whole fix rather than a stylistic preference.
+        // NaN fails every comparison, so `multiplier <= 0f` is FALSE for NaN and the default never
+        // applied -- and `Math.max(1f, NaN)` is NaN too, so the floor below did not catch it either. Two
+        // guards that both read as protective, neither of which stops the one value that matters.
+        //
+        // A NaN line height then poisons everything downstream of it: getScrollHeight multiplies by it,
+        // getMaxScrollTop subtracts, setScrollImmediate clamps with Math.max/min and stores NaN, and every
+        // view part computes a row's top as `origin + line * lineHeight - scrollTop`. One NaN stacks every
+        // row in the document at the same y, with nothing having thrown.
+        if (!(multiplier > 0f)) multiplier = 1.2f;
+        float size = general.fontSize();
+        if (!(size > 0f)) return 1f;
+        float height = size * multiplier;
+        return height > 1f ? height : 1f;
     }
 
     /**
@@ -1304,7 +1511,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     /** Forgets the widest line, so a shorter document reports a smaller scroll width. */
-    private void forgetWidestLine() {
+    void forgetWidestLine() {
         widestSeen = 0f;
     }
 
@@ -1344,7 +1551,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * of its row rather than at the row's start. The x search is still over the row's prefix widths —
      * rebased by the view line's origin — for the reason {@link #xOfView} gives.</p>
      */
-    private int offsetAtLocal(float localX, float localY) {
+    int offsetAtLocal(float localX, float localY) {
         float relativeY = localY - textOriginY() + getScrollTop();
         int viewLine = Math.max(0, Math.min(viewLineCount() - 1, (int) (relativeY / lineHeight())));
 
@@ -1436,9 +1643,35 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     /** Sets the language. Pass {@link SyntaxTokenizer#NONE} for plain text. */
+    /**
+     * Where an indent level comes from when Enter is pressed, or null for the syntactic rule.
+     *
+     * <p>Set beside the tokenizer, because the only implementation is one: a provider needs the parse
+     * tree, and the tokenizer is what owns one per document. @see IndentationProvider</p>
+     */
+    @Nullable
+    private IndentationProvider indentation;
+
+    /** @see #indentation */
+    public TextEditor setIndentationProvider(@Nullable IndentationProvider provider) {
+        this.indentation = provider;
+        return this;
+    }
+
     public TextEditor setTokenizer(SyntaxTokenizer newTokenizer) {
         if (this.tokenizer == newTokenizer) return this;
+        // Detach the old one's listener before dropping it, or a tokenizer that is still finishing work
+        // keeps marking THIS editor dirty about a document it no longer shows.
+        this.tokenizer.setInvalidationListener(null);
         this.tokenizer = newTokenizer == null ? SyntaxTokenizer.NONE : newTokenizer;
+        // A backend that parses in the background has no other way to say "ask me again": the document
+        // did not change when its work landed, so nothing else would ever prompt a re-query and the
+        // highlighting would sit one edit behind until something unrelated repainted.
+        this.tokenizer.setInvalidationListener((fromOffset, toOffset) -> {
+            invalidateRowSyntax(fromOffset, toOffset);
+            highlightsDirty = true;
+        });
+        rowSyntax.clear();
         highlightsDirty = true;
         highlightedFrom = -1;
         highlightedTo = -1;
@@ -1447,6 +1680,339 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     public SyntaxTokenizer tokenizer() {
         return tokenizer;
+    }
+
+    /**
+     * Attaches an engine, or detaches one with null.
+     *
+     * <h3>This editor does not own what it is given</h3>
+     *
+     * <p>The old services are <b>not closed</b> here, only unsubscribed. Services belong to the document
+     * ({@link LanguageServices}), and the same file open in two panes is two editors holding one set —
+     * so closing on replacement would release a compiler still in use by the other view. The owner is
+     * whoever created it, which today is {@code TextFileDocument}.</p>
+     *
+     * <p>The subscription is the same one {@link #setTokenizer} makes and for the same reason: a compile
+     * lands without the document changing, so nothing else would ever prompt a re-query and the semantic
+     * colours would sit one compile behind until an unrelated repaint.</p>
+     */
+    public TextEditor setLanguageServices(@Nullable LanguageServices services) {
+        if (this.languageServices == services) return this;
+        if (this.languageServices != null) {
+            this.languageServices.semanticTokens().setInvalidationListener(null);
+        }
+        if (languageDiagnostics != null) {
+            languageDiagnostics.disconnect();
+            languageDiagnostics = null;
+        }
+        this.languageServices = services;
+        if (services != null) {
+            services.semanticTokens().setInvalidationListener((fromOffset, toOffset) -> {
+                invalidateRowSyntax(fromOffset, toOffset);
+                highlightsDirty = true;
+                // A NEW ANALYSIS LANDED. This is the only signal the editor gets that the engine knows more
+                // than it did, and a completion list opened against the previous one may have been unable
+                // to resolve its receiver at all. Asking again here is what stops an empty popup sitting on
+                // screen until the next keystroke.
+                suggest.retrigger();
+            });
+            // THE ENGINE ANNOUNCES, THIS DOCUMENT'S SET OWNS. Filed under the engine's own id so a
+            // second producer -- the shader compiler on a .glsl, a future linter -- cannot erase it,
+            // which is the whole reason DiagnosticSet is keyed by owner. From here the Problems panel,
+            // the inspection widget and the status bar all light up through paths that already work.
+            languageDiagnostics = services.onDiagnostics(
+                    announced -> problems.install(services.id(), announced));
+        }
+        rowSyntax.clear();
+        highlightsDirty = true;
+        highlightedFrom = -1;
+        highlightedTo = -1;
+        return this;
+    }
+
+    /** The engine behind this document, or null. @see LanguageServices */
+    @Nullable
+    public LanguageServices languageServices() {
+        return languageServices;
+    }
+
+    // ── Go-to-definition ────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Where {@link #goToDefinition} sends a jump it cannot make itself — a declaration in <em>another</em>
+     * file.
+     *
+     * <p><b>The editor deliberately cannot open documents.</b> Same line {@code ProblemsPanel} draws and
+     * states for the same reason: opening a file is a workspace-level act, and a widget that did it itself
+     * would have to reach a client, a tab strip and a dock through the application to get there.</p>
+     *
+     * <p>A <b>same-file</b> jump is deliberately <em>not</em> announced, and that asymmetry is the design
+     * rather than an omission. Nothing is opened, no tab changes, and the entire act is moving this
+     * widget's own caret — so routing it out and back would hand the shell a movement it cannot perform
+     * better, and would make jumping to a local variable depend on a workbench that a harness scene and a
+     * bare editor test do not have. What goes out is what genuinely cannot be done from in here.</p>
+     *
+     * <p>Both halves still converge on {@link #revealAt}, so they cannot drift on what "arriving" means.</p>
+     */
+    public final Signal.Value<DeclarationSite> onDefinitionChosen = new Signal.Value<>();
+
+    /**
+     * Put the caret at {@code at} and frame it — the one movement every navigation ends with.
+     *
+     * <p>Shared rather than repeated because {@link #setCaret} deliberately does not scroll, so every
+     * caller has to remember a second call; the ones that forgot it are indistinguishable from nothing
+     * having happened. Centred rather than merely visible, because a line you were <em>sent</em> to with
+     * all of its context on one side is the worst possible framing for it — both references centre for
+     * navigation and only scroll minimally for typing.</p>
+     */
+    public void revealAt(TextPoint at) {
+        setCaret(buffer.pointToOffset(at));
+        revealCaretCentred();
+    }
+
+    // ── Language features ────────────────────────────────────────────────────────────────────
+    //
+    // The subsystem is EditorLanguageFeatures: resolve, documentation, code actions and go-to-definition,
+    // which share the request-serial machinery that makes an asynchronous answer safe to act on. They are
+    // one class for that reason and not four -- four copies of the two discards would drift on exactly the
+    // rule that must not.
+
+    private final EditorLanguageFeatures langFeatures = new EditorLanguageFeatures(this);
+
+    /** Resolve, documentation, code actions, go-to-definition. */
+    EditorLanguageFeatures langFeatures() {
+        return langFeatures;
+    }
+
+    /**
+     * Asks every contributor what can be done about the problems at {@code offset}.
+     *
+     * @see EditorLanguageFeatures#requestCodeActions(int, java.util.function.Consumer)
+     */
+    public boolean requestCodeActions(int offset, java.util.function.Consumer<List<CodeAction>> answer) {
+        return langFeatures.requestCodeActions(offset, answer);
+    }
+
+    /** Applies one action — the only path. @see EditorLanguageFeatures#applyCodeAction */
+    public boolean applyCodeAction(@Nullable CodeAction action) {
+        return langFeatures.applyCodeAction(action);
+    }
+
+    /** {@code Show on Mouse Move} — IntelliJ's own name for this, and on by default as it is there. */
+    public TextEditor setHoverDocumentationEnabled(boolean enabled) {
+        langFeatures.setHoverEnabled(enabled);
+        return this;
+    }
+
+    public boolean isHoverDocumentationEnabled() {
+        return langFeatures.isHoverEnabled();
+    }
+
+    /** Test seam — @see HoverDocumentation#pointerForTest */
+    public void hoverPointerForTest(int offset) {
+        langFeatures.hover().pointerForTest(offset);
+    }
+
+    /** Test seam — @see HoverDocumentation#hoverAnchorAtForTest */
+    public int hoverWordStartAtForTest(float localX, float localY) {
+        return langFeatures.hover().hoverAnchorAtForTest(localX, localY);
+    }
+
+    boolean isSelecting() {
+        return selecting;
+    }
+
+    float pointerX() {
+        return pointerX;
+    }
+
+    float pointerY() {
+        return pointerY;
+    }
+
+    WordClassifier wordClassifier() {
+        return wordClassifier;
+    }
+
+    /** The live Quick Documentation popup, or null. Exposed so a test can read it without pixels. */
+    @Nullable
+    public DocumentationPopup documentationPopup() {
+        return langFeatures.documentationPopup();
+    }
+
+    /**
+     * Resolve at the caret and show the Quick Documentation popup — {@code Ctrl+Q}.
+     *
+     * @see EditorLanguageFeatures#showQuickDocumentation()
+     */
+    public boolean showQuickDocumentation() {
+        return langFeatures.showQuickDocumentation();
+    }
+
+    /** The full action list at an offset — Alt+Enter. @see EditorLanguageFeatures#showCodeActionsAt */
+    public boolean showCodeActionsAt(int offset) {
+        return langFeatures.showCodeActionsAt(offset);
+    }
+
+    /** The overflow menu, and the lightbulb row inside it. */
+    public static final String CODE_ACTIONS_CLASS = "__code-actions__";
+    public static final String PREFERRED_ACTION_CLASS = "__preferred-action__";
+
+    /** Moves the caret to {@code problem} and centres it — what clicking a stripe mark does. */
+    public boolean goToDiagnostic(@Nullable Diagnostic problem) {
+        return goToProblem(problem);
+    }
+
+    /** Closes the documentation popup if it is open. */
+    public void closeQuickDocumentation() {
+        langFeatures.closeQuickDocumentation();
+    }
+
+    /**
+     * Resolve the name at the caret and go to where it is declared — {@code Ctrl+B}, and Ctrl+Click.
+     *
+     * @return whether a request was issued at all
+     * @see EditorLanguageFeatures#goToDefinition()
+     */
+    public boolean goToDefinition() {
+        return langFeatures.goToDefinition();
+    }
+
+    // ── Completion ──────────────────────────────────────────────────────────────────────────────
+    //
+    // The subsystem is EditorSuggest. anchorInWindow and isInCommentOrString stay here: the first is
+    // shared with the documentation popup and the second with bracket matching, and both are seams where
+    // being asked twice is how two answers appear.
+
+    private final EditorSuggest suggest = new EditorSuggest(this);
+
+    private static float finiteOrZero(float value) {
+        return Float.isFinite(value) ? value : 0f;
+    }
+
+    /** The live session, or null. Exposed so a test can assert on the model without going through pixels. */
+    @Nullable
+    public CompletionSession completionSession() {
+        return suggest.session();
+    }
+
+    /**
+     * Opens a completion session at the caret — Ctrl+Space, or a trigger character.
+     *
+     * @return false when nothing opened — no engine, or the caret is somewhere completion has no business
+     * @see EditorSuggest#open
+     */
+    public boolean openCompletion(CompletionProvider.TriggerKind trigger, @Nullable String triggerCharacter) {
+        return suggest.open(trigger, triggerCharacter);
+    }
+
+    public void closeCompletion() {
+        suggest.close();
+    }
+
+    /** The popup, built on first use. Null until a session has opened in an attached window. */
+    @Nullable
+    public CompletionPopup completionPopup() {
+        return suggest.popup();
+    }
+
+    /** Asks for completions here, whether or not a list is already open. @see EditorSuggest#trigger */
+    public void triggerSuggest() {
+        suggest.trigger();
+    }
+
+    /**
+     * Where {@code offset} sits in the window's coordinate space, as {@code {x, y, lineHeight}}.
+     *
+     * <p>Shared by both popups because it is the seam where two coordinate spaces meet, and a popup placed
+     * from the wrong one looks deliberately positioned while being wrong by exactly {@code uiScale}. Two
+     * copies of this would be two chances to reach for the transform chain, which is in surface pixels and
+     * is only populated once the element has painted.</p>
+     *
+     * <h3>Summed from the LAYOUT chain, not from the transform chain</h3>
+     *
+     * <p>The obvious implementation is {@code localToWorld}, and it is wrong here twice over. It is in
+     * <b>surface</b> pixels — the root transform is baked into it — while the popup's {@code left}/{@code
+     * top} are ordinary style values in logical pixels that the paint scales <em>again</em>, so the anchor
+     * comes out multiplied by {@code uiScale}. And it is populated <b>during {@code drawSubtree}</b>, so
+     * anything asking before this element has painted reads an identity matrix and gets the window's corner.
+     * Both faults produce a popup that is neatly placed somewhere wrong, which is the hardest kind to
+     * notice: it looks like a placement policy rather than a bad number.</p>
+     *
+     * <p>Summing {@code getLayoutX()}/{@code getLayoutY()} to the root gives the position in exactly the
+     * space {@code left}/{@code top} are interpreted in, with no scale in it and no dependency on having
+     * painted. The cost is that it ignores {@code transform:} — which is correct rather than a limitation,
+     * because a transformed editor's popup should follow its layout box, not its visual one.</p>
+     */
+    @Nullable
+    float[] anchorInWindow(int at) {
+        int anchorOffset = Math.max(0, Math.min(at, buffer.length()));
+        int viewLine = viewLineOf(anchorOffset, LineProjection.Affinity.RIGHT);
+        ProjectedLines.ModelPosition model = modelAt(viewLine);
+        int rowStart = buffer.document().lineStartOffset(model.row());
+        LineProjection.ViewPosition view = projectionAt(viewLine)
+                .toViewPosition(anchorOffset - rowStart, LineProjection.Affinity.RIGHT);
+
+        // THE SCROLL OFFSET CAN BE NaN, and this is the seam where that stops being someone else's problem.
+        //
+        // A NaN scroll poisons everything downstream silently: it propagates through the subtraction, then
+        // through the min/max in the placement, and lands the popup at the window's corner looking
+        // deliberately placed. Treating a non-finite offset as zero is right rather than merely defensive —
+        // "scrolled by an unknown amount" and "not scrolled" are the same picture for a document that has
+        // not been scrolled, and the alternative is a popup nobody can find.
+        float localX = textOriginX() + xOfView(viewLine, view.column()) - finiteOrZero(getScrollLeft());
+        float localY = topOfViewLine(viewLine);
+        if (!Float.isFinite(localX) || !Float.isFinite(localY)) return null;
+        return new float[] { getWindowX() + localX, getWindowY() + localY, lineHeight() };
+    }
+
+    /**
+     * Whether {@code offset} is inside a comment or a string, per the grammar.
+     *
+     * <p>Read from the tokenizer's capture names, which is the vocabulary §10.1 already fixes — so this
+     * needs no per-language table and a new grammar gets the suppression for free. A language with no
+     * tokenizer answers false, which is the right default: it means the popup opens, and an unwanted popup
+     * is recoverable in a way that a popup that refuses to open is not.</p>
+     */
+    boolean isInCommentOrString(int offset) {
+        int from = Math.max(0, offset - 1);
+        for (SyntaxToken token : tokenizer.tokenize(buffer.document(), from, offset + 1)) {
+            if (token.start() > offset || token.end() < offset) continue;
+            String capture = token.name();
+            if (capture == null) continue;
+            if (capture.equals("comment") || capture.startsWith("comment.")
+                    || capture.equals("string") || capture.startsWith("string.")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Releases what this editor's own document work holds — the tokenizer's natives and the engine.
+     *
+     * <p><b>Not called from the widget's own teardown</b>, deliberately. A widget can be removed from the
+     * tree and re-added, and a dock rebuild does exactly that on every split and drag; closing the parse
+     * tree there would free natives for a document that is still open and rebuild them on the next frame.
+     * The document is what ends, so the document calls this — {@code TextFileDocument.dispose()}.</p>
+     *
+     * <p>Idempotent, because the paths that reach it overlap: a file deleted while its tab is open can
+     * plausibly arrive from both ends.</p>
+     */
+    public void disposeLanguage() {
+        tokenizer.setInvalidationListener(null);
+        tokenizer.close();
+        tokenizer = SyntaxTokenizer.NONE;
+        if (languageDiagnostics != null) {
+            languageDiagnostics.disconnect();
+            languageDiagnostics = null;
+        }
+        if (languageServices != null) {
+            languageServices.semanticTokens().setInvalidationListener(null);
+            languageServices.close();
+            languageServices = null;
+        }
+        rowSyntax.clear();
     }
 
     /**
@@ -1478,9 +2044,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         highlightedTo = to;
         highlightsDirty = false;
 
-        List<SyntaxToken> tokens = tokenizer == SyntaxTokenizer.NONE
-                ? List.<SyntaxToken>of()
-                : tokenizer.tokenize(buffer.document(), from, to);
+        ensureRowSyntax(firstViewLine, lastViewLine);
         for (Map.Entry<Integer, UIElement> entry : realisedLines.entrySet()) {
             int viewLine = entry.getKey();
             if (viewLine < 0 || viewLine >= viewLineCount()) continue;
@@ -1490,38 +2054,96 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // it, which reads as the highlighter losing sync rather than as a coordinate bug.
             int lineStart = viewLineStartOffset(viewLine);
             int lineEnd = viewLineEndOffset(viewLine);
+            int modelRow = modelAt(viewLine).row();
+            int rowStart = buffer.document().lineStartOffset(modelRow);
 
             Map<String, List<TextRange>> byName = new LinkedHashMap<>();
-            addDocumentRanges(byName, "search", searchMatches, lineStart, lineEnd);
+            addDocumentRanges(byName, "occurrence", occurrences, lineStart, lineEnd);
+            addDocumentRanges(byName, "selection-occurrence", selectionOccurrences, lineStart, lineEnd);
+            // AFTER the occurrences, so a search hit wins the character where the two overlap. A search
+            // is something you asked for; occurrences are something the caret happened to be standing in.
+            addDocumentRanges(byName, "search", find.matches(), lineStart, lineEnd);
             // A SECOND NAME rather than a second mechanism: `::highlight()` already carries
             // `text-decoration-line`, so an excluded span is struck through by the sheet.
-            addDocumentRanges(byName, "search-excluded", results.excludedRanges(), lineStart, lineEnd);
+            addDocumentRanges(byName, "search-excluded", find.excludedRanges(), lineStart, lineEnd);
             if (bracketPair != null) {
                 addDocumentRanges(byName, "bracket", List.of(
                         TextRange.of(bracketPair[0], bracketPair[0] + 1),
                         TextRange.of(bracketPair[1], bracketPair[1] + 1)), lineStart, lineEnd);
             }
-            for (SyntaxToken token : tokens) {
-                int start = Math.max(token.start(), lineStart);
-                int end = Math.min(token.end(), lineEnd);
-                if (end <= start) continue;
-                TextRange range = TextRange.of(start - lineStart, end - lineStart);
-                byName.computeIfAbsent(token.name(), key -> new ArrayList<>()).add(range);
-                String general = token.generalName();
-                if (general != null) {
-                    byName.computeIfAbsent(general, key -> new ArrayList<>()).add(range);
+            // From the cache, and rebased twice: the entries are relative to their MODEL row, while a
+            // range published here must be relative to the VIEW line -- which for a wrapped row is some
+            // way into it. Doing only the first would push every colour on a continuation line left by
+            // the width of everything above it.
+            List<SyntaxToken> rowTokens = rowSyntax.get(modelRow);
+            if (rowTokens != null && !rowTokens.isEmpty()) {
+                for (SyntaxToken token : rowTokens) {
+                    int start = Math.max(rowStart + token.start(), lineStart);
+                    int end = Math.min(rowStart + token.end(), lineEnd);
+                    if (end <= start) continue;
+                    TextRange range = TextRange.of(start - lineStart, end - lineStart);
+                    // THE GENERAL FORM GOES IN FIRST, and the order is the whole of its meaning.
+                    //
+                    // A dotted capture is published under both names so a theme that has not styled
+                    // `function.call` still colours it as `function`. That is a FALLBACK -- but these end
+                    // up in one insertion-ordered map, and whichever name is written last wins the
+                    // character. Publishing the specific name first therefore inverted it: every
+                    // specialisation was overwritten by its own stem, so `function.call` resolved
+                    // correctly and then took `function`'s colour anyway, and the distinction the query
+                    // was adjusted to make disappeared before it reached the screen.
+                    String general = token.generalName();
+                    if (general != null) addRange(byName, general, range);
+                    addRange(byName, token.name(), range);
                 }
             }
+
+            // AFTER THE SYNTAX TOKENS, and that order is the whole of the effect. A character belongs to
+            // one highlight and the last name written wins it, so publishing here REPLACES the token's
+            // colour rather than tinting it -- which is IntelliJ's look for dead code (flat grey) rather
+            // than VS Code's (opacity, which keeps the hue). The alternative would be blending colours in
+            // the paint path, and the sheet can express one of these and not the other.
+            addTagRanges(byName, lineStart, lineEnd);
 
             // CLAMPED to what is actually painted. A collapsed header stops drawing its trailing bracket,
             // so a token covering it would publish a range past the end of the string. Correct to do
             // unconditionally -- a range beyond the text is never meaningful, folding or not.
             int painted = textOf(entry.getValue()).getText().length();
+            // SOURCE OFFSETS BECOME DISPLAY OFFSETS HERE, and every producer above needs it: search
+            // matches, the bracket pair, `::highlight()` ranges and the syntax tokens are all expressed
+            // in document offsets, while the string they are about to be applied to is
+            // viewLineDisplayText -- which has TABS EXPANDED.
+            //
+            // One tab therefore pushed everything after it left by (tabSize - 1) columns. Invisible in a
+            // space-indented codebase, which is why it survived: it took console output, where
+            // printStackTrace indents every frame with a real tab, for it to show -- as links underlining
+            // three characters to the left of the text they point at.
+            //
+            // Done ONCE, at the end, rather than per producer: they all share the fault, and a remap
+            // inside each one is four places for the next producer to forget.
+            // EXPANDED FROM THE LIVE ROW, never from `rowMetrics`. That is a computeIfAbsent cache, so a
+            // stale entry is returned silently -- and `displayIndexOf` CLAMPS its argument to the table's
+            // own length, so a table measured from a shorter row truncates every range on the real one at
+            // a different point. The Run console's per-script filter showed exactly that: `RunTest` where
+            // `RunTest.java:61` belonged, `Threa` for `Thread.java:1583`, and the last frame untouched
+            // because its stale counterpart happened to be long enough.
+            //
+            // A paint pass must not depend on a cache it cannot check. Skipped entirely for a row with no
+            // tab, which is nearly all of them: display equals source there, so the mapping is the
+            // identity and there is nothing to expand.
+            String source = buffer.line(modelRow);
+            CursorColumns.Line expanded =
+                    source.indexOf('\t') < 0 ? null : CursorColumns.expand(source, tabSize);
+            int viewSourceStart = lineStart - rowStart;
+            int displayFrom = expanded == null ? viewSourceStart : expanded.displayIndexOf(viewSourceStart);
             for (List<TextRange> ranges : byName.values()) {
                 for (int i = ranges.size() - 1; i >= 0; i--) {
                     TextRange range = ranges.get(i);
-                    int start = Math.min(range.start(), painted);
-                    int end = Math.min(range.end(), painted);
+                    int start = expanded == null ? range.start()
+                            : expanded.displayIndexOf(viewSourceStart + range.start()) - displayFrom;
+                    int end = expanded == null ? range.end()
+                            : expanded.displayIndexOf(viewSourceStart + range.end()) - displayFrom;
+                    start = Math.min(Math.max(0, start), painted);
+                    end = Math.min(Math.max(0, end), painted);
                     // DROPPED, not clamped to empty. TextRange refuses a zero-width range outright, so
                     // building one to filter it afterwards throws instead of filtering -- and the range
                     // that collapses is the bracket-match on the very brace the chip took over, i.e. the
@@ -1532,14 +2154,245 @@ public class TextEditor extends ScrollerView implements UndoScope {
             }
             byName.values().removeIf(List::isEmpty);
 
+            // CLEARED AND REBUILT, so the ORDER is this line's and not the previous occupant's.
+            //
+            // Order is not cosmetic here: a character covered by two names takes the colour of whichever
+            // was registered LAST, and tree-sitter's convention is that a later pattern refines an earlier
+            // one. The Java grammar leans on it — `(identifier) @variable` is its first pattern and matches
+            // everything, with @constant, @type and @function.method arriving later to say what a given
+            // identifier actually is.
+            //
+            // Removing the absent names and re-setting the rest looked equivalent and was not: setting an
+            // existing key in a LinkedHashMap keeps its ORIGINAL position, so a name kept whatever slot it
+            // had been given by whichever line this pooled element rendered before. `variable` outranked
+            // `constant` or not depending on scroll history, which is as close to random as makes no
+            // difference — and it presented as constants simply never being purple.
             HighlightRegistry highlights = textOf(entry.getValue()).highlights();
-            for (String name : new ArrayList<>(highlights.names())) {
-                if (!byName.containsKey(name)) highlights.remove(name);
-            }
+            highlights.clear();
             for (Map.Entry<String, List<TextRange>> named : byName.entrySet()) {
                 highlights.set(named.getKey(), named.getValue());
             }
         }
+    }
+
+    /**
+     * Files one range under one highlight name, dropping it if that name already covers the text.
+     *
+     * <p><b>A highlight refuses overlapping ranges</b>, and nesting is ordinary rather than exceptional:
+     * a grammar captures a string literal and then captures the escape sequence <em>inside</em> it. The
+     * two are different names and coexist happily — until the dotted fallback republishes
+     * {@code string.escape}'s range under {@code string}, which is already covering those characters. The
+     * result is a hard failure from {@code HighlightRegistry.set}, and it only became reachable when a
+     * real grammar replaced the word-list lexer, because a lexer never nests.</p>
+     *
+     * <p>Dropping is the correct resolution rather than a workaround: the outer range and the inner one
+     * carry <em>the same name</em>, so they resolve to the same colour, and the fallback exists only to
+     * cover what a specific name did not. Anything it duplicates is by definition already handled.</p>
+     */
+    private static void addRange(Map<String, List<TextRange>> byName, String name, TextRange range) {
+        List<TextRange> ranges = byName.computeIfAbsent(name, key -> new ArrayList<>());
+        for (TextRange existing : ranges) {
+            if (range.start() < existing.end() && existing.start() < range.end()) return;
+        }
+        ranges.add(range);
+    }
+
+    /** The highlight name {@link DiagnosticTag#UNNECESSARY} is styled through. */
+    static final String UNNECESSARY_HIGHLIGHT = "unnecessary";
+
+    /**
+     * Publishes the ranges that change how text is <b>drawn</b> rather than marked — unused code faded,
+     * deprecated code struck through.
+     *
+     * <h3>Why this is not the squiggle</h3>
+     *
+     * <p>{@link DiagnosticTag}'s own note makes the case: "unused import" is not a lesser warning, it is a
+     * different kind of statement, and underlining it says "something is wrong here" about code whose only
+     * problem is that nobody reads it. Every reference implementation fades instead — which is what lets
+     * them report six kinds of unused thing without the file looking broken.</p>
+     *
+     * <p>It reuses the highlight mechanism the syntax colours already arrive through, so the whole feature
+     * is two names and two rules in the sheet. The colour stays in CSS, which is what lets a scheme decide
+     * how faded "faded" is; nothing here knows what either tag looks like.</p>
+     *
+     * <p><b>Offsets come from the tracked lane, never from the diagnostic.</b> The same rule
+     * {@code SquigglesPart} is built on and for the same reason: a row/column converted against the live
+     * buffer is right only at the instant the analysis landed, so 300ms of typing later the fade would sit
+     * over whatever moved into those offsets. A range whose text was deleted draws nothing at all.</p>
+     *
+     * <p><b>{@link DiagnosticTag#DEPRECATED} is deliberately not published here.</b> The
+     * {@code deprecated} highlight already exists and is fed by the <em>semantic token</em> path, which
+     * is the better producer of it in two ways: it marks the reference itself rather than whatever range
+     * a diagnostic happened to cover, and it works whether or not the deprecation warning is switched on.
+     * Publishing it a second time would put two producers on one name for no gain. The tag is still
+     * carried on the diagnostic — the Problems panel styles its own row from it.</p>
+     */
+    private void addTagRanges(Map<String, List<TextRange>> byName, int lineStart, int lineEnd) {
+        for (TrackedRange tracked : buffer.decorations().inLane(DIAGNOSTIC_LANE)) {
+            Diagnostic diagnostic = tracked.payload(Diagnostic.class);
+            if (diagnostic == null || tracked.collapsedByEdit()) continue;
+            if (!diagnostic.hasTag(DiagnosticTag.UNNECESSARY)) continue;
+
+            int start = Math.max(tracked.from(), lineStart);
+            int end = Math.min(tracked.to(), lineEnd);
+            if (end <= start) continue;
+            addRange(byName, UNNECESSARY_HIGHLIGHT, TextRange.of(start - lineStart, end - lineStart));
+        }
+    }
+
+    /**
+     * Fills {@link #rowSyntax} for any realised row that has no entry — and asks the tokenizer nothing
+     * when they all do, which is the entire point.
+     *
+     * <p>Scrolling back over rows already seen, a repaint, a fold, a resize and a selection change all
+     * land here with a full cache and cost one map lookup per row. Typing invalidates one row (or the
+     * rows below it, when the line count moved) and so queries a row-sized range rather than a
+     * viewport-sized one.</p>
+     *
+     * <p>The query covers the whole span from the first to the last uncached row rather than issuing one
+     * per row: a tree-sitter query has a fixed setup cost that dwarfs a few extra rows of range, so n
+     * small queries are slower than one slightly larger one. Rows in the span that were already cached
+     * are re-filled from the same result, which is free and keeps the code honest about what the span
+     * covers.</p>
+     */
+    private void ensureRowSyntax(int firstViewLine, int lastViewLine) {
+        SemanticTokenProvider semantic = languageServices == null
+                ? SemanticTokenProvider.NONE : languageServices.semanticTokens();
+        if (tokenizer == SyntaxTokenizer.NONE && semantic == SemanticTokenProvider.NONE) return;
+
+        int firstMissing = Integer.MAX_VALUE;
+        int lastMissing = -1;
+        for (int viewLine = firstViewLine; viewLine <= lastViewLine; viewLine++) {
+            if (viewLine < 0 || viewLine >= viewLineCount()) continue;
+            int row = modelAt(viewLine).row();
+            if (rowSyntax.containsKey(row)) continue;
+            firstMissing = Math.min(firstMissing, row);
+            lastMissing = Math.max(lastMissing, row);
+        }
+        if (lastMissing < 0) return;
+
+        int lineCount = buffer.lineCount();
+        firstMissing = Math.max(0, Math.min(firstMissing, lineCount - 1));
+        lastMissing = Math.max(0, Math.min(lastMissing, lineCount - 1));
+
+        int spanStart = buffer.document().lineStartOffset(firstMissing);
+        int spanEnd = clampToDocument(buffer.document().lineStartOffset(lastMissing)
+                + buffer.line(lastMissing).length());
+
+        // Seed every row in the span as "queried, nothing found" FIRST. A row with no captures at all --
+        // a blank line, a line of punctuation the grammar does not name -- would otherwise stay absent and
+        // be re-queried on every single refresh, which is the cache failing exactly where it looks like it
+        // is working.
+        for (int row = firstMissing; row <= lastMissing; row++) {
+            rowSyntax.put(row, new ArrayList<>());
+        }
+
+        for (SyntaxToken token : tokenizer.tokenize(buffer.document(), spanStart, spanEnd)) {
+            distributeToRows(token, firstMissing, lastMissing);
+        }
+
+        // SEMANTIC TOKENS LAND SECOND AND WIN. Both sources speak the same capture vocabulary and describe
+        // the same spans; the difference is that the grammar guessed from shape and the engine knows. So a
+        // parameter the grammar called `variable` becomes `variable.parameter`, and that is the entire
+        // value of having an engine colour anything.
+        //
+        // Merged into the SAME per-row bucket rather than kept as a second layer, because the paint path
+        // takes one list per row and the overlap rule has to be decided somewhere -- a second list would
+        // push that decision into refreshHighlights, where two ranges under different names overlapping is
+        // exactly the shape that crashed HighlightRegistry once already.
+        // TWO PASSES, AND THE SPLIT IS THE RULE. The precedence is "the engine's answer beats the
+        // grammar's", which is a statement about SOURCES -- so every grammar token overlapping any
+        // semantic one is cleared first, and only then are the semantic tokens added. Doing it token by
+        // token would make each semantic token displace the previous one, and they are deliberately
+        // allowed to overlap each other: `count` being a field and `count` being deprecated are two
+        // true things about one range, drawn as a colour and a strike-through by two different rules.
+        List<SyntaxToken> semanticTokens = semantic.tokensIn(spanStart, spanEnd);
+        for (SyntaxToken token : semanticTokens) {
+            clearGrammarUnder(token, firstMissing, lastMissing);
+        }
+        for (SyntaxToken token : semanticTokens) {
+            distributeToRows(token, firstMissing, lastMissing);
+        }
+    }
+
+    /**
+     * Drops the grammar's cached tokens wherever this semantic token covers them.
+     *
+     * <p>Called for every semantic token <em>before</em> any is added, which is what lets semantic
+     * tokens overlap each other. Leaving the grammar's instead would put two ranges under unrelated
+     * names over one span and make which colour paints depend on the order the paint path happened to
+     * walk the list in — the same class of bug as the capture-precedence one, and just as invisible,
+     * since both names are legitimate and both resolve to a real colour.</p>
+     */
+    private void clearGrammarUnder(SyntaxToken token, int firstRow, int lastRow) {
+        int startRow = buffer.document().offsetToPoint(clampToDocument(token.start())).row();
+        int endRow = buffer.document().offsetToPoint(
+                clampToDocument(Math.max(token.start(), token.end() - 1))).row();
+        for (int row = Math.max(startRow, firstRow); row <= Math.min(endRow, lastRow); row++) {
+            List<SyntaxToken> bucket = rowSyntax.get(row);
+            if (bucket == null) continue;
+            int rowStart = buffer.document().lineStartOffset(row);
+            int rowEnd = rowStart + buffer.line(row).length();
+            final int from = Math.max(token.start(), rowStart) - rowStart;
+            final int to = Math.min(token.end(), rowEnd) - rowStart;
+            if (to <= from) continue;
+            bucket.removeIf(existing -> from < existing.end() && existing.start() < to);
+        }
+    }
+
+    /**
+     * Files one document token under every row it covers, clipped and rebased to each.
+     *
+     * <p>A token is not a row: a block comment or a text block spans many, and the grammar reports it as
+     * one. Storing it only under the row it starts on leaves every row after the first uncoloured, which
+     * reads as the comment ending early rather than as a cache bug.</p>
+     */
+    private void distributeToRows(SyntaxToken token, int firstRow, int lastRow) {
+        int startRow = buffer.document().offsetToPoint(clampToDocument(token.start())).row();
+        int endRow = buffer.document().offsetToPoint(clampToDocument(Math.max(token.start(), token.end() - 1))).row();
+        for (int row = Math.max(startRow, firstRow); row <= Math.min(endRow, lastRow); row++) {
+            List<SyntaxToken> bucket = rowSyntax.get(row);
+            if (bucket == null) continue;
+            int rowStart = buffer.document().lineStartOffset(row);
+            int rowEnd = rowStart + buffer.line(row).length();
+            int start = Math.max(token.start(), rowStart) - rowStart;
+            int end = Math.min(token.end(), rowEnd) - rowStart;
+            if (end > start) bucket.add(new SyntaxToken(start, end, token.name()));
+        }
+    }
+
+    /**
+     * Drops cached tokens for the rows an edit touched — and for everything below it when the edit
+     * changed the line COUNT.
+     *
+     * <p>The same rule {@link #invalidateMeasuredRows} follows, for the same reason: the map is keyed by
+     * row index, so inserting or removing a line renumbers every row below and their cached tokens now
+     * describe someone else's text. Removing that guard breaks nothing that any existing test would
+     * notice, and shows up as colour from one line appearing on another after a newline is typed.</p>
+     */
+    private void invalidateRowSyntax(ChangeSet change) {
+        List<Change> changes = change.changes();
+        if (changes.size() != 1 || buffer.lineCount() != previousLineCount) {
+            rowSyntax.clear();
+            return;
+        }
+        Change edit = changes.get(0);
+        int start = clampToDocument(change.mapPos(edit.from(), -1));
+        int end = clampToDocument(start + edit.insert().length());
+        int firstRow = buffer.document().offsetToPoint(start).row();
+        int lastRow = buffer.document().offsetToPoint(end).row();
+        for (int row = firstRow; row <= lastRow; row++) rowSyntax.remove(row);
+    }
+
+    /** Drops cached tokens across a document range — what a backend reports when a background parse lands. */
+    private void invalidateRowSyntax(int fromOffset, int toOffset) {
+        if (toOffset >= SyntaxTokenizer.InvalidationListener.EVERYTHING || fromOffset <= 0 && toOffset >= buffer.length()) {
+            rowSyntax.clear();
+            return;
+        }
+        int firstRow = buffer.document().offsetToPoint(clampToDocument(fromOffset)).row();
+        int lastRow = buffer.document().offsetToPoint(clampToDocument(toOffset)).row();
+        for (int row = firstRow; row <= lastRow; row++) rowSyntax.remove(row);
     }
 
     // ── Indentation ─────────────────────────────────────────────────────────────────────────────
@@ -1553,6 +2406,71 @@ public class TextEditor extends ScrollerView implements UndoScope {
     public int getIndentWidth() {
         return indentWidth;
     }
+
+    /**
+     * Whether one indent level is spaces or a tab.
+     *
+     * <p>Separate from {@link #setIndentWidth} because a tab-indented file still needs a width — it is
+     * where the stops are, and Backspace and Tab both ask. VS Code's pair is {@code insertSpaces} and
+     * {@code tabSize} for exactly this reason.</p>
+     */
+    public TextEditor setInsertSpaces(boolean spaces) {
+        this.insertSpaces = spaces;
+        return this;
+    }
+
+    public boolean isInsertSpaces() {
+        return insertSpaces;
+    }
+
+    /** The pair, as the cursor operations want it. */
+    private TypeOperations.IndentStyle indentStyle() {
+        return new TypeOperations.IndentStyle(insertSpaces, indentWidth);
+    }
+
+    /**
+     * Numbers the gutter by distance from the caret, keeping the caret's own row absolute.
+     *
+     * <p>Vim's {@code number relativenumber} pair and VS Code's {@code lineNumbers: "relative"}. Off by
+     * default: it is for people who type motions by count, and for everyone else it replaces a number
+     * they can read with arithmetic they cannot.</p>
+     */
+    public TextEditor setRelativeLineNumbers(boolean relative) {
+        if (this.relativeLineNumbers == relative) return this;
+        this.relativeLineNumbers = relative;
+        // EVERY NUMBER CHANGES WHEN THE CARET MOVES, so the gutter has to be redrawn on selection
+        // changes and not only when the window scrolls -- which `afterSelectionChange` already does by
+        // marking the tree dirty. Here it is the switch itself that moved.
+        markTreeDirty();
+        return this;
+    }
+
+    public boolean isRelativeLineNumbers() {
+        return relativeLineNumbers;
+    }
+
+    /**
+     * What the caret is drawn as.
+     *
+     * <p>The three every reference offers, and the only three that mean anything: a bar between two
+     * characters, a block over one, an underline beneath one. VS Code's {@code editor.cursorStyle} adds
+     * "thin" variants of the last two, which are the same shapes at a different width — and the width is
+     * already {@code caret-width} in the sheet, so they would be a second way to say one thing.</p>
+     */
+    public enum CaretStyle { LINE, BLOCK, UNDERLINE }
+
+    /** The caret's shape. Defaults to {@link CaretStyle#LINE}, which is what a text editor looks like. */
+    public TextEditor setCaretStyle(CaretStyle style) {
+        this.caretStyle = style == null ? CaretStyle.LINE : style;
+        markTreeDirty();
+        return this;
+    }
+
+    public CaretStyle getCaretStyle() {
+        return caretStyle;
+    }
+
+    private CaretStyle caretStyle = CaretStyle.LINE;
 
     public TextEditor setLanguage(Language newLanguage) {
         this.language = newLanguage == null ? Language.PLAIN : newLanguage;
@@ -1607,19 +2525,42 @@ public class TextEditor extends ScrollerView implements UndoScope {
      */
     private void insertNewlineWithIndent() {
         List<Change> changes = new ArrayList<>(selections.count());
+        List<Integer> carets = new ArrayList<>(selections.count());
+        int shift = 0;
         for (Selection selection : selections.all()) {
-            int row = buffer.offsetToPoint(selection.start()).row();
-            String line = buffer.line(row);
-            int indent = 0;
-            while (indent < line.length() && (line.charAt(indent) == ' ' || line.charAt(indent) == '\t')) {
-                indent++;
-            }
-            String carried = line.substring(0, Math.min(indent, Math.max(0,
-                    selection.start() - buffer.document().lineStartOffset(row))));
-            String trimmed = line.trim();
-            boolean opens = trimmed.endsWith("{") || trimmed.endsWith("(") || trimmed.endsWith("[");
-            String insert = "\n" + carried + (opens ? spaces(indentWidth) : "");
-            changes.add(new Change(selection.start(), selection.end(), insert));
+            TypeOperations.Enter enter = TypeOperations.enterAt(
+                    buffer.document(), selection.start(), indentStyle(), language, indentation);
+            changes.add(new Change(selection.start(), selection.end(), enter.text()));
+            // EACH CARET IS SHIFTED BY THE EDITS BEFORE IT. `enterAt` answers against the document as it
+            // stands, and the changes are applied together, so the second caret's offset has to carry the
+            // first change's growth.
+            carets.add(enter.caret() + shift);
+            shift += enter.text().length() - (selection.end() - selection.start());
+        }
+        applyEdit(changes);
+
+        // AND THE CARET IS NOT ALWAYS AT THE END OF WHAT WAS INSERTED, which is why this cannot leave the
+        // placement to `mapThrough`: pressing Enter between a brace pair writes TWO lines and belongs on
+        // the first of them. Mapping an insertion puts it after both.
+        List<Selection> placed = new ArrayList<>(carets.size());
+        for (int caret : carets) placed.add(Selection.caret(clampToDocument(caret)));
+        selections.setAll(placed, selections.primaryIndex());
+        afterSelectionChange();
+        ensureCaretVisible();
+    }
+
+    /**
+     * Tab with no selection — <b>to the next stop</b>, computed per caret.
+     *
+     * <p>Inserting {@code indentWidth} spaces regardless of where the caret stood is what this replaces:
+     * from column six with a width of four it produced column ten, which is not a stop, so a block indented
+     * by Tab drifted one character further out per press.</p>
+     */
+    private void insertTabAtCarets() {
+        List<Change> changes = new ArrayList<>(selections.count());
+        for (Selection selection : selections.all()) {
+            changes.add(new Change(selection.start(), selection.end(),
+                    TypeOperations.tabAt(buffer.document(), selection.start(), indentStyle())));
         }
         applyEdit(changes);
     }
@@ -1659,8 +2600,12 @@ public class TextEditor extends ScrollerView implements UndoScope {
         changes.removeIf(Change::isEmpty);
         if (changes.isEmpty()) return;
         ChangeSet edit = ChangeSet.of(buffer.length(), changes);
-        buffer.edit(edit);
+        buffer.edit(edit, selections.all());
         selections.mapThrough(edit);
+        // THE GOAL COLUMN IS STALE ONCE THE TEXT MOVES, exactly as it is in `applyEdit`, which clears it.
+        // Without this, Tab-indenting a line and then pressing Up aimed at the column the caret had
+        // BEFORE the indent -- so the caret drifted left by one indent, once, and then behaved.
+        clearGoalColumns();
         viewCursorsPart.restartBlink();
         ensureCaretVisible();
         onSelectionChanged.emit();
@@ -1673,12 +2618,36 @@ public class TextEditor extends ScrollerView implements UndoScope {
     }
 
     private void extendDragTo(int offset) {
+        if (columnAnchor >= 0) {
+            applyColumnSelection(offset);
+            return;
+        }
         if (dragAnchor == null) {
             setSelection(getAnchor(), offset);
             return;
         }
         Selection extended = MouseSelection.extend(
                 buffer.document(), dragAnchor, offset, dragGranularity, wordClassifier);
+
+        // AN ALT-DRAG EXTENDS THE CARET IT ADDED AND LEAVES THE OTHERS ALONE.
+        //
+        // `setSelection` is documented as collapsing to a single selection, which is right for an
+        // ordinary drag and destroys the entire point of an Alt+click: the press added a caret, the very
+        // first pointer Move afterwards replaced every caret with one, and it took a movement of a single
+        // pixel. Reported from the harness as multi-caret being "kind of broken", which is what it looks
+        // like from the outside -- the carets appear and then silently do not survive the mouse.
+        //
+        // The primary is the one `add` just made -- `normalise` carries the index through its sort and
+        // its merges for exactly this kind of reason.
+        if (draggingAddedCaret && selections.isMultiple()) {
+            List<Selection> all = new ArrayList<>(selections.all());
+            int at = Math.max(0, Math.min(selections.primaryIndex(), all.size() - 1));
+            all.set(at, extended);
+            selections.setAll(all, at);
+            afterSelectionChange();
+            ensureCaretVisible();
+            return;
+        }
         setSelection(extended.anchor(), extended.head());
     }
 
@@ -1740,6 +2709,49 @@ public class TextEditor extends ScrollerView implements UndoScope {
             return;
         }
         insertAtCaret(String.valueOf(typed));
+        maybeTriggerCompletion(typed);
+    }
+
+    /**
+     * Opens a session when a trigger character is typed — §18.1.
+     *
+     * <p>After the insertion, not before: the request carries the caret, and a provider asked to complete
+     * {@code foo} where the {@code .} has not landed yet resolves the expression as if there were no member
+     * access at all. Every reference implementation triggers on the character having been typed.</p>
+     *
+     * <p>Only when no session is live. Typing {@code .} inside an open list is a commit character's job, and
+     * re-opening would discard the list mid-keystroke.</p>
+     */
+    private void maybeTriggerCompletion(char typed) {
+        if (languageServices == null) return;
+
+        // A TRIGGER CHARACTER RESTARTS THE SESSION; it never defers to a live one.
+        //
+        // This deferred, on the reasoning that reopening would discard a list mid-keystroke. Backwards: a
+        // dot ENDS the word the open list was about. Typing `f`, `b` opens an autopopup session for a word,
+        // and the `.` then found that session live and returned -- so the member list never opened at all.
+        // What stayed on screen was the dying word session, whose prefix had just become `fb.` and matched
+        // nothing, which is why it looked like an empty member list and why Ctrl+Space -- which has no such
+        // guard -- worked on the very same text.
+        if (language.isCompletionTrigger(typed)) {
+            closeCompletion();
+            openCompletion(CompletionProvider.TriggerKind.CHARACTER, String.valueOf(typed));
+            return;
+        }
+
+        // The autopopup half still defers: every character of a word would otherwise restart the session and
+        // throw away the list it is narrowing.
+        if (suggest.isLive()) return;
+        // TYPING A NAME OPENS THE LIST TOO -- IntelliJ's autopopup, and without it the only way in was
+        // Ctrl+Space, which is a thing you have to remember rather than a thing that helps.
+        //
+        // It self-limits rather than needing a threshold: the session filters down as you type and closes
+        // itself the moment nothing matches, so declaring a brand-new name costs one popup that vanishes
+        // on the first character that makes the name unique. A minimum prefix length would be a number
+        // chosen to feel right, and would delay exactly the case it was meant to serve.
+        if (Character.isJavaIdentifierStart(typed)) {
+            openCompletion(CompletionProvider.TriggerKind.EXPLICIT, null);
+        }
     }
 
 
@@ -1767,19 +2779,87 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
         String needle = buffer.document().slice(primary.start(), primary.end()).toString();
         if (needle.isEmpty()) return false;
-        String haystack = buffer.toString();
 
-        int from = selections.all().get(selections.count() - 1).end();
-        int at = haystack.indexOf(needle, from);
-        if (at < 0) at = haystack.indexOf(needle);
+        // FROM THE ONE MOST RECENTLY ADDED, which is the primary -- `SelectionModel.add` makes it so, and
+        // `normalise` carries the index through its sort.
+        //
+        // Taking the last selection BY POSITION worked for as long as the matches ran down the document
+        // and died the moment the search wrapped: the newest caret was then at the top and the last-by-
+        // position one still at the bottom, so every further press resumed from the end, found the match
+        // it had already taken, and refused. Multi-caret simply stopped responding, which is what was
+        // reported.
+        int at = nextUnselectedOccurrence(needle, primary.end(), isWholeWordAt(primary));
         if (at < 0) return false;
-        for (Selection existing : selections.all()) {
-            if (existing.start() == at) return false;   // already have this one
-        }
         selections.add(new Selection(at, at + needle.length()));
         afterSelectionChange();
         ensureCaretVisible();
         return true;
+    }
+
+    /**
+     * The next occurrence of {@code needle} at or after {@code from} that no caret already holds, wrapping
+     * once — or {@code -1} when every occurrence is taken.
+     *
+     * <p>Skipping rather than refusing is the second half of the same bug: a match that is already
+     * selected is a reason to keep looking, not a reason to stop. Refusing left the next unselected one
+     * unreachable whenever an earlier match happened to lie in the way.</p>
+     */
+    /**
+     * Replaces the selection with the box between the column anchor and {@code offset}.
+     *
+     * <p>The last entry is made primary, because {@link ColumnSelection#between} puts the head's row
+     * there — so the blinking caret stays on the row the pointer is over rather than jumping to whichever
+     * row happens to sort first.</p>
+     */
+    private void applyColumnSelection(int offset) {
+        if (columnAnchor < 0) return;
+        List<Selection> box = ColumnSelection.between(
+                buffer.document(), clampToDocument(columnAnchor), clampToDocument(offset), getTabSize());
+        if (box.isEmpty()) return;
+        selections.setAll(box, box.size() - 1);
+        afterSelectionChange();
+        ensureCaretVisible();
+    }
+
+    private int nextUnselectedOccurrence(String needle, int from, boolean wholeWords) {
+        // THROUGH `TextSearch`, which is the one definition of what a match is -- the hand-rolled
+        // `indexOf` walk here had to grow its own whole-word test the moment Ctrl+D needed one, which is
+        // the second copy of a rule the search already owned. It also copied the whole document to do it.
+        List<TextRange> all = TextSearch.findAll(buffer.document(),
+                SearchQuery.of(needle, new SearchQuery.Options(true, wholeWords, false)));
+        for (TextRange match : all) {
+            if (match.start() >= from && !alreadySelected(match.start(), needle.length())) {
+                return match.start();
+            }
+        }
+        for (TextRange match : all) {
+            if (match.start() < from && !alreadySelected(match.start(), needle.length())) {
+                return match.start();
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Whether a selection covers <b>exactly</b> a word — which is what decides Ctrl+D's matching rule.
+     *
+     * <p>VS Code's {@code addSelectionToNextFindMatch}: a selection that <em>started</em> as a word keeps
+     * looking for that word, so {@code count} does not go on to select the {@code count} inside
+     * {@code counter}. A selection somebody dragged out by hand is a request about those characters and
+     * matches them anywhere — the gesture says which question is being asked, and the difference only
+     * shows up on the second press.</p>
+     */
+    private boolean isWholeWordAt(Selection selection) {
+        if (selection.isEmpty()) return false;
+        int[] word = WordOperations.wordAt(buffer.document(), selection.start(), wordClassifier);
+        return word != null && word[0] == selection.start() && word[1] == selection.end();
+    }
+
+    private boolean alreadySelected(int start, int length) {
+        for (Selection existing : selections.all()) {
+            if (existing.start() == start && existing.end() == start + length) return true;
+        }
+        return false;
     }
 
     /** A caret at every occurrence of the selection — {@code Ctrl+Shift+L}. */
@@ -1790,12 +2870,10 @@ public class TextEditor extends ScrollerView implements UndoScope {
         String needle = buffer.document().slice(primary.start(), primary.end()).toString();
         if (needle.isEmpty()) return 0;
 
-        String haystack = buffer.toString();
         List<Selection> found = new ArrayList<>();
-        int at = haystack.indexOf(needle);
-        while (at >= 0) {
-            found.add(new Selection(at, at + needle.length()));
-            at = haystack.indexOf(needle, at + needle.length());
+        for (TextRange match : TextSearch.findAll(buffer.document(),
+                SearchQuery.of(needle, new SearchQuery.Options(true, false, false)))) {
+            found.add(new Selection(match.start(), match.end()));
         }
         if (found.isEmpty()) return 0;
         selections.setAll(found, found.size() - 1);
@@ -1859,11 +2937,17 @@ public class TextEditor extends ScrollerView implements UndoScope {
         LineOperations.Move move = LineOperations.move(buffer.document(), touchedRows(), direction);
         if (move == null) return;
 
+        if (readOnly || move.change().isEmpty()) return;
         List<Selection> moved = new ArrayList<>();
         for (Selection selection : selections.all()) {
             moved.add(new Selection(selection.anchor() + move.shift(), selection.head() + move.shift()));
         }
-        applyEditKeepingSelection(new ArrayList<>(List.of(move.change())));
+        // APPLIED WITHOUT LETTING THE EDIT PLACE THE CARETS. Every touched row moves by the same known
+        // amount, so this already has the answer -- going through `applyEditKeepingSelection` mapped the
+        // carets through the change, emitted `onSelectionChanged`, and then had that answer overwritten
+        // and emitted again. Two emissions per Alt+Up, one of them describing selections nobody kept.
+        ChangeSet edit = ChangeSet.of(buffer.length(), List.of(move.change()));
+        buffer.edit(edit, selections.all());
         selections.setAll(moved, selections.primaryIndex());
         afterSelectionChange();
         ensureCaretVisible();
@@ -1906,14 +2990,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
                 new Change(primary.start(), primary.end(), replacement))));
     }
 
-    // ── Helpers ─────────────────────────────────────────────────────────────────────────────────
-
-
-
     // ── Bracket matching ────────────────────────────────────────────────────────────────────────
 
-    private static final String OPENERS = "([{";
-    private static final String CLOSERS = ")]}";
 
     /**
      * Finds the bracket at the caret and its partner, or clears the pair.
@@ -1932,10 +3010,123 @@ public class TextEditor extends ScrollerView implements UndoScope {
         if (bracketPair != null && bracketPair[1] < 0) bracketPair = null;
     }
 
+    /**
+     * <b>Every other place the word under the caret appears</b>, published as {@code ::highlight(occurrence)}.
+     *
+     * <h3>What it is for, and why it is not a search</h3>
+     *
+     * <p>Both references do this and it is the most visible thing an editor without it is missing: put the
+     * caret in a name and every use of that name is marked, so "where else is this" is answered by
+     * standing still rather than by typing it into a find box. IntelliJ calls it identifier highlighting,
+     * VS Code occurrence highlighting.</p>
+     *
+     * <h3>Three refusals, and each of them is what keeps it quiet</h3>
+     *
+     * <ul>
+     *   <li><b>Only from a bare caret inside a word.</b> With a selection the user has already said what
+     *       they are interested in, and marking something else competes with it; between two words there
+     *       is no question being asked.</li>
+     *   <li><b>Whole words, matching case.</b> Without both, putting the caret in {@code i} marks every
+     *       letter i in the file — which is not a highlight, it is noise with a colour.</li>
+     *   <li><b>Nothing at all when there is only one.</b> A word that appears once is marked as its own
+     *       only occurrence otherwise: a box drawn round the thing you are already looking at, on every
+     *       caret move, saying nothing.</li>
+     * </ul>
+     *
+     * <p>Recomputed on selection change rather than per frame, which is the same beat the bracket match
+     * runs on. It is a whole-document scan, so it is bounded: past {@link #OCCURRENCE_SCAN_LIMIT}
+     * characters nothing is marked at all, on the same reasoning {@link #BRACKET_SCAN_LIMIT} records —
+     * a scan long enough to be felt on a keystroke is worse than the feature is good.</p>
+     */
+    private void updateOccurrences() {
+        occurrences.clear();
+        selectionOccurrences.clear();
+        if (buffer.length() > OCCURRENCE_SCAN_LIMIT || selections.isMultiple()) return;
+
+        if (selections.hasSelection()) {
+            selectionOccurrences.addAll(selectedTextOccurrences());
+            return;
+        }
+
+        int[] word = WordOperations.wordAt(buffer.document(), getCaret(), wordClassifier);
+        if (word == null || word[1] <= word[0]) return;
+        String needle = buffer.document().slice(word[0], word[1]).toString();
+        if (needle.isEmpty() || !wordClassifier.isWordPart(needle.charAt(0))) return;
+        occurrences.addAll(matchesOf(needle, true));
+    }
+
+    /**
+     * <b>Selection highlight</b> — the other places the selected text appears.
+     *
+     * <h3>A different name from the caret's word, because it is a different statement</h3>
+     *
+     * <p>VS Code keeps {@code wordHighlight} and {@code selectionHighlight} apart and so does this: one
+     * marks where the symbol you are standing in also lives, the other marks where the characters you
+     * <em>chose</em> also appear. The second is by definition not whole-word — selecting {@code ell} is a
+     * request about those three letters — which is exactly why it must not wear the first one's colour.</p>
+     *
+     * <h3>One line, and not a trivial one</h3>
+     *
+     * <p>A multi-line selection is a block of code being moved, not a string being looked for, and marking
+     * every place a whole paragraph recurs answers a question nobody asked. Whitespace-only and
+     * single-character selections are refused for the reason the word case refuses {@code i}: the marks
+     * would outnumber the text.</p>
+     */
+    private List<TextRange> selectedTextOccurrences() {
+        Selection primary = selections.primary();
+        String selected = buffer.document().slice(primary.start(), primary.end()).toString();
+        if (selected.length() < MINIMUM_SELECTION_HIGHLIGHT || selected.trim().isEmpty()) return List.of();
+        if (selected.indexOf('\n') >= 0) return List.of();
+        return matchesOf(selected, false);
+    }
+
+    /** Every occurrence of {@code needle}, or nothing when it is its own only one. */
+    private List<TextRange> matchesOf(String needle, boolean wholeWords) {
+        List<TextRange> found = TextSearch.findAll(buffer.document(),
+                SearchQuery.of(needle, new SearchQuery.Options(true, wholeWords, false)));
+        // ONE IS NONE -- see the note on updateOccurrences.
+        return found.size() < 2 ? List.of() : found;
+    }
+
+    /** Occurrences of the word under the caret. Published under {@code ::highlight(occurrence)}. */
+    private final List<TextRange> occurrences = new ArrayList<>();
+
+    /** The same for the SELECTED text, under {@code ::highlight(selection-occurrence)}. */
+    private final List<TextRange> selectionOccurrences = new ArrayList<>();
+
+    /** Below this a selection highlight marks more than it says. One character is every character. */
+    private static final int MINIMUM_SELECTION_HIGHLIGHT = 2;
+
+    /**
+     * Past this many characters the occurrence scan is skipped outright.
+     *
+     * <p>It runs on every caret move and reads the whole document, so on a large file it would be felt as
+     * the arrow keys becoming sticky — which is a worse thing to have than the highlight is a good one.</p>
+     */
+    private static final int OCCURRENCE_SCAN_LIMIT = 2_000_000;
+
     private int matchAt(int offset) {
         if (offset < 0 || offset >= buffer.length()) return -1;
-        char c = buffer.document().charAt(offset);
-        return OPENERS.indexOf(c) >= 0 || CLOSERS.indexOf(c) >= 0 ? offset : -1;
+        return partnerOf(buffer.document().charAt(offset)) != 0 ? offset : -1;
+    }
+
+    /**
+     * The other half of the pair {@code c} belongs to, or {@code 0}.
+     *
+     * <p>From the {@link Language}, which already knows the pairs — the matcher used to carry its own
+     * {@code "([{"} and {@code ")]}"} beside it, which is two definitions of "a bracket" and the one that
+     * cannot be taught a language whose blocks are spelled differently.</p>
+     *
+     * <p><b>A self-closing pair is refused.</b> A quote's opener and closer are the same character, so
+     * there is nothing to count depth on: a matcher that believed {@code isCloser} about it would scan for
+     * the "partner" of a quote and land on whichever quote came next in the file.</p>
+     */
+    private char partnerOf(char c) {
+        if (language.isSelfClosing(c)) return 0;
+        Character closer = language.structuralCloserFor(c);
+        if (closer != null) return closer;
+        Character opener = language.structuralOpenerFor(c);
+        return opener != null ? opener : 0;
     }
 
     /**
@@ -1947,17 +3138,27 @@ public class TextEditor extends ScrollerView implements UndoScope {
      */
     private int matchingBracket(int offset) {
         char bracket = buffer.document().charAt(offset);
-        int openIndex = OPENERS.indexOf(bracket);
-        boolean forward = openIndex >= 0;
-        char partner = forward ? CLOSERS.charAt(openIndex) : OPENERS.charAt(CLOSERS.indexOf(bracket));
+        char partner = partnerOf(bracket);
+        if (partner == 0) return -1;
+        boolean forward = language.structuralCloserFor(bracket) != null;
+        // A BRACKET INSIDE A STRING OR A COMMENT IS NOT PUNCTUATION, and the anchor's own state is what
+        // decides which candidates count. Without this, `(` in `"("` counted the next real `)` in the
+        // file and drew a pair spanning code it had nothing to do with -- and the highlight looked
+        // authoritative while doing it. Both references skip token types that are not brackets.
+        //
+        // Asked only of candidates, never of every character: `isInCommentOrString` tokenizes a window,
+        // and a scan bounded at BRACKET_SCAN_LIMIT holds a few dozen brackets rather than thousands.
+        boolean anchorQuoted = isInCommentOrString(offset);
         int step = forward ? 1 : -1;
         int depth = 0;
         int limit = Math.min(BRACKET_SCAN_LIMIT, buffer.length());
         for (int i = 0, at = offset; i < limit; i++, at += step) {
             if (at < 0 || at >= buffer.length()) return -1;
             char c = buffer.document().charAt(at);
+            if (c != bracket && c != partner) continue;
+            if (isInCommentOrString(at) != anchorQuoted) continue;
             if (c == bracket) depth++;
-            else if (c == partner && --depth == 0) return at;
+            else if (--depth == 0) return at;
         }
         return -1;
     }
@@ -1965,19 +3166,27 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private static final int BRACKET_SCAN_LIMIT = 16 * 1024;
 
     // ── Find and replace ────────────────────────────────────────────────────────────────────────
+    //
+    // The subsystem itself is EditorFind; what is left here is the public surface the commands, the bar
+    // and the tests call. Delegating rather than re-exposing the object keeps `TextEditor.findNext()`
+    // working for every existing caller -- the extraction is a code move, and the 226 widget tests are
+    // the net under it.
+
+    private final EditorFind find = new EditorFind(this);
+
+    /** Find, replace and the bar. */
+    EditorFind finder() {
+        return find;
+    }
 
     /**
      * Finds every occurrence and publishes them under {@code ::highlight(search)}.
      *
-     * <p>Whole-document rather than viewport-bounded, unlike syntax highlighting, and for a reason: the
-     * match <em>count</em> is the answer the user wants, and "3 of 47" cannot be computed from what is on
-     * screen. The ranges themselves are still only rendered for realised rows.</p>
-     *
      * @return how many matches there are
+     * @see EditorFind#find(SearchQuery)
      */
     public int find(String query, boolean caseSensitive) {
-        return find(SearchQuery.of(query,
-                SearchQuery.Options.DEFAULT.withMatchCase(caseSensitive)));
+        return find.find(query, caseSensitive);
     }
 
     /**
@@ -1985,75 +3194,28 @@ public class TextEditor extends ScrollerView implements UndoScope {
      *
      * <p><b>Every</b> match, which is why this cannot go through {@link SearchMatcher#match} — that answers
      * "the best match in this candidate", which is the right question for a list row and the wrong one for
-     * a document. The word-boundary rule is still shared, via
-     * {@link SearchMatcher#isWholeWordAt}: a second definition of "a word" would be a second answer to the
-     * same toggle.</p>
-     *
-     * <p>An <b>uncompilable pattern finds nothing</b> and does not throw — it is recompiled on every
-     * keystroke while a regex is being typed.</p>
+     * a document. The word-boundary rule is still shared, via {@link SearchMatcher#isWholeWordAt}: a second
+     * definition of "a word" would be a second answer to the same toggle.</p>
      *
      * @return how many matches there are
      */
     public int find(@Nullable SearchQuery query) {
-        lastSearch = query == null || query.isEmpty() ? null : query;
-        lastQuery = lastSearch == null ? "" : lastSearch.text();
-        lastQueryCaseSensitive = lastSearch != null && lastSearch.options().matchCase();
-        // THE SCAN IS THE DOCUMENT'S, not this widget's -- see TextSearch. What stays here is what a view
-        // owns: which match is selected, what to paint, and where the caret goes.
-        results = results.withMatches(TextSearch.findAll(buffer.toString(), lastSearch));
-        searchMatches.clear();
-        searchMatches.addAll(results.matches());
-        currentMatch = results.current();
-        highlightsDirty = true;
-        return searchMatches.size();
+        return find.find(query);
     }
 
     /** The occurrences, the cursor and the exclusions. @see SearchResults */
     public SearchResults searchResults() {
-        return results;
+        return find.results();
     }
 
-    /**
-     * Excludes the selected match from Replace All, or puts it back — IntelliJ's <b>Exclude</b>.
-     *
-     * <p>The span stays in the list and stays visible; it is struck through instead.</p>
-     */
+    /** Excludes the selected match from Replace All, or puts it back — IntelliJ's <b>Exclude</b>. */
     public boolean toggleExcludeCurrentMatch() {
-        boolean changed = results.toggleExcludeCurrent();
-        if (changed) highlightsDirty = true;
-        return changed;
+        return find.toggleExcludeCurrentMatch();
     }
 
-    private SearchResults results = SearchResults.EMPTY;
-
-    /** Replace edits the buffer, which re-enters this listener; one pass is enough. */
-    private boolean reentrantFind;
-
-    /**
-     * The find & replace bar, built on first use and floated over the editor's top edge.
-     *
-     * <p>Floated rather than stacked above, which is what Monaco does: the editor's layout maths — view
-     * lines, the gutter, scroll extents — all measure against its own box, and pushing content down would
-     * put the bar inside every one of those sums.</p>
-     */
+    /** The find &amp; replace bar, built on first use and floated over the editor's top edge. */
     public SearchReplaceBar searchBar() {
-        if (searchBar == null) {
-            searchBar = new SearchReplaceBar(this);
-            searchBar.addClass("__editor-find__");
-            // PINNED TO THE VIEWPORT, not to the text. An absolute child of a scroller still moves with the
-            // content -- `top: 0` means the top of the DOCUMENT, so the bar scrolled away and left the
-            // editor behind it. `setScrollExempt` is what holds a decoration still while the text moves.
-            searchBar.setScrollExempt(true);
-            searchBar.layout(l -> l.positionType(TaffyPosition.ABSOLUTE)
-                    .top(0f).left(0f).widthPercent(100f));
-            searchBar.setDisplayed(false);
-            addInternalChild(searchBar);
-            searchBar.onClosed.connect(() -> {
-                UIWindow window = getAttachedWindow();
-                if (window != null) window.getInputHandler().requestPointerFocus(this);
-            });
-        }
-        return searchBar;
+        return find.bar();
     }
 
     /** Opens the find bar — Ctrl+F. */
@@ -2066,149 +3228,106 @@ public class TextEditor extends ScrollerView implements UndoScope {
         searchBar().openReplace();
     }
 
-    @Nullable
-    private SearchReplaceBar searchBar;
-
     /** Whether a replacement should take the case of what it replaced. @see TextSearch#preserveCase */
     public TextEditor setPreserveCase(boolean value) {
-        this.preserveCase = value;
+        find.setPreserveCase(value);
         return this;
     }
 
     public boolean preserveCase() {
-        return preserveCase;
+        return find.preserveCase();
     }
-
-    private boolean preserveCase;
-
-    /** The document text a match covers — what Preserve case reads to decide the replacement's shape. */
-    private String textIn(TextRange range) {
-        String all = buffer.toString();
-        int from = Math.max(0, Math.min(range.start(), all.length()));
-        int to = Math.max(from, Math.min(range.end(), all.length()));
-        return all.substring(from, to);
-    }
-
-    @Nullable
-    private SearchQuery lastSearch;
 
     /** Searches for the word under the caret — {@code Ctrl+F3}. */
     public boolean findWordUnderCaret() {
-        Selection primary = selections.primary();
-        int start = primary.start();
-        int end = primary.end();
-        if (primary.isEmpty()) {
-            int[] word = WordOperations.wordAt(buffer.document(), primary.head(), wordClassifier);
-            if (word == null) return false;
-            start = word[0];
-            end = word[1];
-        }
-        if (end <= start) return false;
-        find(buffer.document().slice(start, end).toString(), false);
-        return findNext();
+        return find.findWordUnderCaret();
     }
 
     public int matchCount() {
-        return searchMatches.size();
+        return find.matchCount();
     }
 
     /** Which match is selected, 1-based for display, or 0 when none is. */
     public int currentMatchNumber() {
-        return currentMatch < 0 ? 0 : currentMatch + 1;
+        return find.currentMatchNumber();
     }
 
     /** Selects the next match after the caret, wrapping. */
     public boolean findNext() {
-        if (searchMatches.isEmpty()) return false;
-        int caret = getCaret();
-        int next = 0;
-        for (int i = 0; i < searchMatches.size(); i++) {
-            if (searchMatches.get(i).start() > caret) {
-                next = i;
-                break;
-            }
-            // No else. `next` starts at 0 and stays there, which IS the wrap: running off the end of a
-            // document whose last match is behind the caret returns to the first one.
-        }
-        return selectMatch(next);
+        return find.findNext();
     }
 
     /** Selects the previous match before the caret, wrapping. */
     public boolean findPrevious() {
-        if (searchMatches.isEmpty()) return false;
-        int caret = getSelectionStart();
-        int previous = searchMatches.size() - 1;
-        for (int i = searchMatches.size() - 1; i >= 0; i--) {
-            if (searchMatches.get(i).start() < caret) {
-                previous = i;
-                break;
-            }
-        }
-        return selectMatch(previous);
+        return find.findPrevious();
     }
 
-    private boolean selectMatch(int index) {
-        if (index < 0 || index >= searchMatches.size()) return false;
-        currentMatch = index;
-        while (results.current() != index && results.next()) {
-            if (results.current() == index) break;
-        }
-        TextRange match = searchMatches.get(index);
-        setSelection(match.start(), match.end());
-        ensureCaretVisible();
-        return true;
+    /**
+     * The offset of the <b>first line on screen</b> — where a fresh query starts looking.
+     *
+     * <p>Scrolling is view state and deliberately never moves the caret, so the two drift apart the moment
+     * you read rather than edit. That is what made {@link #findNext()} the wrong operation to run on a
+     * newly typed query: it anchors on the caret, which after a wheel-scroll is still wherever you last
+     * clicked — usually the top of the file — so typing a query scrolled the document back there. Nothing
+     * about it was intermittent except whether you had clicked first.</p>
+     *
+     * <p>It stays on the editor rather than moving to {@code EditorFind} with the rest: it names no find
+     * state at all, and the next viewport-anchored feature would otherwise reach into the find subsystem
+     * to ask a question about the <em>scroll</em>.</p>
+     */
+    public int firstVisibleOffset() {
+        // Through rowAtTopOfViewport, which is the same question zoom already asks. Written out again here
+        // it would be a second definition of "which row is at the top", and the two would answer
+        // differently the first time either learned something about wrapping or folding.
+        return buffer.document().lineStartOffset(rowAtTopOfViewport());
+    }
+
+    /**
+     * Selects the first match at or after {@code offset}, wrapping — what a <b>fresh</b> query does.
+     *
+     * @see EditorFind#findFrom(int)
+     */
+    public boolean findFrom(int offset) {
+        return find.findFrom(offset);
     }
 
     /** Replaces the selected match and finds the next. */
     public boolean replaceCurrent(String replacement) {
-        if (currentMatch < 0 || currentMatch >= searchMatches.size()) return false;
-        TextRange match = searchMatches.get(currentMatch);
-        String text = replacement == null ? "" : replacement;
-        buffer.replace(match.start(), match.end(),
-                preserveCase ? TextSearch.preserveCase(textIn(match), text) : text);
-        buffer.breakUndoCoalescing();
-        find(lastSearch);
-        return true;
+        return find.replaceCurrent(replacement);
     }
 
     /**
      * Replaces every match as <b>one</b> edit.
      *
-     * <p>One {@link ChangeSet} rather than a loop of replacements: a loop would invalidate every later
-     * offset after the first, and would put each replacement on the undo stack separately — so undoing a
-     * replace-all would take one press per match.</p>
-     *
      * @return how many were replaced
+     * @see EditorFind#replaceAll(String)
      */
     public int replaceAll(String replacement) {
-        // WHAT THE USER DID NOT STRIKE OUT. `included()` is the whole point of Exclude: the excluded spans
-        // stay in the list and stay drawn, and only this skips them.
-        List<TextRange> targets = results.included();
-        if (targets.isEmpty()) return 0;
-        String text = replacement == null ? "" : replacement;
-        List<Change> changes = new ArrayList<>(targets.size());
-        for (TextRange match : targets) {
-            changes.add(new Change(match.start(), match.end(),
-                    preserveCase ? TextSearch.preserveCase(textIn(match), text) : text));
-        }
-        int replaced = changes.size();
-        ChangeSet edit = ChangeSet.of(buffer.length(), changes);
-        buffer.edit(edit);
-        buffer.breakUndoCoalescing();
-        selections.mapThrough(edit).collapseEachToHead();
-        find(lastSearch);
-        return replaced;
+        return find.replaceAll(replacement);
     }
 
-    /** Clips document-relative ranges to one line and rebases them onto it. */
-    private static void addDocumentRanges(Map<String, List<TextRange>> byName, String name,
+    /**
+     * Clips document-relative ranges to one line and rebases them onto it.
+     *
+     * <p><b>Through {@link #addRange}, which is what the syntax path already does.</b> This added
+     * directly, so five names reached {@code HighlightRegistry.set} with no overlap guard at all —
+     * {@code occurrence}, {@code selection-occurrence}, {@code search}, {@code search-excluded} and
+     * {@code bracket} — and a highlight refuses overlapping ranges with a hard failure, thrown from
+     * {@code tickFrame} where nothing above it in the trace names the producer.</p>
+     *
+     * <p>Overlap here is ordinary rather than exotic: a search can match at two positions one character
+     * apart, and an occurrence list computed against one revision and rebased onto another can hold two
+     * spans of the same word that no longer sit where they did. Dropping is the same resolution and the
+     * same reasoning {@code addRange} already documents — the ranges carry ONE name, so they resolve to
+     * one colour, and painting the union or the first is indistinguishable to a reader.</p>
+     */
+    static void addDocumentRanges(Map<String, List<TextRange>> byName, String name,
                                           List<TextRange> ranges, int lineStart, int lineEnd) {
         for (TextRange range : ranges) {
             int start = Math.max(range.start(), lineStart);
             int end = Math.min(range.end(), lineEnd);
             if (end <= start) continue;
-            byName.computeIfAbsent(name, key -> new ArrayList<>())
-                    .add(TextRange.of(start - lineStart, end - lineStart));
+            addRange(byName, name, TextRange.of(start - lineStart, end - lineStart));
         }
     }
 
@@ -2266,14 +3385,20 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * <p>The values are pure CSS — no font, no layout — so one read per frame is always current.</p>
      */
     private void refreshGutterMetrics() {
+        // THE GUTTER GETS THE EDITOR'S FONT SIZE, and that is what makes the three `em` metrics below
+        // mean anything. font-size does NOT effectively inherit here -- ua/core.css opens with
+        // `* { font-size: 10 }`, which is a candidate on every element, and inheritance only applies
+        // where there is no candidate at any origin. So without this push the gutter's `em`s would
+        // resolve against 10 at every zoom level while the digits beside them grew, which is precisely
+        // the drift the old baseline-ratio hack existed to undo.
+        pushEditorFontTo(gutter);
         cachedPadLeft = gutterMetric(LayoutProperties.PADDING_LEFT);
         cachedFoldWidth = gutterMetric(LayoutProperties.PADDING_RIGHT);
         cachedCodeLeftPad = gutterMetric(LayoutProperties.MARGIN_RIGHT);
     }
 
     /**
-     * One of the gutter's metrics, as the cascade computed it, <b>scaled to the editor's current
-     * font size.</b>
+     * One of the gutter's metrics, as the cascade computed it.
      *
      * <p>Read from the <b>computed style</b> rather than from the laid-out box, because
      * {@code getTaffyLayout()} is protected and the gutter is a plain {@code UIElement} — Java's protected
@@ -2285,36 +3410,20 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * width, which is computed <em>from</em> these three values — so it would be circular, and silently
      * returning something plausible is worse than ignoring it.</p>
      *
-     * <h3>The scaling — a regression this restores, not a new feature</h3>
-     * <p>{@link #measureGutter}'s own doc already claims "derived from the font size rather than fixed,
-     * so the gutter stays proportionate when the editor is zoomed" — that used to be true when these
-     * three metrics were {@code max(6f, fontSize * 0.9f)}-shaped Java constants. Moving them into
-     * {@code default.css} (see {@link #gutterPadLeft}'s doc) fixed the real problem — a pixel value
-     * baked into a widget — but dropped the multiply that made the claim true: a bare CSS length has no
-     * way to say "relative to font size" at all (this engine has no {@code em} unit), so the number the
-     * sheet gives back is the same at every zoom level while {@link #lineHeight} and the digits'
-     * shaped width both grow. The numbers column kept pace with zoom because it is measured text; the
-     * padding around it did not, because it was never anything but a constant — so the gutter's
-     * proportions visibly drifted apart from the code the more the editor was zoomed.</p>
+     * <h3>The zoom scaling is gone, and the sheet does it now</h3>
      *
-     * <p>Re-deriving a fixed reference size would need a caller to say what font-size these constants
-     * were authored against, and nothing records that. Instead the font-size the FIRST call ever saw is
-     * cached as the baseline ({@link #gutterMetricBaselineFontSize}) and every value scales relative to
-     * it — so whatever the gutter looks like at whatever size an editor actually starts at is preserved
-     * exactly (ratio 1.0 there), and it stays proportionate as the size changes from that point, in
-     * either direction. A theme is still free to change the absolute numbers in the sheet; only the
-     * zoom-relative behaviour is decided here.</p>
+     * <p>This used to multiply by {@code fontSize / gutterMetricBaselineFontSize}, where the baseline was
+     * the font size the FIRST call ever saw. It existed for a real defect — {@code lineHeight} and the
+     * digits' shaped width both grow with zoom while a bare CSS length does not, so the gutter's
+     * proportions visibly came apart from the code — and it was an {@code em} with no name, no way for a
+     * sheet to opt out of, and a reference value that depended on when the editor happened to be created.
+     * The three metrics are authored in {@code em} now (see {@code ua/editor.css}) and the cascade
+     * resolves them per element, so this is a plain read again.</p>
      */
     private float gutterMetric(StyleProperty<LengthPercentageAuto> property) {
         LengthPercentageAuto value = gutter.getStyle().getLayoutGroup().getValueSave(property);
         if (value == null || value.getType() != LengthPercentageAuto.Type.LENGTH) return 0f;
-        float raw = Math.max(0f, value.getValue());
-
-        float fontSize = getStyle().getGeneralGroup().fontSize();
-        if (fontSize <= 0f) return raw;
-        if (gutterMetricBaselineFontSize <= 0f) gutterMetricBaselineFontSize = fontSize;
-
-        return raw * (fontSize / gutterMetricBaselineFontSize);
+        return Math.max(0f, value.getValue());
     }
 
     /**
@@ -2352,7 +3461,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return gutterVisible ? cachedFoldWidth : 0f;
     }
 
-    /** The vertical equivalent, for the same reason. */
     // ── Seams for the view parts ────────────────────────────────────────────────────────────────
     //
     // Package-private, and deliberately not public API. A view part is a piece of THIS widget rather
@@ -2395,8 +3503,71 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return measuredFontKey;
     }
 
+    /**
+     * Gives {@code element} the font the editor <b>measures</b> with — the one seam for it.
+     *
+     * <p>Four places wrote this pair out: the line renderer, the line numbers, the whitespace markers and
+     * the fold decorations. It is cheap, because {@code replaceOrPutCandidate} no-ops on an unchanged
+     * value — but a font disagreement between a decoration and the text it sits on is a <b>scale error
+     * that grows across the row</b>, so four independent statements of "the editor's font" is four places
+     * for one of them to be edited alone.</p>
+     *
+     * <p>At {@code IMPORTANT}, because the sheet's own rule for these classes would otherwise win and the
+     * decoration would size itself independently of the text it is describing.</p>
+     */
+    void pushEditorFontTo(UIElement element) {
+        var general = getStyle().getGeneralGroup();
+        StyleGroup.importantPipeline(element.getStyle().getGeneralGroup(),
+                g -> g.fontSize(general.fontSize()).fontFamily(general.fontFamily()));
+    }
+
+    /**
+     * Starts the horizontal scrollbar after the gutter rather than under it.
+     *
+     * <p>The gutter is pinned and does not scroll horizontally, so a bar running beneath it offers to
+     * scroll something that will not move.</p>
+     *
+     * <p>Written at {@code IMPORTANT} origin because {@code ScrollerView} rewrites the bar's geometry
+     * every frame from {@code refreshScrollers}; a lower-origin write would simply lose to it.</p>
+     *
+     * <p><b>The editor's own layout, and it used to live in {@code LineNumbersPart}.</b> A view part places
+     * its own decorations; the scrollbar is neither its decoration nor its business, and finding this
+     * inside the line-number renderer is exactly the surprise the review named. The editor already owns
+     * {@code setTopChromeInset} for the vertical bar.</p>
+     */
+    void insetHorizontalBarPastGutter() {
+        if (!gutterVisible) return;
+        UIElement bar = horizontalScrollerElement();
+        if (bar == null) return;
+        final float left = paddingLeft() + gutterWidth();
+        final float width = Math.max(0f, getClientWidth() - left - verticalBarThickness());
+        StyleGroup.importantPipeline(bar.getStyle().getLayoutGroup(), l -> l.left(left).width(width));
+    }
+
     float textOriginY() {
         return getTaffyLayout().padding().top;
+    }
+
+    /**
+     * <b>Where a view line's top edge is drawn</b>, in this element's own space — the one statement of it.
+     *
+     * <h3>Eleven copies, and only one of them guarded the scroll offset</h3>
+     *
+     * <p>{@code textOriginY() + viewLine * lineHeight() - getScrollTop()} was written out in eight view
+     * parts and three more places here. That is a formula every part has to agree on exactly, and the
+     * disagreement was already there: {@code getScrollTop()} <b>can be NaN</b> — and NaN minus anything is
+     * NaN, so every row lands at the same y and the whole editor draws as one stacked line. One call site
+     * had a {@code finiteOrZero} around it. The other ten did not, and could not have been fixed without
+     * finding them all.</p>
+     *
+     * <p>So the guard lives here, once, and the parts ask rather than compute. <b>The source is fixed</b> —
+     * it was a NaN {@code line-height} multiplier getting past two guards that both looked protective, see
+     * {@link #lineHeight()} — so this is defence in depth rather than the repair. It stays because the
+     * formula having one home is worth it on its own, and because a scroll offset arriving non-finite from
+     * somewhere new should degrade to zero rather than flatten the document.</p>
+     */
+    float topOfViewLine(int viewLine) {
+        return textOriginY() + viewLine * lineHeight() - finiteOrZero(getScrollTop());
     }
 
     /**
@@ -2633,7 +3804,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * @param delta  pixels the viewport was scrolled INTO that line, so a partial scroll is not snapped
      *               to a line boundary on every zoom step
      */
-    private record StableViewport(int offset, float delta) {
+    record StableViewport(int offset, float delta) {
         static final StableViewport NONE = new StableViewport(-1, 0f);
     }
 
@@ -2655,7 +3826,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * because a zoom at the top has nothing to preserve — but folding at the top genuinely can need to
      * scroll to keep the caret still once the rows above it are gone.</p>
      */
-    private StableViewport captureFoldAnchor() {
+    StableViewport captureFoldAnchor() {
         float height = lineHeight();
         if (!(height > 0f)) return StableViewport.NONE;
         int caret = selections.primary().head();
@@ -2679,7 +3850,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * correction would show the wrong lines for the length of it — the same reason caret-follow scrolling
      * is immediate.</p>
      */
-    private void restoreStableViewport(StableViewport anchor) {
+    void restoreStableViewport(StableViewport anchor) {
         float height = lineHeight();
         if (anchor.offset() < 0 || !(height > 0f)) return;
         // The delta is re-added verbatim, which is what the original does. It is a pixel count taken at
@@ -2781,6 +3952,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
                         .left(left).top(0f).width(width).height(height));
     }
 
+
     /**
      * Starts the vertical scrollbar below whatever chrome is floating at the editor's top edge.
      *
@@ -2828,11 +4000,24 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     /** The advance of one space in the editor's measured font. */
     float spaceAdvance() {
-        CgFontFamily family = resolveFamily();
-        if (family == null) return 0f;
-        float[] widths = caretOffsets(" ", family);
-        return widths.length > 1 ? widths[1] : 0f;
+        var general = getStyle().getGeneralGroup();
+        String fontKey = general.fontFamily() + "/" + general.fontSize();
+        // CACHED, for the reason `gutterDigitsWidth` records for the digit: two view parts ask this
+        // EVERY FRAME -- the indent guides and the rulers, once each -- and every ask shaped a space. A
+        // value that only moves when the font does, re-derived sixty times a second. Keyed on the same
+        // font key `rowMetrics` uses, so the caches invalidate together.
+        if (spaceWidth < 0f || !fontKey.equals(spaceWidthFontKey)) {
+            CgFontFamily family = resolveFamily();
+            if (family == null) return 0f;
+            float[] widths = caretOffsets(" ", family);
+            spaceWidth = widths.length > 1 ? widths[1] : 0f;
+            spaceWidthFontKey = fontKey;
+        }
+        return spaceWidth;
     }
+
+    private float spaceWidth = -1f;
+    private String spaceWidthFontKey = "";
 
     /**
      * The measured x of every character column of a row, for {@link ShapedLineBreaks}.
@@ -2919,10 +4104,38 @@ public class TextEditor extends ScrollerView implements UndoScope {
             projections.rebuild(buffer.document());
             return;
         }
-        int at = Math.max(0, Math.min(change.mapPos(changes.get(0).from(), -1), buffer.length()));
+        Change edit = changes.get(0);
+        int at = Math.max(0, Math.min(change.mapPos(edit.from(), -1), buffer.length()));
         int row = buffer.document().offsetToPoint(at).row();
-        int removed = delta >= 0 ? 1 : 1 - delta;
-        int added = delta >= 0 ? 1 + delta : 1;
+
+        // THE ROWS COME FROM THE EDIT, not from the line-count delta.
+        //
+        // Deriving them from the delta alone assumes the change is LOCAL -- true of every keystroke, and
+        // false of a single change that replaces the whole document. `TextBuffer.load` is exactly that:
+        // one Change spanning everything. Filtering the Run console from 478 rows to 427 gave delta -51,
+        // which the old arithmetic read as "52 rows at row 0 became 1 row" -- so every row from 52 down
+        // kept its OLD projection, and `viewLineEndOffset` answered for text that was no longer there.
+        //
+        // That is silent: the rows paint correctly, because the text comes from elsewhere. What breaks is
+        // anything CLIPPED to a view line's end -- refreshHighlights clamps every range to it, so the Run
+        // console's stack-frame links came out truncated by however far each stale end happened to fall
+        // short. `RunTest` for `RunTest.java:61`, `Threa` for `Thread.java:1583`, and one frame perfect
+        // because its stale end overshot instead.
+        //
+        // Counted from the inserted text, which is exact in every case: one row for a plain keystroke,
+        // two for a newline, and the whole new document for a replace. The removed count then follows,
+        // since delta is by definition added minus removed.
+        int added = 1;
+        String insert = edit.insert();
+        for (int i = 0; i < insert.length(); i++) {
+            if (insert.charAt(i) == '\n') added++;
+        }
+        int removed = added - delta;
+        if (removed < 1) {
+            // Not a shape rowsChanged can express. Rebuilding is always correct, only slower.
+            projections.rebuild(buffer.document());
+            return;
+        }
         projections.rowsChanged(buffer.document(), row, removed, added);
     }
 
@@ -3031,7 +4244,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     private float textHeight = -1f;
 
-    private void ensureCaretVisible() {
+    void ensureCaretVisible() {
         float height = lineHeight();
         float top = viewLineOf(getCaret(), LineProjection.Affinity.LEFT) * height;
         // IMMEDIATE, not the smooth scroll the sheet asks for. `scroll-behavior: smooth` is right for a
@@ -3039,16 +4252,75 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // eased scroll means it is off screen for the length of the animation and every keystroke chases
         // a viewport that is still catching up with the last one.
         float viewport = viewportHeight();
-        if (top < getScrollTop()) setScrollImmediate(getScrollLeft(), top);
-        else if (top + height > getScrollTop() + viewport) {
-            setScrollImmediate(getScrollLeft(), top + height - viewport);
+        // IN THE COORDINATES A LINE IS ACTUALLY DRAWN IN, which offsetAtLocal is the definition of: a line
+        // at content offset `top` appears at `top + textOriginY() - scrollTop`. This compared `top`
+        // against `scrollTop` directly, i.e. it assumed the text starts at the top of the scrollport --
+        // true only while the top padding is zero.
+        //
+        // The find bar makes it 26px (it insets the editor by its own height), so every comparison here
+        // was out by nearly two lines: stepping to a match computed `2814 > 2814`, concluded the caret
+        // was already visible, and left it one row below the last one on screen. That is the whole of
+        // "sometimes puts them one line before/after the visible lines".
+        //
+        // ASYMMETRIC, and deliberately. The far edge adds the origin because the line has to fit above
+        // the bottom of the box. The near edge does not, because scrolling a line to `top` puts it at the
+        // FIRST ROW OF TEXT rather than at the top of the scrollport -- the padding strip above it is
+        // where the bar sits, and a line revealed into it is covered rather than shown. Both edges then
+        // mean the same thing: inside the band the text is meant to occupy.
+        float origin = textOriginY();
+        if (!caretIsInView()) {
+            if (top < getScrollTop()) setScrollImmediate(getScrollLeft(), top);
+            else setScrollImmediate(getScrollLeft(), top + height + origin - viewport);
         }
+        revealCaretHorizontally();
         // NOT invalidateWindow(). Scrolling changes which rows are on screen, and updateWindow already
         // recomputes that range every frame -- realising what has come into view and recycling what has
         // left. Tearing the whole window down here recycled every line on every keystroke, which clears
         // their highlights and is the other half of the colour flicker.
         markTreeDirty();
     }
+
+    /**
+     * Scrolls sideways so the caret is inside the text viewport — <b>the other axis</b>.
+     *
+     * <h3>Half a reveal is not a reveal</h3>
+     *
+     * <p>This scrolled vertically only, so pressing End on a line wider than the viewport put the caret
+     * somewhere off to the right and left it there: the row was on screen, the caret was not, and the
+     * next character typed appeared somewhere nobody was looking. Both references reveal on both axes.</p>
+     *
+     * <h3>A margin, not the edge</h3>
+     *
+     * <p>Revealed with a few characters of context either side, because a caret pinned exactly to the
+     * right edge has nothing after it to read and jumps again on the very next keystroke. Monaco's
+     * {@code cursorSurroundingLines} is the vertical form of the same idea.</p>
+     *
+     * <p>Soft wrap makes this a no-op by construction — there is nothing to scroll to — and the guard is
+     * the horizontal scroll range itself rather than a flag, so the two cannot disagree.</p>
+     */
+    private void revealCaretHorizontally() {
+        float maximum = getMaxScrollLeft();
+        if (!Float.isFinite(maximum) || maximum <= 0f) return;
+
+        ProjectedLines.ViewPosition view = projections().toViewPosition(
+                buffer.document(), getCaret(), LineProjection.Affinity.LEFT);
+        float caretX = xOfView(view.viewLine(), view.column());
+        if (!Float.isFinite(caretX)) return;
+
+        float margin = Math.max(1f, spaceAdvance()) * HORIZONTAL_REVEAL_MARGIN;
+        float left = finiteOrZero(getScrollLeft());
+        float width = textViewportWidth();
+        if (width <= 0f) return;
+
+        float wanted = left;
+        if (caretX - margin < left) wanted = caretX - margin;
+        else if (caretX + margin > left + width) wanted = caretX + margin - width;
+        wanted = Math.max(0f, Math.min(wanted, maximum));
+        if (wanted != left) setScrollImmediate(wanted, getScrollTop());
+    }
+
+    /** Characters of context kept either side of a caret revealed sideways. */
+    private static final float HORIZONTAL_REVEAL_MARGIN = 4f;
 
     // ── Virtualised rendering ───────────────────────────────────────────────────────────────────
 
@@ -3060,7 +4332,24 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // The FULL layout, not just the text. An edit or a reflow can turn a continuation line into a
             // first line or the reverse, which moves its carried indent and its width -- and after a
             // resize it moves every one of them.
+            String before = textOf(entry.getValue()).getText();
             layOutLine(viewLine, entry.getValue());
+            // A ROW WHOSE TEXT CHANGED HAS STALE HIGHLIGHTS, and nothing else says so.
+            //
+            // refreshHighlights below early-outs on `!highlightsDirty && from == highlightedFrom && to ==
+            // highlightedTo` -- i.e. on the visible OFFSET RANGE being unchanged. That is not a proxy for
+            // "the ranges are still valid": replace the document wholesale while the viewport is scrolled
+            // and the range can be identical over completely different text, so every realised row keeps
+            // the previous document's ranges and NEVER self-corrects, because nothing dirties them again.
+            //
+            // Reached from the Run console, where filtering re-derives the transcript under a reader who
+            // has scrolled back to look at a stack trace: ten link ranges published, one still painted --
+            // a character short, over the wrong word. It is reachable in an ordinary editor too, by
+            // reloading a file from disk while scrolled away from the top.
+            //
+            // Compared rather than assumed, so the method keeps its contract that a frame which changed
+            // nothing writes nothing: setText no-ops on an unchanged string, and so does this.
+            if (!before.equals(textOf(entry.getValue()).getText())) highlightsDirty = true;
         }
         // NO markTreeDirty() HERE, and its absence is the point.
         //
@@ -3073,6 +4362,23 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // Whatever genuinely moved has already dirtied the tree by writing a different value, which is the
         // mechanism the rest of the widget layer relies on. Adding a blanket dirty on top is not
         // belt-and-braces; it is the belt sewn to the floor.
+    }
+
+    /**
+     * Forces the next pass to rebuild every visible highlight range.
+     *
+     * <p>For a caller that <b>replaced the document wholesale</b> — the Run console re-derives its whole
+     * transcript when a per-script filter changes — where the buffer's own change signal is not enough on
+     * its own. {@link #refreshHighlights} early-outs when the visible OFFSET RANGE is unchanged, and a
+     * replace under a scrolled viewport can produce an identical range over completely different text.</p>
+     *
+     * <p>Clearing the remembered range as well as setting the flag is the point: the flag alone is
+     * consumed by whichever pass runs first, and the range comparison then holds the stale answer.</p>
+     */
+    public void invalidateHighlights() {
+        highlightsDirty = true;
+        highlightedFrom = -1;
+        highlightedTo = -1;
     }
 
     protected void invalidateWindow() {
@@ -3109,6 +4415,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
         viewCursorsPart.advanceBlink(deltaSeconds);
         zoomIndicatorPart.tick(deltaSeconds);
         autoScrollDuringDrag(deltaSeconds);
+        // A REST TIMER, so it belongs on the heartbeat rather than on the move event: what it measures is
+        // the pointer NOT moving, and the last move is the one event that will not be followed by another.
+        langFeatures.hover().tick(deltaSeconds);
         return true;
     }
 
@@ -3155,7 +4464,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // exist, so asking first would realise rows against a count that is about to move -- and a
         // reprojection resets visibility whenever the row count changed, so the hidden rows have to be
         // reapplied on the far side of it rather than the near side.
-        if (refreshFolding()) {
+        if (folds.refreshFolding()) {
             firstRealised = -1;
             lastRealised = -1;
             rebindRealisedLines();
@@ -3204,12 +4513,22 @@ public class TextEditor extends ScrollerView implements UndoScope {
         syncLineFonts();
         refreshHighlights(first, last);
         layOutTextViewport();
-        // Every extracted part, in one pass. Monaco skips the ones whose shouldRender() is false;
-        // this renders all of them, which is what the methods it replaced did.
+        // Every extracted part, in one pass. Monaco gates each on a dirty flag; this does not, and that is
+        // now stated where the flag used to be rather than implied by a field nobody set. See
+        // EditorViewPart.
         for (EditorViewPart part : viewParts) {
             part.render(first, last);
-            part.onDidRender();
         }
+        insetHorizontalBarPastGutter();
+        // THE POPUP RE-ANCHORS HERE, once a frame, and not only when the caret moves.
+        //
+        // The anchor is derived from measured row widths, and those are computed in this very method --
+        // so asking for it at the moment a session opens reads whatever the last frame happened to have
+        // measured, which for text edited since is NOTHING. It came back NaN, the popup fell back to the
+        // origin, and it drew neatly over the editor's top-left corner: plausible enough to look like a
+        // placement policy rather than an unmeasured read. Re-anchoring per frame also keeps it correct
+        // through a scroll, which no caret-driven update would have caught either.
+        suggest.updateAnchor();
     }
 
     /**
@@ -3230,12 +4549,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * self-correcting once the cascade settles.</p>
      */
     private void syncLineFonts() {
-        var general = getStyle().getGeneralGroup();
-        final float size = general.fontSize();
-        final var family = general.fontFamily();
         for (UIElement line : realisedLines.values()) {
-            StyleGroup.importantPipeline(line.getChildren().get(0).getStyle().getGeneralGroup(),
-                    g -> g.fontSize(size).fontFamily(family));
+            pushEditorFontTo(line.getChildren().get(0));
         }
     }
 
@@ -3246,7 +4561,12 @@ public class TextEditor extends ScrollerView implements UndoScope {
             line.addClass(LINE_CLASS);
             line.setHitTest(false);
             line.markAsInternal();
-            line.addChild(new UIText(""));
+            // SYNTAX_CLASS is what carries the forty ::highlight() rules. They used to be selected as
+            // `texteditor text::highlight(...)`, which made the whole capture vocabulary the editor's
+            // private property -- so the documentation popup, which draws a declaration the engine
+            // tokenized in exactly the same vocabulary, would have needed a duplicate list. Two lists
+            // drift, and the first divergence reads as a scheme bug rather than a selector one.
+            line.addChild(new UIText("").addClass(SYNTAX_CLASS));
         }
         layOutLine(viewLine, line);
         if (line.getParent() == null) textViewport().addInternalChild(line);
@@ -3263,7 +4583,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * One routine means a line cannot be positioned two different ways depending on how it got here.</p>
      */
     private void layOutLine(int viewLine, UIElement line) {
-        final float top = textOriginY() + viewLine * lineHeight() - getScrollTop();
+        final float top = topOfViewLine(viewLine);
         final float left = codeLeftPad() + carriedIndentPx(viewLine) - getScrollLeft();
         // A DEFINITE WIDTH IS REQUIRED. An absolutely-positioned box with no width resolves to zero, and
         // a zero-width line lays its text out as though it had no extent -- which shaved the first
@@ -3298,283 +4618,122 @@ public class TextEditor extends ScrollerView implements UndoScope {
     // ===================================================================================================
     // Folding
     // ===================================================================================================
+    //
+    // The subsystem is EditorFolding; these are the calls the commands, the gutter arrows and the tests
+    // make. Every one of them was already one line over a private helper, so delegating changes nothing
+    // about them except which file the helper lives in.
 
-    /**
-     * Recomputes regions when something invalidated them, then pushes the hidden rows into the projection.
-     *
-     * <p>Runs every frame and is cheap when nothing moved: the recompute is gated on {@code foldingDirty},
-     * and {@link ProjectedLines#setHiddenAreas} reports whether it actually changed a row's visibility.</p>
-     *
-     * @return whether the set of visible rows changed, so the caller can drop what it has realised
-     */
-    private boolean refreshFolding() {
-        if (!foldingEnabled) return false;
-        if (foldingDirty) {
-            foldingDirty = false;
-            folding.update(buffer.document(), foldingProvider, tabSize);
-        }
-        return applyHiddenRows();
-    }
+    private final EditorFolding folds = new EditorFolding(this);
 
-    private boolean applyHiddenRows() {
-        List<FoldingModel.RowRange> hidden = folding.hiddenRows();
-        int[][] ranges = new int[hidden.size()][];
-        for (int i = 0; i < hidden.size(); i++) {
-            ranges[i] = new int[] { hidden.get(i).startRow(), hidden.get(i).endRow() };
-        }
-        return projections.setHiddenAreas(ranges);
+    /** Folding — regions, hidden rows, and the eight commands. */
+    EditorFolding folds() {
+        return folds;
     }
 
     /** The folding model, for tests and for anything wanting to drive folds directly. */
     public FoldingModel foldingModel() {
-        return folding;
+        return folds.model();
     }
 
     /**
      * The first row of every collapsed region — the whole fold state, as something storable.
      *
-     * <p>Rows rather than region indexes, because an index means nothing once the document changes: the
-     * regions are recomputed from the text, so index 3 is a different block after an edit while row 42 is
-     * still row 42 or is simply not foldable any more. IntelliJ and VS Code both persist folds by
-     * position for the same reason.</p>
-     *
-     * <p>A pure read, deliberately — it does <b>not</b> recompute stale regions. A getter that quietly
-     * runs a document-wide scan is the trap {@code getScrollWidth} already documents here; anything that
-     * has been painting has current regions, and anything that has not has no folds to report.</p>
+     * @see EditorFolding#collapsedRows()
      */
     public int[] collapsedRows() {
-        FoldingRegions regions = folding.regions();
-        int[] found = new int[regions.length()];
-        int count = 0;
-        for (int i = 0; i < regions.length(); i++) {
-            if (regions.isCollapsed(i)) found[count++] = regions.getStartLineNumber(i);
-        }
-        return java.util.Arrays.copyOf(found, count);
+        return folds.collapsedRows();
     }
 
     /**
      * Sets the fold state outright: every region starting on one of {@code startRows} is collapsed and
      * every other region is opened.
      *
-     * <p><b>Recomputes the regions first</b>, which is the entire reason this is a method rather than
-     * something a caller does through {@link #foldingModel()}. Regions are rebuilt from the text one frame
-     * <em>after</em> the text arrives, so a restore running straight after the content lands would collapse
-     * against an empty region set and silently do nothing — the failure would look like folds never having
-     * been saved.</p>
-     *
-     * <p>Goes through the same anchor-and-lift path every interactive fold does, so a caret left inside a
-     * region being closed is moved onto its header rather than becoming unpaintable. Restore the caret
-     * <em>before</em> calling this and that lift does the right thing for free.</p>
+     * @see EditorFolding#setCollapsedRows(int...)
      */
     public TextEditor setCollapsedRows(int... startRows) {
-        if (!foldingEnabled) return this;
-        StableViewport anchor = captureFoldAnchor();
-        ensureFoldingCurrent();
-        FoldingRegions regions = folding.regions();
-        for (int i = 0; i < regions.length(); i++) {
-            int start = regions.getStartLineNumber(i);
-            boolean wanted = false;
-            for (int row : startRows) {
-                if (row == start) {
-                    wanted = true;
-                    break;
-                }
-            }
-            regions.setCollapsed(i, wanted);
-        }
-        afterFoldChange(anchor);
+        folds.setCollapsedRows(startRows);
         return this;
     }
 
     /** Swaps the region source — a syntax-aware provider layers over the indent one this way. */
     public TextEditor setFoldingProvider(FoldingRangeProvider provider) {
-        this.foldingProvider = provider == null ? FoldingRangeProvider.none() : provider;
-        this.foldingDirty = true;
+        folds.setProvider(provider);
         return this;
     }
 
     public TextEditor setFoldingEnabled(boolean enabled) {
-        if (this.foldingEnabled == enabled) return this;
-        this.foldingEnabled = enabled;
-        if (!enabled) {
-            folding.setCollapseStateForAll(false);
-            applyHiddenRows();
-        }
-        this.foldingDirty = true;
+        folds.setEnabled(enabled);
         return this;
     }
 
     public boolean isFoldingEnabled() {
-        return foldingEnabled;
-    }
-
-    /**
-     * Ensures the regions are current before a command reads them.
-     *
-     * <p>A command can fire between an edit and the next frame, and the region set is only recomputed in
-     * {@code refreshFolding}. Without this a fold command right after typing would act on the regions of
-     * the document as it was, which is off by however many rows the edit added.</p>
-     */
-    private void ensureFoldingCurrent() {
-        if (foldingDirty) {
-            foldingDirty = false;
-            folding.update(buffer.document(), foldingProvider, tabSize);
-        }
-    }
-
-    /**
-     * Moves every caret out of a row that is about to be hidden, onto its region's header.
-     *
-     * <p>Not cosmetic: a caret on a hidden row has no view line, so it cannot be drawn where it actually
-     * is. {@code ProjectedLines.toViewPosition} walks it to the nearest visible row instead, and the caret
-     * is then painted on a line it is not on — typing inserts somewhere other than where it appears. VS
-     * Code does the same lift, which is why folding a block you are inside leaves the caret on the block's
-     * first line.</p>
-     *
-     * <p><b>EVERY caret, which this did not used to do.</b> It read {@code selections.primary()} inside the
-     * loop and returned after the first fix, so a secondary caret inside a folded block stayed there. With
-     * one caret that is indistinguishable from correct, and every folding test had one — the plural in the
-     * name and in this javadoc was the only evidence of the intent.</p>
-     */
-    private void liftCaretsOutOfHiddenRows() {
-        List<FoldingModel.RowRange> hidden = folding.hiddenRows();
-        if (hidden.isEmpty()) return;
-        boolean[] moved = { false };
-        selections.transform(selection -> {
-            int row = buffer.document().offsetToPoint(selection.head()).row();
-            for (FoldingModel.RowRange range : hidden) {
-                if (!range.contains(row)) continue;
-                moved[0] = true;
-                // The region's HEADER. hiddenRows() starts at startLineNumber + 1 -- the first row stays
-                // visible because it carries the fold arrow -- so startRow - 1 is that header, and is
-                // never negative.
-                return Selection.caret(buffer.document().lineStartOffset(range.startRow() - 1));
-            }
-            return selection;
-        });
-        // Several carets in one folded block all land on its header; setAll normalises them into one.
-        if (moved[0]) afterSelectionChange();
-    }
-
-    /**
-     * Finishes a fold change, keeping the viewport where it was.
-     *
-     * <p><b>The anchor is captured before the change, by the caller.</b> Folding removes rows above the
-     * viewport as readily as below it, and {@code scrollTop} is a pixel count — so collapsing everything
-     * while scrolled into a file silently pulls the whole document up past the top of the view, and
-     * fold-all near the end leaves the editor apparently empty. IntelliJ keeps the line you are on exactly
-     * where it is, which is the same guarantee zooming already makes here and the same
-     * {@code StableViewport} that makes it.</p>
-     */
-    private void afterFoldChange(StableViewport anchor) {
-        liftCaretsOutOfHiddenRows();
-        if (applyHiddenRows()) {
-            firstRealised = -1;
-            lastRealised = -1;
-            forgetWidestLine();
-        }
-        // AFTER the hidden rows are applied, or the anchor is resolved against the projection the fold
-        // just invalidated.
-        restoreStableViewport(anchor);
-        invalidateStyleMatch();
+        return folds.isEnabled();
     }
 
     /** Folds or unfolds the innermost region at the caret, stepping outwards when already in that state. */
     public void fold() {
-        StableViewport anchor = captureFoldAnchor();
-        ensureFoldingCurrent();
-        folding.setCollapseStateUp(true, caretRow());
-        afterFoldChange(anchor);
+        folds.fold();
     }
 
     public void unfold() {
-        StableViewport anchor = captureFoldAnchor();
-        ensureFoldingCurrent();
-        folding.setCollapseStateUp(false, caretRow());
-        afterFoldChange(anchor);
+        folds.unfold();
     }
 
     /** Folds or unfolds the region at the caret and everything inside it. */
     public void foldRecursively() {
-        StableViewport anchor = captureFoldAnchor();
-        ensureFoldingCurrent();
-        FoldingRegions.Region region = folding.getRegionAtLine(caretRow());
-        if (region != null && !region.isCollapsed()) folding.toggleCollapseState(Integer.MAX_VALUE, caretRow());
-        afterFoldChange(anchor);
+        folds.foldRecursively();
     }
 
     public void foldAll() {
-        StableViewport anchor = captureFoldAnchor();
-        ensureFoldingCurrent();
-        folding.collapseAllKeepingDocumentVisible(buffer.lineCount());
-        afterFoldChange(anchor);
+        folds.foldAll();
     }
 
     public void unfoldAll() {
-        StableViewport anchor = captureFoldAnchor();
-        ensureFoldingCurrent();
-        folding.setCollapseStateForAll(false);
-        afterFoldChange(anchor);
+        folds.unfoldAll();
     }
 
     /** Folds every region at exactly {@code level}, leaving the block the caret is in open. */
     public void foldLevel(int level) {
-        StableViewport anchor = captureFoldAnchor();
-        ensureFoldingCurrent();
-        folding.setCollapseStateAtLevel(level, true, caretRow());
-        afterFoldChange(anchor);
+        folds.foldLevel(level);
     }
 
     /** Toggles the region whose first row is {@code row} — what clicking a gutter arrow does. */
     public void toggleFoldAt(int row) {
-        ensureFoldingCurrent();
-        FoldingRegions.Region region = folding.getRegionStartingAt(row);
-        if (region == null) return;
-        StableViewport anchor = captureFoldAnchor();
-        region.setCollapsed(!region.isCollapsed());
-        afterFoldChange(anchor);
+        folds.toggleFoldAt(row);
     }
 
     int caretRow() {
         return buffer.document().offsetToPoint(selections.primary().head()).row();
     }
 
-    /**
-     * What a collapsed region's chip reads.
-     *
-     * <p>{@code "...}"} rather than plain {@code "..."} whenever the region's last row is the one that
-     * closes it — so the header {@code void f() {} plus the chip renders as {@code void f() {...}}, which
-     * is IntelliJ's collapsed form and the whole point of swallowing the closing row. The closer is taken
-     * from the DOCUMENT rather than assumed, so {@code });} comes back intact instead of being guessed at
-     * as a bare brace.</p>
-     */
+    /** What a collapsed region's chip reads. @see EditorFolding#placeholderTextFor */
     String placeholderTextFor(FoldingRegions.Region region) {
-        int endRow = region.endLineNumber();
-        if (endRow <= region.startLineNumber() || endRow >= buffer.lineCount()) {
-            return FOLD_PLACEHOLDER_TEXT;
-        }
-        String closing = buffer.document().line(endRow).trim();
-        if (closing.isEmpty()) return FOLD_PLACEHOLDER_TEXT;
-        char first = closing.charAt(0);
-        if (first != '}' && first != ')' && first != ']') return FOLD_PLACEHOLDER_TEXT;
-        return FOLD_PLACEHOLDER_TEXT + closing;
+        return folds.placeholderTextFor(region);
     }
 
     /**
-     * Retires one pooled element.
+     * Drops every realised line, so the next pass rebuilds them.
      *
-     * <p><b>Clears its text as well as collapsing its box</b>, for the reason {@code hideFrom} gives: zero
-     * size hides a fill and nothing else, and a {@code UIText} inside keeps painting. The line numbers
-     * looked immune because the gutter clips to its own bounds — but a retired number is still <em>inside</em>
-     * those bounds, so the clip never applied to it. Invisible until scroll-past-end made it possible to
-     * leave a long tail of retired numbers behind, which then drew on top of one another.</p>
+     * <p>For folding, which changes <em>which</em> rows exist rather than only where they are — what is
+     * realised is keyed on a view-line window that no longer describes the same text.</p>
      */
-    private void hide(UIElement element) {
-        StyleGroup.defaultPipeline(element.getStyle().getLayoutGroup(), l -> l.width(0f).height(0f));
-        for (UIElement child : element.getChildren()) {
-            if (child instanceof UIText label) label.setText("");
-        }
+    void dropRealisedLines() {
+        firstRealised = -1;
+        lastRealised = -1;
+        forgetWidestLine();
     }
+
+    /**
+     * Re-runs selector matching over the editor's subtree.
+     *
+     * <p>{@code invalidateStyleMatch} is {@code protected} on {@code UIElement} — deliberately, so nothing
+     * outside a widget can force its cascade — and the parts and subsystems are outside it in Java's terms
+     * while being inside it in every other sense. This is the one forwarder rather than a widening.</p>
+     */
+    void invalidateStyles() {
+        invalidateStyleMatch();
+    }
+
 
     // ── §G view decorations: layout ─────────────────────────────────────────────────────────────
 
@@ -3670,8 +4829,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * the chip now begins.</p>
      */
     private int collapsedHeaderCut(int row) {
-        if (!foldingEnabled) return -1;
-        FoldingRegions.Region region = folding.getRegionStartingAt(row);
+        if (!folds.isEnabled()) return -1;
+        FoldingRegions.Region region = folds.model().getRegionStartingAt(row);
         if (region == null || !region.isCollapsed()) return -1;
         int opener = FoldingDecorationsPart.trailingOpenerIndex(buffer.document().line(row));
         return opener < 0 ? -1 : rowMetrics(row).line().displayIndexOf(opener);
@@ -3709,13 +4868,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return false;
     }
 
-    /**
-     * Routes {@link UiDataKeys#UNDO_STACK} through the same walk everything else uses.
-     *
-     * <p>Without this the key would answer null for this widget while {@code UndoScope.nearest} found a
-     * stack — two mechanisms disagreeing about the same question, which is the thing {@code DataContext}
-     * exists to stop.</p>
-     */
     /**
      * What Cut/Copy/Paste mean in a text editor. @see com.crystalgui.ui.ClipboardActions
      *
@@ -3755,10 +4907,21 @@ public class TextEditor extends ScrollerView implements UndoScope {
         @Override
         public void paste() {
             String pending = CgPlatform.input().getClipboard();
-            if (pending != null && !pending.isEmpty()) insertAtCaret(pending);
+            if (pending == null || pending.isEmpty()) return;
+            // RE-INDENTED TO WHERE IT LANDS, so a method copied out of one class arrives at the new
+            // one's depth. A shift and not a reformat -- see TypeOperations.reindentForPaste.
+            insertAtCaret(TypeOperations.reindentForPaste(
+                    buffer.document(), selections.primary().start(), pending, indentStyle()));
         }
     };
 
+    /**
+     * Routes {@link UiDataKeys#UNDO_STACK} through the same walk everything else uses.
+     *
+     * <p>Without this the key would answer null for this widget while {@code UndoScope.nearest} found a
+     * stack — two mechanisms disagreeing about the same question, which is the thing {@code DataContext}
+     * exists to stop.</p>
+     */
     @Override
     public Object getData(DataKey<?> key) {
         if (key == UiDataKeys.CLIPBOARD) return clipboardActions;

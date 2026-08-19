@@ -1,6 +1,7 @@
 package com.crystalgui.headless;
 
 import com.crystalgui.text.ChangeSet;
+import com.crystalgui.text.Selection;
 import com.crystalgui.text.TextBuffer;
 import org.junit.Test;
 
@@ -63,6 +64,62 @@ public class TextBufferTest {
 
         assertEquals("undo and redo are edits too, and a view must hear about them",
                 List.of(6, 3, 6), lengths);
+    }
+
+    // ── The carets an undo restores ─────────────────────────────────────────────────────────────
+
+    /**
+     * <b>Undo puts the carets back where the edit was made</b>, and redo puts them where it left them.
+     *
+     * <p>Reported from the harness as "undo/redo don't put the caret back". The redo half is derived
+     * rather than recorded — the same carets carried through the change — so the two cannot disagree.
+     */
+    @Test
+    public void undoAndRedoRestoreTheCaretsTheEditWasMadeAt() {
+        TextBuffer buffer = buffer("hello");
+        List<List<Selection>> restored = new ArrayList<>();
+        buffer.onSelectionsRestored.connect(restored::add);
+
+        buffer.edit(ChangeSet.replace(5, 5, 5, " world"), List.of(Selection.caret(5)));
+        buffer.undo();
+        assertEquals("undo answers with where the caret stood before the edit",
+                List.of(List.of(Selection.caret(5))), restored);
+
+        buffer.redo();
+        assertEquals("redo answers with where that caret ended up", 2, restored.size());
+        assertEquals(Selection.caret(11), restored.get(1).get(0));
+    }
+
+    /** A view that records none still undoes; nothing is announced, and nothing breaks. */
+    @Test
+    public void anEditWithNoRecordedCaretsAnnouncesNothing() {
+        TextBuffer buffer = buffer("hello");
+        List<List<Selection>> restored = new ArrayList<>();
+        buffer.onSelectionsRestored.connect(restored::add);
+
+        buffer.insert(5, "!");
+        buffer.undo();
+
+        assertEquals("hello", buffer.toString());
+        assertTrue(restored.isEmpty());
+    }
+
+    /**
+     * <b>A merged run of typing undoes to where the run STARTED.</b> Taking the later entry's carets
+     * would land the caret in the middle of text the undo has just removed.
+     */
+    @Test
+    public void aMergedRunKeepsTheFirstStepsCarets() {
+        TextBuffer buffer = buffer("");
+        List<List<Selection>> restored = new ArrayList<>();
+        buffer.onSelectionsRestored.connect(restored::add);
+
+        buffer.edit(ChangeSet.replace(0, 0, 0, "a"), List.of(Selection.caret(0)));
+        buffer.edit(ChangeSet.replace(1, 1, 1, "b"), List.of(Selection.caret(1)));
+        buffer.undo();
+
+        assertEquals("", buffer.toString());
+        assertEquals(List.of(List.of(Selection.caret(0))), restored);
     }
 
     // ── Undo ────────────────────────────────────────────────────────────────────────────────────
@@ -267,5 +324,79 @@ public class TextBufferTest {
             while (buffer.redo()) { /* rewind */ }
             assertEquals("round " + round, full, buffer.toString());
         }
+    }
+
+    // ── The version spine ───────────────────────────────────────────────────────────────────────
+
+    @Test
+    public void everyEditAdvancesTheVersion() {
+        TextBuffer buffer = buffer("");
+        int start = buffer.version();
+
+        buffer.insert(0, "a");
+        buffer.insert(1, "b");
+
+        assertEquals("each applied edit is one version", start + 2, buffer.version());
+    }
+
+    @Test
+    public void anEmptyOrRejectedEditDoesNotAdvanceTheVersion() {
+        TextBuffer buffer = buffer("hello");
+        int before = buffer.version();
+
+        buffer.edit(ChangeSet.empty(buffer.length()));
+
+        assertEquals("a no-op must not invalidate everything computed against the document",
+                before, buffer.version());
+    }
+
+    @Test
+    public void undoAndRedoAdvanceTheVersionToo() {
+        // The one that matters. Undo moves the text as surely as typing does, so anything computed
+        // against the document beforehand is equally stale -- a version that only advanced on forward
+        // edits would let a diagnostic list survive Ctrl+Z and be re-attached to text it never described.
+        TextBuffer buffer = buffer("");
+        buffer.setCoalesceWindowMillis(0);
+        now += 1000;
+        buffer.insert(0, "typed");
+
+        int afterTyping = buffer.version();
+        buffer.undo();
+        assertTrue("undo is a change", buffer.version() > afterTyping);
+
+        int afterUndo = buffer.version();
+        buffer.redo();
+        assertTrue("so is redo", buffer.version() > afterUndo);
+    }
+
+    @Test
+    public void theVersionNeverRepeatsWhenTheTextReturnsToAnEarlierValue() {
+        // Why this is a counter and not a hash of the content: typing a character and deleting it leaves
+        // identical text, and a result computed against the text in between is still describing a
+        // document that no longer exists. Identity of content is the wrong question.
+        TextBuffer buffer = buffer("x");
+        int start = buffer.version();
+
+        buffer.insert(1, "y");
+        buffer.delete(1, 2);
+
+        assertEquals("the text is back where it started", "x", buffer.toString());
+        assertTrue("the version is not", buffer.version() > start);
+    }
+
+    @Test
+    public void aListenerSeesTheVersionItsOwnChangeProduced() {
+        // Bumped before the signal, so onChanged can stamp a snapshot with the version it belongs to --
+        // reading the pre-edit version there would stamp every job one behind, and the symptom is every
+        // result being discarded as stale forever.
+        TextBuffer buffer = buffer("");
+        List<Integer> seen = new ArrayList<>();
+        buffer.onChanged.connect(change -> seen.add(buffer.version()));
+
+        buffer.insert(0, "a");
+
+        assertEquals(1, seen.size());
+        assertEquals("the listener must see the new version, not the one it replaced",
+                buffer.version(), (int) seen.get(0));
     }
 }

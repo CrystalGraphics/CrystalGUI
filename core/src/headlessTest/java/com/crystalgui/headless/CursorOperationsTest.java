@@ -4,6 +4,7 @@ import com.crystalgui.text.Change;
 import com.crystalgui.text.Rope;
 import com.crystalgui.text.Selection;
 import com.crystalgui.text.WordClassifier;
+import com.crystalgui.text.cursor.ColumnSelection;
 import com.crystalgui.text.cursor.CursorColumns;
 import com.crystalgui.text.cursor.LineOperations;
 import com.crystalgui.text.cursor.MouseSelection;
@@ -178,6 +179,342 @@ public class CursorOperationsTest {
         assertEquals(4, TypeOperations.backspaceFrom(document, 8, 4));
         assertEquals("but one character inside the text", 11,
                 TypeOperations.backspaceFrom(document, 12, 4));
+    }
+
+    /**
+     * <b>Counted the way the line is DRAWN.</b> Two tabs are two characters and eight columns; counting
+     * characters said {@code 2 % 4 == 2} and one press deleted the whole indent, landing the caret at
+     * column zero. Reported from the harness as "backspace does not take me back up to the previous
+     * line" — which is the same bug seen from its other end, since only column zero joins lines.
+     */
+    @Test
+    public void backspaceTakesOneTabAtATime() {
+        Rope document = Rope.of("\t\ttext");
+        assertEquals("one tab, not both", 1, TypeOperations.backspaceFrom(document, 2, 4));
+        assertEquals("then the other", 0, TypeOperations.backspaceFrom(document, 1, 4));
+    }
+
+    /** An indent that is not on a stop goes to the stop below it, not a whole level from where it is. */
+    @Test
+    public void backspaceFromAnUnalignedIndentGoesToTheStop() {
+        Rope document = Rope.of("      text");
+        assertEquals(4, TypeOperations.backspaceFrom(document, 6, 4));
+        assertEquals(0, TypeOperations.backspaceFrom(document, 4, 4));
+    }
+
+    /** At column zero it is the line join, which is what the whole indent walk is on its way to. */
+    @Test
+    public void backspaceAtColumnZeroJoinsTheLines() {
+        Rope document = Rope.of("a\n    b");
+        assertEquals(1, TypeOperations.backspaceFrom(document, 2, 4));
+    }
+
+    /**
+     * <b>A blank line goes straight up.</b> Reported from the harness as "backspace here should take me
+     * up and it doesn't" — the second time that sentence has been said about this method, and a different
+     * cause each time: the first was counting characters instead of columns
+     * ({@link #backspaceTakesOneTabAtATime}), this one is the indent walk running on a line with nothing
+     * to unindent.
+     *
+     * <p>Press Enter twice inside a method and the caret sits on eight spaces the user never typed.
+     * Walking them costs two presses before the one that does the intended thing. IntelliJ removes the
+     * indent and the break together; this is that.</p>
+     */
+    @Test
+    public void backspaceOnAWhollyBlankLineJumpsToTheEndOfThePreviousLine() {
+        Rope document = Rope.of("    void f() {\n\n        \n    }");
+        // The caret at the end of the blank third line -- one press, and it lands after the empty second.
+        int caret = document.lineStartOffset(2) + 8;
+        assertEquals(document.lineEndOffset(1), TypeOperations.backspaceFrom(document, caret, 4));
+    }
+
+    /**
+     * And the line it lands on keeps whatever is on it — the join is a join, not a jump to column zero.
+     */
+    @Test
+    public void theJumpLandsAfterThePreviousLinesContent() {
+        // Four spaces under a line that opens a block, so the caret IS at the block's own indent and the
+        // press is the jump rather than a step back to it.
+        Rope document = Rope.of("f() {\n    ");
+        assertEquals(document.lineEndOffset(0),
+                TypeOperations.backspaceFrom(document, document.length(), 4));
+    }
+
+    /**
+     * <b>Deeper than the block wants is a step back to it, not a jump.</b>
+     *
+     * <p>Reported from the harness after the jump went in: it fired wherever the caret was, so a blank
+     * line the user had pushed further in — by Tab, or by a paste landing deep — lost the line on the
+     * first press instead of coming back a level. IntelliJ's <em>Smart Backspace: to proper indent
+     * position</em> is the distinction, and "proper" is the block's depth rather than the nearest stop.</p>
+     */
+    @Test
+    public void aBlankLineDeeperThanItsBlockComesBackToTheBlockFirst() {
+        // The block wants four; the caret is at twelve.
+        Rope document = Rope.of("f() {\n            \n}");
+        int caret = document.lineStartOffset(1) + 12;
+        assertEquals("back to the block's indent, and the line stays",
+                document.lineStartOffset(1) + 4, TypeOperations.backspaceFrom(document, caret, 4));
+
+        // And from there, the jump -- asked of the document the first press LEAVES BEHIND, which is a
+        // line of four spaces. Asking the original again is asking about a caret mid-whitespace, which is
+        // a different case with a different answer and was how this test first failed.
+        Rope after = Rope.of("f() {\n    \n}");
+        assertEquals("and only then does the line go", after.lineEndOffset(0),
+                TypeOperations.backspaceFrom(after, after.lineStartOffset(1) + 4, 4));
+    }
+
+    /**
+     * The scope is read from the previous <b>non-blank</b> line — a run of empty lines says nothing about
+     * depth, so the answer comes from whatever last wrote something.
+     */
+    @Test
+    public void theBlocksIndentIsReadPastAnyBlankLinesAbove() {
+        Rope document = Rope.of("f() {\n\n\n        ");
+        int caret = document.length();
+        assertEquals("eight is deeper than the block's four", document.lineStartOffset(3) + 4,
+                TypeOperations.backspaceFrom(document, caret, 4));
+    }
+
+    /**
+     * A closing line does not open a block, so the line under it belongs at the closer's own depth.
+     *
+     * <p>The shape the report came in: a caret one level in from a {@code }} that had just closed a
+     * method. The block there is the one the brace closed <em>into</em>, so the indent to stop at is the
+     * brace's own — and a press deeper than it comes back to it rather than deleting the line.</p>
+     */
+    @Test
+    public void aLineUnderAClosingBraceBelongsAtTheBracesOwnDepth() {
+        Rope document = Rope.of("    void f() {\n    }\n        ");
+        int caret = document.length();
+        assertEquals("eight is deeper than the brace's four", document.lineStartOffset(2) + 4,
+                TypeOperations.backspaceFrom(document, caret, 4));
+
+        Rope after = Rope.of("    void f() {\n    }\n    ");
+        assertEquals("and at four it is the jump", after.lineEndOffset(1),
+                TypeOperations.backspaceFrom(after, after.length(), 4));
+    }
+
+    /**
+     * <b>The distinction is CONTENT AFTER THE CARET, not "is the caret in indentation".</b>
+     *
+     * <p>Both lines here start with eight spaces and both have the caret at column eight. The one with a
+     * statement after it unindents by a level, because there is something to unindent; the empty one goes
+     * up. Merging them either makes the tab-stop walk unreachable or makes every blank line take three
+     * presses.</p>
+     */
+    @Test
+    public void anIndentWithCodeAfterItStillWalksItsStops() {
+        Rope withCode = Rope.of("x;\n        y;");
+        int caretInIndent = withCode.lineStartOffset(1) + 8;
+        assertEquals("a level, not a jump", caretInIndent - 4,
+                TypeOperations.backspaceFrom(withCode, caretInIndent, 4));
+
+        // The blank line's block is column zero -- `x;` opens nothing -- so eight is over-indented and the
+        // press comes back to zero rather than taking the line. The answers still differ at the same
+        // column, which is the point: one unindents by a level, the other by the whole indent.
+        Rope blank = Rope.of("x;\n        ");
+        assertEquals("the same column, the other answer", blank.lineStartOffset(1),
+                TypeOperations.backspaceFrom(blank, blank.length(), 4));
+    }
+
+    /**
+     * A caret parked inside a blank line's whitespace walks the stops instead of jumping.
+     *
+     * <p>Jumping would carry the spaces <em>after</em> the caret up onto the previous line as trailing
+     * whitespace. Only reachable by clicking into the middle of an empty line, which is exactly why it
+     * would never have been noticed.</p>
+     */
+    @Test
+    public void aCaretInsideABlankLinesWhitespaceStillWalksTheStops() {
+        Rope document = Rope.of("x;\n        ");
+        int midway = document.lineStartOffset(1) + 4;
+        assertEquals(document.lineStartOffset(1), TypeOperations.backspaceFrom(document, midway, 4));
+    }
+
+    /** Nothing above to join to — the first line of a file falls back to the walk. */
+    @Test
+    public void aBlankFirstLineHasNowhereToGoUpTo() {
+        Rope document = Rope.of("        \nx;");
+        assertEquals(4, TypeOperations.backspaceFrom(document, 8, 4));
+    }
+
+    // ── Enter ───────────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * <b>The caret lands on a line of its own between the braces.</b> Reported from the harness: typing
+     * Enter after {@code if (true) &#123;} with the closer already there produced one line with the
+     * closing brace sitting beside the caret. The rule that did it asked whether the LINE ended in an
+     * opener, and with the caret between the pair the line ends in the closer.
+     */
+    @Test
+    public void enterBetweenBracesOpensAMiddleLine() {
+        Rope document = Rope.of("    if (true) {}");
+        TypeOperations.Enter enter = TypeOperations.enterAt(document, 15,
+                TypeOperations.IndentStyle.spaces(4), Language.java());
+        assertEquals("\n        \n    ", enter.text());
+        assertEquals("the caret is on the FIRST of the two new lines", 15 + 9, enter.caret());
+    }
+
+    /** An opener with anything else after it indents once and stays on one line. */
+    @Test
+    public void enterAfterAnOpenerIndentsOnce() {
+        Rope document = Rope.of("    if (true) {");
+        TypeOperations.Enter enter = TypeOperations.enterAt(document, 15,
+                TypeOperations.IndentStyle.spaces(4), Language.java());
+        assertEquals("\n        ", enter.text());
+        assertEquals(15 + 9, enter.caret());
+    }
+
+    /** Anything else carries the indentation across and does nothing more. */
+    @Test
+    public void enterElsewhereCarriesTheIndent() {
+        Rope document = Rope.of("    call();");
+        TypeOperations.Enter enter = TypeOperations.enterAt(document, 11,
+                TypeOperations.IndentStyle.spaces(4), Language.java());
+        assertEquals("\n    ", enter.text());
+    }
+
+    /**
+     * <b>The line's last character is not the question.</b> Splitting a line in the middle carries the
+     * indent and nothing else, however the line happens to end.
+     */
+    @Test
+    public void enterInTheMiddleOfALineDoesNotIndent() {
+        Rope document = Rope.of("    foo bar {");
+        TypeOperations.Enter enter = TypeOperations.enterAt(document, 7,
+                TypeOperations.IndentStyle.spaces(4), Language.java());
+        assertEquals("\n    ", enter.text());
+    }
+
+    /** In tabs mode one level is a tab, and the carried indent is whatever the line already had. */
+    @Test
+    public void enterInTabsModeIndentsWithATab() {
+        Rope document = Rope.of("\tif (true) {");
+        TypeOperations.Enter enter = TypeOperations.enterAt(document, 12,
+                TypeOperations.IndentStyle.tabs(4), Language.java());
+        assertEquals("\n\t\t", enter.text());
+    }
+
+    // ── Column selection ────────────────────────────────────────────────────────────────────────
+
+    /** One selection per row, all between the same two columns. */
+    @Test
+    public void aBoxCoversTheSameColumnsOnEveryRow() {
+        Rope document = Rope.of("abcdef\nghijkl\nmnopqr");
+        List<Selection> box = ColumnSelection.between(document, 1, document.lineStartOffset(2) + 4, 4);
+
+        assertEquals(3, box.size());
+        assertEquals(new Selection(1, 4), box.get(0));
+        assertEquals(new Selection(8, 11), box.get(1));
+        assertEquals(new Selection(15, 18), box.get(2));
+    }
+
+    /**
+     * <b>Columns are VISUAL, which is the whole of the port.</b> A box is a rectangle on screen, so two
+     * rows whose text differs in tabs must still line up — computed from character offsets it would be a
+     * ragged edge that follows the text rather than a box.
+     */
+    @Test
+    public void aBoxLinesUpAcrossTabsAndSpaces() {
+        Rope document = Rope.of("\tabc\n    def");
+        // Column 4 on both rows: just past the tab on the first, just past the four spaces on the second.
+        List<Selection> box = ColumnSelection.between(document, 1, document.lineStartOffset(1) + 4, 4);
+
+        assertEquals(2, box.size());
+        assertEquals("the tab row starts after its single tab character", 1, box.get(0).start());
+        assertEquals("and the space row after its four", document.lineStartOffset(1) + 4,
+                box.get(1).start());
+    }
+
+    /**
+     * <b>A short row is clamped, never skipped.</b> The point of a box is usually to type at the end of
+     * every line in it, and a row dropping out because it is shorter is exactly the row somebody wanted.
+     */
+    @Test
+    public void aShortRowIsClampedToItsOwnEnd() {
+        Rope document = Rope.of("abcdefgh\nij\nklmnopqr");
+        List<Selection> box = ColumnSelection.between(document, 4, document.lineStartOffset(2) + 6, 4);
+
+        assertEquals(3, box.size());
+        Selection middle = box.get(1);
+        assertEquals("clamped to the end of `ij`", document.lineStartOffset(1) + 2, middle.start());
+        assertEquals("and to the same place, so it is a bare caret", middle.start(), middle.end());
+    }
+
+    /** Dragging upwards puts the head's row last, so the caller can treat it as the primary. */
+    @Test
+    public void anUpwardBoxEndsOnTheHeadsRow() {
+        Rope document = Rope.of("aaaa\nbbbb\ncccc");
+        List<Selection> box = ColumnSelection.between(document, document.lineStartOffset(2) + 1, 1, 4);
+
+        assertEquals(3, box.size());
+        assertEquals("the head's row is last", 1, box.get(2).start());
+    }
+
+    // ── Paste ───────────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * <b>A block arrives at the depth it is dropped into</b>, keeping its own shape. The shift is
+     * measured from the minimum indent of the lines after the first, so nothing inside the block moves
+     * relative to anything else — a nested statement stays nested.
+     */
+    @Test
+    public void pastedLinesAreShiftedToWhereTheyLand() {
+        Rope document = Rope.of("class A {\n    void go() {\n        \n    }\n}");
+        int at = document.lineStartOffset(2) + 8;                     // inside the 8-space indent
+        String pasted = "if (x) {\n    call();\n}";
+
+        assertEquals("if (x) {\n            call();\n        }",
+                TypeOperations.reindentForPaste(document, at, pasted,
+                        TypeOperations.IndentStyle.spaces(4)));
+    }
+
+    /** The first line is being typed at the caret, so it goes in exactly as it was cut. */
+    @Test
+    public void theFirstPastedLineIsNeverTouched() {
+        Rope document = Rope.of("        ");
+        String pasted = "    already indented\n    second";
+        String out = TypeOperations.reindentForPaste(document, 8, pasted,
+                TypeOperations.IndentStyle.spaces(4));
+        assertTrue(out.startsWith("    already indented\n"));
+    }
+
+    /** Into the middle of a line, what the rest should line up with is genuinely ambiguous. */
+    @Test
+    public void pastingIntoTextLeavesTheBlockAlone() {
+        Rope document = Rope.of("    int x = 1;");
+        String pasted = "a\n        b";
+        assertEquals(pasted, TypeOperations.reindentForPaste(document, 10, pasted,
+                TypeOperations.IndentStyle.spaces(4)));
+    }
+
+    /** A single line has no shape to preserve and no lines below it to shift. */
+    @Test
+    public void aSingleLinePasteIsUnchanged() {
+        Rope document = Rope.of("        ");
+        assertEquals("value", TypeOperations.reindentForPaste(document, 8, "value",
+                TypeOperations.IndentStyle.spaces(4)));
+    }
+
+    /** In tabs mode the shift is written as tabs, because that is how the document indents. */
+    @Test
+    public void aShiftInTabsModeIsWrittenWithTabs() {
+        Rope document = Rope.of("\t\t");
+        String out = TypeOperations.reindentForPaste(document, 2, "a\nb",
+                TypeOperations.IndentStyle.tabs(4));
+        assertEquals("a\n\t\tb", out);
+    }
+
+    // ── Tab ─────────────────────────────────────────────────────────────────────────────────────
+
+    /** To the next stop, so a Tab-indented block does not drift one character further out per press. */
+    @Test
+    public void tabGoesToTheNextStop() {
+        Rope document = Rope.of("ab");
+        assertEquals("  ", TypeOperations.tabAt(document, 2, TypeOperations.IndentStyle.spaces(4)));
+        assertEquals("    ", TypeOperations.tabAt(document, 0, TypeOperations.IndentStyle.spaces(4)));
+        assertEquals("\t", TypeOperations.tabAt(document, 1, TypeOperations.IndentStyle.tabs(4)));
     }
 
     @Test

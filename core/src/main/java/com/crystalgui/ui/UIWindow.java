@@ -4,6 +4,7 @@ import com.crystalgraphics.api.PoseStack;
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.style.StyleEngine;
@@ -499,6 +500,16 @@ public final class UIWindow {
         float deltaSeconds = (now - lastFrameNanos) / 1_000_000_000f;
         lastFrameNanos = now;
 
+        // BACKGROUND RESULTS FIRST, for the same reason calculateStyle runs before calculateLayout: a
+        // landed result is an input to this frame, and applying it after the passes that read it lands it
+        // one frame late. A reparse that arrives here marks its editor's highlights dirty, and the refresh
+        // below is the pass that acts on that.
+        //
+        // hasShared() rather than shared(): asking whether there is work must never be the thing that
+        // spawns a thread pool. A window in a headless test that schedules nothing creates nothing —
+        // the same guard, for the same reason, as CgUiPaintContext.hasInstance().
+        if (JobScheduler.hasShared()) JobScheduler.shared().drain();
+
         styleEngine.calculateStyle(deltaSeconds);
         tickAnimations(deltaSeconds);
         // A TICKER MAY HAVE BUILT A SUBTREE, not merely set a class on one — and an element that has
@@ -583,8 +594,13 @@ public final class UIWindow {
 
     public void unregisterElement(UIElement element) {
         if (element == null) return;
-        // Before anything else: a detached element must not linger in the top layer, or it would keep
-        // painting and hit-testing after leaving the tree.
+        // FIRST, while the element is still whole: anything it wanted remembered is read back out here,
+        // because this is the last moment it can be read at all. Closing a tool window DETACHES it, so a
+        // session saved afterwards walks a tree the widget has left and writes nothing -- drag the Run
+        // panel's divider, close the panel, quit, and the width is gone. The mirror of registerElement.
+        if (sessionState != null) sessionState.captureFrom(element);
+        // A detached element must not linger in the top layer, or it would keep painting and hit-testing
+        // after leaving the tree.
         topLayer.remove(element);
         // Nor in the modal stack, and this one is worse than a leak — a modal that left the tree without
         // being closed would keep the ENTIRE window inert with nothing left to interact with, which is
@@ -663,7 +679,31 @@ public final class UIWindow {
             }
         }
         styleEngine.markDirty(element);
+
+        // LAST, and only for an element that asked. A widget built long after a session was restored --
+        // a tool window opened for the first time, a split a panel makes when a script finally runs --
+        // joins the window here and nowhere else, which is what lets its remembered state reach it at all.
+        //
+        // A refusal is contained: a payload written by an older build is a reason for one widget to open
+        // at its default, never a reason an element cannot be added to a window.
+        if (sessionState != null) {
+            try {
+                sessionState.applyTo(element);
+            } catch (RuntimeException refused) {
+                CrystalGuiCore.LOGGER.warn("Could not restore the remembered state of #{}",
+                        element.getId(), refused);
+            }
+        }
     }
+
+    /**
+     * Widget state carried over from a previous run — see {@link SessionState}.
+     *
+     * <p>Nullable and normally null: a window with no session behind it (a dialog, a test, the gallery)
+     * pays one null check per registration. The workbench installs one; nothing else has to know.</p>
+     */
+    @Nullable @Getter @Setter
+    private SessionState<?> sessionState;
 
     /** Every element currently attached to this window's tree. Read-only — used by {@link StyleEngine}
      * to re-match the whole tree when a stylesheet is added or removed. */

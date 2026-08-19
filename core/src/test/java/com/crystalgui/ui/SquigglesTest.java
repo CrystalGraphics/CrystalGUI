@@ -165,6 +165,58 @@ public class SquigglesTest extends UiTestBase {
         assertEquals(1, found.size());
         float width = found.get(0).getRuntimeCache().getWidth();
         assertTrue("width " + width + " is not a plausible four-character row", width > 0f && width < 300f);
+
+        // AND IT IS THE SAME BAND AN EXPLICIT RANGE OVER THAT ROW DRAWS, which is the claim the bound
+        // above cannot make. `Diagnostic.onRow` says column Integer.MAX_VALUE, and both conversions to an
+        // offset -- the editor's own and `Rope.pointToOffset` -- OVERFLOWED on it, so the range collapsed
+        // to a point at the row's start and was widened to one character to be visible. One character is
+        // "plausible" for a four-character row, so this test stayed green over a squiggle sitting in the
+        // indentation. Compared against the other path rather than against a pixel count: the number is
+        // the font's business and the agreement between the two spellings is not.
+        editor.diagnostics().setAll(List.of(Diagnostic.error(
+                new TextPoint(1, 0), new TextPoint(1, 4), "the same row, spelled out")));
+        settle();
+        List<UIElement> explicit = bands("__squiggle-error__");
+        assertEquals(1, explicit.size());
+        assertEquals("a whole-row diagnostic does not cover the row an explicit range covers",
+                explicit.get(0).getRuntimeCache().getWidth(), width, 0.01f);
+    }
+
+    /**
+     * A whole-row mark starts at the row's first non-whitespace character, not at column 0.
+     *
+     * <p>A producer saying "this row" is pointing at the statement; the indentation in front of it is text
+     * nobody claimed was wrong, and on a nested line most of the underline would be empty space — which
+     * reads as the mark being misaligned rather than as it being wide. Asserted as a comparison against
+     * the same row unindented, so no pixel count is baked in.</p>
+     */
+    @Test
+    public void aWholeRowMarkSkipsTheIndentation() {
+        build("alpha\n        beta\ngamma");
+        editor.diagnostics().setAll(List.of(
+                Diagnostic.onRow(1, DiagnosticSeverity.ERROR, "the indented row")));
+        settle();
+        float indented = bands("__squiggle-error__").get(0).getRuntimeCache().getWidth();
+
+        build("alpha\nbeta\ngamma");
+        editor.diagnostics().setAll(List.of(
+                Diagnostic.onRow(1, DiagnosticSeverity.ERROR, "the same row, unindented")));
+        settle();
+        float bare = bands("__squiggle-error__").get(0).getRuntimeCache().getWidth();
+
+        assertEquals("the mark covers the indentation as well as the statement", bare, indented, 0.01f);
+    }
+
+    /** A row that is only whitespace keeps its mark — there is nothing to move onto. */
+    @Test
+    public void aWhitespaceOnlyRowStillGetsAMark() {
+        build("alpha\n    \ngamma");
+        editor.diagnostics().setAll(List.of(
+                Diagnostic.onRow(1, DiagnosticSeverity.ERROR, "a blank row")));
+        settle();
+        List<UIElement> found = bands("__squiggle-error__");
+        assertEquals("trimming collapsed the range and the mark vanished", 1, found.size());
+        assertTrue(found.get(0).getRuntimeCache().getWidth() >= 1f);
     }
 
     // ── Navigation ──────────────────────────────────────────────────────────────────────────────

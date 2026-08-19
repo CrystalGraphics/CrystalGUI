@@ -189,6 +189,14 @@ public class ProjectFileTree extends UIElement implements UndoScope {
         this.tree = new TreeView<>(source);
         tree.addClass(TREE_CLASS);
         tree.setRenderer(new FilesRenderer(this));
+        // THE EXPLORER'S OWN CUT/COPY/PASTE, reclaimed from the list.
+        //
+        // ListView implements ClipboardActions so that every list gets Copy, and UiDataKeys.CLIPBOARD
+        // resolves by walking OUTWARD from focus and taking the first match -- so with focus on a row the
+        // tree is found before this panel is. Without this line the explorer's file operations would have
+        // been silently replaced by a row-text copier: the menu still opens, every item still enables, and
+        // Cut does nothing recognisable. See ListView.setClipboardActions.
+        tree.setClipboardActions(clipboardActions);
         // MULTIPLE, which ListView already implements in full -- Ctrl to toggle, Shift for a range. This
         // is configuration rather than code, and it is what every file command that acts on "the
         // selection" rather than "the selected path" needs.
@@ -459,6 +467,9 @@ public class ProjectFileTree extends UIElement implements UndoScope {
      * and the widget has no business naming commands it does not own.</p>
      */
     public ProjectFileTree setContextMenu(CommandRegistry registry, Supplier<ContextMenu> menu) {
+        // DECLINE THE DEFAULT. Every list gets a right-click Copy menu; this one has its own, and two
+        // menus attached to one element are two listeners that both open.
+        tree.suppressDefaultContextMenu();
         ContextMenu.attach(tree, registry, element -> {
             // SELECT THE ROW FIRST. Every command resolves its target through selectedPath(), so a
             // right-click on an unselected row would otherwise act on whatever was selected before it --

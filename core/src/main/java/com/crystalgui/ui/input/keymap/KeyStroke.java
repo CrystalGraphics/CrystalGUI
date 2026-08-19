@@ -71,6 +71,51 @@ public record KeyStroke(int key, int modifiers) {
     }
 
     /**
+     * Whether this stroke's key is a function key, F1 through F19.
+     *
+     * <p>The other half of the typing guard, and the half that was missing. {@link #hasNonShiftModifier()}
+     * is a <em>proxy</em> for "this keystroke would type something" — correct for {@code Shift+B}, which is
+     * a capital B, and wrong for every key that produces no character at all. A function key produces none
+     * under any modifier, so it is always safe around text input.</p>
+     *
+     * <p><b>Without this, no {@code Shift+F<n>} binding could ever fire while an editor had focus</b> —
+     * which is where those bindings are used. IntelliJ's Run is Shift+F10 and works while editing; ours
+     * looked like a dead key, and the search went to the harness's debug binding twice before landing
+     * here.</p>
+     *
+     * <p>Enumerated rather than range-checked, because {@link CgKeyCodes} is LWJGL2-shaped and the codes
+     * are <b>not contiguous</b>: F1–F10 are 0x3B–0x44, then F11/F12 jump to 0x57/0x58, F13–F18 to
+     * 0x64–0x69 and F19 to 0x71. A {@code >= F1 && <= F12} test would sweep in Num Lock, Scroll Lock and
+     * the entire numeric keypad — every one of which does type something.</p>
+     */
+    public boolean isFunctionKey() {
+        switch (key) {
+            case CgKeyCodes.KEY_F1:
+            case CgKeyCodes.KEY_F2:
+            case CgKeyCodes.KEY_F3:
+            case CgKeyCodes.KEY_F4:
+            case CgKeyCodes.KEY_F5:
+            case CgKeyCodes.KEY_F6:
+            case CgKeyCodes.KEY_F7:
+            case CgKeyCodes.KEY_F8:
+            case CgKeyCodes.KEY_F9:
+            case CgKeyCodes.KEY_F10:
+            case CgKeyCodes.KEY_F11:
+            case CgKeyCodes.KEY_F12:
+            case CgKeyCodes.KEY_F13:
+            case CgKeyCodes.KEY_F14:
+            case CgKeyCodes.KEY_F15:
+            case CgKeyCodes.KEY_F16:
+            case CgKeyCodes.KEY_F17:
+            case CgKeyCodes.KEY_F18:
+            case CgKeyCodes.KEY_F19:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /**
      * Whether this stroke's key is <b>itself</b> a modifier — Ctrl, Shift, Alt or the Super/Meta key.
      *
      * <p>Pressing Ctrl generates a real key-down whose key <em>is</em> Ctrl, and such a stroke can never

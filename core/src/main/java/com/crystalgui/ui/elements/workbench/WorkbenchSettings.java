@@ -124,8 +124,12 @@ public final class WorkbenchSettings {
 
     private static Setting<String> schemeSetting() {
         ThemeRegistry.registerBuiltins();
+        // ISLANDS DARK, matching the frame. The chrome draws IntelliJ's window and the document was
+        // painted in VS Code's palette -- both good, and recognisably from different products, with the
+        // seam most visible exactly where the eye spends its time. Dark+ stays in the list because a VS
+        // Code user should be able to have it back in one click; that IS the second axis working.
         return Setting.select("appearance.editorScheme", "Editor color scheme",
-                        displayNames(ThemeRegistry.schemes()), "Dark+")
+                        displayNames(ThemeRegistry.schemes()), "Islands Dark")
                 .description("Colours inside the editor: syntax, selection, gutter, guides. "
                         + "Independent of the UI theme.");
     }

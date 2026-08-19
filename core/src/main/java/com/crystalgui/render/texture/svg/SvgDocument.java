@@ -1,5 +1,6 @@
 package com.crystalgui.render.texture.svg;
 
+import com.crystalgraphics.gl.buffer.CgStreamBuffer;
 import com.crystalgraphics.gl.render.CgVectorRenderer;
 import com.crystalgraphics.util.io.CgIO;
 import com.crystalgraphics.util.profiling.CgProfiler;
@@ -7,6 +8,7 @@ import com.crystalgraphics.util.profiling.CgProfiler;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.CgUiPaintContext;
 
+import java.lang.annotation.Annotation;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;

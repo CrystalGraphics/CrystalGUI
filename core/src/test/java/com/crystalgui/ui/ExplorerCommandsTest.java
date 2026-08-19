@@ -34,7 +34,7 @@ import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.ui.elements.SearchField;
 import com.crystalgui.ui.elements.TextField;
-import com.crystalgui.ui.elements.chrome.InputDialog;
+import com.crystalgui.ui.elements.InputDialog;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.ui.elements.workbench.ProjectFileTree;
 import org.junit.Test;

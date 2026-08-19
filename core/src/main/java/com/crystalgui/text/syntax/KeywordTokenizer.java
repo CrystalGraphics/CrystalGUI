@@ -22,19 +22,49 @@ import java.util.Set;
  * are much stronger evidence than one implementation with expectations written to match it.</p>
  *
  * <h3>What it cannot do, stated plainly</h3>
- * <p>It has no idea what anything <em>is</em>. It cannot tell a type from a variable, a call from a
- * declaration, or a field from a local — all of which need a parse. It highlights the four things a
- * regular language can actually recognise: comments, strings, numbers and a fixed keyword set. Anything
- * beyond that is why tree-sitter is worth a native dependency.</p>
+ * <p>It has no idea what anything <em>is</em>. It highlights the four things a regular language can
+ * actually recognise: comments, strings, numbers and a fixed keyword set. Anything beyond that is why
+ * tree-sitter is worth a native dependency.</p>
+ *
+ * <p><b>There are three tiers, and the two things above this one fail differently</b>, which is worth
+ * separating because it decides where a missing colour has to be fixed:</p>
+ *
+ * <ul>
+ *   <li><b>This</b> — comments, strings, numbers, keywords. Every identifier is one colour.</li>
+ *   <li><b>A grammar</b> ({@code SyntaxTokenizer} from the language module) sees <em>shape</em>, so it
+ *       separates a declaration from a call and a constructor from a method. It still cannot separate a
+ *       field from a local, because nothing in the shape of {@code count} says which it is.</li>
+ *   <li><b>An engine</b> ({@link com.crystalgui.text.lang.SemanticTokenProvider}) has resolved the names,
+ *       so it can. That is the whole reason the semantic layer colours anything at all.</li>
+ * </ul>
+ *
+ * <p>Each tier is absent independently and each absence is silent. This one is what remains when both of
+ * the others are — which is the case on a dedicated server, and the reason this file is not deleted.</p>
  */
 public final class KeywordTokenizer implements SyntaxTokenizer {
 
     private final Set<String> keywords;
     private final Set<String> types;
 
+    /**
+     * Which characters open a string, as data rather than as a condition.
+     *
+     * <p>C-family is {@code "} and {@code '}; JavaScript adds the backtick. It matters more than it
+     * looks: an <em>unhandled</em> quote character is not a missing colour, it is a lexer that walks into
+     * the literal and reads its contents as code — so a {@code "} inside a template literal opens a
+     * string that runs to the end of the line, and every keyword in between is painted. Handling the
+     * character is what bounds that.</p>
+     */
+    private final String quotes;
+
     public KeywordTokenizer(Set<String> keywords, Set<String> types) {
+        this(keywords, types, "\"'");
+    }
+
+    public KeywordTokenizer(Set<String> keywords, Set<String> types, String quotes) {
         this.keywords = new HashSet<>(keywords);
         this.types = new HashSet<>(types);
+        this.quotes = quotes;
     }
 
     /** Java's reserved words, plus the primitives as types. */
@@ -59,6 +89,40 @@ public final class KeywordTokenizer implements SyntaxTokenizer {
                         + "ivec2 ivec3 ivec4 uvec2 uvec3 uvec4 mat2 mat3 mat4 mat2x2 mat2x3 mat2x4 mat3x2 "
                         + "mat3x3 mat3x4 mat4x2 mat4x3 mat4x4 sampler1D sampler2D sampler3D samplerCube "
                         + "sampler2DArray samplerBuffer image2D atomic_uint"));
+    }
+
+    /**
+     * JavaScript — every reserved word, including the ones this engine will refuse to run.
+     *
+     * <h4>Why {@code class} and {@code await} are in the list even though Rhino rejects them</h4>
+     *
+     * <p>This tier <b>colours</b>; it does not judge. A file using {@code class} is still a file whose
+     * {@code class} is a keyword, and painting it as an ordinary identifier would say the opposite of
+     * what the engine is about to say about it — the diagnostic names the construct, so the word had
+     * better look like the construct. Which words an engine <em>accepts</em> is `RhinoProblemPolicy`'s
+     * question, and the answer differs per band, which is exactly why it cannot live in a constant here.
+     * The completion list is where the distinction is enforced, because offering a keyword is teaching
+     * it.</p>
+     *
+     * <p>The "types" set is JavaScript's <b>built-in constructors</b>, which is the nearest honest
+     * analogue: they are the capitalised global names a reader treats as types, and colouring them as
+     * such is what every editor does. {@code undefined}/{@code NaN}/{@code Infinity} sit with the
+     * keywords beside {@code null}, since they are values rather than constructors.</p>
+     */
+    public static KeywordTokenizer javascript() {
+        return new KeywordTokenizer(
+                setOf("await async break case catch class const continue debugger default delete do else "
+                        + "export extends finally for from function get if import in instanceof let new "
+                        + "of return set static super switch this throw try typeof var void while with "
+                        + "yield true false null undefined NaN Infinity"),
+                setOf("Array Boolean Date Error EvalError Function JSON Map Math Number Object Promise "
+                        + "Proxy RangeError ReferenceError Reflect RegExp Set String Symbol SyntaxError "
+                        + "TypeError URIError WeakMap WeakSet BigInt ArrayBuffer DataView Float32Array "
+                        + "Float64Array Int8Array Int16Array Int32Array Uint8Array Uint16Array Uint32Array "
+                        + "Packages Java"),
+                // THE BACKTICK, which is the whole reason this factory does not just call the two-argument
+                // constructor. @see #quotes
+                "\"'`");
     }
 
     private static Set<String> setOf(String spaceSeparated) {
@@ -108,7 +172,7 @@ public final class KeywordTokenizer implements SyntaxTokenizer {
                 i = stop;
                 continue;
             }
-            if (c == '"' || c == '\'') {
+            if (quotes.indexOf(c) >= 0) {
                 int stop = closingQuote(text, i, c);
                 tokens.add(new SyntaxToken(scanFrom + i, scanFrom + stop, "string"));
                 i = stop;

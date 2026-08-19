@@ -4,6 +4,7 @@ import com.crystalgui.core.data.CacheCell;
 import com.crystalgui.core.data.ReadOnlyVec2f;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgraphics.platform.service.CgInputService;
+import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgraphics.platform.input.CgSystemInput.Keyboard;
 import com.crystalgraphics.platform.input.CgSystemInput.Mouse;
@@ -121,6 +122,31 @@ public final class UIInputHandler implements CgSystemInput.Keyboard, CgSystemInp
             dragController.cancelDrag();
         }
         blurIfFocused(element);
+    }
+
+    /**
+     * The element is about to represent something else — so it cannot still be what the pointer is over.
+     *
+     * <p>The narrow half of {@link #forgetElement}, for an element that is <b>not</b> leaving the tree: a
+     * pooled list row is deliberately kept as a {@code display: none} child so its Taffy node and style
+     * candidates survive, and it comes back bound to a different item. {@code recycle} already gives up
+     * <em>focus</em> for exactly this reason — "the element must give focus up the moment it stops
+     * representing anything" — and hover is the same sentence with a different word in it.</p>
+     *
+     * <p>Without it the flag rides the element through the pool: fold a heading with the pointer on its
+     * chevron, unfold it, and the element that was the heading comes back as some row further down still
+     * wearing {@code :hover}, so an untouched row lights up. The next hover diff does correct it, which is
+     * why it presents as a two-or-three-frame flash rather than a stuck highlight — and why it reads as a
+     * paint glitch rather than as state.</p>
+     *
+     * <p>{@code lastFrameHover} is dropped as well as the flag, so the next diff treats the pointer as
+     * newly entering whatever is genuinely under it. Leaving it set would suppress the very Enter that
+     * repairs this when the recycled element happens to still be under the cursor.</p>
+     */
+    public void clearHoverIfHovered(UIElement element) {
+        if (element == null) return;
+        if (lastFrameHover == element) lastFrameHover = null;
+        element.setHovered(false);
     }
 
     public void sendInputEvent(UIElement element, UIEvent event) {
@@ -403,13 +429,29 @@ public final class UIInputHandler implements CgSystemInput.Keyboard, CgSystemInp
             if (!propagationStopped) {
                 moveTabFocus(event, modifiers);
             }
-        } else {
-            emitKeyboardUp(event, modifiers);
-            // A release binding is not gated on propagation: a release cannot be "handled" the way a press
-            // can, because what it ends was already begun by the matching press. Suppressing it would
-            // leave a space-to-pan gesture stuck on.
-            resolveKeymap(event, modifiers, KeyEventType.RELEASE);
+            // ACTIVATION IS GATED TOO, by the same rule the line above follows: one keystroke does one
+            // thing. A widget that consumed Space must not also have a click synthesized on it.
+            if (!propagationStopped) {
+                handleActivationKey(event);
+            }
+            // AND THE HOST IS TOLD, which it was not.
+            //
+            // This returned false unconditionally, so a key the UI had fully consumed was reported to the
+            // platform as untouched -- and the platform acts on what is left over. On 1.7.10 that is
+            // `GuiScreen`: Escape closed the completion popup through `stopPropagation`, the answer came
+            // back "nobody wanted it", and the screen shut underneath the editor. So the popup closed AND
+            // the whole editor did, which reads as Escape being wired to the wrong thing rather than as a
+            // return value.
+            //
+            // It is not only Escape. Every consumed keystroke was mis-reported; Escape is simply the one
+            // key a Minecraft host also acts on itself, so it is the only one where the lie was visible.
+            return propagationStopped;
         }
+        emitKeyboardUp(event, modifiers);
+        // A release binding is not gated on propagation: a release cannot be "handled" the way a press
+        // can, because what it ends was already begun by the matching press. Suppressing it would
+        // leave a space-to-pan gesture stuck on.
+        resolveKeymap(event, modifiers, KeyEventType.RELEASE);
         handleActivationKey(event);
         return false;
     }
@@ -602,15 +644,42 @@ public final class UIInputHandler implements CgSystemInput.Keyboard, CgSystemInp
         // dialog's text field the moment you click its dim backdrop, which no dialog anywhere does.
         boolean absorbedByModal = targetElement == null && window.getActiveModal() != null;
 
-        if (targetElement != focusedElement && !absorbedByModal) {
+        // THE NEAREST FOCUSABLE ANCESTOR, not the exact element hit — the DOM's rule, which is why
+        // clicking a <button>'s inner text focuses the button.
+        //
+        // Composites used to dodge this by making their parts `setHitTest(false)`, which works right up
+        // until a part is itself interactive: a tree's fold chevron has to keep the pointer, and it is
+        // never focusable. So a press on it blurred the focus owner here and then focused NOTHING, and
+        // the fold left the whole window with `focusedElement == null` — no ring anywhere, and
+        // `consumeKeyboardEvent` dispatches nothing at all in that state, so the keyboard went dead.
+        // Reported as the Problems panel flickering: the ring left the editor tab on the press, and
+        // `ListView.restoreFocusIfRealised` then read null as "nobody owns this" and pulled focus onto a
+        // row. Two chevrons had it, `GraphNode` works around it with its own `requestFocus`, and the
+        // walk is what covers every composite at once.
+        UIElement focusTarget = targetElement;
+        while (focusTarget != null && !focusTarget.getFocusPolicy().focusesOnClick()) {
+            focusTarget = focusTarget.getParent();
+        }
+
+        // ONLY THE PRIMARY BUTTON MOVES FOCUS. A right-click opens a menu ABOUT something; it does not
+        // choose it, and here that distinction is load-bearing rather than pedantic — a ListView drives
+        // its selection entirely from focus, so a right-click that focused a row also selected it, and
+        // the menu destroyed the selection it was opened over. Unrecoverable for a multi-selection.
+        //
+        // The context menu still knows its subject: it reads the row under the pointer directly, which is
+        // the rule a context menu follows anyway (a menu bar resolves against focus, a context menu
+        // against what was clicked).
+        if (buttonId != CgMouseCodes.LEFT_BUTTON) focusTarget = focusedElement;
+
+        if (focusTarget != focusedElement && !absorbedByModal) {
             if (focusedElement != null) {
                 emitAndLoseFocus(focusedElement);
             }
-            if (targetElement != null && targetElement.getFocusPolicy().focusesOnClick()) {
+            if (focusTarget != null) {
                 // Deliberately no scroll: you clicked what you could already see, and scrolling
                 // here would pull the content out from under the cursor. Nor a focus ring, unless
                 // this is a text field — see emitAndSetFocus.
-                emitAndSetFocus(targetElement, FocusSource.POINTER);
+                emitAndSetFocus(focusTarget, FocusSource.POINTER);
             }
         }
 

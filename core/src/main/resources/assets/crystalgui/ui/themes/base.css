@@ -201,15 +201,27 @@ theme {
     --inspection-clean-fg: var(--success);
     --inspection-error-fg: var(--error);
     --inspection-warning-fg: var(--warning);
+    /* The third severity, which only became visible when the widget started drawing icons rather than
+     * spelling "1 note" in the same colour as everything else. */
+    --inspection-info-fg: var(--info);
 
     --label-fg: var(--fg);
 
     --list-hover-bg: var(--hover-bg);
     --list-selected-bg: var(--selection-bg);
+    /* THE SELECTION OF A LIST THAT DOES NOT HAVE FOCUS. The system token has existed all along with
+     * nothing deriving from it — the same distinction the tabs already draw with --tab-active-bg against
+     * --tab-focused-bg, which is how you can tell, with two panels open, where a keystroke will land. */
+    --list-selected-inactive-bg: var(--selection-inactive-bg);
 
     --menu-accelerator: var(--fg-hint);
     --menu-arrow: var(--fg-secondary);
-    --menu-bg: var(--surface-overlay);
+    /* THE BASE SURFACE, not the overlay one. A menu is chrome that opens over the workbench, and it reads
+     * as part of the same shell as the menu bar it drops from -- which is already --surface-base. Derived
+     * from --surface-overlay it came out a few points lighter than the bar above it, so the two halves of
+     * one gesture were different greys. Every menu goes through this: the main bar's drops, context menus,
+     * dropdowns and submenus are all Menu. */
+    --menu-bg: var(--surface-base);
     --menu-border: var(--border-base);
     --menu-fg: var(--fg);
     --menu-item-disabled-fg: var(--fg-disabled);
@@ -331,6 +343,59 @@ theme {
 
     --resizer-grip: var(--border-strong);
 
+    /* The Run console. Chrome DERIVES, exactly as the Problems panel above it does — these were authored
+     * as free-standing hex, which the governance test correctly refused: a panel whose toolbar keeps its
+     * own grey while every other toolbar follows the theme is the drift the token layer exists to stop. */
+    --run-action-disabled-fg: var(--fg-disabled);
+    --run-action-fg: var(--fg-secondary);
+    --run-action-hover-bg: var(--hover-bg);
+    --run-action-hover-fg: var(--fg);
+    /* A console hyperlink, and it is the SYSTEM link colour rather than a syntax token. VS Code draws the
+     * same distinction: link colour is a workbench colour, not a token-scheme colour, because a link is an
+     * affordance rather than a category of code — which is also what spares every scheme having to define
+     * a `--syntax-link` it has no opinion about. */
+    --run-link-fg: var(--link);
+    /* The icon-tier green, not `--success`: that is the body colour for a completed thing and too dark to
+     * read as a 10px mark. Read by the activity bar's dot AND by the file tree's row, from this one name,
+     * so the two greens cannot drift apart again — which they had, having been chosen weeks apart. */
+    --run-live-fg: var(--success-icon);
+    /* The "nothing has run yet" note. The SAME hint tone as the eviction notice, deliberately: both are
+     * the panel talking about itself rather than showing a script's output, and a second grey for the
+     * same voice is how two of them come to disagree. */
+    --run-empty-fg: var(--fg-hint);
+    /* The line that opens a run — the accent, because that is this vocabulary's "look here" and a run
+     * boundary is the one thing in a transcript you scroll to find. It reads against the output around
+     * it (the scheme's own foreground) and against the faded grey of the line that CLOSES a run, which
+     * is the contrast that matters: a heading and a footnote, not two identical grey lines.
+     *
+     * A theme wanting a boundary hue of its own pins one in its fine-tune block; base.css derives. */
+    --run-boundary-fg: var(--accent);
+    /* The line the reader typed. `--success` rather than `--success-icon`: this is a SENTENCE on the
+     * console's surface, and the icon tier is tuned to read as a small mark rather than as text — the
+     * same distinction --run-live-fg makes from the other side, where a 10px dot needed the brighter
+     * one. Green because it is what IntelliJ's own input echo uses. */
+    --run-input-fg: var(--success);
+    --run-notice-fg: var(--fg-hint);
+    /* The live-script rail. Its own surface, one step back from the transcript, because it is chrome
+     * beside content -- the same relationship every tool window's header has with its body. */
+    --run-rail-bg: var(--surface-panel);
+    --run-rail-border: var(--divider);
+    --run-rail-fg: var(--fg);
+    --run-rail-hover-bg: var(--hover-bg);
+    /* A dot for a state that is neither good nor bad -- compiled, or finished and gone. `--fg-disabled`
+     * rather than a grey of its own: the row is still there and still selectable, it simply is not doing
+     * anything, which is what a disabled foreground means everywhere else in this table. */
+    --run-rail-idle: var(--fg-disabled);
+    --run-rail-selected-bg: var(--selection-bg);
+    /* The controls' stripe. The rail's surface, because they are the same kind of thing -- chrome framing
+     * the transcript on either side -- and a third grey between them would read as a third region. */
+    --run-stripe-bg: var(--surface-panel);
+    /* The ICON tier for both, not the body colour: these are 6px dots, and --error/--warning are darkened
+     * until a SENTENCE in them reads on the surface. The same distinction --run-live-fg makes. */
+    --run-rail-failed: var(--error-icon);
+    --run-rail-stopped: var(--warning-icon);
+    --run-rail-time-fg: var(--fg-hint);
+
     --scrollbar-corner: #00000000;
     --scrollbar-track: #00000000;
 
@@ -364,6 +429,39 @@ theme {
     --splitter-bg: var(--divider);
     --splitter-hover-bg: var(--border-strong);
     --splitter-pressed-bg: var(--fg);
+
+    --completion-deprecated: var(--fg-hint);
+    --completion-params: var(--fg-hint);
+    --completion-selected-bg: var(--accent-soft);
+    --completion-detail: var(--fg-hint);
+    --completion-grip: var(--border-strong);
+    --completion-hint: var(--fg-hint);
+    --completion-icon: var(--fg-hint);
+    --completion-options-hover-bg: var(--hover-bg);
+    --completion-label: var(--fg);
+    --completion-match: var(--link);
+
+    /* Quick Documentation. The BANDS are chrome and derive from the surface tokens; the DEFINITION line's
+     * colours deliberately do not appear here -- it reads --syntax-* straight from the active scheme, so
+     * the signature is coloured by whatever is colouring the code it describes. A second palette would be
+     * a second thing to keep in step, and would be visibly wrong the moment a scheme is switched. */
+    --doc-bg: var(--surface-panel);
+    --doc-border: var(--border-base);
+    /* The problem band reads as CHROME on top of the document the rest of the popup is showing, so it
+     * takes the surface every other bar takes -- the activity bar, the menu bar and the status bar are
+     * all --surface-base. Derived rather than repeated: a theme that moves its chrome moves this with it,
+     * which is the whole reason the component layer exists. */
+    --doc-problem-bg: var(--surface-base);
+    --doc-owner-fg: var(--fg-hint);
+    /* The provenance remark after the owner -- quieter than the owner itself, because it qualifies the
+     * answer rather than naming it. Derived from the disabled foreground, which is this system's
+     * quietest legible text. */
+    --doc-owner-note-fg: var(--fg-disabled);
+    --doc-body-fg: var(--fg);
+    /* The bottom band names WHERE the symbol is declared, which qualifies the answer rather than being
+     * it — so it takes the same quiet the owner's provenance remark does, one step below the owner name
+     * itself. Derived, not repeated: a theme that moves its hint colour moves this with it. */
+    --doc-footer-fg: var(--fg-hint);
 
     --squiggle-error: var(--error);
     --squiggle-info: var(--info);

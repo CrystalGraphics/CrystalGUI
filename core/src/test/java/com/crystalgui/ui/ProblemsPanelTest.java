@@ -4,6 +4,7 @@ import com.crystalgui.core.search.SearchQuery;
 import com.crystalgui.ui.elements.tree.TreeSearch;
 import com.crystalgui.testsupport.TestPlatformService;
 import com.crystalgraphics.platform.service.CgInputService;
+import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgKeyCodes;
@@ -16,6 +17,7 @@ import com.crystalgui.text.diagnostic.DiagnosticSet;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.diagnostic.Markers;
 import com.crystalgui.ui.elements.chrome.ProblemNode;
+import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.elements.chrome.ProblemsPanel;
 
 import org.junit.Before;
@@ -767,6 +769,322 @@ public class ProblemsPanelTest extends UiTestBase {
         settle();
         assertEquals("and without the options it is a plain substring again",
                 List.of(shader), panel.visibleFiles());
+    }
+
+    /**
+     * <b>Folding a heading lands focus on the row, and never on nothing.</b>
+     *
+     * <p>{@code emitMouseDown} blurs the focus owner <em>before</em> it dispatches, and a chevron is
+     * {@code FocusPolicy.NONE} — it has to be, since focusing a fold arrow is meaningless. So the press
+     * used to blur whatever had focus and then focus nothing at all, leaving the whole window with
+     * {@code focusedElement == null}: no ring anywhere, and {@code consumeKeyboardEvent} dispatches
+     * nothing whatsoever in that state, so the keyboard went dead after a fold. It also let
+     * {@code ListView.restoreFocusIfRealised} read null as "nobody owns this" and pull focus onto a row a
+     * frame later, so the ring left the editor tab and reappeared somewhere the user never clicked —
+     * reported as the panel flickering.</p>
+     *
+     * <p>The fix is the DOM's own rule, in {@code emitMouseDown}: click-focus walks up to the nearest
+     * focusable ancestor, which is why clicking a {@code <button>}'s inner text focuses the button. Here
+     * that ancestor is the row, so focus moves <em>into</em> the panel — which is also what both
+     * references do when you click anything in a tree.</p>
+     *
+     * <p>Driven through {@code emitMouseDown}'s own route rather than {@code sendInputEvent}: focus
+     * resolution is the thing under test and dispatching straight at the element skips it entirely.</p>
+     */
+    @Test
+    public void foldingAHeadingLandsFocusOnTheRow() {
+        give(shader, error(3, "one"), error(9, "two"));
+        panel.bindTo(markers);
+        settle();
+
+        // Somewhere else in the window entirely -- standing in for the editor tab or the rail button the
+        // user was last in. Focusable on click, which is what every such control is.
+        UIElement elsewhere = new UIElement().layout(l -> l.width(10).height(10));
+        elsewhere.setFocusPolicy(FocusPolicy.CLICK);
+        panel.getParent().addChild(elsewhere);
+        settle();
+        window.getInputHandler().requestFocus(elsewhere);
+        settle();
+        assertSame(elsewhere, window.getInputHandler().getFocusedElement());
+
+        // Through the realised row rather than querySelector: rows are internal children, which public
+        // traversal skips by design.
+        UIElement headingRow = panel.tree().realisedRows().get(0);
+        assertNotNull("the heading row is not realised, so this asserts nothing", headingRow);
+        UIElement twisty = headingRow.querySelector("." + ProblemsPanel.TWISTY_CLASS);
+        assertNotNull("no chevron, so this asserts nothing", twisty);
+        press(twisty);
+
+        // EVERY FRAME, not just once it settles. The second half of this bug was a single frame with no
+        // focus owner at all: the fold recycles the row, recycling blurs it, and the restore used to be
+        // deferred to the next frame. One frame is enough to see — every :focus ring in the window goes
+        // out and comes back, which is what "the focus rings of everything flash" was. Asserting after a
+        // settle passes against the broken version, because by then the restore has run.
+        for (int frame = 0; frame < 8; frame++) {
+            window.updateWithoutPainting();
+            assertNotNull("frame " + frame + " had no focus owner at all — every ring in the window blinks,"
+                            + " and consumeKeyboardEvent dispatches nothing while focus is null",
+                    window.getInputHandler().getFocusedElement());
+        }
+
+        assertSame("focus should land on the row the chevron belongs to",
+                headingRow, window.getInputHandler().getFocusedElement());
+    }
+
+    /**
+     * <b>Collapsing moves focus to the heading, and unfolding does not resurrect the old row.</b>
+     *
+     * <p>Two faults, one stale number. {@code focusedIndex} is clamped only by {@code setFocusedIndex},
+     * which nothing calls when the model <em>shrinks</em> — so folding a heading with focus on its last
+     * child left the index at 2 with one row in the list. While out of range that is invisible: nothing
+     * is realised there, so focus simply went nowhere and the panel lost its ring. It stops being
+     * invisible when the list grows back — unfolding found index 2 realised again and put focus on
+     * whatever now occupies it, which is the last problem. Reported as "unfolding opens with the last
+     * item focused for a split second".</p>
+     *
+     * <p>So: the index is clamped where the model is whole ({@code ListView.updateWindow}), and the fold
+     * hands focus to the node it collapsed — the ARIA tree pattern, and the same rule the editor already
+     * applies to folding a block the caret is in. A focus owner that is not on screen cannot be painted,
+     * scrolled to or typed at.</p>
+     */
+    @Test
+    public void collapsingMovesFocusToTheHeadingAndUnfoldingKeepsItThere() {
+        give(shader, error(3, "one"), error(9, "two"));
+        panel.bindTo(markers);
+        settle();
+        assertEquals("the heading plus its two problems", 3, panel.tree().visibleRows().size());
+
+        UIElement lastRow = panel.tree().realisedRows().get(2);
+        assertNotNull(lastRow);
+        window.getInputHandler().requestFocus(lastRow);
+        settle();
+        assertEquals(2, panel.tree().getFocusedIndex());
+
+        ProblemNode heading = ProblemNode.file(shader);
+        panel.tree().requestToggle(heading);
+        for (int frame = 0; frame < 6; frame++) {
+            window.updateWithoutPainting();
+            assertNotNull("folding left frame " + frame + " with no focus owner — the arrows cannot walk"
+                    + " back out of what was just collapsed", window.getInputHandler().getFocusedElement());
+        }
+        assertEquals("focus should sit on the heading that was collapsed", 0, panel.tree().getFocusedIndex());
+
+        panel.tree().requestToggle(heading);
+        for (int frame = 0; frame < 6; frame++) window.updateWithoutPainting();
+        assertEquals("unfolding resurrected the stale index and grabbed the last problem",
+                0, panel.tree().getFocusedIndex());
+    }
+
+    /**
+     * <b>A recycled row must not come back wearing {@code :hover}.</b>
+     *
+     * <p>A pooled row is deliberately kept in the tree as a {@code display: none} child, so nothing
+     * detaches and nothing tells the input handler the element has stopped meaning what it meant.
+     * {@code recycle} gives up <em>focus</em> for exactly that reason — "the element must give focus up
+     * the moment it stops representing anything" — and hover was simply never included in that sentence.
+     * So the flag rode the element through the pool: fold the heading with the pointer on its chevron,
+     * unfold it, and the element that <em>was</em> the heading came back as the last problem, still
+     * hovered. An untouched row lit up.</p>
+     *
+     * <p>The next hover diff corrects it, which is why it showed as a two-or-three-frame flash on the
+     * wrong row rather than a stuck highlight — and why it read as a paint glitch rather than as state.
+     * The whole gesture goes through real presses, because the hover the pooling carries is the one the
+     * pointer left on the chevron.</p>
+     */
+    @Test
+    public void unfoldingDoesNotBringARowBackHovered() {
+        give(shader, error(3, "one"), error(9, "two"));
+        panel.bindTo(markers);
+        settle();
+
+        UIElement twisty = panel.tree().realisedRows().get(0).querySelector("." + ProblemsPanel.TWISTY_CLASS);
+        assertNotNull("no chevron, so this asserts nothing", twisty);
+        press(twisty);
+        settle();
+        assertEquals("the heading should be folded", 1, panel.tree().visibleRows().size());
+
+        press(panel.tree().realisedRows().get(0).querySelector("." + ProblemsPanel.TWISTY_CLASS));
+        for (int frame = 0; frame < 6; frame++) {
+            window.updateWithoutPainting();
+            for (var entry : panel.tree().realisedRows().entrySet()) {
+                // Row 0 is the one the pointer is genuinely on — its chevron is what was pressed.
+                if (entry.getKey() == 0) continue;
+                assertFalse("frame " + frame + ": row " + entry.getKey() + " came back from the pool"
+                                + " hovered, with the pointer on the heading's chevron",
+                        entry.getValue().isHovered());
+            }
+        }
+    }
+
+    /**
+     * <b>A double click on a problem reports it; a single click only selects.</b>
+     *
+     * <p>Two failures with one symptom — "clicking does nothing, it does not even highlight". The panel
+     * wired navigation to {@code onRowActivated}, whose javadoc says <em>Enter on the focused row</em>
+     * and says the pointer half is the renderer's to raise; nobody raised it, so the panel was fully
+     * keyboard-navigable and inert to the mouse. And {@code ListView} put {@code __selected__} on the row
+     * while no stylesheet gave this panel a rule for it, so selection worked perfectly and painted
+     * nothing — which is what made a wired-up widget look completely dead and sent the search to the
+     * input layer twice.</p>
+     *
+     * <p>Through the real press route, because {@code sendInputEvent} skips focus resolution and
+     * selection here is driven entirely by focus — a test that dispatches straight at the row passes
+     * against a panel no click can ever select.</p>
+     */
+    @Test
+    public void doubleClickingAProblemReportsItAndSelectsIt() {
+        give(shader, error(4, "undefined variable"), error(9, "no output node"));
+        panel.bindTo(markers);
+        settle();
+
+        List<ProblemNode> chosen = new ArrayList<>();
+        panel.onProblemChosen.connect(chosen::add);
+
+        UIElement problemRow = panel.tree().realisedRows().get(1);
+        assertNotNull("row 1 should be the first problem under the heading", problemRow);
+        assertFalse("row 1 is a heading, so this asserts the wrong thing",
+                panel.tree().rowAt(1).item().isFile());
+
+        press(problemRow);
+        settle();
+        assertTrue("one press must only select — it is how you aim at a row, not how you leave it",
+                chosen.isEmpty());
+        assertTrue("the row was never marked selected, so nothing can highlight",
+                problemRow.hasClass(com.crystalgui.ui.elements.list.ListView.SELECTED_CLASS));
+
+        press(problemRow);
+        settle();
+        assertEquals("a double click should report exactly one problem", 1, chosen.size());
+    }
+
+    /**
+     * <b>Clicking a file heading does not navigate.</b> It is not a destination — {@code chooseRow} says
+     * so and folds it instead — and folding on a single click would be a second spelling of what the
+     * chevron already does, on a tree that also has to support selecting a row.
+     */
+    @Test
+    public void clickingAFileHeadingDoesNotReportAProblem() {
+        give(shader, error(4, "undefined variable"));
+        panel.bindTo(markers);
+        settle();
+
+        List<ProblemNode> chosen = new ArrayList<>();
+        panel.onProblemChosen.connect(chosen::add);
+
+        // TWICE, so this asserts the heading rule rather than merely re-asserting that one press does
+        // nothing — which is true of every row now and would make this pass for the wrong reason.
+        press(panel.tree().realisedRows().get(0));
+        press(panel.tree().realisedRows().get(0));
+        settle();
+
+        assertTrue("a heading is not a destination", chosen.isEmpty());
+    }
+
+    /**
+     * <b>Copy puts the message on the clipboard, not the record.</b>
+     *
+     * <p>{@code ListRenderer.copyTextFor} defaults to {@code String.valueOf}, which for a record is its
+     * generated {@code toString} — so copying a problem produced the whole object graph, {@code code=}
+     * and {@code tags=[]} included. The override has to travel through {@code TreeView}'s renderer
+     * adapter as well, which unwraps the flattened {@code TreeRow} the list actually holds; without that
+     * forward the override exists and is never called.</p>
+     */
+    @Test
+    public void copyingAProblemPutsItsMessageOnTheClipboard() {
+        give(shader, error(4, "undefined variable"));
+        panel.bindTo(markers);
+        settle();
+
+        int problemIndex = -1;
+        for (int i = 0; i < panel.tree().visibleRows().size(); i++) {
+            if (!panel.tree().rowAt(i).item().isFile()) { problemIndex = i; break; }
+        }
+        assertTrue("no problem row, so this asserts nothing", problemIndex >= 0);
+
+        panel.tree().select(problemIndex);
+        assertTrue("nothing to copy", panel.tree().canCopy());
+        panel.tree().copy();
+
+        assertEquals("undefined variable", CgPlatform.input().getClipboard());
+    }
+
+    /**
+     * <b>A right-click does not change the selection.</b>
+     *
+     * <p>It opens a menu <em>about</em> a row; it does not choose it. Two separate things had to be told
+     * so: {@code emitMouseDown} settled focus on any button (and a list drives selection from focus), and
+     * the row's own press listener selected on any button too. Either alone left the menu destroying the
+     * selection it was opened over — unrecoverable once a multi-selection exists.</p>
+     */
+    @Test
+    public void rightClickingARowLeavesTheSelectionAlone() {
+        give(shader, error(4, "undefined variable"), error(9, "no output node"));
+        panel.bindTo(markers);
+        settle();
+
+        press(panel.tree().realisedRows().get(1));
+        settle();
+        assertTrue("the left press should have selected row 1", panel.tree().isSelected(1));
+
+        rightPress(panel.tree().realisedRows().get(2));
+        settle();
+
+        assertTrue("a right-click moved the selection off the row the user had chosen",
+                panel.tree().isSelected(1));
+        assertFalse("a right-click selected the row it was merely asking about",
+                panel.tree().isSelected(2));
+    }
+
+    /** A secondary-button press, through the same accumulate-and-dispatch route as a real one. */
+    private void rightPress(UIElement target) {
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().endFrame();
+        int cx = (int) (target.getRuntimeCache().getX() + target.getRuntimeCache().getWidth() / 2f);
+        int cy = (int) (target.getRuntimeCache().getY() + target.getRuntimeCache().getHeight() / 2f);
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().consumeMouseEvent(
+                new CgSystemInput.Mouse.Event(cx, cy, 0, 0, 1, true, 0f, 0L));
+        window.getInputHandler().endFrame();
+    }
+
+    /**
+     * <b>Worst first, then document order.</b>
+     *
+     * <p>The panel is read top-down to decide what to fix, and an error is not one of six things to scan
+     * for — it is why the panel is open. Sorted positionally, two syntax errors on line 509 sat under four
+     * unused-import warnings purely because imports live at the top of the file, so the only rows that
+     * stopped it compiling were the last ones you reached.</p>
+     *
+     * <p>Only the view is reordered: {@code Diagnostic}'s natural order stays positional, because a
+     * squiggle lookup and "what is on this row" both want document order.</p>
+     */
+    @Test
+    public void problemsAreListedWorstFirst() {
+        give(shader,
+                at(3, DiagnosticSeverity.WARNING, "unused import"),
+                at(7, DiagnosticSeverity.INFORMATION, "a note"),
+                at(40, DiagnosticSeverity.ERROR, "second error"),
+                at(20, DiagnosticSeverity.ERROR, "first error"),
+                at(9, DiagnosticSeverity.WARNING, "unused local"));
+        panel.bindTo(markers);
+        settle();
+        expandEverything();
+
+        List<Diagnostic> shown = panel.visibleProblems();
+        assertEquals(List.of("first error", "second error", "unused import", "unused local", "a note"),
+                shown.stream().map(Diagnostic::message).toList());
+    }
+
+    /** A press through the real route — accumulated and dispatched by the frame pair, as input is. */
+    private void press(UIElement target) {
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().endFrame();
+        int cx = (int) (target.getRuntimeCache().getX() + target.getRuntimeCache().getWidth() / 2f);
+        int cy = (int) (target.getRuntimeCache().getY() + target.getRuntimeCache().getHeight() / 2f);
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().consumeMouseEvent(
+                new CgSystemInput.Mouse.Event(cx, cy, 0, 0, 0, true, 0f, 0L));
+        window.getInputHandler().endFrame();
     }
 
 }

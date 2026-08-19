@@ -70,6 +70,20 @@ public final class CgUiPaintContext {
      * bundles rather than shipping a duplicate. */
     private static final String DEFAULT_FONT_ASSET = "crystalgraphics:IBMPlexSans-Regular.ttf";
 
+    /**
+     * The same preference order {@code StylePropertyRegistry.FONT_FAMILY} declares, and it has to stay
+     * that way: this is the face anything drawing text <em>without</em> consulting the cascade gets, so a
+     * divergence shows up as one widget in a different font from every other with nothing in any
+     * stylesheet to explain it. First entry that loads wins.
+     *
+     * <p><b>Proportional</b>, like the cascade default — the monospace face is applied by
+     * {@code ua/editor.css} to code surfaces only, and this is the UI's fallback rather than the
+     * editor's.</p>
+     */
+    private static final String[] DEFAULT_FONT_STACK = {
+            DEFAULT_FONT_ASSET,
+    };
+
     static {
         // Self-wire CrystalGUI's lifecycle the moment this class comes into play.
         //
@@ -271,15 +285,28 @@ public final class CgUiPaintContext {
     }
 
     private static CgFont loadDefaultFont() {
-        InputStream in = CgIO.openStream(DEFAULT_FONT_ASSET);
+        // WALKS THE STACK, so the preferred face can be declared before it is shipped and the UI simply
+        // keeps using the next one down until it lands. Throwing on the first entry made naming a font
+        // you do not yet have a crash at first paint rather than a step down the list.
+        for (String candidate : DEFAULT_FONT_STACK) {
+            CgFont loaded = tryLoadFont(candidate);
+            if (loaded != null) return loaded;
+        }
+        throw new IllegalStateException("CgUiPaintContext: no default font asset could be loaded: "
+                + java.util.Arrays.toString(DEFAULT_FONT_STACK));
+    }
+
+    /** Null when the asset is simply absent — a corrupt one still throws. */
+    private static CgFont tryLoadFont(String asset) {
+        InputStream in = CgIO.openStream(asset);
         if (in == null) {
-            throw new IllegalStateException("CgUiPaintContext: default font asset not found: " + DEFAULT_FONT_ASSET);
+            return null;
         }
         try {
             byte[] data = readAllBytes(in);
-            return CgFont.load(data, DEFAULT_FONT_ASSET, CgFontStyle.REGULAR, 16);
+            return CgFont.load(data, asset, CgFontStyle.REGULAR, 16);
         } catch (IOException e) {
-            throw new IllegalStateException("CgUiPaintContext: failed to read default font asset: " + DEFAULT_FONT_ASSET, e);
+            throw new IllegalStateException("CgUiPaintContext: failed to read default font asset: " + asset, e);
         } finally {
             try {
                 in.close();
@@ -426,7 +453,25 @@ public final class CgUiPaintContext {
         // Full opacity — the resolved texture already carries whatever per-element opacity the UI tree
         // itself applied while painting into msaaFbo; this composite is the "put the finished picture
         // on screen" step, not another opacity multiply.
-        blitLayer(msaaResolveFbo, 1f);
+        //
+        // SCOPED, because this draw happens AFTER glScope.close() above and would otherwise be the one
+        // piece of UI state nothing restores. blitLayer binds a material — so on return from endFrame a
+        // shader program of ours is still current, with the frame's own restore already spent.
+        //
+        // In the harness that is invisible: nothing else in that process draws, so a stale program is
+        // never observed. Minecraft observes it immediately. Its final present is
+        // Framebuffer.framebufferRender, which is pure fixed-function — GL_TEXTURE_2D, GL_COLOR_MATERIAL
+        // and a Tessellator quad — and it never calls glUseProgram(0). So Minecraft's blit of its own
+        // framebuffer to the window runs through OUR vertex shader, which expects instanced quad data
+        // out of an SSBO and gets immediate-mode vertices instead.
+        //
+        // The symptom is genuinely bewildering: the UI renders CORRECTLY into Minecraft's framebuffer —
+        // a glReadPixels there shows the whole editor — while the window shows a flat fill, because the
+        // step between the two is broken rather than the drawing. Anything that reads the framebuffer
+        // (a screenshot tool, a capture) therefore disagrees with the screen.
+        try (CgGlScope blitScope = CgGlState.save(CgGlSlot.PROGRAM, CgGlSlot.TEXTURES)) {
+            blitLayer(msaaResolveFbo, 1f);
+        }
 
         currentMaterial = null;
         currentTexture = null;

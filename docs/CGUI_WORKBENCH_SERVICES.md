@@ -28,6 +28,100 @@ looks like a needed helper is the symptom of one that does not — see
 | `Inspector` — one inspector, any subject | **shipped** | [Contributions](#contributions) |
 | `Notifications` / `StatusBar` — events and ambient text, plus their views (`StatusBarView`, `NotificationsView`, `NotificationBalloons`) | **shipped** | [Notifications and status](#notifications-and-status) |
 | `DockBannerProvider` — a strip above a panel | **shipped** | [Contributions](#contributions) |
+| `JobScheduler` — work off the UI thread | **shipped** | [Background work](#background-work) |
+| `LanguageServices` — the engine behind a document | **seam shipped, no engine yet** | [Language services](#language-services) |
+
+---
+
+## Background work
+
+`com.crystalgui.core.async` — `JobScheduler`, `JobKey`, `JobLane`, `JobContext`.
+
+Runs work off the UI thread and hands the answers back on it. Until this landed, the only executor in
+`core/` was SVG preloading and everything else ran on the frame — which is fine until something wants
+to compile a script, scan a classpath or reparse a file, all of which are far past a frame budget.
+
+```java
+scheduler.job(JobKey.of(document, "diagnostics"), JobLane.LATENCY, context -> compile(snapshot, context))
+        .debounce(300)
+        .onDone(result -> install(result))
+        .submit();
+
+scheduler.drain();                     // once per frame, on the UI thread
+scheduler.cancelAll(document);         // closing a document
+```
+
+### The frame tick is the heartbeat
+
+**Every decision the scheduler makes happens on the UI thread inside `drain()`** — debounce windows are
+evaluated there against an injected clock, jobs are promoted there, results are delivered there. Only
+the job body runs elsewhere.
+
+That is what makes it testable: no timer threads, no scheduled futures, no sleeping, so a test with a
+same-thread executor and a hand-cranked clock exercises the identical code path the editor does. It is
+also what keeps the concurrency surface to exactly one object (the completion queue) — nothing else is
+touched by two threads, so no widget ever needs a lock.
+
+The cost is that a job starts on a frame boundary, up to ~16ms at 60fps. That is inside every budget in
+`plan_syntax.md` §7.3, and it buys determinism.
+
+`drain()` is **deliver → promote → deliver**. The second delivery catches a job that finished *during*
+promotion (always, on a same-thread executor; sometimes, on a real pool with short work) which would
+otherwise wait a whole extra frame. Deliberately two passes rather than a loop to quiescence: a
+completion handler that re-submits an undebounced job is an ordinary shape, and a loop would let it spin
+the frame instead of settling on the next one.
+
+### Single-flight is keyed, and both halves of the key matter
+
+A `JobKey` is `(owner, kind)`. Re-submitting a key that is **waiting** replaces it; re-submitting one
+that is **running** supersedes it — the runner is asked to stop and its result is dropped when it
+arrives. So a burst of keystrokes leaves one live job per key rather than one per keystroke, and the
+last submission always wins.
+
+- Keying on **kind alone** makes two open documents fight, and one editor of a split pair never updates.
+- Keying on **owner alone** makes a document's reparse cancel its own diagnostics.
+- The owner is compared by **identity**, never `equals` — two documents holding identical text are not
+  the same document.
+
+> **A superseded job's result is discarded even if the job never polled for cancellation.** Correctness
+> therefore does not depend on well-behaved job bodies; only responsiveness does.
+
+### Lanes, and the starvation guard
+
+`INTERACTIVE` (a human is blocked — completion) > `LATENCY` (visible, tolerates a few frames — reparse,
+semantic tokens) > `BACKGROUND` (nobody is watching — indexing, first compile).
+
+Strict priority **plus** a guard: a job that has waited past `DEFAULT_STARVATION_GUARD_MILLIS` is
+promoted regardless of lane. Without it, a document being typed in produces a steady stream of
+higher-lane work and a `BACKGROUND` index queued behind it is never built — and the symptom is not a
+hang but completion quietly never learning about unimported types, which reads as a missing feature
+rather than a scheduling bug.
+
+### Cancellation is cooperative
+
+`JobContext.isCancelled()` / `throwIfCancelled()`, polled at loop heads and between phases.
+`Thread.stop` is gone and interrupting a compiler mid-run leaves its state undefined, so there is no
+honest alternative. `throwIfCancelled` is control flow, not failure: the scheduler drops it silently
+without logging.
+
+### What it deliberately does not know
+
+**Document versions.** `TextBuffer.version()` is a monotonic counter bumped by every applied edit —
+*including undo and redo*, which move the text as surely as typing does. Staleness policy belongs to the
+consumer, because there are three legitimate answers (discard / keep-and-adjust / keep-per-line, see
+`plan_syntax.md` §8) and a scheduler deciding centrally would have to understand every consumer. It
+guarantees only that a superseded job's result never lands; comparing the stamp is the caller's job.
+
+### Rules
+
+- **`drain()` on the UI thread, once per frame.** It returns whether anything is outstanding, so a
+  ticker can stop when idle.
+- **Never touch UI or document state from a job body.** Return an immutable value; the `onDone` handler
+  runs on the UI thread.
+- **Snapshot what the job needs before submitting**, and stamp it with `buffer.version()`.
+- **`cancelAll(owner)` when a document closes**, or its work arrives for an editor that no longer exists.
+- **`dispose()` does not shut the executor down** — it may be injected or shared, and a scheduler does
+  not own what it was handed.
 
 ---
 
@@ -981,6 +1075,88 @@ target-phase only — hears nothing at all.
   far end stays reachable.
 
 
+## Widget state that outlives the run — `SessionState`
+
+`DockLayoutCodec` records where a panel **is**: which region, which half, how wide. It says nothing
+about what is *inside* one, and deliberately — the dock does not serialize an element tree, because a
+frozen DOM would restore whatever widgets happened to exist when it was written, and every panel
+rebuilds its own from its model on each open.
+
+So a widget's own geometry had nowhere to live. `SessionState` is where — a bag of `writeState`
+payloads keyed by element id, held by the `UIWindow` and persisted by `WorkbenchSession` under a
+`widgets` key.
+
+```java
+split.setId("run.rail-split");
+split.setSessionPersistent(true);
+```
+
+That is the whole of adopting it. The Run panel is the case that found it: the divider between its
+script rail and its transcript is a real preference, and without this it snapped back on every launch.
+
+### It reuses what was already there, and the first attempt did not
+
+> **This was a `PanelViewState` interface a tool window implemented, and that was the wrong shape.**
+> The engine *already* has a way for a widget to say what it wants preserved — `writeState`/`readState`
+> — and a way to name one — `setId`. A second, parallel mechanism made every panel re-implement
+> persistence for widgets that could already describe themselves, and it could only ever reach a
+> panel's **root**: a divider three levels down had to be hand-proxied out through the panel and back.
+> `SplitView` now answers for its own weights, which `UIDescriptionCodec` gets for free.
+
+| Concern | Where it already lived |
+|---|---|
+| What a widget wants preserved | `UIElement.writeState` / `readState` |
+| Which widget it is | `UIElement.setId` |
+| When a widget appears | `UIWindow.registerElement` |
+| When it goes away | `UIWindow.unregisterElement` |
+
+The only new parts are the bag and one boolean.
+
+### Applied on REGISTRATION, captured on UNREGISTRATION
+
+> **`registerElement` is the one moment every element joins a window, whenever it is made — and
+> "whenever" is the point.** A tool window is built the first time it is opened, and a widget inside one
+> may be built later still: the Run panel's split does not exist until a script runs, which can be
+> minutes after the session was restored or never at all. Anything applied once at startup misses all of
+> that, silently, because the widget looks perfectly correct sitting at its default.
+
+> **`unregisterElement` is the mirror, and skipping it loses everything on close.** Hiding a tool window
+> *detaches* it, so a save afterwards walks a tree the widget has left and writes nothing — drag the Run
+> panel's divider, close the panel, quit, and the width is gone. Reading it back as it leaves is also the
+> last moment it can be read at all.
+
+> **The store is installed when the session is CONSTRUCTED, not when a restore succeeds.** A first run
+> has no record to restore, so an install-on-restore would leave that whole session with no store — and
+> the unregister hook above then captures nothing.
+
+### Two more rules, each learned the same way
+
+> **An id is spent when it is applied.** Re-applying would drag a divider back to the session's position
+> every time its panel was rebuilt, undoing wherever the user had since dragged it — the same rule a
+> document's caret restore follows.
+
+> **Entries nobody claimed are kept and re-emitted.** Writing only what is on screen makes every save an
+> erasure for every widget not built that session: a divider survives exactly as long as the habit of
+> opening its panel, and the erosion is invisible because each individual save looks correct.
+
+### Rules for implementers
+
+- **An id is required and must be stable across runs** — it is the only thing tying a payload to a
+  widget that may not exist yet. Namespace it (`run.rail-split`), because the store is keyed across the
+  whole workbench.
+- **Opt in explicitly.** Persisting everything that has an id would need no flag, but an id is set for
+  `querySelector` and for CSS at least as often as for identity, and silently restoring a `TextField`'s
+  text because somebody named it is a surprise nobody can search for.
+- **`readState` is a request, not a command.** Clamp what comes back; a record can be hand-edited or
+  written by a build whose limits differed. `SplitView.setWeights` already states the shape of this —
+  extra values ignored, missing ones left alone — and a restore that threw because a pane count drifted
+  would take the whole arrangement with it.
+- **State, not a model.** A divider is view state; a filter is not. A remembered filter naming a script
+  that is not running again opens a console empty for a reason three clicks away. Same
+  document-versus-view boundary the undo stack draws.
+- **No version bump for adopting it.** The `widgets` key is additive and every read tolerates its
+  absence; bumping discards every existing arrangement.
+
 ## Contributions
 
 **A feature declares what it can do; nothing enumerates features.** This is the principle the six earlier
@@ -1185,6 +1361,36 @@ markers.detach(resource);   // closing a document
 | **`detach` on close is the half that leaks** | A closed file's problems are not the workspace's, and the listener keeps the document alive |
 | **`setAll` writes the DEFAULT owner's slice** | Not all of them. Kept because forcing every single-producer document to name an owner makes it invent one, scattering keys that never collide and never merge |
 | **Tags change how a diagnostic is DRAWN, not how bad it is** | UNNECESSARY fades, DEPRECATED strikes through, and both keep their severity |
+
+## Language services
+
+`com.crystalgui.text.lang` — `LanguageServices` and the three contracts it bundles
+(`SemanticTokenProvider`, `Resolver`, `CompletionProvider`), plus the value types they speak
+(`SymbolInfo`, `SymbolKind`, `SymbolModifier`, `TypeRef`, `DeclarationSite`, `CompletionItem`,
+`CompletionList`, `Versioned`). **Interfaces only** — every engine lives in `language/`.
+
+```java
+// The workbench builds one per DOCUMENT, from the same registry entry that answers "what language".
+LanguageRegistry.Entry entry = LanguageRegistry.forFileName(path.name());
+editor.setTokenizer(entry.newTokenizer());
+editor.setLanguageServices(entry.newServices(editor.buffer(), resource));   // null when no engine
+
+// An engine publishes diagnostics into the document's existing set, under its own id.
+document.diagnostics().changeOne(services.id(), compiled.problems());
+```
+
+| Rule | Why |
+|---|---|
+| **Absence is the feature flag, and there is no other one** | Three tiers degrade independently and each absence is silent: no engine → grammar colouring, no grammar → keyword lexer, neither → plain text. A `enableSemanticHighlighting` boolean would be a second source of truth about what is actually loaded, and the two disagree the moment a native fails to load |
+| **Per DOCUMENT, never per editor** | The same file in two split panes is one document. Two sets would double every compile, publish two competing diagnostic slices into one `DiagnosticSet`, and disagree about which version they had reached |
+| **`LanguageServices.close()` is the ONLY close on the seam** | `SemanticTokenProvider` has one too and nothing outside an implementation may call it — an editor closing a provider releases something it was only lent, while the document's other view carries on using it |
+| **The document owns them — `TextFileDocument.dispose()`** | Not the widget. The dock rebuilds every panel on every split and drag, so releasing on widget teardown frees a parse tree for a document that is still open and rebuilds it next frame. **This is also what finally calls `SyntaxTokenizer.close()`**: that method has existed since the seam did and nothing in the application ever reached it, so every text document's native parse tree survived until the process ended |
+| **`setLanguageServices` unsubscribes, it does not close** | Same reason — the editor holds, the document owns |
+| **Diagnostics are NOT on this interface** | They already have a home with a per-owner model built for exactly this. `services.id()` is the owner key; mirroring the list here would be two copies with no rule about which is authoritative |
+| **Every answer carries the document version it describes** | `Versioned<T>`. The consumer picks the staleness policy, because there are three correct ones and they are not interchangeable: **discard** for hover and go-to-definition, **keep adjusted** for diagnostics, **keep per line** for semantic tokens — dropping those on every keystroke flickers the file back to lexer colouring and restores it 300ms later |
+| **Two async shapes, and the split is not arbitrary** | Continuous background analysis **pushes** with an invalidation range (`SemanticTokenProvider`, mirroring `SyntaxTokenizer`); a user-initiated question **requests** with a callback that may never fire (`Resolver`, `CompletionProvider`). LSP splits them the same way — `publishDiagnostics` is a notification, `hover` is a request |
+| **Semantic tokens speak the grammars' capture vocabulary** | `SymbolKind.captureName()` is the bridge. A parallel vocabulary would need its own scheme tokens, its own governance test and a mapping table nobody keeps current. `StyleGovernanceTest.everySymbolKindNamesACaptureTheSheetColours` pins it |
+| **An engine's colouring REPLACES the grammar's where they overlap** | Merged into one per-row bucket in `TextEditor.ensureRowSyntax`, not layered. Two overlapping ranges under unrelated names leave the winner to paint order — and both names resolve to real colours, so the wrong one reads as a scheme bug |
 
 ## Contributing to a view's header
 

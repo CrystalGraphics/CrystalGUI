@@ -36,6 +36,53 @@ public class LanguageRegistryTest {
         }
     }
 
+    /**
+     * JavaScript, in the tier that has no engine and no grammar — M10 §1.
+     *
+     * <p>All three extensions, because the grammar claims all three and a registry that knew fewer would
+     * open one of them as plain text with the grammar sitting right there.</p>
+     */
+    @Test
+    public void everyJavaScriptExtensionResolvesToJavaScript() {
+        for (String name : new String[]{"app.js", "module.mjs", "legacy.cjs"}) {
+            assertEquals(name, "javascript", LanguageRegistry.forFileName(name).language().name());
+        }
+    }
+
+    /**
+     * The backtick is a pair, and it is the one thing JavaScript's punctuation adds to Java's.
+     *
+     * <p>It matters twice. Auto-close writes the closing backtick, which is what makes a template
+     * literal typeable; and the <b>lexer</b> has to know the character opens a string, or it walks into
+     * the literal and reads its contents as code — so a {@code "} inside a template opens a string that
+     * runs to the end of the line and paints every keyword in between. The pair and the lexer are two
+     * facts about one character, which is why both are asserted here.</p>
+     */
+    @Test
+    public void javaScriptTreatsTheBacktickAsASelfClosingPair() {
+        Language js = LanguageRegistry.forFileName("app.js").language();
+        assertEquals(Character.valueOf('`'), js.closerFor('`'));
+        assertTrue(js.isSelfClosing('`'));
+        // NOT an indent opener: a template's body is text, and an auto-indent that treated it as a block
+        // would reflow the string. The braces of a ${...} inside it are their own pair, and they indent.
+        assertFalse(js.opensIndent('`'));
+        // Java has no such pair, which is why this is not on cFamily.
+        assertEquals(null, LanguageRegistry.forFileName("Main.java").language().closerFor('`'));
+    }
+
+    /** The editing facts a `.js` file needs and only {@link Language} carries. */
+    @Test
+    public void javaScriptCommentsAndBracketsAreTheCFamilySet() {
+        Language js = LanguageRegistry.forFileName("app.js").language();
+        assertEquals("//", js.lineComment());
+        assertEquals("/*", js.blockCommentStart());
+        assertEquals("*/", js.blockCommentEnd());
+        assertTrue(js.opensIndent('{'));
+        // The `.` that opens a completion list -- absent while `.js` resolved to PLAIN, so a member list
+        // could never open however good the engine behind it was.
+        assertTrue(js.isCompletionTrigger('.'));
+    }
+
     @Test
     public void extensionsAreCaseInsensitive() {
         assertEquals("java", LanguageRegistry.forFileName("Main.JAVA").language().name());
@@ -155,13 +202,18 @@ public class LanguageRegistryTest {
     public void globsMatchTheWholeNameAndTreatDotsLiterally() {
         LanguageRegistry.Entry spec = new LanguageRegistry.Entry(
                 Language.cFamily("spec"), () -> SyntaxTokenizer.NONE);
-        LanguageRegistry.registerGlobs(spec, "*.test.js");
+        // `.ts` RATHER THAN `.js`, and the swap is worth a line. This read `*.test.js` while nothing had
+        // claimed `.js`; M10 registered it, and an EXTENSION beats a GLOB -- so the assertion started
+        // reporting "javascript" and looked like a precedence bug in the glob matcher. It is not: that
+        // precedence is deliberate and has its own test below. This one is about dots being literal and
+        // the match covering the whole name, so it needs an extension nobody has claimed.
+        LanguageRegistry.registerGlobs(spec, "*.test.ts");
 
-        assertEquals("spec", LanguageRegistry.forFileName("thing.test.js").language().name());
-        assertEquals("spec", LanguageRegistry.forFileName("src/deep/thing.test.js").language().name());
+        assertEquals("spec", LanguageRegistry.forFileName("thing.test.ts").language().name());
+        assertEquals("spec", LanguageRegistry.forFileName("src/deep/thing.test.ts").language().name());
         assertSame("a dot must not behave as 'any character'",
-                LanguageRegistry.PLAIN, LanguageRegistry.forFileName("thingXtestXjs"));
-        assertSame(LanguageRegistry.PLAIN, LanguageRegistry.forFileName("thing.test.json"));
+                LanguageRegistry.PLAIN, LanguageRegistry.forFileName("thingXtestXts"));
+        assertSame(LanguageRegistry.PLAIN, LanguageRegistry.forFileName("thing.test.tsx"));
     }
 
     /**

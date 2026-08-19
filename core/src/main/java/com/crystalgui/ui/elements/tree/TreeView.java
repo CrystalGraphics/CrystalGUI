@@ -103,6 +103,13 @@ public class TreeView<T> extends ListView<TreeRow<T>> {
             public void unbind(UIElement template) {
                 renderer.unbind(template);
             }
+
+            /** Unwraps the flattened row, so a tree renderer answers about its ITEM rather than about
+             * the depth/expanded envelope the list happens to hold it in. */
+            @Override
+            public String copyTextFor(TreeRow<T> row) {
+                return row == null ? "" : renderer.copyTextFor(row.item());
+            }
         });
         return this;
     }
@@ -210,17 +217,51 @@ public class TreeView<T> extends ListView<TreeRow<T>> {
         List<T> asked = new ArrayList<>(pendingToggles);
         pendingToggles.clear();
         boolean moved = false;
+        // What holds focus BEFORE the re-flatten, because afterwards its row may not exist to ask.
+        T focusedItem = null;
+        int focusedAt = getFocusedIndex();
+        if (focusedAt >= 0) {
+            TreeRow<T> row = rowAt(focusedAt);
+            if (row != null) focusedItem = row.item();
+        }
+        T closed = null;
         for (T item : asked) {
             if (!source.hasChildren(item)) continue;
             boolean open = !expanded.contains(item);
             if (open) expanded.add(item);
-            else expanded.remove(item);
+            else { expanded.remove(item); closed = item; }
             onExpandChanged.emit(item, open);
             moved = true;
         }
         // ONE re-flatten however many folds arrived, which is the point of queueing them rather than
         // applying each as it lands.
         if (moved) refresh();
+
+        // COLLAPSING A NODE MOVES FOCUS TO THAT NODE — the ARIA tree pattern, and the same rule the editor
+        // already applies to folding a block the caret is in: a focus owner that is no longer on screen
+        // cannot be painted, scrolled to or typed at, so the fold has to hand focus somewhere.
+        //
+        // Without it, folding a heading whose child held focus left the whole window with NO focus owner:
+        // no ring anywhere, and consumeKeyboardEvent dispatches nothing at all while focus is null, so the
+        // arrows could not walk back out of the thing that had just been collapsed.
+        //
+        // Set here rather than after the next layout, because this runs from TreeView's tick BEFORE
+        // ListView's — so updateWindow sees the corrected index in the SAME frame and restores focus with
+        // no gap. A frame later would be one frame of nothing focused, which is the flash this and
+        // ListView.updateWindow were both written to close.
+        if (closed != null && focusedItem != null && visibleIndexOf(focusedItem) < 0) {
+            int at = visibleIndexOf(closed);
+            if (at >= 0) setFocusedIndex(at);
+        }
+    }
+
+    /** Where {@code item} sits in the flattened rows, or {@code -1} when it is not on screen. */
+    private int visibleIndexOf(T item) {
+        for (int i = 0; i < getModel().size(); i++) {
+            TreeRow<T> row = getModel().get(i);
+            if (row != null && java.util.Objects.equals(row.item(), item)) return i;
+        }
+        return -1;
     }
 
     /** By flattened row index — what a renderer's own twisty listener calls, since a row knows its index
@@ -260,14 +301,6 @@ public class TreeView<T> extends ListView<TreeRow<T>> {
      * <em>different</em> row every time it is recycled, so a listener cannot capture an index and must ask
      * at click time. Delegates to the list's realised-row map rather than duplicating it.</p>
      */
-    public int indexOfRowElement(@Nullable UIElement rowElement) {
-        if (rowElement == null) return -1;
-        for (var entry : realisedRows().entrySet()) {
-            if (entry.getValue() == rowElement) return entry.getKey();
-        }
-        return -1;
-    }
-
     @Nullable
     public TreeRow<T> rowAt(int index) {
         return index >= 0 && index < getModel().size() ? getModel().get(index) : null;

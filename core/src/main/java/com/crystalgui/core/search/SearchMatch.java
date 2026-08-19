@@ -64,7 +64,22 @@ public record SearchMatch(int score, Kind kind, int fieldWeight, List<Range> ran
         /** The query hits word starts — {@code cp} → {@code Cross Product}. */
         ACRONYM(200),
         /** The query appears somewhere inside. */
-        SUBSTRING(100);
+        SUBSTRING(100),
+
+        /**
+         * The query's characters appear in order but not together — {@code fMS} → {@code fooMethodStuff}.
+         *
+         * <p><b>Opt-in per consumer</b>, via {@link SearchMatcher#match(SearchQuery, String, int, boolean)},
+         * because the two consumers genuinely disagree and both are right. A completion list wants it: it is
+         * the headline behaviour of every modern editor and the list is already scoped to what is in scope
+         * at the caret. A create menu does not: over a few hundred short labels a subsequence matcher returns
+         * a long tail nobody meant, which is the failure a search box exists to avoid — and Unity's own menu
+         * refuses it too.</p>
+         *
+         * <p>Lowest tier by a wide margin, so any real substring hit outranks any subsequence hit. That
+         * ordering is what stops {@code set} from ranking {@code sELECTED_tEXT} above {@code setText}.</p>
+         */
+        SUBSEQUENCE(20);
 
         private final int score;
 

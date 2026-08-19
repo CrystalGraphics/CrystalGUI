@@ -81,7 +81,7 @@ public final class SettingsCodec {
         if (json == null || json.trim().isEmpty()) return new SettingsModel();
         try {
             return MODEL.decode(com.crystalgui.serialization.JsonOps.INSTANCE,
-                    com.google.gson.JsonParser.parseString(json));
+                    new com.google.gson.JsonParser().parse(json));
         } catch (RuntimeException malformed) {
             com.crystalgui.core.CrystalGuiCore.LOGGER.warn(
                     "Preferences file could not be read; continuing with the defaults", malformed);

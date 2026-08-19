@@ -224,6 +224,49 @@ public class ScrollCapabilityTest extends UiTestBase {
 
     // ── helpers ─────────────────────────────────────────────────────────────
 
+    /**
+     * <b>A scroll-exempt child is not content to scroll to.</b>
+     *
+     * <p>The second half of what {@code setScrollExempt} promises — {@code getScrollWidth} and
+     * {@code getScrollHeight} both already exclude exempt children, and {@code scrollIntoView} was the one
+     * place that did not. An exempt child does not move with the content, so it is already where it will
+     * be drawn; "revealing" it is meaningless, and what it actually reveals is its <em>layout</em>
+     * position, which for an overlay pinned with {@code top: 0} is the top of the document.</p>
+     *
+     * <p>Found from a stack trace, not from here: the editor's find bar is pinned that way, so focusing
+     * its input scrolled a file from line 429 to line 1 — through {@code Popover.hide} restoring focus
+     * when the hover documentation dismissed, and {@code requestFocus} revealing even an element that
+     * already has focus. Any other pinned overlay would have done the same.</p>
+     *
+     * <p>Both halves asserted, because the exemption is the whole content of the test: with an ordinary
+     * child at the same place the reveal must still happen, or this would pass just as well against a
+     * {@code scrollIntoView} that had been broken outright.</p>
+     */
+    @Test
+    public void scrollIntoViewSkipsAnAncestorAnExemptChildDoesNotMoveWith() {
+        for (boolean exempt : new boolean[]{true, false}) {
+            UIElement scroller = scrollingList(Overflow.SCROLL);
+            UIElement pinned = new UIElement().layout(l -> l.positionType(
+                    dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE).top(0f).left(0f).width(80).height(20));
+            pinned.setScrollExempt(exempt);
+            scroller.addChild(pinned);
+            layOut(scroller);
+
+            scroller.setScrollImmediate(0f, 100f);
+            assertEquals(100f, scroller.getScrollTop(), 0.5f);
+
+            pinned.scrollIntoView();
+
+            if (exempt) {
+                assertEquals("an exempt overlay pinned at top:0 dragged the content back to it",
+                        100f, scroller.getScrollTop(), 0.5f);
+            } else {
+                assertEquals("an ordinary child at top:0 must still be revealed",
+                        0f, scroller.getScrollTop(), 0.5f);
+            }
+        }
+    }
+
     private UIElement withOverflow(Overflow mode) {
         UIElement e = new UIElement();
         StyleGroup.defaultPipeline(e.getStyle().getGeneralGroup(), g -> g.overflow(mode));

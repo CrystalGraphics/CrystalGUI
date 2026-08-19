@@ -234,9 +234,26 @@ popover.__open__, menu.__open__, dropdown .__menu__.__open__ {
     opacity: 1;
 }
 
+/* THE GAP MATCHES THE POPUP'S PADDING, and that equality is the whole rule.
+ *
+ * They were 1px and 2px, so the first row sat 2px from the frame while every row after it sat 1px from
+ * its neighbour -- and with the focus highlight being an inset BAR rather than a full-width strip, the
+ * difference is drawn rather than merely spaced, which is why it reads as the first item being mis-set
+ * instead of as the menu being a pixel loose. Even means the first bar is inset from the frame by the
+ * same amount it is separated from the next one. */
 menu .__items__ {
     flex-direction: column;
-    gap-all: 1px;
+    gap-all: 2px;
+}
+
+/* THE FRAME INSET IS THE ROW'S PADDING PLUS THE GAP, which is what makes the first label sit the
+ * same distance from
+ * the top of the menu as two labels sit from each other. See menuitem for the derivation. Vertical only:
+ * the horizontal inset is the popup padding plus the row's own 4px margin, which is the inset-bar look
+ * and has nothing to do with the vertical rhythm. */
+menu {
+    padding-top: 4px;
+    padding-bottom: 4px;
 }
 
 /* A grouping rule, as every native context menu uses. Margins rather than padding on the neighbours:
@@ -259,7 +276,33 @@ menu .__separator__ {
 
 /* Items are Buttons, so they inherit the button rule above; these overrides make them read as rows
  * rather than as a stack of separate controls — full width, left-aligned, no rounding between them. */
+/* ON THE TEXT, NOT ON THE ROW, and this is the one rule about font-size in this engine worth restating:
+ * `* { font-size: 10 }` in core.css is a candidate at STYLESHEET origin on EVERY element, and inheritance
+ * only applies where there is no candidate at any origin — so a size declared on `menuitem` computes
+ * correctly on the row and every label inside it still draws at 10. A MenuItem is a Button, so its label
+ * and its accelerator are both `text` children; one selector reaches the pair, which is why they stay the
+ * same size as each other for free.
+ *
+ * Not on `menu text`, which would also catch anything a caller puts in a row. */
+menuitem text {
+    font-size: 8;
+}
+
 menuitem {
+    /* PADDING RATHER THAN SLACK, and this is what makes the rhythm even in the only place it can be
+     * judged -- between the TEXT, not between the row boxes.
+     *
+     * The row was 13px tall around a 10.4px label with the label flush to its top, so every row carried
+     * 2.6px of dead space UNDERNEATH it: the first label sat 2px from the frame while consecutive labels
+     * sat 4.6px apart. The boxes were evenly spaced the whole time, which is why measuring them said
+     * nothing was wrong.
+     *
+     * Expressed as padding so the slack is symmetric and known, and the menu's own vertical padding is
+     * then set to the row's padding plus the gap -- the one relation that makes the first label's
+     * inset equal the distance between two labels, whatever the font measures. */
+    align-items: center;
+    padding-top: 2px;
+    padding-bottom: 2px;
     min-height: 13px;
     padding-left: 6px;
     padding-right: 6px;

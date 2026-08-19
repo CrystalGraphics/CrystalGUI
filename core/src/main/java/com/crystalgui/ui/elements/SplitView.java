@@ -2,6 +2,7 @@ package com.crystalgui.ui.elements;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.serialization.StateMap;
 
 import javax.annotation.Nullable;
 import com.crystalgui.style.StyleGroup;
@@ -477,6 +478,48 @@ public class SplitView extends UIElement {
         if (pairSum <= 0f) return;
         setPercentageAt(index, percentageAt(index) + deltaWeight / pairSum * 100f);
     }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>The weights, which is the whole of a split's authored geometry -- and it belongs here rather
+     * than in whatever happens to own the split. Two callers want it and neither should have to know how
+     * a pane stores its share: {@code UIDescriptionCodec}, so a server can describe a split at 30%, and
+     * {@link com.crystalgui.ui.SessionState}, so a divider somebody dragged is still there tomorrow.</p>
+     *
+     * <p>Every pane, not the two-pane {@code percentage} facade: an N-pane split is not recoverable from
+     * one number, and the facade would silently flatten the others on the way back.</p>
+     */
+    @Override
+    protected <T> void writeState(StateMap<T> out) {
+        super.writeState(out);
+        float[] weights = getWeights();
+        if (weights.length == 0) return;
+        List<Float> values = new ArrayList<>(weights.length);
+        for (float weight : weights) values.add(weight);
+        out.putList(KEY_WEIGHTS, values, (entry, weight) -> entry.putFloat(KEY_WEIGHT, weight));
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Through {@link #setWeights}, which already says what a length mismatch means: extra values
+     * ignored, missing ones left alone. A record describing three panes arriving at a split that now has
+     * two is an ordinary consequence of the layout changing between builds, and it must cost the panes
+     * that still match nothing.</p>
+     */
+    @Override
+    protected <T> void readState(StateMap<T> in) {
+        super.readState(in);
+        List<Float> values = in.getList(KEY_WEIGHTS, entry -> entry.getFloat(KEY_WEIGHT, 0f));
+        if (values.isEmpty()) return;
+        float[] weights = new float[values.size()];
+        for (int i = 0; i < weights.length; i++) weights[i] = values.get(i);
+        setWeights(weights);
+    }
+
+    private static final String KEY_WEIGHTS = "weights";
+    private static final String KEY_WEIGHT = "w";
 
     /**
      * Every pane's weight, in order.
