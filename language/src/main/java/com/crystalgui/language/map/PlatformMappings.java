@@ -82,10 +82,36 @@ public final class PlatformMappings {
      * <p>Idempotent. The second caller returns immediately rather than fetching again.</p>
      */
     public static void begin(Progress progress) {
+        if (!claim()) return;
+        acquireClaimed(progress);
+    }
+
+    /**
+     * <b>Takes ownership of the acquisition, without doing it.</b> True if this caller now owns it.
+     *
+     * <p>Exists to close a race that was a coin flip. A client wants the fetch inside a job so it reports
+     * into the status bar — but a job does not run until {@code JobScheduler.drain()}, which is the first
+     * CrystalGUI paint, and anything touching {@link #current()} before that would start the lazy daemon
+     * path instead. Both paths acquire correctly; only one of them draws a bar, and which one won was
+     * decided by whatever happened to ask first.</p>
+     *
+     * <p>Claiming at registration — long before any paint — makes it deterministic: the lazy path finds
+     * the work already owned and returns.</p>
+     *
+     * <p><b>A claim is a promise to do it.</b> Claiming and then never calling
+     * {@link #acquireClaimed} leaves the mapping permanently unacquired, with {@code current()} answering
+     * identity for ever and nothing to say why. Only claim where the follow-through is certain.</p>
+     */
+    public static boolean claim() {
         synchronized (PlatformMappings.class) {
-            if (started) return;
+            if (started) return false;
             started = true;
+            return true;
         }
+    }
+
+    /** Does the work a {@link #claim()} promised, reporting into {@code progress}. */
+    public static void acquireClaimed(Progress progress) {
         ScriptService needsFetch = decide();
         if (needsFetch != null) fetch(needsFetch, progress == null ? Progress.NONE : progress);
     }
@@ -99,10 +125,7 @@ public final class PlatformMappings {
      */
     private static void startLazily() {
         ScriptService needsFetch;
-        synchronized (PlatformMappings.class) {
-            if (started) return;
-            started = true;
-        }
+        if (!claim()) return;
         // THE DECISION INLINE, THE FETCH ON A THREAD. A mapping already cached is applied before this
         // returns, so the caller's very next current() sees it -- which is the difference between the
         // editor opening with readable names and opening with runtime ones and correcting itself.

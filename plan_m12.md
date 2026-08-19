@@ -1247,15 +1247,23 @@ the workspace layer this engine never opens.
 
 Decided:
 
-- **Trim the closure**, verified twice — a constant-pool reachability scan (the idiom
-  `ExecutionNeedsNoGrammarTest` already uses: *a reference in the constant pool is the real question*),
-  then `smokeEngineBands` proving it on a real JVM of each band's era.
+- ~~**Trim the closure**~~ — **MEASURED, and not worth doing.** `BandClosureReachabilityTest` walks the
+  constant pools outward from the roots we actually load (`jdt.core`, `ecj`, `rhino`) and reports what
+  nothing reaches. The answer is **two jars and about 200 KB per band** — `core.commands` and
+  `core.expressions` — out of 11–16 MB. **The estimate above was wrong**: JNA and `core.resources` *are*
+  referenced from the roots, so "half of it is dead weight" does not survive contact with the data.
+  Dropping 1.7% from a signed, version-pinned closure is a bad trade against a reflective load the scan
+  cannot see, so the closure stays whole. The test is kept as a report and fails no build.
 - **Drop band 11 from the shipped set.** lwjgl3ify targets 17+, vanilla is 8; Java 11–16 on 1.7.10 is not
   a configuration anyone ships. Keep it for dev and tests.
-- **Bundling becomes a build flag** (`-PcgBundleBands`), defaulting to **band 8 for 1.7.10**.
+- ✅ **Bundling is a build flag** — `-PcgBundleBands=8` (default), `8,17`, or `none`. `bundleEngineBands`
+  and `checkEngineManifest` both work per selected band.
 - **Download is the fallback, not the mechanism** — a third `EngineSource` behind
   `firstOf(configured, bundled, downloaded)`, which already returns the first non-empty answer and so
-  needs no change. Unlike the mapping data these can be digest-pinned properly — not by
+  needs no change. ✅ **Built and exercised end to end**: with `-PcgBundleBands=none` the dev client
+  fetched all fifteen of band 8's jars from Maven Central, digest-verified against the shipped manifest,
+  and opened the editor — which is the only way to reach that path on a host whose own band is the
+  bundled one. Unlike the mapping data these can be digest-pinned properly — not by
   fetching Maven's published `.sha1`, but by **hashing the artifacts Gradle resolved** into a shipped
   resource, which pins the exact bytes the build was tested against and needs no network at build
   time. `CacheFiles.install` already verifies. See P6.1.13 D16.

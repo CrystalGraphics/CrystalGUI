@@ -38,11 +38,20 @@ public class ClientProxy extends CommonProxy {
         // not: UIWindow.paintFrame is the only thing that drains it, so a dedicated server -- which runs
         // scripts and needs readable names to compile them -- would queue the fetch for ever. Threading
         // is the caller's decision, and this caller has a UI.
-        JobScheduler.shared().job(JobKey.of(ClientProxy.class, "mappings"), JobLane.BACKGROUND,
-                context -> {
-                    PlatformMappings.begin(context.progress());
-                    return null;
-                }).submit();
+        // CLAIMED NOW, DONE LATER, and the order is the whole point. The job does not run until the
+        // scheduler is drained -- the first CrystalGUI paint -- and anything touching the mappings before
+        // then would take the lazy daemon path instead. Both acquire correctly; only this one draws a bar,
+        // so without claiming here which one ran was decided by whatever asked first.
+        //
+        // Safe to defer because a claim made here is always honoured: the job is already submitted, and a
+        // client that never opens the editor never needs a mapping.
+        if (PlatformMappings.claim()) {
+            JobScheduler.shared().job(JobKey.of(ClientProxy.class, "mappings"), JobLane.BACKGROUND,
+                    context -> {
+                        PlatformMappings.acquireClaimed(context.progress());
+                        return null;
+                    }).submit();
+        }
 
         CgUiInput.register();
         CgUiAutoTest.register();
