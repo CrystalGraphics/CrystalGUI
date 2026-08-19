@@ -432,6 +432,65 @@ tab .__pre-icon__ {
     overlay-fit: contain;
 }
 
+/* ── THE CLOSE BUTTON ────────────────────────────────────────────────────────────────────────────
+ *
+ * ITS SPACE IS ALWAYS PAID FOR AND ITS GLYPH IS NOT. Faded rather than hidden until the pointer is over
+ * the tab or the tab is the selected one, which is what IntelliJ, VS Code and every browser draw — and
+ * the reason is layout rather than taste. A tab that GROWS a button on hover changes width, so every tab
+ * to its right moves; on a strip that means the tab under the pointer slides out from under it, and a
+ * press where a label was closes the neighbour. `opacity` costs the width unconditionally and draws
+ * nothing, which is the only way to have both.
+ *
+ * So never `display: none` here. Being invisible and still hit-testable costs nothing: reaching it needs
+ * the pointer on the tab, and that is exactly what makes it appear — there is no state in which a user
+ * can press a button they cannot see.
+ *
+ * MIN-HEIGHT AND PADDING ARE CLEARED, and neither is optional. `button { min-height: 14px }` is a
+ * DIFFERENT PROPERTY from the height below, so it does not compete with it — it simply wins whenever it
+ * is the larger number, and at 14px around a 9px box it is. The base button padding is the same story
+ * one property along: left at 4px either side, an 9px glyph sits in a 17px box and the tab grows by the
+ * difference. This is the third time that pair has cost a round; see the menu-bar and search-toggle
+ * notes for the other two. */
+tab .__close__ {
+    width: 11px;
+    height: 11px;
+    min-height: 0;
+    min-width: 0;
+    padding-all: 0;
+    margin-left: 3px;
+    flex-shrink: 0;
+    flex-grow: 0;
+    opacity: 0;
+    /* `background` and `background-color` are separate properties, and a button arrives with a DRAWABLE
+     * from the base rule — setting only the colour leaves that drawable painted over it. Both, always. */
+    background: none;
+    background-color: #00000000;
+    /* `shape("cross")` rather than an icon file, as `searchfield .__clear__` already draws: it is
+     * procedural, so it stays crisp at 9px where a rasterised 16px glyph would not, and it takes its
+     * colour from the element instead of from artwork. */
+    overlay: shape("cross");
+    cursor: pointer;
+    /* DIMMER THAN THE LABEL. The cross is an affordance rather than information -- it says "this can be
+     * closed", which the reader already knows -- so drawn at the label's weight it competes with the
+     * filename for attention on every tab at once. A `button` also arrives with `color: #222222` SPECIFIED
+     * on it by the base rule, which no inherited colour from the tab can beat, so this has to be stated
+     * here whatever the surrounding text is doing. */
+    color: var(--tab-close-fg, #5A5D63);
+}
+/* Shown on the tab's own hover, not the button's: the affordance appears when you approach the tab,
+ * which is the whole point of reserving the space. `:hover` walks the chain, so hovering the button
+ * itself keeps the tab hovered too and the glyph does not blink out from under the pointer. */
+tab:hover .__close__,
+tab:checked .__close__ {
+    opacity: 1;
+}
+/* And its own hover is the usual affordance a control gets, so it reads as pressable rather than as a
+ * mark printed on the tab. */
+tab .__close__:hover {
+    background-color: var(--tab-close-hover-bg, #5A5A5A);
+    color: var(--tab-close-hover-fg, #DDDDDD);
+}
+
 tab:hover,
 .__problem-tab__:hover {
     background: var(--tab-hover-bg, #8C8C8C);

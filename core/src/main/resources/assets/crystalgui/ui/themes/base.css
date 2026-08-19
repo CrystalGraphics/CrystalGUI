@@ -494,6 +494,9 @@ theme {
     --tab-active-bg: var(--surface-raised);
     --tab-active-fg: var(--fg);
     --tab-bg: #00000000;
+    --tab-close-fg: var(--fg-disabled);
+    --tab-close-hover-bg: var(--hover-bg);
+    --tab-close-hover-fg: var(--fg);
     --tab-disabled-bg: var(--surface-raised);
     --tab-disabled-fg: var(--fg-disabled);
     --tab-fg: var(--fg-secondary);

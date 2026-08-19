@@ -213,6 +213,18 @@ public final class DockPanelRegistry<C> {
      * potentially stale in a way a provider never is. Asking the live workbench first is what lets a
      * changed icon theme reach a restored layout.</p>
      */
+    /**
+     * Whether this panel may be closed — the type's answer, and the tab's close affordance.
+     *
+     * <p>Unknown types are closable. A ref whose descriptor is gone is a panel restored from a layout
+     * whose plugin is no longer installed, and refusing to let it be closed would leave the user with a
+     * tab they can neither use nor be rid of.</p>
+     */
+    public boolean isClosable(DockPanelRef ref) {
+        DockPanelDescriptor descriptor = descriptors.get(ref.typeId());
+        return descriptor == null || descriptor.isClosable();
+    }
+
     @Nullable
     public String iconOf(DockPanelRef ref) {
         if (iconProvider != null) {
