@@ -458,6 +458,10 @@ theme {
      * quietest legible text. */
     --doc-owner-note-fg: var(--fg-disabled);
     --doc-body-fg: var(--fg);
+    /* The bottom band names WHERE the symbol is declared, which qualifies the answer rather than being
+     * it — so it takes the same quiet the owner's provenance remark does, one step below the owner name
+     * itself. Derived, not repeated: a theme that moves its hint colour moves this with it. */
+    --doc-footer-fg: var(--fg-hint);
 
     --squiggle-error: var(--error);
     --squiggle-info: var(--info);

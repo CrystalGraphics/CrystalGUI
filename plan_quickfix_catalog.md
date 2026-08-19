@@ -8,6 +8,15 @@ Written against `org.eclipse.jdt.core` **3.26.0** — band 8's floor, the versio
 against, and therefore the only version whose constants may be named. Every `IProblem` constant below
 was read out of that jar with `javap`, not recalled. It has 966 of them.
 
+> **Java only, and the JavaScript catalogue is deliberately not a column here.**
+> `plan_m10.md` said this file would "gain a JS column rather than a second document", and that was
+> the wrong shape: **every row here is keyed on an `IProblem` id**, and Rhino reports no
+> problem ids at all. A JS column would be empty for nearly every row, because the two catalogues
+> divide differently — Java's is mostly *corrections* answering a diagnostic, and JavaScript's is
+> mostly *intentions* answering the caret, which is a table with a different key rather than a
+> column with the same one. It lives on `JsQuickFixes` and `JsIntentions`, whose class javadocs
+> are the catalogue, with the reasoning in `plan_m10.md` §8.
+
 ---
 
 ## 1. The two references, and what may be taken from each
@@ -1024,8 +1033,11 @@ name node**, never from `getArguments()`, which is the lesson `UnusedPrivateFiel
   catalogue already records the case that makes it dangerous — an RHS with a call in it, where deleting
   drops the side effect. Narrow enough to need its own thinking, not a line in a batch.
 
-Both stay in the catalogue; neither ships here. Deferring them is the point of having written §12's
-exclusions down.
+**Half stale, and corrected rather than deleted.** `DeadCode` <b>did</b> ship — `DeadCodeCorrections`
+is registered and answers for it — so the paragraph above records the reasoning that was true when the
+batch was written and stopped being true when the family was built. `AssignmentHasNoEffect` is still
+deferred, and still for the stated reason: an RHS with a call in it makes deleting the statement drop a
+side effect, which is narrow enough to need its own thinking rather than a line in a batch.
 
 **`EcjProblemSeverities` is created only if something needs enabling**, and the only thing that does is
 step 5's `MissingOverrideAnnotation` — which makes it step 5's cost, not step 4's.

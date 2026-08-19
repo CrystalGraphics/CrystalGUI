@@ -2,6 +2,7 @@ package com.crystalgui.language.js;
 
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.fs.Resource;
+import com.crystalgui.language.engine.EngineBand;
 import com.crystalgui.language.engine.EngineHost;
 import com.crystalgui.language.engine.EngineSource;
 import com.crystalgui.language.engine.JavaEngine;
@@ -23,6 +24,8 @@ import com.crystalgui.text.syntax.Language;
 import com.crystalgui.text.syntax.LanguageRegistry;
 
 import javax.annotation.Nullable;
+
+import java.util.Set;
 
 /**
  * Puts the JavaScript engine behind every {@code .js} document, and tells the Run panel it can run one —
@@ -109,6 +112,10 @@ public final class JsLanguage {
         // THE POLICY REACHES A FRESHLY OPENED ANALYSER. A host that restricted before registering -- or
         // that registers twice -- must not end up with an analyser obeying allow-all.
         analyzer.restrictTo(policy::allowsClass);
+        // AND THE COMPATIBILITY BAND REACHES A FRESHLY OPENED ANALYSER, for the reason the policy above
+        // does: a host that set it before registering must not end up with an analyser warning about
+        // nothing.
+        if (!refusedByTarget.isEmpty()) analyzer.compatibleWith(refusedByTarget, targetLabel);
         // AND THE MAPPINGS REACH A FRESHLY OPENED ENGINE, for the reason the policy does: a host that
         // installed them before registering must not end up with an engine mapping nothing.
         MemberNameMapper mapper = mapperFor(mappings);
@@ -165,6 +172,65 @@ public final class JsLanguage {
     /** The policy every JavaScript surface obeys. */
     public static synchronized ScriptPolicy policy() {
         return policy;
+    }
+
+    // ── The compatibility band (§10.3b) ────────────────────────────────────────────
+
+    /** What the target band refuses, empty when the target is this host. @see #compatibleWith */
+    private static Set<String> refusedByTarget = Set.of();
+
+    /** How the target is named to the author. @see #compatibleWith */
+    private static String targetLabel = "older";
+
+    /**
+     * Warn about syntax an older host would refuse — <b>off by default</b>.
+     *
+     * <p>Default "this host", because a warning nobody asked for about a deployment nobody named is
+     * noise: most scripts are written and run on one machine. A pack author shipping to 1.7.10 sets
+     * {@link EngineBand#JAVA_8} and is told, before a player ever sees it, which lines will not load.</p>
+     *
+     * <p>Read from the target band's <b>measured</b> probe file, which ships as a resource for exactly
+     * this: those jars are not on a deployment's classpath, so the older parser cannot be asked and the
+     * answer has to travel as data. {@code RhinoCapabilityProbeTest} asserts the resource still matches
+     * the jars it describes, so it cannot quietly stop being true.</p>
+     *
+     * <p>Only ever warns <em>downward</em>. A target at or above this host produces nothing: a construct
+     * the local engine refuses is already a syntax error, and saying it twice in two severities is worse
+     * than saying it once.</p>
+     *
+     * @param target the band a script must also load on, or null for "this host"
+     */
+    public static synchronized void compatibleWith(@Nullable EngineBand target) {
+        EngineBand host = EngineBand.detect();
+        refusedByTarget = target == null || target.minimumFeatureVersion() >= host.minimumFeatureVersion()
+                ? Set.of() : refusedBy(target);
+        targetLabel = target == null ? "older" : "Java " + target.minimumFeatureVersion();
+        if (analyzer != null) analyzer.compatibleWith(refusedByTarget, targetLabel);
+    }
+
+    /** Which constructs a band's shipped probe file records as refused. */
+    private static Set<String> refusedBy(EngineBand band) {
+        String resource = "/assets/crystalgui/language/rhino-"
+                + band.minimumFeatureVersion() + ".properties";
+        try (java.io.InputStream in = JsLanguage.class.getResourceAsStream(resource)) {
+            // NO FILE IS NOT AN ERROR. Only band 8's ships -- it is the only one anything targets --
+            // and a host asking about a band with no file gets silence rather than a failure, which is
+            // the same way every other absent capability in this stack degrades.
+            if (in == null) return Set.of();
+            java.util.Properties measured = new java.util.Properties();
+            measured.load(in);
+            Set<String> refused = new java.util.LinkedHashSet<>();
+            for (String key : measured.stringPropertyNames()) {
+                if (!key.startsWith("syntax.")) continue;
+                String verdict = measured.getProperty(key);
+                if (verdict != null && verdict.startsWith("refused")) {
+                    refused.add(key.substring("syntax.".length()));
+                }
+            }
+            return java.util.Collections.unmodifiableSet(refused);
+        } catch (java.io.IOException unreadable) {
+            return Set.of();
+        }
     }
 
     /** How member names are written and shown. @see #useMemberNames */

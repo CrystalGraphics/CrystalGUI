@@ -4,6 +4,7 @@ import com.crystalgui.language.engine.bridge.JsExecutor;
 import com.crystalgui.language.engine.bridge.LiveScopeSnapshot;
 import com.crystalgui.language.engine.bridge.MemberNameMapper;
 
+import com.crystalgui.language.js.rhino.JsImports;
 import com.crystalgui.language.js.rhino.JsLoaders;
 import com.crystalgui.language.js.rhino.RhinoThread;
 import org.mozilla.javascript.BaseFunction;
@@ -141,10 +142,16 @@ public final class RhinoExecutor implements JsExecutor {
     public Compiled compile(String sourceName, String source) {
         String name = sourceName == null || sourceName.isEmpty() ? "script.js" : sourceName;
         String text = source == null ? "" : source;
+        // BLANKED BEFORE THE PARSER, because `import` is a reserved word in Rhino and a script carrying
+        // one dies with "identifier is a reserved word" before anything of ours runs. Blanking is
+        // length-preserving, so every offset in the file stays the offset the editor already published.
+        // @see JsImports
+        JsImports.Scanned scanned = JsImports.scan(text);
         return RhinoThread.with(() -> {
             Context cx = FACTORY.enterContext();
             try {
-                return new CompiledScript(cx.compileString(text, name, 1, null), List.of());
+                return new CompiledScript(cx.compileString(scanned.source(), name, 1, null),
+                        List.of(), scanned.imported());
             } catch (EvaluatorException refused) {
                 // AN ORDINARY OUTCOME, not an exception the shell has to catch. The analyser has usually
                 // already put the same problem on the same offsets in the editor; this is only the gate
@@ -200,6 +207,7 @@ public final class RhinoExecutor implements JsExecutor {
                     ScriptableObject scope = cx.initStandardObjects(null, false);
                     installGlobals(cx, scope, run, out, err, readLine, allowsClass);
                     bind(cx, scope, bindings, allowsClass);
+                    bindImports(cx, scope, script, allowsClass);
                     // WHAT WAS THERE BEFORE THE SCRIPT RAN. The standard library, our console globals and
                     // the host's bindings all live on this same scope, so "what did the run define" is a
                     // difference rather than a listing -- without the baseline the live tier would offer
@@ -260,6 +268,34 @@ public final class RhinoExecutor implements JsExecutor {
                 continue;
             }
             ScriptableObject.putProperty(scope, binding.getKey(), wrap(cx, scope, value));
+        }
+    }
+
+    /**
+     * The classes this script's {@code import} lines named, in scope under their simple names.
+     *
+     * <p>The other half of {@link JsImports}: the statements were blanked out of the source before the
+     * parser saw them, so this is where the names they declared actually come from. Bound per run onto
+     * the fresh scope, beside the host's own bindings, for the same reason those are — nothing the
+     * previous run defined is reachable, and "replace" has to mean replace.</p>
+     *
+     * <p><b>Through the same gate {@code Java.type} uses.</b> An import is a reach for a class and is
+     * refused exactly as the explicit spelling would be — a filter a script could walk past by writing
+     * the reach differently is not a filter. Refused and missing classes are both reported into
+     * {@code messages} rather than thrown: an import that cannot be honoured should leave the author with
+     * a line to read, not a stack, and the script is left to fail on the name itself if it uses it.</p>
+     */
+    private static void bindImports(Context cx, Scriptable scope, Compiled compiled,
+                                    Predicate<String> allowsClass) {
+        if (!(compiled instanceof CompiledScript)) return;
+        Map<String, String> imported = ((CompiledScript) compiled).imported();
+        if (imported.isEmpty()) return;
+        for (Map.Entry<String, String> each : imported.entrySet()) {
+            String binaryName = each.getValue();
+            if (allowsClass != null && !allowsClass.test(binaryName)) continue;
+            Class<?> found = JsLoaders.load(binaryName);
+            if (found == null) continue;
+            ScriptableObject.putProperty(scope, each.getKey(), wrap(cx, scope, found));
         }
     }
 
@@ -605,9 +641,27 @@ public final class RhinoExecutor implements JsExecutor {
         private final Script script;
         private final List<String> messages;
 
+        /**
+         * What this script's {@code import} lines bound — simple name to binary name.
+         *
+         * <p>Carried from COMPILE to RUN because that is where the two halves fall: the statements are
+         * blanked out of the source before the parser sees it, and the names they declared can only be
+         * put somewhere once there is a scope to put them in, which is per run.</p>
+         */
+        private final Map<String, String> imported;
+
         CompiledScript(Script script, List<String> messages) {
+            this(script, messages, Map.of());
+        }
+
+        CompiledScript(Script script, List<String> messages, Map<String, String> imported) {
             this.script = script;
             this.messages = messages;
+            this.imported = imported == null ? Map.of() : imported;
+        }
+
+        Map<String, String> imported() {
+            return imported;
         }
 
         @Override

@@ -114,12 +114,64 @@ public class JavaMemberCompletionTest {
         assertTrue("System.in is missing: " + labels, labels.contains("in"));
     }
 
+    /**
+     * <b>{@code System.out} is a CONSTANT, and this test used to assert it was a field.</b>
+     *
+     * <p>It is {@code public static final PrintStream out} — static and final, which is the rule for a
+     * constant and the rule this engine's <em>semantic-token</em> pass has always applied to it. So the
+     * editor drew {@code System.out} in the constant colour while the completion popup listed it with a
+     * field icon: <b>one declaration, two answers, from one engine</b>, depending only on which question
+     * was asked.</p>
+     *
+     * <p>The disagreement surfaced through JavaScript, which is the useful part. Once JS started
+     * colouring Java members through {@code membersOf}, a {@code static final} field drew as a plain
+     * property in a {@code .js} file and as a constant in a {@code .java} one — the same member, from
+     * the same declaration, three lines apart in two tabs. Chasing that found the two rules.</p>
+     *
+     * <p>The name below keeps saying "so the icon and the ranking are right", because that is still what
+     * it is for: a kind that is <em>wrong</em> costs an icon and a rank. It just has to be the same wrong
+     * or right in both places.</p>
+     */
     @Test
-    public void aFieldIsReportedAsAFieldSoTheIconAndTheRankingAreRight() {
+    public void aStaticFinalFieldIsReportedAsAConstantSoTheIconAndTheRankingAreRight() {
         CompletionItem out = named(completeAfterTheDot(AFTER_THE_DOT), "out");
         assertNotNull("System.out is missing", out);
-        assertEquals(SymbolKind.FIELD, out.kind());
+        assertEquals("System.out is `public static final` -- the same rule the semantic pass applies",
+                SymbolKind.CONSTANT, out.kind());
         assertEquals("the detail column shows the type", "PrintStream", out.detail());
+    }
+
+    /**
+     * And an <b>instance</b> field is still a field — the half the change above must not take with it.
+     *
+     * <p>Without this, "everything is a constant now" would pass the test above perfectly.</p>
+     */
+    @Test
+    public void anInstanceFieldIsStillAField() {
+        // ITS OWN CALL rather than `completeAfterTheDot`, which hardcodes `System.` -- the shape
+        // `anInstanceReceiverOffersItsInstanceMembers` below already uses for the same reason.
+        String source = ""
+                + "class Demo {\n"
+                + "    static class Box { public int count; }\n"
+                + "    void run(Box b) {\n"
+                + "        b.\n"
+                + "    }\n"
+                + "}\n";
+        TextBuffer buffer = new TextBuffer(source);
+        LanguageServices services = new JavaLanguageServices(
+                buffer, engine, null, "Demo", HostClasspath.detect());
+        try {
+            int caret = source.indexOf("b.\n") + 2;
+            AtomicReference<CompletionList> answered = new AtomicReference<>(CompletionList.EMPTY);
+            services.completion().complete(
+                    CompletionProvider.Request.character(caret, "", "."),
+                    (Versioned<CompletionList> v) -> answered.set(v.orElse(CompletionList.EMPTY)));
+            CompletionItem count = named(answered.get().items(), "count");
+            assertNotNull("the instance field is missing", count);
+            assertEquals(SymbolKind.FIELD, count.kind());
+        } finally {
+            services.close();
+        }
     }
 
     /**

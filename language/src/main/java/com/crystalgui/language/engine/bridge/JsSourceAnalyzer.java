@@ -2,6 +2,7 @@ package com.crystalgui.language.engine.bridge;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Predicate;
 
 /**
@@ -143,6 +144,25 @@ public interface JsSourceAnalyzer {
      * {@code func_147439_a} beside a runtime that only accepts {@code getBlock} is an editor working against
      * its user.</p>
      */
+    /**
+     * Warn about syntax an <b>older</b> host would refuse, even though this one parsed it (§10.3b).
+     *
+     * <p>A modder on Java 17 writes {@code a?.b ?? c}, their Rhino takes it, and it fails to load for
+     * every 1.7.10 player. Six constructs sit in that gap and the engine cannot discover them for
+     * itself: a deployment ships <b>one</b> band, so the older parser is not present to ask. The host
+     * reads the target band's measured probe file and hands the verdict over as data.</p>
+     *
+     * <p>A {@code Set<String>} of probe keys rather than a band or a version, for the reason every
+     * crossing here is a JDK type — and because what the engine needs to know is not <em>which</em>
+     * band, it is <em>what that band refuses</em>. Empty is the default and reports nothing.</p>
+     *
+     * @param refusedByTarget probe keys such as {@code optionalChaining}, without the {@code syntax.}
+     *                        prefix
+     * @param targetLabel     how to name the target to the author, e.g. {@code "Java 8"}
+     */
+    default void compatibleWith(Set<String> refusedByTarget, String targetLabel) {
+    }
+
     default void useMemberNames(MemberNameMapper mapper) {
     }
 

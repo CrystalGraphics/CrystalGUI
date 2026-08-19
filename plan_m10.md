@@ -35,7 +35,7 @@ most visible thing to have early.
 | **10.2** Bridge + registration + the fixture | `JsSourceAnalyzer`/`JsExecutor`; `RhinoSourceAnalyzer`/`RhinoExecutor`/`RhinoThread`; `JsLanguageServices`/`JsHost`/`JsLanguage` through `EngineHost.shared`; **`Main.js` seeded into the harness workspace, `HarnessWorkspace` registering JS** | the file opens with services (owner `javascript`), **a syntax error is already a real squiggle**, Run knows it is a script and refuses a broken one | **done** — `ef098fe` |
 | **10.3** Diagnostics | IDE-mode parse errors, `RhinoProblemPolicy` (cascade suppression + refusal re-titling), unused-name warnings, retention through errors | one squiggle per problem, not five; `class`/`import`/`async` each say why | **done** — `77adc82`. **Compatibility band deferred to 10.3b** (see below) |
 | **10.4** Semantic tokens + scopes | `RhinoScopes`, `RhinoSemanticTokens`, `RhinoGlobals` | parameter / local / const / reassigned / captured / builtin / unresolved, each drawn as itself | **done** — `77adc82`. JSDoc recording moves to 10.6, where the tiers read it |
-| **10.3b** Compatibility band | ship band 8's probe file as a resource; detect the six constructs 1.9.1 accepts and 1.7.15.1 refuses (default params, spread, computed properties, destructuring defaults, `?.`, `??`) from the AST; warn when the target band is older than the host | an author on Java 17 is told what a Java 8 player cannot load | **deferred** — needs a per-construct AST detector, which is a different kind of work from a message policy and is worth its own step |
+| **10.3b** Compatibility band | ship band 8's probe file as a resource; detect the six constructs 1.9.1 accepts and 1.7.15.1 refuses (default params, spread, computed properties, destructuring defaults, `?.`, `??`); warn when the target band is older than the host | an author on Java 17 is told what a Java 8 player cannot load | **done** — `JsCompatibility`, `JsLanguage.compatibleWith(band)`, 6 tests. Off by default. Detected from **text over located nodes** rather than from accessors — see below |
 | **10.5** Execution | `JsHost`, `RhinoExecutor.run/stop/currentLine/describe`, console/`print`/`readLine`/`Java.type` globals, `RhinoConsoleFormat`, `RhinoOrigin`, `RhinoStackFrameFilter`, runtime errors as `js-runtime` diagnostics through a new engine-neutral `AnalysedLanguageServices.reportRuntimeProblems` lane | Shift+F10 runs it; output attributed by line; Stop works; a thrown error squiggles its line | **done** — see "10.5 as built" below. `snapshotScope` moves to 10.6, beside its only consumer |
 | **10.6** Resolution + interop | the four tiers (`RhinoResolution`), `RhinoJsDoc`, `RhinoInference`, `InteropResolver` over the Java probe unit + reflection fallback, `LiveScopeSnapshot` from `snapshotScope`, `JsTypeRef`, **`RhinoTokens`** | hover says what a name is and which tier said so; a Java receiver's members are the Java engine's; after a run a global is typed by what it became | **done** — see "10.6 as built" |
 | **10.7** Completion | `JsCompletionProvider`, `JsKeywords` (measured per band), the probe re-parse, `Java.type("…")` names from the shared `TypeIndex`, live-object completion with the inherited half | `.` after a Java object lists its members; after a run, `settings.` lists what it has; no refused keyword offered | **done** — see "10.7 as built" |
@@ -148,7 +148,7 @@ or not honest for JS; what is shown instead is stated.
 | Unused local / unused import | Unused local, parameter, function (declared in a scope, never referenced) | Full | Symbol table has the declaration; a `Name` walk has the references. Same "hidden while broken, retained through it" behaviour via the base class | `RhinoSourceAnalyzer` |
 | Unreachable code, dead branch, no-effect expression | **Constant-condition branches only** — `if (true)` / `if (false)`, from an AST walk over literal conditions | Partial | `RhinoSourceAnalyzer.withConstantConditions`, gated on the file having parsed like every other optional problem. `while (true)` is deliberately exempt: it is the idiomatic spelling of a deliberate loop, and warning about it would mark correct code in every event loop ever written. **Rhino's own warnings are NOT enabled** — `msg.no.side.effects`, `msg.trailing.comma`, `msg.missing.semi` and the rest are strict-mode output, and `environs()` sets `setStrictMode(false)` on purpose: which style opinions are worth showing is a policy decision nobody has made, and turning them on wholesale would decide it by accident. Deferred to 10.3b, where a message policy is the work | `RhinoSourceAnalyzer` |
 | **`class` / `import` / `export` / `async`** — n/a in Java | The engine's own refusal, with the engine's message | Full | Rhino's parser reports it as a syntax error; the policy re-titles the message so `class` reads "classes are not supported by this engine (Rhino 1.7.15)" rather than "missing ; before statement". `async` needs the *source* rather than the message, since it lexes as an ordinary identifier | `RhinoProblemPolicy` |
-| `?.` / `??` — refused on band 8, accepted on 11+ | **Not re-titled** | No (deferred) | The *compatibility band*, 10.3b, and a different kind of work from the four above: those are refused by every band we ship, so the message can be flat, while these need per-construct AST detection and a comparison against the band an author is targeting. Rhino's raw syntax error is what is shown until then | — (10.3b) |
+| `?.` / `??` — refused on band 8, accepted on 11+ | **Warned, not re-titled** | Yes (10.3b) | On a band that refuses them these are ordinary syntax errors and need no re-title. The interesting case is the other one: a host that *accepts* them, targeting one that does not. `JsCompatibility` reports both, plus default parameters, array spread, destructuring defaults and computed properties — as **warnings**, because the code is valid where it was written and the finding is about somewhere else | `JsCompatibility` |
 | **Semantic tokens** — parameter / local / field / static / captured / reassigned / unresolved / deprecated / call | parameter (`variable.parameter`), local (`variable`), function name (`function`), `const` binding (`constant`), reassigned parameter/local (`….reassigned` — assigned after declaration), captured local (`variable.captured` — referenced from an inner `FunctionNode`), free name that is a JS global (`variable.builtin`), free name that is a **host binding** (`variable.global`), unresolved free name (`variable.unresolved`), unresolved call (`function.unresolved`), **Java package segments (`module`) and the type at the end of a chain (`type`)** | Full for scope-derived and for package chains | Symbol tables + a `NodeVisitor` over `Name`/`PropertyGet`/`FunctionCall`; `markJavaChains` colours only the OUTERMOST chain, since overlapping tokens are decided by paint order rather than by intent. **`property`/`function.call` on a resolved Java member and `deprecated` from Java's `@Deprecated` are not emitted** — both need a per-node interop lookup during the token walk, which is a bridge crossing per member access on every keystroke; the same information is on the hover and in the completion list, where it is asked for deliberately. Same overlay contract as Java: only what the grammar cannot know | `RhinoSemanticTokens` |
 | **`resolveAt`** — one binding, exact | Four tiers, best first: (1) **live scope** after a run — the actual value; (2) **JSDoc** on the declaration — `@type`/`@param`/`@returns`; (3) **syntactic inference** — literal kinds, `new X`, `Java.type("…")`/`Packages.…`, `function` → FUNCTION with parameter names, a Java call whose receiver resolved → the Java resolver's return type; (4) declared-but-unknown → `SymbolInfo` with kind and declaration, `type == null` | Partial (1–3), Best-effort (declared/unknown) | Each tier is a class with one method, tried in order; the tier that answered is recorded on the answer so the popup can say "(from last run)" — see §7 | `JsResolver` = `LiveScopeTier`, `JsDocTier`, `InferenceTier`, `DeclarationTier` |
 | `expectedTypeAt` (what type fits here) | A **Java** callee's declared parameter type (`list.add(|)`), and a JSDoc `@param {T}` on a JavaScript one; else null | Partial | `RhinoResolution.javaParameterTypeAt` reads the same member list the popup and the hover read, so the three cannot disagree; an overload set resolves to the first member of that name with enough parameters — exact for the common case and a stated guess otherwise | `RhinoResolution` |
@@ -287,7 +287,23 @@ first token at the position — `class` at an error position becomes "classes ar
 Rhino <version>"; `import`/`export`, `async`, `await`, `?.`, `??`, `**` likewise, **only if the probe
 found the band refuses them**. A band that accepts `class` produces no diagnostic and no re-title.
 
-**Compatibility band.** The refusal table has a second column: the *target* band. `RhinoProblemPolicy`
+**Compatibility band.** ✅ **Built — with one design decision the row did not anticipate.** The row
+says "detect the six constructs … **from the AST**", and that is the half that had to change.
+`JsCompatibility` uses the AST only to *locate* a candidate and asks the question of the source text it
+covers, because this module compiles against band 8's Rhino and runs against the host's — a gap that has
+now produced four distinct failures (an inlined `Token` constant that renumbered, two accessors present
+on one band and absent on the other, and `getFirstChild()` answering **null** because a node's parts are
+fields rather than child-list entries). An accessor for a construct band 8 refuses is also, fairly
+often, an accessor band 8's jar does not have, so the obvious implementation would not compile.
+
+Two things that fell out of building it, both of which would have made the feature untrustworthy:
+**a `??` inside a string or a comment is not an operator** (spans taken off Rhino's own lex rather than
+a scanner written here, since a second lexer is a second thing to get wrong about escapes), and **it
+only ever warns downward** — a target at or above the host reports nothing, because a construct the
+local engine refuses is already a syntax error and saying it twice in two severities is worse than
+saying it once.
+
+The refusal table has a second column: the *target* band. `RhinoProblemPolicy`
 takes a compatibility band (a setting, default "this host"), and a construct the target band's probe
 file lists as refused becomes a **warning** — "not supported on Java 8 hosts" — even when the local
 Rhino parsed it happily. Band 8's probe output therefore ships as a resource, not only as a build
@@ -470,7 +486,12 @@ correction), same `CodeAction` types, same popup, same Alt+Enter, same version g
 `ChangeSet`s stamped with the analysis version like Java's — and it stays small because Rhino gives
 absolute positions for every node. Every correction is tested through the same `FixFixture` shape Java
 uses (a fixture file per family under `fixtures/js/`), and the catalog file `plan_quickfix_catalog.md`
-gains a JS column rather than a second document.
+gains a JS column rather than a second document. **— Revised: it does not, and should not.** Every row
+in that file is keyed on an `IProblem` id and Rhino reports none, so a JS column would be empty for
+nearly every row. The two catalogues divide differently: Java's is mostly corrections answering a
+diagnostic, JavaScript's mostly intentions answering the caret — a different key, not a second column
+under the same one. The JS catalogue is the class javadoc on `JsQuickFixes` and `JsIntentions`, and
+§8 below is its reasoning.
 
 ---
 
@@ -793,7 +814,7 @@ JS quotes `src.zip` when present; go-to-definition to a JS declaration and to a 
 - The tier provenance §7 asks for was already done at 10.6, in the owner band's text.
 
 **10.9 — Quick fixes + intentions.** `JsRewrites`, `JsQuickFixes`, the §8 catalog, fixtures under
-`fixtures/js/`; `plan_quickfix_catalog.md` gains a JS column. *Tests:* one fixture per family through
+`fixtures/js/`; the catalogue is the class javadoc, not a column in `plan_quickfix_catalog.md` — see §8. *Tests:* one fixture per family through
 the `FixFixture` shape; `Negation`, `Names`, `SimilarNames`, `SwitchIntentions`' rule reused rather
 than copied — a test asserting the JS intention and the Java one agree on the same shape.
 
@@ -817,10 +838,22 @@ cannot pass against an edit at the wrong offsets.
 - **A template literal is measured but never offered.** `JsKeywords` gained a `template` probe so the
   intention is not offered on a band that would refuse the result — and it is filtered out of the completion
   list, because it is punctuation and a row there is a promise that accepting it produces something.
-- **Deferred, with reasons:** function expression → arrow, index `for` → `for…of`, `if`-chain → `switch`
-  (each needs a use-analysis the scopes do not yet expose — whether `this`/`arguments` appear, whether an
-  index is used only to index, whether every arm tests one variable), and extract-to-local (needs `Names`,
-  whose deriving half takes a JDT binding). None is blocked; each is a day's work with its own fixture.
+- **~~Deferred~~ — all four landed**, in `JsIntentions` beside the catalog. They were deferred as a group
+  because each has to prove something about a whole body before it may fire (whether `this`/`arguments`
+  appear, whether an index is used only to index, whether every arm tests one variable), and extract-to-local
+  additionally waited on `Names`, whose deriving half took a JDT binding — it is now `DerivedNames` in
+  `core`, split where the rule stops needing a type, so `getDisplayName()` names itself `displayName` in
+  both languages from one implementation. `JsKeywords` gained an `arrow` probe beside `template`, and for
+  the same reason.
+  **The proofs are the work, and three of them were wrong on the first pass in ways that still compiled:**
+  the `this` check compared a source span, and a `KeywordLiteral` in `this.x` measures five characters
+  (`"this."`), so the conversion was offered on exactly the shape it exists to refuse; the write-through
+  check excluded plain `=`, so `xs[i] = 0` read as a fetch and `for…of` silently stopped storing; and
+  `break` was matched by text against a node whose source carries its semicolon. Found by dumping twelve
+  fixtures through the real analyser rather than by reading the conditions.
+  **It also fixed a pre-existing one:** Rhino's loops extend `Scope`, so the structural statement walk
+  stopped on a loop's own header — "Surround with try/catch" offered to wrap a `while` condition. Both fix
+  classes now share one walk that excludes `Loop`.
 - **A refused keyword still gets no fix**, which is the one catalog entry that is an absence: `class` cannot
   be rewritten as a function honestly, and a repair that silently changed semantics is worse than none.
 
@@ -1404,33 +1437,60 @@ rename/find-usages/signature help for JS ahead of Java having them.
 
 ## 15. Verify before building on it (the probe's list — §23's discipline)
 
+*Audited 2026-08-19 against the code, because a list of open questions nobody closes is a list that
+stops being read. Each row below is now answered, struck as superseded, or explicitly still open —
+and the audit found one that was neither: step 11 had never been done, and doing it is the whole
+reason a band divergence keeps being found by a person rather than by the build.*
+
 1. ~~`Context.getSourcePositionFromStack` visibility per band~~ — **answered: package-private on all
-   three**, so the direct route is out. Still open: whether `new EvaluatorException("")` constructed on
-   the script thread carries the current line in interpreted mode, or whether `RhinoOrigin` needs the
-   same-package accessor shaded beside Rhino (§9.4).
-2. `JavaMembers` refuses a `ClassShutter`-hidden class for an object *passed in* as a binding, not
-   only for `Packages` lookups.
-3. Rhino's interpreter treats a `java.lang.Error` from `observeInstructionCount` as uncatchable by
-   script `catch` and still runs `finally` — on both Rhinos.
-4. `initStandardObjects(null, true)` (sealed) permits installing `Java`/`console` afterwards, or must
-   be sealed after installation.
-5. Which parser warnings each band emits in IDE mode with an `ErrorCollector` (the message-id list §4's
-   policy is keyed on), and whether `setRecordingLocalJsDocComments` attaches JSDoc to `var`/`let`/`const`
-   initialisers as well as to functions.
-6. `SymbolKind` has a kind for a plain JS object/`Object.prototype` container (`OBJECT`), or `PROPERTY`/
-   `MODULE` cover it — a core edit if not, and a one-line one.
-7. `NativeFunction`'s arity/name accessors are the same names on both Rhinos.
+   three**, so the direct route is out. **And the fallback works**, which is the half that was left
+   open: `RhinoExecutor.currentLine()` builds `new EvaluatorException("origin")` on the script thread
+   and reads `getScriptStack()`. No same-package accessor, nothing shaded beside Rhino.
+2. **Open.** `JavaMembers` refuses a `ClassShutter`-hidden class for an object *passed in* as a
+   binding, not only for `Packages` lookups. `JsSandboxTest` covers the `Java.type` and call routes;
+   the passed-in binding is the one shape nothing asks about.
+3. **Half answered.** `aStopCannotBeCaughtByTheScript` pins that Rhino's interpreter refuses to let a
+   script `catch` the stop — on the running band. That a `finally` still runs, and that both bands
+   agree, is untested.
+4. ~~`initStandardObjects(null, true)` (sealed) permits installing `Java`/`console` afterwards~~ —
+   **answered by 9a**, which measured it directly: a sealed scope still takes globals, so install
+   order is free. Duplicate row, kept struck rather than deleted so the question is not asked a third
+   time.
+5. **Half answered, half decided.** `setRecordingLocalJsDocComments` does attach JSDoc to `var`
+   initialisers — the JSDoc tier reads them and `JsAnalysisTest` covers it. The parser-warning
+   message-id list per band was **not** measured and no longer needs to be: §12a settled that Rhino's
+   own warnings stay off, because they are strict-mode output and which style opinions to show is a
+   policy decision nobody has made.
+6. ~~`SymbolKind` has a kind for a plain JS object container~~ — **answered: no core edit needed.**
+   `PROPERTY` and `MODULE` cover it; there is no `OBJECT` constant and nothing wanted one.
+7. **Open, and moot for now.** `NativeFunction`'s arity/name accessors — nothing in the module names
+   that type today, so the question has no consumer. It returns the moment one appears.
 8. ~~Promises drain at the end of an evaluation~~ — **answered: they do**, on every band. No pump.
-9. ~~`?.`, `??`, `**`, rest parameters, generators per band~~ — **answered**, and six of the guesses were
-   wrong; see the measured table in §13a. The probe file is what the policy, the keyword set and the
-   compatibility-band warning read.
+9. ~~`?.`, `??`, `**`, rest parameters, generators per band~~ — **answered**, and six of the guesses
+   were wrong; see the measured table in §13a. The probe file is what the policy, the keyword set and
+   the compatibility-band warning read — and since 10.3b, band 8's copy **ships as a resource** with a
+   test asserting it still matches the jars it describes.
 9a. ~~Whether a sealed scope still takes new globals~~ — **answered: it does**, so install order is free.
-9b. **A standing question for every engine, raised by the regexp finding:** does any other adapter reach
-   a `ServiceLoader` seam? ECJ has service files of its own, so the same "engine loader must be the
-   thread context classloader, before first class-init" rule may already apply to the Java engine
-   without anything having noticed — nothing it does today needs one, and that is not a guarantee.
-10. `CompilerEnvirons.setGenerateObserverCount(true)` makes the observer fire in compiled mode on both
-    Rhinos, and the generated class-file version loads on band 8.
-11. `EngineApiSurfaceTest`'s existing Rhino block already pins `Context`, `ContextFactory`, `ClassShutter`,
-   `Scriptable`, `ScriptableObject`, `ErrorReporter`, `EvaluatorException`; step 2 extends it with the
-   parser and interop surface above so a band bump fails the build rather than the popup.
+9b. **Open, and deliberately kept open.** A standing question for every engine, raised by the regexp
+   finding: does any other adapter reach a `ServiceLoader` seam? ECJ has service files of its own, so
+   the "engine loader must be the thread context classloader before first class-init" rule may already
+   apply to the Java engine without anything having noticed. Nothing it does today needs one, and that
+   is not a guarantee.
+10. ~~`setGenerateObserverCount(true)` makes the observer fire in compiled mode~~ — **not applicable.**
+   §9.1 chose interpreted mode (`setOptimizationLevel(-1)`) and the executor sets it unconditionally,
+   so there is no compiled path for the observer to fire on. The question returns only if that
+   decision does.
+11. ~~Extend `EngineApiSurfaceTest` with the parser and interop surface~~ — **done, and it had not
+   been.** The row said step 2 would extend it "so a band bump fails the build rather than the popup";
+   the block still pinned only what M5 needed — seven types about evaluating a string — while
+   everything the editor is built on arrived afterwards and was pinned by nothing.
+   `everyBandCarriesTheRhinoApiTheEDITORUses` now covers the IDE-mode parse, the tree accessors
+   (including `visit`, the one reading true on both bands), the symbol table, the twenty-six node
+   types the fix catalog and the compatibility band locate by class, and the execution seam.
+   **All four band divergences this module has hit were the kind this catches** — `ObjectProperty.getLeft`,
+   the `Token` constants, `CatchClause.getVarName`, `NativeJavaObject`'s three-argument constructor —
+   and every one of them was found by a person running it on the other band.
+   *(One shape worth recording: `ContextFactory.observeInstructionCount` is `protected`, so a
+   `getMethod` check reports it missing on every band. A member an adapter **overrides** rather than
+   calls needs `getDeclaredMethod` — the question is whether it is there to override, not whether it
+   is callable.)*

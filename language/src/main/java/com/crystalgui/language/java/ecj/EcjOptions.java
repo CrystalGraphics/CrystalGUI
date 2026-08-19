@@ -80,6 +80,15 @@ public final class EcjOptions {
         options.put("org.eclipse.jdt.core.compiler.source", level);
         options.put("org.eclipse.jdt.core.compiler.compliance", level);
         options.put("org.eclipse.jdt.core.compiler.codegen.targetPlatform", level);
+        // AND THE DOC COMMENTS, or `BodyDeclaration.getJavadoc()` answers null for every declaration in
+        // the file (M13 §25.6). Without it the parser skips doc comments entirely: the node's own span
+        // still covers the comment, which is the shape `JavaSignatures.quotedFragment` records having
+        // been caught by -- it scans the text to step over a comment the accessor denied existed.
+        //
+        // NOT A DIAGNOSTIC SWITCH. This turns on doc-comment PARSING, not the ~40 javadoc problems
+        // (`JavadocMissingReturnTag` and friends), which have their own options and stay off -- the
+        // catalogue lists them under what is deliberately not built. So this adds a tree, not a squiggle.
+        options.put("org.eclipse.jdt.core.compiler.doc.comment.support", "enabled");
         return options;
     }
 }
