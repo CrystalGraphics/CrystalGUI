@@ -243,12 +243,12 @@ public class SourceArchivesTest {
     @Test
     public void aBundledSourceIsReadThroughTheLoader() throws Exception {
         File jar = folder.newFile("mod.jar");
-        writeSourceJar(jar, SourceArchives.BUNDLED_PREFIX + "com/example/Thing.java",
+        writeSourceJar(jar, BundledSources.PREFIX + "com/example/Thing.java",
                 "package com.example; class Thing {}");
 
         try (URLClassLoader loader = new URLClassLoader(new URL[] { jar.toURI().toURL() }, null)) {
             SourceArchives.Archive archive =
-                    new SourceArchives.ResourceArchive(loader, SourceArchives.BUNDLED_PREFIX);
+                    new SourceArchives.ResourceArchive(loader, BundledSources.PREFIX);
             assertEquals("package com.example; class Thing {}",
                     archive.read("com/example/Thing.java"));
             assertNull(archive.read("com/example/Absent.java"));
@@ -269,6 +269,8 @@ public class SourceArchivesTest {
         File onDisk = folder.newFile("lib-sources.jar");
         writeSourceJar(onDisk, "com/example/Thing.java", "package com.example; class Thing {}");
         File classes = folder.newFile("lib.jar");
+        writeSourceJar(classes, BundledSources.PREFIX + "com/example/Thing.java",
+                "package com.example; class Thing {}");
 
         try (URLClassLoader loader = new URLClassLoader(new URL[0], null)) {
             List<SourceArchives.Archive> archives =
@@ -291,7 +293,7 @@ public class SourceArchivesTest {
     public void aBundledPathCannotClimbOutOfItsPrefix() throws Exception {
         try (URLClassLoader loader = new URLClassLoader(new URL[0], null)) {
             SourceArchives.Archive archive =
-                    new SourceArchives.ResourceArchive(loader, SourceArchives.BUNDLED_PREFIX);
+                    new SourceArchives.ResourceArchive(loader, BundledSources.PREFIX);
             assertNull(archive.read("../../../etc/passwd"));
             assertNull(archive.read(""));
             assertNull(archive.read(null));
@@ -312,7 +314,7 @@ public class SourceArchivesTest {
     @Test
     public void ourOwnSourcesAreShippedAndReachableFromTheClasspath() {
         SourceArchives.Archive bundled = new SourceArchives.ResourceArchive(
-                SourceArchives.class.getClassLoader(), SourceArchives.BUNDLED_PREFIX);
+                SourceArchives.class.getClassLoader(), BundledSources.PREFIX);
         String text = bundled.read("com/crystalgui/ui/UIElement.java");
         assertNotNull("core's sources are not in the jar — see tasks.jar in core/build.gradle.kts", text);
         assertTrue("that is not UIElement", text.contains("public class UIElement"));
@@ -332,8 +334,11 @@ public class SourceArchivesTest {
      */
     @Test
     public void crystalGraphicsShipsItsSourcesTooAndUnderItsOwnNamespace() {
-        List<SourceArchives.Archive> archives =
-                SourceArchives.discover(List.of(), SourceArchives.class.getClassLoader());
+        // THE RUNNING CLASSPATH, because that is what discovery scans. An empty list finds nothing, which
+        // is correct and would make this assert against a producer that was never built.
+        List<SourceArchives.Archive> archives = SourceArchives.discover(
+                List.of(System.getProperty("java.class.path", "").split(File.pathSeparator)),
+                SourceArchives.class.getClassLoader());
         String text = null;
         for (SourceArchives.Archive archive : archives) {
             if (!(archive instanceof SourceArchives.ResourceArchive)) continue;
