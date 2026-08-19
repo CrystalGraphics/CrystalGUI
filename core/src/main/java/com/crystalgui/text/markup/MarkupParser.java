@@ -20,6 +20,31 @@ import java.util.Locale;
  * licences of the three obvious sources are laid out. The spec is a specification; nobody's code is
  * copied here.</p>
  *
+ * <h3>Why this is not {@code CgMarkupParser}</h3>
+ *
+ * <p>CrystalGraphics already has one, and it answers a different question. {@code CgMarkupParser} turns
+ * markup into a {@code CgStyledText} — <b>one flat string plus non-overlapping style spans</b> — which is
+ * what a renderer needs to draw a line: a chat message, a label, a tooltip with a bold word in it. Its
+ * vocabulary is {@code <b>}/{@code <i>}/{@code <u>}/{@code <s>}/{@code <color=#RRGGBB>}, a bespoke set
+ * rather than HTML's, with no entities and no attributes.</p>
+ *
+ * <p>A doc comment is not a line. Its paragraphs, its {@code <pre>} samples and its lists are
+ * <em>blocks</em>, and a code sample has to become an element with its own background and its own
+ * coloured runs. There is no way to say that in one string and a span list; encoding it in one is
+ * precisely the wall of text this exists to stop.</p>
+ *
+ * <p><b>And the boundary forbids the merge anyway.</b> {@code CgStyledText} is in CrystalGraphics
+ * <em>core</em>, and {@code core/src/headlessTest} takes {@code com.crystalgraphics:platform} and
+ * deliberately not core — the absence is the assertion that a dedicated server can build and hold
+ * documents with no GL and no fonts. Documentation is one of those: {@code SymbolInfo} lives beside the
+ * language SPIs, which run headlessly for exactly this reason. A parser that reached CG core could not be
+ * tested there and could not ship on a server.</p>
+ *
+ * <p>Where the two genuinely meet is <b>at draw time</b>, one layer down from here: when the popup paints
+ * a paragraph, a run marked {@link MarkupSpan#STRONG} is a {@code CgStyleSpan}, and turning the one into
+ * the other is the renderer's job and belongs on that side of the seam. This layer decides what the
+ * document says; CrystalGraphics decides what a run of glyphs looks like.</p>
+ *
  * <h3>A subset, and it says which</h3>
  *
  * <p>Not implemented: the full insertion-mode tree construction, foreign content, {@code <table>},
