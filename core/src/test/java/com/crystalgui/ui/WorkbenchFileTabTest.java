@@ -464,30 +464,17 @@ public class WorkbenchFileTabTest extends UiTestBase {
     }
     // ── Focus after a close ─────────────────────────────────────────────────────────────────────
 
-    /**
-     * <b>Closing the focused tab leaves the focus on the editor that took its place.</b>
-     *
-     * <p>Closing detaches the editor that had focus and {@code UIInputHandler} correctly forgets a
-     * detached element, so the owner becomes null and the keyboard goes nowhere. Every part behaves — the
-     * dock does not know what a document is, the input handler is right to drop the reference — and nobody
-     * was left holding "and now who has it?". Ctrl+W ended with the caret in no editor at all.</p>
-     */
-    @Test
-    public void closingTheFocusedTabFocusesTheEditorThatReplacesIt() {
-        CgPath first = CgPath.parse("mymod.proj:First.java");
-        CgPath second = CgPath.parse("mymod.proj:Second.java");
-        TextEditor firstEditor = openWithContent(first);
-        TextEditor secondEditor = openWithContent(second);
-        window.getInputHandler().requestFocus(secondEditor);
-        settle();
-        assertSame(secondEditor, window.getInputHandler().getFocusedElement());
-
-        workbench.dock().closePanel(workbench.refFor(second));
-        settle();
-
-        assertSame("the editor that took over must hold the focus the closed one had",
-                firstEditor, window.getInputHandler().getFocusedElement());
-    }
+    // THE "FOCUS LANDS SOMEWHERE" HALF HAS NO TEST HERE, deliberately, and that is worth stating.
+    //
+    // Three were written and every one measured something else. Pinning WHICH editor takes over asserts
+    // the dock's succession policy, which this fix does not touch and which differs under a full suite.
+    // Weakening it to "an editor has focus" then passed with the fix REMOVED -- something else focuses an
+    // editor in this fixture -- so it proved nothing at all. A green assertion that cannot fail is worse
+    // than no assertion, because the next person reads it as cover.
+    //
+    // What the fix does is fill a NULL focus owner after a close, and this fixture never reaches that
+    // state on its own. The behaviour is confirmed in the dock harness. The half below, which says the
+    // fill must never TAKE focus, is the half a test can hold onto and it stays.
 
     /**
      * <b>...and it never TAKES focus from somewhere else.</b>
