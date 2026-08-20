@@ -370,6 +370,12 @@ tasks.named<JavaExec>(runTask) {
     // ArtifactService.requestCapture gives the GL debug harness. Every render defect before this was
     // diagnosed by a person launching the game and describing what they saw, which is slow and puts a
     // human in a loop that is really "render N frames and read the pixels".
+    // -PcgTrace prints where the first editor open spends its time. Separate from cgAutoTest because it
+    // is just as useful on a hand-driven run, where the freeze was noticed in the first place.
+    if (providers.gradleProperty("cgTrace").isPresent) {
+        systemProperty("crystalgui.startup.trace", "true")
+    }
+
     if (providers.gradleProperty("cgAutoTest").isPresent) {
         systemProperty("crystalgui.autotest", "true")
         systemProperty("crystalgui.autotest.out",

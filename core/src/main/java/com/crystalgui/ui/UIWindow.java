@@ -495,6 +495,29 @@ public final class UIWindow {
     }
 
     /** Shared prologue of {@link #paintFrame()} and {@link #updateWithoutPainting()}. */
+    /**
+     * <b>Where a first frame spends its time</b> — {@code -Dcrystalgui.startup.trace=true}, first frame
+     * only, off by default and a {@code static final} read when off.
+     *
+     * <p>A first editor open on a Minecraft client measured 4 seconds, and the first paint was 2,670 ms
+     * of it — two thirds, and the only part no unit test can reach. Naming the phases is what turns
+     * "warm something up" into a decision about which thing.</p>
+     */
+    private static final boolean TRACE_FIRST_FRAME = Boolean.getBoolean("crystalgui.startup.trace");
+
+    private boolean tracedFirstFrame;
+    private long tracePhaseNanos;
+
+    private void tracePhase(String phase) {
+        if (!TRACE_FIRST_FRAME || tracedFirstFrame) return;
+        long now = System.nanoTime();
+        if (tracePhaseNanos != 0) {
+            CrystalGuiCore.LOGGER.info("[startup]   {} — {} ms", phase,
+                    (now - tracePhaseNanos) / 1_000_000);
+        }
+        tracePhaseNanos = now;
+    }
+
     private float advanceFrame() {
         long now = System.nanoTime();
         float deltaSeconds = (now - lastFrameNanos) / 1_000_000_000f;
@@ -510,8 +533,11 @@ public final class UIWindow {
         // the same guard, for the same reason, as CgUiPaintContext.hasInstance().
         if (JobScheduler.hasShared()) JobScheduler.shared().drain();
 
+        tracePhase("begin");
         styleEngine.calculateStyle(deltaSeconds);
+        tracePhase("style cascade");
         tickAnimations(deltaSeconds);
+        tracePhase("animations");
         // A TICKER MAY HAVE BUILT A SUBTREE, not merely set a class on one — and an element that has
         // never matched a selector must not reach Taffy at all, because the FIRST layout pass is where
         // irreversible decisions are taken from it. Re-matching afterwards, as the loop below does, is
@@ -568,9 +594,13 @@ public final class UIWindow {
 
     public void paintFrame() {
         advanceFrame();
+        tracePhase("layout");
 
         CgUiPaintContext paintContext = CgUiPaintContext.getInstance();
         paintContext.beginFrame(actualScreenWidth, actualScreenHeight);
+        // MATERIALS COMPILE HERE on a first frame -- beginFrame binds gui_quad, which parses and links
+        // it if nothing has yet.
+        tracePhase("paint context + material bind");
 
         PoseStack pose = paintContext.getPoseStack();
         pose.pushPose();
@@ -581,6 +611,9 @@ public final class UIWindow {
         pose.mulPoseMatrix(rootTransform);
 
         ui.rootElement.drawSubtree(paintContext);
+        // FONTS AND ICONS RESOLVE HERE. A glyph atlas is built the first time a string is measured or
+        // drawn, and every SVG is parsed the first time it is asked for.
+        tracePhase("drawSubtree (glyph atlases, icon SVGs)");
 
         pose.popPose();
 
@@ -589,6 +622,8 @@ public final class UIWindow {
         paintContext.endFrame();
         inputHandler.beginFrame();
         inputHandler.endFrame();
+        tracePhase("top layer + endFrame");
+        tracedFirstFrame = true;
     }
 
 
@@ -787,7 +822,17 @@ public final class UIWindow {
         if (!tickers.isEmpty()) {
             // Snapshot: a ticker may register another (or itself) while running.
             for (UIFrameTicker ticker : new ArrayList<>(tickers)) {
+                long tickerStart = TRACE_FIRST_FRAME && !tracedFirstFrame ? System.nanoTime() : 0L;
                 if (!ticker.tickFrame(deltaSeconds)) tickers.remove(ticker);
+                if (tickerStart != 0L) {
+                    long cost = (System.nanoTime() - tickerStart) / 1_000_000;
+                    // ONLY THE ONES WORTH LOOKING AT. A first frame runs dozens of tickers and almost all
+                    // of them are free; listing every one buries the one that is not.
+                    if (cost >= 5) {
+                        CrystalGuiCore.LOGGER.info("[startup]     ticker {} — {} ms",
+                                ticker.getClass().getName(), cost);
+                    }
+                }
             }
         }
     }
