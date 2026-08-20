@@ -2,6 +2,7 @@ package com.crystalgui.ui;
 
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.text.markup.MarkupParser;
+import com.crystalgui.text.syntax.Language;
 import com.crystalgui.ui.elements.MarkupView;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.text.TextRange;
@@ -159,6 +160,56 @@ public class MarkupViewTest extends UiTestBase {
         String text = allText(sample);
         assertTrue("the sample's indentation was collapsed: <" + text + ">", text.contains("    y();"));
         assertTrue("the sample lost its line breaks: <" + text + ">", text.contains("\n"));
+    }
+
+    /**
+     * <b>A {@code <pre>} sample is lexed when a language has been named, and left alone otherwise.</b>
+     *
+     * <p>Asserted through the {@code __syntax__} class rather than through the bands, because that class
+     * is the half that is easy to omit and impossible to see: a run carrying ranges without it resolves
+     * every scheme rule to nothing and draws as plain text, which reads as the lexing not working rather
+     * than as a missing selector. The band count then says the tokenizer was actually consulted.</p>
+     *
+     * <p>{@code KeywordTokenizer} is what answers here — {@code core}'s own engineless tier, since a test
+     * in this module has no grammar module behind it. That is the point: the seam is
+     * {@link com.crystalgui.text.syntax.SyntaxTokenizer}, and a consumer must not care which side of it
+     * answered.</p>
+     */
+    @Test
+    public void aCodeSampleIsLexedOnlyWhenALanguageIsNamed() {
+        String doc = "<pre>class A { int x = 1; }</pre>";
+
+        MarkupView plain = new MarkupView();
+        plain.setDocument(MarkupParser.parse(doc));
+        UIText untouched = firstText(plain);
+        assertNotNull("the sample produced no text run", untouched);
+        assertTrue("an unnamed language still marked the sample as code",
+                !untouched.hasClass(UIText.SYNTAX_CLASS));
+
+        MarkupView java = new MarkupView().setCodeLanguage(Language.JAVA);
+        java.setDocument(MarkupParser.parse(doc));
+        UIText lexed = firstText(java);
+        assertNotNull("the sample produced no text run", lexed);
+        assertTrue("the sample was not marked as syntax-coloured, so no scheme rule can reach it",
+                lexed.hasClass(UIText.SYNTAX_CLASS));
+        assertTrue("no bands were registered, so nothing was lexed",
+                !lexed.highlights().entries().isEmpty());
+    }
+
+    /**
+     * <b>The sample's text is untouched by lexing.</b>
+     *
+     * <p>Bands are offsets into the run's own string, so anything that rewrote the text to colour it
+     * would be painting over the wrong characters. Worth stating because the inline chip <em>does</em>
+     * pad its text, and a reader who knows that would reasonably expect this to as well.</p>
+     */
+    @Test
+    public void lexingDoesNotAlterTheSampleText() {
+        String sample = "class A { int x = 1; }";
+        MarkupView view = new MarkupView().setCodeLanguage(Language.JAVA);
+        view.setDocument(MarkupParser.parse("<pre>" + sample + "</pre>"));
+
+        assertEquals("the sample was rewritten", sample, firstText(view).getText());
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────────────────────────

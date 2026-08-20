@@ -45,6 +45,7 @@ import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.text.HighlightRegistry;
+import com.crystalgui.ui.text.SyntaxHighlighting;
 import com.crystalgui.ui.text.TextRange;
 import dev.vfyjxf.taffy.style.LengthPercentageAuto;
 import dev.vfyjxf.taffy.style.TaffyPosition;
@@ -125,7 +126,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * this class and gets the same rules. Public because the documentation popup is the second consumer
      * and will not be the last.</p>
      */
-    public static final String SYNTAX_CLASS = "__syntax__";
+    /** @see UIText#SYNTAX_CLASS — the definition; kept here because every scheme and half the editor
+     * already names it through this class. */
+    public static final String SYNTAX_CLASS = UIText.SYNTAX_CLASS;
     public static final String CARET_CLASS = "__caret__";
     public static final String SELECTION_CLASS = "__selection__";
     public static final String GUTTER_CLASS = "__gutter__";
@@ -2127,8 +2130,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
                     // correctly and then took `function`'s colour anyway, and the distinction the query
                     // was adjusted to make disappeared before it reached the screen.
                     String general = token.generalName();
-                    if (general != null) addRange(byName, general, range);
-                    addRange(byName, token.name(), range);
+                    if (general != null) SyntaxHighlighting.addRange(byName, general, range);
+                    SyntaxHighlighting.addRange(byName, token.name(), range);
                 }
             }
 
@@ -2224,14 +2227,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * carry <em>the same name</em>, so they resolve to the same colour, and the fallback exists only to
      * cover what a specific name did not. Anything it duplicates is by definition already handled.</p>
      */
-    private static void addRange(Map<String, List<TextRange>> byName, String name, TextRange range) {
-        List<TextRange> ranges = byName.computeIfAbsent(name, key -> new ArrayList<>());
-        for (TextRange existing : ranges) {
-            if (range.start() < existing.end() && existing.start() < range.end()) return;
-        }
-        ranges.add(range);
-    }
-
     /** The highlight name {@link DiagnosticTag#UNNECESSARY} is styled through. */
     static final String UNNECESSARY_HIGHLIGHT = "unnecessary";
 
@@ -2271,7 +2266,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             int start = Math.max(tracked.from(), lineStart);
             int end = Math.min(tracked.to(), lineEnd);
             if (end <= start) continue;
-            addRange(byName, UNNECESSARY_HIGHLIGHT, TextRange.of(start - lineStart, end - lineStart));
+            SyntaxHighlighting.addRange(byName, UNNECESSARY_HIGHLIGHT, TextRange.of(start - lineStart, end - lineStart));
         }
     }
 
@@ -3550,7 +3545,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             int start = Math.max(range.start(), lineStart);
             int end = Math.min(range.end(), lineEnd);
             if (end <= start) continue;
-            addRange(byName, name, TextRange.of(start - lineStart, end - lineStart));
+            SyntaxHighlighting.addRange(byName, name, TextRange.of(start - lineStart, end - lineStart));
         }
     }
 

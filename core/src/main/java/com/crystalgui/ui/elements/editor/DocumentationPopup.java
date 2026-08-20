@@ -10,6 +10,8 @@ import com.crystalgui.text.markup.MarkupParser;
 import com.crystalgui.text.lang.SymbolKind;
 import com.crystalgui.text.lang.SymbolModifier;
 import com.crystalgui.text.lang.TypeRef;
+import com.crystalgui.core.signal.Signal;
+import com.crystalgui.text.syntax.Language;
 import com.crystalgui.text.syntax.SyntaxToken;
 import com.crystalgui.ui.AnchoredPlacement;
 import com.crystalgui.ui.UIElement;
@@ -21,6 +23,7 @@ import com.crystalgui.text.lang.CodeAction;
 import com.crystalgui.ui.elements.ScrollerView;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.input.FocusPolicy;
+import com.crystalgui.ui.text.SyntaxHighlighting;
 import com.crystalgui.ui.text.TextRange;
 import lombok.Getter;
 
@@ -391,6 +394,7 @@ public final class DocumentationPopup extends Popover {
         footerRow.addInternalChild(footerText);
         footerRow.addInternalChild(footerEdit);
         body.addClass(BODY_CLASS);
+        body.onLinkActivated.connect(onLinkActivated::emit);
 
         problemMessage.addClass(PROBLEM_MESSAGE_CLASS);
         // NOT forceSelfSizeWidth. It reports the unwrapped run, which is exactly what stops a wrapping
@@ -860,6 +864,28 @@ public final class DocumentationPopup extends Popover {
         return super.showFor(anchorElement, invoker);
     }
 
+    /**
+     * What a {@code <pre>} sample in the documentation is written in.
+     *
+     * <p>Forwarded to the body rather than derived here, and the popup cannot derive it: a
+     * {@link SymbolInfo} says what a symbol IS, not what language the file describing it is written in.
+     * The editor knows, and it is the editor that opens this.</p>
+     */
+    /**
+     * A {@code {@link}} in the documentation was pressed, carrying its target.
+     *
+     * <p>Forwarded straight from the body. The target is the raw {@code href} the emitter wrote —
+     * {@code java:java.util.List} for a javadoc link — and turning that into a place to go needs
+     * something holding an engine, which this popup is not. The same division the footer pencil already
+     * makes: the popup states what happened, {@code EditorLanguageFeatures} decides what it means.</p>
+     */
+    public final Signal.Value<String> onLinkActivated = new Signal.Value<>();
+
+    public DocumentationPopup setCodeLanguage(@Nullable Language language) {
+        body.setCodeLanguage(language);
+        return this;
+    }
+
     private void unpin() {
         pinned = false;
         removeClass(PINNED_CLASS);
@@ -1122,35 +1148,12 @@ public final class DocumentationPopup extends Popover {
         definitionText = signature.text();
         layOutSignatureLines(signature.text());
 
-        // REBASED ONTO EACH LINE. The tokens index the whole declaration, and every line after the first
-        // starts somewhere into it -- so a range handed to the wrong element by its absolute offset lands
-        // wherever that many characters is on THAT line, which is a colour on unrelated text rather than
-        // an error.
-        String[] lines = signature.text().split("\n", -1);
-        int[] lineStart = new int[lines.length];
-        for (int i = 1; i < lines.length; i++) {
-            lineStart[i] = lineStart[i - 1] + lines[i - 1].length() + 1;
-        }
-        List<Map<String, List<TextRange>>> perLine = new ArrayList<>();
-        for (int i = 0; i < lines.length; i++) perLine.add(new LinkedHashMap<>());
-
-        for (SyntaxToken token : signature.tokens()) {
-            for (int i = 0; i < lines.length; i++) {
-                int from = lineStart[i];
-                int to = from + lines[i].length();
-                int start = Math.max(token.start(), from);
-                int end = Math.min(token.end(), to);
-                if (end <= start) continue;
-                perLine.get(i).computeIfAbsent(token.name(), any -> new ArrayList<>())
-                        .add(TextRange.of(start - from, end - from));
-            }
-        }
-        for (int i = 0; i < lines.length; i++) {
-            UIText line = definitionLines.get(i);
-            for (Map.Entry<String, List<TextRange>> entry : perLine.get(i).entrySet()) {
-                line.highlights().set(entry.getKey(), entry.getValue());
-            }
-        }
+        // REBASED ONTO EACH LINE by `SyntaxHighlighting`, which is where that loop now lives -- the
+        // tokens index the whole declaration and every line after the first starts somewhere into it, so
+        // a range handed to a line by its absolute offset lands wherever that many characters is on THAT
+        // line: a colour on unrelated text rather than an error. A `<pre>` sample in a rendered doc
+        // comment needs the identical operation, which is what took it out of here.
+        SyntaxHighlighting.colourLines(definitionLines, signature.text(), signature.tokens());
     }
 
     /**

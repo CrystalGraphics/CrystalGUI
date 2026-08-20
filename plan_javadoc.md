@@ -40,6 +40,11 @@ one.
 
 ## 1. The parity audit
 
+> **Status, as of the syntax-colouring commit.** Ten of the thirteen rows are shipped; the three left are marked **OPEN** below and
+> collected in §6. The table is the original audit and is deliberately not rewritten — what it
+> recorded is what the popup looked like before any of this, and a row's wording is the evidence for why
+> the work was worth doing.
+
 Numbered as they were reported, so the conversation and this file agree.
 
 ### A. The body — six symptoms, one cause
@@ -50,29 +55,29 @@ plain text, so there is nowhere for structure to survive even if the parser kept
 
 | # | Gap | IntelliJ | Ours |
 |---|---|---|---|
-| 1 | Code blocks | `<pre>` becomes a panel with its own background | inlined into the prose — "For example: String str = "abc";" runs on as a sentence |
-| 2 | Syntax colouring in doc code | `char`, `new`, `"abc"` coloured inside the panel | uniform body colour |
-| 3 | Inline `{@code}` | tinted box around `String`, `"abc"` | indistinguishable from prose |
-| 4 | Paragraphs | blank-line separated | one wall |
-| 5 | Lists | bullet and indent | a bare newline |
-| 6 | `{@link}` | coloured and clickable | plain subject text |
+| 1 | **DONE** Code blocks | `<pre>` becomes a panel with its own background | inlined into the prose — "For example: String str = "abc";" runs on as a sentence |
+| 2 | **DONE** Syntax colouring in doc code | `char`, `new`, `"abc"` coloured inside the panel | uniform body colour |
+| 3 | **DONE** Inline `{@code}` | tinted box around `String`, `"abc"` | indistinguishable from prose |
+| 4 | **DONE** Paragraphs | blank-line separated | one wall |
+| 5 | **DONE** Lists | bullet and indent | a bare newline |
+| 6 | **PART** `{@link}` | coloured and clickable | plain subject text |
 
 ### B. The signature
 
 | # | Gap | IntelliJ | Ours |
 |---|---|---|---|
-| 7 | Layout source | normalised from the PSI: one interface per line, qualified outside `java.lang` | the source quote, verbatim |
-| 8 | Continuation alignment | each interface aligned under the first | inherits the source's own indent |
+| 7 | **DONE** Layout source | normalised from the PSI: one interface per line, qualified outside `java.lang` | the source quote, verbatim |
+| 8 | **DONE** Continuation alignment | each interface aligned under the first | inherits the source's own indent |
 
 ### C. Chrome and layout
 
 | # | Gap | IntelliJ | Ours |
 |---|---|---|---|
-| 9 | Width | ~480px | **already capped at 441px** — measured, see §5. The screenshot predates it or was resized |
-| 10 | Scrollbar | visible on the right | **already there** — the body caps at 220px under `overflow: auto`; see §5 |
-| 11 | Footer | pencil + kebab, bottom right | `__doc-footer__` exists; not visible on a class hover |
-| 12 | Prose vs code contrast | body dimmed slightly against code | uniform |
-| 13 | Line spacing | looser prose | tighter |
+| 9 | **DONE** Width | ~480px | **already capped at 441px** — measured, see §5. The screenshot predates it or was resized |
+| 10 | **DONE** Scrollbar | visible on the right | **already there** — the body caps at 220px under `overflow: auto`; see §5 |
+| 11 | **DONE** Footer | pencil + kebab, bottom right | `__doc-footer__` exists; not visible on a class hover |
+| 12 | **DONE** Prose vs code contrast | body dimmed slightly against code | uniform |
+| 13 | **DONE** Line spacing | looser prose | tighter |
 
 ---
 
@@ -425,3 +430,135 @@ the box it was aiming at: a promoted element's layout position and its world pos
 places it diverges from its DOM parent, and here they were (-140,-76) and (0,0) — hit testing uses the
 world one. The behaviour is verified in the harness; a test that keeps measuring the fixture rather than
 the feature is worse than none.
+
+
+---
+
+## 6. What is left
+
+Three rows of §1 and three questions from §4, stated as of the syntax-colouring commit.
+
+### 6.1 The audit rows
+
+**Row 6 — `{@link}` is styled but not clickable.** The plumbing is already in place and unused:
+`JavaDocs` emits `<a href="java:…">`, `MarkupParser` keeps it, `MarkupSpan.target()` carries it to the
+renderer, and `MarkupView` drops it — which its own javadoc says, so that adding navigation is a
+listener rather than a re-parse. The precedent for the gesture is the footer's pencil: the popup emits an
+intent (`onGoToDeclaration`) and the editor decides what to do with it. The missing pieces are a hit test
+from a character offset back to a span, which the band ranges already describe, and a decision about what
+a `java:` target resolves against.
+
+**Row 7 — a supertype outside `java.lang` should be qualified.** The stacking half shipped
+(`JavaSignatures` assembles rather than quotes once there is more than one supertype), and the naming half
+did not: ours reads `implements Serializable`, IntelliJ reads `implements java.io.Serializable` while
+leaving `Comparable` and `CharSequence` bare. The rule is "qualify anything not in `java.lang`", which is
+one condition in the renderer — the binding already knows its package.
+
+**Row 12 — prose and code are the same foreground.** Both resolve to `--fg`
+(`--doc-body-fg` and `--markup-pre-fg`). IntelliJ dims the prose slightly so the code reads as the
+foreground of the two. A token change, but it is a judgement about how much, and it should be made against
+a screenshot rather than in the abstract.
+
+### 6.2 The open questions, two of them now answered
+
+**How the model crosses the bridge — decided by what shipped.** The engine emits *markup as a string*
+and the popup parses it (`MarkupParser.parse` in `DocumentationPopup.fill`). `SymbolInfo.documentation()`
+therefore stayed a `String` and `com.crystalgui.text.lang` gained nothing, which was the second of the two
+options and the one that keeps the SPI small. Worth stating because the first option — a value type on
+the seam — is the one a reader would assume from the model existing.
+
+**`{@inheritDoc}` — half done, and the half that matters most is the one that works.** A method with
+*no comment at all* inherits its supertype's, breadth-first, superclass before interfaces
+(`JavaSignatures.documentationOf`) — without which a large fraction of methods render empty and the
+feature reads as broken. The tag *inside* a comment, mixing the author's own prose with the inherited
+text, is not honoured: it renders as its own subject like any other unrecognised inline tag.
+
+**JavaScript gets the renderer and none of the emitter.** Only the Java engine calls
+`withDocumentation`; `RhinoJsDoc` is "a tag grammar, not a documentation renderer" by its own first line,
+and the JS side forwards a *Java* symbol's documentation through `InteropResolver` and produces none of
+its own. The renderer and the model are language-neutral and need no change — what is missing is a
+JSDoc emitter, and JSDoc is **Markdown** rather than HTML, so it is a second parser feeding the same
+`MarkupDocument` rather than a second renderer.
+
+### 6.3 Found on the way, not in the audit
+
+**A grammar's guarded `@type` patterns are inert, so `System.out` reads as two variables.** The Java query
+states the rule — `((field_access object: (identifier) @type) (#match? @type "^[A-Z]"))` — but
+`Queries.liftUnambiguousPredicates` lifts a predicate only when *every* use of that capture name is
+predicated, and `@type` is used both guarded (four patterns) and unguarded (a dozen). An unlifted
+predicate is not evaluated by the binding at all, so those four patterns contribute nothing and `System`
+falls through to the catch-all `(identifier) @variable`.
+
+This is **not** specific to documentation and not introduced by it: the editor is affected identically and
+only looks right because the Java engine's semantic tokens replace the grammar's guess. A doc popup has no
+engine, which is why it surfaced here. The fix is to key the lifted filter by **pattern** rather than by
+capture name; it touches the query loader every language shares, so it is its own piece of work.
+
+
+---
+
+### Rows 6, 7 and 12, and the inert `@type`
+
+**Row 7 rested on a misreading, and is retired.** The audit read IntelliJ's
+`implements java.io.Serializable, Comparable<String>, CharSequence, Constable, ConstantDesc` as a
+normalisation rule — "qualified outside `java.lang`". It is not a rule: `String.java` is written that
+way, and IntelliJ is quoting it. Checked against `src.zip` rather than inferred:
+
+```java
+public final class String
+    implements java.io.Serializable, Comparable<String>, CharSequence,
+               Constable, ConstantDesc {
+```
+
+`Constable` and `ConstantDesc` are `java.lang.constant.*` and appear **bare** in IntelliJ's own output, so
+implementing "qualify outside `java.lang`" would have matched on one entry by coincidence and diverged on
+two. Our assembled form uses simple names throughout, which is consistent where quoting inherits whatever
+the author happened to type. The stacking half of the row shipped earlier, so the row is done.
+
+**Row 12 is a per-theme override, not a system token.** A doc body at `--fg` is exactly as bright as the
+code samples in it and the two read as one surface; at `--fg-secondary` it reads as disabled. The value
+sits between, about fifteen percent down from `--fg`. It was first added as a system token `--prose-fg`
+and the governance suite refused it twice, correctly: `crystal-light.css` must define every key its dark
+pair does, and `base.css` may derive only into `SYSTEM_VOCABULARY`, whose own note says adding a name is
+an API decision rather than a convenience. One component wanting quieter prose does not earn a system
+concept, so `--doc-body-fg` is overridden per theme instead — which several component tokens already
+are.
+
+**Row 6 is half done and the remaining half is a missing SPI method, not a missing widget.** The gesture
+is complete: `UIText.offsetAt` resolves a point to a source character, `MarkupView` retains each run's
+link spans and emits `onLinkActivated` with the raw `href`, and `DocumentationPopup` forwards it.
+`offsetAt` answers at **run** granularity, which sounds coarse and is exact for this: a span boundary is a
+shaping-run boundary, so a link is its own run — the same property `paintHighlightBands` is built on.
+
+What is missing is the far end. `Resolver` offers `resolveAt(offset)`, `expectedTypeAt(offset)` and
+`membersOf(type, offset)` — **nothing by name** — so no consumer can turn `java:java.util.List`
+into a `SymbolInfo`, and IntelliJ's behaviour for a doc link is to navigate the popup to that element's
+documentation. The piece needed is one SPI method (`describe(qualifiedName)`), implemented Java-side by
+the probe-unit trick `InteropResolver.describeMember` already uses. Deliberately not invented here:
+emitting a signal into an editor that cannot act on it is honest; guessing at a resolver is not.
+
+### The inert `@type`, fixed — and the lift is now per PATTERN
+
+`Queries` lifted a `#match?` out of the query text only when **every** use of that capture name was
+guarded, because the re-application could only match on the name. `@constant` qualified; `@type` did not
+— four patterns guard it with `^[A-Z]` and a dozen use it bare — so those four contributed
+nothing and `System.out.println` reported two plain variables.
+
+**The lift is now resolved to the pattern it came from.** Each stripped predicate records the byte offset
+it occupied in the stripped text, and `Queries.filtersByPattern` maps that against
+`TSQuery.getStartByteForPattern`/`getEndByteForPattern` once the query is compiled. A pattern's byte range
+is a fact the compiled query already knows, so keying on it needs no parsing of our own — and the
+predicate was written inside its pattern, so containment is the answer. Every translatable predicate is
+lifted now; what is still refused is one this JVM cannot express, because stripping that would make its
+pattern fire *unconditionally*, which is a wrong colour rather than a missing one.
+
+**Measured before changing anything, and it corrected a guess.** The binding ships
+`TSQueryPredicate$TSQueryPredicateMatch` and `TreeSitterTokenizer.predicatesHold` already calls
+`getPredicatesForPattern(...).test(...)`, which reads as `#match?` being supported and the whole lift
+being obsolete. Disabling the lift failed **all three** of `LiftedPredicateTest`'s cases: a pattern
+carrying a predicate still yields no match through this binding, exactly as that test has documented since
+it was written. The class exists; the cursor never gets that far.
+
+This is not documentation-specific. The editor was affected identically and only looked right because the
+Java engine's semantic tokens replace the grammar's guess — which is why it surfaced in a popup that
+has no engine.
