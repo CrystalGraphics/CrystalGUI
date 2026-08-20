@@ -1502,9 +1502,41 @@ public class Workbench extends UIElement {
      *
      * <p>Open in the sense of "has a document", which is not the same as "has a tab": a file whose tab was
      * closed while a save was in flight still has one, and a session record wants both.</p>
+     *
+     * <p><b>And the gap now points both ways.</b> Since {@code DockGroup} builds a tab's content on first
+     * activation, a session restored with five files open has five tabs and <em>one</em> document — so
+     * this is a subset of {@link #openTabPaths()} as often as it is a superset. Every caller here wants
+     * this one, and wants it for the same reason: they have something to do to a live editor
+     * ({@code upgradeServices}, the settings sweep) or something to read off a live document (the session
+     * record's view state). None of them would be improved by being handed a path with nothing behind it
+     * — and asking for a document by path <em>creates</em> one, so a caller that walked the tabs instead
+     * would build the whole session to look at it.</p>
      */
     public java.util.List<CgPath> openPaths() {
         return open.paths();
+    }
+
+    /**
+     * Every file with a <b>tab</b>, built or not, in strip order across every group.
+     *
+     * <p>The counterpart to {@link #openPaths()}, and the one that answers "what is open" the way a user
+     * would mean it: a restored tab is a title until something activates it, and it is no less open for
+     * having no widget behind it yet. Read off the dock's own panel refs, which carry the path — so it
+     * costs a walk and builds nothing.</p>
+     */
+    public java.util.List<CgPath> openTabPaths() {
+        java.util.List<CgPath> paths = new ArrayList<>();
+        for (DockLeaf leaf : dock.layout().leaves()) {
+            for (DockPanelRef panel : leaf.panels()) {
+                String path = panel.state(PATH_STATE, "");
+                if (path.isEmpty()) continue;
+                CgPath parsed = CgPath.parse(path);
+                // The same file can be open in two groups -- a split of one document is two tabs and one
+                // document -- and this is a set of files, not of tabs.
+                if (!paths.contains(parsed)) paths.add(parsed);
+            }
+        }
+        return paths;
     }
 
     /**
