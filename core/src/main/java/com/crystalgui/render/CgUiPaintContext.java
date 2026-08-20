@@ -52,8 +52,9 @@ import java.util.List;
  * owns that lifecycle must call {@link #destroy()} on context destruction — see that method for what
  * is and isn't freed, and why the distinction matters.</p>
  *
- * <p>Wraps frame lifecycle in {@link CgGlScope} for GL state isolation and saves/restores
- * {@link CgFrameData} so UI rendering does not corrupt the 3D pipeline state.</p>
+ * <p>Wraps frame lifecycle in {@link CgGlScope} for GL state isolation. It does <em>not</em> restore
+ * {@link CgFrameData}, which it overwrites with a screen-space camera — see {@link #beginFrame} for
+ * why that needs no restore and what does.</p>
  *
  * <p>Integrates {@link ScissorStack} for nested clip regions — GL scissor is applied
  * at draw time when a scissor rect is active.</p>
@@ -103,6 +104,8 @@ public final class CgUiPaintContext {
      * frame will report it in the ordinary way; a warm-up must not be the thing that fails a context.</p>
      */
     public void warm(int width, int height) {
+        // Leaks the Pass RenderState of every material below — doBind applies it, unbind() restores
+        // none of it. Scoped by CgUiLifecycle.onInit, which wraps the construction too; no scope here.
         for (CgMaterial material : new CgMaterial[] { boxModelMaterial, curveMaterial, layerBlitMaterial }) {
             try {
                 material.bind();
@@ -354,9 +357,9 @@ public final class CgUiPaintContext {
     // ── Frame lifecycle ─────────────────────────────────────────────────────
 
     /**
-     * Saves GL state via {@link CgGlScope}, saves {@link CgFrameData}, sets up
-     * an orthographic screen-space projection, and binds the shared box-model
-     * material. Call once per frame before {@code rootElement.drawSubtree(ctx)}.
+     * Saves GL state via {@link CgGlScope}, overwrites {@link CgFrameData} with an orthographic
+     * screen-space projection, and binds the shared box-model material. Call once per frame before
+     * {@code rootElement.drawSubtree(ctx)}.
      */
     /**
      * Monotonic frame counter, for work a drawable wants to rate-limit to once per frame.
@@ -389,10 +392,21 @@ public final class CgUiPaintContext {
             msaaFbo.resize(w, h);
             msaaResolveFbo.resize(w, h);
         }
+        // The clearColor below outlives this frame — CgFrameBuffer.clear scopes FBO alone and no
+        // CgGlSlot models a clear value. Not ours to fix here (every caller of it leaks the same way)
+        // and harmless against MC, which sets glClearColor immediately before each of its own clears.
+        // Clear DEPTH is never touched: clearColor() passes GL_COLOR_BUFFER_BIT alone, and that one
+        // WOULD matter — MC writes glClearDepth once at startup, like the glDepthFunc it sets there.
         msaaFbo.bind();
         msaaFbo.clearColor(0f, 0f, 0f, 0f);
 
-        // Save CgFrameData
+        // Overwritten and deliberately NOT restored — the javadoc used to claim otherwise and was
+        // corrected rather than implemented. CgFrameData is per-frame scratch that every consumer
+        // repopulates before executing a pass, so at frame level nothing reads what we leave. NESTED
+        // draws are the case that does need it, and already have it: CgPreviewRenderer copies the
+        // camera out and back, because its caller is this frame. Restoring here also costs more than
+        // it saves — prepareFrame() moves the active texture unit, so it needs a TEXTURES scope of its
+        // own or MC's fixed-function present samples the wrong unit and the window goes white.
         CgRenderPipeline pipeline = CgRenderPipeline.getInstance();
         CgFrameData fd = pipeline.getFrameData();
         // Set ortho projection for UI
@@ -438,9 +452,8 @@ public final class CgUiPaintContext {
     }
 
     /**
-     * Unbinds the box-model material, restores {@link CgFrameData}, and restores
-     * GL state via the saved {@link CgGlScope}. Call once after the whole UI tree
-     * has painted.
+     * Unbinds the box-model material and restores GL state via the saved {@link CgGlScope}. Call once
+     * after the whole UI tree has painted.
      */
     public void endFrame() {
         if (!frameActive) return;
@@ -491,7 +504,16 @@ public final class CgUiPaintContext {
         // a glReadPixels there shows the whole editor — while the window shows a flat fill, because the
         // step between the two is broken rather than the drawing. Anything that reads the framebuffer
         // (a screenshot tool, a capture) therefore disagrees with the screen.
-        try (CgGlScope blitScope = CgGlState.save(CgGlSlot.PROGRAM, CgGlSlot.TEXTURES)) {
+        //
+        // THE SLOTS ARE EVERYTHING A MATERIAL BIND CAN WRITE, not just the PROGRAM + TEXTURES the bug
+        // above names: blitLayer applies gui_layer_blit's whole RenderState (Blend, DepthTest ALWAYS,
+        // DepthWrite OFF, Cull OFF) and the frame's own scope closed six lines up. Measured leaving MC
+        // with depthTest on, depthWriteMask false and blend on — a world drawn with no depth
+        // arbitration, so terrain stops occluding its own caves. Listed as the full set CgRenderState
+        // can write, so the next material to declare Stencil or ColorMask does not start it again.
+        try (CgGlScope blitScope = CgGlState.save(CgGlSlot.PROGRAM, CgGlSlot.TEXTURES,
+                CgGlSlot.BLEND, CgGlSlot.DEPTH, CgGlSlot.CULL,
+                CgGlSlot.STENCIL, CgGlSlot.COLOR_MASK)) {
             blitLayer(msaaResolveFbo, 1f);
         }
 
