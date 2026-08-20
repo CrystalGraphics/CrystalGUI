@@ -407,10 +407,47 @@ public final class MarkupParser {
         private final StringBuilder run = new StringBuilder();
         private final List<String> openInline = new ArrayList<>();
 
-        /** Nested lists, innermost last. Each holds the items closed so far. */
-        private final List<List<MarkupBlock>> lists = new ArrayList<>();
-        private final List<Boolean> ordered = new ArrayList<>();
-        private final List<MarkupBlock> itemBlocks = new ArrayList<>();
+        /**
+         * One open list. Nesting is a stack of these, innermost last.
+         *
+         * <p><b>One object per list rather than parallel arrays.</b> This began as a {@code lists} stack
+         * with an {@code ordered} stack beside it, and adding {@code <dl>} wanted a third — at which
+         * point the row kind wanted a fourth and was written as a single field instead, which is a bug
+         * waiting for the first {@code <dl>} nested inside a {@code <ul>}: the inner list would close a
+         * row under the outer list's kind. State that is per-list belongs to the list.</p>
+         */
+        private static final class OpenList {
+            /** Rows closed so far. */
+            final List<MarkupBlock> items = new ArrayList<>();
+            /**
+             * Blocks gathered for the row currently being built.
+             *
+             * <p><b>Per list, and that is a fix rather than tidiness.</b> One shared list meant a nested
+             * list inherited whatever its parent's row had gathered so far: {@code <li>before<ul>…}
+             * opened the inner list with {@code before} still pending, so the inner list's first row
+             * closed over it and the text moved from the outer item into the nested one. Same for a
+             * {@code <dl>} inside an {@code <li>}, where it also arrived under the wrong KIND.</p>
+             */
+            final List<MarkupBlock> rowBlocks = new ArrayList<>();
+            final boolean ordered;
+            final boolean definitions;
+            /**
+             * What the row currently being built will close as.
+             *
+             * <p>A {@code <ul>} has only {@link MarkupBlock.Kind#ITEM}. A {@code <dl>}'s rows alternate
+             * term and detail, and since those are siblings in HTML rather than nested, the row that is
+             * ending is the PREVIOUS one — so this tracks what was opened, not what is opening.</p>
+             */
+            MarkupBlock.Kind rowKind = MarkupBlock.Kind.ITEM;
+
+            OpenList(boolean ordered, boolean definitions) {
+                this.ordered = ordered;
+                this.definitions = definitions;
+            }
+        }
+
+        /** Nested lists, innermost last. */
+        private final List<OpenList> lists = new ArrayList<>();
 
         private int styles;
         private String link;
@@ -432,7 +469,7 @@ public final class MarkupParser {
             // has to be closed first, or the item everything after the final `<li>` went into is dropped
             // along with the close tag that never came.
             while (!lists.isEmpty()) {
-                closeItem();
+                closeOpenRow();
                 closeList();
             }
             closeBlock();
@@ -454,12 +491,27 @@ public final class MarkupParser {
                     break;
                 case "ul":
                 case "ol":
+                case "dl":
                     closeBlock();
-                    lists.add(new ArrayList<>());
-                    ordered.add("ol".equals(tag));
+                    lists.add(new OpenList("ol".equals(tag), "dl".equals(tag)));
                     break;
                 case "li":
-                    closeItem();
+                    closeOpenRow();
+                    setRowKind(MarkupBlock.Kind.ITEM);
+                    break;
+                // A `<dt>` or `<dd>` closes whatever row was open before it, exactly as an `<li>` does --
+                // these are siblings in HTML rather than nested, so the previous one ends where the next
+                // begins and nothing closes them explicitly.
+                case "dt":
+                case "dd":
+                    // CLOSES UNDER THE KIND THE OPEN ROW ALREADY IS, then becomes the new kind. Closing
+                    // a `<dt>` under TERM reads correctly and is wrong every other time: it is the
+                    // PREVIOUS row that is ending, and after a `<dd>` that row is a detail. Written the
+                    // obvious way, every value in a section table was filed as a label -- so the label
+                    // column held the values, the value column held nothing, and the block rendered as a
+                    // stack of empty rows.
+                    closeOpenRow();
+                    setRowKind("dt".equals(tag) ? MarkupBlock.Kind.TERM : MarkupBlock.Kind.DETAIL);
                     break;
                 case "blockquote":
                     closeBlock();
@@ -496,11 +548,11 @@ public final class MarkupParser {
                         verbatim.setLength(0);
                     }
                     break;
-                case "ul": case "ol":
-                    closeItem();
+                case "ul": case "ol": case "dl":
+                    closeOpenRow();
                     closeList();
                     break;
-                case "li":
+                case "li": case "dt": case "dd":
                     break;
                 case "p": case "blockquote":
                     closeBlock();
@@ -557,6 +609,17 @@ public final class MarkupParser {
             pending.add(new MarkupSpan(text, styles, (styles & MarkupSpan.LINK) != 0 ? link : null));
         }
 
+        /** The innermost open list, or {@code null} at the top level. */
+        private OpenList openList() {
+            return lists.isEmpty() ? null : lists.get(lists.size() - 1);
+        }
+
+        /** Records what the row now being built will close as. */
+        private void setRowKind(MarkupBlock.Kind kind) {
+            OpenList list = openList();
+            if (list != null) list.rowKind = kind;
+        }
+
         private void closeBlock() {
             endRun();
             if (pending.isEmpty()) {
@@ -569,25 +632,36 @@ public final class MarkupParser {
             pending.clear();
             headingLevel = 0;
             if (lists.isEmpty()) blocks.add(block);
-            else itemBlocks.add(block);
+            else openList().rowBlocks.add(block);
         }
 
-        private void closeItem() {
+        /**
+         * Ends the row being built, under the kind the open list says it is.
+         *
+         * <p>Read off the list rather than passed in: a {@code <dl>}'s rows are not all the same, and
+         * which one is ending is a fact about the list that is open, not about the tag that ended it.
+         * Passing it worked and put the answer in the caller's hands, which is how a nested list came to
+         * close its rows under its parent's kind.</p>
+         */
+        private void closeOpenRow() {
             closeBlock();
-            if (lists.isEmpty() || itemBlocks.isEmpty()) return;
-            lists.get(lists.size() - 1)
-                    .add(MarkupBlock.of(MarkupBlock.Kind.ITEM, new ArrayList<>(itemBlocks), 0));
-            itemBlocks.clear();
+            OpenList list = openList();
+            if (list == null || list.rowBlocks.isEmpty()) return;
+            list.items.add(MarkupBlock.of(list.rowKind, new ArrayList<>(list.rowBlocks), 0));
+            list.rowBlocks.clear();
+            list.rowKind = MarkupBlock.Kind.ITEM;
         }
 
         private void closeList() {
-            if (lists.isEmpty()) return;
-            List<MarkupBlock> items = lists.remove(lists.size() - 1);
-            boolean isOrdered = ordered.remove(ordered.size() - 1);
-            if (items.isEmpty()) return;
-            MarkupBlock list = MarkupBlock.of(MarkupBlock.Kind.LIST, items, isOrdered ? 1 : 0);
-            if (lists.isEmpty()) blocks.add(list);
-            else itemBlocks.add(list);
+            OpenList list = openList();
+            if (list == null) return;
+            lists.remove(lists.size() - 1);
+            if (list.items.isEmpty()) return;
+            MarkupBlock closed = list.definitions
+                    ? MarkupBlock.of(MarkupBlock.Kind.DEFINITIONS, list.items, 0)
+                    : MarkupBlock.of(MarkupBlock.Kind.LIST, list.items, list.ordered ? 1 : 0);
+            if (lists.isEmpty()) blocks.add(closed);
+            else openList().rowBlocks.add(closed);
         }
     }
 

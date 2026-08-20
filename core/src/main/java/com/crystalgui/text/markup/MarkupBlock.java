@@ -29,7 +29,20 @@ public record MarkupBlock(Kind kind, List<MarkupSpan> spans, List<MarkupBlock> c
         /** {@code <h1>}–{@code <h6>}, with the number in {@link #level}. */
         HEADING,
         /** {@code <blockquote>}. */
-        QUOTE
+        QUOTE,
+        /**
+         * {@code <dl>} — a two-column block whose children alternate {@link #TERM} and {@link #DETAIL}.
+         *
+         * <p>Modelled as HTML has it rather than as a bespoke "sections" kind, because that is what a
+         * documentation section list <em>is</em>: {@code Since:} beside {@code 1.0} is a term and its
+         * definition. It also means nothing here knows what a javadoc block tag is — a JSDoc emitter
+         * or a shader node's description can produce the same shape and get the same layout.</p>
+         */
+        DEFINITIONS,
+        /** {@code <dt>} — the label of a {@link #DEFINITIONS} row. */
+        TERM,
+        /** {@code <dd>} — the value of a {@link #DEFINITIONS} row; may hold blocks of its own. */
+        DETAIL
     }
 
     public static MarkupBlock paragraph(List<MarkupSpan> spans) {

@@ -10,6 +10,8 @@ import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.LinkedHashMap;
 
 /**
  * <b>A doc comment, rendered as the popup's body</b> — M13 §25.6.
@@ -85,17 +87,23 @@ public final class JavaDocs {
             if (!(each instanceof TagElement)) continue;
             TagElement tag = (TagElement) each;
             String name = tag.getTagName();
-            String text = flatten(tag.fragments(), name != null);
+            String text = TagElement.TAG_SEE.equals(name)
+                    ? seeText(tag.fragments())
+                    : flatten(tag.fragments(), hasASubject(name));
             if (text.isBlank()) continue;
             if (name == null) {
                 // THE DESCRIPTION, which is the one tag with no name and always comes first.
                 if (out.length() > 0) out.append("<p>");
                 out.append(text);
             } else {
-                tagged.add(new Section(rankOf(name), label(name) + text));
+                tagged.add(new Section(rankOf(name), name, labelFor(name), text));
             }
         }
 
+        // GROUPED BY TAG, so four `@author` lines are one Author row rather than four paragraphs, and
+        // four `@see` lines are one See Also. IntelliJ does this and it is not cosmetic: a class with four
+        // authors and four references produced eight stacked rows that read as eight unrelated facts, and
+        // the eye has to notice the repeated label to group them itself.
         // SECTION ORDER, NOT SOURCE ORDER -- ported from IntelliJ's `JavaDocInfoGenerator`, whose
         // method path emits deprecated, then the parameters, then the return, then the throws, then
         // since, author/version, the three API tags, see-also, and anything it does not recognise last.
@@ -105,12 +113,40 @@ public final class JavaDocs {
         // author declared them in, and that order IS meaningful: it is the parameter order.
         tagged.sort(Comparator.comparingInt(section -> section.rank));
 
+        // A DEFINITION LIST, which is what a section table IS: a label beside its value. Emitting
+        // `<dl>` rather than a bespoke shape means the renderer needs no idea what a javadoc tag is, and
+        // a JSDoc emitter producing the same shape gets the same two-column layout for free.
+        //
+        // Grouped by LABEL rather than by tag, because two tags can share one heading: `@throws` and
+        // `@exception` are one Throws row. `tagged` is already in section order, so a LinkedHashMap
+        // keeps the groups in it.
+        Map<String, List<Section>> sections = new LinkedHashMap<>();
         for (Section section : tagged) {
-            // EACH BLOCK TAG IS ITS OWN PARAGRAPH. They were newline-separated, which the parser
-            // collapses away like any other authored line break -- correctly, since a doc comment's
-            // wrapping is not structure. A `@param` that runs on from the sentence before it is worse
-            // than one on its own line, so the structure is stated rather than implied by whitespace.
-            out.append("<p>").append(section.text);
+            sections.computeIfAbsent(section.label(), key -> new ArrayList<>()).add(section);
+        }
+        if (!sections.isEmpty()) {
+            out.append("<dl>");
+            for (Map.Entry<String, List<Section>> entry : sections.entrySet()) {
+                List<Section> group = entry.getValue();
+                out.append("<dt>").append(escape(entry.getKey())).append("</dt><dd>");
+                if (group.size() == 1 || joinsInline(group.get(0).tagName())) {
+                    // ONE LINE, comma-separated. Four authors are four names in one answer, not four
+                    // statements about authorship -- which is how IntelliJ renders them and how a reader
+                    // reads them.
+                    out.append("<p>");
+                    for (int i = 0; i < group.size(); i++) {
+                        if (i > 0) out.append(", ");
+                        out.append(group.get(i).text());
+                    }
+                } else {
+                    // ONE PER LINE, as a paragraph each. `<br>` was the obvious spelling and is silently
+                    // wrong: the parser collapses whitespace per run, so a newline from `<br>` comes back
+                    // out as a SPACE and four references ran together into one wrapped line.
+                    for (Section section : group) out.append("<p>").append(section.text());
+                }
+                out.append("</dd>");
+            }
+            out.append("</dl>");
         }
         String rendered = out.toString();
         if (rendered.isBlank()) return null;
@@ -118,15 +154,88 @@ public final class JavaDocs {
                 : rendered.substring(0, MAX_LENGTH).stripTrailing() + "…";
     }
 
-    /** A block tag paired with the section it sorts into. */
-    private static final class Section {
-        final int rank;
-        final String text;
+    /**
+     * A block tag paired with the section it sorts into.
+     *
+     * @param tagName the tag as written, which is what BEHAVIOUR keys on
+     * @param label   the heading it is shown under, which is what it is GROUPED by — {@code @throws}
+     *                and {@code @exception} are one Throws row, not two
+     */
+    private record Section(int rank, String tagName, String label, String text) {
+    }
 
-        Section(int rank, String text) {
-            this.rank = rank;
-            this.text = text;
+    /**
+     * Whether a tag's first fragment is a <b>subject</b> that the rest describes.
+     *
+     * <p>{@code @param count the number of rows} is a name and a description, and the dash between them
+     * is what makes that readable. Every other tag is one run of prose — and the dash was being
+     * inserted into all of them, after whatever the first fragment happened to be, so
+     * {@code @implNote The implementation ... is left to {@code javac} ...} rendered as
+     * "left to — the discretion", a dash dropped mid-sentence at the first inline tag. It reads as a
+     * stray character rather than as a rule misapplied, which is why it survived being looked at.</p>
+     */
+    private static boolean hasASubject(String tagName) {
+        return TagElement.TAG_PARAM.equals(tagName)
+                || TagElement.TAG_THROWS.equals(tagName)
+                || TagElement.TAG_EXCEPTION.equals(tagName);
+    }
+
+    /**
+     * The heading a tag is shown under — IntelliJ's own wording.
+     *
+     * <p>Its {@code JavaDocInfoGenerator} names these outright ("API Note", "Implementation
+     * Requirements", "Implementation Note") and the rest follow the same shape: a human label with a
+     * colon, not the tag's own spelling. {@code implNote} is a tag; "Implementation Note:" is what it
+     * means, and a reader should not have to know javadoc to read a hover.</p>
+     *
+     * <p>An unrecognised tag keeps its own name, which is IntelliJ's answer too — {@code @jls} shows
+     * as {@code jls}. Inventing a label for a tag nobody has defined would be guessing at what somebody
+     * else's convention means.</p>
+     */
+    private static String labelFor(String tagName) {
+        switch (tagName) {
+            case TagElement.TAG_DEPRECATED:
+                return "Deprecated:";
+            case TagElement.TAG_PARAM:
+                return "Params:";
+            case TagElement.TAG_RETURN:
+                return "Returns:";
+            case TagElement.TAG_THROWS:
+            case TagElement.TAG_EXCEPTION:
+                return "Throws:";
+            case TagElement.TAG_SINCE:
+                return "Since:";
+            case TagElement.TAG_AUTHOR:
+                return "Author:";
+            case TagElement.TAG_VERSION:
+                return "Version:";
+            case TagElement.TAG_SEE:
+                return "See Also:";
+            case "@apiNote":
+                return "API Note:";
+            case "@implSpec":
+                return "Implementation Requirements:";
+            case "@implNote":
+                return "Implementation Note:";
+            default:
+                return tagName.startsWith("@") ? tagName.substring(1) : tagName;
         }
+    }
+
+    /**
+     * Whether a section's values read as ONE list rather than as separate statements.
+     *
+     * <p>{@code @author} is the case: four of them are four names in one answer, and IntelliJ joins them
+     * with commas on a single line. {@code @see} is the other: four references are four places to look,
+     * and it gives each its own line. The split is per tag because it is a fact about what the tag means,
+     * not about how many there happen to be — which is why this asks about the TAG and not about the
+     * heading it is drawn under. Keying it on the wording made the rendering of a section depend on the
+     * string somebody chose to title it with.</p>
+     */
+    private static boolean joinsInline(String tagName) {
+        return TagElement.TAG_AUTHOR.equals(tagName)
+                || TagElement.TAG_VERSION.equals(tagName)
+                || TagElement.TAG_SINCE.equals(tagName);
     }
 
     /**
@@ -154,19 +263,6 @@ public final class JavaDocs {
         }
     }
 
-    /**
-     * {@code @param} → {@code "param "}, and so on.
-     *
-     * <p>The tag's own spelling rather than a translated word, so an unrecognised or custom tag renders
-     * as itself instead of vanishing — a doc comment that silently loses a line is worse than one that
-     * shows a tag name.</p>
-     */
-    private static String label(String tagName) {
-        String bare = tagName.startsWith("@") ? tagName.substring(1) : tagName;
-        // BOLD, because it is a heading for the line that follows it. Emitted as markup rather than left
-        // plain so the renderer can tell the label from the prose without knowing what a javadoc tag is.
-        return "<b>" + escape(bare) + "</b> ";
-    }
 
     /**
      * A tag's fragments, flattened.
@@ -265,13 +361,7 @@ public final class JavaDocs {
                     // own grammar rather than a guess. The reference still goes in the href: it is the
                     // half that can be resolved, and dropping it means re-deriving a target from display
                     // text later.
-                    List<?> parts = tag.fragments();
-                    String reference = parts.isEmpty() ? "" : flatten(parts.subList(0, 1), false);
-                    String label = parts.size() > 1
-                            ? flatten(parts.subList(1, parts.size()), false) : "";
-                    String shown = label.isEmpty() ? reference : label;
-                    if (shown.isEmpty()) return null;
-                    return "<a href=\"java:" + escape(reference) + "\">" + escape(shown) + "</a>";
+                    return referenceLink(tag.fragments());
                 }
                 case TagElement.TAG_VALUE:
                     return "<code>" + escape(subject) + "</code>";
@@ -301,6 +391,69 @@ public final class JavaDocs {
      * refused outright by other parts of this codebase, which is why it is not that one.</p>
      */
     public static final String INHERIT_DOC = "\u0001inheritDoc\u0001";
+
+    /**
+     * A block {@code @see}'s content — as a link when it names something, verbatim when it does not.
+     *
+     * <h3>From the fragments, not from the rendered text</h3>
+     *
+     * <p>An inline {@code {@link}} already becomes a link, because it is a {@code TagElement} and goes
+     * through {@link #pieceOf}. A <b>block</b> {@code @see} does not: its reference is a bare
+     * {@code Name} or {@code MemberRef} at the top level, so it fell through to the generic text path
+     * and rendered fully qualified while the identical reference written inline rendered short — two
+     * spellings of one thing, disagreeing on screen, in the same popup.</p>
+     *
+     * <p>The first version fixed that by splitting the <em>flattened</em> text on its first space and
+     * re-escaping the halves, which works and is the wrong shape: {@code flatten} emits markup, so that
+     * is a parser for this method's own output, and anything the author had already escaped went round
+     * a second time. Asking the fragments is both simpler and exact — and it means the block form and
+     * the inline form are now rendered by literally the same method, so they cannot drift.</p>
+     *
+     * <p>{@code @see} has two forms that are not references: a quoted string
+     * ({@code @see "The Java Language Specification"}) and an author's own anchor
+     * ({@code @see <a href="...">}). Both arrive as a leading {@code TextElement} and are left exactly
+     * as written — shortening a sentence at its last dot would take the end off it.</p>
+     */
+    private static String seeText(List<?> fragments) {
+        if (!fragments.isEmpty() && !(fragments.get(0) instanceof TextElement)) {
+            String link = referenceLink(fragments);
+            if (link != null) return link;
+        }
+        return flatten(fragments, false);
+    }
+
+    /**
+     * A reference and its optional label, as a link — javadoc's own grammar for both
+     * {@code {@link}} and {@code @see}.
+     *
+     * <p>The first fragment is the reference and the rest are the label. The reference goes in the
+     * href because it is the half that can be resolved; the label is what a reader wants to see, and
+     * when there is none the reference is shortened for display.</p>
+     */
+    private static String referenceLink(List<?> parts) {
+        String reference = parts.isEmpty() ? "" : flatten(parts.subList(0, 1), false);
+        String label = parts.size() > 1 ? flatten(parts.subList(1, parts.size()), false) : "";
+        String shown = label.isEmpty() ? simpleReference(reference) : label;
+        if (shown.isEmpty()) return null;
+        return "<a href=\"java:" + escape(reference) + "\">" + escape(shown) + "</a>";
+    }
+
+    /**
+     * A reference as a reader wants to see it — {@code java.lang.Object#toString()} becomes
+     * {@code Object.toString()}.
+     *
+     * <p>The package is dropped and the {@code #} becomes a dot, which is javadoc's own spelling of a
+     * member for display. A bare {@code #member}, meaning "on this class", loses only the marker.</p>
+     */
+    private static String simpleReference(String reference) {
+        int hash = reference.indexOf('#');
+        String type = hash < 0 ? reference : reference.substring(0, hash);
+        String member = hash < 0 ? "" : reference.substring(hash + 1);
+        int lastDot = type.lastIndexOf('.');
+        String simple = lastDot < 0 ? type : type.substring(lastDot + 1);
+        if (member.isEmpty()) return simple;
+        return simple.isEmpty() ? member : simple + "." + member;
+    }
 
     /** Makes text safe to put inside emitted markup — the four that would otherwise re-parse. */
     private static String escape(String text) {

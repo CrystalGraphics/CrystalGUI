@@ -1,5 +1,8 @@
 package com.crystalgui.ui;
 
+import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgui.core.data.Transform2D;
+import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.text.markup.MarkupParser;
 import com.crystalgui.text.syntax.Language;
@@ -13,6 +16,7 @@ import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -211,6 +215,157 @@ public class MarkupViewTest extends UiTestBase {
         view.setDocument(MarkupParser.parse("<pre>" + sample + "</pre>"));
 
         assertEquals("the sample was rewritten", sample, firstText(view).getText());
+    }
+
+    /**
+     * <b>{@code UIText.offsetAt} answers a real character, and it is the foundation of both link
+     * gestures.</b>
+     *
+     * <p>Nothing else in the engine calls it, so nothing else would notice if it answered {@code -1} for
+     * every point — and both the press and the hover would then simply do nothing, which is
+     * indistinguishable from the events not arriving. Worth pinning for that reason alone.</p>
+     */
+    @Test
+    public void offsetAtAnswersACharacterInsideALaidOutRun() {
+        // A STYLED fixture, because the answer is RUN-granular by design: an unstyled paragraph is ONE
+        // shaped run, so every point in it is that run’s first character and a test over one would
+        // pass against an implementation that always answered zero. A span boundary is a shaping-run
+        // boundary, which is what makes “which link” exact even though “which letter” is not.
+        MarkupView view = new MarkupView(MarkupParser.parse(
+                "<p>go <a href=\"java:A\">Alpha</a> now</p>"));
+        UIText run = inWindow(view);
+        int alpha = run.getText().indexOf("Alpha");
+
+        assertEquals("a point before the first glyph is the first character", 0, run.offsetAt(1f, 4f));
+        assertTrue("the fixture lost its link", alpha > 0);
+        // Far enough in to be past “go ” and inside the link’s own run.
+        assertEquals("a point over the link did not resolve to it", alpha, run.offsetAt(14f, 4f));
+        assertTrue("a point past the last glyph must answer nothing",
+                run.offsetAt(run.getRuntimeCache().getWidth() - 2f, 4f) < 0);
+        assertTrue("a point above the first line must answer nothing", run.offsetAt(4f, -20f) < 0);
+    }
+
+    /**
+     * <b>Hovering a link marks that link and nothing else.</b>
+     *
+     * <p>A paragraph is ONE text element, so {@code :hover} on it is true anywhere in the sentence and
+     * cannot say which link the pointer is over. The band is driven from the pointer instead, and this
+     * pins the half that decides which range gets it.</p>
+     */
+    @Test
+    public void hoveringALinkMarksThatLinkAlone() {
+        MarkupView view = new MarkupView(MarkupParser.parse(
+                "<p>see <a href=\"java:A\">Alpha</a> and <a href=\"java:B\">Beta</a></p>"));
+        UIText run = inWindow(view);
+
+        int alpha = run.getText().indexOf("Alpha");
+        assertTrue("the fixture lost its link text", alpha >= 0);
+
+        view.hoverAt(run, alpha + 1);
+        assertEquals("the hovered link was not marked", 1,
+                run.highlights().get(MarkupView.LINK_HOVER_RANGE).size());
+        assertEquals("the mark is not on the link under the pointer", alpha,
+                run.highlights().get(MarkupView.LINK_HOVER_RANGE).get(0).start());
+
+        view.hoverAt(run, -1);
+        assertTrue("the mark survived the pointer leaving",
+                run.highlights().get(MarkupView.LINK_HOVER_RANGE).isEmpty());
+    }
+
+    /** Attaches a view to a settled window and answers its first run. */
+    private UIText inWindow(MarkupView view) {
+        UIElement root = new UIElement().layout(l -> l.width(400).height(200));
+        root.addChild(view);
+        UIWindow window = new UIWindow(Ui.of(root));
+        window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
+        window.init(400, 200);
+        for (int i = 0; i < 4; i++) window.updateWithoutPainting();
+        UIText run = firstText(view);
+        assertNotNull("no run was built", run);
+        return run;
+    }
+
+    /*
+     * DELIBERATELY NOT TESTED HERE: the pointer-to-band path end to end.
+     *
+     * It needs `localToWorld` on the runs, and that is populated during `drawSubtree` -- so in a headless
+     * test every element reports the root transform alone and a point computed from one lands nowhere
+     * near the element it came from. The fixture measured itself rather than the feature: the run laid
+     * out at (-100,-50) while the "world" point came back as 2x the local one, and the hit test
+     * answered with the ROOT.
+     *
+     * What is covered above is everything reachable without a paint: `offsetAt` resolving a point to the
+     * right link, and `hoverAt` writing and clearing the band on the right range. What is not is whether
+     * the window agrees that a run is under the pointer, which needs a real frame.
+     */
+
+    /**
+     * <b>A pointer resolves to a character even when the run is not at the origin.</b>
+     *
+     * <p>The whole defect this pins is invisible at (0,0): {@code screenToLocal} answers the space the
+     * element's BOX lives in, while {@code offsetAt} wants the element's own — so the two agree
+     * exactly when the box origin is zero and diverge by the box origin everywhere else. Both link
+     * gestures wrote the pair out longhand and both were wrong; every fixture built around one element
+     * filling its window passed anyway.</p>
+     *
+     * <p>So the run here is deliberately pushed down and right. Reverting {@code offsetAtScreen} to
+     * {@code offsetAt(local)} fails this on the second assertion.</p>
+     */
+    @Test
+    public void aPointerResolvesToACharacterWhenTheRunIsAwayFromTheOrigin() {
+        MarkupView view = new MarkupView(MarkupParser.parse("<p>alpha beta gamma</p>"));
+        UIElement root = new UIElement().layout(l -> l.width(400).height(300));
+        UIElement spacer = new UIElement().layout(l -> l.width(400).height(120));
+        root.addChild(spacer);
+        root.addChild(view);
+        UIWindow window = new UIWindow(Ui.of(root));
+        window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
+        window.init(400, 300);
+        for (int i = 0; i < 4; i++) window.updateWithoutPainting();
+
+        UIText run = firstText(view);
+        assertNotNull("no run was built", run);
+        float boxY = run.getRuntimeCache().getY();
+        assertTrue("the fixture did not push the run off the origin -- it cannot show the defect",
+                boxY > 0f);
+
+        // A point a little inside the run, converted out to where a pointer would have to be. The box
+        // origin goes in because `localToWorld` maps the space the BOX lives in, not the element's own.
+        var world = Transform2D.apply(run.getRuntimeCache().localToWorld.get(),
+                run.getRuntimeCache().getX() + 2f, boxY + 2f);
+
+        assertEquals("a pointer just inside the run must resolve to its first character",
+                0, run.offsetAtScreen(world.x(), world.y()));
+
+        var straight = run.screenToLocal(world.x(), world.y());
+        assertTrue("feeding screenToLocal straight to offsetAt is the defect this guards --"
+                        + " it must not agree with the corrected conversion",
+                run.offsetAt(straight.x(), straight.y()) != 0);
+    }
+
+    /**
+     * <b>Several {@code <dd>}s under one {@code <dt>} all reach the screen.</b>
+     *
+     * <p>HTML allows it and javadoc produces it: {@code @throws} with two exceptions is one Throws
+     * heading over two values. The parser always kept both — the view built its value column, then
+     * REPLACED it for each detail it met, so every value but the last was dropped after being correctly
+     * parsed. Silent, and invisible in any fixture with one value per label.</p>
+     *
+     * <p>Asserted on the rendered text rather than on child counts, because a column that exists and is
+     * empty would satisfy a count.</p>
+     */
+    @Test
+    public void severalDetailsUnderOneTermAllRender() {
+        MarkupView view = new MarkupView(MarkupParser.parse(
+                "<dl><dt>Throws:</dt><dd>IOException</dd><dd>SQLException</dd></dl>"));
+
+        List<String> rendered = new ArrayList<>();
+        collectText(view, rendered);
+
+        assertTrue("the label is missing: " + rendered, rendered.contains("Throws:"));
+        assertTrue("the first value was dropped -- only the last survived: " + rendered,
+                rendered.contains("IOException"));
+        assertTrue("the second value is missing: " + rendered, rendered.contains("SQLException"));
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────────────────────────
