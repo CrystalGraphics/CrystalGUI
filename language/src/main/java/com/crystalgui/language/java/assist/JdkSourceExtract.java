@@ -277,7 +277,11 @@ public final class JdkSourceExtract {
             return new Result(State.INSTALLED, written + " files from " + url,
                     written, Files.size(target));
         } catch (IOException | RuntimeException unavailable) {
-            return new Result(State.UNAVAILABLE, unavailable.toString());
+            // THE CLASS NAME FOR THE LOG, THE SENTENCE FOR THE PERSON. `toString` is what somebody
+            // debugging wants and it is not what a balloon should say -- offline, this read
+            // "java.net.UnknownHostException: api.adoptium.net" to a user whose wifi was simply off.
+            System.err.println("[crystalgui] jdk sources failed: " + unavailable);
+            return new Result(State.UNAVAILABLE, Downloads.describe(unavailable));
         } finally {
             try {
                 Files.deleteIfExists(scratch);
