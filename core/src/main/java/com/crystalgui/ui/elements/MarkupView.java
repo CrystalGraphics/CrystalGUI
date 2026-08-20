@@ -3,8 +3,13 @@ package com.crystalgui.ui.elements;
 import com.crystalgui.text.markup.MarkupBlock;
 import com.crystalgui.text.markup.MarkupDocument;
 import com.crystalgui.text.markup.MarkupSpan;
+import com.crystalgui.core.signal.Signal;
+import com.crystalgui.text.syntax.Language;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.text.SyntaxHighlighting;
 import com.crystalgui.ui.text.TextRange;
+
+import javax.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -120,7 +125,45 @@ public class MarkupView extends UIElement {
      */
     private static final String[] BANDS = {CODE_RANGE, STRONG_RANGE, EMPHASIS_RANGE, LINK_RANGE};
 
+    /**
+     * Where each run's links are, so a press can be turned back into a target.
+     *
+     * <p>Kept beside the runs rather than on them: a {@code UIText} has nowhere to put an arbitrary
+     * payload, and a parallel map keyed by the element is what {@code MarkupView} can clear wholesale
+     * when it rebuilds. Cleared in {@link #setDocument}, or a document's links would answer for the
+     * next document's text.</p>
+     */
+    private final Map<UIText, List<LinkSpan>> links = new LinkedHashMap<>();
+
+    /** One link's extent within its run, and where it points. */
+    private record LinkSpan(int start, int end, String target) {
+    }
+
     private MarkupDocument document = MarkupDocument.EMPTY;
+
+    /**
+     * What a {@code <pre>} sample is written in, or null for no colouring.
+     *
+     * <p><b>The consumer says, because only the consumer knows.</b> A code sample in a doc comment is in
+     * the language of the document that carries it — Java in a javadoc, JavaScript in a JSDoc — and this
+     * view has never seen the document. Guessing from the sample's own text is the alternative and is the
+     * thing every renderer that tries it gets wrong on short samples.</p>
+     *
+     * <p>Null rather than {@code Language.PLAIN} so "nobody has said" and "explicitly plain" stay
+     * different: a caller that never sets one gets uncoloured samples rather than a lookup per block.</p>
+     */
+    @Nullable
+    private Language codeLanguage;
+
+    /**
+     * Fired when a link is pressed, with the {@code href} the markup carried.
+     *
+     * <p>A signal rather than an action, because this view has no idea what a target means: a javadoc
+     * {@code {@link}} arrives as {@code java:java.util.List} and only something holding an engine can
+     * turn that into anything. The same shape the popup's footer pencil already uses — the widget states
+     * the intent and its host decides.</p>
+     */
+    public final Signal.Value<String> onLinkActivated = new Signal.Value<>();
 
     public MarkupView() {
         this(MarkupDocument.EMPTY);
@@ -136,6 +179,24 @@ public class MarkupView extends UIElement {
     }
 
     /**
+     * Colours {@code <pre>} samples as {@code language}.
+     *
+     * <p>Takes effect on the next {@link #setDocument}, not retroactively — a view is rebuilt whenever
+     * its content changes anyway, and re-tokenizing what is already on screen would mean holding every
+     * sample's source to do it with.</p>
+     */
+    public MarkupView setCodeLanguage(@Nullable Language language) {
+        this.codeLanguage = language;
+        return this;
+    }
+
+    /** @see #setCodeLanguage */
+    @Nullable
+    public Language getCodeLanguage() {
+        return codeLanguage;
+    }
+
+    /**
      * Replaces the content.
      *
      * <p>Rebuilds outright rather than diffing. A documentation popup shows one symbol at a time and the
@@ -144,6 +205,7 @@ public class MarkupView extends UIElement {
      */
     public MarkupView setDocument(MarkupDocument document) {
         this.document = document == null ? MarkupDocument.EMPTY : document;
+        links.clear();
         clearAllChildren();
         for (MarkupBlock block : this.document.blocks()) {
             UIElement built = build(block);
@@ -155,6 +217,33 @@ public class MarkupView extends UIElement {
     /** True when there is nothing to draw — the caller's cue to hide the band entirely. */
     public boolean isEmpty() {
         return document.blocks().isEmpty();
+    }
+
+    /**
+     * Turns a press on a run into the link under it, if there is one.
+     *
+     * <p><b>Target phase and no bubbling</b>: the run IS what was pressed, and stopping there matters
+     * because an ancestor may read the same press as something else — {@code DocumentationPopup} begins a
+     * MOVE on any press that reaches it, so a link click would drag the box a few pixels while following
+     * the link. A press on ordinary prose is left alone and still reaches that ancestor.</p>
+     *
+     * <p>The offset comes from {@link UIText#offsetAt}, which resolves to a shaped run — and a link is
+     * its own span, so it is its own run. That makes "which link" exact even though "which letter" is
+     * not.</p>
+     */
+    private void attachLinkPress(UIText run) {
+        run.onMouseDown.attachListener((element, event) -> {
+            var local = run.screenToLocal(event.getPosition().x(), event.getPosition().y());
+            int offset = run.offsetAt(local.x(), local.y());
+            if (offset < 0) return;
+            for (LinkSpan span : links.getOrDefault(run, List.of())) {
+                if (offset >= span.start() && offset < span.end()) {
+                    onLinkActivated.emit(span.target());
+                    event.stopPropagation();
+                    return;
+                }
+            }
+        }, false, false);
     }
 
     private UIElement build(MarkupBlock block) {
@@ -198,6 +287,12 @@ public class MarkupView extends UIElement {
         ScrollerView box = new ScrollerView();
         box.addClass(CODE_BLOCK_CLASS);
         UIText sample = new UIText(block.text());
+        // LEXED, NOT RESOLVED. A grammar knows a keyword from an identifier from a string, which is the
+        // whole of what a sample in a doc comment needs -- it is an illustration rather than part of the
+        // program, so there is nothing to resolve it against and nothing that would be true if there were.
+        // The capture names are the ones the editor's scheme already defines, so a sample is coloured by
+        // the same rules as the code it describes, with no second vocabulary to keep in step.
+        SyntaxHighlighting.highlight(sample, block.text(), codeLanguage);
         box.addChild(sample);
         return box;
     }
@@ -264,6 +359,7 @@ public class MarkupView extends UIElement {
     private UIText text(List<MarkupSpan> spans, String styleClass) {
         StringBuilder assembled = new StringBuilder();
         Map<String, List<TextRange>> bands = new LinkedHashMap<>();
+        List<LinkSpan> found = new ArrayList<>();
 
         for (MarkupSpan span : spans) {
             int start = assembled.length();
@@ -288,7 +384,10 @@ public class MarkupView extends UIElement {
             if (span.has(MarkupSpan.CODE)) bands.computeIfAbsent(CODE_RANGE, k -> new ArrayList<>()).add(range);
             if (span.has(MarkupSpan.STRONG)) bands.computeIfAbsent(STRONG_RANGE, k -> new ArrayList<>()).add(range);
             if (span.has(MarkupSpan.EMPHASIS)) bands.computeIfAbsent(EMPHASIS_RANGE, k -> new ArrayList<>()).add(range);
-            if (span.has(MarkupSpan.LINK)) bands.computeIfAbsent(LINK_RANGE, k -> new ArrayList<>()).add(range);
+            if (span.has(MarkupSpan.LINK)) {
+                bands.computeIfAbsent(LINK_RANGE, k -> new ArrayList<>()).add(range);
+                if (span.target() != null) found.add(new LinkSpan(start, end, span.target()));
+            }
         }
 
         UIText run = new UIText(assembled.toString());
@@ -307,6 +406,10 @@ public class MarkupView extends UIElement {
         for (String band : BANDS) run.highlights().set(band, List.of());
         for (Map.Entry<String, List<TextRange>> entry : bands.entrySet()) {
             run.highlights().set(entry.getKey(), entry.getValue());
+        }
+        if (!found.isEmpty()) {
+            links.put(run, found);
+            attachLinkPress(run);
         }
         return run;
     }

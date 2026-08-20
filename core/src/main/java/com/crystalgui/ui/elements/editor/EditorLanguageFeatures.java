@@ -300,7 +300,7 @@ final class EditorLanguageFeatures {
 
         List<Diagnostic> problems = editor.diagnosticsAt(offset);
         if (!problems.isEmpty()) {
-            if (docPopup == null) docPopup = new DocumentationPopup();
+            ensureDocPopup();
             docPopup.showProblemsAt(window, problems, anchor[0], anchor[1], anchor[2]);
             fillProblemSection(offset);
         }
@@ -308,7 +308,7 @@ final class EditorLanguageFeatures {
         boolean asked = resolveAt(LANE_DOC, offset, symbol -> {
             UIWindow live = editor.getAttachedWindow();
             if (live == null) return;
-            if (docPopup == null) docPopup = new DocumentationPopup();
+            ensureDocPopup();
             float[] at = editor.anchorInWindow(offset);
             if (at == null) return;
             docPopup.show(live, symbol, at[0], at[1], at[2]);
@@ -398,7 +398,7 @@ final class EditorLanguageFeatures {
     void showProblemPopupAt(Diagnostic problem, UIElement anchor) {
         UIWindow window = editor.getAttachedWindow();
         if (window == null || problem == null || anchor == null) return;
-        if (docPopup == null) docPopup = new DocumentationPopup();
+        ensureDocPopup();
         List<Diagnostic> problems = List.of(problem);
         docPopup.showProblems(window, problems, anchor);
 
@@ -422,6 +422,21 @@ final class EditorLanguageFeatures {
             // left of where it was measured.
             docPopup.reposition();
         });
+    }
+
+    /**
+     * The popup, built on first use and told what language its code samples are in.
+     *
+     * <p>Three call sites created it identically and none of them said that second part, which is the
+     * reason to have one: a doc comment's {@code <pre>} samples are in the language of the file that
+     * carries the comment, so the answer is the editor's own — and setting it here rather than at
+     * construction means it cannot go stale against an editor whose language was set after the popup
+     * first appeared.</p>
+     */
+    private DocumentationPopup ensureDocPopup() {
+        if (docPopup == null) docPopup = new DocumentationPopup();
+        docPopup.setCodeLanguage(editor.language());
+        return docPopup;
     }
 
     /** Closes the documentation popup if it is open. */

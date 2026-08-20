@@ -112,6 +112,18 @@ import java.util.Set;
  */
 public final class UIText extends UIElement {
 
+    /**
+     * Marks a text run as <b>coloured by a syntax scheme</b> — what every {@code ::highlight(<capture>)}
+     * rule in a scheme is scoped to.
+     *
+     * <p>Here rather than on {@code TextEditor}, which is where it used to live and is no longer the only
+     * thing that draws code: a documentation popup's declaration line carries it, and so does a code
+     * sample inside a rendered doc comment. The class marks a <em>text element</em>, so this is the type
+     * that should name it — and a general-purpose widget must not have to import the editor to say that
+     * its text is code.</p>
+     */
+    public static final String SYNTAX_CLASS = "__syntax__";
+
     static {
         // `font-size`/`font-family` are GeneralGroup/visual properties, never routed through TaffyBridge
         // the way LayoutProperties are — so nothing marks Taffy dirty when either changes, and
@@ -823,6 +835,50 @@ public final class UIText extends UIElement {
      * registered a range <em>and</em> a stylesheet styled it, so the fast unspanned path pays one null
      * check.</p>
      */
+    /**
+     * The source character at a point in this element's own coordinates, or {@code -1}.
+     *
+     * <h3>Run granularity, and that is not an approximation</h3>
+     *
+     * <p>The walk resolves to a shaped RUN and answers that run's first character, which sounds coarse
+     * and is exactly right for what asks: <b>a span boundary is a shaping-run boundary</b>. A highlighted
+     * range therefore <em>is</em> one or more runs — the property {@code paintHighlightBands} is built on
+     * — so "which span was clicked" is answered precisely even though "which letter" is not. A caller
+     * needing the letter would need per-glyph advances, which nothing does yet.</p>
+     *
+     * <p>Same walk as the band painter, deliberately: if the two disagreed about where a run sits, a
+     * click would land on text other than the one under the pointer, and both are derived from the same
+     * layout for the same reason the hit-test and the pose share {@code UITransform.applyTo}.</p>
+     *
+     * <p>Answers {@code -1} when the element has never been laid out or the point is above the first
+     * line — never a clamped guess, because "nothing here" and "the first character" are different
+     * answers and a caller that wants the clamp can say so.</p>
+     */
+    public int offsetAt(float localX, float localY) {
+        var taffy = getTaffyLayout();
+        if (taffy == null) return -1;
+        float contentWidth = taffy.contentBoxWidth();
+        float x = localX - taffy.border().left - taffy.padding().left;
+        float y = localY - taffy.border().top - taffy.padding().top;
+        if (y < 0f) return -1;
+
+        float maxWidthForWrap = getStyle().getGeneralGroup().whiteSpace().wraps() ? contentWidth : 0f;
+        CgTextLayout textLayout = ensureShaped().layout(maxWidthForWrap, 0f);
+        List<List<CgShapedRun>> lines = textLayout.lines();
+        if (lines.isEmpty()) return -1;
+
+        float lineHeight = textLayout.totalHeight() / lines.size();
+        int lineIndex = lineHeight <= 0f ? 0 : (int) (y / lineHeight);
+        if (lineIndex < 0 || lineIndex >= lines.size()) return -1;
+
+        float at = 0f;
+        for (CgShapedRun run : lines.get(lineIndex)) {
+            at += run.totalAdvance();
+            if (x < at) return run.sourceStart();
+        }
+        return -1;
+    }
+
     private void paintHighlightBands(CgUiPaintContext ctx, CgTextLayout layout,
                                      float contentX, float contentY) {
         HighlightStyle[] perChar = highlightPerChar;

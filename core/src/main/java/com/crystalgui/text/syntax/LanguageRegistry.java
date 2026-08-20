@@ -5,6 +5,8 @@ import com.crystalgui.fs.Resource;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.lang.LanguageServices;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.function.Supplier;
 
@@ -107,6 +109,21 @@ public final class LanguageRegistry {
 
     private static final FilePatternMap<Entry> RULES = new FilePatternMap<>();
 
+    /**
+     * The same entries, keyed by language name — for a caller that knows <b>what</b> rather than
+     * <b>which file</b>.
+     *
+     * <p>Every rule here is a file pattern, which is right for the question the editor asks ("I am
+     * opening {@code Foo.java}"). It is the wrong question for a caller holding a {@link Language}
+     * already: a code sample inside a rendered doc comment is Java because the document is, and there is
+     * no file name to invent for it. Deriving one — {@code "x.java"} — works and is a lie the next reader
+     * has to decode.</p>
+     *
+     * <p>Written by the same three registration methods, so an entry replaced later (the tree-sitter
+     * tokenizers overwrite the keyword ones when {@code language/} is present) is replaced in both.</p>
+     */
+    private static final Map<String, Entry> BY_LANGUAGE = new HashMap<>();
+
     static {
         Entry java = new Entry(Language.JAVA, KeywordTokenizer::java);
         registerExtensions(java, "java");
@@ -130,16 +147,37 @@ public final class LanguageRegistry {
     /** Registers {@code entry} for each extension, with or without the leading dot, case-insensitively. */
     public static synchronized void registerExtensions(Entry entry, String... extensions) {
         RULES.putExtensions(entry, extensions);
+        remember(entry);
     }
 
     /** Registers {@code entry} for each <b>exact</b> file name — {@code Dockerfile}, {@code .gitignore}. */
     public static synchronized void registerNames(Entry entry, String... fileNames) {
         RULES.putNames(entry, fileNames);
+        remember(entry);
     }
 
     /** Registers {@code entry} for each glob over the whole file name — {@code *.test.js}. */
     public static synchronized void registerGlobs(Entry entry, String... globs) {
         RULES.putGlobs(entry, globs);
+        remember(entry);
+    }
+
+    private static void remember(Entry entry) {
+        BY_LANGUAGE.put(entry.language().name(), entry);
+    }
+
+    /**
+     * The entry for a language, never null — {@link #PLAIN} when nothing has claimed it.
+     *
+     * <p>Keyed on the language's <b>name</b> rather than on the record's identity, because
+     * {@code Language.JAVA} the constant and the {@code Language} a registered entry holds need not be the
+     * same object: {@code language/} re-registers Java with a tree-sitter tokenizer and builds its own
+     * value. The name is what both agree on.</p>
+     */
+    public static synchronized Entry forLanguage(@Nullable Language language) {
+        if (language == null) return PLAIN;
+        Entry entry = BY_LANGUAGE.get(language.name());
+        return entry == null ? PLAIN : entry;
     }
 
     /** The language for a file name or path, never null. */
