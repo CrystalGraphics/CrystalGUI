@@ -436,64 +436,62 @@ the feature is worse than none.
 
 ## 6. What is left
 
-Three rows of §1 and three questions from §4, stated as of the syntax-colouring commit.
+Twelve of the thirteen audit rows are shipped, one is half shipped, and two of §4's three questions
+are still open. Each remaining item is blocked on the same kind of thing — something the engines do
+not yet expose — rather than on rendering work.
 
-### 6.1 The audit rows
+### 6.1 Row 6: a link is a gesture, not yet a destination
 
-**Row 6 — `{@link}` is styled but not clickable.** The plumbing is already in place and unused:
-`JavaDocs` emits `<a href="java:…">`, `MarkupParser` keeps it, `MarkupSpan.target()` carries it to the
-renderer, and `MarkupView` drops it — which its own javadoc says, so that adding navigation is a
-listener rather than a re-parse. The precedent for the gesture is the footer's pencil: the popup emits an
-intent (`onGoToDeclaration`) and the editor decides what to do with it. The missing pieces are a hit test
-from a character offset back to a span, which the band ranges already describe, and a decision about what
-a `java:` target resolves against.
+The near half is done: `UIText.offsetAt` resolves a point to a source character, `MarkupView` retains
+each run's link spans and emits `onLinkActivated` with the raw `href`, `DocumentationPopup` forwards it,
+and a link is styled and hit-testable. What a link cannot do is go anywhere.
 
-**Row 7 — a supertype outside `java.lang` should be qualified.** The stacking half shipped
-(`JavaSignatures` assembles rather than quotes once there is more than one supertype), and the naming half
-did not: ours reads `implements Serializable`, IntelliJ reads `implements java.io.Serializable` while
-leaving `Comparable` and `CharSequence` bare. The rule is "qualify anything not in `java.lang`", which is
-one condition in the renderer — the binding already knows its package.
+`Resolver` offers `resolveAt(offset)`, `expectedTypeAt(offset)` and `membersOf(type, offset)` —
+**nothing by name** — so no consumer can turn `java:java.util.List` into a `SymbolInfo`, and
+navigating a doc link means showing that element's documentation. The missing piece is one SPI method:
 
-**Row 12 — prose and code are the same foreground.** Both resolve to `--fg`
-(`--doc-body-fg` and `--markup-pre-fg`). IntelliJ dims the prose slightly so the code reads as the
-foreground of the two. A token change, but it is a judgement about how much, and it should be made against
-a screenshot rather than in the abstract.
+```java
+void describe(String qualifiedName, Consumer<Versioned<SymbolInfo>> answer);
+```
 
-### 6.2 The open questions, two of them now answered
+Implementable Java-side by the probe-unit trick `InteropResolver.describeMember` already uses — it
+analyses `class $Probe { <fqn> $x; }` and reads the binding back — so the engine work is small and
+the seam is the decision. Deliberately not invented while building the gesture: emitting a signal an
+editor cannot act on is honest, and a half-resolver would not be.
 
-**How the model crosses the bridge — decided by what shipped.** The engine emits *markup as a string*
-and the popup parses it (`MarkupParser.parse` in `DocumentationPopup.fill`). `SymbolInfo.documentation()`
-therefore stayed a `String` and `com.crystalgui.text.lang` gained nothing, which was the second of the two
-options and the one that keeps the SPI small. Worth stating because the first option — a value type on
-the seam — is the one a reader would assume from the model existing.
+### 6.2 `{@inheritDoc}` inside a comment
 
-**`{@inheritDoc}` — half done, and the half that matters most is the one that works.** A method with
-*no comment at all* inherits its supertype's, breadth-first, superclass before interfaces
-(`JavaSignatures.documentationOf`) — without which a large fraction of methods render empty and the
-feature reads as broken. The tag *inside* a comment, mixing the author's own prose with the inherited
-text, is not honoured: it renders as its own subject like any other unrecognised inline tag.
+The half that matters most works: a method with **no comment at all** inherits its supertype's,
+breadth-first, superclass before interfaces (`JavaSignatures.documentationOf`) — without which a
+large fraction of methods render empty and the feature reads as broken rather than as the method having
+nothing to say.
 
-**JavaScript gets the renderer and none of the emitter.** Only the Java engine calls
-`withDocumentation`; `RhinoJsDoc` is "a tag grammar, not a documentation renderer" by its own first line,
-and the JS side forwards a *Java* symbol's documentation through `InteropResolver` and produces none of
-its own. The renderer and the model are language-neutral and need no change — what is missing is a
-JSDoc emitter, and JSDoc is **Markdown** rather than HTML, so it is a second parser feeding the same
-`MarkupDocument` rather than a second renderer.
+The tag written *inside* a comment, mixing the author's own prose with the inherited text, is not
+honoured: it renders as its own subject like any other unrecognised inline tag. Doing it means resolving
+the supertype's comment at the point the tag appears and splicing, which is `JavaDocInfoGenerator`'s
+recursive `generateValue` path — the one part of that emitter this port skipped.
 
-### 6.3 Found on the way, not in the audit
+### 6.3 JavaScript gets the renderer and none of the emitter
 
-**A grammar's guarded `@type` patterns are inert, so `System.out` reads as two variables.** The Java query
-states the rule — `((field_access object: (identifier) @type) (#match? @type "^[A-Z]"))` — but
-`Queries.liftUnambiguousPredicates` lifts a predicate only when *every* use of that capture name is
-predicated, and `@type` is used both guarded (four patterns) and unguarded (a dozen). An unlifted
-predicate is not evaluated by the binding at all, so those four patterns contribute nothing and `System`
-falls through to the catch-all `(identifier) @variable`.
+Only the Java engine calls `withDocumentation`. `RhinoJsDoc` is "a tag grammar, not a documentation
+renderer" by its own first line, and the JS side forwards a *Java* symbol's documentation through
+`InteropResolver` while producing none of its own — so hovering a documented JavaScript function
+shows a declaration and nothing under it.
 
-This is **not** specific to documentation and not introduced by it: the editor is affected identically and
-only looks right because the Java engine's semantic tokens replace the grammar's guess. A doc popup has no
-engine, which is why it surfaced here. The fix is to key the lifted filter by **pattern** rather than by
-capture name; it touches the query loader every language shares, so it is its own piece of work.
+The renderer and the model need no change, which is the whole point of them being language-neutral.
+What is missing is a JSDoc emitter, and **JSDoc is Markdown rather than HTML** — so it is a second
+parser feeding the same `MarkupDocument`, not a second renderer. `MarkupParser` stays as it is.
 
+### 6.4 Closed since the audit
+
+- **Row 7 is retired**, not implemented — its premise was a misreading of one example. See the log.
+- **How the model crosses the bridge** is decided by what shipped: the engine emits markup as a
+  *string* and the popup parses it, so `SymbolInfo.documentation()` stayed a `String` and
+  `com.crystalgui.text.lang` gained nothing. That was the second of the two options and the one that
+  keeps the SPI small.
+- **The inert `@type` patterns** are fixed by per-pattern predicate lifting, which was never a
+  documentation problem — the editor was affected identically and only looked right because
+  semantic tokens replaced the grammar's guess.
 
 ---
 
