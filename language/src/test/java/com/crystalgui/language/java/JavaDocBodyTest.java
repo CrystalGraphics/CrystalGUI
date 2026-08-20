@@ -625,4 +625,113 @@ public class JavaDocBodyTest {
                 docs.contains("<em>special</em>"));
         assertFalse("the angle brackets were escaped: <" + docs + ">", docs.contains("&lt;em&gt;"));
     }
+
+    /**
+     * <b>A reference to something in THIS file resolves, and a member resolves to itself.</b>
+     *
+     * <p>The fallback builds a probe — a separate compilation unit compiled against the classpath —
+     * and the classpath does not contain the file being edited. So every inward-pointing link answered
+     * nothing: {@code @see #helper()}, {@code {@link MyOtherClass}}, a bare {@code #member}. In a file
+     * whose See Also mixed JDK references with its own, the JDK half worked and the rest did not,
+     * which reads as the link being broken at random.</p>
+     *
+     * <p>A member is answered as ITSELF here, which the probe path cannot do — the plan's "a member
+     * resolves to its owning type" partial is about members reached through the classpath, and a
+     * declaration in this file needs no unit that calls it.</p>
+     */
+    @Test
+    public void aReferenceIntoThisFileResolves() {
+        String source = ""
+                + "public class Script {\n"
+                + "    /** Uses {@link Helper} and {@link #other()}. */\n"
+                + "    void run() { }\n"
+                + "    void other() { }\n"
+                + "    interface Helper { void help(String s); }\n"
+                + "}\n";
+        SourceAnalyzer.Analysis analysis = engine.analyzer().analyze(
+                "Script", source, HostClasspath.detect(), engine.releaseLevel(), 1L);
+        try {
+            SymbolInfo type = analysis.describe("Helper");
+            assertNotNull("a type declared in this very file resolved to nothing", type);
+            assertEquals("Helper", type.name());
+
+            SymbolInfo bare = analysis.describe("#other()");
+            assertNotNull("a bare #member -- 'on the class this comment is in' -- resolved to nothing",
+                    bare);
+            assertEquals("a bare member must resolve to the METHOD, not to its owning type",
+                    "other", bare.name());
+
+            SymbolInfo qualified = analysis.describe("Helper#help");
+            assertNotNull("a qualified member in this file resolved to nothing", qualified);
+            assertEquals("help", qualified.name());
+
+            assertNull("a qualifier naming another type must not be answered by this file's own member",
+                    analysis.describe("Nowhere#other"));
+        } finally {
+            analysis.close();
+        }
+    }
+
+    /**
+     * <b>A member reference carries a QUALIFIED owner into the href.</b>
+     *
+     * <p>{@code @see Map#entrySet()} is a {@code MethodRef} rather than a {@code Name}, so it fell
+     * through the qualification added for types and kept the author's spelling. That cuts to a bare
+     * {@code Map}, which resolves nowhere — while the two plain-name references above it in the same
+     * See Also worked, because they happen to be names.</p>
+     */
+    @Test
+    public void aMemberReferenceIsLinkedByItsQualifiedOwner() {
+        String source = ""
+                + "import java.util.Map;\n"
+                + "public class Script {\n"
+                + "    /**\n"
+                + "     * Uses things.\n"
+                + "     *\n"
+                + "     * @see Map#entrySet()\n"
+                + "     */\n"
+                + "    int rows() { return 1; }\n"
+                + "    int use() { return rows(); }\n"
+                + "}\n";
+        String docs = docAt(source, "rows();");
+        assertNotNull(docs);
+        assertTrue("the owner must be qualified or the href resolves nowhere: <" + docs + ">",
+                docs.contains("java:java.util.Map#entrySet()"));
+    }
+
+    /**
+     * <b>A reference that did not really resolve is not coloured as though it had.</b>
+     *
+     * <p>{@code setBindingsRecovery} synthesises a binding for an unknown type rather than answering
+     * null, so {@code no.such.Type} comes back a CLASS named {@code Type} in a container
+     * {@code no.such}. In code that is harmless — the same range is marked {@code unresolved} and the
+     * later token wins — but that mark is deliberately suppressed inside a doc comment, so a recovered
+     * kind would be the ONLY thing said about the name, and a broken reference would draw in the same
+     * confident colour as a working one beside it.</p>
+     */
+    @Test
+    public void anUnresolvableDocReferenceIsNotColouredAsAType() {
+        String source = ""
+                + "public class Script {\n"
+                + "    /** Sees {@link no.such.Type} and {@link String}. */\n"
+                + "    void run() { }\n"
+                + "}\n";
+        SourceAnalyzer.Analysis analysis = engine.analyzer().analyze(
+                "Script", source, HostClasspath.detect(), engine.releaseLevel(), 1L);
+        try {
+            int missing = source.indexOf("no.such.Type") + "no.such.".length();
+            int real = source.indexOf("{@link String}") + "{@link ".length();
+            String missingCapture = null;
+            String realCapture = null;
+            for (com.crystalgui.text.syntax.SyntaxToken t : analysis.semanticTokens()) {
+                if (missing >= t.start() && missing < t.end()) missingCapture = t.name();
+                if (real >= t.start() && real < t.end()) realCapture = t.name();
+            }
+            assertEquals("the reference that DOES resolve must still be coloured", "type", realCapture);
+            assertNull("a recovered binding was coloured as a real type: " + missingCapture,
+                    missingCapture);
+        } finally {
+            analysis.close();
+        }
+    }
 }

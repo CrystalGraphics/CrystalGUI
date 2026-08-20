@@ -15,6 +15,7 @@ import com.crystalgui.text.syntax.Language;
 import com.crystalgui.text.syntax.SyntaxToken;
 import com.crystalgui.ui.AnchoredPlacement;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.UIFrameTicker;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.MarkupView;
 import com.crystalgui.ui.elements.Scroller;
@@ -796,9 +797,22 @@ public final class DocumentationPopup extends Popover {
         pendingNavigation = symbol;
         UIWindow window = getAttachedWindow();
         if (window == null) return;
-        window.registerTicker(deltaSeconds -> {
-            applyPendingNavigation();
-            return false;
+        // ONE SHOT, AND IT DROPS ITSELF BEFORE IT WORKS. Written as a lambda ending in `return false`,
+        // a throw from the body skips that return -- so the ticker stays registered and throws again on
+        // every frame after, out of `tickAnimations`, out of `advanceFrame`, out of `paintFrame`. One
+        // failed navigation would take the whole window with it, permanently, which reads as the popup
+        // having broken rather than as a single answer having been bad. The flag is set first so the
+        // repeat cannot happen whatever the body does.
+        window.registerTicker(new UIFrameTicker() {
+            private boolean spent;
+
+            @Override
+            public boolean tickFrame(float deltaSeconds) {
+                if (spent) return false;
+                spent = true;
+                applyPendingNavigation();
+                return false;
+            }
         });
     }
 

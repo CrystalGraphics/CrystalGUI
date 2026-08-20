@@ -94,16 +94,25 @@ public class MarkupViewTest extends UiTestBase {
         assertEquals("expected exactly one code band, got " + code, 1, code.size());
 
         TextRange band = code.get(0);
-        // ONE NON-BREAKING SPACE EACH SIDE, INSIDE THE BAND. That is the chip's padding: `HighlightStyle` permits
-        // horizontal padding and it paints, but it inflates the rect without moving a glyph, so the plate
-        // grew outwards and swallowed the single space either side of the chip. Real advance is the only
-        // padding layout will honour -- so the band covering exactly ` null ` is the assertion, and a band
-        // covering `null` would mean the plate is back to touching its neighbours. NON-BREAKING,
-        // or the leading pad wraps to the previous line and paints a stub of plate dangling off it.
-        assertEquals("the band does not cover the padded chip: <" + rendered + "> band=" + band,
-                " null ", rendered.substring(band.start(), band.end()));
-        assertTrue("the word itself was altered, not merely padded: <" + rendered + ">",
-                rendered.contains(" null "));
+        // THE BAND COVERS THE WORD; THE PADS SIT OUTSIDE IT. The two do different jobs and they used to
+        // be conflated, with the pads inside the band on the reasoning that real advance is the only
+        // padding layout honours. True, and only half of it: `HighlightStyle` permits horizontal
+        // padding and it paints, but it inflates the rect WITHOUT moving a glyph, so everything it adds
+        // is taken from the gap to the neighbouring word. With the pads inside the plate, raising the
+        // padding pushed the plate outwards until a chip and the comma after it were touching.
+        //
+        // So: the PADDING is the plate's breathing room, measured from the glyphs; the PAD CHARACTER is
+        // separation from the words either side, which layout honours and the plate cannot grow into.
+        // A band covering the pads means the two have been conflated again.
+        assertEquals("the band must cover the word alone: <" + rendered + "> band=" + band,
+                "null", rendered.substring(band.start(), band.end()));
+        // NON-BREAKING, or the leading pad wraps to the previous line -- and now that the plate does not
+        // cover it, a break there would leave the chip's first glyph alone at the start of a line.
+        assertTrue("the chip lost the pads that separate it from the prose: <" + rendered + ">",
+                rendered.contains("\u00A0null\u00A0"));
+        assertEquals("the leading pad must be non-breaking",
+                '\u00A0', rendered.charAt(band.start() - 1));
+        assertEquals("the trailing pad must be non-breaking", '\u00A0', rendered.charAt(band.end()));
     }
 
     /**

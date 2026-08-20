@@ -2491,8 +2491,52 @@ public class TextEditor extends ScrollerView implements UndoScope {
             final int from = Math.max(token.start(), rowStart) - rowStart;
             final int to = Math.min(token.end(), rowEnd) - rowStart;
             if (to <= from) continue;
-            bucket.removeIf(existing -> from < existing.end() && existing.start() < to);
+            bucket.removeIf(existing -> replacedBySemantic(existing, from, to));
         }
+    }
+
+    /**
+     * Whether a grammar token is displaced by a semantic one over {@code [from, to)}.
+     *
+     * <p>ONE NAMED RULE rather than the two halves spelled out at the call site, so a test asks the
+     * same question the merge does. Written out inline, a test could only restate it — and a restated
+     * rule agrees with itself forever while saying nothing about the editor.</p>
+     */
+    static boolean replacedBySemantic(SyntaxToken existing, int from, int to) {
+        return overlaps(existing, from, to) && !contains(existing, from, to);
+    }
+
+    /** Whether {@code existing} shares any character with {@code [from, to)}. */
+    private static boolean overlaps(SyntaxToken existing, int from, int to) {
+        return from < existing.end() && existing.start() < to;
+    }
+
+    /**
+     * Whether {@code existing} strictly CONTAINS {@code [from, to)} — and so is not a competing answer.
+     *
+     * <h3>Why a container survives a semantic token</h3>
+     *
+     * <p>"The engine's answer beats the grammar's" is a statement about two sources describing <b>the
+     * same thing</b>: the grammar called {@code count} a {@code variable} from its shape, the engine
+     * knows it is a {@code variable.parameter}. Both answer "what is this identifier", so the better
+     * answer replaces the worse one.</p>
+     *
+     * <p>A token that contains the semantic one answers a different question — "what is this identifier
+     * <em>inside</em>" — and both are true at once. {@code DocComments} emits a coarse
+     * {@code comment.doc} over the WHOLE comment before the pieces within it, so once doc-tag references
+     * began resolving, a single {@code {@link List}} cleared that container for its entire row: the
+     * prose either side lost the comment's colour and its italic, while a line whose reference happened
+     * not to resolve kept both. It was reported as the highlighting being inconsistent from one line to
+     * the next, which is precisely how it looked.</p>
+     *
+     * <p>Keeping it is safe because the semantic tokens are added <b>after</b> and the last name written
+     * wins the character — so the container styles the prose and the engine still styles the name it
+     * resolved. STRICT, because a token with exactly the semantic one\u2019s bounds is describing the same
+     * characters and nothing else, which makes it a competing answer rather than a context.</p>
+     */
+    private static boolean contains(SyntaxToken existing, int from, int to) {
+        return existing.start() <= from && existing.end() >= to
+                && (existing.start() < from || existing.end() > to);
     }
 
     /**

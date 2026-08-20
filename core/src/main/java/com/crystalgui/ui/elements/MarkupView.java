@@ -628,11 +628,25 @@ public class MarkupView extends UIElement implements UIFrameTicker {
             // Not a thin space: the bundled faces are already known to be missing U+2026 and U+22EE, and
             // U+00A0 is Latin-1 rather than a typographic extra, so it is present wherever a space is.
             boolean chip = span.has(MarkupSpan.CODE);
-            assembled.append(chip ? "\u00A0" + span.text() + "\u00A0" : span.text());
+            String pad = chip ? "\u00A0" : "";
+            assembled.append(pad).append(span.text()).append(pad);
             int end = assembled.length();
             if (end == start) continue;
             TextRange range = TextRange.of(start, end);
-            if (span.has(MarkupSpan.CODE)) bands.computeIfAbsent(CODE_RANGE, k -> new ArrayList<>()).add(range);
+            if (chip) {
+                // THE PLATE COVERS THE TEXT AND NOT THE PADS, and the split is the whole point of
+                // having both. A band's padding inflates the painted rect WITHOUT moving a glyph, so
+                // whatever it adds is taken from the gap to the neighbouring word -- with the pads
+                // inside the plate, raising the padding pushed the plate out until `StringBuffer` and
+                // the comma after it were touching.
+                //
+                // So the two are given different jobs. The PADDING is the plate's own breathing room,
+                // measured from the glyphs it surrounds. The PAD CHARACTER is separation from the text
+                // either side, and it is a real character, so layout honours it and the plate can never
+                // grow into it.
+                bands.computeIfAbsent(CODE_RANGE, k -> new ArrayList<>())
+                        .add(TextRange.of(start + pad.length(), end - pad.length()));
+            }
             if (span.has(MarkupSpan.STRONG)) bands.computeIfAbsent(STRONG_RANGE, k -> new ArrayList<>()).add(range);
             if (span.has(MarkupSpan.EMPHASIS)) bands.computeIfAbsent(EMPHASIS_RANGE, k -> new ArrayList<>()).add(range);
             if (span.has(MarkupSpan.LINK)) {

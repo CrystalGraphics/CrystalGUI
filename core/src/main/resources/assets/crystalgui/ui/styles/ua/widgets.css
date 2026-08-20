@@ -581,16 +581,17 @@ markupview .__markup-bullet__::highlight(markup-code) {
     /* A PLATE, not a tint -- rounded, so a short identifier reads as code rather than as an arbitrarily
      * highlighted word.
      *
-     * THE SPACE INSIDE THE PLATE IS TWO THINGS, and it has to be. `MarkupView` puts a real U+00A0 either
-     * side of the chip text, which LAYOUT honours -- that is what stops the plate touching the glyphs and
-     * what keeps the gap to the neighbouring word. This padding is the rest of it, and it only inflates
-     * the painted rect: it moves no glyph, so it must stay small or it eats into that gap rather than
-     * adding to the plate. Two pixels is the difference between a chip and a tinted word.
+     * THE PLATE'S BREATHING ROOM IS THIS PADDING; the gap to the words either side is a real U+00A0
+     * that `MarkupView` puts OUTSIDE the band. They have to be two different things: padding inflates
+     * the painted rect without moving a glyph, so anything it adds comes out of the gap to the
+     * neighbour -- with the pad characters inside the plate, raising this pushed the plate out until a
+     * chip and the comma after it were touching. Outside the band, layout honours the pad and the plate
+     * cannot reach it however large this grows.
      *
      * Vertical padding is not permitted at all -- a band is as tall as its line box, and inflating that
      * overlaps the line above. @see HighlightStyle */
-    padding-left: 2px;
-    padding-right: 2px;
+    padding-left: 3px;
+    padding-right: 3px;
     border-radius: 3px;
 }
 
