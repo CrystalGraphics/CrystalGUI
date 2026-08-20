@@ -102,6 +102,32 @@ public final class CgUiPaintContext {
     private static CgUiPaintContext instance;
 
     /** Lazily constructs the singleton on first use. See the class doc for why this must stay lazy. */
+    /**
+     * <b>Compiles the shipped materials now, so the first frame that draws does not.</b>
+     *
+     * <p>{@code CgMaterial.load} in the constructor <em>parses</em> a {@code .shader}; the GLSL is
+     * compiled and linked on the first {@code bind}. So constructing this class early bought nothing —
+     * measured, twice: warming by construction alone left the first frame's material bind at 300 ms
+     * against 286 before. Binding each material once is what actually pays the cost.</p>
+     *
+     * <p>Called from {@link com.crystalgui.lifecycle.CgUiLifecycle#onInit}, which is on the GL thread with
+     * a live context by definition. Never call it from anywhere else: a bind outside a frame is only safe
+     * because nothing is mid-draw, and {@code CgGlScope} is not held here.</p>
+     *
+     * <p>Failures are swallowed. A shader that will not compile is a real problem and the first real
+     * frame will report it in the ordinary way; a warm-up must not be the thing that fails a context.</p>
+     */
+    public void warmMaterials() {
+        for (CgMaterial material : new CgMaterial[] { boxModelMaterial, curveMaterial, layerBlitMaterial }) {
+            try {
+                material.bind();
+                material.unbind();
+            } catch (RuntimeException | LinkageError ignored) {
+                // See the note above: an optimisation that fails is silent.
+            }
+        }
+    }
+
     public static CgUiPaintContext getInstance() {
         if (instance == null) instance = new CgUiPaintContext();
         return instance;

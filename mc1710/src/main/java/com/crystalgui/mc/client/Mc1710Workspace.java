@@ -40,7 +40,7 @@ import java.util.List;
  * <p>Same order as {@code HarnessWorkspace}: grammars, then the engines, before a document exists.
  * See {@link #registerLanguages()} — every piece degrades on its own, and none is fatal.</p>
  */
-final class Mc1710Workspace {
+public final class Mc1710Workspace {
 
     static final String PROJECT_ID = "minecraft.workspace";
 
@@ -95,7 +95,23 @@ final class Mc1710Workspace {
      * are logged: {@code LanguageServices} being absent is the feature flag the whole stack degrades
      * through, so it reads as those features not existing rather than as not being switched on.</p>
      */
-    private static void registerLanguages() {
+    /**
+     * <b>Called from {@code ClientProxy} at FML init, not from here.</b>
+     *
+     * <p>Measured at 443 ms — the engine band's loader, six grammars and a tree-sitter native — and it
+     * was being paid on the first F6, on the client thread, as part of a four-second freeze. FML init is
+     * the <em>same thread</em>, so this is not made concurrent; it is made <b>early</b>, where a loading
+     * screen is already up and nobody is waiting on a keystroke.</p>
+     *
+     * <p>Deliberately not moved to a background thread, which was the tempting version: registration
+     * writes to {@code LanguageRegistry} and to {@code CommandRegistry}, whose {@code byId} is a plain
+     * {@code LinkedHashMap} — the UI reads both, so a concurrent register is the same class of hazard as
+     * emitting a signal from a worker. Early on the right thread costs nothing and risks nothing.</p>
+     *
+     * <p>Idempotent, so the constructor's own call is a no-op second time: {@code JavaLanguage.register}
+     * returns early once an engine is open, and the others read-and-add rather than replace.</p>
+     */
+    public static void registerLanguages() {
         probeTreeSitterNative();
         try {
             TreeSitterLanguages.register();
