@@ -118,6 +118,15 @@ public final class TreeSitterTokenizer
     private final Map<String, Pattern> captureFilters;
 
     /**
+     * The lifted {@code #match?} tests, keyed by the PATTERN that carried each one.
+     *
+     * <p>By pattern rather than by capture name, which is what lets a capture used both guarded and bare
+     * keep both meanings — see {@code Queries.filtersByPattern}. Keyed by name alone,
+     * {@code @type}’s four guarded patterns could not be lifted at all and contributed nothing.</p>
+     */
+    private final Map<Integer, Map<String, Pattern>> patternFilters;
+
+    /**
      * The injections query, or {@code null} for a language that embeds nothing.
      *
      * <p>HTML is not one language: {@code <style>} is CSS and {@code <script>} is JavaScript, and a
@@ -156,7 +165,8 @@ public final class TreeSitterTokenizer
      *                  synchronous. See the field note.
      */
     public TreeSitterTokenizer(TSLanguage language, String highlightQuery, JobScheduler scheduler) {
-        this(language, new Queries.Prepared(highlightQuery, java.util.Collections.emptyMap()), scheduler);
+        this(language, new Queries.Prepared(highlightQuery, java.util.Collections.emptyMap(),
+                java.util.Collections.emptyList()), scheduler);
     }
 
     TreeSitterTokenizer(TSLanguage language, Queries.Prepared prepared, JobScheduler scheduler) {
@@ -164,6 +174,7 @@ public final class TreeSitterTokenizer
         this.parser = new TSParser();
         this.parser.setLanguage(language);
         this.query = new TSQuery(language, prepared.text());
+        this.patternFilters = Queries.filtersByPattern(this.query, prepared);
         this.captureFilters = prepared.captureFilters();
         this.scheduler = scheduler;
 
@@ -406,7 +417,8 @@ public final class TreeSitterTokenizer
                 // The lifted predicate, re-applied. Without it the SCREAMING_CASE test that separates a
                 // constant from an ordinary identifier would be gone entirely, and every identifier in
                 // the file would be captured as a constant.
-                Pattern filter = captureFilters.get(name);
+                Map<String, Pattern> guards = patternFilters.get(patternIndex);
+                Pattern filter = guards == null ? captureFilters.get(name) : guards.get(name);
                 if (filter != null && !filter.matcher(textOf(node)).find()) continue;
                 int start = offsets.toUtf16(node.getStartByte());
                 int end = offsets.toUtf16(node.getEndByte());
