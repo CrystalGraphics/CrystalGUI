@@ -42,7 +42,34 @@ public record MarkupBlock(Kind kind, List<MarkupSpan> spans, List<MarkupBlock> c
         /** {@code <dt>} — the label of a {@link #DEFINITIONS} row. */
         TERM,
         /** {@code <dd>} — the value of a {@link #DEFINITIONS} row; may hold blocks of its own. */
-        DETAIL
+        DETAIL,
+        /**
+         * {@code <table>} — a {@link #CAPTION} at most, then {@link #ROW}s.
+         *
+         * <p>Modelled because the JDK's own documentation is full of them, not because a hover needs a
+         * web page. Measured before it was written: {@code java.util.Formatter} carries NINETEEN tables
+         * in 88k characters of comment and its whole purpose is the conversion reference,
+         * {@code java.util.regex.Pattern} three, {@code DateTimeFormatter} two. Dropping the tags left
+         * every cell concatenated into one run of prose — {@code ModeMeaning READ_WRITEReads and
+         * writes} — which is worse than showing nothing, because it reads as the renderer having
+         * failed rather than as a construct nobody implemented.</p>
+         *
+         * <p>{@code thead}, {@code tbody} and {@code tfoot} are transparent: they group rows for
+         * styling and say nothing this layer needs, so their rows land in the table directly.</p>
+         */
+        TABLE,
+        /** {@code <caption>} — a table's title, if it has one. */
+        CAPTION,
+        /** {@code <tr>} — one row of {@link #CELL}s. */
+        ROW,
+        /**
+         * {@code <td>} or {@code <th>} — one cell, with {@code level} 1 for a header.
+         *
+         * <p>Header-ness rides on {@code level} rather than on a kind of its own, the way an ordered
+         * {@link #LIST} already carries its own flag there. A header cell is a cell: it sits in the same
+         * column, is measured with the others, and differs only in how it is drawn.</p>
+         */
+        CELL
     }
 
     public static MarkupBlock paragraph(List<MarkupSpan> spans) {

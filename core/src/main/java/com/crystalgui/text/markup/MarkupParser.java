@@ -429,8 +429,17 @@ public final class MarkupParser {
              * {@code <dl>} inside an {@code <li>}, where it also arrived under the wrong KIND.</p>
              */
             final List<MarkupBlock> rowBlocks = new ArrayList<>();
+            /**
+             * What this container closes as — {@code LIST}, {@code DEFINITIONS}, {@code TABLE} or
+             * {@code ROW}.
+             *
+             * <p>Was two booleans, which is the shape that wanted a third the moment {@code <dl>}
+             * arrived and a fourth for {@code <table>}. A container has ONE kind; asking it to be
+             * spelled as a set of flags means every reader has to reconstruct which combinations are
+             * legal, and two of the four here are not.</p>
+             */
+            final MarkupBlock.Kind kind;
             final boolean ordered;
-            final boolean definitions;
             /**
              * What the row currently being built will close as.
              *
@@ -440,9 +449,12 @@ public final class MarkupParser {
              */
             MarkupBlock.Kind rowKind = MarkupBlock.Kind.ITEM;
 
-            OpenList(boolean ordered, boolean definitions) {
+            /** {@code 1} marks the row being built as a header cell. @see MarkupBlock.Kind#CELL */
+            int rowLevel;
+
+            OpenList(MarkupBlock.Kind kind, boolean ordered) {
+                this.kind = kind;
                 this.ordered = ordered;
-                this.definitions = definitions;
             }
         }
 
@@ -493,7 +505,40 @@ public final class MarkupParser {
                 case "ol":
                 case "dl":
                     closeBlock();
-                    lists.add(new OpenList("ol".equals(tag), "dl".equals(tag)));
+                    lists.add(new OpenList("dl".equals(tag)
+                            ? MarkupBlock.Kind.DEFINITIONS : MarkupBlock.Kind.LIST,
+                            "ol".equals(tag)));
+                    break;
+                case "table":
+                    closeBlock();
+                    lists.add(new OpenList(MarkupBlock.Kind.TABLE, false));
+                    break;
+                // TRANSPARENT. They group rows for styling and say nothing a reader needs, so the rows
+                // inside them belong to the table rather than to a container of their own.
+                case "thead":
+                case "tbody":
+                case "tfoot":
+                    break;
+                case "caption":
+                    closeOpenRow();
+                    setRowKind(MarkupBlock.Kind.CAPTION);
+                    break;
+                case "tr":
+                    // A ROW IS ITS OWN CONTAINER, because a table nests two levels where a list nests
+                    // one: the table collects rows and each row collects cells. Closing any row still
+                    // open first is the same rule `<li>` follows -- rows are siblings, so the previous
+                    // one ends where this begins whether or not `</tr>` was written.
+                    if (openList() != null && openList().kind == MarkupBlock.Kind.ROW) {
+                        closeOpenRow();
+                        closeList();
+                    }
+                    lists.add(new OpenList(MarkupBlock.Kind.ROW, false));
+                    break;
+                case "td":
+                case "th":
+                    closeOpenRow();
+                    setRowKind(MarkupBlock.Kind.CELL);
+                    setRowLevel("th".equals(tag) ? 1 : 0);
                     break;
                 case "li":
                     closeOpenRow();
@@ -553,6 +598,25 @@ public final class MarkupParser {
                     closeList();
                     break;
                 case "li": case "dt": case "dd":
+                case "thead": case "tbody": case "tfoot":
+                case "td": case "th":
+                    break;
+                case "caption":
+                    closeOpenRow();
+                    break;
+                case "tr":
+                    closeOpenRow();
+                    closeList();
+                    break;
+                case "table":
+                    // A `<table>` MISSING ITS `</tr>` still has to reach the document, so the row is
+                    // closed here as well -- the same reason `build` unwinds every open list at the end.
+                    if (openList() != null && openList().kind == MarkupBlock.Kind.ROW) {
+                        closeOpenRow();
+                        closeList();
+                    }
+                    closeOpenRow();
+                    closeList();
                     break;
                 case "p": case "blockquote":
                     closeBlock();
@@ -620,6 +684,12 @@ public final class MarkupParser {
             if (list != null) list.rowKind = kind;
         }
 
+        /** Records the level the row now being built closes with — a header cell's marker. */
+        private void setRowLevel(int level) {
+            OpenList list = openList();
+            if (list != null) list.rowLevel = level;
+        }
+
         private void closeBlock() {
             endRun();
             if (pending.isEmpty()) {
@@ -647,9 +717,11 @@ public final class MarkupParser {
             closeBlock();
             OpenList list = openList();
             if (list == null || list.rowBlocks.isEmpty()) return;
-            list.items.add(MarkupBlock.of(list.rowKind, new ArrayList<>(list.rowBlocks), 0));
+            list.items.add(MarkupBlock.of(list.rowKind, new ArrayList<>(list.rowBlocks),
+                    list.rowLevel));
             list.rowBlocks.clear();
             list.rowKind = MarkupBlock.Kind.ITEM;
+            list.rowLevel = 0;
         }
 
         private void closeList() {
@@ -657,11 +729,20 @@ public final class MarkupParser {
             if (list == null) return;
             lists.remove(lists.size() - 1);
             if (list.items.isEmpty()) return;
-            MarkupBlock closed = list.definitions
-                    ? MarkupBlock.of(MarkupBlock.Kind.DEFINITIONS, list.items, 0)
-                    : MarkupBlock.of(MarkupBlock.Kind.LIST, list.items, list.ordered ? 1 : 0);
-            if (lists.isEmpty()) blocks.add(closed);
-            else openList().rowBlocks.add(closed);
+            MarkupBlock closed = MarkupBlock.of(list.kind, list.items, list.ordered ? 1 : 0);
+            OpenList parent = openList();
+            if (parent == null) {
+                blocks.add(closed);
+            } else if (parent.kind == MarkupBlock.Kind.TABLE
+                    && closed.kind() == MarkupBlock.Kind.ROW) {
+                // A ROW IS THE TABLE'S OWN ITEM, not a block inside the row the table is building.
+                // Every other container is content that happens to sit in an item -- a `<ul>` inside an
+                // `<li>` -- and goes through `rowBlocks`. A table has no such thing: its rows ARE its
+                // items, so routing them the ordinary way would wrap each one in an anonymous ITEM.
+                parent.items.add(closed);
+            } else {
+                parent.rowBlocks.add(closed);
+            }
         }
     }
 

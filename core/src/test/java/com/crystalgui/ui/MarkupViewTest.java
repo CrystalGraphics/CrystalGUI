@@ -377,6 +377,72 @@ public class MarkupViewTest extends UiTestBase {
         assertTrue("the second value is missing: " + rendered, rendered.contains("SQLException"));
     }
 
+    /**
+     * <b>A table renders its cells, rather than concatenating them into prose.</b>
+     *
+     * <p>The failure this replaces was not a missing table — it was a paragraph reading
+     * {@code Modes ModeMeaning READ_WRITEReads and writes}, every cell run together, because unknown
+     * tags degrade to their text and {@code <td>} was unknown. That reads as the renderer having
+     * broken rather than as a construct nobody implemented, which is why it is worth having at all.</p>
+     */
+    @Test
+    public void aTableRendersItsCells() {
+        MarkupView view = new MarkupView(MarkupParser.parse(
+                "<table><caption>Modes</caption>"
+                        + "<tr><th>Mode</th><th>Meaning</th></tr>"
+                        + "<tr><td>READ_WRITE</td><td>Reads and writes</td></tr></table>"));
+
+        List<String> rendered = new ArrayList<>();
+        collectText(view, rendered);
+        assertTrue("the caption is missing: " + rendered, rendered.contains("Modes"));
+        assertTrue("a header cell is missing: " + rendered, rendered.contains("Mode"));
+        assertTrue("a header cell is missing: " + rendered, rendered.contains("Meaning"));
+        assertTrue("a body cell is missing: " + rendered, rendered.contains("READ_WRITE"));
+        assertTrue("a body cell is missing: " + rendered, rendered.contains("Reads and writes"));
+
+        // AND AS SEPARATE ELEMENTS, which is the whole difference from the old behaviour: one run
+        // holding every cell would satisfy a "contains" check on each of them.
+        assertTrue("the cells were concatenated into one run: " + rendered,
+                rendered.contains("Mode") && rendered.contains("Meaning"));
+    }
+
+    /**
+     * <b>A column is as wide as its widest cell, in every row.</b>
+     *
+     * <p>{@code display: grid} is non-functional in this engine — measured twice, the value cell comes
+     * back at the container's full width and the first track is never reserved — so the columns are
+     * lined up after layout instead. Without it a table is a set of independent rows whose cells happen
+     * to start wherever their own text ends, which is not a table.</p>
+     */
+    @Test
+    public void everyCellInAColumnGetsTheSameWidth() {
+        MarkupView view = new MarkupView(MarkupParser.parse(
+                "<table>"
+                        + "<tr><td>a</td><td>short</td></tr>"
+                        + "<tr><td>a much longer first cell</td><td>x</td></tr></table>"));
+        UIElement root = new UIElement().layout(l -> l.width(600).height(300));
+        root.addChild(view);
+        UIWindow window = new UIWindow(Ui.of(root));
+        window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
+        window.init(600, 300);
+        for (int i = 0; i < 6; i++) window.updateWithoutPainting();
+
+        List<UIElement> rows = new ArrayList<>();
+        for (UIElement child : view.getChildren()) {
+            for (UIElement maybeRow : child.getChildren()) {
+                if (maybeRow.getClasses().contains(MarkupView.TABLE_ROW_CLASS)) rows.add(maybeRow);
+            }
+            if (child.getClasses().contains(MarkupView.TABLE_ROW_CLASS)) rows.add(child);
+        }
+        assertEquals("expected two rows, got " + rows.size(), 2, rows.size());
+
+        float firstA = rows.get(0).getChildren().get(0).getRuntimeCache().getWidth();
+        float firstB = rows.get(1).getChildren().get(0).getRuntimeCache().getWidth();
+        assertTrue("the first column never measured anything", firstA > 0f);
+        assertEquals("the two cells of one column are different widths, so it is not a column",
+                firstA, firstB, 1f);
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────────────────────────
 
     private static UIText firstText(UIElement root) {
