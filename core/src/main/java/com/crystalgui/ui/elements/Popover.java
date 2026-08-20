@@ -91,6 +91,20 @@ public class Popover extends UIElement {
     @Setter
     private float offset = 0f;
 
+    /**
+     * Which side of its anchor this opens on, and how far off it.
+     *
+     * <p>Protected because a popover attached to something at the EDGE of the window must not rely on the
+     * flip to save it. {@code ProcessesPopover} hangs off the status bar, where {@code BOTTOM} has no room
+     * at all — it flipped, and it flipped to a position flush against the bar, so the list appeared to be
+     * growing out of the thing it was covering. Naming the side and a gap says what was meant instead of
+     * depending on the fallback to arrive at it.</p>
+     */
+    protected final void setPreferredSide(AnchoredPlacement.Side side, float gap) {
+        this.preferredSide = side == null ? AnchoredPlacement.Side.BOTTOM : side;
+        this.offset = gap;
+    }
+
     /** Set when anchored to an element; null when anchored to a bare point (a context menu). */
     @Nullable
     private UIElement anchor;

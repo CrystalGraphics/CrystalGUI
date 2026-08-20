@@ -485,6 +485,10 @@ theme {
     /* Asked to cancel and not yet stopped. Disabled, because the control IS inert now -- the work is
      * not, which is why the bar beside it keeps its colour. */
     --progress-cancelling-fg: var(--fg-disabled);
+    /* The chip under a cancel cross on hover. Derived rather than pinned so a theme that moves its
+     * hover surface moves this with it, which is the whole point of the component tier. */
+    --progress-cancel-hover-fg: var(--fg);
+    --progress-cancel-hover-bg: var(--hover-bg);
     /* The Processes popup's dismiss link. --link like every other link in the chrome, rather than
      * --accent: a link is a workbench colour, and the console's hyperlink note explains why. */
     --progress-hide-fg: var(--link);

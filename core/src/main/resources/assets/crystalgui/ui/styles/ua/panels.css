@@ -171,7 +171,13 @@ notificationsview > .__notification-list__ {
  * long title give way rather than pushing the time off the card. */
 .__notification__ .__entry-head__ {
     flex-direction: row;
-    align-items: center;
+    /* THE ICON SITS ON THE FIRST LINE, not in the middle of the block.
+     *
+     * `center` is right while every message is one line and wrong the moment one wraps: a four-line
+     * message put the severity glyph level with line two and a half, floating beside the text rather than
+     * introducing it. Both references align it to the first baseline for the same reason — the icon says
+     * what KIND of thing this is, which you read before the words, not halfway through them. */
+    align-items: flex-start;
     gap-all: 6px;
     width: 100%;
 }
@@ -1165,6 +1171,19 @@ runpanel .__run-notice__ {
  * it is the one number the widget writes. Nothing here may set the fill's width.
  */
 
+/* THE POINTER, which the shared rule cannot give this one.
+ *
+ * `.__status-bar__ .__status-item__.__clickable__` is a COMPOUND selector and this element deliberately
+ * does not wear `__status-item__` — that class marks a registry entry and `contents` collects by it, so
+ * wearing it made a reserved slot count as an entry and shifted every index in the bar. So the entry
+ * carrying the most obviously clickable thing in the bar was the one entry with no pointer, and the class
+ * that would have fixed it is the one it must not have. A reserved slot styles itself, as breadcrumbs
+ * does. */
+.__progress-item__,
+.__progress-item__ .__cancel__ {
+    cursor: pointer;
+}
+
 .__progress-item__ {
     flex-direction: row;
     align-items: center;
@@ -1202,16 +1221,26 @@ progressbar .__fill__ {
     border-radius: 2px;
 }
 
+/* THE GLYPH GOES IN `overlay`, NOT `background` — which is what lets it have a hover chip at all.
+ *
+ * `background` and `background-color` are separate properties and the drawable wins the paint, so an
+ * icon in the background channel means a `background-color` on hover is painted straight over. That is
+ * why these two crosses were the only close-shaped controls in the application that lit up by changing
+ * colour and nothing else: not a missing rule, an occupied channel. `.__notification__ .__close__` has
+ * always drawn its cross with `overlay: shape("cross")` for exactly this reason, and this now matches it
+ * — same chip, same radius, same idea. */
 .__progress-item__ .__cancel__ {
-    width: 10px;
-    height: 10px;
+    width: 12px;
+    height: 12px;
     flex-shrink: 0;
-    background: icon("crystalgui:x");
+    overlay: icon("crystalgui:x");
     color: var(--statusbar-item-dim-fg, #6E7178);
+    border-radius: 2px;
 }
 
 .__progress-item__ .__cancel__:hover {
-    color: var(--statusbar-item-fg, #9DA0A8);
+    color: var(--progress-cancel-hover-fg, #FFFFFF);
+    background-color: var(--progress-cancel-hover-bg, #5A5F62);
 }
 
 /* The Processes popup. */
@@ -1270,17 +1299,20 @@ progressbar .__fill__ {
     flex-grow: 1;
 }
 
+/* Same as the status bar's, and for the same reason — see the note there. */
 .__processes__ .__process-row__ .__cancel__ {
-    width: 10px;
-    height: 10px;
+    width: 12px;
+    height: 12px;
     flex-shrink: 0;
     margin-left: 8px;
-    background: icon("crystalgui:x");
+    overlay: icon("crystalgui:x");
     color: var(--statusbar-item-dim-fg, #6E7178);
+    border-radius: 2px;
 }
 
 .__processes__ .__process-row__ .__cancel__:hover {
-    color: var(--menu-fg, #BBBBBB);
+    color: var(--progress-cancel-hover-fg, #FFFFFF);
+    background-color: var(--progress-cancel-hover-bg, #5A5F62);
 }
 
 /* Asked for and not yet acknowledged: inert, but the bar stays -- the work has not stopped. */

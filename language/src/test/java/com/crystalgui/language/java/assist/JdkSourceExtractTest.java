@@ -317,7 +317,7 @@ public class JdkSourceExtractTest {
             // is that it comes first.
             System.setProperty(JdkSourceExtract.URL_PROPERTY,
                     new File(cache.toFile(), "absent.tar.gz").toURI().toString());
-            JdkSourceExtract.Result result = JdkSourceExtract.acquire(cache, recorder);
+            JdkSourceExtract.Result result = JdkSourceExtract.acquire(cache, recorder, () -> false);
 
             assertEquals(JdkSourceExtract.State.UNAVAILABLE, result.state());
             assertFalse("the fetch reported nothing at all", announced.isEmpty());
