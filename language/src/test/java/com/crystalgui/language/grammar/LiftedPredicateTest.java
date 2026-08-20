@@ -121,4 +121,31 @@ public class LiftedPredicateTest {
         assertTrue("plain type identifiers must still be captured, got " + types, types.contains("String"));
         tokenizer.close();
     }
+
+    /**
+     * <b>A capitalised identifier in a field access is a TYPE, which is how a grammar stands in for
+     * resolution.</b>
+     *
+     * <p>The Java query says so outright — {@code ((field_access object: (identifier) @type)
+     * (#match? @type \"^[A-Z]\"))} — and three sibling patterns say it for a scoped identifier, a
+     * method invocation and a method reference. Without them {@code System.out.println} reads as two
+     * plain variables and a call, which is what a documentation popup shows: the editor hides it because
+     * the Java engine’s semantic tokens replace the grammar’s guess, and a popup has no
+     * engine.</p>
+     *
+     * <p>{@code @type} cannot be lifted the way {@code @constant} is: lifting re-applies a filter by
+     * CAPTURE NAME, and {@code @type} is used both guarded (four patterns) and bare (a dozen), so a
+     * lifted filter would delete the type colouring the grammar states outright.</p>
+     */
+    @Test
+    public void aCapitalisedFieldAccessObjectIsAType() {
+        TreeSitterTokenizer tokenizer = javaTokenizer();
+        String source = "class A { void m() { System.out.println(1); int n = obj.field; } }";
+        List<SyntaxToken> tokens = tokenizer.tokenize(Rope.of(source), 0, source.length());
+
+        assertTrue("System should be a type: " + textsCaptured(source, tokens, "type"),
+                textsCaptured(source, tokens, "type").contains("System"));
+        assertFalse("a lower-case receiver must not be a type",
+                textsCaptured(source, tokens, "type").contains("obj"));
+    }
 }
