@@ -265,13 +265,24 @@ disappearance is indistinguishable from success, which is the exact defect class
 | failed | leaves, and a notification appears (D18) |
 | done | leaves, after the minimum visible time (D9) |
 
-### The one wrinkle worth stating
+### The one wrinkle worth stating — ✅ closed
 
-An editor **already open** when a late download completes still has no analysis until its document is
-reopened: D22 fixes the resolve, not the already-constructed services. Re-attaching services to a live
-document is `TextFileDocument`'s business and is out of scope here. Named so it is a known limit rather
-than a bug report — and it is the ordinary case only on the very first launch of a Java-17 client, which
-is the one launch where the editor is unlikely to be open already.
+An editor **already open** when a late download completed had no analysis until its document was
+reopened: D22 fixed the resolve, not the already-constructed services. Named here as a known limit rather
+than left to arrive as a bug report.
+
+**Closed by announcing the change.** `LanguageRegistry.onCapabilityChanged` fires when a language starts
+offering services it did not, `JavaLanguage.engine()` emits it the moment a late band resolves, and the
+workbench fills in every open document that has **none** — touching nothing already attached, because a
+live services object holds a compile result about text that has not changed, and replacing it would throw
+that away and re-subscribe every listener hanging off it.
+
+Two details are load-bearing. The subscription is **one per workbench, not one per document**: the
+question "which open documents are missing services" is about the workspace, and subscribing beside the
+attach would add a listener per file that each did the same sweep. And it is made when the workbench
+**attaches to a window** rather than in its constructor — this is a listener on a process-lived static, so
+a disposed workbench that stayed subscribed would keep a whole editor tree reachable, which is the exact
+mistake the problem-count entry a few lines away already records.
 
 ### The widgets
 
