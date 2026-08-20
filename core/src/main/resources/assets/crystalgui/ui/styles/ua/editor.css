@@ -1277,8 +1277,29 @@ documentationpopup {
      * What actually needed bounding was the CONTENT, not the box: the engine breaks a long declaration
      * across lines (see Signature), so the widest line is short by construction and the box is sensible
      * without anything capping it. Height still caps, because a documentation body is unbounded in a way
-     * a declaration is not, and the body band is the part that scrolls. */
-    max-height: 320px;
+     * a declaration is not, and the body band is the part that scrolls.
+     *
+     * AND THE HEIGHT BOUND IS ON THE BAND, NOT HERE -- see `.__doc-scroll__`. It was `max-height: 320px`
+     * on this rule, which is the very trap the paragraph above records, one axis over: `max-height` is
+     * applied after `height` whatever origin the height came from, so a vertical drag was silently capped
+     * and the handle looked dead going down. Moving the bound to the content leaves the box free, and the
+     * box is content-sized, so nothing about the resting size changes.
+     *
+     * NOT fixable in `UIResizer` by releasing the maximum: CSS `resize` names `min-*`/`max-*` as its only
+     * constraints, and the resizer re-applies them deliberately so a LEADING edge can derive its origin
+     * from the size the box will actually settle at. `ResizeTest.maxWidthConstrainsTheResize` pins it. */
+    /* A FLOOR, because the box is sized by its DECLARATION and the prose has no say in it.
+     *
+     * `public final class Main` is a short declaration attached to eight paragraphs, so the popup opened
+     * at the width of those four words and wrapped the documentation into a column barely wider than the
+     * signature — every sentence broken three times, which reads as the renderer failing rather than as
+     * the box being small. IntelliJ's is a comfortable fixed width for exactly this reason.
+     *
+     * A minimum rather than a width, so a LONG declaration still drives the box wider; and a minimum
+     * rather than the max the comment above rejects, because a floor cannot stop a drag from growing.
+     * It does stop a drag from going narrower, which is the intended half: a documentation popup below
+     * this width is not a smaller popup, it is an unreadable one. */
+    min-width: 420px;
     /* Over the completion popup's 900 -- Ctrl+Q with a list open should read over it, not under it. */
     z-index: 910;
 }
@@ -1615,6 +1636,13 @@ documentationpopup .__doc-separator__ {
  * The body no longer scrolls itself: a scrollbar inside one band scrolls the prose while leaving a long
  * `implements` list pinned above it, which is how you end up unable to reach what the declaration pushed
  * off the bottom. */
+/* FILLS WHAT THE POPUP GIVES IT, rather than carrying a cap of its own.
+ *
+ * It was `max-height: 260px`, which works exactly until the popup is resized: the box grows, the scroller
+ * does not, and the drag appears to do nothing below the first 260px. The popup's own `max-height` is the
+ * one height bound — Taffy resolves the box against it and then distributes what is left, so the fill
+ * idiom has the definite parent it needs — and `UIResizer` releases that bound on a vertical drag, which
+ * is what lets both the box and this grow together. */
 documentationpopup .__doc-scroll__ {
     flex-direction: column;
     width: 100%;
@@ -1623,11 +1651,31 @@ documentationpopup .__doc-scroll__ {
     gap-all: 3px;
 }
 
+/* ONCE THE USER HAS TAKEN THE HEIGHT, the band FILLS instead of capping itself.
+ *
+ * The cap above is what makes a long document scroll inside a sensible box before anybody has an opinion.
+ * It is also what made a vertical drag look broken: the frame grew and the band stayed 260px, so the popup
+ * gained empty space below its own content. The fill idiom needs a parent with a DEFINITE height and the
+ * popup only has one once the drag has written it -- `max-height` does not make a box definite, which is
+ * why writing this unconditionally collapsed the band to zero instead. */
+documentationpopup.__user-sized-height__ .__doc-scroll__ {
+    max-height: auto;
+    height: 0;
+    flex-grow: 1;
+    min-height: 0;
+}
+
+/* THE BAND IS A `MarkupView` NOW, so this rule sizes a CONTAINER and the text rules below it name the
+ * text. `font-size` on the container would compute correctly and reach nothing — `ua/core.css` opens
+ * with `* { font-size: 10 }`, so there is a candidate at STYLESHEET origin on every paragraph inside.
+ * `color` genuinely does inherit and stays here, where it covers bullets and headings too. */
 documentationpopup .__doc-body__ {
-    font-size: 9;
     color: var(--doc-body-fg, #DFE1E5);
-    white-space: normal;
-    max-width: 300px;
+    /* NO `max-width`. It capped the prose at 300px, so widening the popup left the paragraphs at their
+     * old measure with a growing empty margin beside them — the box resized and the text did not. The
+     * width now comes entirely from the box, whose floor is `min-width` above and whose ceiling is the
+     * user's drag. */
+    width: 100%;
     /* LOOSER THAN THE BANDS ABOVE IT, and the two want opposite things.
      *
      * The popup declares `line-height: 1.15` on itself so it reaches every band -- that number was chosen
@@ -1637,6 +1685,16 @@ documentationpopup .__doc-body__ {
      * documentation body noticeably looser than its signature for exactly this reason.
      *
      * Scoped here rather than raised on the popup, or the declaration goes back to being tall. */
+    line-height: 1.45;
+}
+
+/* AND THE SAME TWO PROPERTIES ON THE TEXT ITSELF, for the reason stated above. Scoped to the popup so a
+ * `MarkupView` used anywhere else keeps the default size — this 9 is the documentation band's, chosen
+ * against the declaration above it, not a statement about markup in general. */
+documentationpopup .__markup-paragraph__,
+documentationpopup .__markup-bullet__,
+documentationpopup .__markup-code__ > text {
+    font-size: 9;
     line-height: 1.45;
 }
 

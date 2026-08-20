@@ -124,20 +124,24 @@ public class Popover extends UIElement {
     }
 
     /**
-     * <b>Never</b> — so a resizable popover gets the trailing handles only.
+     * <b>Always</b> — a resizable popover gets all eight handles.
      *
-     * <p>A popover is absolutely positioned, which would normally earn it all eight resize handles. It
-     * must not have the leading four: {@code AnchoredPlacement} is the single writer of {@code left} and
-     * {@code top} on an anchored popup, and a top or left handle moves the box by writing exactly those.
-     * Two writers means the handle and the placement fight every frame.</p>
+     * <p>This used to answer {@code false}, and the reason was real rather than cautious:
+     * {@link AnchoredPlacement} is the single writer of {@code left} and {@code top} on an anchored popup,
+     * a leading handle moves the box by writing exactly those, and two writers means the handle and the
+     * placement fight every frame. What the constraint bought was the trailing three — bottom, right and
+     * the corner — which is CSS's own default grabber, so it looked like a convention rather than a
+     * limitation and went unquestioned.</p>
      *
-     * <p>What is left is the bottom, the right and the bottom-right corner — which is also CSS's own
-     * default grabber, and what Unity's Create Node window offers. The constraint and the convention
-     * happen to agree.</p>
+     * <p><b>{@link #moveTo} dissolves it.</b> It does not add a second writer; it <em>hands ownership
+     * over</em>, and {@link #reposition()} goes quiet from that point on — so there is still exactly one
+     * writer at any moment, which is the property the refusal was protecting. {@link #applyResizeOrigin}
+     * routes the leading edges through it, and re-showing re-anchors, so a popup resized from the top does
+     * not open detached forever afterwards.</p>
      */
     @Override
     protected boolean canMoveResizeOrigin() {
-        return false;
+        return true;
     }
 
     public Popover setMode(Mode mode) {
@@ -396,6 +400,21 @@ public class Popover extends UIElement {
         freelyPositioned = true;
         StyleGroup.importantPipeline(getStyle().getLayoutGroup(), l -> l.left(rootLeft).top(rootTop));
         return this;
+    }
+
+    /**
+     * A leading-edge resize moves the origin, and here that means <b>handing over from the anchor</b>.
+     *
+     * <p>The base writes {@code left}/{@code top} directly, which on an anchored popup is the one thing
+     * nothing else may do: {@link AnchoredPlacement} is the single writer, and {@link #reposition()} would
+     * overwrite the drag on the very next tick — the top edge would follow the pointer for one frame and
+     * snap back, every frame. {@link #moveTo} is the legal route, and it is legal precisely because it
+     * transfers ownership rather than competing for it. Same handover a drag on the body uses; this is the
+     * other gesture that moves a popup.</p>
+     */
+    @Override
+    protected void applyResizeOrigin(float left, float top) {
+        moveTo(left, top);
     }
 
     /** Re-runs placement against the current anchor. */

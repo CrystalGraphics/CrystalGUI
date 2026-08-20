@@ -1116,6 +1116,22 @@ public class UIElement implements SettingsScope, DataProvider {
     private boolean userSizedWidth, userSizedHeight;
 
     /**
+     * The class every resize handle carries.
+     *
+     * <p>Here rather than on {@code UIResizer}, which is package-private: the handles are a feature of
+     * <em>this</em> class ({@code setResize}) and the class name is the only public handle on them. A
+     * widget that must tell a press on its own body from a press on its grabber has no other way to ask,
+     * and the alternative is that widget repeating the string literal.</p>
+     */
+    public static final String RESIZER_CLASS = "__resizer__";
+
+    /** @see #syncUserSizedClasses() */
+    public static final String USER_SIZED_WIDTH_CLASS = "__user-sized-width__";
+
+    /** @see #syncUserSizedClasses() */
+    public static final String USER_SIZED_HEIGHT_CLASS = "__user-sized-height__";
+
+    /**
      * Called by {@link UIResizer} as a drag writes each axis.
      *
      * <p><b>Records only; it does not clear anything.</b> Withdrawing the IMPORTANT declarations on this
@@ -1131,6 +1147,26 @@ public class UIElement implements SettingsScope, DataProvider {
     void markUserSized(boolean width, boolean height) {
         userSizedWidth |= width;
         userSizedHeight |= height;
+        syncUserSizedClasses();
+    }
+
+    /**
+     * The two flags above, as classes a stylesheet can see.
+     *
+     * <p>State a widget flips from its own code belongs on a <b>class</b>, not a pseudo-class — the engine
+     * re-evaluates a pseudo-class on its terms and a class on yours, and this changes exactly twice in an
+     * element's life. There is no {@code :user-sized} to add and there should not be.</p>
+     *
+     * <p>It exists because <b>"the user has taken this axis" changes what the layout inside should do</b>,
+     * and only the sheet can say what. {@code DocumentationPopup} is the case that found it: unresized, its
+     * scroll band caps itself so a long document scrolls inside a sensible box; once the user drags the box
+     * taller the band has to <em>fill</em> instead, or the drag grows the frame and nothing inside it. Both
+     * spellings are correct, and which one applies is not something the widget can write once at
+     * construction.</p>
+     */
+    private void syncUserSizedClasses() {
+        if (userSizedWidth) addClass(USER_SIZED_WIDTH_CLASS); else removeClass(USER_SIZED_WIDTH_CLASS);
+        if (userSizedHeight) addClass(USER_SIZED_HEIGHT_CLASS); else removeClass(USER_SIZED_HEIGHT_CLASS);
     }
 
     /**
@@ -1145,6 +1181,7 @@ public class UIElement implements SettingsScope, DataProvider {
     public void clearUserSizing() {
         userSizedWidth = false;
         userSizedHeight = false;
+        syncUserSizedClasses();
         getStyle().removeCandidates(LayoutProperties.WIDTH, slot -> slot.origin() == StyleOrigin.INLINE);
         getStyle().removeCandidates(LayoutProperties.HEIGHT, slot -> slot.origin() == StyleOrigin.INLINE);
     }

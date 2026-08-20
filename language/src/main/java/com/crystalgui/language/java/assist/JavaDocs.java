@@ -8,6 +8,7 @@ import org.eclipse.jdt.core.dom.TextElement;
 import javax.annotation.Nullable;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -54,7 +55,21 @@ public final class JavaDocs {
     }
 
     /**
-     * The comment as text, or null when there is nothing worth showing.
+     * The comment as <b>markup</b>, or null when there is nothing worth showing.
+     *
+     * <h3>Markup out, not plain text — and the HTML is the author's own</h3>
+     *
+     * <p>This used to strip every tag and collapse the result, which is what made the popup a wall: a
+     * doc comment's {@code <p>}, {@code <pre>} and {@code <li>} are the only structure it has, and
+     * throwing them away leaves prose with the paragraph breaks removed and its code samples inlined
+     * into sentences.</p>
+     *
+     * <p>So the author's HTML is <b>passed through</b> and the javadoc-specific tags are resolved into
+     * it — {@code {@code x}} becomes {@code <code>x</code>}, {@code {@link X}} becomes an anchor. That is
+     * what IntelliJ's {@code JavaDocInfoGenerator} does, and for the same reason: the tags are the part
+     * only a Java engine can resolve, and the HTML is already a thing the consumer can parse.
+     * {@code MarkupParser} is that consumer; the whitespace collapsing that used to happen here is its
+     * job now, because it is the only side that knows which text is inside a {@code <pre>}.</p>
      *
      * <p>Null rather than empty, because {@code DocumentationPopup} hides the band on blank and an
      * empty string that reached it would be a gap under the definition that reads as a rendering
@@ -64,7 +79,7 @@ public final class JavaDocs {
     public static String render(@Nullable Javadoc javadoc) {
         if (javadoc == null) return null;
         StringBuilder out = new StringBuilder();
-        List<String> tagged = new ArrayList<>();
+        List<Section> tagged = new ArrayList<>();
 
         for (Object each : javadoc.tags()) {
             if (!(each instanceof TagElement)) continue;
@@ -74,21 +89,69 @@ public final class JavaDocs {
             if (text.isBlank()) continue;
             if (name == null) {
                 // THE DESCRIPTION, which is the one tag with no name and always comes first.
-                if (out.length() > 0) out.append("\n\n");
+                if (out.length() > 0) out.append("<p>");
                 out.append(text);
             } else {
-                tagged.add(label(name) + text);
+                tagged.add(new Section(rankOf(name), label(name) + text));
             }
         }
 
-        for (String line : tagged) {
-            if (out.length() > 0) out.append('\n');
-            out.append(line);
+        // SECTION ORDER, NOT SOURCE ORDER -- ported from IntelliJ's `JavaDocInfoGenerator`, whose
+        // method path emits deprecated, then the parameters, then the return, then the throws, then
+        // since, author/version, the three API tags, see-also, and anything it does not recognise last.
+        // A doc comment may write its tags in any order and plenty do, so rendering them as authored
+        // means two comments describing the same method lay out differently -- which is exactly what a
+        // reader uses position to avoid. `sort` is stable, so several `@param`s keep the order the
+        // author declared them in, and that order IS meaningful: it is the parameter order.
+        tagged.sort(Comparator.comparingInt(section -> section.rank));
+
+        for (Section section : tagged) {
+            // EACH BLOCK TAG IS ITS OWN PARAGRAPH. They were newline-separated, which the parser
+            // collapses away like any other authored line break -- correctly, since a doc comment's
+            // wrapping is not structure. A `@param` that runs on from the sentence before it is worse
+            // than one on its own line, so the structure is stated rather than implied by whitespace.
+            out.append("<p>").append(section.text);
         }
-        String rendered = collapse(out.toString());
+        String rendered = out.toString();
         if (rendered.isBlank()) return null;
         return rendered.length() <= MAX_LENGTH ? rendered
                 : rendered.substring(0, MAX_LENGTH).stripTrailing() + "…";
+    }
+
+    /** A block tag paired with the section it sorts into. */
+    private static final class Section {
+        final int rank;
+        final String text;
+
+        Section(int rank, String text) {
+            this.rank = rank;
+            this.text = text;
+        }
+    }
+
+    /**
+     * Which section a block tag belongs to, lower first.
+     *
+     * <p>The sequence is {@code JavaDocInfoGenerator}'s and the numbers are only its positions. An
+     * unrecognised tag sorts last rather than being dropped: a doc comment may carry anything, and a
+     * custom tag is still something its author wrote on purpose.</p>
+     */
+    private static int rankOf(String tagName) {
+        switch (tagName) {
+            case TagElement.TAG_DEPRECATED: return 0;
+            case TagElement.TAG_PARAM:      return 1;
+            case TagElement.TAG_RETURN:     return 2;
+            case TagElement.TAG_THROWS:
+            case TagElement.TAG_EXCEPTION:  return 3;
+            case TagElement.TAG_SINCE:      return 4;
+            case TagElement.TAG_AUTHOR:     return 5;
+            case TagElement.TAG_VERSION:    return 6;
+            case "@apiNote":                return 7;
+            case "@implSpec":               return 8;
+            case "@implNote":               return 9;
+            case TagElement.TAG_SEE:        return 10;
+            default:                        return 11;
+        }
     }
 
     /**
@@ -100,7 +163,9 @@ public final class JavaDocs {
      */
     private static String label(String tagName) {
         String bare = tagName.startsWith("@") ? tagName.substring(1) : tagName;
-        return bare + " ";
+        // BOLD, because it is a heading for the line that follows it. Emitted as markup rather than left
+        // plain so the renderer can tell the label from the prose without knowing what a javadoc tag is.
+        return "<b>" + escape(bare) + "</b> ";
     }
 
     /**
@@ -113,13 +178,41 @@ public final class JavaDocs {
     private static String flatten(List<?> fragments, boolean keepFirstAsSubject) {
         StringBuilder out = new StringBuilder();
         boolean first = true;
+        boolean previousWasText = false;
+        boolean dashPending = false;
         for (Object fragment : fragments) {
             String piece = pieceOf(fragment);
             if (piece == null) continue;
-            if (out.length() > 0 && !piece.startsWith(" ") && needsSpace(out)) out.append(' ');
+            boolean isText = fragment instanceof TextElement;
+            if (out.length() > 0) {
+                // THE SUBJECT DASH, WRITTEN ONLY ONCE SOMETHING FOLLOWS IT. It separates a block tag's
+                // subject from its description -- `name — the row's label` -- and was appended the
+                // moment the subject was seen, which is right for `@param` and wrong for every tag whose
+                // subject IS the whole content. `@author nobody` rendered as `author nobody —` and
+                // `@see java.util.stream.Stream` as `... Stream —`, a dash pointing at nothing.
+                if (dashPending) {
+                    out.append(" —");
+                    dashPending = false;
+                }
+                // A LINE BREAK IS TWO ADJACENT TEXT FRAGMENTS, and that is a fact about JDT rather than a
+                // guess: it breaks a doc comment into one `TextElement` per SOURCE LINE, and subdivides a
+                // line only around inline tags -- so two text fragments are never adjacent within a line,
+                // and where they are adjacent there was a newline between them.
+                //
+                // The newline has to survive, because inside a `<pre>` it IS the sample's structure and
+                // the emitter cannot know it is inside one -- only the parser tracks that. Joining with a
+                // space instead is why `char data[] = {'a','b','c'};` and `String str = new String(data);`
+                // arrived as one long line that ran out of the popup: two statements, correct characters,
+                // and the shape of the sample destroyed. Everywhere else `MarkupParser` collapses the
+                // newline to a space exactly as it collapses the author's own wrapping, so prose is
+                // unaffected and no caller has to say which case it is in.
+                if (isText && previousWasText) out.append('\n');
+                else if (!piece.startsWith(" ") && needsSpace(out)) out.append(' ');
+            }
             out.append(piece);
-            if (first && keepFirstAsSubject) out.append(" —");
+            if (first && keepFirstAsSubject) dashPending = true;
             first = false;
+            previousWasText = isText;
         }
         return out.toString().trim();
     }
@@ -132,12 +225,34 @@ public final class JavaDocs {
     @Nullable
     private static String pieceOf(Object fragment) {
         if (fragment instanceof TextElement) {
-            return stripHtml(((TextElement) fragment).getText());
+            // VERBATIM. The author's HTML is the structure; see the note on render().
+            return ((TextElement) fragment).getText();
         }
         if (fragment instanceof TagElement) {
-            // AN INLINE TAG IS ITS SUBJECT. `{@link List#add}` reads as `List#add`; the braces are for a
-            // renderer that does not exist yet, and showing them would be showing markup.
-            return flatten(((TagElement) fragment).fragments(), false);
+            TagElement tag = (TagElement) fragment;
+            String subject = flatten(tag.fragments(), false);
+            if (subject.isEmpty()) return null;
+            String name = tag.getTagName();
+            if (name == null) return subject;
+            switch (name) {
+                case TagElement.TAG_CODE:
+                case TagElement.TAG_LITERAL:
+                    // ESCAPED, and this is the one place it is not optional: `{@code List<String>}` is
+                    // full of angle brackets that are content. Passing them through would have the parser
+                    // read `<String>` as a tag and drop it, so the sample would lose its type argument --
+                    // silently, and only for generic code.
+                    return "<code>" + escape(subject) + "</code>";
+                case TagElement.TAG_LINK:
+                case TagElement.TAG_LINKPLAIN:
+                case TagElement.TAG_SEE:
+                    // THE TARGET IS CARRIED even though nothing navigates yet. It is the whole content of
+                    // the tag, and dropping it here means re-resolving it later from a rendered label.
+                    return "<a href=\"java:" + escape(subject) + "\">" + escape(subject) + "</a>";
+                case TagElement.TAG_VALUE:
+                    return "<code>" + escape(subject) + "</code>";
+                default:
+                    return subject;
+            }
         }
         if (fragment instanceof ASTNode) {
             // A `@link`'s target is a Name or a MemberRef rather than text -- it is the whole point of
@@ -145,6 +260,11 @@ public final class JavaDocs {
             return ((ASTNode) fragment).toString().trim();
         }
         return null;
+    }
+
+    /** Makes text safe to put inside emitted markup — the four that would otherwise re-parse. */
+    private static String escape(String text) {
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
     /**
