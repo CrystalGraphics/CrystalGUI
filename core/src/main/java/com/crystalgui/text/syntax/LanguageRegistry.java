@@ -88,6 +88,15 @@ public final class LanguageRegistry {
             this(language, tokenizer, null);
         }
 
+        /**
+         * A tokenizer for this language — <b>exactly what was registered</b>, composed with nothing.
+         *
+         * <p>{@link DocComments#refining} briefly happened here, and it was wrong in a way worth naming:
+         * a registry accessor that returns something other than what was put in it is invisible at every
+         * call site. {@code language/} registers a tree-sitter tokenizer and would have received a wrapper
+         * it never asked for, with no way to get the raw one back and nothing at either end saying so.
+         * Composition belongs to whoever is building a pipeline, not to the lookup they build it from.</p>
+         */
         public SyntaxTokenizer newTokenizer() {
             return tokenizer.get();
         }

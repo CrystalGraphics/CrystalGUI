@@ -527,6 +527,43 @@ texteditor .__indent-guide__ {
     font-style: var(--syntax-comment-style, italic);
 }
 
+/* INSIDE A DOC COMMENT — its tags, the names they name, and the HTML people write in them.
+ *
+ * IntelliJ's own four keys, which is where these come from: DEFAULT_DOC_COMMENT,
+ * DEFAULT_DOC_COMMENT_TAG, DEFAULT_DOC_COMMENT_TAG_VALUE and DEFAULT_DOC_MARKUP. A grammar cannot
+ * produce them — to a Java parser a doc comment is ONE token and everything in it is a convention
+ * — so `DocComments` lexes it, and these are the names it emits.
+ *
+ * DOTTED, so a scheme that says nothing about them still colours a doc comment: `comment.doc.tag` falls
+ * back to `comment.doc`, which falls back to `comment`. That is why they are not four unrelated names,
+ * and it is what lets a scheme opt into as much of this as it wants. */
+
+/* THE FACE IS PART OF THE SCHEME'S DATA, not a decoration chosen here. IntelliJ's `FONT_TYPE` on
+ * DEFAULT_DOC_COMMENT_TAG is 0/1/2/3 for plain/bold/italic/both, and it is 3 in `Eclipse_Dark_Theme.icls`
+ * — which is not incidental: that scheme's tag colour (#8E8070) sits almost exactly on its comment
+ * grey (#808080), so the FACE is what tells a tag from the prose around it and the colour alone leaves
+ * them indistinguishable. A scheme that separates them by colour sets neither and inherits the comment's
+ * own style. */
+.__syntax__::highlight(comment.doc.tag) {
+    color: var(--syntax-doc-tag, #67A37C);
+    font-style: var(--syntax-doc-tag-style, italic);
+    font-weight: var(--syntax-doc-tag-weight, normal);
+}
+
+/* The name a tag names — the `x` in `@param x`. Deliberately NOT italic even where the comment is:
+ * it is an identifier quoted inside prose, and every reference scheme sets it apart from the tag rather
+ * than matching it. */
+.__syntax__::highlight(comment.doc.value) {
+    color: var(--syntax-doc-value, #ABADB3);
+    font-style: var(--syntax-doc-value-style, normal);
+    font-weight: normal;
+}
+
+.__syntax__::highlight(comment.doc.markup) {
+    color: var(--syntax-doc-markup, #68A67E);
+    font-style: var(--syntax-comment-style, italic);
+}
+
 /* ── Identifiers ──
  *
  * A grammar cannot tell a field from a local by itself; `locals.scm` can, within a file, and semantic

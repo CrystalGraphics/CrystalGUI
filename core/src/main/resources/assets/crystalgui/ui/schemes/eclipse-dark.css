@@ -158,6 +158,19 @@ theme {
     /* Darcula's line comment; the DOC comment is Eclipse Dark's own, and lighter than it. */
     --syntax-comment: #7A7E85;
     --syntax-comment-doc: #808080;
+    /* DOC COMMENTS, from `ij-scheme/Eclipse_Dark_Theme.icls` — DEFAULT_DOC_COMMENT_TAG,
+     * DEFAULT_DOC_COMMENT_TAG_VALUE and DEFAULT_DOC_MARKUP, verbatim. Eclipse is the one table here that
+     * makes its markup a strong blue against a brown-grey tag, which is exactly the distinction the
+     * screenshot this came from was showing. */
+    --syntax-doc-tag: #8E8070;
+    --syntax-doc-value: #9A8C7C;
+    --syntax-doc-markup: #1E789B;
+    /* The FACE, from the same file's FONT_TYPE (0/1/2/3 = plain/bold/italic/both). FONT_TYPE 3 on the tag — bold AND italic — and the one scheme here that needs it:
+     * its tag brown (#8E8070) and its comment grey (#808080) are four points apart per channel,
+     * so the FACE is what tells a tag from the prose it introduces. */
+    --syntax-doc-tag-style: italic;
+    --syntax-doc-tag-weight: bold;
+    --syntax-doc-value-style: normal;
 
     /* THE ROWS THAT MAKE THIS SCHEME. A local is yellow, a parameter blue, a field cyan — three colours
      * where Islands has one, and all three need the semantic layer to tell them apart. A grammar sees

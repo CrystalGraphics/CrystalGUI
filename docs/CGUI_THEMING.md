@@ -541,6 +541,12 @@ editor scheme's.
 | `--syntax-constant-weight` | `normal` | dark-plus.css |
 | `--syntax-constructor` | `#4EC9A0` | dark-plus.css |
 | `--syntax-deprecated` | `#808080` | dark-plus.css |
+| `--syntax-doc-markup` | `#569CD6` | dark-plus.css |
+| `--syntax-doc-tag` | `#569CD6` | dark-plus.css |
+| `--syntax-doc-tag-style` | `normal` | dark-plus.css |
+| `--syntax-doc-tag-weight` | `normal` | dark-plus.css |
+| `--syntax-doc-value` | `#9CDCFE` | dark-plus.css |
+| `--syntax-doc-value-style` | `normal` | dark-plus.css |
 | `--syntax-embedded` | `#D4D4D4` | dark-plus.css |
 | `--syntax-error` | `#F44747` | dark-plus.css |
 | `--syntax-function` | `#DCDCAA` | dark-plus.css |
