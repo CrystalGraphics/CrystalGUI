@@ -12,6 +12,9 @@ import com.crystalgraphics.text.render.CgTextRenderer;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.texture.CgUiRoundedRect;
+
+import javax.annotation.Nullable;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.StyleOrigin;
@@ -831,22 +834,73 @@ public final class UIText extends UIElement {
         float y = contentY;
         for (List<CgShapedRun> line : lines) {
             float x = contentX;
+            // ADJACENT RUNS OF ONE HIGHLIGHT ARE ONE BAND, accumulated here and flushed when the style
+            // changes. Drawing per run was indistinguishable while a band was a plain rect -- two
+            // abutting rects of the same colour look like one -- and stops being so the moment a band has
+            // GEOMETRY: per-run padding would open a gap inside a single highlighted phrase and per-run
+            // rounding would round every interior boundary, so `{@code a b}` would draw as two pills.
+            // Shaping breaks a run for reasons of its own (a font fallback, a script change), so "one
+            // highlight" and "one run" were never the same thing.
+            HighlightStyle pending = null;
+            float pendingX = x;
+            float pendingWidth = 0f;
             for (CgShapedRun run : line) {
                 float advance = run.totalAdvance();
                 int at = run.sourceStart();
                 // The run's FIRST character decides, because a run cannot span two highlights: the
                 // boundary that made them different styles is also a shaping boundary.
                 HighlightStyle style = at >= 0 && at < perChar.length ? perChar[at] : null;
-                int band = style == null ? 0 : style.backgroundColor();
-                // Alpha zero is "no band" and not "a transparent band" — see HighlightStyle.
-                if (band != 0 && (band >>> 24) != 0) {
-                    ctx.fillRect(x, y, advance, lineHeight, band);
+                if (style != pending) {
+                    paintBand(ctx, pending, pendingX, y, pendingWidth, lineHeight);
+                    pending = style;
+                    pendingX = x;
+                    pendingWidth = 0f;
                 }
+                pendingWidth += advance;
                 x += advance;
             }
+            paintBand(ctx, pending, pendingX, y, pendingWidth, lineHeight);
             y += lineHeight;
         }
     }
+
+    /**
+     * One highlight's band on one line.
+     *
+     * <p>Square and unpadded is the overwhelmingly common case — an editor's selection, a search hit, a
+     * bracket match — so it keeps {@code fillRect}, which batches with every other quad in the frame. A
+     * band with geometry goes through the SDF rounded-rect material instead, which is a material switch
+     * and therefore its own draw call; that is the right price for a few words of inline code and the
+     * wrong one for every selected line in a document, which is why the fast path is not merely an
+     * optimisation.</p>
+     */
+    private void paintBand(CgUiPaintContext ctx, @Nullable HighlightStyle style,
+                           float x, float y, float width, float height) {
+        if (style == null || width <= 0f) return;
+        int band = style.backgroundColor();
+        // Alpha zero is "no band" and not "a transparent band" — see HighlightStyle.
+        if (band == 0 || (band >>> 24) == 0) return;
+
+        float padLeft = style.bandPadLeft(width);
+        float padRight = style.bandPadRight(width);
+        float bandX = x - padLeft;
+        float bandWidth = width + padLeft + padRight;
+        float[] radii = style.cornerRadii(bandWidth, height);
+
+        if (radii == null) {
+            ctx.fillRect(bandX, y, bandWidth, height, band);
+            return;
+        }
+        if (bandDrawable == null) bandDrawable = new CgUiRoundedRect();
+        bandDrawable.setFillColor(band)
+                .setCornerRadius(radii[0], radii[1], radii[2], radii[3],
+                        radii[4], radii[5], radii[6], radii[7]);
+        bandDrawable.draw(ctx, 0f, 0f, bandX, y, bandWidth, height);
+    }
+
+    /** Reused across frames — a drawable is a description, and building one per band per frame is churn. */
+    @Nullable
+    private CgUiRoundedRect bandDrawable;
 
     /**
      * The layout the {@code text-shadow} pass should draw — the ordinary one unless a span carries an
