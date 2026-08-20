@@ -1,7 +1,8 @@
 # M12 — Platform integration: 1.7.10
 
-Detail for the M12 row in `plan_syntax.md` §20. This file covers **Phases 1 through 3**, all of which
-have landed; Phase 4 is sketched at the end and deliberately not designed yet.
+Detail for the M12 row in `plan_syntax.md` §20. **Phases 1 through 3 have landed**; **Phase 4 is scoped
+at the end** (2026-08-21) as the network and server layer, with its backlog of platform-deferred
+prerequisites in [`plan_prephase4.md`](plan_prephase4.md).
 
 > **Phase 1 goal, in one sentence:** press a key in a real 1.7.10 client and `CrystalEditor` opens,
 > paints, and can be typed in.
@@ -1283,20 +1284,102 @@ mapping fetch off the bare `new Thread` it runs on today.
 
 ---
 
-## Phase 4 — sketch only, not designed
+## Phase 4 — the network and server layer
 
-Phases 2 and 3 were sketched here and are now designed, built and documented above — Phase 2 in its own
-section, Phase 3 in §26. **Phase 3 is what closed M6.** What is left:
+**Scoped 2026-08-21.** Phase 4 is **everything network- and server-shaped** across
+`CrystalGUI_TODO.md` and `CrystalGUI_P6_TODO.md`, gathered here because it is one subject that those
+documents record in a dozen places. Phases 2 and 3 were sketched here and then designed; this is that
+step for Phase 4.
 
-- **Phase 4 — the workspace over the wire**, and `mc1201` after it.
+> **The ordering is forced, not chosen.** The client/server connection has to be genuinely established
+> before the workspace can move onto it. That is not a preference about sequencing — there is currently
+> nothing to be remote *over*, and the workspace is the largest consumer of a transport that does not
+> exist yet. Building the consumer first would mean designing against a transport whose framing, size
+> limit and lifecycle are all still open.
 
-Two things worth carrying into it, both learned the expensive way in Phase 3 rather than reasoned about
-in advance:
+### What is already true
+
+Worth stating, because the protocol is much further along than the absence of networking suggests:
+
+| | State |
+|---|---|
+| The protocol | **Real.** `net/` ships `UIPacket`, `UIPacketCodec`, `ServerUiSession`, `ClientUiSession`, `RpcRegistry`, `NetworkIds`, `SheetRef`, `UiEventKinds`, with `serialization/` under it |
+| The workspace over it | **Real, and running in-game.** `Mc1710Workspace` drives `WorkspaceService` over a genuine session pair; every listing, read and write crosses a packet |
+| `UITransport` implementations | **One: `InMemoryTransport`.** There is no Minecraft transport anywhere |
+| mc1710 networking | **None.** No channel, no packet handler, no `SimpleNetworkWrapper` |
+| `CommonProxy` | **Empty by design** — *"The server-side half: nothing … a dedicated server has no screens"* |
+
+So the gap is not the protocol and not the filesystem. It is the **transport and the session
+lifecycle**, plus a server that has never had to do anything.
+
+---
+
+### Stage A — establish the connection
+
+Nothing else in Phase 4 can be validated until this exists.
+
+| # | Item | From |
+|---|---|---|
+| **A1** | **Measure 1.7.10's custom-payload size limit** and freeze framing on it | P6.1.10 §Minecraft — *"its custom-payload size limit must be checked before chunk sizing freezes"*; also [`plan_prephase4.md`](plan_prephase4.md) item 2 |
+| **A2** | **A Minecraft `UITransport`** — a channel plus the codec bridge, sized by A1 | The gap named above; `UITransport` has exactly one implementation today |
+| **A3** | **Server-side registration.** `CommonProxy` stops being empty | M12 §26.14 *"carried forward"* — *"`CommonProxy` is empty, so nothing registers server-side … when that lands both the registration site and that one method move"* |
+| **A4** | **Session lifecycle** — join opens, leave/disconnect/kick closes, server shutdown drains | New. Nothing models it: today both halves are constructed together and die together |
+| **A5** | **`ScriptService1710.cacheRoot()` moves** — it is the one client-shaped member, reading `Minecraft.getMinecraft().mcDataDir` | M12 §26.14 *"carried forward"* |
+| **A6** | **Two-session RPC soak** — real traffic over time, desync visible on screen | `CrystalGUI_TODO.md` P3.1, `TODO`. Written for `InMemoryTransport` and *"touches no Minecraft"*, so it can land before A2 and then be re-pointed at the real transport — which makes it Stage A's validation rather than a separate errand |
+
+> **A6 is worth doing early rather than last.** It was deferred as validation that *"nothing downstream
+> is waiting on"*, which was true when the transport was in-process. It stops being true here: it is the
+> only thing that exercises two sessions over time, and Stage A is precisely where a framing or
+> lifecycle bug hides.
+
+### Stage B — move the workspace onto it
+
+The code was built for this. `Mc1710Workspace`'s own javadoc:
+
+> *Both halves of a real workspace, **in the client process** … Shortcutting that would make the later
+> phase — the same client against a workspace on a dedicated server — **a rewrite rather than a
+> transport swap**.*
+
+| # | Item | From |
+|---|---|---|
+| **B1** | **Swap the transport.** Same client, same `WorkspaceService`, real connection | P6.1.10; the swap the javadoc above reserves |
+| **B2** | **Server-hosted project directories** — the actual vision: files live on the server's machine, singleplayer is the same path because the integrated server *is* one | P6.1.10 §vision — *"This is VS Code Remote, not a file browser"* |
+| **B3** | **D11 chunked transfer + manifest resolve.** Gated on A1 | P6.1.10 D11; P6.1.13 — *"Deferred; protocol shape reserved. Hard cap 100 MB"* |
+| **B4** | **Permissions on a real server.** `WorkspacePermission.ALLOW_ALL` is what mc1710 passes today | `Mc1710Workspace`; fine for one local player, not for a server |
+
+### Stage C — what only matters once it is remote
+
+Every one of these is currently listed as a known gap and none of them bites while both halves share a
+process. From `docs/CGUI_SERVER_AND_SERIALIZATION.md` §8 unless noted:
+
+| # | Item | Note |
+|---|---|---|
+| **C1** | **No multi-viewer fan-out** — *"One session, one client"* | The first thing a real server invalidates |
+| **C2** | **No `TreeDelta`** — a structural change means a new description and a re-open | Explicitly *"a real design problem, not an afternoon"*, because network ids are positional |
+| **C3** | **`TabView` does not round-trip** — tabs and panes live in internal containers the description codec does not descend into | A dock over the wire needs this |
+| **C4** | **Only seven widgets implement `writeState`/`readState`** | *"a new stateful widget must add them or it will silently arrive blank"* |
+| **C5** | `fs.writeDelta`, client cache, `WatchService`, conflict dialog, `fs.rename`/`delete`, resume, multi-user presence | P6.1.10 §"Out — deferred, and each is purely additive" |
+| **C6** | **No slots/inventory** — the Minecraft-specific half of a container GUI | §8. Note this is also what would revive the struck platform-tooltip item |
+
+---
+
+### Explicitly not Phase 4
+
+- **mc1201, and the three per-loader filesystems.** All mc1201 work waits until mc1710 is finished —
+  including **P3.2**, which remains `BLOCKED — needs a call from you`.
+- **`Show Difference`** — needs a Myers diff ported from VS Code's `common/diff/`. Not networking.
+- **Translatable text** — pre-Phase-4 item 1, and a platform seam rather than a network one.
+
+### Two things to carry in
+
+Both learned the expensive way in Phase 3 rather than reasoned about in advance:
 
 - **A client is an environment no test reproduces.** Java 8, `rt.jar` instead of a jrt image, a classpath
   a launcher assembled, and a loader that transforms on the way in. Every defect that survived to a
   client in this phase was invisible to the suite *and* to the harness, and each was found in minutes
   once there was a gated probe inside the game. Build the probe early rather than reasoning from source.
+  **For Phase 4 the equivalent is a dedicated server, not just a client** — `InMemoryTransport` and a
+  singleplayer integrated server will both hide anything that only a real connection does.
 - **The compiler and the editor are different consumers of the same seam, and they fail apart.** A script
   that runs is no evidence the popup works, and a popup that lists members is no evidence a script links.
   Anything Phase 4 adds to that seam wants asking twice.
