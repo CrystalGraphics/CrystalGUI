@@ -48,6 +48,30 @@ public final class Downloads {
     /** Fifteen seconds each for connect and read. Long enough for a slow mirror, short enough to give up. */
     public static final int TIMEOUT_MILLIS = 15_000;
 
+    /**
+     * How many times a transfer is tried before it is reported as failed.
+     *
+     * <p>Three, and it is only worth having <b>because of resume</b>: without one, a retry re-downloads
+     * everything and the second attempt is as likely to be interrupted as the first, so three attempts
+     * at 110 MB is a way to spend a quarter of an hour failing. With the {@code .part} kept, each attempt
+     * starts where the last stopped, which turns a flaky connection from fatal into slow.</p>
+     */
+    public static final int ATTEMPTS = 3;
+
+    /** Multiplied by the attempt number, so 1s then 2s. Long enough to outlast a blip, short enough to wait. */
+    public static final long RETRY_BACKOFF_MILLIS = 1000L;
+
+    private static void sleep(long millis) throws java.io.InterruptedIOException {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            // THE FLAG IS RESTORED AND THE WAIT IS ABANDONED. Swallowing this is how a job that was asked
+            // to stop keeps going, which is the defect the cancel work in this same file just fixed.
+            throw new java.io.InterruptedIOException("interrupted while waiting to retry");
+        }
+    }
+
     private Downloads() {
     }
 
@@ -135,9 +159,25 @@ public final class Downloads {
          *         was installed, which is a caller's cue to report rather than to retry in a loop
          */
         public boolean into(Path target) throws IOException {
-            try (Download download = open()) {
-                return CacheFiles.install(target, download.stream(), md5);
+            IOException last = null;
+            for (int attempt = 1; attempt <= ATTEMPTS; attempt++) {
+                if (cancelled.getAsBoolean()) throw new java.io.InterruptedIOException("cancelled");
+                // WHAT SURVIVED THE LAST ATTEMPT. The `.part` was always kept across a crash so the next
+                // launch could overwrite it; asking how big it is turns that into a resume for free.
+                long have = CacheFiles.partialSize(target);
+                try (Download download = Download.start(url, what, progress, cancelled, have)) {
+                    return CacheFiles.install(target, download.stream(), md5, download.resumed());
+                } catch (java.io.InterruptedIOException stopped) {
+                    // ASKED TO STOP is not a failure to retry -- and the .part stays, so resuming later
+                    // costs nothing.
+                    throw stopped;
+                } catch (IOException failed) {
+                    last = failed;
+                    if (attempt == ATTEMPTS) break;
+                    sleep(RETRY_BACKOFF_MILLIS * attempt);
+                }
             }
+            throw last;
         }
     }
 
@@ -201,14 +241,24 @@ public final class Downloads {
          *                  counted, because "3 of 15 failed" sends somebody looking and "stopped at
          *                  ecj-3.26.0.jar" tells them where
          */
-        public record Result(int installed, int total, String failure) {
+        public record Result(int installed, int total, String failure, boolean cancelled) {
+
+            Result(int installed, int total, String failure) {
+                this(installed, total, failure, false);
+            }
+
+            /** Asked to stop, which is not the same as unable to continue. */
+            static Result cancelled(int installed, int total) {
+                return new Result(installed, total, null, true);
+            }
 
             public boolean complete() {
-                return failure == null && installed == total;
+                return !cancelled && failure == null && installed == total;
             }
 
             @Override
             public String toString() {
+                if (cancelled) return "cancelled after " + installed + " of " + total;
                 return complete() ? installed + " of " + total
                         : installed + " of " + total + ", stopped at " + failure;
             }
@@ -230,7 +280,11 @@ public final class Downloads {
             for (Artifact artifact : artifacts) {
                 // BETWEEN ARTIFACTS AS WELL AS INSIDE THEM: a batch that only polled inside a transfer
                 // would still start the next one after being told to stop.
-                if (cancelled.getAsBoolean()) return new Result(installed, artifacts.size(), "cancelled");
+                // CANCELLED IS ITS OWN STATE, not a failure whose "artifact name" is the word cancelled.
+                // That is what the field said a moment ago, and it put a thing that is not an artifact
+                // into the slot that names one -- so anything reading `failure` to say WHICH jar stopped
+                // it would have reported a jar called "cancelled".
+                if (cancelled.getAsBoolean()) return Result.cancelled(installed, artifacts.size());
                 progress.detail(artifact.fileName());
                 Path target = directory.resolve(artifact.fileName());
                 try {
@@ -281,8 +335,29 @@ public final class Downloads {
      * it failed. The length is on the response we are already reading; there is no reason to ask twice.</p>
      */
     public static Body fetch(String url) throws IOException {
+        return fetch(url, 0L);
+    }
+
+    /**
+     * The same, asking the server to continue from {@code from}.
+     *
+     * <p>{@link Body#resumed()} says whether it agreed. <b>A server that ignores the range is not an
+     * error</b> — it answers 200 with the whole body, which is a correct response to a request it chose
+     * not to honour, and the caller simply starts the file again. Treating that as a failure would make
+     * resume a thing that breaks downloads on the hosts that do not support it.</p>
+     */
+    public static Body fetch(String url, long from) throws IOException {
         URLConnection connection = connect(url);
-        return new Body(connection.getInputStream(), connection.getContentLengthLong());
+        if (from > 0) connection.setRequestProperty("Range", "bytes=" + from + "-");
+        InputStream stream = connection.getInputStream();
+        boolean resumed = from > 0 && connection instanceof HttpURLConnection
+                && ((HttpURLConnection) connection).getResponseCode() == 206;
+        long length = connection.getContentLengthLong();
+        // THE TOTAL, NOT THE REMAINDER. A 206 declares only what it is about to send, so a resumed
+        // transfer would otherwise report a bar sized to the tail and a percentage that starts at zero
+        // three-quarters of the way through the file.
+        if (resumed && length >= 0) length += from;
+        return new Body(stream, length, resumed);
     }
 
     /** An open response: what to read, and how much of it there is. */
@@ -290,10 +365,21 @@ public final class Downloads {
 
         private final InputStream stream;
         private final long length;
+        private final boolean resumed;
 
         Body(InputStream stream, long length) {
+            this(stream, length, false);
+        }
+
+        Body(InputStream stream, long length, boolean resumed) {
             this.stream = stream;
             this.length = length;
+            this.resumed = resumed;
+        }
+
+        /** Whether the server honoured a range request and this is a continuation. */
+        public boolean resumed() {
+            return resumed;
         }
 
         public InputStream stream() {
