@@ -3,6 +3,7 @@ package com.crystalgui.language.java;
 import com.crystalgui.core.async.JobKey;
 import com.crystalgui.core.async.JobLane;
 import com.crystalgui.core.async.JobScheduler;
+import com.crystalgui.core.async.ProgressState;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.notify.Notifications;
@@ -84,7 +85,8 @@ public final class JdkSourceCommands {
                                     // be cancelled from the Processes popup, which for a download of this
                                     // size is the affordance that matters most.
                                     JdkSourceExtract.Result result =
-                                            JdkSourceExtract.acquire(cacheRoot(), context.progress());
+                                            JdkSourceExtract.acquire(cacheRoot(), context.progress(),
+                                                    context::isCancelled);
                                     // SAID ONCE, WHICHEVER IT IS -- the same rule PlatformMappings
                                     // follows. "Already cached" and "could not reach it" both end with
                                     // the popup unchanged, and are entirely different things to somebody
@@ -118,7 +120,13 @@ public final class JdkSourceCommands {
         if (result == null) return;
         switch (result.state()) {
             case INSTALLED:
-                Notifications.info("JDK sources downloaded — " + result.detail());
+                // WHAT ARRIVED, NOT WHERE FROM. `detail()` carries the URL, which is right for the one
+                // stderr line and wrong for a balloon: it wrapped to six lines of a link nobody can click.
+                // The numbers are the part somebody actually wants, and they are on the Result rather than
+                // parsed back out of a sentence.
+                Notifications.info("JDK sources downloaded — " + result.files() + " files, "
+                        + ProgressState.bytes(result.bytes())
+                        + ", cached under the game directory");
                 break;
             case CACHED:
                 Notifications.info("JDK sources are already downloaded.");

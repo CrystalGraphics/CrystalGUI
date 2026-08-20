@@ -255,6 +255,9 @@ public interface EngineSource {
                 for (EngineManifest row : missing) {
                     artifacts.add(new Downloads.Artifact(row.fileName(), row.url(), row.md5()));
                 }
+                // NO `cancelledWhen` HERE, and that is a statement rather than an omission: this runs from
+                // EngineHost, which has no JobContext to ask -- the band is acquired before there is a
+                // workbench to cancel from. When it grows one, this is the line that takes the flag.
                 Downloads.Batch.Result fetched = Downloads.batch(artifacts)
                         .named("Downloading Java engine (band " + band.minimumFeatureVersion() + ")")
                         .reporting(progress)

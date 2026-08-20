@@ -424,6 +424,8 @@ editor scheme's.
 | `--problems-tree-line-fg` | `var(--fg-hint)` | base.css |
 | `--problems-unnecessary-fg` | `var(--fg-hint)` | base.css |
 | `--problems-warning-fg` | `var(--warning-icon)` | base.css |
+| `--progress-cancel-hover-bg` | `var(--hover-bg)` | base.css |
+| `--progress-cancel-hover-fg` | `var(--fg)` | base.css |
 | `--progress-cancelling-fg` | `var(--fg-disabled)` | base.css |
 | `--progress-fill-bg` | `var(--accent)` | base.css |
 | `--progress-hide-fg` | `var(--link)` | base.css |

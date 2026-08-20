@@ -142,10 +142,35 @@ public final class JdkSourceExtract {
     public static final class Result {
         private final State state;
         private final String detail;
+        private final int files;
+        private final long bytes;
 
         Result(State state, String detail) {
+            this(state, detail, 0, 0L);
+        }
+
+        /**
+         * With the numbers a report wants, which {@link #detail} is the wrong place for.
+         *
+         * <p>{@code detail} carries the URL because the one stderr line is for whoever is diagnosing a
+         * failure. A notification wants what arrived — and building that by parsing the detail string
+         * would be inventing a format to read it back out of.</p>
+         */
+        Result(State state, String detail, int files, long bytes) {
             this.state = state;
             this.detail = detail;
+            this.files = files;
+            this.bytes = bytes;
+        }
+
+        /** How many source files were kept. */
+        public int files() {
+            return files;
+        }
+
+        /** How big the installed extract is. */
+        public long bytes() {
+            return bytes;
         }
 
         public State state() {
@@ -207,7 +232,8 @@ public final class JdkSourceExtract {
      * has, and for the same reason: this module must not reach for a scheduler, because a dedicated
      * server has no frame to drain one on.</p>
      */
-    public static Result acquire(Path cacheRoot, Progress progress) {
+    public static Result acquire(Path cacheRoot, Progress progress,
+                                 java.util.function.BooleanSupplier cancelled) {
         int feature = runningFeatureVersion();
         Path target = extractFile(cacheRoot, feature);
         if (CacheFiles.isValid(target, null)) {
@@ -228,7 +254,8 @@ public final class JdkSourceExtract {
 
             int written;
             try (Download download = Downloads.from(url)
-                         .named("Downloading JDK sources").reporting(progress).open();
+                         .named("Downloading JDK sources").reporting(progress)
+                         .cancelledWhen(cancelled).open();
                  TarArchive archive = TarArchive.gzip(download.stream());
                  OutputStream file = Files.newOutputStream(scratch);
                  ZipOutputStream out = new ZipOutputStream(file)) {
@@ -247,7 +274,8 @@ public final class JdkSourceExtract {
                 }
             }
             System.setProperty(SOURCES_PROPERTY, target.toAbsolutePath().toString());
-            return new Result(State.INSTALLED, written + " files from " + url);
+            return new Result(State.INSTALLED, written + " files from " + url,
+                    written, Files.size(target));
         } catch (IOException | RuntimeException unavailable) {
             return new Result(State.UNAVAILABLE, unavailable.toString());
         } finally {

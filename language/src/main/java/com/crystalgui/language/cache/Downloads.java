@@ -59,8 +59,11 @@ public final class Downloads {
 
     /** A transfer of {@code url}, undescribed. Add what it is called and where to report it. */
     public static Request from(String url) {
-        return new Request(url, "Downloading", null, Progress.NONE);
+        return new Request(url, "Downloading", null, Progress.NONE, NEVER_CANCELLED);
     }
+
+    /** The default: a transfer nobody can stop, which is what an unattended one is. */
+    private static final java.util.function.BooleanSupplier NEVER_CANCELLED = () -> false;
 
     /**
      * An immutable description of one transfer.
@@ -74,22 +77,39 @@ public final class Downloads {
         private final String what;
         private final String md5;
         private final Progress progress;
+        private final java.util.function.BooleanSupplier cancelled;
 
-        private Request(String url, String what, String md5, Progress progress) {
+        private Request(String url, String what, String md5, Progress progress,
+                        java.util.function.BooleanSupplier cancelled) {
             this.url = url;
             this.what = what;
             this.md5 = md5;
             this.progress = progress;
+            this.cancelled = cancelled;
         }
 
         /** The line the chrome shows, present tense — {@code "Downloading engine band 17"}. */
         public Request named(String what) {
-            return new Request(url, what, md5, progress);
+            return new Request(url, what, md5, progress, cancelled);
         }
 
         /** Where to report. Defaults to {@link Progress#NONE}, which is a real answer, not a stub. */
         public Request reporting(Progress progress) {
-            return new Request(url, what, md5, progress == null ? Progress.NONE : progress);
+            return new Request(url, what, md5, progress == null ? Progress.NONE : progress, cancelled);
+        }
+
+        /**
+         * When to give up — polled as the bytes go past.
+         *
+         * <p><b>Cancellation is cooperative, and a transfer that never asks cannot be cancelled.</b> The
+         * scheduler's × marked the job cancelled and discarded its result, exactly as designed, while the
+         * download ran happily to completion — so pressing it did nothing observable and read as a dead
+         * button. {@code JobContext} says this in as many words: <i>"Work that never polls is not wrong,
+         * merely uninterruptible."</i> A 110 MB transfer is not something to leave uninterruptible.</p>
+         */
+        public Request cancelledWhen(java.util.function.BooleanSupplier cancelled) {
+            return new Request(url, what, md5, progress,
+                    cancelled == null ? NEVER_CANCELLED : cancelled);
         }
 
         /**
@@ -100,12 +120,12 @@ public final class Downloads {
          * digest to pin, which is where the MCP mapping data still is.</p>
          */
         public Request verifying(String md5) {
-            return new Request(url, what, md5, progress);
+            return new Request(url, what, md5, progress, cancelled);
         }
 
         /** Opens it. The caller reads {@link Download#stream()} and closes the {@link Download}. */
         public Download open() throws IOException {
-            return Download.start(url, what, progress);
+            return Download.start(url, what, progress, cancelled);
         }
 
         /**
@@ -125,7 +145,7 @@ public final class Downloads {
 
     /** Several artifacts into one directory, under a single aggregate bar. */
     public static Batch batch(List<Artifact> artifacts) {
-        return new Batch(artifacts, "Downloading", Progress.NONE);
+        return new Batch(artifacts, "Downloading", Progress.NONE, NEVER_CANCELLED);
     }
 
     /**
@@ -148,19 +168,28 @@ public final class Downloads {
         private final List<Artifact> artifacts;
         private final String what;
         private final Progress progress;
+        private final java.util.function.BooleanSupplier cancelled;
 
-        private Batch(List<Artifact> artifacts, String what, Progress progress) {
+        private Batch(List<Artifact> artifacts, String what, Progress progress,
+                      java.util.function.BooleanSupplier cancelled) {
             this.artifacts = artifacts;
             this.what = what;
             this.progress = progress;
+            this.cancelled = cancelled;
         }
 
         public Batch named(String what) {
-            return new Batch(artifacts, what, progress);
+            return new Batch(artifacts, what, progress, cancelled);
         }
 
         public Batch reporting(Progress progress) {
-            return new Batch(artifacts, what, progress == null ? Progress.NONE : progress);
+            return new Batch(artifacts, what, progress == null ? Progress.NONE : progress, cancelled);
+        }
+
+        /** @see Request#cancelledWhen */
+        public Batch cancelledWhen(java.util.function.BooleanSupplier cancelled) {
+            return new Batch(artifacts, what, progress,
+                    cancelled == null ? NEVER_CANCELLED : cancelled);
         }
 
         /**
@@ -199,12 +228,16 @@ public final class Downloads {
             long done = 0;
             int installed = 0;
             for (Artifact artifact : artifacts) {
+                // BETWEEN ARTIFACTS AS WELL AS INSIDE THEM: a batch that only polled inside a transfer
+                // would still start the next one after being told to stop.
+                if (cancelled.getAsBoolean()) return new Result(installed, artifacts.size(), "cancelled");
                 progress.detail(artifact.fileName());
                 Path target = directory.resolve(artifact.fileName());
                 try {
                     if (!CacheFiles.isValid(target, artifact.md5())
                             && !from(artifact.url()).verifying(artifact.md5())
-                                    .named(what).reporting(Progress.NONE).into(target)) {
+                                    .named(what).reporting(Progress.NONE)
+                                    .cancelledWhen(cancelled).into(target)) {
                         return new Result(installed, artifacts.size(), artifact.fileName());
                     }
                 } catch (IOException | RuntimeException unavailable) {

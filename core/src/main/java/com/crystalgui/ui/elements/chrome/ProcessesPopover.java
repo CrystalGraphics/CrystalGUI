@@ -53,6 +53,10 @@ public class ProcessesPopover extends Popover {
     public ProcessesPopover() {
         addClass(POPOVER_CLASS);
         setMode(Mode.AUTO);
+        // ABOVE THE BAR, WITH A GAP. The default is BOTTOM and there is no room below a status bar, so it
+        // relied on the flip -- which lands it flush against the bar, reading as a panel growing out of
+        // the thing it covers. IntelliJ's Processes popup floats clear of its own status bar; this is that.
+        setPreferredSide(com.crystalgui.ui.AnchoredPlacement.Side.TOP, 6f);
         StyleGroup.defaultPipeline(getStyle().getLayoutGroup(),
                 l -> l.flexDirection(FlexDirection.COLUMN));
 

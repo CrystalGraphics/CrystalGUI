@@ -66,13 +66,14 @@ public final class Download implements Closeable {
      * <p>Reached through {@code Downloads.from(url).named(what).reporting(progress).open()}, which is the
      * described form and the one a call site should read as. This is what that resolves to.</p>
      */
-    static Download start(String url, String what, Progress progress) throws IOException {
+    static Download start(String url, String what, Progress progress,
+                          java.util.function.BooleanSupplier cancelled) throws IOException {
         // BEFORE THE CONNECT, and indeterminate because nothing knows the size yet. This ordering is the
         // whole reason the class exists -- see the header.
         progress.begin(what, -1, Progress.Unit.BYTES);
         Downloads.Body body = Downloads.fetch(url);
         if (body.length() > 0) progress.begin(what, body.length(), Progress.Unit.BYTES);
-        return new Download(body, new Counting(body.stream(), progress));
+        return new Download(body, new Counting(body.stream(), progress, cancelled));
     }
 
     /** The bytes, counted and reported as they are read. */
@@ -99,12 +100,14 @@ public final class Download implements Closeable {
     private static final class Counting extends FilterInputStream {
 
         private final Progress progress;
+        private final java.util.function.BooleanSupplier cancelled;
         private long read;
         private long reportedAt;
 
-        Counting(InputStream in, Progress progress) {
+        Counting(InputStream in, Progress progress, java.util.function.BooleanSupplier cancelled) {
             super(in);
             this.progress = progress;
+            this.cancelled = cancelled;
         }
 
         @Override
@@ -121,11 +124,17 @@ public final class Download implements Closeable {
             return count;
         }
 
-        private void advance(int count) {
+        private void advance(int count) throws IOException {
             read += count;
             if (read - reportedAt < REPORT_EVERY_BYTES) return;
             reportedAt = read;
             progress.advance(read);
+            // ASKED ON THE SAME THRESHOLD AS THE REPORT, so a cancel is noticed within 64 KB rather than
+            // per byte. An InterruptedIOException rather than a bespoke type: the caller already catches
+            // IOException to mean "did not arrive", which is exactly what a stopped transfer is.
+            if (cancelled.getAsBoolean()) {
+                throw new java.io.InterruptedIOException("download cancelled");
+            }
         }
     }
 }
