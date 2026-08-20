@@ -492,6 +492,13 @@ theme {
      * answer rather than naming it. Derived from the disabled foreground, which is this system's
      * quietest legible text. */
     --doc-owner-note-fg: var(--fg-disabled);
+    /* THE PROSE. Derived from --fg here and OVERRIDDEN per theme, dimmer, so the code samples in a doc
+     * body come forward against the sentences around them.
+     *
+     * A system token was the first shape and is too big a claim: `SYSTEM_VOCABULARY` is the styling
+     * spec and its own note says adding a name is an API decision rather than a convenience, which one
+     * component wanting slightly quieter prose does not earn. A theme overriding a component token is
+     * the ordinary way to say "this particular thing is this colour here", and several already do. */
     --doc-body-fg: var(--fg);
     /* The bottom band names WHERE the symbol is declared, which qualifies the answer rather than being
      * it — so it takes the same quiet the owner's provenance remark does, one step below the owner name
