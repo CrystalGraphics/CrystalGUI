@@ -63,10 +63,6 @@ public final class CgUiLifecycle implements CgLifecycleListener {
      * {@link #onInit} immediately, so the callback is not silently skipped.</p>
      */
     public static void register() {
-        if (Boolean.getBoolean("crystalgui.startup.trace")) {
-            com.crystalgui.core.CrystalGuiCore.LOGGER.info("[startup] CgUiLifecycle.register(), context live = {}",
-                    com.crystalgraphics.gl.lifecycle.CgGraphicsLifecycle.isInitialized());
-        }
         CgGraphicsLifecycle.addListener(INSTANCE);
     }
 
@@ -92,10 +88,6 @@ public final class CgUiLifecycle implements CgLifecycleListener {
      */
     @Override
     public void onInit(int width, int height) {
-        if (Boolean.getBoolean("crystalgui.startup.trace")) {
-            com.crystalgui.core.CrystalGuiCore.LOGGER.info("[startup] CgUiLifecycle.onInit fired ({}x{})",
-                    width, height);
-        }
         // The GL gate, installed the moment a context exists.
         //
         // Until now Disposer has been running every disposal immediately, which is correct while there
@@ -110,33 +102,10 @@ public final class CgUiLifecycle implements CgLifecycleListener {
         Thread glThread = Thread.currentThread();
         Disposer.setGlGate(() -> Thread.currentThread() == glThread, pending::add);
 
-        warmPaintContext(width, height);
+        // Warmup the paint context, around 1000ms on first init done before world frame time
+        CgUiPaintContext.getInstance().warm(width, height);
     }
-
-    /** <b>Builds the paint context now, so the first frame that draws does not have to.</b>*/
-    private static void warmPaintContext(int width, int height) {
-        long started = System.nanoTime();
-        try {
-            // AND BIND EACH MATERIAL ONCE. Construction only parses the .shader files; the GLSL compile
-            // and link happen on the first bind, which is why warming by construction alone measured as
-            // no change at all.
-            CgUiPaintContext.getInstance().warmMaterials(width, height);
-            if (Boolean.getBoolean("crystalgui.startup.trace")) {
-                com.crystalgui.core.CrystalGuiCore.LOGGER.info(
-                        "[startup] paint context warmed at onInit — {} ms",
-                        (System.nanoTime() - started) / 1_000_000);
-            }
-        } catch (RuntimeException | LinkageError refused) {
-            // An optimisation that fails is silent -- but SAYING it was skipped is not the same as
-            // reporting a failure, and a warm-up nobody can tell ran is the shape this project has been
-            // bitten by before.
-            if (Boolean.getBoolean("crystalgui.startup.trace")) {
-                com.crystalgui.core.CrystalGuiCore.LOGGER.info("[startup] paint context warm SKIPPED — {}",
-                        refused.toString());
-            }
-        }
-    }
-
+    
     /**
      * Disposals that arrived off the GL thread, waiting for {@link #onFrame}.
      *
