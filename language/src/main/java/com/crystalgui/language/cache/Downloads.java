@@ -61,6 +61,47 @@ public final class Downloads {
     /** Multiplied by the attempt number, so 1s then 2s. Long enough to outlast a blip, short enough to wait. */
     public static final long RETRY_BACKOFF_MILLIS = 1000L;
 
+    /**
+     * A failure worth trying again, or one that will answer the same way in two seconds.
+     *
+     * <p><b>An unknown host is not a blip.</b> It means DNS could not resolve the name at all, which on a
+     * machine with no network is the immediate and permanent answer — retrying it three times spends the
+     * backoff re-asking a question that cannot change that fast, and delays the report of a failure the
+     * user can see for themselves. Observed offline: the whole command failed correctly and took three
+     * seconds longer than it needed to.</p>
+     *
+     * <p>A timeout, a reset, a truncated body and a 5xx are the opposite — those are what retrying is
+     * for, and they are the reason the loop exists at all.</p>
+     */
+    private static boolean worthRetrying(IOException failure) {
+        if (failure instanceof java.net.UnknownHostException) return false;
+        // A 404 is an answer, and it will be the same answer next time.
+        return !(failure instanceof java.io.FileNotFoundException);
+    }
+
+    /**
+     * A failure in words somebody can act on, rather than a class name.
+     *
+     * <p>Offline, the balloon read <i>"Could not download JDK sources —
+     * java.net.UnknownHostException: api.adoptium.net"</i>. Every part of that after the dash is for
+     * whoever is debugging, and the person reading it wanted to know their connection was off. The
+     * exception's own {@code toString} stays on the stderr line, where debugging happens.</p>
+     */
+    public static String describe(Throwable failure) {
+        if (failure == null) return "unknown error";
+        if (failure instanceof java.net.UnknownHostException) {
+            return "could not reach " + failure.getMessage() + " — check your connection";
+        }
+        if (failure instanceof java.net.SocketTimeoutException) return "the connection timed out";
+        if (failure instanceof java.io.FileNotFoundException) {
+            return "the server does not have it any more";
+        }
+        if (failure instanceof java.io.InterruptedIOException) return "stopped";
+        if (failure instanceof java.net.ConnectException) return "the connection was refused";
+        String message = failure.getMessage();
+        return message == null || message.isEmpty() ? failure.getClass().getSimpleName() : message;
+    }
+
     private static void sleep(long millis) throws java.io.InterruptedIOException {
         try {
             Thread.sleep(millis);
@@ -173,7 +214,7 @@ public final class Downloads {
                     throw stopped;
                 } catch (IOException failed) {
                     last = failed;
-                    if (attempt == ATTEMPTS) break;
+                    if (attempt == ATTEMPTS || !worthRetrying(failed)) break;
                     sleep(RETRY_BACKOFF_MILLIS * attempt);
                 }
             }

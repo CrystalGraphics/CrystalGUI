@@ -179,6 +179,45 @@ public class DownloadsTest {
         assertTrue(CacheFiles.isValid(file, "md5:" + md5));
     }
 
+    /**
+     * <b>A failure reads as a sentence, and a dead network is not retried.</b>
+     *
+     * <p>Both from the offline run. The balloon said {@code java.net.UnknownHostException:
+     * api.adoptium.net} to somebody whose wifi was off — every character after the dash was for whoever
+     * is debugging. And an unknown host means DNS resolved nothing at all, so the retry loop spent its
+     * backoff re-asking a question that cannot change in two seconds and delayed a report the user could
+     * already see out of the window.</p>
+     */
+    @Test
+    public void aFailureReadsAsASentence() {
+        assertEquals("could not reach api.adoptium.net — check your connection",
+                Downloads.describe(new java.net.UnknownHostException("api.adoptium.net")));
+        assertEquals("the connection timed out",
+                Downloads.describe(new java.net.SocketTimeoutException("Read timed out")));
+        assertEquals("the server does not have it any more",
+                Downloads.describe(new java.io.FileNotFoundException("https://example/x")));
+        assertEquals("stopped", Downloads.describe(new InterruptedIOException("cancelled")));
+    }
+
+    /**
+     * An unreachable host fails once, not three times.
+     *
+     * <p>Measured by the clock: three attempts carry 1s and 2s of backoff, so a retried DNS failure
+     * cannot come back in under three seconds. This asserts it does.</p>
+     */
+    @Test
+    public void anUnknownHostIsNotRetried() {
+        long started = System.currentTimeMillis();
+        try {
+            Downloads.from("http://no-such-host.invalid/thing.bin").named("Test")
+                    .into(folder.getRoot().toPath().resolve("never.bin"));
+            fail("expected an unknown host to fail");
+        } catch (IOException expected) {
+            long took = System.currentTimeMillis() - started;
+            assertTrue("it retried a failure that cannot change: took " + took + "ms", took < 3000);
+        }
+    }
+
     /** Counts the reports so a cancel can be asked for partway rather than up front. */
     private static Progress counting(AtomicLong seen) {
         return new Progress() {
