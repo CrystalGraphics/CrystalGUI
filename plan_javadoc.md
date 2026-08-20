@@ -436,8 +436,9 @@ the feature is worse than none.
 
 ## 6. What is left
 
-Thirteen of thirteen audit rows are shipped. **One item remains**, and it is the one that was always
-going to be last: JavaScript has no documentation at all.
+Thirteen of thirteen audit rows are shipped. **Two items remain**: JavaScript has no documentation at
+all, which was always going to be last; and a doc-tag reference is not coloured by what it resolves to,
+which the editor-side javadoc highlighting turned up on its way past.
 
 ### 6.1 JavaScript gets the renderer and none of the emitter
 
@@ -451,7 +452,28 @@ change; that is the whole point of them. What is missing is a **JSDoc emitter**,
 **Markdown** rather than HTML — so it is a second parser feeding the same `MarkupDocument`, not a
 second renderer. `MarkupParser` stays as it is.
 
-### 6.2 Two known partials, neither blocking
+### 6.2 A `@see` reference is not coloured by its kind
+
+The editor now lexes a doc comment's tags and markup (`DocComments`), and a block tag's argument takes
+IntelliJ's `DOC_COMMENT_TAG_VALUE` — one flat colour for every name. IntelliJ colours
+{@code @see Stream} by what {@code Stream} actually **is**: an interface glyph colour for an interface, a
+class colour for a class.
+
+**A lexer cannot know that.** It sees a word after a tag; deciding it is an interface is resolution. So
+this is a <b>semantic token</b>, and the machinery for one already exists and is already wired —
+{@code Analysis.semanticTokens}, merged in {@code TextEditor.ensureRowSyntax} under the rule that
+semantic tokens REPLACE grammar tokens where they overlap. What is missing is the Java engine noticing
+that a range inside a doc comment is a type reference and publishing {@code type.interface} over it.
+
+Two things make it more than a small addition. The engine's semantic pass walks the AST, and a doc
+comment is not in the AST — JDT parses one into a {@code Javadoc} node only when doc-comment support
+is on, which {@code EcjOptions} does enable, so the node is there and its {@code TagElement} fragments
+carry {@code Name} nodes with real bindings. And the offsets have to be the *document's*, which the
+`Javadoc` node gives directly. So it is tractable; it is simply engine work rather than scheme work, and
+pretending a flat colour satisfies it would be the "resolves but paints the wrong thing" failure this
+plan keeps naming.
+
+### 6.3 Two known partials, neither blocking
 
 **A member reference resolves to its owning type.** `{@link List#add}` opens `List`'s documentation,
 which is related and is not what was asked. A member needs a probe that CALLS it so overload resolution
@@ -464,7 +486,7 @@ which nothing passes.
 recursively would assemble a hover out of three levels of a hierarchy. One level is what a reader asked
 for; the marker is stripped from the inherited text rather than resolved again.
 
-### 6.3 Closed since the audit
+### 6.4 Closed since the audit
 
 - **Row 6** is done: `UIText.offsetAt` resolves a press to a run, `MarkupView` emits the target,
   `Resolver.describe(name)` turns it into a symbol and the popup navigates to it.
