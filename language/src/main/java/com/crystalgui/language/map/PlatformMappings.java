@@ -112,8 +112,21 @@ public final class PlatformMappings {
 
     /** Does the work a {@link #claim()} promised, reporting into {@code progress}. */
     public static void acquireClaimed(Progress progress) {
+        acquireClaimed(progress, () -> false);
+    }
+
+    /**
+     * The same, stoppable.
+     *
+     * <p>This one runs inside a job — {@code ClientProxy} submits it — so unlike the engine band it has a
+     * flag to hand over, and a first launch's mapping fetch is genuinely cancellable rather than merely
+     * marked so.</p>
+     */
+    public static void acquireClaimed(Progress progress, java.util.function.BooleanSupplier cancelled) {
         ScriptService needsFetch = decide();
-        if (needsFetch != null) fetch(needsFetch, progress == null ? Progress.NONE : progress);
+        if (needsFetch != null) {
+            fetch(needsFetch, progress == null ? Progress.NONE : progress, cancelled);
+        }
     }
 
     /** The lazy path: a daemon thread, so a first {@code current()} never blocks its caller. */
@@ -134,7 +147,10 @@ public final class PlatformMappings {
 
         // Daemon, because mapping data must never be the reason a game cannot exit. One-shot, because
         // there is exactly one artifact to acquire per process.
-        Thread worker = new Thread(() -> fetch(needsFetch, Progress.NONE), "crystalgui-mappings");
+        // UNCANCELLABLE, and that is the lazy path's nature rather than an omission: nobody asked for
+        // it, nothing is watching it, and there is no job to press an × on.
+        Thread worker = new Thread(() -> fetch(needsFetch, Progress.NONE, () -> false),
+                "crystalgui-mappings");
         worker.setDaemon(true);
         worker.start();
     }
@@ -196,11 +212,12 @@ public final class PlatformMappings {
      * <p>Indeterminate: the two CSVs are small and their host declares no length worth trusting, so a
      * sweep is honest where a bar would be invented.</p>
      */
-    private static void fetch(ScriptService platform, Progress progress) {
+    private static void fetch(ScriptService platform, Progress progress,
+                              java.util.function.BooleanSupplier cancelled) {
         MappingCoordinates coordinates = platform.mappings();
         progress.begin("Downloading Minecraft mappings", -1);
         progress.detail(coordinates.cacheKey());
-        apply(MappingCache.load(coordinates, platform.cacheRoot()));
+        apply(MappingCache.load(coordinates, platform.cacheRoot(), cancelled));
     }
 
     private static void apply(MappingCache.Result result) {

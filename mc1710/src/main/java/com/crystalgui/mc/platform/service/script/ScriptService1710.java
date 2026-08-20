@@ -31,19 +31,28 @@ public final class ScriptService1710 implements ScriptService {
      */
     private static final MappingCoordinates MCP_STABLE_12 = MappingCoordinates
             .of("1.7.10", "stable", "12",
-                    "https://raw.githubusercontent.com/MinecraftForge/FML/1.7.10/conf/")
+                    // PINNED TO A COMMIT, not to the `1.7.10` BRANCH it named before.
+                    //
+                    // A branch is a moving reference. This one has not moved since May 2015 and there is
+                    // no reason to expect it to, which is exactly the kind of reasoning that is true right
+                    // up until it is not -- and if it did move, every client would silently start fetching
+                    // different names for the same pinned `stable/12` coordinate. A commit is immutable by
+                    // construction: git addresses it by the content it reaches.
+                    "https://raw.githubusercontent.com/MinecraftForge/FML/"
+                            + "a099592d3d1418245e3af65eda195da244287188/conf/")
             // The two files that carry members. `params.csv` is deliberately not among them: its names
             // are parameter names, which exist in bytecode only as debug metadata and are never resolved
             // against, so downloading it would cost 40 KB to change nothing a script can observe.
             //
-            // NO DIGESTS PINNED YET, which is the one thing here that is provisional rather than decided.
-            // Upstream publishes no .md5 beside these two, so pinning means recording a hash of what was
-            // fetched -- a real check against a mirror serving something else, and one that has to be
-            // taken from a trusted fetch rather than invented. Until then a corrupted download is caught
-            // by the parse rather than by the digest, which is weaker and is stated so it is not mistaken
-            // for a decision.
-            .withFile("methods.csv")
-            .withFile("fields.csv");
+            // DIGESTS ARE UPSTREAM'S OWN, and the note here used to say there were none. That was true of
+            // `.md5` files beside the CSVs and false of the repository: GIT ADDRESSES EVERY BLOB BY SHA-1,
+            // GitHub's API reports it, and it is as pinnable as anything we could compute -- with the
+            // advantage of being upstream's number rather than a hash we recorded from one fetch and hoped
+            // was of the right bytes. `CacheFiles` reads the `gitblob:` tag.
+            //
+            // Taken from the contents API at the commit above; `git hash-object <file>` reproduces them.
+            .withDigest("methods.csv", "gitblob:4861d2b6c224122c25ba39ac224f4886b6ddd938")
+            .withDigest("fields.csv", "gitblob:db4063eab8c1dc742791c59d071be22772ae462c");
 
     /**
      * {@code World#getBlock} is {@code func_147439_a} in production.

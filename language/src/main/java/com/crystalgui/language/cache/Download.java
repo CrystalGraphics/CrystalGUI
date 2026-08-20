@@ -68,12 +68,28 @@ public final class Download implements Closeable {
      */
     static Download start(String url, String what, Progress progress,
                           java.util.function.BooleanSupplier cancelled) throws IOException {
+        return start(url, what, progress, cancelled, 0L);
+    }
+
+    /**
+     * The same, continuing from {@code from} bytes if the server allows it.
+     *
+     * <p>The bar counts from {@code from} rather than from zero, so a resumed transfer picks up where the
+     * last one stopped instead of appearing to start again — which is the whole point of resuming and
+     * would otherwise be invisible to the person watching it.</p>
+     */
+    static Download start(String url, String what, Progress progress,
+                          java.util.function.BooleanSupplier cancelled, long from) throws IOException {
         // BEFORE THE CONNECT, and indeterminate because nothing knows the size yet. This ordering is the
         // whole reason the class exists -- see the header.
         progress.begin(what, -1, Progress.Unit.BYTES);
-        Downloads.Body body = Downloads.fetch(url);
-        if (body.length() > 0) progress.begin(what, body.length(), Progress.Unit.BYTES);
-        return new Download(body, new Counting(body.stream(), progress, cancelled));
+        Downloads.Body body = Downloads.fetch(url, from);
+        long already = body.resumed() ? from : 0L;
+        if (body.length() > 0) {
+            progress.begin(what, body.length(), Progress.Unit.BYTES);
+            if (already > 0) progress.advance(already);
+        }
+        return new Download(body, new Counting(body.stream(), progress, cancelled, already));
     }
 
     /** The bytes, counted and reported as they are read. */
@@ -84,6 +100,11 @@ public final class Download implements Closeable {
     /** What the response said it was, or negative — a chunked reply has no length and that is ordinary. */
     public long length() {
         return body.length();
+    }
+
+    /** Whether this continues a previous attempt — what decides append versus overwrite. */
+    public boolean resumed() {
+        return body.resumed();
     }
 
     @Override
@@ -104,10 +125,16 @@ public final class Download implements Closeable {
         private long read;
         private long reportedAt;
 
-        Counting(InputStream in, Progress progress, java.util.function.BooleanSupplier cancelled) {
+        Counting(InputStream in, Progress progress, java.util.function.BooleanSupplier cancelled,
+                 long already) {
             super(in);
             this.progress = progress;
             this.cancelled = cancelled;
+            // WHAT WAS ALREADY ON DISK. `Progress.advance` is absolute, so a resumed transfer that
+            // counted only its own bytes would report a bar running backwards to the fraction it is
+            // resuming from.
+            this.read = already;
+            this.reportedAt = already;
         }
 
         @Override

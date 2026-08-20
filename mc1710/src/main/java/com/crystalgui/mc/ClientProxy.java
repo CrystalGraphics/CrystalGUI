@@ -48,7 +48,7 @@ public class ClientProxy extends CommonProxy {
         if (PlatformMappings.claim()) {
             JobScheduler.shared().job(JobKey.of(ClientProxy.class, "mappings"), JobLane.BACKGROUND,
                     context -> {
-                        PlatformMappings.acquireClaimed(context.progress());
+                        PlatformMappings.acquireClaimed(context.progress(), context::isCancelled);
                         return null;
                     }).submit();
         }
