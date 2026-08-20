@@ -170,12 +170,25 @@ public final class JavaLanguage {
         if (ready == null) return;
         Thread worker = new Thread(() -> {
             try {
-                // NO CLASSPATH RESOLUTION WANTED, just the compiler's own machinery -- a source naming
-                // nothing outside java.lang loads the parser, the resolver and the binding stack, which
-                // is where the 515 ms is. Passing the real classpath would also warm the type index, and
-                // that is a much larger and more speculative thing to do on somebody's behalf.
+                // THE REAL CLASSPATH, which this deliberately did NOT pass until it was measured.
+                //
+                // The original note here said the type index was "a much larger and more speculative
+                // thing to do on somebody's behalf", and warmed against an empty classpath so only the
+                // parser, resolver and binding stack were loaded. That was the right call without a
+                // number and the wrong one with it: restoring an editor tab on a .java file was
+                // measured at 255 ms inside DockGroup.showContent, on the client thread, during the
+                // frame after F6 -- and an analysis against the real classpath is what that is.
+                //
+                // So the speculation is now on this side of the boundary, where it is free if wrong: a
+                // daemon thread at MIN_PRIORITY that nothing waits on, overlapping whatever the game
+                // does next. The index is shared per classpath, so warming THIS classpath is what the
+                // editor's own first analysis will look in -- warming any other would be work nobody
+                // reads, which is the same silent failure the glyph warm has to avoid.
+                //
+                // The honest cost is memory: a full index is ~18 MB, held for a process that may never
+                // open a .java file. That is the trade, and it is stated rather than hidden.
                 ready.analyzer().analyze("Warm", "final class Warm { void f() { int i = 0; } }",
-                        java.util.Collections.<String>emptyList(), ready.releaseLevel(), 0L).close();
+                        classpath, ready.releaseLevel(), 0L).close();
             } catch (Throwable ignored) {
                 // See the note above: an optimisation that fails is silent.
             }

@@ -71,8 +71,18 @@ public final class UIWindow {
     private int actualScreenWidth;
     private int actualScreenHeight;
 
+    /**
+     * The scale a window runs at until a host says otherwise.
+     *
+     * <p>Named rather than inlined because {@code CgUiPaintContext}'s glyph warm has to rasterise at
+     * the size text is actually drawn at — {@code font-size * uiScale} — and a warm aimed at the wrong
+     * size is silently useless: the glyphs generate, cache, and are never looked up. Two copies of this
+     * number would let that happen with nothing on screen to show for it.</p>
+     */
+    public static final float DEFAULT_UI_SCALE = 2f;
+
     @Getter
-    private float uiScale = 2;
+    private float uiScale = DEFAULT_UI_SCALE;
     /** @see #getRootTransform() */
     private final Matrix4f rootTransform = new Matrix4f().scale(2, 2, 1f);
     @Getter
