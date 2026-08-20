@@ -436,9 +436,9 @@ the feature is worse than none.
 
 ## 6. What is left
 
-Thirteen of thirteen audit rows are shipped. **Two items remain**: JavaScript has no documentation at
-all, which was always going to be last; and a doc-tag reference is not coloured by what it resolves to,
-which the editor-side javadoc highlighting turned up on its way past.
+Thirteen of thirteen audit rows are shipped. **One item remains**: JavaScript has no documentation at
+all, which was always going to be last. Doc-tag reference colouring (§6.2) shipped and is kept below as
+the record of what it turned out to be.
 
 ### 6.1 JavaScript gets the renderer and none of the emitter
 
@@ -452,26 +452,39 @@ change; that is the whole point of them. What is missing is a **JSDoc emitter**,
 **Markdown** rather than HTML — so it is a second parser feeding the same `MarkupDocument`, not a
 second renderer. `MarkupParser` stays as it is.
 
-### 6.2 A `@see` reference is not coloured by its kind
+### 6.2 A `@see` reference is coloured by its kind — **shipped**
 
-The editor now lexes a doc comment's tags and markup (`DocComments`), and a block tag's argument takes
-IntelliJ's `DOC_COMMENT_TAG_VALUE` — one flat colour for every name. IntelliJ colours
-{@code @see Stream} by what {@code Stream} actually **is**: an interface glyph colour for an interface, a
-class colour for a class.
+The editor lexes a doc comment's tags and markup (`DocComments`), and a block tag's argument took
+IntelliJ's `DOC_COMMENT_TAG_VALUE` — one flat colour for every name. IntelliJ colours `@see Stream` by
+what `Stream` actually **is**: the interface colour for an interface, the class colour for a class.
 
-**A lexer cannot know that.** It sees a word after a tag; deciding it is an interface is resolution. So
-this is a <b>semantic token</b>, and the machinery for one already exists and is already wired —
-{@code Analysis.semanticTokens}, merged in {@code TextEditor.ensureRowSyntax} under the rule that
-semantic tokens REPLACE grammar tokens where they overlap. What is missing is the Java engine noticing
-that a range inside a doc comment is a type reference and publishing {@code type.interface} over it.
+**A lexer cannot know that**, so this had to be a semantic token — and the note here used to say the
+Java engine needed to start "noticing that a range inside a doc comment is a type reference". Measured,
+it already does. JDT parses a doc comment into a `Javadoc` node with **real bindings on its names**,
+because `EcjOptions` enables doc-comment support, and `captureFor` has always turned a binding into
+`type.interface`/`type.class`/`type.enum`.
 
-Two things make it more than a small addition. The engine's semantic pass walks the AST, and a doc
-comment is not in the AST — JDT parses one into a {@code Javadoc} node only when doc-comment support
-is on, which {@code EcjOptions} does enable, so the node is there and its {@code TagElement} fragments
-carry {@code Name} nodes with real bindings. And the offsets have to be the *document's*, which the
-`Javadoc` node gives directly. So it is tractable; it is simply engine work rather than scheme work, and
-pretending a flat colour satisfies it would be the "resolves but paints the wrong thing" failure this
-plan keeps naming.
+**What was missing was one constructor argument.** `new ASTVisitor()` is `new ASTVisitor(false)`, and
+`Javadoc.accept0` only offers its tags to a visitor that asked for them — so every name inside every doc
+comment was invisible to the semantic pass. A probe over a comment containing `{@link List}` and
+`@see List` reported **zero tokens**; with `new ASTVisitor(true)` it reports `type.interface` for both,
+`module` for each package segment of `@see java.util.List`, `type` for `@throws IllegalStateException`
+and `function.call` for `{@link #other()}`. No second resolver and no doc-specific machinery: the answer
+was already there and nothing was walking to it.
+
+**Two decisions came with it.**
+
+A `@param`'s subject **names a declaration rather than referencing one**. It resolves — to the parameter
+binding — so it came back `variable.parameter`, which is a true statement and the wrong colour: semantic
+tokens REPLACE grammar tokens where they overlap, so it would have taken the character from the lexer's
+`comment.doc.value`, which is what IntelliJ draws there. Stated as "what a `@param` names" rather than as
+a list of tags that may resolve, because every other tag's argument genuinely is a reference.
+
+**An unresolvable name in a doc comment is not marked `unresolved`.** That mark says a name will not
+compile, which is not a thing a comment can do; javadoc's reference rules are stricter than the
+language's and JDT declines shapes a reader would accept, so the mark would draw red over working prose.
+The same name in *code* is still marked, which makes it a scope rather than a weakening. `deprecated` is
+left alone — that is a true statement about whatever the reference points at.
 
 ### 6.3 Two known partials, neither blocking
 
@@ -496,6 +509,14 @@ for; the marker is stripped from the inherited text rather than resolved again.
   popup parses it, so `SymbolInfo.documentation()` stayed a `String`.
 - **The inert `@type` patterns** are fixed by per-pattern predicate lifting, which was never a
   documentation problem.
+- **Section tables** ship as a `<dl>` — `Since:` beside `1.0`, `See Also:` beside its references —
+  with the label column equalised after layout. Not an audit row; it came out of reading the popup
+  beside IntelliJ's once the block tags were rendering at all.
+- **A link underlines under the pointer and takes a `cursor: pointer`**, which finished the gesture
+  row 6 opened. The underline is a `::highlight()` band and the cursor is a class, because they are
+  different granularities — see the log.
+- **`localToWorld` no longer drifts from the pose it was drawn with.** Not a documentation defect at
+  all; the popup was simply the first thing precise enough to expose it.
 
 ---
 
@@ -602,3 +623,83 @@ new was asked of the toolchain — the two spellings had simply never been compa
 And the test needle repeated a trap the sibling test documents in a comment: `impl.read()` lands on
 `impl` and resolves the VARIABLE, whose documentation is legitimately null, so the walk under test never
 ran and the failure looked like the feature.
+
+---
+
+### Section tables, the link under the pointer, and a hit test that had never agreed with what was drawn
+
+**A section table is a `<dl>`.** `Since:` beside `1.0` is a term and its definition, so that is what the
+emitter writes and what the model carries — `DEFINITIONS`/`TERM`/`DETAIL`, modelled as HTML has it
+rather than as a bespoke "javadoc sections" kind. Nothing in the renderer knows what a block tag is,
+which is what lets a JSDoc emitter (§6.1) or a shader node's description get the same two-column layout
+without touching it.
+
+Block tags are also **grouped by heading** now: four `@author` lines are one Author row rather than four
+stacked paragraphs that read as four unrelated facts. Whether a group reads as one list or as separate
+statements is a fact about the TAG — `@author` joins with commas, `@see` gives each reference its own
+line — so `joinsInline` asks about the tag and not about the heading's wording. `<br>` was the obvious
+spelling for the second case and is silently wrong: `MarkupParser` collapses whitespace per run, so the
+newline comes back out as a space and four references ran together into one wrapped line.
+
+**The label column is equalised after layout, and a grid was measured before that was accepted.**
+`display: grid` with `grid-template-columns: max-content 1fr` is the obvious answer and does not work
+here — tried with `max-content` and again with `auto`, the value cell comes back at the container's full
+width and the first track is never reserved, so every label drew on top of its own value. A fixed width
+is the other obvious answer and is what put `Since:` a third of the popup away from `1.0`. `alignTerms`
+gives every label the width of the widest and settles for the same reason `UIText`'s own sizing does:
+the width goes in as an IMPORTANT candidate and `replaceOrPutCandidate` no-ops when it is unchanged.
+**MIN-width, not width** — a label is `forceSelfSizeWidth`, so it already writes its own measured width
+at IMPORTANT, and two IMPORTANT candidates on one property is a race the labels lost.
+
+**The hover is a band, not a `:hover` rule.** A paragraph is ONE text element, so `:hover` on it is true
+anywhere in the sentence and would underline every link in it at once. A link is a RANGE, and only a
+range-sized answer names one. The cursor is the other half of the same state and cannot be a band —
+`cursor` is a property of an element — so it is a CLASS the sheet styles, rather than an IMPORTANT write
+that would need Java to name a resting value ("prose is an I-beam") the theme should own.
+
+Driven from a **frame ticker** rather than `onMouseMove`. The move listener was the first build and never
+fired: it was the only `onMouseMove.attachListener` in the engine, which is the same smell `display:
+grid` had, and `updateWithoutPainting` deliberately skips input handling — which is presumably why
+nothing else consumes move events.
+
+**`UIText.offsetAtScreen` exists because there are two "local" spaces and mixing them is silent.**
+`screenToLocal` answers the space an element's BOX is expressed in — the one `isMouseOverElement` tests
+against `getX()`/`getY()` — while `offsetAt` wants coordinates relative to the element's own top-left.
+They differ by exactly the box origin, so the mistake is correct at (0,0) and wrong everywhere else, and
+it survives every fixture built around one element filling its window. Measured on the popup: a link 38px
+down a paragraph sitting at y=453 resolved to `-1`, and the same point less the box origin resolved to the
+link's first character exactly. Both link gestures had written the pair out longhand and both were wrong
+the same way.
+
+**And that was not the whole of it.** With the offsets right, a link still could not be hovered until it
+had been clicked at roughly fifteen times, whereupon it worked and kept working. Two hundred frames with
+the pointer stationary, the run reporting a world origin of y=-10628 where the layout put it at y=506, and
+then a correction between one frame and the next with no input at all — which is the shape that says
+state rather than geometry. Three diagnoses were wrong before that was measured, and each was plausible:
+the links were genuinely below the fold in one fixture, and the pointer genuinely was off the word in
+another.
+
+`drawSubtree` held two bugs in three lines. **Aliasing**: `CacheCell.set` stores the reference it is
+given, so handing it the live pose made the cached matrix an alias of the `PoseStack`'s — and an element
+whose transform is the identity does not push, so most elements aliased the SAME `Matrix4f`, which
+`mulPoseMatrix` and the scroll offset then mutate in place. `-10628` is the editor's scrolled content
+arriving through a shared pose. **The dirty gate**: refreshing only when the cell was dirty put paint's
+correction out of reach in exactly the case that needed it, because any `get()` — a hit test, a widget's
+own pointer arithmetic — runs the calculator and marks the cell clean, and nothing invalidates it on a
+scroll or a relayout. One bad computation stuck for the life of the element.
+
+`reconcileWorldMatrix` mutates the cell's own matrix in place, every frame, whenever it differs from the
+pose. The pose is the ground truth: it is what was drawn, and the invariant has always been that
+hit-testing and rendering share one matrix. **This was never a link bug** — it was every hit test in a
+promoted, scrolled subtree, and links were only the first thing precise enough to notice.
+
+**The cleanup pass then found four more, three of them silent.** A second `<dd>` under one `<dt>` was
+parsed and then dropped by the renderer, which replaced its value column for each one it met — and
+`@throws` with two exceptions is the everyday case. A block `@see` was rendered by splitting the
+emitter's own flattened HTML on its first space and re-escaping the halves, so anything already escaped
+went round twice; it now goes through the same `referenceLink(fragments)` that `{@link}` uses, so the
+block form and the inline form cannot drift. The parser kept three parallel lists and a scalar row kind,
+which a `<dl>` nested in a `<ul>` would have closed under the wrong list's kind — and consolidating that
+surfaced a long-standing one underneath: the blocks gathered for the row being built were shared across
+nesting depth, so `<li>before<ul>…` left `before` pending and the nested list's first row closed over it,
+moving the outer item's text into the nested list.

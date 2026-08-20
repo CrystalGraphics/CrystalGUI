@@ -2,6 +2,9 @@ package com.crystalgui.language.java.assist;
 
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.Javadoc;
+import org.eclipse.jdt.core.dom.IBinding;
+import org.eclipse.jdt.core.dom.ITypeBinding;
+import org.eclipse.jdt.core.dom.Name;
 import org.eclipse.jdt.core.dom.TagElement;
 import org.eclipse.jdt.core.dom.TextElement;
 
@@ -49,9 +52,6 @@ import java.util.LinkedHashMap;
  * change to this seam.</p>
  */
 public final class JavaDocs {
-
-    /** Long enough to be worth reading, short enough that a popup does not become a document. */
-    private static final int MAX_LENGTH = 4000;
 
     private JavaDocs() {
     }
@@ -148,10 +148,18 @@ public final class JavaDocs {
             }
             out.append("</dl>");
         }
+        // NO LENGTH CAP. There was one -- 4000 characters, "short enough that a popup does not become
+        // a document" -- and it was a reasonable trade when the popup was a fixed band of text. It is now
+        // scrollable and resizable, so a long comment costs a scrollbar rather than a truncation, and the
+        // reader decides when they have read enough.
+        //
+        // It was also cutting the WRONG THING. The value here is rendered markup, so the cut lands
+        // wherever 4000 characters happens to fall -- mid-tag as readily as mid-word -- and the parser
+        // downstream is handed markup that does not close. `java.lang.Class` is the everyday case: its
+        // comment is several times the cap, so the nesting section ended in `, w…` and everything after
+        // it was simply gone, with the ellipsis the only sign that it had been.
         String rendered = out.toString();
-        if (rendered.isBlank()) return null;
-        return rendered.length() <= MAX_LENGTH ? rendered
-                : rendered.substring(0, MAX_LENGTH).stripTrailing() + "…";
+        return rendered.isBlank() ? null : rendered;
     }
 
     /**
@@ -431,11 +439,54 @@ public final class JavaDocs {
      * when there is none the reference is shortened for display.</p>
      */
     private static String referenceLink(List<?> parts) {
+        Object first = parts.isEmpty() ? null : parts.get(0);
         String reference = parts.isEmpty() ? "" : flatten(parts.subList(0, 1), false);
         String label = parts.size() > 1 ? flatten(parts.subList(1, parts.size()), false) : "";
-        String shown = label.isEmpty() ? simpleReference(reference) : label;
+        // THE LABEL IS ALREADY MARKUP; A DERIVED NAME IS NOT. `flatten` passes an author's HTML
+        // through verbatim -- that is the whole design, the author's markup is the structure -- so a
+        // label has been rendered by the time it arrives here and escaping it again turns it back into
+        // text. `{@linkplain Class#isHidden() <em>hidden</em>}` is the JDK's own spelling and it drew as
+        // a literal `<em>hidden</em>`, angle brackets and all, in the middle of a sentence.
+        //
+        // Same mistake as the block `@see` made before it, from the other end: that one PARSED this
+        // method's output, this one re-escaped it. A value that has already been rendered is finished.
+        String shown = label.isEmpty() ? escape(simpleReference(reference)) : label;
         if (shown.isEmpty()) return null;
-        return "<a href=\"java:" + escape(reference) + "\">" + escape(shown) + "</a>";
+        return "<a href=\"java:" + escape(targetOf(first, reference)) + "\">" + shown + "</a>";
+    }
+
+    /**
+     * The reference to put in the href — <b>qualified</b>, where the binding can say so.
+     *
+     * <p>A reference is written against the imports and package of the file it appears in, and the
+     * popup that follows it has neither. {@code java.text.Collator} says {@code @see RuleBasedCollator},
+     * which is unambiguous there and resolves to nothing anywhere else: {@code Resolver.describe} builds
+     * {@code class $Probe { RuleBasedCollator $x; }}, the probe does not compile, and the link is
+     * refused — correctly, and to the reader it is a blue word that does nothing. Every {@code @see} in
+     * the JDK's own sources is written this way, so it was most of them.</p>
+     *
+     * <p>The binding is right there. Both units a comment can come from resolve them — the editor's own,
+     * and an attached source, which {@code AttachedSources} parses with {@code setResolveBindings(true)}
+     * — so this asks the name what it actually resolved to rather than guessing at an import list.</p>
+     *
+     * <p><b>The erasure, not the binding's own qualified name.</b> A generic type answers
+     * {@code java.util.List<E>}, which is not a name any probe can declare. The erasure gives
+     * {@code java.util.List}, and it keeps the SOURCE spelling of a nested type
+     * ({@code java.util.Map.Entry} rather than the binary {@code Map$Entry}), which is what the probe
+     * has to be able to write down.</p>
+     *
+     * <p>Falls back to the reference as written whenever there is no binding — an unresolved reference,
+     * or a comment parsed without one. That is exactly the previous behaviour, so nothing that worked
+     * before can regress.</p>
+     */
+    private static String targetOf(@Nullable Object fragment, String asWritten) {
+        if (!(fragment instanceof Name)) return asWritten;
+        IBinding binding = ((Name) fragment).resolveBinding();
+        if (!(binding instanceof ITypeBinding)) return asWritten;
+        ITypeBinding erasure = ((ITypeBinding) binding).getErasure();
+        if (erasure == null) return asWritten;
+        String qualified = erasure.getQualifiedName();
+        return qualified == null || qualified.isEmpty() ? asWritten : qualified;
     }
 
     /**

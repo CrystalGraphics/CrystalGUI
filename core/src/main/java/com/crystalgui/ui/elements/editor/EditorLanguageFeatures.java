@@ -470,20 +470,25 @@ final class EditorLanguageFeatures {
         String name = scheme < 0 ? target : target.substring(scheme + 1);
         if (name.isEmpty()) return;
 
-        UIWindow window = editor.getAttachedWindow();
-        if (window == null) return;
-        // WHERE THE POPUP ALREADY IS, not where the caret is. The box is being read and may have been
-        // dragged somewhere deliberate; re-anchoring it to the caret on every link would walk it back
-        // across the screen mid-sentence.
-        float[] anchor = editor.anchorInWindow(editor.getCaret());
-        if (anchor == null) return;
-
-        editor.languageServices().resolver().describe(name, answer -> {
-            if (answer == null || answer.value() == null) return;
-            UIWindow live = editor.getAttachedWindow();
-            if (live == null) return;
-            ensureDocPopup().show(live, answer.value(), anchor[0], anchor[1], anchor[2]);
-        });
+        // NOWHERE NEW. The comment that used to sit here said "where the popup already is, not where
+        // the caret is" and the line under it passed `editor.getCaret()` -- so every link walked the box
+        // back to the caret, which is nowhere near the link that was just pressed. Following a chain of
+        // references marched the popup across the screen a step at a time.
+        //
+        // Navigating in place needs no anchor at all, which also retires a silent early return:
+        // `anchorInWindow` answers null on a non-finite coordinate and took the navigation with it while
+        // the press had plainly landed. That was never observed -- the dead links had a different cause
+        // entirely, in `SnippetAnalysis` -- and it is worth not leaving behind either.
+        DocumentationPopup popup = ensureDocPopup();
+        if (!popup.isOpen()) return;
+        editor.languageServices().resolver().describe(name,
+                answer -> {
+                    if (answer == null || answer.value() == null) return;
+                    // STILL OPEN? `describe` is documented as a callback that may never fire, and by
+                    // the same contract it may fire after the reader has closed the box.
+                    if (!popup.isOpen()) return;
+                    popup.navigateTo(answer.value());
+                });
     }
 
     /** Closes the documentation popup if it is open. */

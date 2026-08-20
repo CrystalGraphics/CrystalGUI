@@ -50,6 +50,7 @@ import org.eclipse.jdt.core.dom.QualifiedName;
 import org.eclipse.jdt.core.dom.QualifiedType;
 import org.eclipse.jdt.core.dom.ReturnStatement;
 import org.eclipse.jdt.core.dom.SimpleName;
+import org.eclipse.jdt.core.dom.TagElement;
 import org.eclipse.jdt.core.dom.SimpleType;
 import org.eclipse.jdt.core.dom.SingleVariableDeclaration;
 import org.eclipse.jdt.core.dom.StructuralPropertyDescriptor;
@@ -506,9 +507,27 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
             final List<SyntaxToken> tokens = new ArrayList<>();
             CompilationUnit resolved = unit;
             if (resolved == null) return tokens;
-            resolved.accept(new ASTVisitor() {
+            // TRUE MEANS "VISIT DOC TAGS", and it is the whole of what was missing. `new ASTVisitor()`
+            // is `new ASTVisitor(false)`, so `Javadoc.accept0` never offers its tags to the visitor and
+            // every name inside a doc comment was invisible to this pass -- measured, zero tokens over
+            // a comment containing `{@link List}` and `@see List`.
+            //
+            // Nothing else was needed. JDT resolves those names for real, because `EcjOptions` turns
+            // doc-comment support on, so a `@see List` fragment is a `SimpleName` carrying an
+            // `ITypeBinding` exactly as a name in code does -- and `captureFor` already turns a binding
+            // into `type.interface`/`type.class`/`type.enum`. No second resolver, no doc-specific
+            // machinery: the answer was already there and nobody was walking to it.
+            resolved.accept(new ASTVisitor(true) {
                 @Override
                 public boolean visit(SimpleName name) {
+                    // A `@param`'s SUBJECT NAMES A DECLARATION; it does not reference one. `@param n`
+                    // resolves to the parameter binding and so came back `variable.parameter`, which is
+                    // a true statement and the wrong colour: IntelliJ draws it as DOC_COMMENT_TAG_VALUE,
+                    // and it is the lexer's `comment.doc.value` that should win the character. Every
+                    // other tag's argument IS a reference -- `@throws IllegalStateException` and
+                    // `@see java.util.List` are types, and `{@link #other()}` is a member -- so this is
+                    // the one exclusion rather than a list of tags that may resolve.
+                    if (isParamTagSubject(name)) return true;
                     String capture = captureFor(name);
                     if (capture != null) {
                         // THE `@` IS PART OF THE ANNOTATION, and a SimpleName does not include it: the
@@ -556,7 +575,16 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                         // ONLY WHERE A NAME WAS EXPECTED TO RESOLVE. A label, a package fragment and
                         // the name in a declaration position legitimately have no binding, and
                         // underlining those would mark correct code as broken on every file.
-                        if (isResolvable(name)) tokens.add(new SyntaxToken(start, end, "unresolved"));
+                        // AND NEVER INSIDE A DOC COMMENT. This mark says the name will not compile,
+                        // which is not a thing a comment can do -- javadoc's own reference rules are
+                        // stricter than the language's and JDT declines shapes that are perfectly legal
+                        // to a reader, so a mark here would be red on working prose. The file's standing
+                        // rule decides it: a missed underline is invisible, a false one is a red mark on
+                        // correct code. `deprecated` below is left alone, because that IS a true
+                        // statement about whatever the reference points at.
+                        if (isResolvable(name) && !inDocComment(name)) {
+                            tokens.add(new SyntaxToken(start, end, "unresolved"));
+                        }
                         return;
                     }
                     if (binding.isDeprecated()) {
@@ -580,6 +608,28 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
             if (!(parent instanceof SingleVariableDeclaration)) return false;
             StructuralPropertyDescriptor slot = parent.getLocationInParent();
             return slot != null && "recordComponents".equals(slot.getId());
+        }
+
+        /**
+         * Whether a name is what a {@code @param} tag names.
+         *
+         * <p>Asked of the PARENT rather than by walking for a tag, because that is exactly the shape:
+         * JDT puts a block tag's argument at the head of its own {@code TagElement}'s fragments. An
+         * inline {@code {@link}} inside a {@code @param}'s prose has the nested tag as its parent, so
+         * it is unaffected and still colours as the reference it is.</p>
+         */
+        private static boolean isParamTagSubject(SimpleName name) {
+            ASTNode parent = name.getParent();
+            return parent instanceof TagElement
+                    && TagElement.TAG_PARAM.equals(((TagElement) parent).getTagName());
+        }
+
+        /** Whether a node sits inside a doc comment rather than in code. */
+        private static boolean inDocComment(ASTNode node) {
+            for (ASTNode at = node; at != null; at = at.getParent()) {
+                if (at.getNodeType() == ASTNode.JAVADOC) return true;
+            }
+            return false;
         }
 
         /** Whether a name sits inside a {@code package} or {@code import} path. */

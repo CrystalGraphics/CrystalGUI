@@ -268,6 +268,10 @@ public final class DocumentationPopup extends Popover {
     /** @see #SCROLL_CLASS */
     private final ScrollerView scroller = new ScrollerView();
 
+    /** What {@link #navigateTo} was asked for, applied on the next frame. */
+    @Nullable
+    private SymbolInfo pendingNavigation;
+
     /**
      * The problem section — message, then the one action worth showing without being asked.
      *
@@ -758,6 +762,63 @@ public final class DocumentationPopup extends Popover {
         setProblem(problems, List.of());
     }
 
+    /**
+     * Replaces what this popup is showing, <b>without moving it</b>.
+     *
+     * <p>For following a link. {@link #show} re-anchors, which is right for a hover — a new hover is a
+     * new place — and wrong here: you are reading this box, and you had to move the pointer onto a link
+     * to press it, so re-anchoring walks the box across the screen on every step of a chain of
+     * references. IntelliJ replaces the content in place, and the position is the one thing a reader has
+     * already got used to.</p>
+     *
+     * <p>The dragged size is kept for the same reason — it was chosen to read this with, and the next
+     * page is more of the same reading. {@link #show} deliberately forgets it, because that is a fresh
+     * open.</p>
+     *
+     * <p>The problem band goes, though. An intention belongs to the code under the caret, not to the
+     * class you just navigated to, so carrying it across would offer "Split into declaration and
+     * assignment" on {@code java.lang.StringBuffer}.</p>
+     */
+    public void navigateTo(SymbolInfo symbol) {
+        if (symbol == null) return;
+        // NEXT FRAME, NOT NOW -- and this is the engine's own rule rather than caution: a widget must
+        // never rebuild the elements it is being clicked on. `fill` replaces the whole body, including
+        // the very `UIText` whose press is still being dispatched, and light dismiss runs AFTER that
+        // dispatch: it asks the press target for its innermost popover ancestor, a detached element has
+        // none, and the popup was therefore read as "pressed from outside" and closed on the click that
+        // asked it to navigate.
+        //
+        // The old code survived that by accident. It called `show()`, which bumps `popoverShowSeq`, and
+        // light dismiss spares anything shown during the press -- so re-anchoring was doubling as life
+        // support, and removing it exposed a defect that had always been there. Bumping the counter from
+        // here would work and would be a lie: nothing is being shown. Deferring is the honest fix, and a
+        // frame is invisible to a reader.
+        pendingNavigation = symbol;
+        UIWindow window = getAttachedWindow();
+        if (window == null) return;
+        window.registerTicker(deltaSeconds -> {
+            applyPendingNavigation();
+            return false;
+        });
+    }
+
+    /** Swaps in the page {@link #navigateTo} asked for, a frame after the press that asked. */
+    private void applyPendingNavigation() {
+        SymbolInfo symbol = pendingNavigation;
+        pendingNavigation = null;
+        // CLOSED IN THE MEANTIME? A press outside, or Escape, between the click and this frame.
+        if (symbol == null || !isOpen()) return;
+        this.shown = symbol;
+        removeClass(PROBLEM_ONLY_CLASS);
+        definition.setDisplayed(true);
+        setProblem(List.of(), List.of());
+        fill(symbol);
+        // THE BOX IS A DIFFERENT SIZE NOW, and it is still anchored: a shorter page would leave it
+        // hanging below its anchor and a taller one would run off the bottom. `reposition` is the only
+        // thing allowed to write left/top on an anchored popup.
+        reposition();
+    }
+
     public void show(UIWindow window, SymbolInfo symbol, float x, float y, float lineHeight) {
         this.shown = symbol;
         // RESTORED, because showProblems changes both and this popup is one reused instance -- a hover in
@@ -902,6 +963,14 @@ public final class DocumentationPopup extends Popover {
     }
 
     private void fill(SymbolInfo symbol) {
+        // BACK TO THE TOP, because this is a different document. Scroll is view state, and the view is
+        // now showing something else -- following a `@see` from halfway down one comment opened the next
+        // one already scrolled, with its declaration cut off above the fold, which reads as the popup
+        // having rendered wrongly rather than as it having kept a position.
+        //
+        // IMMEDIATE rather than animated: there is nothing on screen yet to animate from, and a smooth
+        // scroll would be a visible slide on every open.
+        scroller.setScrollImmediate(0f, 0f);
         // THE OWNER'S ICON, NOT THE SYMBOL'S. This band names what DECLARES the symbol, so it must be
         // drawn as that -- a method shows the class it is on, a class shows its package. Drawing the
         // symbol's own kind put a method glyph next to the class name, which says the wrong thing

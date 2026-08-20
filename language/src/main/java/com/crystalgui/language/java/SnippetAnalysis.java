@@ -98,6 +98,27 @@ final class SnippetAnalysis implements Analysis {
         return inScript(unit.resolveAt(wrapped.toUnitOffset(offset)));
     }
 
+    /**
+     * Forwarded <b>unchanged</b> — a name is not a position, so there is nothing to translate.
+     *
+     * <p>Which is exactly why it was missing. Every other method here earns its override by moving an
+     * offset between the author's document and the wrapped one; this one has no offset in it and no
+     * offset out, so there was nothing to write and it was not written. The bridge's
+     * {@code default … { return null; }} then answered for it, and a default is an answer chosen for
+     * someone who never saw the question.</p>
+     *
+     * <p><b>The failure was file-shaped and read as random.</b> A snippet — a bare body, which is what
+     * a Java script is — gets wrapped in this class; a file with a real class declaration does not. So
+     * every documentation link worked in {@code Main.java} and none worked in a one-line scratch file,
+     * with the same popup, the same emitter and the same engine underneath. Three rounds went to the
+     * press, the anchor and the href before the difference turned out to be which of two Analysis
+     * objects was answering.</p>
+     */
+    @Override
+    public SymbolInfo describe(String name) {
+        return unit.describe(name);
+    }
+
     @Override
     public TypeRef expectedTypeAt(int offset) {
         return unit.expectedTypeAt(wrapped.toUnitOffset(offset));
