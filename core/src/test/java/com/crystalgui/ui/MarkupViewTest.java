@@ -90,15 +90,16 @@ public class MarkupViewTest extends UiTestBase {
         assertEquals("expected exactly one code band, got " + code, 1, code.size());
 
         TextRange band = code.get(0);
-        // ONE SPACE EACH SIDE, INSIDE THE BAND. That is the chip's padding: `HighlightStyle` permits
+        // ONE NON-BREAKING SPACE EACH SIDE, INSIDE THE BAND. That is the chip's padding: `HighlightStyle` permits
         // horizontal padding and it paints, but it inflates the rect without moving a glyph, so the plate
         // grew outwards and swallowed the single space either side of the chip. Real advance is the only
         // padding layout will honour -- so the band covering exactly ` null ` is the assertion, and a band
-        // covering `null` would mean the plate is back to touching its neighbours.
+        // covering `null` would mean the plate is back to touching its neighbours. NON-BREAKING,
+        // or the leading pad wraps to the previous line and paints a stub of plate dangling off it.
         assertEquals("the band does not cover the padded chip: <" + rendered + "> band=" + band,
-                " null ", rendered.substring(band.start(), band.end()));
+                " null ", rendered.substring(band.start(), band.end()));
         assertTrue("the word itself was altered, not merely padded: <" + rendered + ">",
-                rendered.contains(" null "));
+                rendered.contains(" null "));
     }
 
     /**

@@ -244,10 +244,27 @@ public final class JavaDocs {
                     return "<code>" + escape(subject) + "</code>";
                 case TagElement.TAG_LINK:
                 case TagElement.TAG_LINKPLAIN:
-                case TagElement.TAG_SEE:
-                    // THE TARGET IS CARRIED even though nothing navigates yet. It is the whole content of
-                    // the tag, and dropping it here means re-resolving it later from a rendered label.
-                    return "<a href=\"java:" + escape(subject) + "\">" + escape(subject) + "</a>";
+                case TagElement.TAG_SEE: {
+                    // A LINK IS A REFERENCE AND AN OPTIONAL LABEL, and the label is what a reader wants.
+                    //
+                    // `{@link java.lang.Character Character}` has both, and flattening the fragments into
+                    // one string showed BOTH -- `java.lang.Character Character`, the qualified name with
+                    // its own short form stuck to the end. It reads as a rendering fault because it is
+                    // one; IntelliJ shows `Character`, which is what the author asked for by writing a
+                    // label at all.
+                    //
+                    // The first fragment is the reference and the rest are the label, which is javadoc's
+                    // own grammar rather than a guess. The reference still goes in the href: it is the
+                    // half that can be resolved, and dropping it means re-deriving a target from display
+                    // text later.
+                    List<?> parts = tag.fragments();
+                    String reference = parts.isEmpty() ? "" : flatten(parts.subList(0, 1), false);
+                    String label = parts.size() > 1
+                            ? flatten(parts.subList(1, parts.size()), false) : "";
+                    String shown = label.isEmpty() ? reference : label;
+                    if (shown.isEmpty()) return null;
+                    return "<a href=\"java:" + escape(reference) + "\">" + escape(shown) + "</a>";
+                }
                 case TagElement.TAG_VALUE:
                     return "<code>" + escape(subject) + "</code>";
                 default:

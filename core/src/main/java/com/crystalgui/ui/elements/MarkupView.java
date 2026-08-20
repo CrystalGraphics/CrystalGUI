@@ -363,7 +363,7 @@ public class MarkupView extends UIElement {
 
         for (MarkupSpan span : spans) {
             int start = assembled.length();
-            // A CHIP'S PADDING IS A SPACE INSIDE THE BAND, not `padding` on the highlight.
+            // A CHIP'S PADDING IS A NON-BREAKING SPACE INSIDE THE BAND, not `padding` on the highlight.
             //
             // `HighlightStyle` does permit horizontal padding and it does paint -- but it inflates the
             // painted RECT and cannot move a glyph, which is the whole reason CSS forbids box properties
@@ -373,11 +373,20 @@ public class MarkupView extends UIElement {
             //
             // A space inside the band is the same padding with real advance behind it, so layout pushes
             // the neighbours away exactly as an HTML `<code>` box would -- one space outside the plate as
-            // the gap, one inside it as the padding. An ordinary U+0020 rather than a thin space: the
-            // bundled faces are already known to be missing U+2026 and U+22EE, and a chip that draws tofu
-            // on the one machine without the glyph is a worse trade than three pixels of width.
+            // the gap, one inside it as the padding.
+            //
+            // U+00A0 AND NOT U+0020, because the padding is part of the chip and a line may not break
+            // inside one. With an ordinary space it could and did: the leading pad wrapped to the end of
+            // the previous line and painted its band there, so a chip at the start of a line left a stub
+            // of plate dangling off the line above it. `CgLineBreaker` asks `BreakIterator.getLineInstance`
+            // for the root locale, which is UAX #14, which classes U+00A0 as GL (Glue) -- so the break
+            // moves to the real space BEFORE the chip and the whole chip travels together, which is what
+            // it should have done from the start.
+            //
+            // Not a thin space: the bundled faces are already known to be missing U+2026 and U+22EE, and
+            // U+00A0 is Latin-1 rather than a typographic extra, so it is present wherever a space is.
             boolean chip = span.has(MarkupSpan.CODE);
-            assembled.append(chip ? " " + span.text() + " " : span.text());
+            assembled.append(chip ? "\u00A0" + span.text() + "\u00A0" : span.text());
             int end = assembled.length();
             if (end == start) continue;
             TextRange range = TextRange.of(start, end);
