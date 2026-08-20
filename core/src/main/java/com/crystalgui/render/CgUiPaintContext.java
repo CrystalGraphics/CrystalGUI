@@ -117,7 +117,7 @@ public final class CgUiPaintContext {
      * <p>Failures are swallowed. A shader that will not compile is a real problem and the first real
      * frame will report it in the ordinary way; a warm-up must not be the thing that fails a context.</p>
      */
-    public void warmMaterials() {
+    public void warmMaterials(int width, int height) {
         for (CgMaterial material : new CgMaterial[] { boxModelMaterial, curveMaterial, layerBlitMaterial }) {
             try {
                 material.bind();
@@ -125,6 +125,17 @@ public final class CgUiPaintContext {
             } catch (RuntimeException | LinkageError ignored) {
                 // See the note above: an optimisation that fails is silent.
             }
+        }
+        // AND ONE EMPTY FRAME, which is the larger half. Compiling the shaders left the first real
+        // beginFrame at 252 ms against 285 -- so most of that cost was never the GLSL: it is the quad
+        // renderer's VAO and instance buffer, the text renderer, the scissor stack and the GL state
+        // save, all built on first use inside this call. A frame that draws nothing pays for all of
+        // them and leaves nothing on screen.
+        try {
+            beginFrame(Math.max(1, width), Math.max(1, height));
+            endFrame();
+        } catch (RuntimeException | LinkageError ignored) {
+            // As above.
         }
     }
 
