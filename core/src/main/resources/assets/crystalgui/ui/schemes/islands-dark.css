@@ -131,6 +131,17 @@ theme {
 
     --syntax-comment: #7A7E85;
     --syntax-comment-doc: #5F826B;
+    /* DOC COMMENTS, from `ij-scheme/Islands Dark.xml` — DEFAULT_DOC_COMMENT_TAG,
+     * DEFAULT_DOC_COMMENT_TAG_VALUE and DEFAULT_DOC_MARKUP, verbatim. (That file's values are identical
+     * to `Dark.icls`, which is what makes Islands IntelliJ's current default rather than a variant.) */
+    --syntax-doc-tag: #67A37C;
+    --syntax-doc-value: #ABADB3;
+    --syntax-doc-markup: #68A67E;
+    /* The FACE, from the same file's FONT_TYPE (0/1/2/3 = plain/bold/italic/both). DEFAULT_DOC_COMMENT is FONT_TYPE 2 and the tag sets none, so it reads in the
+     * comment’s own italic and is told apart by colour — #67A37C against a #5F826B body. */
+    --syntax-doc-tag-style: italic;
+    --syntax-doc-tag-weight: normal;
+    --syntax-doc-value-style: normal;
 
     /* Grey until a semantic layer can tell these apart — see the header. A grammar sees an identifier. */
     --syntax-variable: #BCBEC4;

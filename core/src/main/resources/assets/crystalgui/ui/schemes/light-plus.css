@@ -91,6 +91,16 @@ theme {
     --syntax-constant-builtin: #0000FF;
     --syntax-comment: #008000;
     --syntax-comment-doc: #008000;
+    /* DOC COMMENTS, from VS Code Light+ for the reason Dark+ takes its own: this is VS Code's palette
+     * rather than IntelliJ's. Tag #0000FF is Light+'s `storage`, the name after it #001080 is its
+     * `variable`, and #800000 is what Light+ paints an HTML tag. */
+    --syntax-doc-tag: #0000FF;
+    --syntax-doc-value: #001080;
+    --syntax-doc-markup: #800000;
+    /* The FACE, from the same file's FONT_TYPE (0/1/2/3 = plain/bold/italic/both). Light+’s own answer, matching Dark+: colour alone, no face. */
+    --syntax-doc-tag-style: normal;
+    --syntax-doc-tag-weight: normal;
+    --syntax-doc-value-style: normal;
     --syntax-variable: #001080;
     --syntax-variable-builtin: #0000FF;
     --syntax-variable-parameter: #001080;

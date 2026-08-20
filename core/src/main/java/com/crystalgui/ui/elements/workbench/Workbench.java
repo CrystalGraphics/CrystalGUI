@@ -15,6 +15,7 @@ import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.diagnostic.DiagnosticSet;
 import com.crystalgui.text.cursor.IndentationProvider;
 import com.crystalgui.text.fold.FoldingRangeProvider;
+import com.crystalgui.text.syntax.DocComments;
 import com.crystalgui.text.syntax.LanguageRegistry;
 import com.crystalgui.text.syntax.SyntaxTokenizer;
 import com.crystalgui.ui.UIElement;
@@ -437,7 +438,11 @@ public class Workbench extends UIElement {
             created.setLanguage(entry.language());
             // A FRESH tokenizer per document -- the interface exists for implementations holding a parse
             // tree per file, and sharing one would cross-contaminate them.
-            SyntaxTokenizer tokenizer = entry.newTokenizer();
+            // AND ITS DOC COMMENTS READ. A grammar reports `/** ... */` as ONE comment token, because to
+            // a parser that is what it is -- the tags and the HTML inside are a convention rather than
+            // syntax. `DocComments` is the lexing pass that reads them, composed here rather than inside
+            // `newTokenizer` so the registry keeps answering with what was registered.
+            SyntaxTokenizer tokenizer = DocComments.refining(entry.newTokenizer());
             created.setTokenizer(tokenizer);
             // AND IF IT CAN FOLD, IT FOLDS. A tokenizer holding a parse tree already knows where a block
             // begins and ends, which is strictly better than guessing from indentation -- and asking it

@@ -1,6 +1,7 @@
 package com.crystalgui.ui.text;
 
 import com.crystalgui.text.Rope;
+import com.crystalgui.text.syntax.DocComments;
 import com.crystalgui.text.syntax.Language;
 import com.crystalgui.text.syntax.LanguageRegistry;
 import com.crystalgui.text.syntax.SyntaxToken;
@@ -70,7 +71,11 @@ public final class SyntaxHighlighting {
      */
     public static List<SyntaxToken> tokenize(String source, @Nullable Language language) {
         if (source == null || source.isEmpty() || language == null) return List.of();
-        SyntaxTokenizer tokenizer = LanguageRegistry.forLanguage(language).newTokenizer();
+        // REFINED, exactly as the editor's is: a `<pre>` sample containing a doc comment should read
+        // the same in a popup as it does in the file it came from, and the alternative is a second
+        // vocabulary that drifts.
+        SyntaxTokenizer tokenizer =
+                DocComments.refining(LanguageRegistry.forLanguage(language).newTokenizer());
         try {
             return tokenizer.tokenize(Rope.of(source), 0, source.length());
         } finally {

@@ -103,6 +103,21 @@ theme {
 
     --syntax-comment: #8C8C8C;
     --syntax-comment-doc: #8C8C8C;
+    /* DOC COMMENTS, from `ij-scheme/Light.icls` — the light pair of the Islands table, since
+     * IntelliJ ships no separate Islands Light and its Light scheme is what that theme resolves to.
+     *
+     * Its DEFAULT_DOC_COMMENT_TAG sets no foreground at all, only an underline, so the tag would inherit
+     * the comment colour and be told apart by an effect this engine does not draw on a highlight. The
+     * value is IntelliJ's own #3D3D3D; the tag takes the comment's own colour a step darker so it is
+     * still a tag, and the markup follows the same blue relationship the dark tables use. */
+    --syntax-doc-tag: #6E6E6E;
+    --syntax-doc-value: #3D3D3D;
+    --syntax-doc-markup: #1E789B;
+    /* The FACE, from the same file's FONT_TYPE (0/1/2/3 = plain/bold/italic/both). Light.icls gives its TAG_VALUE FONT_TYPE 2, which is how that table sets a name apart
+     * where the dark ones use a brighter colour. */
+    --syntax-doc-tag-style: italic;
+    --syntax-doc-tag-weight: normal;
+    --syntax-doc-value-style: italic;
 
     /* Neutral until a semantic layer can separate them — see islands-dark.css. */
     --syntax-variable: #000000;
