@@ -846,4 +846,135 @@ public class JavaAnalysisTest {
             analysis.close();
         }
     }
+
+    /**
+     * <b>A reference inside a doc comment is coloured by what it RESOLVES to.</b>
+     *
+     * <p>IntelliJ draws {@code @see Stream} with the interface colour and {@code @see String} with the
+     * class colour, and a lexer structurally cannot: it sees a word after a tag. {@code DocComments}
+     * gives every one of them the same flat {@code comment.doc.value}, which is the right answer for a
+     * lexer and the wrong one on screen.</p>
+     *
+     * <p>What was missing was not a resolver. JDT parses a doc comment into a {@code Javadoc} node with
+     * real bindings on its names, because {@code EcjOptions} enables doc-comment support — but
+     * {@code new ASTVisitor()} means {@code new ASTVisitor(false)}, so {@code Javadoc.accept0} never
+     * offered its tags to the visitor and this pass reported <em>nothing at all</em> over a comment.
+     * One constructor argument; the bindings were there the whole time.</p>
+     */
+    @Test
+    public void aTypeReferenceInADocCommentIsColouredByItsResolvedKind() {
+        String source = ""
+                + "import java.util.List;\n"
+                + "public class Script {\n"
+                + "    /**\n"
+                + "     * Uses {@link List} and a {@link String} too.\n"
+                + "     *\n"
+                + "     * @throws IllegalStateException when bad\n"
+                + "     */\n"
+                + "    void run() { }\n"
+                + "}\n";
+        SourceAnalyzer.Analysis analysis = analyze(source);
+        try {
+            List<SyntaxToken> tokens = analysis.semanticTokens();
+            assertEquals("an interface reference in a doc comment must take the interface colour",
+                    "type.interface", captureOver(tokens, source, source.indexOf("{@link List}") + 7));
+            assertEquals("a class reference in the same comment must NOT take the interface colour",
+                    "type", captureOver(tokens, source, source.indexOf("{@link String}") + 7));
+            assertEquals("a thrown type is a reference like any other",
+                    "type", captureOver(tokens, source, source.indexOf("IllegalStateException")));
+        } finally {
+            analysis.close();
+        }
+    }
+
+    /**
+     * <b>A {@code @param}'s subject names a declaration; it does not reference one.</b>
+     *
+     * <p>It resolves — to the parameter binding — so turning doc tags on coloured it
+     * {@code variable.parameter}, which is a true statement and the wrong colour: IntelliJ draws it as
+     * DOC_COMMENT_TAG_VALUE, and semantic tokens REPLACE grammar tokens where they overlap, so the
+     * lexer's {@code comment.doc.value} would have lost the character. This is the one exclusion, and
+     * it is stated as "what a {@code @param} names" rather than as a list of tags that may resolve —
+     * every other tag's argument genuinely is a reference.</p>
+     */
+    @Test
+    public void aParamTagsSubjectKeepsTheDocValueColour() {
+        String source = ""
+                + "public class Script {\n"
+                + "    /**\n"
+                + "     * Does a thing.\n"
+                + "     *\n"
+                + "     * @param count how many\n"
+                + "     */\n"
+                + "    void run(int count) { }\n"
+                + "}\n";
+        SourceAnalyzer.Analysis analysis = analyze(source);
+        try {
+            List<SyntaxToken> tokens = analysis.semanticTokens();
+            int inComment = source.indexOf("@param count") + "@param ".length();
+            assertNull("the parameter name after @param must be left to the lexer",
+                    captureOver(tokens, source, inComment));
+
+            // The declaration itself is still coloured -- this suppresses a doc comment, not a parameter.
+            int inSignature = source.indexOf("int count") + "int ".length();
+            assertEquals("variable.parameter", captureOver(tokens, source, inSignature));
+        } finally {
+            analysis.close();
+        }
+    }
+
+    /**
+     * <b>An unresolvable reference in a doc comment is not marked unresolved.</b>
+     *
+     * <p>The mark says a name will not compile, which is not a thing a comment can do. Javadoc's own
+     * reference rules are stricter than the language's and JDT declines shapes a reader would accept,
+     * so leaving the mark on would draw red over working prose — and this file's standing rule is that
+     * a missed underline is invisible while a false one is a red mark on correct code.</p>
+     *
+     * <p>The same name in CODE is still marked, which is what makes this a scope rather than a
+     * weakening.</p>
+     */
+    @Test
+    public void anUnresolvableNameIsMarkedInCodeAndNotInADocComment() {
+        String source = ""
+                + "public class Script {\n"
+                + "    /**\n"
+                + "     * See {@link NoSuchTypeHere} for details.\n"
+                + "     */\n"
+                + "    void run() { NoSuchTypeHere x = null; }\n"
+                + "}\n";
+        SourceAnalyzer.Analysis analysis = analyze(source);
+        try {
+            List<SyntaxToken> tokens = analysis.semanticTokens();
+            int inComment = source.indexOf("{@link NoSuchTypeHere}") + "{@link ".length();
+            int inCode = source.indexOf("NoSuchTypeHere x");
+
+            assertFalse("a doc comment must not be marked unresolved",
+                    hasCapture(tokens, inComment, "unresolved"));
+            assertTrue("an unresolvable name in code is still marked",
+                    hasCapture(tokens, inCode, "unresolved"));
+        } finally {
+            analysis.close();
+        }
+    }
+
+    /** The capture of the kind token covering {@code offset}, or null. Ignores the second-pass marks. */
+    private static String captureOver(List<SyntaxToken> tokens, String source, int offset) {
+        for (SyntaxToken token : tokens) {
+            if (offset < token.start() || offset >= token.end()) continue;
+            if ("unresolved".equals(token.name()) || "deprecated".equals(token.name())) continue;
+            return token.name();
+        }
+        return null;
+    }
+
+    /** Whether any token covering {@code offset} carries this capture. */
+    private static boolean hasCapture(List<SyntaxToken> tokens, int offset, String capture) {
+        for (SyntaxToken token : tokens) {
+            if (offset >= token.start() && offset < token.end() && capture.equals(token.name())) {
+                return true;
+            }
+        }
+        return false;
+    }
 }

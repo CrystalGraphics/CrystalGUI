@@ -18,6 +18,11 @@ import com.crystalgui.ui.text.TextRange;
 import org.junit.Before;
 import org.junit.Test;
 
+
+import com.crystalgui.style.StyleGroup;
+
+import com.crystalgui.text.diagnostic.Diagnostic;
+
 import java.util.List;
 import java.util.Set;
 
@@ -497,5 +502,134 @@ public class DocumentationPopupTest extends UiTestBase {
 
     private List<TextRange> ranges(String name) {
         return popup.definitionElement().highlights().get(name);
+    }
+
+    /**
+     * <b>Following a link replaces the content without moving the box.</b>
+     *
+     * <p>The method this replaces read the caret's anchor and re-showed there, under a comment saying
+     * it did the opposite ("where the popup already is, not where the caret is"). So every link walked
+     * the popup back to the caret — nowhere near the link that had just been pressed, and you have to
+     * move the pointer onto a link to press it, so a chain of references marched the box across the
+     * screen a step at a time.</p>
+     */
+    @Test
+    public void navigatingToALinkKeepsThePopupWhereItIs() {
+        show(field("entryPoint", "Method", SymbolModifier.STATIC));
+        float left = popup.getRuntimeCache().getX();
+        float top = popup.getRuntimeCache().getY();
+        assertTrue("the fixture never placed the popup", left != 0f || top != 0f);
+
+        popup.navigateTo(new SymbolInfo("StringBuffer", SymbolKind.CLASS, TypeRef.of("StringBuffer"),
+                "java.lang", null, Set.of(), null));
+        for (int i = 0; i < 2; i++) window.updateWithoutPainting();
+
+        assertEquals("the box moved horizontally when following a link",
+                left, popup.getRuntimeCache().getX(), 0.5f);
+        assertEquals("the box moved vertically when following a link",
+                top, popup.getRuntimeCache().getY(), 0.5f);
+    }
+
+    /**
+     * <b>An intention does not travel with the reader.</b>
+     *
+     * <p>The band belongs to the code under the caret — "Split into declaration and assignment" is about
+     * the line you hovered, not about {@code java.lang.StringBuffer}. Carrying it across would offer a
+     * fix for one thing while describing another, which is worse than showing no fix at all.</p>
+     */
+    @Test
+    public void navigatingDropsTheProblemBand() {
+        show(field("entryPoint", "Method", SymbolModifier.STATIC));
+        popup.setProblem(
+                List.of(Diagnostic.error(new TextPoint(0, 0), new TextPoint(0, 5), "cannot resolve")),
+                List.of());
+        for (int i = 0; i < 2; i++) window.updateWithoutPainting();
+        assertTrue("the fixture never showed a problem band", problemRowHeight() > 0f);
+
+        popup.navigateTo(new SymbolInfo("StringBuffer", SymbolKind.CLASS, TypeRef.of("StringBuffer"),
+                "java.lang", null, Set.of(), null));
+        for (int i = 0; i < 2; i++) window.updateWithoutPainting();
+
+        assertEquals("the problem band followed the reader to an unrelated class",
+                0f, problemRowHeight(), 0.001f);
+    }
+
+    /** The measured height of the problem/intention row — zero when it is not being drawn. */
+    private float problemRowHeight() {
+        float tallest = 0f;
+        for (UIElement each : popup.querySelectorAll("." + DocumentationPopup.PROBLEM_CLASS)) {
+            tallest = Math.max(tallest, each.getRuntimeCache().getHeight());
+        }
+        return tallest;
+    }
+
+    /**
+     * <b>Navigating does not rebuild the popup during the press that asked for it.</b>
+     *
+     * <p>This is the engine's own rule — a widget must never rebuild the elements it is being clicked
+     * on — and here it is load-bearing for something a long way away. {@code fill} replaces the whole
+     * body, including the {@code UIText} whose press is still being dispatched; light dismiss runs
+     * <em>after</em> that dispatch and asks the press target for its innermost popover ancestor. A
+     * detached element has none, so the popup read as "pressed from outside" and closed itself on the
+     * very click that asked it to navigate — then stayed closed.</p>
+     *
+     * <p>It had always been broken and was masked: the old path called {@code show()}, which bumps
+     * {@code popoverShowSeq}, and light dismiss spares anything shown during the press. Re-anchoring was
+     * doubling as life support.</p>
+     *
+     * <p>Asserted as "nothing changed yet, then it did" rather than by driving a real press, because
+     * {@code lightDismiss} is reached from {@code emitMouseDown} and a test dispatching straight at an
+     * element skips it entirely — it would pass against the broken version.</p>
+     */
+    @Test
+    public void navigatingDefersTheRebuildByAFrame() {
+        show(field("entryPoint", "Method", SymbolModifier.STATIC));
+        assertFalse("the fixture already mentions the target", popupMentions("StringBuffer"));
+
+        popup.navigateTo(new SymbolInfo("StringBuffer", SymbolKind.CLASS, TypeRef.of("StringBuffer"),
+                "java.lang", null, Set.of(), null));
+        assertFalse("the body was rebuilt inside the call -- the element being pressed is destroyed"
+                        + " under its own dispatch, and light dismiss then closes the popup",
+                popupMentions("StringBuffer"));
+
+        for (int i = 0; i < 2; i++) window.updateWithoutPainting();
+        assertTrue("the deferred navigation never arrived", popupMentions("StringBuffer"));
+    }
+
+    /** Whether any text in the popup contains this word. */
+    private boolean popupMentions(String word) {
+        for (UIElement each : popup.querySelectorAll("text")) {
+            if (each instanceof UIText && ((UIText) each).getText().contains(word)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * <b>The width floor governs how the popup OPENS, and stops governing once the reader drags it.</b>
+     *
+     * <p>{@code min-width: 420px} exists because the box is sized by its DECLARATION and the prose has
+     * no say: {@code public final class Main} is four words attached to eight paragraphs, so without a
+     * floor the popup opened at the width of those four words and broke every sentence three times.</p>
+     *
+     * <p>But the same floor also stopped a <em>drag</em> going narrower, which reads as the handle being
+     * broken on that axis — the height has no floor and went all the way down. A box that arrived narrow
+     * by accident and one somebody deliberately pulled narrow are different things, and
+     * {@code __user-sized-width__} is how the cascade tells them apart.</p>
+     */
+    @Test
+    public void theWidthFloorLiftsOnceTheReaderHasDraggedIt() {
+        show(field("entryPoint", "Method", SymbolModifier.STATIC));
+        assertTrue("the floor is not holding the popup open: " + popup.getRuntimeCache().getWidth(),
+                popup.getRuntimeCache().getWidth() >= 420f);
+
+        // What a drag does: write the width at INLINE, and record that the reader took the axis.
+        StyleGroup.inlinePipeline(popup.getStyle().getLayoutGroup(), l -> l.width(180f));
+        // Through UIElement, which DECLARES it: a package-private member is not inherited across
+        // packages, so it is not a member of DocumentationPopup at all.
+        ((UIElement) popup).markUserSized(true, false);
+        for (int i = 0; i < 3; i++) window.updateWithoutPainting();
+
+        assertEquals("the popup would not go below its own opening width",
+                180f, popup.getRuntimeCache().getWidth(), 1f);
     }
 }

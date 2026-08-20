@@ -1334,11 +1334,27 @@ documentationpopup {
      *
      * A minimum rather than a width, so a LONG declaration still drives the box wider; and a minimum
      * rather than the max the comment above rejects, because a floor cannot stop a drag from growing.
-     * It does stop a drag from going narrower, which is the intended half: a documentation popup below
-     * this width is not a smaller popup, it is an unreadable one. */
+     *
+     * IT APPLIES TO THE BOX THE POPUP CHOOSES FOR ITSELF, AND NOT TO ONE THE READER CHOSE -- see the
+     * rule below. This used to stop a drag going narrower too, on the reasoning that a documentation
+     * popup below this width is unreadable. That is true of a box that arrived narrow by accident and
+     * false of one somebody deliberately dragged: the height already resizes to nothing and nobody
+     * minds, because pulling an edge is a statement about what you want. */
     min-width: 420px;
     /* Over the completion popup's 900 -- Ctrl+Q with a list open should read over it, not under it. */
     z-index: 910;
+}
+
+/* THE FLOOR IS FOR AN AUTO-SIZED BOX ONLY. `UIResizer` adds this class as a drag writes the width, so
+ * the minimum above governs how wide the popup OPENS and stops governing the moment the reader takes
+ * hold of the edge. Without it the box could not be dragged below its own opening width, which reads as
+ * the resize handle being broken on that axis -- the height, which has no floor, went all the way down.
+ *
+ * A class rather than releasing the constraint in `UIResizer`: `resize` names `min-*`/`max-*` as its
+ * only constraints and the resizer re-applies them deliberately, so a leading edge can derive its
+ * origin. The cascade is where a constraint belongs. @see UIElement#USER_SIZED_WIDTH_CLASS */
+documentationpopup.__user-sized-width__ {
+    min-width: 0;
 }
 
 /* THE PROBLEM BAND — the message, then the one action worth showing without being asked.

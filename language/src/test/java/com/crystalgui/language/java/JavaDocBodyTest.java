@@ -13,9 +13,18 @@ import org.junit.Assume;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.concurrent.atomic.AtomicReference;
+
+import com.crystalgui.text.lang.Versioned;
+
+import com.crystalgui.text.lang.LanguageServices;
+
+import com.crystalgui.text.TextBuffer;
+
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -453,5 +462,167 @@ public class JavaDocBodyTest {
         } finally {
             analysis.close();
         }
+    }
+
+    /**
+     * <b>A link's target is qualified, because the popup that follows it has no imports.</b>
+     *
+     * <p>A javadoc reference is written against the package and imports of the file it appears in.
+     * {@code java.text.Collator} says {@code @see RuleBasedCollator} and means
+     * {@code java.text.RuleBasedCollator}; put the reference in the href exactly as written and
+     * {@code Resolver.describe} builds {@code class $Probe { RuleBasedCollator $x; }}, which resolves to
+     * nothing and is refused. The link is styled, hoverable, and does nothing — and it is most of the
+     * JDK, since almost no {@code @see} in it is written out in full.</p>
+     *
+     * <p>It looked like it worked because the fixtures were qualified. {@code @see java.util.List} is
+     * its own answer.</p>
+     */
+    @Test
+    public void anUnqualifiedReferenceIsLinkedByItsResolvedName() {
+        String source = ""
+                + "import java.util.List;\n"
+                + "public class Script {\n"
+                + "    /**\n"
+                + "     * Uses things.\n"
+                + "     *\n"
+                + "     * @see List\n"
+                + "     */\n"
+                + "    int rows() { return 1; }\n"
+                + "    int use() { return rows(); }\n"
+                + "}\n";
+        String docs = docAt(source, "rows();");
+        assertNotNull(docs);
+        assertTrue("the href must carry a name that resolves on its own, not the one the author"
+                        + " could write because of an import: <" + docs + ">",
+                docs.contains("java:java.util.List"));
+        // The reader still sees what the author wrote.
+        assertTrue("the LABEL should stay short: <" + docs + ">", docs.contains(">List<"));
+    }
+
+    /**
+     * <b>A generic reference is qualified by its ERASURE.</b>
+     *
+     * <p>{@code ITypeBinding.getQualifiedName()} answers {@code java.util.List<E>} for the generic
+     * declaration, and no probe can declare a field of that — so the qualification would have swapped
+     * one unfollowable link for another. The erasure also keeps the SOURCE spelling of a nested type,
+     * {@code java.util.Map.Entry} rather than the binary {@code Map$Entry}, which is the form the probe
+     * has to write down.</p>
+     */
+    @Test
+    public void aGenericReferenceIsQualifiedWithoutItsTypeArguments() {
+        String source = ""
+                + "import java.util.Map;\n"
+                + "public class Script {\n"
+                + "    /**\n"
+                + "     * Uses entries.\n"
+                + "     *\n"
+                + "     * @see Map.Entry\n"
+                + "     */\n"
+                + "    int rows() { return 1; }\n"
+                + "    int use() { return rows(); }\n"
+                + "}\n";
+        String docs = docAt(source, "rows();");
+        assertNotNull(docs);
+        assertTrue("a nested type must keep its source spelling: <" + docs + ">",
+                docs.contains("java:java.util.Map.Entry"));
+        assertFalse("type arguments must not reach the href: <" + docs + ">", docs.contains("<E>"));
+        assertFalse("the binary spelling cannot be declared by a probe: <" + docs + ">",
+                docs.contains("Map$Entry"));
+    }
+
+
+    /**
+     * <b>A documentation link works in a SCRIPT, not only in a file that declares a type.</b>
+     *
+     * <p>{@code JavaLanguageServices.analyse} branches on {@link ScriptPrelude#declaresType}: a file
+     * with a class is analysed as written, and a bare body — which is what a person writes in the Run
+     * panel — is wrapped in a prelude and every answer translated back through {@code SnippetAnalysis}.
+     * That class overrides each method that has an offset to move, and {@code describe} takes a NAME, so
+     * there was nothing to translate and nothing was written. The bridge's {@code default} then answered
+     * null for it.</p>
+     *
+     * <p><b>The symptom was file-shaped and read as random.</b> Every link worked in a file with a class
+     * declaration and none worked in a one-line scratch file, with the same popup, the same emitter and
+     * the same engine underneath — three rounds went to the press, the anchor and the href before the
+     * difference turned out to be which of two {@code Analysis} objects was answering.</p>
+     */
+    @Test
+    public void aScriptCanFollowADocumentationLink() {
+        TextBuffer buffer = new TextBuffer("String abc = \"ABC\";\n");
+        LanguageServices services = new JavaLanguageServices(
+                buffer, engine, null, "Script", HostClasspath.detect());
+        try {
+            AtomicReference<SymbolInfo> answered = new AtomicReference<>();
+            services.resolver().describe("java.text.Collator",
+                    (Versioned<SymbolInfo> v) -> answered.set(v.value()));
+            assertNotNull("a bare snippet answered nothing for a link every other file follows",
+                    answered.get());
+            assertEquals("Collator", answered.get().name());
+        } finally {
+            services.close();
+        }
+    }
+
+    /**
+     * <b>A long comment is rendered whole.</b>
+     *
+     * <p>There was a 4000-character cap, from when the popup was a fixed band of text rather than
+     * something scrollable and resizable. It cut RENDERED MARKUP, so the cut landed wherever 4000
+     * characters happened to fall — mid-tag as readily as mid-word — and handed the parser markup that
+     * does not close. {@code java.lang.Class} is the everyday case: its comment is several times the
+     * cap, so the nesting section ended in {@code , w…} and the rest was simply gone.</p>
+     */
+    @Test
+    public void aLongCommentIsNotTruncated() {
+        StringBuilder body = new StringBuilder();
+        for (int i = 0; i < 200; i++) {
+            body.append("     * Sentence number ").append(i)
+                .append(" of a comment that is comfortably past any cap.\n");
+        }
+        String source = ""
+                + "public class Script {\n"
+                + "    /**\n"
+                + body
+                + "     * @since 1.0\n"
+                + "     */\n"
+                + "    int rows() { return 1; }\n"
+                + "    int use() { return rows(); }\n"
+                + "}\n";
+
+        String docs = docAt(source, "rows();");
+        assertNotNull(docs);
+        assertTrue("the comment was cut short: " + docs.length() + " characters",
+                docs.length() > 8000);
+        assertTrue("the last sentence is missing, so it was truncated",
+                docs.contains("Sentence number 199"));
+        assertFalse("an ellipsis means the cap is still there", docs.endsWith("\u2026"));
+        // The section table is emitted AFTER the description, so a cap would have taken it entirely.
+        assertTrue("the trailing section was lost with the truncation", docs.contains("Since:"));
+    }
+
+    /**
+     * <b>An author's link label may contain markup, and it must survive.</b>
+     *
+     * <p>{@code flatten} passes an author's HTML through verbatim — that is the design, their markup is
+     * the structure — so a label arrives here already rendered, and escaping it again turns it back into
+     * text. {@code {@linkplain Class#isHidden() <em>hidden</em>}} is the JDK's own spelling and drew as
+     * a literal {@code <em>hidden</em>}, angle brackets and all, mid-sentence.</p>
+     */
+    @Test
+    public void aLinkLabelKeepsItsOwnMarkup() {
+        String source = ""
+                + "public class Script {\n"
+                + "    /**\n"
+                + "     * A {@linkplain java.util.List <em>special</em> list} of things.\n"
+                + "     */\n"
+                + "    int rows() { return 1; }\n"
+                + "    int use() { return rows(); }\n"
+                + "}\n";
+
+        String docs = docAt(source, "rows();");
+        assertNotNull(docs);
+        assertTrue("the label's markup was escaped back into text: <" + docs + ">",
+                docs.contains("<em>special</em>"));
+        assertFalse("the angle brackets were escaped: <" + docs + ">", docs.contains("&lt;em&gt;"));
     }
 }
