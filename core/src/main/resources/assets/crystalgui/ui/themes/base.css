@@ -214,6 +214,41 @@ theme {
      * --tab-focused-bg, which is how you can tell, with two panels open, where a keystroke will land. */
     --list-selected-inactive-bg: var(--selection-inactive-bg);
 
+    /* MARKUP -- a rendered documentation body (`MarkupView`). Generic on purpose: a javadoc comment
+     * today, a JSDoc comment or a shader node's description on the same tokens.
+     *
+     * Inline code and a `<pre>` sample share one surface deliberately. They are the same thing at two
+     * scales -- a plate that says "this is code, not prose" -- and a theme that gave them different
+     * grounds would make a one-word chip and the block below it look unrelated.
+     *
+     * RAISED, and the first version was RECESSED on the reasoning that a code plate reads as set INTO the
+     * prose, the way a field does. The reasoning is fine and the arithmetic was not: a documentation popup
+     * is --surface-panel (#191A1C) and --surface-recessed is #131416, so the plate differed from the
+     * ground it sits on by SIX POINTS PER CHANNEL. It was not subtle, it was invisible -- and a code block
+     * nobody can see is worse than no plate at all, because the sample then runs into the prose around it
+     * with nothing to say where it starts. Raised is +18 and is what both reference renderers do: IntelliJ
+     * and VS Code each draw their code blocks LIGHTER than the body, not darker. */
+    --markup-bullet-fg: var(--fg-hint);
+    /* LIGHTER THAN THE BLOCK, and not for symmetry with it. A `<pre>` carries a hairline; an inline chip
+     * is a `::highlight()` band, and a band has no outline to draw -- `HighlightStyle` permits colour,
+     * weight, style and the decorations, and nothing box-shaped beyond the fill and its radius. So the
+     * chip has to do with fill alone what the block does with fill AND border, which means it needs more
+     * of it. Given the same --surface-raised as the block it was legible in a code sample and still almost
+     * invisible mid-sentence. --hover-bg is the system's existing name for a surface lifted a little for
+     * attention, which is what a chip is. */
+    --markup-code-bg: var(--hover-bg);
+    --markup-code-fg: var(--fg);
+    --markup-heading-fg: var(--fg);
+    --markup-link-fg: var(--link);
+    --markup-pre-bg: var(--surface-raised);
+    --markup-pre-fg: var(--fg);
+    /* The hairline round a `<pre>` sample. A border rather than more contrast: past a point, separating a
+     * block by making it lighter starts making it shout, and the reference renderers both stop at a modest
+     * fill plus an outline. */
+    --markup-pre-border: var(--border-base);
+    /* The rule down a blockquote's left edge -- a divider, which is what it is. */
+    --markup-quote-rule: var(--divider);
+
     --menu-accelerator: var(--fg-hint);
     --menu-arrow: var(--fg-secondary);
     /* THE BASE SURFACE, not the overlay one. A menu is chrome that opens over the workbench, and it reads

@@ -6,6 +6,7 @@ import com.crystalgui.language.engine.JavaEngine;
 import com.crystalgui.language.engine.bridge.SourceAnalyzer;
 import com.crystalgui.language.java.classpath.HostClasspath;
 import com.crystalgui.text.lang.SymbolInfo;
+import com.crystalgui.text.markup.MarkupParser;
 
 import org.junit.AfterClass;
 import org.junit.Assume;
@@ -101,11 +102,20 @@ public class JavaDocBodyTest {
     }
 
     /**
-     * <b>An inline tag renders as its subject.</b> {@code {@link List#add}} is information; the braces
-     * are markup for a renderer that does not exist yet, and showing them shows markup to a reader.
+     * <b>An inline tag renders as its subject, and the author's HTML survives to the parser.</b>
+     *
+     * <p>This asserted that {@code <b>} never reached the reader, and enforced it by stripping the tag
+     * here. It still never reaches the reader &mdash; one layer later. A doc comment's tags are the only
+     * structure it has, so the emitter passes them through and {@link MarkupParser} is what turns them
+     * into styled runs; stripping them here threw that structure away before anything could use it,
+     * which is what made the popup a wall of text.</p>
+     *
+     * <p>So the assertion is the <b>round trip</b>: the tag is present in what the emitter produces, and
+     * absent from what a reader is shown. Asserting only the first half would pass against an emitter
+     * that never resolved anything, and only the second against the stripping this replaced.</p>
      */
     @Test
-    public void inlineTagsBecomeTheirSubjectAndHtmlIsStripped() {
+    public void inlineTagsBecomeTheirSubjectAndTheAuthorsHtmlReachesTheParser() {
         String source = ""
                 + "public class Script {\n"
                 + "    /** Delegates to {@link #other}, and <b>never</b> returns {@code null}. */\n"
@@ -117,7 +127,94 @@ public class JavaDocBodyTest {
         assertNotNull(docs);
         assertTrue("the link's subject was dropped: <" + docs + ">", docs.contains("other"));
         assertTrue("the inline code was dropped: <" + docs + ">", docs.contains("null"));
-        assertTrue("HTML reached the reader: <" + docs + ">", !docs.contains("<b>"));
+        assertTrue("the author's emphasis was stripped before the parser could see it: <" + docs + ">",
+                docs.contains("<b>never</b>"));
+
+        String read = MarkupParser.parse(docs).text();
+        assertTrue("markup reached the reader: <" + read + ">", !read.contains("<b>"));
+        assertTrue("the emphasised word was lost with its tag: <" + read + ">", read.contains("never"));
+    }
+
+    /**
+     * <b>A tag whose subject IS its whole content gets no dangling separator.</b>
+     *
+     * <p>The dash separates a subject from a description — {@code name — the row's label}
+     * — and was written the moment the subject was seen, so {@code @author nobody} rendered as
+     * {@code author nobody —}: a separator pointing at nothing. It is now held back until
+     * something actually follows it.</p>
+     */
+    @Test
+    public void aTagWithNoDescriptionDoesNotTrailASeparator() {
+        String source = ""
+                + "public class Script {\n"
+                + "    /**\n"
+                + "     * Does a thing.\n"
+                + "     *\n"
+                + "     * @author nobody\n"
+                + "     * @param name the label\n"
+                + "     */\n"
+                + "    void act(String name) { }\n"
+                + "    void use() { act(\"x\"); }\n"
+                + "}\n";
+        String read = MarkupParser.parse(docAt(source, "act(\"x\")")).text();
+
+        assertTrue("the author tag lost its value: <" + read + ">", read.contains("nobody"));
+        assertTrue("a separator dangles after a tag with nothing after it: <" + read + ">",
+                !read.contains("nobody \u2014"));
+        assertTrue("the param lost the separator it genuinely needs: <" + read + ">",
+                read.contains("\u2014"));
+    }
+
+    /**
+     * <b>Block tags render in section order, not in the order they were written.</b>
+     *
+     * <p>Ported from IntelliJ's {@code JavaDocInfoGenerator}: deprecated, parameters, return, throws,
+     * since, author/version, the API tags, see-also, then anything unrecognised. A doc comment may
+     * write its tags in any order and plenty do, so emitting them as authored means two comments
+     * describing the same method lay out differently &mdash; which is what a reader uses position to
+     * avoid.</p>
+     *
+     * <p>The fixture writes them in exactly the wrong order, so a version that preserved source order
+     * would fail on every pair rather than by coincidence.</p>
+     */
+    @Test
+    public void blockTagsRenderInSectionOrderRatherThanSourceOrder() {
+        String source = ""
+                + "public class Script {\n"
+                + "    /**\n"
+                + "     * Adds a row.\n"
+                + "     *\n"
+                + "     * @see #clear\n"
+                + "     * @since 1.2\n"
+                + "     * @throws IllegalStateException when closed\n"
+                + "     * @return whether it fitted\n"
+                + "     * @param name the row's label\n"
+                + "     * @deprecated use the builder\n"
+                + "     */\n"
+                + "    boolean add(String name) { return true; }\n"
+                + "    boolean use() { return add(\"x\"); }\n"
+                + "    void clear() { }\n"
+                + "}\n";
+        String docs = docAt(source, "add(\"x\")");
+        assertNotNull(docs);
+
+        // Read positions off the RENDERED text rather than the markup, so the assertion survives a
+        // change to how a label is emitted -- it is the ordering that is being pinned, not the tags.
+        String read = MarkupParser.parse(docs).text();
+        int deprecated = read.indexOf("use the builder");
+        int param = read.indexOf("row's label");
+        int returns = read.indexOf("whether it fitted");
+        int throwsAt = read.indexOf("when closed");
+        int since = read.indexOf("1.2");
+        int see = read.indexOf("clear");
+
+        assertTrue("a section went missing entirely: <" + read + ">",
+                deprecated >= 0 && param >= 0 && returns >= 0 && throwsAt >= 0 && since >= 0 && see >= 0);
+        assertTrue("@deprecated did not lead: <" + read + ">", deprecated < param);
+        assertTrue("@param did not precede @return: <" + read + ">", param < returns);
+        assertTrue("@return did not precede @throws: <" + read + ">", returns < throwsAt);
+        assertTrue("@throws did not precede @since: <" + read + ">", throwsAt < since);
+        assertTrue("@since did not precede @see: <" + read + ">", since < see);
     }
 
     /**

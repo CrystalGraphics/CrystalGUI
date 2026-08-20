@@ -336,6 +336,15 @@ editor scheme's.
 | `--list-hover-bg` | `var(--hover-bg)` | base.css |
 | `--list-selected-bg` | `var(--selection-bg)` | base.css |
 | `--list-selected-inactive-bg` | `var(--selection-inactive-bg)` | base.css |
+| `--markup-bullet-fg` | `var(--fg-hint)` | base.css |
+| `--markup-code-bg` | `var(--hover-bg)` | base.css |
+| `--markup-code-fg` | `var(--fg)` | base.css |
+| `--markup-heading-fg` | `var(--fg)` | base.css |
+| `--markup-link-fg` | `var(--link)` | base.css |
+| `--markup-pre-bg` | `var(--surface-raised)` | base.css |
+| `--markup-pre-border` | `var(--border-base)` | base.css |
+| `--markup-pre-fg` | `var(--fg)` | base.css |
+| `--markup-quote-rule` | `var(--divider)` | base.css |
 | `--menu-accelerator` | `var(--fg-hint)` | base.css |
 | `--menu-arrow` | `var(--fg-secondary)` | base.css |
 | `--menu-bg` | `var(--surface-base)` | base.css |
@@ -607,4 +616,5 @@ editor scheme's.
 | `--warning` | `#CCA700` | crystal-dark.css |
 | `--warning-icon` | `#FFAF0F` | crystal-dark.css |
 | `--workbench-bg` | `var(--surface-base)` | base.css |
+
 <!-- TOKENS:END -->

@@ -217,6 +217,12 @@ final class HoverDocumentation {
      * apart. Escape and a press outside still close either, through the popover stacks.</p>
      */
     /** Forgets what hover opened, without touching a Ctrl+Q popup. */
+    /** Whether the popup has been pinned by a press — see {@code DocumentationPopup.isPinned()}. */
+    private boolean isPinned() {
+        DocumentationPopup popup = editor.documentationPopup();
+        return popup != null && popup.isOpen() && popup.isPinned();
+    }
+
     void forget() {
         shownFor = -1;
         grace = 0f;
@@ -231,6 +237,14 @@ final class HoverDocumentation {
 
     void tick(float deltaSeconds) {
         if (!enabled) return;
+
+        // PINNED: a press on the box took it out of the hover's hands entirely, so nothing here applies --
+        // not the grace, and not the rest timer either. Returning before the rest timer is the half that
+        // is easy to miss and matters more: there is ONE popup instance, so letting a new word win would
+        // not open a second box, it would repopulate the pinned one with a different symbol and yank it
+        // back to that word's anchor. The pin is released by hiding, which light dismiss, Escape and
+        // {@code closeQuickDocumentation} all still do.
+        if (isPinned()) return;
 
         // STICKY: the pointer being inside the popup is the one state where nothing should be counted.
         if (shownFor >= 0 && editor.documentationPopup() != null && editor.documentationPopup().isPointerOver()) {

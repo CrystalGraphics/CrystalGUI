@@ -5,6 +5,8 @@ import com.crystalgui.text.lang.Signature;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.text.lang.DeclarationSite;
 import com.crystalgui.text.lang.SymbolInfo;
+import com.crystalgui.text.markup.MarkupDocument;
+import com.crystalgui.text.markup.MarkupParser;
 import com.crystalgui.text.lang.SymbolKind;
 import com.crystalgui.text.lang.SymbolModifier;
 import com.crystalgui.text.lang.TypeRef;
@@ -12,6 +14,8 @@ import com.crystalgui.text.syntax.SyntaxToken;
 import com.crystalgui.ui.AnchoredPlacement;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
+import com.crystalgui.ui.elements.MarkupView;
+import com.crystalgui.ui.elements.Scroller;
 import com.crystalgui.ui.elements.Popover;
 import com.crystalgui.text.lang.CodeAction;
 import com.crystalgui.ui.elements.ScrollerView;
@@ -90,6 +94,16 @@ public final class DocumentationPopup extends Popover {
     public static final String DEFINITION_CLASS = "__doc-definition__";
     public static final String DEFINITION_BOX_CLASS = "__doc-definition-box__";
     public static final String BODY_CLASS = "__doc-body__";
+
+    /**
+     * On the popup while it is {@linkplain #isPinned() pinned}.
+     *
+     * <p>State the widget flips from its own listener, so a class rather than a pseudo-class — the
+     * engine re-evaluates a pseudo-class on its terms and a class on yours, and there is no
+     * {@code :pinned} to add. Nothing in the shipped sheet styles it; it is here so a theme <em>can</em>
+     * say the box is no longer a hover, which is a real thing to want to say.</p>
+     */
+    public static final String PINNED_CLASS = "__pinned__";
 
     /**
      * The scrolling region — everything except the quick-fix band at the top.
@@ -236,7 +250,17 @@ public final class DocumentationPopup extends Popover {
 
     private final UIElement footerEdit = new UIElement();
 
-    private final UIText body = new UIText("");
+    /**
+     * The prose band — <b>a {@link MarkupView}, not a text element</b>.
+     *
+     * <p>It was a {@code UIText} carrying whatever the engine reported, which worked only for as long as
+     * the engine reported plain text. {@code JavaDocs} now emits the author's own markup, because a doc
+     * comment's {@code <p>}, {@code <pre>} and {@code <li>} are the only structure it has and stripping
+     * them is what made this band a wall. Parsing it here rather than in the engine is deliberate: the
+     * engine's job ends at "what does this symbol say", and the same markup is what a JSDoc comment or a
+     * shader node's description would arrive as.</p>
+     */
+    private final MarkupView body = new MarkupView();
 
     /** @see #SCROLL_CLASS */
     private final ScrollerView scroller = new ScrollerView();
@@ -293,6 +317,17 @@ public final class DocumentationPopup extends Popover {
      */
     @Getter
     private boolean pointerOver;
+
+    /**
+     * -- GETTER --
+     *  Whether a press has <b>pinned</b> this popup — IntelliJ's behaviour, and two things at once.
+     *  <p>A pinned popup stops being a hover: it survives the pointer leaving the word it describes, and
+     *  it stops being re-anchored, because a press also begins a move. The two are one gesture and one
+     *  flag deliberately — a box you can drag but that vanishes when you reach past it, or one that
+     *  stays but snaps back to its anchor, is worse than neither.</p>
+     */
+    @Getter
+    private boolean pinned;
 
     public DocumentationPopup() {
         addClass(POPUP_CLASS);
@@ -390,6 +425,31 @@ public final class DocumentationPopup extends Popover {
         moreActions.onMouseDown.attachListener((element, event) -> {
             onMoreActions.emit();
             event.stopPropagation();
+        }, false, true);
+
+        // PRESS TO PIN, AND THE SAME PRESS BEGINS A MOVE. Target AND bubble, because the press lands on
+        // whatever is under it -- a paragraph, the owner row, the empty space beside the definition -- and
+        // this element is never that thing. `(false, false)` subscribes the target phase only, so the
+        // container would hear nothing at all.
+        //
+        // The three links above take their own presses and stop propagation, so they never reach here and
+        // a click on "More actions..." is still a click. The resizer and the scrollbars do NOT stop
+        // propagation, so they are excluded by hand below.
+        onMouseDown.attachListener((element, event) -> {
+            float rawX = event.getPosition().x();
+            float rawY = event.getPosition().y();
+            // A synthesized activation press (Space/Enter on a focused element) carries the cursor's
+            // position, which may be nowhere near this box. Honouring one would teleport it.
+            if (!isOpen() || !containsScreenPoint(rawX, rawY)) return;
+
+            // PINNED BY ANY PRESS ON THE BOX, including one aimed at a handle or a scrollbar. Dragging a
+            // corner to resize and then having the popup evaporate the moment the pointer leaves the word
+            // would make the resize pointless; scrolling it is even more plainly "I am reading this".
+            // Only the MOVE is excluded below -- the pin is about intent, the move is about which gesture.
+            pinned = true;
+            addClass(PINNED_CLASS);
+            if (ownsItsOwnPress(event.getTarget())) return;
+            beginMove(rawX, rawY);
         }, false, true);
 
         // ABOVE the owner, which is IntelliJ's order and is not arbitrary: the problem is why you looked,
@@ -734,9 +794,84 @@ public final class DocumentationPopup extends Popover {
         fill(symbol);
     }
 
+    /**
+     * Whether the press belongs to a part that will act on it itself.
+     *
+     * <p>The resize grabber and the scrollbars both start drags of their own and neither stops
+     * propagation, so without this a press on either would begin a move as well: dragging the corner
+     * would resize the box <em>and</em> slide it, and dragging the scrollbar would carry the whole popup
+     * with the thumb. They are excluded here rather than made to stop propagation, because both are
+     * shared widgets and every other consumer is relying on that press continuing to bubble.</p>
+     */
+    private boolean ownsItsOwnPress(@Nullable UIElement target) {
+        for (UIElement at = target; at != null && at != this; at = at.getParent()) {
+            // BY CLASS for the resizer, because `UIResizer` is package-private and cannot be named from
+            // here; by TYPE for the scroller, which is an ordinary public widget.
+            if (at.hasClass(UIElement.RESIZER_CLASS) || at instanceof Scroller) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Starts dragging the box, from a source that <b>does not move with it</b>.
+     *
+     * <p>{@code UIDragController} reports its delta through {@link UIElement#screenToLocal}, so the frame
+     * the delta is measured in is the drag <em>source</em>'s. Naming this popup as its own source would
+     * therefore measure each frame's movement in a frame that has already moved by it, which is the trap
+     * already recorded for a canvas pan: "a pan drag's source is the viewport, never the transformed
+     * plane". The parent is the frame this box is positioned inside and it stays still while the box
+     * travels, so the delta stays a delta.</p>
+     *
+     * <p>The move goes through {@link Popover#moveTo}, which is the one legal way to write
+     * {@code left}/{@code top} here: it hands ownership over from {@code AnchoredPlacement} rather than
+     * competing with it, so there is still exactly one writer. Writing the position directly would be
+     * overwritten by the next {@code reposition()} and the box would appear nailed down.</p>
+     */
+    private void beginMove(float rawX, float rawY) {
+        UIWindow window = getAttachedWindow();
+        UIElement frame = getParent();
+        if (window == null || frame == null) return;
+
+        float startLeft = getWindowX();
+        float startTop = getWindowY();
+        window.getInputHandler().getDragController().startDrag(frame, rawX, rawY,
+                (mouseX, mouseY, startX, startY, deltaX, deltaY) ->
+                        moveTo(startLeft + deltaX, startTop + deltaY));
+    }
+
+    /**
+     * Every re-show clears the pin, and both entry points are overridden because there are two.
+     *
+     * <p>Popover.showAt and showFor already clear their own freely-positioned flag so a box you moved does
+     * not open in that spot forever; the pin is the same fact one layer up and has to travel with it.
+     * Missing one would leave a popup that is drawn at a fresh anchor while still refusing to close on
+     * hover-off -- the two halves of pinning disagreeing about whether it is still pinned.</p>
+     */
+    @Override
+    public Popover showAt(float rootX, float rootY, @Nullable UIElement invoker) {
+        unpin();
+        return super.showAt(rootX, rootY, invoker);
+    }
+
+    /** @see #showAt */
+    @Override
+    public Popover showFor(UIElement anchorElement, @Nullable UIElement invoker) {
+        unpin();
+        return super.showFor(anchorElement, invoker);
+    }
+
+    private void unpin() {
+        pinned = false;
+        removeClass(PINNED_CLASS);
+    }
+
     @Override
     public Popover hide() {
         shown = null;
+        // UNPINNED. This is one reused instance, so a pin left behind would make the NEXT hover -- a
+        // different symbol, at a different anchor -- open already pinned and already detached from its
+        // anchor, which reads as the popup being stuck.
+        unpin();
         return super.hide();
     }
 
@@ -763,13 +898,16 @@ public final class DocumentationPopup extends Popover {
         String docs = symbol.documentation();
         // HIDDEN, not empty. An empty band is a gap under the definition that looks like a rendering
         // failure; no band is a popup that is simply shorter.
-        bodyShown = docs != null && !docs.isBlank();
+        // PARSED FIRST, and emptiness is asked of the DOCUMENT rather than the string. A comment that is
+        // all markup and no words -- an empty `<p>`, a stray tag -- is a non-blank string that renders to
+        // nothing, and testing the string would leave the separator drawn above an empty band.
+        body.setDocument(docs == null ? MarkupDocument.EMPTY : MarkupParser.parse(docs));
+        bodyShown = !body.isEmpty();
         // THE RULE FOLLOWS THE BAND IT DIVIDES. Left visible with no body under it, it draws a line
         // across the bottom of the popup that reads as a band which failed to load -- the same reason
         // the body itself hides rather than showing empty.
         separator.setDisplayed(bodyShown);
         body.setDisplayed(bodyShown);
-        body.setText(docs == null ? "" : docs);
         renderFooter(symbol);
     }
 

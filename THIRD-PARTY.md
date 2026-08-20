@@ -140,6 +140,7 @@ wrong by someone moving fast:
 | Source | Licence | What is permitted |
 |---|---|---|
 | VS Code / Monaco, CodeMirror 6 | **MIT** | **Port the code.** Attribute in the class javadoc, naming the source file |
+| **IntelliJ Community** | **Apache 2.0** | **Port the code**, with attribution and the statement of modifications § 4(b) asks for. What is ported today is *behaviour rather than source*: `JavaDocs` follows `JavaDocInfoGenerator`’s block-tag section order (deprecated → params → return → throws → since → author/version → the API tags → see-also → unrecognised last) and its inline-tag mapping, each named at the rule it decides. The file-type icons in the table above are the same licence arriving as assets |
 | **Zed** | **GPL-3.0** | **Read for shape only.** Copying it would impose GPL on this repository. `Rope`/`TextSummary` take `SumTree`'s *design*; not a line of its code |
 
 ## Trademarks
