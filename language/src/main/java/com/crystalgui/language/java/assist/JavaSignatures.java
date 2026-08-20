@@ -704,9 +704,37 @@ public final class JavaSignatures {
     @Nullable
     public String documentationOf(@Nullable IBinding binding) {
         String own = docTextOf(binding);
-        if (own != null) return own;
+        if (own != null) return spliceInheritedDoc(own, binding);
         if (!(binding instanceof IMethodBinding)) return null;
         return inheritedDocOf((IMethodBinding) binding);
+    }
+
+    /**
+     * Replaces every {@code {@inheritDoc}} in a comment with the text it is asking for.
+     *
+     * <p>The <b>bare</b> case — a method with no comment at all — is handled above and is the
+     * one that matters most: an overriding method usually carries {@code @Override} and nothing else, so
+     * without it a large fraction of methods render empty. This is the other case, where an author wrote
+     * their own prose <em>and</em> asked for the inherited text at a particular point in it. Java's own
+     * tooling and IntelliJ both honour it; until now it rendered as nothing, so a comment reading
+     * "{@code {@inheritDoc} Additionally, …}" lost its first half silently.</p>
+     *
+     * <p><b>The inherited text is stripped of its own markers rather than resolved recursively.</b> A
+     * supertype's comment may contain the tag too, and each hop would need its own walk from a different
+     * binding — which terminates, since {@code MAX_DOC_HOPS} bounds it, but produces a comment
+     * assembled from three levels of a hierarchy for a hover. One level is what a reader asked for.</p>
+     */
+    @Nullable
+    private String spliceInheritedDoc(String own, @Nullable IBinding binding) {
+        if (!own.contains(JavaDocs.INHERIT_DOC)) return own;
+        String inherited = binding instanceof IMethodBinding
+                ? inheritedDocOf((IMethodBinding) binding) : null;
+        String text = inherited == null ? "" : inherited.replace(JavaDocs.INHERIT_DOC, "");
+        String spliced = own.replace(JavaDocs.INHERIT_DOC, text).trim();
+        // A COMMENT THAT WAS ONLY THE TAG, with nothing above it to inherit, is not an empty comment --
+        // it is a comment with nothing to say, and the popup hides a blank body rather than drawing a
+        // gap under the declaration. Null is how that is spelled everywhere else here.
+        return spliced.isEmpty() ? null : spliced;
     }
 
     /** How far up a hierarchy to look for an inherited comment. Deeper than any real API, cheaper than a search. */

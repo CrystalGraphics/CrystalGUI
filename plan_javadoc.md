@@ -60,7 +60,7 @@ plain text, so there is nowhere for structure to survive even if the parser kept
 | 3 | **DONE** Inline `{@code}` | tinted box around `String`, `"abc"` | indistinguishable from prose |
 | 4 | **DONE** Paragraphs | blank-line separated | one wall |
 | 5 | **DONE** Lists | bullet and indent | a bare newline |
-| 6 | **PART** `{@link}` | coloured and clickable | plain subject text |
+| 6 | **DONE** `{@link}` | coloured and clickable | plain subject text |
 
 ### B. The signature
 
@@ -436,62 +436,44 @@ the feature is worse than none.
 
 ## 6. What is left
 
-Twelve of the thirteen audit rows are shipped, one is half shipped, and two of §4's three questions
-are still open. Each remaining item is blocked on the same kind of thing — something the engines do
-not yet expose — rather than on rendering work.
+Thirteen of thirteen audit rows are shipped. **One item remains**, and it is the one that was always
+going to be last: JavaScript has no documentation at all.
 
-### 6.1 Row 6: a link is a gesture, not yet a destination
-
-The near half is done: `UIText.offsetAt` resolves a point to a source character, `MarkupView` retains
-each run's link spans and emits `onLinkActivated` with the raw `href`, `DocumentationPopup` forwards it,
-and a link is styled and hit-testable. What a link cannot do is go anywhere.
-
-`Resolver` offers `resolveAt(offset)`, `expectedTypeAt(offset)` and `membersOf(type, offset)` —
-**nothing by name** — so no consumer can turn `java:java.util.List` into a `SymbolInfo`, and
-navigating a doc link means showing that element's documentation. The missing piece is one SPI method:
-
-```java
-void describe(String qualifiedName, Consumer<Versioned<SymbolInfo>> answer);
-```
-
-Implementable Java-side by the probe-unit trick `InteropResolver.describeMember` already uses — it
-analyses `class $Probe { <fqn> $x; }` and reads the binding back — so the engine work is small and
-the seam is the decision. Deliberately not invented while building the gesture: emitting a signal an
-editor cannot act on is honest, and a half-resolver would not be.
-
-### 6.2 `{@inheritDoc}` inside a comment
-
-The half that matters most works: a method with **no comment at all** inherits its supertype's,
-breadth-first, superclass before interfaces (`JavaSignatures.documentationOf`) — without which a
-large fraction of methods render empty and the feature reads as broken rather than as the method having
-nothing to say.
-
-The tag written *inside* a comment, mixing the author's own prose with the inherited text, is not
-honoured: it renders as its own subject like any other unrecognised inline tag. Doing it means resolving
-the supertype's comment at the point the tag appears and splicing, which is `JavaDocInfoGenerator`'s
-recursive `generateValue` path — the one part of that emitter this port skipped.
-
-### 6.3 JavaScript gets the renderer and none of the emitter
+### 6.1 JavaScript gets the renderer and none of the emitter
 
 Only the Java engine calls `withDocumentation`. `RhinoJsDoc` is "a tag grammar, not a documentation
 renderer" by its own first line, and the JS side forwards a *Java* symbol's documentation through
 `InteropResolver` while producing none of its own — so hovering a documented JavaScript function
 shows a declaration and nothing under it.
 
-The renderer and the model need no change, which is the whole point of them being language-neutral.
-What is missing is a JSDoc emitter, and **JSDoc is Markdown rather than HTML** — so it is a second
-parser feeding the same `MarkupDocument`, not a second renderer. `MarkupParser` stays as it is.
+The renderer, the model, the link gesture and `Resolver.describe` are all language-neutral and need no
+change; that is the whole point of them. What is missing is a **JSDoc emitter**, and JSDoc is
+**Markdown** rather than HTML — so it is a second parser feeding the same `MarkupDocument`, not a
+second renderer. `MarkupParser` stays as it is.
 
-### 6.4 Closed since the audit
+### 6.2 Two known partials, neither blocking
 
-- **Row 7 is retired**, not implemented — its premise was a misreading of one example. See the log.
-- **How the model crosses the bridge** is decided by what shipped: the engine emits markup as a
-  *string* and the popup parses it, so `SymbolInfo.documentation()` stayed a `String` and
-  `com.crystalgui.text.lang` gained nothing. That was the second of the two options and the one that
-  keeps the SPI small.
+**A member reference resolves to its owning type.** `{@link List#add}` opens `List`'s documentation,
+which is related and is not what was asked. A member needs a probe that CALLS it so overload resolution
+picks one — `InteropResolver.describeMember` builds exactly that shape and is child-side, so it
+cannot be reached from the Java engine and has to be written again there. A bare `#member`, meaning "on
+the class this comment is in", answers nothing: resolving it needs the asker's enclosing declaration,
+which nothing passes.
+
+**`{@inheritDoc}` splices one level.** A supertype's comment may contain the tag too, and resolving that
+recursively would assemble a hover out of three levels of a hierarchy. One level is what a reader asked
+for; the marker is stripped from the inherited text rather than resolved again.
+
+### 6.3 Closed since the audit
+
+- **Row 6** is done: `UIText.offsetAt` resolves a press to a run, `MarkupView` emits the target,
+  `Resolver.describe(name)` turns it into a symbol and the popup navigates to it.
+- **Row 7 is retired**, not implemented — its premise was a misreading of one example.
+- **Row 12** ships as a per-theme override rather than a system token.
+- **How the model crosses the bridge** is decided by what shipped: markup crosses as a *string* and the
+  popup parses it, so `SymbolInfo.documentation()` stayed a `String`.
 - **The inert `@type` patterns** are fixed by per-pattern predicate lifting, which was never a
-  documentation problem — the editor was affected identically and only looked right because
-  semantic tokens replaced the grammar's guess.
+  documentation problem.
 
 ---
 
@@ -560,3 +542,41 @@ it was written. The class exists; the cursor never gets that far.
 This is not documentation-specific. The editor was affected identically and only looked right because the
 Java engine's semantic tokens replace the grammar's guess — which is why it surfaced in a popup that
 has no engine.
+
+
+---
+
+### Following a link, and inheriting inside a comment
+
+**`Resolver.describe(name, answer)`** is the SPI method every other entry point could not stand in for:
+they all resolve from an OFFSET, because they are all about a document, and `{@link java.util.List}`
+names its target outright with no position anywhere meaning it. Default answers nothing, so JavaScript
+and the engineless tier need no change and an unanswered link stays exactly as inert as it was.
+
+The Java side is a **probe unit** — `class $Probe { <name> $x; }` — which is the same trick
+`InteropResolver` uses to describe a Java type for JavaScript, and for the same reason: nothing can hand
+JDT a name and get a binding, but everything can hand it a file. `resolveAt` is then asked at the LAST
+SEGMENT's first character, because a qualified name's earlier segments resolve to packages and offset
+zero of `java.util.List` describes `java`.
+
+**JDT RECOVERS AN UNKNOWN NAME INTO A PLAUSIBLE BINDING**, which is the trap here. `no.such.Type` comes
+back as a `CLASS` named `Type` in a container `no.such` — so neither the kind nor the shape of the
+answer distinguishes it from a real one, and the first version happily described a class nobody has.
+The discriminator is the probe's own diagnostics: it declares exactly one thing, so any error in it is
+about that thing. It matters because the failure is silent and subtractive — a link to a missing
+class would replace what you were reading with a popup showing its own last segment and nothing else.
+
+**`{@inheritDoc}` inside a comment** is a marker the emitter writes and `JavaSignatures` fills, because
+the two halves live in different places: `JavaDocs` renders ONE comment and the tag asks for a DIFFERENT
+one, whose supertypes only the signature walk knows how to find.
+
+That marker exposed a real bug one layer down. `flatten` ended with **`String.trim()`, which removes
+every character <= U+0020 — control codes included** — so the leading `\u0001` was eaten
+whenever a comment OPENED with `{@inheritDoc}`, which is the commonest way to write one. The marker
+survived as `inheritDoc\u0001`, matched nothing, and rendered its own name to the reader. `strip()`
+asks `Character.isWhitespace`, which U+0001 is not. `render` already used `stripTrailing()`, so nothing
+new was asked of the toolchain — the two spellings had simply never been compared.
+
+And the test needle repeated a trap the sibling test documents in a comment: `impl.read()` lands on
+`impl` and resolves the VARIABLE, whose documentation is legitimately null, so the walk under test never
+ran and the failure looked like the feature.
