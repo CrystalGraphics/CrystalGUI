@@ -7,6 +7,7 @@ import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.lang.CodeAction;
 import com.crystalgui.text.lang.CodeActionProvider;
 import com.crystalgui.text.lang.DeclarationSite;
+import com.crystalgui.text.lang.Resolver;
 import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
@@ -434,9 +435,55 @@ final class EditorLanguageFeatures {
      * first appeared.</p>
      */
     private DocumentationPopup ensureDocPopup() {
-        if (docPopup == null) docPopup = new DocumentationPopup();
+        if (docPopup == null) {
+            docPopup = new DocumentationPopup();
+            // ONCE, at construction, because it is the popup's own lifetime and not a per-show fact --
+            // unlike the code language beside it, which follows the editor and is refreshed every time.
+            docPopup.onLinkActivated.connect(this::followDocumentationLink);
+        }
         docPopup.setCodeLanguage(editor.language());
         return docPopup;
+    }
+
+    /**
+     * Follows a {@code {@link}} pressed in the documentation — the popup navigates to what it names.
+     *
+     * <p>IntelliJ's behaviour, and the reason a doc link goes here rather than to go-to-definition: a
+     * reference in a comment is usually to something you want to <em>read about</em>, not somewhere you
+     * want the caret. The declaration is still one press away, from the footer pencil, once you are
+     * looking at it.</p>
+     *
+     * <h3>The target is the engine's to interpret</h3>
+     *
+     * <p>{@code java:} is what {@code JavaDocs} writes; the rest is whatever that language calls the
+     * thing. Nothing here parses it beyond stripping the scheme, because a JSDoc emitter will write its
+     * own references and this method should not have to learn each one — {@link Resolver#describe}
+     * is the seam that knows.</p>
+     *
+     * <p>Silence is the ordinary answer for a name nothing on the classpath has, and it is the RIGHT one:
+     * a link that opens an empty popup is worse than one that does nothing, because the empty popup
+     * replaces what you were reading.</p>
+     */
+    private void followDocumentationLink(String target) {
+        if (target == null || editor.languageServices() == null) return;
+        int scheme = target.indexOf(':');
+        String name = scheme < 0 ? target : target.substring(scheme + 1);
+        if (name.isEmpty()) return;
+
+        UIWindow window = editor.getAttachedWindow();
+        if (window == null) return;
+        // WHERE THE POPUP ALREADY IS, not where the caret is. The box is being read and may have been
+        // dragged somewhere deliberate; re-anchoring it to the caret on every link would walk it back
+        // across the screen mid-sentence.
+        float[] anchor = editor.anchorInWindow(editor.getCaret());
+        if (anchor == null) return;
+
+        editor.languageServices().resolver().describe(name, answer -> {
+            if (answer == null || answer.value() == null) return;
+            UIWindow live = editor.getAttachedWindow();
+            if (live == null) return;
+            ensureDocPopup().show(live, answer.value(), anchor[0], anchor[1], anchor[2]);
+        });
     }
 
     /** Closes the documentation popup if it is open. */

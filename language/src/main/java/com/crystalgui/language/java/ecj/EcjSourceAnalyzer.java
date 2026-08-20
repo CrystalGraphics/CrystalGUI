@@ -62,6 +62,9 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
+import javax.annotation.Nullable;
+
+import java.util.function.Function;
 import java.util.Map;
 import java.util.Set;
 import com.crystalgui.language.engine.bridge.Analysis;
@@ -128,8 +131,14 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
         // THE SAME CLASSPATH, handed on rather than re-derived: a signature quoted out of a source
         // archive has to resolve against what this parse resolved against, or the binding keys the two
         // are matched by would not be the same strings. @see AttachedSources
+        // AND HOW TO ASK ABOUT A NAME THIS UNIT NEVER MENTIONS -- a documentation link's target. The
+        // same classpath and release, so the answer resolves against what this parse resolved against.
+        // A probe built by `describeName` gets no describer of its own, which is what stops a link
+        // inside a probe's own documentation from starting another probe.
+        boolean probe = "$Probe".equals(className);
         return new EcjAnalysis(unit, source, version, releaseLevel,
-                AttachedSources.forClasspath(classpath), keep[0]);
+                AttachedSources.forClasspath(classpath), keep[0],
+                probe ? null : name -> describeName(name, classpath, releaseLevel));
     }
 
     /**
@@ -277,6 +286,62 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
     }
 
     /** One resolved file, held on the engine's side. */
+    /**
+     * What a qualified name refers to — a documentation link's target, resolved.
+     *
+     * <p><b>A probe unit</b>, which is the same trick {@code InteropResolver} uses to describe a Java
+     * type for JavaScript and for the same reason: nothing can hand JDT a name and get a binding, but
+     * everything can hand it a file. {@code class $Probe { <name> $x; }} declares a field of the type in
+     * question, and asking the resulting analysis about the type's own name is a question it can answer.
+     * The unlikely names are IntelliJ's own trick for the same problem.</p>
+     *
+     * <p><b>A member reference resolves to its owning type today.</b> {@code List#add} answers with
+     * {@code List}, which is related and is not what was asked; a member needs a probe that CALLS it, so
+     * that overload resolution picks one — {@code InteropResolver.describeMember} builds exactly that
+     * and is child-side, so it cannot be reached from here. Stated rather than silently rounded off: a
+     * link to a member opening its type's documentation is a useful answer and a partial one, and the
+     * increment that finishes it is a second probe shape rather than new machinery.</p>
+     *
+     * <p>A reference with no type at all — a bare {@code #member}, meaning "on the class this comment
+     * is in" — answers nothing. Resolving it needs the enclosing declaration, which is the asker's
+     * context rather than the name's, and no caller passes it yet.</p>
+     */
+    @Nullable
+    private SymbolInfo describeName(String name, List<String> classpath, int releaseLevel) {
+        if (name == null) return null;
+        String bare = name.trim();
+        int hash = bare.indexOf('#');
+        if (hash == 0) return null;
+        if (hash > 0) bare = bare.substring(0, hash);
+        if (bare.isEmpty() || !bare.matches("[\\w.$]+")) return null;
+
+        String probe = "class $Probe { " + bare + " $x; }";
+        try (Analysis analysis = analyze("$Probe", probe, classpath, releaseLevel, 0L)) {
+            // AT THE LAST SEGMENT'S FIRST CHARACTER. `resolveAt` wants a position inside the NAME, and a
+            // qualified name's earlier segments resolve to packages -- asking at offset zero of
+            // `java.util.List` describes `java`, which is a real answer to a question nobody asked.
+            int lastDot = bare.lastIndexOf('.');
+            int at = probe.indexOf(bare) + (lastDot < 0 ? 0 : lastDot + 1);
+            // A PROBE THAT DID NOT COMPILE RESOLVED NOTHING, and that is the only reliable way to ask.
+            // JDT RECOVERS an unknown qualified name into a plausible binding rather than failing --
+            // `no.such.Type` comes back as a CLASS named `Type` in a container `no.such`, so neither the
+            // kind nor the shape of the answer distinguishes it from a real one. The probe declares
+            // exactly one thing, so any error in it is about that thing.
+            //
+            // It matters because the alternative is silent: a link to a class nobody has would open a
+            // popup showing its own last segment and nothing else, replacing whatever was being read
+            // with strictly less than was already there.
+            for (Diagnostic problem : analysis.diagnostics()) {
+                if (problem.severity() == DiagnosticSeverity.ERROR) return null;
+            }
+            return analysis.resolveAt(at);
+        } catch (Exception unresolvable) {
+            // A name that does not resolve is the ordinary case for a link into a class nobody has on the
+            // classpath, not an error worth failing a hover over.
+            return null;
+        }
+    }
+
     private static final class EcjAnalysis implements Analysis {
 
         private final long version;
@@ -308,8 +373,24 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
         /** The classpath the unit's bindings resolve through — released in {@link #close()}, not before. */
         private INameEnvironment environment;
 
+        /**
+         * How to describe a name this unit never mentions — see {@code EcjSourceAnalyzer.describeName}.
+         *
+         * <p>A function rather than a back-reference to the analyzer, because that is the whole of what is
+         * needed and an analysis holding its analyzer is a lifetime question nobody asked. Null on the
+         * paths that build an analysis without one, which answer nothing rather than throwing.</p>
+         */
+        private final Function<String, SymbolInfo> describer;
+
         EcjAnalysis(CompilationUnit unit, String source, long version, int releaseLevel,
                     AttachedSources attached, INameEnvironment environment) {
+            this(unit, source, version, releaseLevel, attached, environment, null);
+        }
+
+        EcjAnalysis(CompilationUnit unit, String source, long version, int releaseLevel,
+                    AttachedSources attached, INameEnvironment environment,
+                    Function<String, SymbolInfo> describer) {
+            this.describer = describer;
             this.environment = environment;
             this.unit = unit;
             this.source = source == null ? "" : source;
@@ -759,6 +840,11 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
         private static String methodCapture(SimpleName name, IMethodBinding method) {
             if (name.getParent() instanceof MethodDeclaration) return SymbolKind.METHOD.captureName();
             return Modifier.isStatic(method.getModifiers()) ? "function.static" : "function.call";
+        }
+
+        @Override
+        public SymbolInfo describe(String name) {
+            return describer == null ? null : describer.apply(name);
         }
 
         @Override

@@ -214,7 +214,12 @@ public final class JavaDocs {
             first = false;
             previousWasText = isText;
         }
-        return out.toString().trim();
+        // STRIP, NOT TRIM. `trim()` removes every character <= U+0020, control codes included, so it ate
+        // the leading half of INHERIT_DOC whenever a comment OPENED with `{@inheritDoc}` -- which is the
+        // commonest way to write one. The marker survived as `inheritDoc`, matched nothing, and
+        // rendered its own name to the reader. `strip()` asks `Character.isWhitespace`, which U+0001 is
+        // not; `render` already uses `stripTrailing()`, so nothing new is required of the toolchain.
+        return out.toString().strip();
     }
 
     private static boolean needsSpace(StringBuilder out) {
@@ -230,6 +235,9 @@ public final class JavaDocs {
         }
         if (fragment instanceof TagElement) {
             TagElement tag = (TagElement) fragment;
+            // BEFORE the empty check, because this is the one inline tag whose whole content is its
+            // absence: `{@inheritDoc}` has no fragments, so it would be dropped as an empty tag.
+            if (TagElement.TAG_INHERITDOC.equals(tag.getTagName())) return INHERIT_DOC;
             String subject = flatten(tag.fragments(), false);
             if (subject.isEmpty()) return null;
             String name = tag.getTagName();
@@ -278,6 +286,21 @@ public final class JavaDocs {
         }
         return null;
     }
+
+    /**
+     * Where an {@code {@inheritDoc}} stood, for whoever can resolve it.
+     *
+     * <p><b>A marker rather than the text</b>, because this class renders one comment and the tag asks
+     * for a different one. Resolving it needs the binding's supertypes, which is
+     * {@code JavaSignatures}' walk and not something a {@code Javadoc} node can answer — so the
+     * emitter marks the spot and the caller that already knows how to find an inherited comment fills
+     * it. Splitting it the other way would mean handing this class a binding it has no other use for.</p>
+     *
+     * <p>{@code U+0001} for the same reason a placeholder path uses it: it is legal in no real doc
+     * comment, so the substitution cannot collide with something an author wrote. {@code U+0000} is
+     * refused outright by other parts of this codebase, which is why it is not that one.</p>
+     */
+    public static final String INHERIT_DOC = "\u0001inheritDoc\u0001";
 
     /** Makes text safe to put inside emitted markup — the four that would otherwise re-parse. */
     private static String escape(String text) {

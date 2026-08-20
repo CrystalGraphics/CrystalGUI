@@ -15,6 +15,7 @@ import org.junit.Test;
 
 import java.util.List;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -163,6 +164,84 @@ public class JavaDocBodyTest {
                 !read.contains("nobody \u2014"));
         assertTrue("the param lost the separator it genuinely needs: <" + read + ">",
                 read.contains("\u2014"));
+    }
+
+    /**
+     * <b>{@code @inheritDoc} <b>inside</b> a comment splices the supertype's text in place.</b>
+     *
+     * <p>Distinct from the bare case, where a method has no comment at all and inherits the whole of
+     * one. Here the author wrote their own prose <em>and</em> asked for the inherited text at a point
+     * in it, which used to render as nothing — so the comment lost the half it had asked for,
+     * silently, while still looking like a working feature.</p>
+     */
+    @Test
+    public void inheritDocInsideACommentSplicesTheSupertypesText() {
+        String source = ""
+                + "public class Script {\n"
+                + "    interface Source {\n"
+                + "        /** Reads the next row. */\n"
+                + "        String read();\n"
+                + "    }\n"
+                + "    static class Impl implements Source {\n"
+                + "        /** {@inheritDoc} Blocks until one arrives. */\n"
+                + "        public String read() { return \"\"; }\n"
+                + "    }\n"
+                + "    String use(Impl impl) { return impl.read(); }\n"
+                + "}\n";
+        // THE NEEDLE IS THE CALL AND NOT THE RECEIVER -- `impl.read()` lands on `impl` and resolves the
+        // VARIABLE, whose documentation is legitimately null, so the walk under test never runs. The
+        // sibling override test records the same trap; this one repeated it within the hour.
+        String read = MarkupParser.parse(docAt(source, "read(); }")).text();
+
+        assertTrue("the inherited sentence was not spliced in: <" + read + ">",
+                read.contains("Reads the next row"));
+        assertTrue("the overriding method lost its own prose: <" + read + ">",
+                read.contains("Blocks until one arrives"));
+        assertTrue("the marker leaked to the reader: <" + read + ">",
+                !read.contains("inheritDoc"));
+    }
+
+    /**
+     * <b>A qualified name resolves to a symbol without any position meaning it.</b>
+     *
+     * <p>What a documentation link needs, and what every other {@code Resolver} method cannot give:
+     * {@code {@link java.util.List}} names its target outright and there is no offset in any open file
+     * that means it. Without this the link was styled, hit-testable and inert.</p>
+     *
+     * <p>The documentation is asserted as well as the name, because resolving the type and then
+     * describing it poorly is the failure that looks like success — a popup that opens on a real
+     * symbol with nothing under it.</p>
+     */
+    @Test
+    public void aQualifiedNameCanBeDescribedWithoutAnOffset() {
+        SymbolInfo described = describe("java.util.List");
+
+        assertNotNull("a qualified name on the classpath described nothing", described);
+        assertEquals("List", described.name());
+        assertNotNull("the described symbol carried no documentation", described.documentation());
+    }
+
+    /**
+     * A name nothing has answers nothing.
+     *
+     * <p>Which is the right answer rather than a gap: a link that opens an EMPTY popup is worse than one
+     * that does nothing, because the empty popup replaces what was being read.</p>
+     */
+    @Test
+    public void anUnknownQualifiedNameDescribesNothing() {
+        assertNull(describe("no.such.Type"));
+    }
+
+    /** What the engine says a name refers to, with no offset involved. */
+    private static SymbolInfo describe(String name) {
+        String source = "public class Script {\n    void run() { }\n}\n";
+        SourceAnalyzer.Analysis analysis = engine.analyzer().analyze(
+                "Script", source, HostClasspath.detect(), engine.releaseLevel(), 1L);
+        try {
+            return analysis.describe(name);
+        } finally {
+            analysis.close();
+        }
     }
 
     /**

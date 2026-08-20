@@ -625,6 +625,16 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
         }
 
         @Override
+        public void describe(String name, Consumer<Versioned<SymbolInfo>> answer) {
+            Analysis analysis = current;
+            if (analysis == null || name == null || name.isEmpty()) {
+                answer.accept(Versioned.<SymbolInfo>none(buffer.version()));
+                return;
+            }
+            answer.accept(Versioned.of(analysis.version(), analysis.describe(name)));
+        }
+
+        @Override
         public void expectedTypeAt(int offset, Consumer<Versioned<TypeRef>> answer) {
             Analysis analysis = current;
             if (analysis == null) {

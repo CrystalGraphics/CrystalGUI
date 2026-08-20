@@ -61,6 +61,26 @@ public interface Resolver {
     };
 
     /**
+     * What a <b>name</b> refers to — the one question here that is not about a position.
+     *
+     * <p>Every other method resolves from an offset, because every other caller is looking at a document.
+     * A documentation link is not: {@code {@link java.util.List}} names its target outright, and there is
+     * no position in any open file that means it. Following one means showing that element's
+     * documentation, which needs a {@link SymbolInfo} the caller cannot get any other way — so the
+     * link was styled, hit-testable and inert until this existed.</p>
+     *
+     * <p><b>A default that answers nothing</b>, because most engines cannot do this and a language with
+     * no engine certainly cannot. An unanswered link stays inert, which is exactly what it was.</p>
+     *
+     * @param name what the language calls the thing — a qualified type name for Java, possibly with a
+     *             {@code #member} suffix. Interpreting it is the engine's business: only the engine knows
+     *             what its own references look like.
+     */
+    default void describe(String name, Consumer<Versioned<SymbolInfo>> answer) {
+        answer.accept(Versioned.none(0));
+    }
+
+    /**
      * What the name at {@code offset} refers to — hover and go-to-definition both ask this.
      *
      * @param offset a UTF-16 offset into the document; anywhere within the name, not only its first
