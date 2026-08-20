@@ -109,6 +109,9 @@ public final class JavaLanguage {
         // on the engine having opened: source attachment is the editor's, not the compiler's.
         JdkSourceCommands.register(CommandRegistry.global());
 
+        // AND WARM THE ENGINE, off this thread. @see #warm
+        warm(classpath);
+
         // AND THAT JAVA CAN RUN. The Run panel is written against ScriptRuntime and finds its runtimes
         // here rather than by asking this class -- so a second language contributes the same way and the
         // panel is not edited. The cache root is the workbench's to choose, which is why this is a
@@ -135,6 +138,52 @@ public final class JavaLanguage {
         return engine != null;
     }
 
+
+    /**
+     * <b>One throwaway analysis, on a daemon thread, so the first real one is not the first one.</b>
+     *
+     * <h3>Measured, not assumed</h3>
+     *
+     * <p>ECJ's first {@code analyze} costs <b>515 ms</b> and its second costs <b>11 ms</b> — that is class
+     * loading and JIT, paid once per process by whoever asks first. In a Minecraft client the one who
+     * asks first is a restored editor tab, on the client thread, during the first frame after F6: a
+     * measured 970 ms of a four-second freeze, spent by a user who pressed a key rather than by a game
+     * that was starting anyway.</p>
+     *
+     * <p>So it is paid here instead, where nothing is waiting for it. The cost does not move to a
+     * different visible place — it moves to a thread nobody is watching, and it overlaps whatever the
+     * game does next.</p>
+     *
+     * <h3>A daemon thread rather than the scheduler</h3>
+     *
+     * <p>The same choice, for the same reason, that {@code PlatformMappings.startLazily} makes:
+     * {@code JobScheduler} is drained by {@code UIWindow.paintFrame}, and there is no window yet when a
+     * language registers. A job submitted here would sit in the queue until the very frame it exists to
+     * make cheaper. Daemon, because a warm-up must never be the reason a game cannot exit.</p>
+     *
+     * <p>Failures are swallowed on purpose and deliberately not logged at warn: this is an optimisation,
+     * and an engine that cannot analyse a trivial class here will say so loudly enough the first time a
+     * real file asks it.</p>
+     */
+    private static void warm(List<String> classpath) {
+        JavaEngine ready = engine;
+        if (ready == null) return;
+        Thread worker = new Thread(() -> {
+            try {
+                // NO CLASSPATH RESOLUTION WANTED, just the compiler's own machinery -- a source naming
+                // nothing outside java.lang loads the parser, the resolver and the binding stack, which
+                // is where the 515 ms is. Passing the real classpath would also warm the type index, and
+                // that is a much larger and more speculative thing to do on somebody's behalf.
+                ready.analyzer().analyze("Warm", "final class Warm { void f() { int i = 0; } }",
+                        java.util.Collections.<String>emptyList(), ready.releaseLevel(), 0L).close();
+            } catch (Throwable ignored) {
+                // See the note above: an optimisation that fails is silent.
+            }
+        }, "crystalgui-java-warm");
+        worker.setDaemon(true);
+        worker.setPriority(Thread.MIN_PRIORITY);
+        worker.start();
+    }
 
     private static void openEngine() {
         if (engine != null) return;

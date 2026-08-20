@@ -101,6 +101,32 @@ public final class CgUiLifecycle implements CgLifecycleListener {
         // thread for the same reason.
         Thread glThread = Thread.currentThread();
         Disposer.setGlGate(() -> Thread.currentThread() == glThread, pending::add);
+
+        warmPaintContext();
+    }
+
+    /** <b>Builds the paint context now, so the first frame that draws does not have to.</b>*/
+    private static void warmPaintContext() {
+        long started = System.nanoTime();
+        try {
+            // AND BIND EACH MATERIAL ONCE. Construction only parses the .shader files; the GLSL compile
+            // and link happen on the first bind, which is why warming by construction alone measured as
+            // no change at all.
+            CgUiPaintContext.getInstance().warmMaterials();
+            if (Boolean.getBoolean("crystalgui.startup.trace")) {
+                com.crystalgui.core.CrystalGuiCore.LOGGER.info(
+                        "[startup] paint context warmed at onInit — {} ms",
+                        (System.nanoTime() - started) / 1_000_000);
+            }
+        } catch (RuntimeException | LinkageError refused) {
+            // An optimisation that fails is silent -- but SAYING it was skipped is not the same as
+            // reporting a failure, and a warm-up nobody can tell ran is the shape this project has been
+            // bitten by before.
+            if (Boolean.getBoolean("crystalgui.startup.trace")) {
+                com.crystalgui.core.CrystalGuiCore.LOGGER.info("[startup] paint context warm SKIPPED — {}",
+                        refused.toString());
+            }
+        }
     }
 
     /**

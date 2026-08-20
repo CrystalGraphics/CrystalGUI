@@ -92,6 +92,7 @@ public final class JsLanguage {
             // member list behind `new java.util.ArrayList().` silently fell back to reflection, or to
             // nothing at all, depending only on which language registered first.
             lendTheJavaEngine();
+        warm();
             return true;
         }
 
@@ -333,6 +334,29 @@ public final class JsLanguage {
      * would quietly fall back to reflection, which answers plausibly and less well. An ordering rule
      * nothing enforces is one somebody eventually breaks.</p>
      */
+    /**
+     * One throwaway parse, off this thread, so a restored {@code .js} tab is not the first.
+     *
+     * <p>The same measurement and the same reasoning as {@code JavaLanguage.warm}: the first analysis a
+     * Rhino engine performs pays for loading and JIT-ing the parser, and in a client the caller who pays
+     * it is a restored editor tab on the frame after F6. Read that method's note for why this is a daemon
+     * thread rather than a scheduler job, and why a failure here is silent.</p>
+     */
+    private static void warm() {
+        JsSourceAnalyzer ready = analyzer;
+        if (ready == null) return;
+        Thread worker = new Thread(() -> {
+            try {
+                ready.analyze("warm.js", "function f(a) { return a + 1; } f(1);", 0L).close();
+            } catch (Throwable ignored) {
+                // An optimisation that fails is silent; a real file will report it loudly enough.
+            }
+        }, "crystalgui-js-warm");
+        worker.setDaemon(true);
+        worker.setPriority(Thread.MIN_PRIORITY);
+        worker.start();
+    }
+
     private static void lendTheJavaEngine() {
         if (analyzer == null || javaLent) return;
         JavaEngine java = JavaLanguage.engine();
