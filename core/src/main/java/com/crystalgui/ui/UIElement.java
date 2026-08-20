@@ -1074,6 +1074,48 @@ public class UIElement implements SettingsScope, DataProvider {
         for (UIElement child : children) child.invalidatePoseCachesRecursively();
     }
 
+    /**
+     * Brings this element's hit-test matrix into line with the pose it is actually being drawn with.
+     *
+     * <p>Package-visible so it can be driven without a GL context: it is reached from
+     * {@code drawSubtree} in production and there is no other way to paint in a test, which would
+     * leave the two defects below unpinned.</p>
+     *
+     * <h3>Two bugs lived here, and together they made one symptom</h3>
+     *
+     * <p>A link in the documentation popup could not be hovered until it had been clicked at roughly
+     * fifteen times, whereupon it began working and stayed working.</p>
+     *
+     * <p><b>Aliasing.</b> {@code CacheCell.set} stores the reference it is given, so handing it the
+     * live pose made this element's cached matrix an <em>alias</em> of the {@code PoseStack}'s. An
+     * element whose transform is the identity does not push, so most elements aliased the SAME
+     * {@code Matrix4f} — which {@code mulPoseMatrix} and the scroll offset then mutate in place. An
+     * already-drawn element's cached matrix therefore changed underneath it as the walk moved on.
+     * Measured on the popup: a run whose world origin should have read y=506 read <b>y=-10628</b>,
+     * the editor's scrolled content leaking in through a shared pose. Mutating the cell's own matrix
+     * in place is both the fix and allocation-free — the calculator returns {@code old}, so
+     * {@code get()} always hands back the instance this cell owns.</p>
+     *
+     * <p><b>The dirty gate.</b> Refreshing only when the cell was dirty put paint's correction out of
+     * reach in exactly the case that needed it: any {@code get()} — a hit test, a widget's own
+     * pointer arithmetic — runs the calculator and marks the cell CLEAN, so a value computed once
+     * from a stale parent chain was never revisited. Nothing invalidates this on scroll or on
+     * relayout, so one bad computation stuck for the life of the element. The pose is the ground
+     * truth: it is what was drawn, and the invariant is that hit-testing and rendering share one
+     * matrix.</p>
+     *
+     * <p>The equality test keeps the common case free — nothing moved, so nothing is written and the
+     * inverse is not invalidated. The identity check ahead of it is deliberate: a cell left aliasing
+     * the pose would otherwise compare equal to itself forever.</p>
+     */
+    void reconcileWorldMatrix(Matrix4f drawn) {
+        Matrix4f tracked = runtimeCache.localToWorld.get();
+        if (tracked != drawn && !tracked.equals(drawn)) {
+            tracked.set(drawn);
+            this.runtimeCache.worldToLocal.invalidate();
+        }
+    }
+
     // ── Resize ───────────────────────────────────────────────────────────────
 
     /** The resize handles, present only while {@code resize} is not {@code none}. Which ones exist
@@ -2194,10 +2236,7 @@ public class UIElement implements SettingsScope, DataProvider {
 
     /** The body of {@link #drawSubtree}, with this element's own transform already on the pose. */
     private void drawSubtreeTransformed(CgUiPaintContext ctx) {
-        if (runtimeCache.localToWorld.isDirty()) {
-            this.runtimeCache.localToWorld.set(ctx.getPoseStack().last().pose());
-            this.runtimeCache.worldToLocal.invalidate();
-        }
+        reconcileWorldMatrix(ctx.getPoseStack().last().pose());
 
         GeneralGroup styleGen = style.getGeneralGroup();
         float opacity = styleGen.opacity();

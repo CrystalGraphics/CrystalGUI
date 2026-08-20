@@ -10,6 +10,7 @@ import com.crystalgui.text.markup.MarkupParser;
 import com.crystalgui.text.markup.MarkupSpan;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -253,5 +254,127 @@ public class MarkupParserTest {
         assertTrue("and the prose around it is not", first.spans().stream()
                 .anyMatch(span -> !span.has(MarkupSpan.CODE)));
         assertTrue("the author's wrapping is gone", !first.text().contains("\n"));
+    }
+
+    /**
+     * <b>A definition list files its terms and its details on the right side.</b>
+     *
+     * <p>{@code <dt>} and {@code <dd>} are SIBLINGS in HTML, so each one ends the row before it — and
+     * that row is whatever kind it already was. Closing a {@code <dt>} as a term reads correctly and is
+     * wrong every other time, because after a {@code <dd>} the row that is ending is a detail. Written
+     * that way, every value was filed as a label: the label column held the values, the value column held
+     * nothing, and a section table rendered as a stack of blank rows. The failure looks like layout and is
+     * parsing, which is why it is asserted here rather than left to the view.</p>
+     */
+    @Test
+    public void aDefinitionListSeparatesTermsFromDetails() {
+        MarkupDocument doc = MarkupParser.parse(
+                "<dl><dt>Since:</dt><dd>1.0</dd><dt>Author:</dt><dd>Ada</dd></dl>");
+
+        assertEquals(1, doc.blocks().size());
+        MarkupBlock list = doc.blocks().get(0);
+        assertEquals(MarkupBlock.Kind.DEFINITIONS, list.kind());
+        assertEquals("expected two terms and two details, got " + list.children().size(),
+                4, list.children().size());
+
+        assertEquals(MarkupBlock.Kind.TERM, list.children().get(0).kind());
+        assertEquals("Since:", list.children().get(0).text());
+        assertEquals(MarkupBlock.Kind.DETAIL, list.children().get(1).kind());
+        assertEquals("1.0", list.children().get(1).text());
+        assertEquals(MarkupBlock.Kind.TERM, list.children().get(2).kind());
+        assertEquals("Author:", list.children().get(2).text());
+        assertEquals(MarkupBlock.Kind.DETAIL, list.children().get(3).kind());
+        assertEquals("Ada", list.children().get(3).text());
+    }
+
+    /** A row’s content lives in its CHILDREN — a term’s own spans are always empty. */
+    @Test
+    public void aDefinitionRowKeepsItsContentInItsChildren() {
+        MarkupBlock list = MarkupParser.parse("<dl><dt>Since:</dt><dd>1.0</dd></dl>").blocks().get(0);
+        MarkupBlock term = list.children().get(0);
+
+        assertTrue("a term carried spans of its own, so a reader of spans would work by accident",
+                term.spans().isEmpty());
+        assertEquals(1, term.children().size());
+        assertEquals("Since:", term.children().get(0).text());
+    }
+
+    /**
+     * <b>A nested list closes its rows under its OWN kind.</b>
+     *
+     * <p>The row kind began as a single field on the builder while the lists themselves were a stack, so
+     * a {@code <dl>} opened inside a {@code <ul>} shared one kind with its parent: the inner list's rows
+     * closed as whatever the outer list last set, and the outer list's next {@code <li>} closed as a
+     * TERM. Per-list state on a stack of lists cannot express that, which is why it now lives there.</p>
+     */
+    @Test
+    public void aDefinitionListNestedInAListKeepsItsOwnRowKinds() {
+        MarkupBlock outer = MarkupParser.parse(
+                "<ul><li>before<dl><dt>Since:</dt><dd>1.0</dd></dl></li><li>after</li></ul>")
+                .blocks().get(0);
+
+        assertEquals(MarkupBlock.Kind.LIST, outer.kind());
+        assertEquals("both list items must survive", 2, outer.children().size());
+        for (MarkupBlock item : outer.children()) {
+            assertEquals("an outer item closed under the inner list's kind",
+                    MarkupBlock.Kind.ITEM, item.kind());
+        }
+
+        MarkupBlock inner = null;
+        for (MarkupBlock child : outer.children().get(0).children()) {
+            if (child.kind() == MarkupBlock.Kind.DEFINITIONS) inner = child;
+        }
+        assertNotNull("the nested definition list was lost", inner);
+        assertEquals(2, inner.children().size());
+        assertEquals(MarkupBlock.Kind.TERM, inner.children().get(0).kind());
+        assertEquals(MarkupBlock.Kind.DETAIL, inner.children().get(1).kind());
+    }
+
+    /**
+     * <b>Several {@code <dd>}s may share one {@code <dt>}, and none of them may be dropped.</b>
+     *
+     * <p>HTML allows it and javadoc produces it — {@code @throws} with two exceptions is one Throws
+     * heading over two values. The parser always kept them; the renderer replaced the row's value column
+     * for each one, so every value but the last disappeared with nothing to show it had.</p>
+     */
+    @Test
+    public void severalDetailsMayFollowOneTerm() {
+        MarkupBlock list = MarkupParser.parse(
+                "<dl><dt>Throws:</dt><dd>IOException</dd><dd>SQLException</dd></dl>").blocks().get(0);
+
+        assertEquals(3, list.children().size());
+        assertEquals(MarkupBlock.Kind.TERM, list.children().get(0).kind());
+        assertEquals(MarkupBlock.Kind.DETAIL, list.children().get(1).kind());
+        assertEquals("IOException", list.children().get(1).text());
+        assertEquals(MarkupBlock.Kind.DETAIL, list.children().get(2).kind());
+        assertEquals("SQLException", list.children().get(2).text());
+    }
+
+    /**
+     * <b>An item's own text stays in that item when a list is nested inside it.</b>
+     *
+     * <p>Long-standing and only found while giving {@code <dl>} its own row kinds. The blocks gathered
+     * for the row being built were a single list on the builder rather than per open list, so opening a
+     * nested list left the outer item's text pending — and the inner list's first row closed over it.
+     * {@code before} moved out of the outer item and became the nested list's first bullet, which reads
+     * as an authoring mistake in the source rather than a parser fault.</p>
+     */
+    @Test
+    public void anItemKeepsItsOwnTextWhenAListIsNestedInsideIt() {
+        MarkupBlock outer = MarkupParser.parse(
+                "<ul><li>before<ul><li>inner</li></ul></li></ul>").blocks().get(0);
+
+        assertEquals(1, outer.children().size());
+        MarkupBlock item = outer.children().get(0);
+
+        assertEquals("the item should hold its own text and then the nested list",
+                2, item.children().size());
+        assertEquals("before", item.children().get(0).text());
+
+        MarkupBlock nested = item.children().get(1);
+        assertEquals(MarkupBlock.Kind.LIST, nested.kind());
+        assertEquals("the outer item's text was swallowed by the nested list",
+                1, nested.children().size());
+        assertEquals("inner", nested.children().get(0).text());
     }
 }

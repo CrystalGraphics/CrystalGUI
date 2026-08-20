@@ -599,10 +599,32 @@ markupview .__markup-heading__::highlight(markup-emphasis) {
     font-style: italic;
 }
 
+/* NO UNDERLINE AT REST. A documentation body is full of references -- a `See Also` of four, a `{@link}`
+ * every other sentence -- and underlining them all turns prose into a ruled page. The colour already says
+ * it is a link; the underline is what says THIS one is under the pointer. Both references do it this
+ * way. */
 markupview .__markup-paragraph__::highlight(markup-link) {
+    color: var(--markup-link-fg, #548AF7);
+}
+
+/* The one the pointer is over. A separate BAND rather than a `:hover` rule, because a paragraph is one
+ * text element: `:hover` on it is true anywhere in the sentence and would underline every link at once.
+ *
+ * The colour is RESTATED rather than inherited from the rule above. Two bands over the same characters
+ * do not layer -- the later-written name wins the character outright -- so leaving it out would drop the
+ * link's blue at the moment the pointer reached it.
+ * @see MarkupView#LINK_HOVER_RANGE */
+markupview .__markup-paragraph__::highlight(markup-link-hover) {
     color: var(--markup-link-fg, #548AF7);
     text-decoration-line: underline;
     text-decoration-color: var(--markup-link-fg, #548AF7);
+}
+
+/* The CURSOR half of the same state, and it has to be a class on the element: `cursor` is a property of
+ * an element, so it cannot be range-sized the way the underline is. `MarkupView.hover` toggles it.
+ * @see MarkupView#LINK_HOVER_CLASS */
+markupview .__markup-link-hover__ {
+    cursor: pointer;
 }
 
 /* HEADINGS. Sized per level rather than one rule for all six: a doc comment that uses `<h3>` for its
@@ -699,4 +721,46 @@ markupview .__markup-quote-rule__ {
     width: 2px;
     flex-shrink: 0;
     background-color: var(--markup-quote-rule, #4A4D52);
+}
+
+/* A `<dl>` — what a documentation section table is drawn as: `Since:` beside `1.0`, `See Also:` beside
+ * its references. Rows rather than two independent columns, because a label that wraps must stay beside
+ * its own value: "Implementation Requirements:" is longer than the column and breaks inside it. */
+
+markupview .__markup-definitions__ {
+    flex-direction: column;
+    width: 100%;
+    gap-all: 4px;
+}
+
+/* The label column is given ONE SHARED WIDTH after layout, by `MarkupView.alignTerms` -- a grid would be
+ * the CSS answer and does not work here (measured: the value cell comes back at the container's full
+ * width, so the first track is never reserved). A fixed width is the other answer and is what made
+ * `Since:` sit a third of the popup away from `1.0`. */
+markupview .__markup-definition__ {
+    flex-direction: row;
+    width: 100%;
+    gap-all: 8px;
+}
+
+/* Quieter than the value it introduces: the label is how you find the row, the value is what you came
+ * for. No width of its own -- `MarkupView.alignTerms` gives every label the width of the widest, which
+ * is what makes the values line up while the gap stays the same on every row. */
+markupview .__markup-term__ {
+    /* NOT SHRINKABLE, or the row squeezes the label back below the shared width it was just given. */
+    flex-shrink: 0;
+    white-space: normal;
+    /* CAPPED, so `Implementation Requirements:` wraps rather than pushing the value column off the box.
+     * Below the cap the measured width decides, and every label lines up with no gap to spare. */
+    max-width: 132px;
+    color: var(--markup-term-fg, #9DA0A8);
+}
+
+/* `width: 0; flex-grow: 1` and never `width: 100%` -- this is a ROW, so 100% is the parent's full width
+ * with the label still beside it, and the row then overflows by exactly the label's width. */
+markupview .__markup-detail__ {
+    flex-direction: column;
+    width: 0;
+    flex-grow: 1;
+    gap-all: 3px;
 }

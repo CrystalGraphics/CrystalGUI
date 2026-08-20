@@ -4,8 +4,11 @@ import com.crystalgui.text.markup.MarkupBlock;
 import com.crystalgui.text.markup.MarkupDocument;
 import com.crystalgui.text.markup.MarkupSpan;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.style.StyleGroup;
 import com.crystalgui.text.syntax.Language;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.UIFrameTicker;
+import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.text.SyntaxHighlighting;
 import com.crystalgui.ui.text.TextRange;
 
@@ -66,7 +69,7 @@ import java.util.Map;
  * clickable. The target survives to this layer so that adding navigation is a listener rather than a
  * re-parse, which is the whole reason the emitter bothers to carry it.</p>
  */
-public class MarkupView extends UIElement {
+public class MarkupView extends UIElement implements UIFrameTicker {
 
     /** One paragraph of running text. */
     public static final String PARAGRAPH_CLASS = "__markup-paragraph__";
@@ -95,6 +98,18 @@ public class MarkupView extends UIElement {
     /** A {@code <blockquote>}. */
     public static final String QUOTE_CLASS = "__markup-quote__";
 
+    /** A {@code <dl>} — the two-column block a documentation section table is drawn as. */
+    public static final String DEFINITIONS_CLASS = "__markup-definitions__";
+
+    /** One {@code <dt>}/{@code <dd>} pair, side by side. */
+    public static final String DEFINITION_ROW_CLASS = "__markup-definition__";
+
+    /** The label column of a row. */
+    public static final String TERM_CLASS = "__markup-term__";
+
+    /** The value column of a row. */
+    public static final String DETAIL_CLASS = "__markup-detail__";
+
     /**
      * The quote's rule, as an <b>element</b> rather than a border.
      *
@@ -117,13 +132,32 @@ public class MarkupView extends UIElement {
     public static final String LINK_RANGE = "markup-link";
 
     /**
+     * The one link the pointer is currently over.
+     *
+     * <p>A second band rather than a {@code :hover} rule, and it has to be: a paragraph is ONE text
+     * element, so {@code :hover} on it is true whenever the pointer is anywhere in the sentence and would
+     * underline every link in it at once. A link is a RANGE, and only a range-sized answer can say which
+     * one.</p>
+     */
+    public static final String LINK_HOVER_RANGE = "markup-link-hover";
+
+    /**
+     * On the run whose link the pointer is over, for the {@code cursor} the band cannot carry.
+     *
+     * <p>A class and not a pseudo-class: {@code :hover} is true anywhere in a paragraph, and this has to
+     * mean "over one of its links".</p>
+     */
+    public static final String LINK_HOVER_CLASS = "__markup-link-hover__";
+
+    /**
      * Every band this view writes, cleared on each run before any is set.
      *
      * <p>Named as a list rather than reset by clearing the whole registry, because a caller may register
      * bands of its own on a text element it owns — search matches on a filtered row are the live example.
      * A blanket clear would take those with it.</p>
      */
-    private static final String[] BANDS = {CODE_RANGE, STRONG_RANGE, EMPHASIS_RANGE, LINK_RANGE};
+    private static final String[] BANDS =
+            {CODE_RANGE, STRONG_RANGE, EMPHASIS_RANGE, LINK_RANGE, LINK_HOVER_RANGE};
 
     /**
      * Where each run's links are, so a press can be turned back into a target.
@@ -134,6 +168,12 @@ public class MarkupView extends UIElement {
      * next document's text.</p>
      */
     private final Map<UIText, List<LinkSpan>> links = new LinkedHashMap<>();
+
+    /** Which link each run is currently showing as hovered, so a move only writes on a change. */
+    private final Map<UIText, LinkSpan> hovered = new LinkedHashMap<>();
+
+    /** Every label cell in the document, so they can be given one shared width. @see #alignTerms */
+    private final List<UIText> terms = new ArrayList<>();
 
     /** One link's extent within its run, and where it points. */
     private record LinkSpan(int start, int end, String target) {
@@ -206,6 +246,8 @@ public class MarkupView extends UIElement {
     public MarkupView setDocument(MarkupDocument document) {
         this.document = document == null ? MarkupDocument.EMPTY : document;
         links.clear();
+        hovered.clear();
+        terms.clear();
         clearAllChildren();
         for (MarkupBlock block : this.document.blocks()) {
             UIElement built = build(block);
@@ -233,17 +275,53 @@ public class MarkupView extends UIElement {
      */
     private void attachLinkPress(UIText run) {
         run.onMouseDown.attachListener((element, event) -> {
-            var local = run.screenToLocal(event.getPosition().x(), event.getPosition().y());
-            int offset = run.offsetAt(local.x(), local.y());
-            if (offset < 0) return;
-            for (LinkSpan span : links.getOrDefault(run, List.of())) {
-                if (offset >= span.start() && offset < span.end()) {
-                    onLinkActivated.emit(span.target());
-                    event.stopPropagation();
-                    return;
-                }
-            }
+            LinkSpan span = linkAt(run,
+                    run.offsetAtScreen(event.getPosition().x(), event.getPosition().y()));
+            if (span == null) return;
+            onLinkActivated.emit(span.target());
+            event.stopPropagation();
         }, false, false);
+    }
+
+    /** The link covering {@code offset} in this run, or {@code null} — including for {@code -1}. */
+    @Nullable
+    private LinkSpan linkAt(UIText run, int offset) {
+        if (offset < 0) return null;
+        for (LinkSpan span : links.getOrDefault(run, List.of())) {
+            if (offset >= span.start() && offset < span.end()) return span;
+        }
+        return null;
+    }
+
+    /**
+     * Marks the link covering {@code offset} in this run, or none.
+     *
+     * <p>Public because it is the seam a test drives. The pointer path runs through
+     * {@link #tickFrame}, which needs a live window, a settled layout and a painted frame before it can
+     * answer anything — so a test going that way would be exercising the hit test rather than the band.
+     * A host with its own pointer model has the same need.</p>
+     */
+    public void hoverAt(UIText run, int offset) {
+        hover(run, linkAt(run, offset));
+    }
+
+    private void hover(UIText run, @Nullable LinkSpan span) {
+        LinkSpan previous = hovered.get(run);
+        if (previous == span) return;
+        hovered.put(run, span);
+        run.highlights().set(LINK_HOVER_RANGE,
+                span == null ? List.of() : List.of(TextRange.of(span.start(), span.end())));
+        // THE CURSOR IS A CLASS; the underline is a BAND. Not an inconsistency -- they are different
+        // granularities and each is at the only one it can be. Which link is underlined is a RANGE
+        // answer, and only a band is range-sized; `cursor` is a property of an element and can only ever
+        // be element-wide.
+        //
+        // A class rather than an IMPORTANT style write, because an IMPORTANT write has to name a resting
+        // value to undo itself with -- and "prose is an I-beam" is a decision the sheet should own, not
+        // one Java should hard-code. It is also what the engine already says about state a widget flips
+        // from its own listener: a class, re-evaluated on your terms, never a pseudo-class.
+        if (span == null) run.removeClass(LINK_HOVER_CLASS);
+        else run.addClass(LINK_HOVER_CLASS);
     }
 
     private UIElement build(MarkupBlock block) {
@@ -263,6 +341,8 @@ public class MarkupView extends UIElement {
                 return item(block, "•");
             case QUOTE:
                 return quote(block);
+            case DEFINITIONS:
+                return definitions(block);
             default:
                 return null;
         }
@@ -328,6 +408,168 @@ public class MarkupView extends UIElement {
         }
         row.addChild(body);
         return row;
+    }
+
+    /**
+     * A {@code <dl>} as a stack of two-column rows.
+     *
+     * <p>Terms and details are <b>siblings</b> in HTML, not nested — so pairing them is this
+     * method's job, and a stray {@code <dd>} with no {@code <dt>} before it gets an empty label rather
+     * than being dropped. A malformed list still shows what it says.</p>
+     *
+     * <p>Rows rather than a real two-column grid, because a label column that wraps is the whole point:
+     * "Implementation Requirements:" is longer than the column and must break inside it while its value
+     * stays beside it. Two independent columns would let the two drift apart vertically.</p>
+     */
+    private UIElement definitions(MarkupBlock block) {
+        UIElement box = new UIElement();
+        box.addClass(DEFINITIONS_CLASS);
+
+        UIElement detail = null;
+        for (MarkupBlock child : block.children()) {
+            if (child.kind() == MarkupBlock.Kind.TERM) {
+                detail = openRow(box, spansOf(child));
+                continue;
+            }
+            // A `<dd>` with no `<dt>` before it opens its own row with an empty label rather than being
+            // dropped: malformed markup still shows what it says.
+            if (detail == null) detail = openRow(box, List.of());
+            // APPENDED, never replaced. HTML lets several `<dd>`s share one `<dt>` -- `@throws` with two
+            // exceptions is the everyday case -- and replacing meant every value but the last vanished
+            // with nothing to show it had.
+            for (MarkupBlock content : child.children()) {
+                UIElement built = build(content);
+                if (built != null) detail.addChild(built);
+            }
+        }
+        return box;
+    }
+
+    /**
+     * Starts a row and answers its value column, empty and ready to be filled.
+     *
+     * <p>Terms and details are <b>siblings</b> in HTML rather than nested, so pairing them is this
+     * view's job: the row is the thing that owns both, and it has to exist before either does.</p>
+     */
+    private UIElement openRow(UIElement box, List<MarkupSpan> label) {
+        UIElement row = new UIElement();
+        row.addClass(DEFINITION_ROW_CLASS);
+        box.addChild(row);
+
+        UIText term = term(label);
+        terms.add(term);
+        row.addChild(term);
+
+        UIElement detail = new UIElement();
+        detail.addClass(DETAIL_CLASS);
+        row.addChild(detail);
+        return detail;
+    }
+
+    /**
+     * Gives every label cell the width of the widest one.
+     *
+     * <p>What a table does, and what makes the values line up while the gap stays the same everywhere.
+     * The alternative is a fixed width, which cannot be both wide enough for the longest label and tight
+     * against the shortest — that is the whole of the complaint this answers.</p>
+     *
+     * <p><b>It settles</b>, for the reason {@code UIText}'s own sizing does: the width is pushed as an
+     * IMPORTANT candidate and {@code replaceOrPutCandidate} no-ops when the value is unchanged, so the
+     * second pass writes nothing and the loop stops. Once written, every label reports the shared width,
+     * so the maximum is stable rather than creeping.</p>
+     *
+     * <p>Skipped entirely until something has a width — the first layout of a freshly built document
+     * reports zero for everything, and equalising to zero would latch it.</p>
+     */
+    private void alignTerms() {
+        if (terms.isEmpty()) return;
+        float widest = 0f;
+        for (UIText label : terms) widest = Math.max(widest, label.getRuntimeCache().getWidth());
+        if (widest <= 0f) return;
+        float shared = widest;
+        for (UIText label : terms) {
+            // MIN-WIDTH, NOT WIDTH, and that is not a style choice. A label is `forceSelfSizeWidth`, so
+            // `UIText.recompute` pushes its own measured width at IMPORTANT on every pass -- writing
+            // `width` here puts two IMPORTANT candidates on ONE property and whichever ran last wins the
+            // frame, so the labels never equalised and could have flickered. A floor is a different
+            // property: nothing else writes it, the natural width is never larger than the widest, and
+            // `flex-shrink: 0` stops the row squeezing it back.
+            StyleGroup.importantPipeline(label.getStyle().getLayoutGroup(), l -> l.minWidth(shared));
+        }
+    }
+
+    @Override
+    protected void onLayoutChanged() {
+        super.onLayoutChanged();
+        alignTerms();
+        // THE TICKER REGISTERS HERE, which is the idiom four other widgets already use: it is the first
+        // moment this element is known to be in a window, and registration is idempotent.
+        UIWindow window = getAttachedWindow();
+        if (window != null && !links.isEmpty()) window.registerTicker(this);
+    }
+
+    /**
+     * Follows the pointer, so the link under it can be underlined and given a cursor.
+     *
+     * <p><b>A ticker rather than {@code onMouseMove}, and that is not a preference.</b> A move listener
+     * is the obvious build and was the first one; it never fired. Mine was the only
+     * {@code onMouseMove.attachListener} in the engine — the same smell {@code display: grid} had,
+     * and that turned out to be non-functional too — and it cannot be tested from here either, because
+     * {@code updateWithoutPainting} deliberately skips input handling, which is presumably WHY nothing
+     * else consumes move events. A frame ticker is a path four widgets already depend on.</p>
+     *
+     * <p>What CSS would do with {@code :hover} on an anchor, and there is no anchor: a paragraph is ONE
+     * text element, so {@code :hover} is true anywhere in the sentence and cannot say which of its links
+     * the pointer is on. A link is a RANGE, and only a range-sized answer names one.</p>
+     *
+     * <p>Cheap by construction. It runs only for a view that has links at all, asks the window for the
+     * hovered element once, and {@link #hoverAt} writes nothing unless the answer CHANGED — so a
+     * pointer sitting still, or travelling across prose, costs one hit test and a reference comparison
+     * per run.</p>
+     */
+    @Override
+    public boolean tickFrame(float deltaSeconds) {
+        UIWindow window = getAttachedWindow();
+        // FALSE DROPS THE TICKER, which is what a detached view wants: it re-registers on its next
+        // layout, and a rebuilt document brings new runs anyway.
+        if (window == null) return false;
+        if (links.isEmpty()) return true;
+
+        var pointer = window.getInputHandler().pointerPosition();
+        UIElement hoveredElement = window.getHoveredElement(pointer.x(), pointer.y());
+        for (UIText run : links.keySet()) {
+            hoverAt(run, run == hoveredElement
+                    ? run.offsetAtScreen(pointer.x(), pointer.y())
+                    : -1);
+        }
+        return true;
+    }
+
+    /**
+     * A label cell — <b>self-sizing</b>, which is what lets {@link #alignTerms} measure it.
+     *
+     * <p>A label routed through the ordinary paragraph path gets {@code neverSelfSizeWidth()}, which is
+     * right for prose (it wraps to whatever box it is given) and reports a content width of <b>zero</b>.
+     * Every label then measured as nothing, the shared width came out zero, and each label was drawn
+     * underneath its own value — a cell refusing to answer the one question the layout asks it.</p>
+     *
+     * <p>A {@code <dt>} is a label rather than a block, so its own spans are enough and the styling on
+     * them survives. The sheet caps its width, so a very long heading still wraps instead of pushing the
+     * value column off the popup.</p>
+     */
+    private UIText term(List<MarkupSpan> spans) {
+        UIText label = text(spans, TERM_CLASS);
+        label.forceSelfSizeWidth();
+        return label;
+    }
+
+    /** A row's spans — its own, or its first block's, since {@code closeItem} nests the content. */
+    private static List<MarkupSpan> spansOf(MarkupBlock block) {
+        if (!block.spans().isEmpty()) return block.spans();
+        for (MarkupBlock child : block.children()) {
+            if (!child.spans().isEmpty()) return child.spans();
+        }
+        return List.of();
     }
 
     private UIElement quote(MarkupBlock block) {

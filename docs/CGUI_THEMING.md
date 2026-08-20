@@ -345,6 +345,7 @@ editor scheme's.
 | `--markup-pre-border` | `var(--border-base)` | base.css |
 | `--markup-pre-fg` | `var(--fg)` | base.css |
 | `--markup-quote-rule` | `var(--divider)` | base.css |
+| `--markup-term-fg` | `var(--fg-secondary)` | base.css |
 | `--menu-accelerator` | `var(--fg-hint)` | base.css |
 | `--menu-arrow` | `var(--fg-secondary)` | base.css |
 | `--menu-bg` | `var(--surface-base)` | base.css |

@@ -229,6 +229,9 @@ theme {
      * with nothing to say where it starts. Raised is +18 and is what both reference renderers do: IntelliJ
      * and VS Code each draw their code blocks LIGHTER than the body, not darker. */
     --markup-bullet-fg: var(--fg-hint);
+    /* The LABEL column of a section table -- quieter than the value it introduces, because the label is
+     * how you find the row and the value is what you came for. */
+    --markup-term-fg: var(--fg-secondary);
     /* LIGHTER THAN THE BLOCK, and not for symmetry with it. A `<pre>` carries a hairline; an inline chip
      * is a `::highlight()` band, and a band has no outline to draw -- `HighlightStyle` permits colour,
      * weight, style and the decorations, and nothing box-shaped beyond the fill and its radius. So the

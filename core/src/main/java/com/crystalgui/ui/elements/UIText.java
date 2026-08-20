@@ -816,26 +816,6 @@ public final class UIText extends UIElement {
 
 
     /**
-     * Fills the {@code background-color} band behind every highlighted range — CSS Custom Highlight's
-     * one genuinely <em>positional</em> property.
-     *
-     * <h3>The geometry was already in the layout</h3>
-     *
-     * <p>{@link HighlightStyle} used to list {@code background-color} as allowed-but-unpaintable, on the
-     * grounds that a band needs per-range rects and a {@code CgStyleSpan} carries nothing positional.
-     * True, and beside the point: <b>shaping breaks a run at every span boundary</b>, so a highlighted
-     * range already <em>is</em> one or more {@link CgShapedRun}s — and each one carries its own
-     * {@code sourceStart}/{@code sourceEnd} and {@code totalAdvance}. Walking them costs no measurement
-     * and no second shaping pass.</p>
-     *
-     * <p>Drawn <b>before</b> the glyphs, which is the only order that works: this is a background, and
-     * the quad path has no depth to sort by — whatever is submitted last is on top.</p>
-     *
-     * <p>Returns immediately for every ordinary label. {@code highlightPerChar} is null unless something
-     * registered a range <em>and</em> a stylesheet styled it, so the fast unspanned path pays one null
-     * check.</p>
-     */
-    /**
      * The source character at a point in this element's own coordinates, or {@code -1}.
      *
      * <h3>Run granularity, and that is not an approximation</h3>
@@ -879,6 +859,52 @@ public final class UIText extends UIElement {
         return -1;
     }
 
+    /**
+     * The source character under a raw pointer position, or {@code -1}.
+     *
+     * <h3>Two "local" spaces, and mixing them is silent</h3>
+     *
+     * <p><b>{@link #screenToLocal} does not answer this element's own coordinates.</b> It answers the
+     * space this element's BOX is expressed in — the one {@code isMouseOverElement} tests a point
+     * against {@link RuntimeCache#getX()}/{@link RuntimeCache#getY()} in. {@link #offsetAt} wants
+     * coordinates relative to this element's own top-left. The two differ by exactly the box origin,
+     * so feeding one to the other is off by however far the element sits from its container's
+     * origin.</p>
+     *
+     * <p>Which is why this exists rather than the two calls at each site. It fails the way coordinate
+     * bugs always do — correctly at the origin and wrong everywhere else — so it survives every
+     * fixture built around a single element at (0,0) and breaks on the first real layout. Measured on
+     * the documentation popup: a link 38px down a paragraph sitting at y=453 resolved to {@code -1},
+     * and the same point less the box origin resolved to the link's first character exactly.</p>
+     *
+     * <p>Both link gestures in {@code MarkupView} — the press that follows a link and the hover that
+     * underlines one — had written it out longhand, and both were wrong in the same way.</p>
+     */
+    public int offsetAtScreen(float screenX, float screenY) {
+        var local = screenToLocal(screenX, screenY);
+        return offsetAt(local.x() - getRuntimeCache().getX(), local.y() - getRuntimeCache().getY());
+    }
+
+    /**
+     * Fills the {@code background-color} band behind every highlighted range — CSS Custom Highlight's
+     * one genuinely <em>positional</em> property.
+     *
+     * <h3>The geometry was already in the layout</h3>
+     *
+     * <p>{@link HighlightStyle} used to list {@code background-color} as allowed-but-unpaintable, on the
+     * grounds that a band needs per-range rects and a {@code CgStyleSpan} carries nothing positional.
+     * True, and beside the point: <b>shaping breaks a run at every span boundary</b>, so a highlighted
+     * range already <em>is</em> one or more {@link CgShapedRun}s — and each one carries its own
+     * {@code sourceStart}/{@code sourceEnd} and {@code totalAdvance}. Walking them costs no measurement
+     * and no second shaping pass.</p>
+     *
+     * <p>Drawn <b>before</b> the glyphs, which is the only order that works: this is a background, and
+     * the quad path has no depth to sort by — whatever is submitted last is on top.</p>
+     *
+     * <p>Returns immediately for every ordinary label. {@code highlightPerChar} is null unless something
+     * registered a range <em>and</em> a stylesheet styled it, so the fast unspanned path pays one null
+     * check.</p>
+     */
     private void paintHighlightBands(CgUiPaintContext ctx, CgTextLayout layout,
                                      float contentX, float contentY) {
         HighlightStyle[] perChar = highlightPerChar;

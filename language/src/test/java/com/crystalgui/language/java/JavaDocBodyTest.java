@@ -245,6 +245,81 @@ public class JavaDocBodyTest {
     }
 
     /**
+     * <b>Repeated tags become ONE section, laid out the way that tag reads.</b>
+     *
+     * <p>Four {@code @author} lines are four names in one answer and join with commas; four {@code @see}
+     * lines are four places to look and take a line each. IntelliJ makes the same split and it is a fact
+     * about what the tag means rather than about how many there are.</p>
+     *
+     * <p>Asserted through the RENDERED text, so it survives a change to how a section is marked up —
+     * what is pinned is that the values are grouped and separated, not which element carries them.</p>
+     */
+    @Test
+    public void repeatedTagsBecomeOneSectionPerLabel() {
+        String source = ""
+                + "public class Script {\n"
+                + "    /**\n"
+                + "     * Does a thing.\n"
+                + "     *\n"
+                + "     * @author Ada\n"
+                + "     * @author Grace\n"
+                + "     * @see java.util.List\n"
+                + "     * @see java.util.Map\n"
+                + "     */\n"
+                + "    void act() { }\n"
+                + "    void use() { act(); }\n"
+                + "}\n";
+        String markup = docAt(source, "act(); }");
+        String read = MarkupParser.parse(markup).text();
+
+        assertTrue("the label was not humanised: <" + read + ">", read.contains("Author:"));
+        assertTrue("the label was not humanised: <" + read + ">", read.contains("See Also:"));
+        assertEquals("the author label was repeated instead of grouped: <" + read + ">",
+                1, countOf(read, "Author:"));
+        assertEquals("the see label was repeated instead of grouped: <" + read + ">",
+                1, countOf(read, "See Also:"));
+        assertTrue("authors were not joined on one line: <" + read + ">",
+                read.contains("Ada, Grace"));
+        assertTrue("a reference kept its package: <" + read + ">",
+                read.contains("List") && !read.contains("java.util.List"));
+    }
+
+    /**
+     * <b>The subject dash belongs to the tags that HAVE a subject.</b>
+     *
+     * <p>{@code @param count the number of rows} is a name and a description. Every other tag is one run
+     * of prose, and the dash was going into all of them after whatever the first fragment happened to be
+     * — so a tag whose text contained an inline {@code {@code}} got a dash dropped at it, mid
+     * sentence. It reads as a stray character rather than as a rule misapplied.</p>
+     */
+    @Test
+    public void onlyASubjectTagGetsTheSeparator() {
+        String source = ""
+                + "public class Script {\n"
+                + "    /**\n"
+                + "     * Does a thing.\n"
+                + "     *\n"
+                + "     * @implNote Left to {@code javac} and its own discretion.\n"
+                + "     * @param name the label\n"
+                + "     */\n"
+                + "    void act(String name) { }\n"
+                + "    void use() { act(\"x\"); }\n"
+                + "}\n";
+        String read = MarkupParser.parse(docAt(source, "act(\"x\")")).text();
+
+        assertTrue("the implNote lost its wording to a separator: <" + read + ">",
+                read.contains("Left to javac and its own discretion"));
+        assertTrue("the param lost the separator it needs: <" + read + ">",
+                read.contains("name \u2014"));
+    }
+
+    private static int countOf(String text, String needle) {
+        int count = 0;
+        for (int at = text.indexOf(needle); at >= 0; at = text.indexOf(needle, at + 1)) count++;
+        return count;
+    }
+
+    /**
      * <b>Block tags render in section order, not in the order they were written.</b>
      *
      * <p>Ported from IntelliJ's {@code JavaDocInfoGenerator}: deprecated, parameters, return, throws,
