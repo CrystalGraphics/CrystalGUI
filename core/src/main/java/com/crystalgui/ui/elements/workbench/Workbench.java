@@ -288,6 +288,7 @@ public class Workbench extends UIElement {
         // writing its own entry into the one static bar -- one per test in the suite, so the entries
         // accumulated and every later change did O(entries) work in every live view.
         markerWatch.disconnectAll();
+        capabilityWatch.disconnectAll();
         if (current == null) {
             if (problemCountEntry != null) problemCountEntry.dispose();
             problemCountEntry = null;
@@ -297,6 +298,10 @@ public class Workbench extends UIElement {
         // document map -- a forward reference the compiler rejects outright.
         open.indexInto(markers);
         markerWatch.add(markers.onDidChange.connect(resource -> refreshProblemCount()));
+        // ATTACHED WORKBENCHES ONLY, for the reason above it: this is a listener on a PROCESS-LIVED
+        // static, so a workbench that subscribed from its constructor would stay reachable for ever and
+        // keep an entire editor tree alive behind it.
+        capabilityWatch.add(LanguageRegistry.onCapabilityChanged.connect(this::attachLateServices));
         refreshProblemCount();
         current.addDataProvider(this);
         // The rail's buttons, once there is a window to take a registry from.
@@ -1502,6 +1507,32 @@ public class Workbench extends UIElement {
         return open.paths();
     }
 
+    /**
+     * <b>Fills in documents that were opened before their language could answer.</b>
+     *
+     * <p>Services are attached once, when a document is created, and that is right — they hold a compile
+     * result about <em>this</em> text and re-creating them would throw one away. It is also why an editor
+     * already on screen when an engine band finished downloading stayed dark until it was closed and
+     * reopened: {@code JavaLanguage} retries its resolve per document, so a document opened <em>after</em>
+     * the band arrived was fine and one opened before it was not, which reads as the feature working for
+     * some files and not others.</p>
+     *
+     * <p><b>Only the nulls.</b> Anything already attached is left alone — replacing a live services object
+     * would discard a compile result about text that has not changed, and re-subscribe every listener that
+     * hangs off it. Filling a gap is not the same operation as refreshing.</p>
+     *
+     * <p>On the UI thread, because {@code LanguageRegistry.onCapabilityChanged} is emitted there — see
+     * that signal's own note for why an emit from a job would be a different and much worse thing.</p>
+     */
+    private void attachLateServices() {
+        for (CgPath path : openPaths()) {
+            TextEditor editor = editorFor(path);
+            if (editor == null || editor.languageServices() != null) continue;
+            LanguageRegistry.Entry entry = LanguageRegistry.forFileName(path.name());
+            editor.setLanguageServices(entry.newServices(editor.buffer(), Resource.of(path)));
+        }
+    }
+
     /** The text editor for a path, or null when that file is not opened by a text editor. */
     @Nullable
     public TextEditor editorFor(CgPath path) {
@@ -1656,6 +1687,19 @@ public class Workbench extends UIElement {
     }
 
     private final ConnectionGroup markerWatch = new ConnectionGroup();
+
+    /**
+     * ONE connection for the workbench, not one per document.
+     *
+     * <p>The tempting place to subscribe is beside the attach, inside the document factory — which would
+     * add a listener per file opened, all of them doing the same whole-workspace sweep. The question
+     * "which open documents are missing services" is about the workspace, so it is asked once.</p>
+     *
+     * <p>In a group so it is released with everything else this workbench holds: a static signal outliving
+     * a disposed workbench is a leak that keeps a whole editor tree alive, and this one is on
+     * {@code LanguageRegistry}, which lives for the process.</p>
+     */
+    private final ConnectionGroup capabilityWatch = new ConnectionGroup();
 
     @Nullable
     private StatusBarEntryAccessor problemCountEntry;

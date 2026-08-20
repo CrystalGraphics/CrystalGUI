@@ -237,7 +237,19 @@ public final class JavaLanguage {
      * {@code TextFileDocument}'s business, and this is deliberately not that.</p>
      */
     public static synchronized JavaEngine engine() {
-        if (engine == null) openEngine();
+        if (engine != null) return engine;
+        openEngine();
+        // A BAND THAT ARRIVED LATE IS ANNOUNCED, or only documents opened AFTER it ever benefit.
+        //
+        // D22 made this resolve retry per document instead of caching the first failure, which is what
+        // lets a downloaded band become usable at all. What it could not do is reach a document that was
+        // already open: services are attached once, at creation, so an editor on screen when the band
+        // landed stayed dark until it was closed and reopened -- the feature working for some files and
+        // not others, which reads as a defect in the analysis rather than in the wiring.
+        //
+        // Emitted from here because this is the moment the answer changes, and it is reached from
+        // `servicesFor` on a document open -- the UI thread. @see LanguageRegistry#onCapabilityChanged
+        if (engine != null) LanguageRegistry.capabilityChanged();
         return engine;
     }
 
