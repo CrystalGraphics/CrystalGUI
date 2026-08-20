@@ -84,21 +84,6 @@ public final class CgUiPaintContext {
             DEFAULT_FONT_ASSET,
     };
 
-    static {
-        // Self-wire CrystalGUI's lifecycle the moment this class comes into play.
-        //
-        // Touching CgUiPaintContext at all is the event "CrystalGUI is about to own things that must
-        // be released on context loss" — so binding teardown to class initialization makes the two
-        // impossible to get out of step. The alternative, an explicit CgUiLifecycle.register() call
-        // in every loader and harness scene, is a step that can be forgotten, and forgetting it fails
-        // silently: the next GL context draws from freed materials and atlases rather than throwing.
-        //
-        // Costs nothing where it must cost nothing. A dedicated server never touches this class, so
-        // it never registers and never loads CrystalGraphics — and could not have anyway, since
-        // LAYER_FORMAT below already makes this class unloadable without CrystalGraphics present.
-        CgUiLifecycle.register();
-    }
-
     private static CgUiPaintContext instance;
 
     /** Lazily constructs the singleton on first use. See the class doc for why this must stay lazy. */
@@ -117,7 +102,7 @@ public final class CgUiPaintContext {
      * <p>Failures are swallowed. A shader that will not compile is a real problem and the first real
      * frame will report it in the ordinary way; a warm-up must not be the thing that fails a context.</p>
      */
-    public void warmMaterials(int width, int height) {
+    public void warm(int width, int height) {
         for (CgMaterial material : new CgMaterial[] { boxModelMaterial, curveMaterial, layerBlitMaterial }) {
             try {
                 material.bind();

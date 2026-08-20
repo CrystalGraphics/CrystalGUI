@@ -63,18 +63,8 @@ public class ClientProxy extends CommonProxy {
         // editor tab on the frame after F6. @see Mc1710Workspace#registerLanguages
         Mc1710Workspace.registerLanguages();
 
-        // AND THE GL WARM-UP, which cannot start itself.
-        //
-        // CgUiLifecycle is registered from CgUiPaintContext's STATIC INITIALISER, which runs on the first
-        // paint -- so the hook that exists to warm the paint context was, by construction, never reached
-        // until the paint context had already been built. Measured: adding the warm-up to onInit changed
-        // the first frame's material bind by nothing at all, 286 ms before and 300 after.
-        //
-        // register() is public and idempotent precisely for this, and addListener delivers onInit
-        // immediately when a context is already live -- which it is by FML init, since Minecraft creates
-        // the display before mods initialise.
+      
         CgUiLifecycle.register();
-
         CgUiInput.register();
         CgUiAutoTest.register();
     }
