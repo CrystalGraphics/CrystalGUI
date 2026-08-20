@@ -105,6 +105,8 @@ theme {
      * this theme rather than of the vocabulary. */
     --editorfind-bg: #F7F8FA;
 
+    /* The light pair: the same gap, in the direction this theme dims. See the dark file. */
+    --doc-body-fg: #3A3B40;
     --dock-drop-overlay: #3574F033;
     --dock-floating-bg: #F2F2F4F5;
     --dock-insertion-bg: #3574F028;

@@ -27,6 +27,7 @@ theme {
     --divider: #2B2D30;
     --fg: #DFE1E5;
     --fg-secondary: #9DA0A8;
+
     --fg-hint: #7A7A7A;
     --fg-disabled: #5A5D63;
     --fg-on-accent: #FFFFFF;
@@ -96,6 +97,11 @@ theme {
      * and its editor are both white. */
     --editorfind-bg: #191A1C;
 
+    /* BETWEEN --fg and --fg-secondary, and it needs to be: a doc body at --fg is exactly as bright as
+     * the code samples inside it, so the two read as one surface, while --fg-secondary reads as disabled
+     * because that is what it means everywhere else here. About fifteen percent down from --fg -- enough
+     * for the code to come forward, not enough for the prose to look switched off. */
+    --doc-body-fg: #C6C8CE;
     --dock-drop-overlay: #4A88C766;
     --dock-floating-bg: #1E1E1EF0;
     --dock-insertion-bg: #7EB6FF30;
