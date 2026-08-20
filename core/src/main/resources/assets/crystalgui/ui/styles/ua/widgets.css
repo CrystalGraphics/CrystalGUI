@@ -770,3 +770,73 @@ markupview .__markup-detail__ {
     flex-grow: 1;
     gap-all: 3px;
 }
+
+
+/* A `<table>` — because the JDK's own documentation is full of them. Measured before this was written:
+ * `java.util.Formatter` carries NINETEEN tables in 88k characters of comment and its whole purpose is
+ * the conversion reference; `java.util.regex.Pattern` three, `DateTimeFormatter` two. Without them
+ * every cell concatenated into one run of prose, which reads as the renderer failing rather than as a
+ * construct nobody implemented.
+ *
+ * The columns are lined up by `MarkupView.alignTables` AFTER layout, for the reason the definition list
+ * already documents: `display: grid` is non-functional here, so a real grid track cannot be asked for.
+ * A definition list is a table of one column and this is the same measurement over N. */
+
+markupview .__markup-table__ {
+    flex-direction: column;
+    width: 100%;
+    gap-all: 2px;
+}
+
+/* Above the rows and quieter than them: a caption names the table, the rows are what you came for. */
+markupview .__markup-caption__ {
+    white-space: normal;
+    padding-bottom: 2px;
+    color: var(--markup-term-fg, #9DA0A8);
+}
+
+/* NO GAP. The cells carry their own padding instead, which puts every column boundary at a single
+ * coordinate — the edge of one cell IS the edge of the next. That is what lets `TableGrid` draw an
+ * interior line and the outer edge with the same call, rather than guessing a midpoint in a gap. */
+markupview .__markup-row__ {
+    flex-direction: row;
+    width: 100%;
+}
+
+/* NOT SHRINKABLE, or the row squeezes a cell back below the shared width its column was just given —
+ * the same rule `.__markup-term__` needs and for the same reason. */
+markupview .__markup-cell__ {
+    flex-direction: column;
+    flex-shrink: 0;
+    white-space: normal;
+    /* INSIDE the cell, so the grid line never touches a glyph and the column measurement includes the
+     * space it needs. A gap on the row could not do the second half: it separates boxes without giving
+     * either of them room. */
+    padding-left: 6px;
+    padding-right: 6px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    /* CAPPED, so one long cell wraps rather than pushing the rest of the row off the box. Below the cap
+     * the measured width decides and the column lines up with no gap to spare. */
+    max-width: 240px;
+}
+
+/* A `<th>`. Weight rather than a fill: a rule under the header would need a one-sided border, which in
+ * this engine either draws all four edges or none depending on which edge is named. */
+markupview .__markup-header-cell__ {
+    font-weight: bold;
+    color: var(--markup-term-fg, #9DA0A8);
+}
+
+/* THE GRID IS STROKED, not built out of boxes -- `MarkupView.TableGrid` reads these two colours back
+ * out of the cascade and draws every line in one paint pass. A line per row pair AND per column pair
+ * would otherwise be one element each, and a column line would have to live inside every row.
+ *
+ * ONE colour and one width for every line, outer edge included: a table's edge and its interior rules
+ * are the same object seen from different sides, and drawing the head's darker made it read as two
+ * tables stacked. `border-color` is a registered property rather than an invented name -- the same
+ * trick the node graph uses to keep its port palette in the sheet. Nothing draws a border here: no
+ * `border-width` is set, so the box itself has none. */
+markupview .__markup-table__ {
+    border-color: var(--markup-table-rule, #3A3D42);
+}

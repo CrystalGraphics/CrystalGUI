@@ -4,6 +4,7 @@ import com.crystalgui.text.markup.MarkupBlock;
 import com.crystalgui.text.markup.MarkupDocument;
 import com.crystalgui.text.markup.MarkupSpan;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.text.syntax.Language;
 import com.crystalgui.ui.UIElement;
@@ -110,6 +111,23 @@ public class MarkupView extends UIElement implements UIFrameTicker {
     /** The value column of a row. */
     public static final String DETAIL_CLASS = "__markup-detail__";
 
+    /** A {@code <table>}. */
+    public static final String TABLE_CLASS = "__markup-table__";
+
+    /** A {@code <caption>}. */
+    public static final String TABLE_CAPTION_CLASS = "__markup-caption__";
+
+    /** One {@code <tr>}. */
+    public static final String TABLE_ROW_CLASS = "__markup-row__";
+
+    /** One {@code <td>} or {@code <th>}. */
+    public static final String TABLE_CELL_CLASS = "__markup-cell__";
+
+    /** On a cell that came from {@code <th>}. */
+    public static final String TABLE_HEADER_CLASS = "__markup-header-cell__";
+
+
+
     /**
      * The quote's rule, as an <b>element</b> rather than a border.
      *
@@ -174,6 +192,14 @@ public class MarkupView extends UIElement implements UIFrameTicker {
 
     /** Every label cell in the document, so they can be given one shared width. @see #alignTerms */
     private final List<UIText> terms = new ArrayList<>();
+
+    /**
+     * Every table's cells, by row, so each COLUMN can be given one shared width.
+     *
+     * <p>Per table rather than per document: two tables in one comment are two grids, and a column in
+     * one says nothing about a column in the other. @see #alignTables</p>
+     */
+    private final List<List<List<UIElement>>> tables = new ArrayList<>();
 
     /** One link's extent within its run, and where it points. */
     private record LinkSpan(int start, int end, String target) {
@@ -248,6 +274,7 @@ public class MarkupView extends UIElement implements UIFrameTicker {
         links.clear();
         hovered.clear();
         terms.clear();
+        tables.clear();
         clearAllChildren();
         for (MarkupBlock block : this.document.blocks()) {
             UIElement built = build(block);
@@ -343,6 +370,8 @@ public class MarkupView extends UIElement implements UIFrameTicker {
                 return quote(block);
             case DEFINITIONS:
                 return definitions(block);
+            case TABLE:
+                return table(block);
             default:
                 return null;
         }
@@ -467,6 +496,228 @@ public class MarkupView extends UIElement implements UIFrameTicker {
     }
 
     /**
+     * A {@code <table>} — a caption at most, then a stack of rows.
+     *
+     * <p>Rows of cells rather than a real grid, for the reason {@link #definitions} already gives:
+     * {@code display: grid} is non-functional in this engine, measured twice — the value cell comes
+     * back at the container's full width and the first track is never reserved. So the columns are
+     * lined up after layout instead, by {@link #alignTables}.</p>
+     *
+     * <p><b>First cut:</b> {@code colspan} and {@code rowspan} are ignored and their cells sit in the
+     * grid as ordinary ones. Both are rare in javadoc and a spanning cell changes what a column even
+     * means, so it is a second pass rather than a flag on this one.</p>
+     */
+    private UIElement table(MarkupBlock block) {
+        UIElement box = new TableGrid();
+        box.addClass(TABLE_CLASS);
+
+        List<List<UIElement>> rows = new ArrayList<>();
+        for (MarkupBlock child : block.children()) {
+            if (child.kind() == MarkupBlock.Kind.CAPTION) {
+                box.addChild(text(spansOf(child), TABLE_CAPTION_CLASS));
+                continue;
+            }
+            if (child.kind() != MarkupBlock.Kind.ROW) continue;
+
+            UIElement row = new UIElement();
+            row.addClass(TABLE_ROW_CLASS);
+            box.addChild(row);
+
+            List<UIElement> cells = new ArrayList<>();
+            for (MarkupBlock cellBlock : child.children()) {
+                UIElement cell = cell(cellBlock);
+                row.addChild(cell);
+                cells.add(cell);
+            }
+            if (!cells.isEmpty()) rows.add(cells);
+        }
+        if (!rows.isEmpty()) tables.add(rows);
+        return box;
+    }
+
+    /**
+     * A table that draws its own grid.
+     *
+     * <h3>Strokes rather than elements</h3>
+     *
+     * <p>A hairline is usually an element here, because a one-sided {@code border-width-*} draws all
+     * four edges or none depending on which edge is named. That works for one rule under a heading and
+     * scales badly to a grid: a line between every pair of rows AND every pair of columns is one box
+     * per line, and {@code java.util.Formatter}'s tables run to dozens of rows each. Column lines are
+     * worse than that — they would have to be boxes inside every row.</p>
+     *
+     * <p>One paint pass costs no elements, no layout and no state: the lines are read off the live boxes
+     * of the rows and cells at the moment of drawing, so they follow a column that {@link #alignTables}
+     * has just resized without being told.</p>
+     *
+     * <p>Drawn in {@code paintOverlay} — after the children, so a line is never hidden under a cell's
+     * background, and before the outline, which belongs to the box rather than to its contents.</p>
+     */
+    private static final class TableGrid extends UIElement {
+
+        /**
+         * How wide a grid line is drawn, in LOGICAL pixels.
+         *
+         * <p>Thinner than the 1px a border would be. A stroke is not a border: it is centred on its
+         * line and feathered at both edges, so a width of 1 lands about two device pixels wide at the
+         * default scale and reads as a rule rather than as the hairline a table wants.</p>
+         */
+        private static final float LINE = 0.6f;
+
+        /** Enough to keep the edge crisp; a stroke with no ramp at all aliases into a dotted line. */
+        private static final float FEATHER = 0.4f;
+
+        @Override
+        protected void paintOverlay(CgUiPaintContext ctx) {
+            super.paintOverlay(ctx);
+            List<UIElement> rows = new ArrayList<>();
+            for (UIElement child : getChildren()) {
+                if (child.getClasses().contains(TABLE_ROW_CLASS)) rows.add(child);
+            }
+            if (rows.isEmpty()) return;
+
+            // FROM THE CASCADE, never a number here -- something has to hand `CgVectorRenderer` an ARGB
+            // int, and the element already knows one. Same trick `NodePort.typeColor` uses to keep a
+            // palette in the sheet. ONE colour for every line: an interior rule and the outer edge are
+            // the same object seen from different sides, and drawing the head's darker made the table
+            // read as two tables stacked.
+            int colour = getStyle().getGeneralGroup().borderColor();
+
+            UIElement widest = rows.get(0);
+            for (UIElement row : rows) {
+                if (row.getChildren().size() > widest.getChildren().size()) widest = row;
+            }
+            List<UIElement> columns = widest.getChildren();
+            if (columns.isEmpty()) return;
+
+            var firstRow = rows.get(0).getRuntimeCache();
+            var lastRow = rows.get(rows.size() - 1).getRuntimeCache();
+            var firstCell = columns.get(0).getRuntimeCache();
+            var lastCell = columns.get(columns.size() - 1).getRuntimeCache();
+            if (firstRow.getWidth() <= 0f || firstCell.getWidth() <= 0f) return;
+
+            // HALF A LINE INSIDE THE EDGE, all four of them. A stroke is CENTRED on the line it is
+            // given, so an outer edge drawn exactly on the content's boundary puts half its width
+            // outside it -- and outside is where the scroller's clip is. The left border came back
+            // visibly fainter than every interior line because half of it had been sheared off, which
+            // reads as an inconsistent stroke width rather than as a clipped one.
+            //
+            // The interior lines need no such nudge: they are already a whole cell away from any edge.
+            float inset = LINE * 0.5f;
+            float top = firstRow.getY() + inset;
+            float bottom = lastRow.getY() + lastRow.getHeight() - inset;
+            float left = firstCell.getX() + inset;
+            float right = lastCell.getX() + lastCell.getWidth() - inset;
+
+            // THE BOX, then the lines inside it. The cells carry their own padding, so every boundary
+            // is a single coordinate rather than a gap to guess a midpoint in -- which is what lets the
+            // outer edge and an interior line be drawn by exactly the same call.
+            stroke(ctx, left, top, right, top, colour);
+            stroke(ctx, left, bottom, right, bottom, colour);
+            stroke(ctx, left, top, left, bottom, colour);
+            stroke(ctx, right, top, right, bottom, colour);
+
+            for (int i = 0; i + 1 < rows.size(); i++) {
+                var cache = rows.get(i).getRuntimeCache();
+                float y = cache.getY() + cache.getHeight();
+                stroke(ctx, left, y, right, y, colour);
+            }
+            for (int i = 0; i + 1 < columns.size(); i++) {
+                var cache = columns.get(i).getRuntimeCache();
+                float x = cache.getX() + cache.getWidth();
+                stroke(ctx, x, top, x, bottom, colour);
+            }
+            ctx.flush();
+        }
+
+        /**
+         * One straight hairline.
+         *
+         * <p>A cubic whose control points equal its endpoints degenerates to a segment, which is how
+         * {@code PortDefaultEditor} draws its stub — reusing {@code ctx.curve()} rather than inventing
+         * a second draw path. The width is in LOGICAL pixels: {@code CgUiRenderer} applies the
+         * {@code PoseStack} to the stroke, so one pixel stays one pixel at any {@code uiScale}.</p>
+         */
+        private static void stroke(CgUiPaintContext ctx, float x0, float y0, float x1, float y1,
+                                   int color) {
+            ctx.curve()
+                    .cubic(x0, y0, x0, y0, x1, y1, x1, y1)
+                    .width(LINE)
+                    .feather(FEATHER)
+                    .colors(color, color)
+                    .submit();
+        }
+    }
+
+    /**
+     * One cell — <b>self-sizing when it is a label</b>, which is what lets a column be measured.
+     *
+     * <p>The same trap {@link #term} documents: a paragraph routed through the ordinary path gets
+     * {@code neverSelfSizeWidth()}, which is right for prose and reports a content width of ZERO — so
+     * every column would measure nothing and equalise to nothing. A cell holding one run of spans is
+     * built as a label instead, and that is nearly every cell a javadoc table has.</p>
+     *
+     * <p>A cell with real blocks in it — a list, a code sample — keeps the ordinary path and simply
+     * does not contribute a width. Its column is then sized by the other rows, which is the right
+     * answer: a paragraph in a table cell should wrap, not set the column.</p>
+     */
+    private UIElement cell(MarkupBlock block) {
+        UIElement built;
+        List<MarkupSpan> spans = spansOf(block);
+        boolean simple = !spans.isEmpty() && block.children().size() <= 1;
+        if (simple) {
+            UIText label = text(spans, TABLE_CELL_CLASS);
+            label.forceSelfSizeWidth();
+            built = label;
+        } else {
+            built = new UIElement();
+            built.addClass(TABLE_CELL_CLASS);
+            for (MarkupBlock child : block.children()) {
+                UIElement content = build(child);
+                if (content != null) built.addChild(content);
+            }
+        }
+        if (block.level() == 1) built.addClass(TABLE_HEADER_CLASS);
+        return built;
+    }
+
+    /**
+     * Gives every column of every table the width of its widest cell.
+     *
+     * <p>{@link #alignTerms} with an index: a definition list is a table of one column, and this is the
+     * same measurement over N. It settles for the same reason — the width goes in as an IMPORTANT
+     * candidate, {@code replaceOrPutCandidate} no-ops when it is unchanged, and once written every cell
+     * reports at least the shared width so the maximum cannot creep.</p>
+     *
+     * <p>MIN-width rather than width, again for the same reason: a label cell is
+     * {@code forceSelfSizeWidth}, so it writes its own measured width at IMPORTANT and two IMPORTANT
+     * candidates on one property is a race. A floor is a different property, and nothing else writes
+     * it.</p>
+     */
+    private void alignTables() {
+        for (List<List<UIElement>> rows : tables) {
+            int columns = 0;
+            for (List<UIElement> row : rows) columns = Math.max(columns, row.size());
+            for (int column = 0; column < columns; column++) {
+                float widest = 0f;
+                for (List<UIElement> row : rows) {
+                    if (column >= row.size()) continue;
+                    widest = Math.max(widest, row.get(column).getRuntimeCache().getWidth());
+                }
+                // NOTHING MEASURED YET is the first layout of a freshly built document, where every box
+                // is zero. Equalising to zero would latch it.
+                if (widest <= 0f) continue;
+                final float shared = widest;
+                for (List<UIElement> row : rows) {
+                    if (column >= row.size()) continue;
+                    StyleGroup.importantPipeline(row.get(column).getStyle().getLayoutGroup(),
+                            l -> l.minWidth(shared));
+                }
+            }
+        }
+    }
+
+    /**
      * Gives every label cell the width of the widest one.
      *
      * <p>What a table does, and what makes the values line up while the gap stays the same everywhere.
@@ -502,6 +753,7 @@ public class MarkupView extends UIElement implements UIFrameTicker {
     protected void onLayoutChanged() {
         super.onLayoutChanged();
         alignTerms();
+        alignTables();
         // THE TICKER REGISTERS HERE, which is the idiom four other widgets already use: it is the first
         // moment this element is known to be in a window, and registration is idempotent.
         UIWindow window = getAttachedWindow();

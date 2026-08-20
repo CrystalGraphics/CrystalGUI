@@ -377,4 +377,107 @@ public class MarkupParserTest {
                 1, nested.children().size());
         assertEquals("inner", nested.children().get(0).text());
     }
+
+    /**
+     * <b>A table is rows of cells, and the grouping elements are transparent.</b>
+     *
+     * <p>Modelled because the JDK's own documentation is full of them — measured, {@code Formatter}
+     * carries nineteen in 88k characters of comment and its whole purpose is the conversion reference.
+     * Dropping the tags concatenated every cell into one run of prose, which reads as the renderer
+     * failing rather than as a construct nobody implemented.</p>
+     */
+    @Test
+    public void aTableIsRowsOfCells() {
+        MarkupBlock table = MarkupParser.parse(
+                "<table><caption>Modes</caption>"
+                        + "<thead><tr><th>Mode</th><th>Meaning</th></tr></thead>"
+                        + "<tbody><tr><td>READ_WRITE</td><td>Reads and writes</td></tr></tbody>"
+                        + "</table>").blocks().get(0);
+
+        assertEquals(MarkupBlock.Kind.TABLE, table.kind());
+        assertEquals("a caption and two rows, with thead/tbody adding nothing",
+                3, table.children().size());
+
+        MarkupBlock caption = table.children().get(0);
+        assertEquals(MarkupBlock.Kind.CAPTION, caption.kind());
+        assertEquals("Modes", caption.text());
+
+        MarkupBlock header = table.children().get(1);
+        assertEquals(MarkupBlock.Kind.ROW, header.kind());
+        assertEquals(2, header.children().size());
+        assertEquals(MarkupBlock.Kind.CELL, header.children().get(0).kind());
+        assertEquals("Mode", header.children().get(0).text());
+        assertEquals("a th must mark itself a header", 1, header.children().get(0).level());
+
+        MarkupBlock body = table.children().get(2);
+        assertEquals(MarkupBlock.Kind.ROW, body.kind());
+        assertEquals("READ_WRITE", body.children().get(0).text());
+        assertEquals("a td is not a header", 0, body.children().get(0).level());
+        assertEquals("Reads and writes", body.children().get(1).text());
+    }
+
+    /**
+     * <b>A row left open by a missing {@code </tr>} still reaches the document.</b>
+     *
+     * <p>Rows are siblings, so the previous one ends where the next begins whether or not it was
+     * closed — the same rule {@code <li>} follows, and the same reason {@code build} unwinds every
+     * container left open at the end of the input.</p>
+     */
+    @Test
+    public void anUnclosedRowStillCloses() {
+        MarkupBlock table = MarkupParser.parse(
+                "<table><tr><td>one<tr><td>two</table>").blocks().get(0);
+
+        assertEquals(MarkupBlock.Kind.TABLE, table.kind());
+        assertEquals("both rows must survive", 2, table.children().size());
+        assertEquals("one", table.children().get(0).children().get(0).text());
+        assertEquals("two", table.children().get(1).children().get(0).text());
+    }
+
+    /** A cell holds blocks, so markup inside one survives as markup. */
+    @Test
+    public void aCellKeepsTheMarkupInsideIt() {
+        MarkupBlock table = MarkupParser.parse(
+                "<table><tr><td>plain</td><td>a <code>chip</code> here</td></tr></table>")
+                .blocks().get(0);
+
+        MarkupBlock cell = table.children().get(0).children().get(1);
+        assertEquals(MarkupBlock.Kind.CELL, cell.kind());
+        assertTrue("the cell lost its text: " + cell.text(), cell.text().contains("chip"));
+    }
+
+    /**
+     * <b>A big table parses without the row machinery losing its place.</b>
+     *
+     * <p>{@code java.util.Formatter} is the case this exists for: nineteen tables in 88k characters of
+     * comment. The shape that would break is not size but NESTING — a table's rows are its items while
+     * every other container's content goes through the row being built, and getting that backwards
+     * wraps each row in an anonymous item, which shows up as a table with one column and N rows of
+     * nothing.</p>
+     */
+    @Test
+    public void aTableWithManyRowsKeepsItsShape() {
+        StringBuilder markup = new StringBuilder("<table><caption>Big</caption>");
+        markup.append("<thead><tr><th>A</th><th>B</th><th>C</th></tr></thead><tbody>");
+        for (int row = 0; row < 60; row++) {
+            markup.append("<tr><td>a").append(row).append("</td><td>b").append(row)
+                  .append("</td><td>c").append(row).append("</td></tr>");
+        }
+        markup.append("</tbody></table>");
+
+        MarkupBlock table = MarkupParser.parse(markup.toString()).blocks().get(0);
+        assertEquals(MarkupBlock.Kind.TABLE, table.kind());
+        assertEquals("a caption, a header row and sixty body rows", 62, table.children().size());
+
+        for (MarkupBlock child : table.children()) {
+            if (child.kind() == MarkupBlock.Kind.CAPTION) continue;
+            assertEquals("every row must be a ROW, not an anonymous item wrapping one",
+                    MarkupBlock.Kind.ROW, child.kind());
+            assertEquals("every row must keep its three cells", 3, child.children().size());
+        }
+
+        MarkupBlock last = table.children().get(table.children().size() - 1);
+        assertEquals("a59", last.children().get(0).text());
+        assertEquals("c59", last.children().get(2).text());
+    }
 }

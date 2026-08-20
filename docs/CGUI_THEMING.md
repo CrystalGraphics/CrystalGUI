@@ -111,6 +111,7 @@ crystal-dark.css is a migration-era pin awaiting the Islands pass; dark-plus.css
 editor scheme's.
 
 <!-- TOKENS:BEGIN -->
+
 | Token | Value | Defined in |
 |---|---|---|
 | `--accent` | `#3574F0` | crystal-dark.css |
@@ -345,6 +346,7 @@ editor scheme's.
 | `--markup-pre-border` | `var(--border-base)` | base.css |
 | `--markup-pre-fg` | `var(--fg)` | base.css |
 | `--markup-quote-rule` | `var(--divider)` | base.css |
+| `--markup-table-rule` | `var(--border-base)` | base.css |
 | `--markup-term-fg` | `var(--fg-secondary)` | base.css |
 | `--menu-accelerator` | `var(--fg-hint)` | base.css |
 | `--menu-arrow` | `var(--fg-secondary)` | base.css |
