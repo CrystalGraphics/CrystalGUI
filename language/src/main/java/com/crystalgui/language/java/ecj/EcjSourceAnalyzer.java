@@ -49,6 +49,9 @@ import org.eclipse.jdt.core.dom.PrefixExpression;
 import org.eclipse.jdt.core.dom.QualifiedName;
 import org.eclipse.jdt.core.dom.QualifiedType;
 import org.eclipse.jdt.core.dom.ReturnStatement;
+import org.eclipse.jdt.core.dom.EnumConstantDeclaration;
+import org.eclipse.jdt.core.dom.EnumDeclaration;
+import org.eclipse.jdt.core.dom.TypeDeclaration;
 import org.eclipse.jdt.core.dom.SimpleName;
 import org.eclipse.jdt.core.dom.TagElement;
 import org.eclipse.jdt.core.dom.SimpleType;
@@ -528,6 +531,21 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                     // `@see java.util.List` are types, and `{@link #other()}` is a member -- so this is
                     // the one exclusion rather than a list of tags that may resolve.
                     if (isParamTagSubject(name)) return true;
+                    // AND NOTHING THAT DID NOT REALLY RESOLVE. `setBindingsRecovery` is on -- it is what
+                    // lets the rest of a broken file still resolve -- and for an unknown TYPE it
+                    // synthesises a binding rather than answering null: `{@link no.such.Type}` comes back
+                    // a CLASS named `Type` in a container `no.such`, indistinguishable from a real one.
+                    //
+                    // In CODE that is harmless, because `endVisit` marks the same range `unresolved` and
+                    // the editor's merge takes the later token. In a doc comment it is not: the mark is
+                    // deliberately suppressed there, so the recovered kind would be the only thing said
+                    // about the name -- a broken reference drawn in the same confident colour as the
+                    // working one three lines above it. Left to the lexer's `comment.doc.value` instead,
+                    // which is what an unresolved reference should look like: ordinary.
+                    if (inDocComment(name)) {
+                        IBinding resolvedTo = bindingFor(name);
+                        if (resolvedTo == null || resolvedTo.isRecovered()) return true;
+                    }
                     String capture = captureFor(name);
                     if (capture != null) {
                         // THE `@` IS PART OF THE ANNOTATION, and a SimpleName does not include it: the
@@ -894,7 +912,104 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
 
         @Override
         public SymbolInfo describe(String name) {
+            // THIS FILE FIRST. The fallback builds a PROBE -- a separate compilation unit compiled
+            // against the classpath -- and the classpath does not contain the file being edited, so a
+            // reference to anything declared here resolved nowhere. That is most of a person's own
+            // links: `{@link #helper()}`, `@see MyOtherClass`, a bare `#member` meaning "on this class".
+            // In the fixture it was every See Also row that pointed inward, while the ones pointing at
+            // the JDK worked, which reads as the link being broken at random.
+            SymbolInfo here = describeInThisUnit(name);
+            if (here != null) return here;
             return describer == null ? null : describer.apply(name);
+        }
+
+        /**
+         * A reference to something declared in <b>this</b> file, or null.
+         *
+         * <p>Matched on the simple name, which is what a doc reference gives: a qualified reference is
+         * cut to its last segment and a member reference to the member. That is enough here and would
+         * not be on a classpath — one file declares few enough names that a collision is the author's
+         * own doing, and the alternative is re-deriving a binding key from text.</p>
+         *
+         * <p>A MEMBER is answered as itself rather than as its owning type, which the probe path cannot
+         * do: the declaration is right here, so there is a binding for it without needing a unit that
+         * calls it. That makes {@code @see #parityBlockTags()} land on the method — the partial named in
+         * the plan is about members reached through the CLASSPATH, and this is the other half.</p>
+         */
+        @Nullable
+        private SymbolInfo describeInThisUnit(String reference) {
+            final CompilationUnit resolved = unit;
+            if (resolved == null || reference == null) return null;
+            String bare = reference.trim();
+            int hash = bare.indexOf('#');
+            String member = hash < 0 ? "" : bare.substring(hash + 1);
+            int bracket = member.indexOf('(');
+            if (bracket >= 0) member = member.substring(0, bracket);
+            String type = hash < 0 ? bare : bare.substring(0, hash);
+            int lastDot = type.lastIndexOf('.');
+            if (lastDot >= 0) type = type.substring(lastDot + 1);
+
+            final String wanted = member.isEmpty() ? type : member;
+            if (wanted.isEmpty()) return null;
+            // A QUALIFIER IS A FILTER, NOT A TARGET. `Other#run` may not be answered by this file's own
+            // `run`, so when a type was named and it is not one declared here, leave it to the probe.
+            final String container = member.isEmpty() ? "" : type;
+
+            final SimpleName[] found = new SimpleName[1];
+            resolved.accept(new ASTVisitor() {
+                private boolean take(SimpleName name) {
+                    if (found[0] != null || name == null) return false;
+                    if (!wanted.equals(name.getIdentifier())) return false;
+                    if (!container.isEmpty() && !container.equals(enclosingTypeName(name))) return false;
+                    found[0] = name;
+                    return true;
+                }
+
+                @Override
+                public boolean visit(TypeDeclaration node) {
+                    take(node.getName());
+                    return true;
+                }
+
+                @Override
+                public boolean visit(EnumDeclaration node) {
+                    take(node.getName());
+                    return true;
+                }
+
+                @Override
+                public boolean visit(MethodDeclaration node) {
+                    take(node.getName());
+                    return true;
+                }
+
+                @Override
+                public boolean visit(VariableDeclarationFragment node) {
+                    take(node.getName());
+                    return true;
+                }
+
+                @Override
+                public boolean visit(EnumConstantDeclaration node) {
+                    take(node.getName());
+                    return true;
+                }
+            });
+
+            SimpleName name = found[0];
+            if (name == null) return null;
+            IBinding binding = name.resolveBinding();
+            return binding == null ? null : describe(resolved, name, binding);
+        }
+
+        /** The simple name of the type a node is declared in, or {@code ""}. */
+        private static String enclosingTypeName(ASTNode node) {
+            for (ASTNode at = node.getParent(); at != null; at = at.getParent()) {
+                if (at instanceof AbstractTypeDeclaration) {
+                    return ((AbstractTypeDeclaration) at).getName().getIdentifier();
+                }
+            }
+            return "";
         }
 
         @Override

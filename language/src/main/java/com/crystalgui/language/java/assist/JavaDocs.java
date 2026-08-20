@@ -4,6 +4,10 @@ import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.Javadoc;
 import org.eclipse.jdt.core.dom.IBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
+import org.eclipse.jdt.core.dom.IMethodBinding;
+import org.eclipse.jdt.core.dom.IVariableBinding;
+import org.eclipse.jdt.core.dom.MemberRef;
+import org.eclipse.jdt.core.dom.MethodRef;
 import org.eclipse.jdt.core.dom.Name;
 import org.eclipse.jdt.core.dom.TagElement;
 import org.eclipse.jdt.core.dom.TextElement;
@@ -480,13 +484,56 @@ public final class JavaDocs {
      * before can regress.</p>
      */
     private static String targetOf(@Nullable Object fragment, String asWritten) {
-        if (!(fragment instanceof Name)) return asWritten;
-        IBinding binding = ((Name) fragment).resolveBinding();
-        if (!(binding instanceof ITypeBinding)) return asWritten;
-        ITypeBinding erasure = ((ITypeBinding) binding).getErasure();
+        ITypeBinding owner = referencedTypeOf(fragment);
+        if (owner == null) return asWritten;
+        ITypeBinding erasure = owner.getErasure();
         if (erasure == null) return asWritten;
         String qualified = erasure.getQualifiedName();
-        return qualified == null || qualified.isEmpty() ? asWritten : qualified;
+        if (qualified == null || qualified.isEmpty()) return asWritten;
+        // THE MEMBER HALF IS KEPT, and it is kept as written. Nothing downstream resolves a member yet
+        // -- `describeName` cuts the reference at the `#` and describes the owning type, which is the
+        // documented partial -- but the owner is the half that has to be QUALIFIED for even that to
+        // work, and throwing the member away would make the href a worse answer than it needs to be
+        // the day member resolution lands.
+        int hash = asWritten.indexOf('#');
+        return hash < 0 ? qualified : qualified + asWritten.substring(hash);
+    }
+
+    /**
+     * The type a reference names, or the type a referenced MEMBER belongs to.
+     *
+     * <p>A plain {@code Name} is the type itself. A {@code MemberRef} ({@code Type#field}) and a
+     * {@code MethodRef} ({@code Type#method(args)}) are not names at all — JDT gives them their own
+     * node types — so they fell through to the as-written path and kept whatever the author could get
+     * away with in their own file. {@code @see Map#entrySet()} therefore emitted an href of
+     * {@code Map#entrySet()}, which cuts to a bare {@code Map} and resolves nowhere: the two references
+     * above it in the same section worked, because they happen to be plain names.</p>
+     *
+     * <p>A bare {@code #member} — "on the class this comment is in" — has no qualifier at all, and this
+     * is what gives it one: the binding knows its declaring class even when the author did not write it
+     * down.</p>
+     */
+    @Nullable
+    private static ITypeBinding referencedTypeOf(@Nullable Object fragment) {
+        if (fragment instanceof Name) {
+            IBinding binding = ((Name) fragment).resolveBinding();
+            return binding instanceof ITypeBinding ? (ITypeBinding) binding : null;
+        }
+        if (fragment instanceof MemberRef) {
+            return declaringTypeOf(((MemberRef) fragment).resolveBinding());
+        }
+        if (fragment instanceof MethodRef) {
+            return declaringTypeOf(((MethodRef) fragment).resolveBinding());
+        }
+        return null;
+    }
+
+    /** The class a member binding belongs to. */
+    @Nullable
+    private static ITypeBinding declaringTypeOf(@Nullable IBinding binding) {
+        if (binding instanceof IMethodBinding) return ((IMethodBinding) binding).getDeclaringClass();
+        if (binding instanceof IVariableBinding) return ((IVariableBinding) binding).getDeclaringClass();
+        return null;
     }
 
     /**
