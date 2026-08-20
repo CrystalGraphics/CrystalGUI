@@ -332,10 +332,17 @@ shaping is pure CPU, so it works here; only atlas upload and drawing stay harnes
 **Still open, deliberately:**
 - **No show delay.** A delay is a timing value and timing values belong in the cascade — doing it
   properly means a real CSS property, which is its own task.
-- **Platform-delegated tooltips not started.** Item slots are platform-unique, so an item's real MC
-  tooltip must be drawn by the loader — a new SPI alongside `UIClipboard`/`UISoundSystem`. Deferred
-  rather than designed blind: there is no loader in the build to validate the seam against, and P3.2
-  is the item that unblocks it.
+- ~~**Platform-delegated tooltips not started.**~~ — **struck 2026-08-21.** The reasoning below
+  is still correct about *what* it is (an item's real MC tooltip — rarity, enchantments, lore, and other
+  mods' `ItemTooltipEvent` lines — which no widget of ours reproduces), and two of its premises have
+  since expired: `UIClipboard`/`UISoundSystem` no longer exist, and mc1710 **is** in the build now, so
+  P3.2 no longer gates it. It is struck for a different reason — **there is no consumer.** Item slots
+  are platform-unique and we have none: zero `ItemStack` references in `core/src/main` or `mc1710/src`.
+  Revive it when something renders an item. See [`plan_prephase4.md`](plan_prephase4.md).
+
+  > *Original text:* Item slots are platform-unique, so an item's real MC tooltip must be drawn by the
+  > loader — a new SPI alongside `UIClipboard`/`UISoundSystem`. Deferred rather than designed blind:
+  > there is no loader in the build to validate the seam against, and P3.2 is the item that unblocks it.
 - `ore.css` has no `tooltip` rules, so it looks the same under both themes.
 
 ---
@@ -611,7 +618,8 @@ without a cursor change.
 
 A port of CSS UI 4 `cursor` (inherited; `auto` resolves to `text` over editable elements), resolved
 from the hover diff so **pointer capture pins it for a whole drag for free**. Presentation sits behind
-`UICursorService`, because LWJGL2 — the harness *and* MC 1.7.10 — has no standard cursors at all, unlike
+`CgCursorService` (named `UICursorService` when this was written; renamed with the move to `CgPlatform`,
+2026-08-21), because LWJGL2 — the harness *and* MC 1.7.10 — has no standard cursors at all, unlike
 GLFW. `CursorBitmaps` draws 32×32 arrows procedurally and lives in `core/` (pure pixel maths), so each
 loader duplicates only a ~90-line adapter.
 
@@ -625,11 +633,16 @@ loader duplicates only a ~90-line adapter.
 
 # P5 — Independent, slot anywhere
 
-### 5.1 The platform seam sweep · `DEFERRED` (2026-07-29) — with P3
+### 5.1 The platform seam sweep · ~~`DEFERRED`~~ **`UNBLOCKED`** (2026-08-21) — was: with P3
 
-> **Deferred alongside P3**, and for the same reason: this is integration surface, not core foundation.
-> Nothing in P5.2/5.3/P6 needs it, and it cannot be verified without a loader in the build anyway — so
-> it naturally belongs next to P3.2 rather than ahead of the remaining engine work.
+> ~~**Deferred alongside P3**, and for the same reason: this is integration surface, not core
+> foundation. Nothing in P5.2/5.3/P6 needs it, and it cannot be verified without a loader in the build
+> anyway — so it naturally belongs next to P3.2 rather than ahead of the remaining engine work.~~
+>
+> **Unblocked 2026-08-21.** mc1710 is in the build and launching, so "no loader to verify against" no
+> longer holds — and note it was unblocked by a loader this section never mentions, since it was written
+> expecting P3.2 (mc1201) to be what freed it. P3.2 is still open and still a product call. See the
+> re-base below before starting: the shape this section describes no longer exists.
 
 **Re-scoped 2026-07-29:** this was "ChatComponent + translatable service", but two platform items have
 since been deferred *into* it from elsewhere. Doing them together is cheaper than three separate visits,
@@ -641,12 +654,36 @@ because they share one question — what the seam looks like and who registers i
 | **Platform-delegated tooltips** | deferred from 1.2 | An item's real MC tooltip must be drawn by the loader; item slots are platform-unique. Not designed yet, deliberately — there was no loader to validate against. |
 | **LWJGL3/GLFW cursor service** | open from 4.5 | Much shorter than the LWJGL2 one: `glfwCreateStandardCursor` covers the resize set with no bitmaps. |
 
-All follow the established shape: interface in `core/`, `NOOP` default, loader registers the real one —
-now proven four times over (`CgUiInputAdapter`, `UIClipboard`, `UISoundSystem`, `UICursorService`).
+> ### Re-based 2026-08-21 — the shape below was stale and the caveat has expired
+>
+> **The caveat is gone.** mc1710 is in the build and launching (M12 Phases 1–3), so this section is
+> unblocked — by a *different* loader than the one it was waiting on, which is why it needs re-basing
+> rather than simply starting.
+>
+> **The shape paragraph named four classes that no longer exist** — `CgUiInputAdapter`, `UIClipboard`,
+> `UISoundSystem`, `UICursorService`. CrystalGUI has no platform registry of its own. Current shape:
+>
+> - The SPI lives in CrystalGraphics' **`platform/service/`**, not `core/`, and a loader registers one
+>   `CgPlatformService` bundle carrying all nine services.
+> - **No method in that bundle has a default and there is no `NOOP` constant** — deliberately. From
+>   `AGENTS.md`: *"inheriting a no-op is indistinguishable from deciding on one."*
+> - For a contract only CrystalGUI's *consumers* need — which is everything left here — the carrier is
+>   **`CgService<T>`**, the slot M12's Phase 3 audit added. Its rule: **closed for what the framework
+>   requires; slots for what its consumers require.**
+>
+> | Item | State after re-base |
+> |---|---|
+> | `ChatComponent`-equivalent, translatable text | **live**, and it has a real consumer: there is no i18n mechanism in the tree at all and the chrome is hardcoded English |
+> | ~~Platform-delegated tooltips~~ | **struck — no consumer.** Not a duplicate of our `Tooltip`; struck because there are no item slots. See §1.2 |
+> | LWJGL3/GLFW cursor service | **parked** — inherently mc1201, and mc1201 waits until mc1710 is finished |
+>
+> 📄 Ordered against the rest of the platform-deferred backlog in
+> [`plan_prephase4.md`](plan_prephase4.md).
 
-> **The recurring caveat:** none of it can be *verified* without a loader in the build, which is P3.2 —
-> the one item still waiting on a call from you. Designing a seam blind is how you get an interface
-> nobody can implement, so the honest sequencing is either "accept unverified" or "do P3.2 first".
+> *Original text:* All follow the established shape: interface in `core/`, `NOOP` default, loader
+> registers the real one — now proven four times over (`CgUiInputAdapter`, `UIClipboard`,
+> `UISoundSystem`, `UICursorService`). **The recurring caveat:** none of it can be *verified* without a
+> loader in the build, which is P3.2.
 
 ### 5.2 LDLib `TextElement` vs `UIText` · `DONE` (2026-07-30)
 
@@ -1287,7 +1324,8 @@ plus gallery `modal` and `menus` pages.
     hover already resolves to the capture target; a resize reverting to `default` when the pointer left
     the handle would look broken.
   - Pushed **on change only**: an implementation may allocate a native object per call.
-  - **`UICursorService`** seam (NOOP default, same shape as `UIClipboard`/`UISoundSystem`), because the
+  - **`CgCursorService`** seam (`UICursorService` as written; renamed with the move to `CgPlatform`,
+    2026-08-21 — and it ships **no `NOOP`**, since the SPI deliberately has no defaults), because the
     platforms differ sharply: LWJGL3/GLFW ships the standard resize set, LWJGL2 — the harness *and* MC
     1.7.10 — has no standard cursors at all and can only build them from pixel data.
   - **`Lwjgl2CursorService` + `CursorBitmaps` in the harness**, generating 32×32 arrows procedurally

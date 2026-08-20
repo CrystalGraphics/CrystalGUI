@@ -41,7 +41,7 @@ than verified it says so.
 | Hover help | `Tooltip` |
 | Persisting a layout | `UIDescriptionCodec` + `StateMap` already round-trip a tree |
 | Server-authored panels | `serialization/` + `net/` |
-| Clipboard, sound as platform seams | `UIClipboard`, `UISoundSystem` — the SPI pattern to copy |
+| Clipboard, sound as platform seams | ~~`UIClipboard`, `UISoundSystem`~~ → **`CgPlatform`** (2026-08-21). Both classes are gone and CrystalGUI has no platform registry of its own; a loader registers one `CgPlatformService` bundle and the clipboard rides on `CgInputService` |
 
 ### What is absent — verified
 
@@ -54,7 +54,7 @@ than verified it says so.
 | **Tree** | No tree widget |
 | **Table / data grid** | No table widget |
 | **Command / undo stack** | Nothing |
-| **File system access** | Nothing, and `core/` is platform-agnostic — this needs the `UIClipboard` treatment |
+| ~~**File system access**~~ | **done** (2026-08-21) — `com.crystalgui.fs` ships `CgFileSystem`, `CgPath`, `LocalFileSystem` and the `Workspace*` protocol, and `Mc1710Workspace` runs it in-game. The `UIClipboard` treatment named here never happened and could not have: that class no longer exists, and this went out as a workspace protocol rather than a platform seam |
 | **Line / curve / stroke rendering** | No drawable draws anything non-rectangular; `sdf.glsl` has rounded-box + coverage only; CrystalGraphics has no line topology in use |
 
 ### The one good surprise
@@ -1499,7 +1499,12 @@ pointers.
 > `fs.rename`/`fs.delete`, and `Show Difference` (which needs a Myers diff ported from VS Code's
 > `common/diff/`).
 >
-> **The per-loader `CgFileSystem` is the gap that matters**: until it exists none of this runs in-game.
+> ~~**The per-loader `CgFileSystem` is the gap that matters**: until it exists none of this runs
+> in-game.~~ — **superseded 2026-08-21.** It runs in-game today: `Mc1710Workspace` wires
+> `WorkspaceService` over `LocalFileSystem` with a real `ServerUiSession`/`ClientUiSession` pair,
+> and every listing, read and write crosses a packet. **The remaining gap is the TRANSPORT, not the
+> filesystem** — both halves live in the client process over `InMemoryTransport`. See
+> [`plan_prephase4.md`](plan_prephase4.md).
 >
 > **Three invariants worth not rediscovering**, each pinned by a test: a watch seeded with no etag reports
 > every file as stale the moment it opens; an un-recorded change re-announces on every poll, which is a
