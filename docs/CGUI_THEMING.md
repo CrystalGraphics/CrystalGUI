@@ -530,7 +530,6 @@ editor scheme's.
 | `--success-icon` | `#5FAD65` | crystal-dark.css |
 | `--surface-base` | `#26282B` | crystal-dark.css |
 | `--surface-borrowed` | `#281F1C` | crystal-dark.css |
-| `--surface-borrowed-raised` | `#3B2E28` | crystal-dark.css |
 | `--surface-editor` | `#191A1C` | crystal-dark.css |
 | `--surface-overlay` | `#2B2D30` | crystal-dark.css |
 | `--surface-panel` | `#191A1C` | crystal-dark.css |
@@ -616,7 +615,6 @@ editor scheme's.
 | `--tab-focused-border` | `var(--accent)` | base.css |
 | `--tab-focused-fg` | `var(--fg)` | base.css |
 | `--tab-hover-bg` | `var(--hover-bg)` | base.css |
-| `--tab-library-active-bg` | `var(--surface-borrowed-raised)` | base.css |
 | `--tab-library-bg` | `var(--surface-borrowed)` | base.css |
 | `--tab-pane-bg` | `#00000000` | base.css |
 | `--tab-strip-bg` | `#00000000` | base.css |

@@ -126,7 +126,7 @@ public class StyleGovernanceTest {
             // read-only. Appended for the same reason `success-icon` was: the set was incomplete rather
             // than closed. Every other surface here is a DEPTH, and this one is a PROVENANCE, which is
             // why it could not be derived from one -- "borrowed" is not a distance from the reader.
-            "surface-borrowed", "surface-borrowed-raised",
+            "surface-borrowed",
             "border-base", "border-strong", "border-field", "divider",
             "fg", "fg-secondary", "fg-hint", "fg-disabled", "fg-on-accent",
             "accent", "accent-hover", "accent-soft",
