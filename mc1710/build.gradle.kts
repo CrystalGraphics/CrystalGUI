@@ -376,6 +376,12 @@ tasks.named<JavaExec>(runTask) {
         systemProperty("crystalgui.startup.trace", "true")
     }
 
+    // -PcgNetProbe sends real frames client->server->client over the Forge channel and logs the round
+    // trip. The headless tests cover everything above CgNetworkChannel and nothing below it.
+    if (providers.gradleProperty("cgNetProbe").isPresent) {
+        systemProperty("crystalgui.net.probe", "true")
+    }
+
     if (providers.gradleProperty("cgAutoTest").isPresent) {
         systemProperty("crystalgui.autotest", "true")
         systemProperty("crystalgui.autotest.out",

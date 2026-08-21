@@ -1,5 +1,7 @@
 package com.crystalgui.mc;
 
+import com.crystalgui.mc.net.Mc1710NetworkChannel;
+
 /**
  * The server-side half: nothing.
  *
@@ -10,6 +12,13 @@ package com.crystalgui.mc;
  *
  * <p>{@code core/} is headless-clean by construction (its build fails on a {@code net.minecraft.*}
  * import), and that property is worth not undoing at the loader.</p>
+ *
+ * <h3>Except networking, which is exactly the server's half</h3>
+ *
+ * <p>The class comment above was true for as long as CrystalGUI was only ever a screen. It stops being
+ * true the moment a workspace is hosted rather than local: a dedicated server holds the files and answers
+ * the protocol, and it does that with no screen anywhere. So the channel registers <em>here</em> rather
+ * than in {@code ClientProxy} — both sides need it, and the server needs it more.</p>
  */
 public class CommonProxy {
 
@@ -17,7 +26,19 @@ public class CommonProxy {
     public void preInit() {
     }
 
-    /** FML init. Nothing common to do. */
+    /**
+     * FML init. Registers the network channel, which both sides need.
+     *
+     * <p><b>init and not preInit, following CustomNPC+</b>, which builds its {@code PacketHandler} at
+     * preInit but calls {@code registerChannels()} from {@code FMLInitializationEvent}. Ours registered
+     * at preInit and no packet was ever delivered, in either direction, with every gate reporting
+     * healthy — channel present on both sides, connection open, dispatcher live, sends accepted. This is
+     * the one structural difference from a mod that demonstrably works.</p>
+     *
+     * <p>Registration is pure wiring — no GL, no screen, no world — which is what lets it sit in common
+     * code without undoing the headless property above.</p>
+     */
     public void init() {
+        Mc1710NetworkChannel.register();
     }
 }
