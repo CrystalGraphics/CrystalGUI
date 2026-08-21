@@ -145,6 +145,9 @@ public class Desktop extends UIElement {
     /** Hands out stacking order. Monotonic, so a raise is O(1) and never touches another window. */
     private int raiseCounter;
 
+    /** Every live window, visible or hidden. @see WindowRegistry */
+    private final WindowRegistry registry = new WindowRegistry();
+
     @Nullable
     private WindowFrame activeWindow;
 
@@ -207,7 +210,13 @@ public class Desktop extends UIElement {
     /** @param programmatic see {@link WindowFrame#restoreFocus} — it decides whether focus rings. */
     public void activate(WindowFrame frame, boolean programmatic) {
         if (frame == null || frame.desktop() != this) return;
+        // ACTIVATING A HIDDEN WINDOW RESTORES IT, which is what a taskbar entry does (W4) and what a
+        // switcher does (W10) -- both of them "activate", and a minimised window has to come back for
+        // that to mean anything. Restored as PERSISTED: it is coming out of retention, which is exactly
+        // the distinction the flag carries.
+        if (frame.state() == WindowState.HIDDEN) frame.show(true);
         raise(frame);
+        registry.activated(frame);
         if (activeWindow != frame) {
             if (activeWindow != null) activeWindow.setActive(false);
             activeWindow = frame;
@@ -291,6 +300,11 @@ public class Desktop extends UIElement {
      * but take no focus and ask for attention instead.</p>
      */
     public <T extends WindowFrame> T addWindow(T frame) {
+        if (frame.state() == WindowState.DESTROYED) {
+            throw new IllegalStateException("a destroyed window cannot be reopened: " + frame.getTitle());
+        }
+        frame.setOwner(this);
+        registry.opened(frame);
         windows.addChild(frame);
         // PROGRAMMATIC, so focus rings: nobody pointed at this window, so a keyboard user needs to be
         // told where focus went. The ring lands on whatever inside it takes focus -- never on the frame,
@@ -299,19 +313,41 @@ public class Desktop extends UIElement {
         return frame;
     }
 
+    /** Puts a hidden window back on the layer. Driven by {@link WindowFrame#show}, which owns the state. */
+    void reattach(WindowFrame frame) {
+        if (frame.getParent() == null) windows.addChild(frame);
+        raise(frame);
+    }
+
     /** The window layer — the work area's box, and the containing block every frame is placed in. */
     public UIElement windowLayer() {
         return windows;
     }
 
+    /** Every live window, visible or hidden — the model, not the tree. @see WindowRegistry */
+    public WindowRegistry registry() {
+        return registry;
+    }
+
     /**
-     * Every window currently on the desktop, in insertion order.
+     * Every live window in open order, <b>including hidden ones</b>.
+     *
+     * <p>The registry's list rather than the layer's children, and the difference is the whole of W3: a
+     * minimised window is still a window, and anything offering a way back to it — the taskbar, the
+     * switcher — has to see it. {@link #visibleWindows()} is the other question.</p>
+     */
+    public List<WindowFrame> windows() {
+        return registry.windows();
+    }
+
+    /**
+     * Just the windows currently on the desktop, in child order.
      *
      * <p>A live view of the layer's own typed list, not a copy and not a filtered scan — see
      * {@link WindowLayer}. Iterating it while adding or removing a window is the usual
      * {@code ConcurrentModificationException}; copy first if a caller needs that.</p>
      */
-    public List<WindowFrame> windows() {
+    public List<WindowFrame> visibleWindows() {
         return windows.frames();
     }
 
@@ -401,6 +437,11 @@ public class Desktop extends UIElement {
                 // been used goes on covering the application's own root forever, so closing the last
                 // window would leave a UI that paints correctly and answers no clicks.
                 syncPresence();
+                // THE STATE FOLLOWS THE TREE. Detaching a frame IS hiding it, whichever route did the
+                // detaching -- so a bare removeSelf() cannot leave a window that is out of the tree and
+                // still claims to be visible.
+                WindowFrame frame = (WindowFrame) child;
+                frame.markHidden();
                 // AND THE ACTIVE WINDOW CANNOT BE ONE THAT LEFT. Windows activates the next one down
                 // when you close the front one; leaving the field pointing at a detached frame would
                 // instead leave a desktop whose keyboard target is not in the tree.
@@ -408,6 +449,11 @@ public class Desktop extends UIElement {
                     activeWindow = null;
                     activateTopmost();
                 }
+                // LAST, and after the activation above rather than before it: eviction can destroy a
+                // window, and destroying one re-enters this method. Doing it while the active window is
+                // still the frame that just left would have activateTopmost() choosing between windows
+                // one of which is mid-removal.
+                registry.evictIfNeeded();
             }
             return removed;
         }

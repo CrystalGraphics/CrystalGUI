@@ -108,6 +108,10 @@ public class DesktopWindowTest extends UiTestBase {
      * The work-area callback walks a maintained list rather than filtering the layer's children, so
      * the list has to stay in step with the tree through <b>every</b> removal path — including a frame
      * removing itself, which is the whole reason frames are public children of an internal layer.
+     *
+     * <p>Asserted on {@code visibleWindows()} — the layer's list — rather than {@code windows()}, which
+     * since W3 means every <em>live</em> window and deliberately keeps hidden ones. A bare detach is a
+     * hide, so the frame is still a window and is simply no longer on the desktop.</p>
      */
     @Test
     public void theFrameListTracksTheTreeThroughSelfRemoval() {
@@ -115,11 +119,12 @@ public class DesktopWindowTest extends UiTestBase {
         Desktop desktop = window.desktop();
         WindowFrame first = window.openWindow(new WindowFrame("One"));
         WindowFrame second = window.openWindow(new WindowFrame("Two"));
-        assertEquals(2, desktop.windows().size());
+        assertEquals(2, desktop.visibleWindows().size());
 
         first.removeSelf();
-        assertEquals("a frame that removed itself is off the desktop", 1, desktop.windows().size());
-        assertSame(second, desktop.windows().get(0));
+        assertEquals("a frame that removed itself is off the desktop", 1, desktop.visibleWindows().size());
+        assertSame(second, desktop.visibleWindows().get(0));
+        assertEquals("but it is retained, which is what W3 made detaching mean", 2, desktop.windows().size());
     }
 
     /** The layer holds windows and nothing else, which is what makes the list provably its children
