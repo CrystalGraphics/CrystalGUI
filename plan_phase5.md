@@ -200,7 +200,108 @@ three things.
 > The registry, the state machine and the controls all belong in `core/`, with the loader reduced to
 > *attaching* a view to a retained window and detaching on close.
 
-### 5.2 Persist the retained set · **because retention is always best-effort**
+### 5.2 The window strip and the switcher · **minimise without this is a leak with a UI**
+
+Mandatory rather than a nicety: a hidden window with no way back is a black hole. Every system that has
+minimise has somewhere minimised things go — the Windows taskbar, the macOS Dock, X11's window list,
+Android Recents, browser tabs.
+
+#### The one fact that shapes the whole design
+
+`uiWindow.paintFrame()` is called from **exactly one place**: `CgUiScreen.drawScreen`. CrystalGUI has
+never rendered outside a `GuiScreen`, so an always-visible in-game strip is not a widget — it is a new
+platform capability (a render-overlay hook, a window with no screen, input while the game runs).
+
+And that last part is what rules it out rather than merely pricing it: **in-game the cursor is captured
+for look control.** A taskbar cannot be clicked without freeing the cursor, and freeing the cursor means
+opening a screen — which is the thing the strip was supposed to save. Any always-on clickable HUD
+degenerates into "hold a modifier to free the mouse", which is a worse keybind.
+
+> Even systems that own the entire screen hide their taskbar: the macOS Dock auto-hides by default and
+> the iPadOS Dock is a gesture. Windows' is persistent **because Windows owns everything**. Here we are a
+> guest on somebody else's screen, competing with the hotbar, chat, potion effects and every other mod.
+
+#### So: two surfaces, one model
+
+| Surface | Where | Why it is cheap there |
+|---|---|---|
+| **Switcher** | a keybind, from anywhere | It *is* a screen, so the cursor is free and the game pauses as it already does. Alt+Tab / Cmd+Tab / Recents. Zero screen cost when unused |
+| **Strip** | inside the shell chrome, beside the window controls | There is already a screen, a free cursor and the space |
+
+**Both are views of the retained registry from 5.1** — not a second list to keep in sync. The taskbar
+*is* the registry, rendered.
+
+#### The model
+
+**A window joins on open and leaves only on destroy.** That is Windows' rule and it is the right one:
+the strip shows what is *live*, visible or hidden, with the focused one highlighted — not a bin of
+minimised things. It also falls straight out of 5.1, where `hide()` and `destroy()` are already
+different verbs, so "until explicitly closed" needs no separate bookkeeping.
+
+#### What to take from a real taskbar
+
+| Take | Why it fits | What it reuses |
+|---|---|---|
+| Icon + label per entry | The minimum that makes an entry identifiable | `CgUiSvg`, `icon()` in CSS |
+| **Focused-window highlight** | Otherwise the strip cannot say where you are | a class, per the "state a widget flips itself belongs on a CLASS" rule |
+| **Grouping by window type** | Two editors are two entries; the screenshot has two of one app side by side | — |
+| **Badges** — unsaved dot, error count | The tab strip already draws `*`; the Problems panel already counts | `FileDecoration`'s badge/colour split |
+| **Per-entry context menu** — close, recent files | Right-click is where "close" lives on every taskbar | `ContextMenu` + `MenuBuilder`, which is already the ONE place commands become rows |
+| **Overflow** when the strip is full | The screenshot's `^` chevron | — |
+| **Progress on the entry** | A chunked transfer or an engine-band download has a real duration | `ProgressBar`, `JobScheduler` |
+
+#### What NOT to take, and why
+
+| Leave | Reason |
+|---|---|
+| **The search box** | The command palette already *is* this. Two search surfaces means two matchers that disagree — the exact failure `TreeSearch.Model.setQuery` taking a `String` already caused once |
+| **The clock** | Minecraft has its own time, and the status bar owns that role |
+| **The system tray** | `StatusBarView` already occupies it |
+| **Pinning / launching** | These are not apps a user launches; they are windows a command opens. "Pinned" would have to mean *"retained even when destroyed"*, which is a third lifecycle state nobody asked for |
+| **Auto-hide** | Solves a problem we do not have — the strip lives inside a screen the user chose to open |
+
+#### Icons — what a window has to declare
+
+A taskbar entry needs an icon, so **a window must declare one**, the way a file type does. The
+machinery exists: `ui/icons/*.svg` (Feather, stroked `currentColor` chrome marks) for window icons,
+`FileIconTheme` for anything file-shaped, and `CgUiSvg` to draw them with no atlas and one instanced
+draw call.
+
+Two traps are already recorded and both apply here:
+
+- **Resolve the light/dark variant through `CgUiSvg.ofIcon`.** `TextureValue.parseIcon` once called
+  `of(toResourcePath(...))` instead, so every `icon()` in every stylesheet drew the light file forever
+  and a theme swap changed nothing.
+- **16px, matching the filetype set**, and a modifier overlay (a badge) is a **full-size layer**, not a
+  glyph in a corner box — JetBrains draws `staticMark`/`finalMark` on their own 16×16 canvases with the
+  glyph already placed, so they compose by stacking.
+
+#### Nice-to-haves, explicitly deferred
+
+Each is real and none blocks the strip. Recorded so they are not re-invented:
+
+- **Live thumbnail on hover.** Windows' taskbar previews. Genuinely feasible here — `CgUiPaintContext`
+  already renders a subtree to an FBO for layer opacity and masking, and node previews already do
+  exactly this. Deferred because a preview of a *hidden* window means rendering something frozen, which
+  contradicts 5.1's "a hidden window stops ticking" unless the last frame is kept.
+- **Drag to reorder**, and a remembered order. `UIDragController` is already there.
+- **Middle-click to close**, matching the tab strip.
+- **A "new window" affordance** on the strip, once more than one window type exists.
+
+#### The trap to avoid on day one
+
+**Minimise with no discoverable way back is worse than no minimise.** If the only route is a keybind
+nobody was told about, the feature is a trap. Cheap fix with machinery that exists: fire a
+`Notification` on hide — *"Editor minimised · press F6 to return"* — which balloons and fades.
+
+And the accelerator must be **read from the keymap, never spelled**. `Keymap.acceleratorFor` is what the
+menus already use; a literal `"F6"` is a promise the widget cannot keep the moment anything rebinds it.
+
+> **Not the same thing as tabs or the dock.** `DockPane` and the tab strips are *documents within a
+> window*. This is *windows*. Merging the two is a category error that gets expensive to unpick, and the
+> engine already keeps the levels apart everywhere else.
+
+### 5.3 Persist the retained set · **because retention is always best-effort**
 
 Retention is in-memory: it survives Escape, and not a crash, not quitting the game, not a disconnect.
 **Every system that retains also persists**, and says so — the Page Lifecycle API ships `wasDiscarded`
@@ -224,7 +325,7 @@ project a resource pack could ship.
 > With 5.1 in place this becomes *"persist the retained set"* rather than *"persist dirty buffers"* —
 > a better-shaped problem, because the retained set is already the thing that knows what mattered.
 
-### 5.3 `enabledWhen` is evaluated locally
+### 5.4 `enabledWhen` is evaluated locally
 
 A command's `enabledWhen` runs on the client, so it cannot ask the server *may I?*. `explorer.delete`
 looks enabled to a non-operator and the refusal arrives as a `NO_PERMISSIONS` failure after a round trip.
@@ -233,28 +334,28 @@ looks enabled to a non-operator and the refusal arrives as a `NO_PERMISSIONS` fa
 feature: what is cached, when it is invalidated, and what a command shows while the answer is unknown.
 The alternative — asking the server per menu open — is a round trip inside a UI gesture and is worse.
 
-### 5.4 The conflict dialog
+### 5.5 The conflict dialog
 
 The protocol half is done and was done deliberately: `Failure.isConflict()` carries the live etag, and a
 delta against a file that moved is **refused rather than merged** — merging is a decision with a UI
 attached and does not belong in a write path. The dialog is that UI, and it stopped being hypothetical
 the moment two players could edit one file.
 
-### 5.5 Presence
+### 5.6 Presence
 
 C1 gives a session its viewers and their peers, which **is** the data presence needs. Nothing displays
 it. Deferred from Phase 4 C5 for exactly this reason — *"broadcasting it wants a consumer that does not
-exist"* — and 5.4 is plausibly that consumer, since knowing somebody else has the file open is what makes
+exist"* — and 5.5 is plausibly that consumer, since knowing somebody else has the file open is what makes
 a conflict comprehensible rather than mysterious.
 
-### 5.6 Two windows on one connection
+### 5.7 Two windows on one connection
 
 `ServerUiSession` enforces one UI session per connection by construction: a second registers
 `ui/description` twice and `MessageRouter` refuses a duplicate. That is the right failure and a real
 limit. Lifting it means the router dispatching on **window id as well as method**, which is the same
 change C1 originally implied and was deliberately left out of it.
 
-### 5.7 Server-contributed commands · `command/*`
+### 5.8 Server-contributed commands · `command/*`
 
 `CommandRegistry`'s javadoc already anticipates *"a command sent from a server"*, and `Protocols` makes
 the namespace straightforward — `command/*` alongside `ui/*` and `workspace/*`, registered the way the
@@ -264,7 +365,7 @@ workspace now is. Nothing implements it.
 which is a trust boundary the protocol has not needed until now. `ScriptPolicy`'s reasoning is the
 precedent — a control nobody will configure is worse than a leaky one that gets used.
 
-### 5.8 The wire under real conditions
+### 5.9 The wire under real conditions
 
 Everything so far is **localhost with tiny payloads**: the in-game probe moved a 44-byte file, and the
 1.25 MB chunked test was in-memory over an `InMemoryTransport`. Credit flow control, fragmentation and
@@ -273,7 +374,7 @@ the 8 MB reassembly bound have never met latency, loss, or a genuinely large fil
 **Watch for:** `MAX_REASSEMBLY_BYTES` is connection-wide rather than per-stream and does not scale with
 the platform ceiling — several large transfers in flight together is the case that has never run.
 
-### 5.9 Platform hygiene · **the class of bug that cost three fixes today**
+### 5.10 Platform hygiene · **the class of bug that cost three fixes today**
 
 - **`PlatformService1201` has the same eager-construction shape** just fixed on 1.7.10, and worse: its
   services are `private final X = new X()` inside a `static final INSTANCE`, so they are built at *class
@@ -313,7 +414,7 @@ the platform ceiling — several large transfers in flight together is the case 
   anything above. An optimisation behind an intact seam.
 - **Slots and inventory** (Phase 4 C6). Refused on the plan family's own rule: no consumer, no
   `ItemStack` anywhere in `core/src/main` or `mc1710/src`. Revive when something renders an item.
-- **mc1201 itself.** Still a product call, not a technical block. 5.9's first bullet is the part worth
+- **mc1201 itself.** Still a product call, not a technical block. 5.10's first bullet is the part worth
   knowing *before* that call is made.
 - **The shader node graph.** Its own document.
 
@@ -326,7 +427,7 @@ probe cannot stand up a second client:
 
 - **Multi-viewer fan-out** with two real players. `MultiViewerTest` covers it; the in-game probe adds a
   real `addViewer` against the live session whose far end is an `InMemoryTransport`.
-- **Anything about latency**, which is 5.8.
+- **Anything about latency**, which is 5.9.
 
 And a standing note from Phase 4 that the dedicated-server work reinforced: **a client is an environment
 no test reproduces** — and a *server* is a second one. Every defect found today was invisible to 1090
