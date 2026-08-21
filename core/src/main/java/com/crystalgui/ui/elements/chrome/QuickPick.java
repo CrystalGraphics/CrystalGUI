@@ -4,21 +4,27 @@ import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.property.ObservableList;
 import com.crystalgui.core.search.SearchQuery;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.render.texture.CgUiDrawable;
+import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Popover;
 import com.crystalgui.ui.elements.SearchField;
 import com.crystalgui.ui.elements.UIText;
+import com.crystalgui.ui.elements.SymbolIcon;
 import com.crystalgui.ui.elements.list.ListRenderer;
 import com.crystalgui.ui.elements.list.ListView;
 import com.crystalgui.ui.elements.list.SelectionMode;
 import com.crystalgui.ui.event.KeyboardEvent;
+import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
+import com.crystalgui.text.lang.SymbolModifier;
 import com.crystalgui.ui.text.TextRange;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import javax.annotation.Nullable;
@@ -55,10 +61,26 @@ import javax.annotation.Nullable;
 public class QuickPick extends Popover {
 
     public static final String CONTENT_CLASS = "__content__";
+
+    /** The bar above the search field. A title, and the surface the whole popup is dragged by. */
+    public static final String HEADER_CLASS = "__qp-header__";
+
+    /** The text in that bar. @see #setTitle */
+    public static final String TITLE_CLASS = "__qp-title__";
+
     public static final String SEARCH_CLASS = "__search__";
     public static final String RESULTS_CLASS = "__results__";
     public static final String CATEGORY_CLASS = "__qp-category__";
     public static final String LABEL_CLASS = "__qp-label__";
+
+    /** The dim text after the label — a symbol's package. @see QuickPickItem#description */
+    public static final String DESCRIPTION_CLASS = "__qp-description__";
+
+    /** The kind glyph before the label. Present on every row, hidden when the item is not a symbol. */
+    public static final String ICON_CLASS = "__qp-icon__";
+
+    /** The file glyph before the label, for a row that is not a symbol. @see QuickPickItem#iconName */
+    public static final String FILE_ICON_CLASS = "__qp-file-icon__";
     public static final String SPACER_CLASS = "__qp-spacer__";
     public static final String ACCELERATOR_CLASS = "__qp-accelerator__";
 
@@ -109,6 +131,14 @@ public class QuickPick extends Popover {
     public final Signal.Value<String> onAccepted = new Signal.Value<>();
 
     private final UIElement content = new UIElement();
+    private final UIElement header = new UIElement();
+    private final UIText title = new UIText("");
+
+    /** Position at the moment a move began, so the drag accumulates from there and not from itself. */
+    private float dragStartLeft, dragStartTop;
+
+    /** @see #setRetainQuery */
+    private boolean retainQuery;
     private final SearchField search = new SearchField();
     private final ObservableList<QuickPickEntry> results = new ObservableList<>();
     private final ListView<QuickPickEntry> list = new ListView<>(results);
@@ -122,6 +152,18 @@ public class QuickPick extends Popover {
         setFocusPolicy(FocusPolicy.NONE);
 
         content.addClass(CONTENT_CLASS);
+
+        // A HEADER, and its job is to be draggable as much as to say anything.
+        //
+        // A popup with no chrome has nowhere to grab: every pixel of it is either the field (which owns
+        // the caret) or a row (which accepts on press). IntelliJ's own Search Everywhere puts its tab
+        // strip here and that strip is the drag handle -- the bar earns its height twice.
+        header.addClass(HEADER_CLASS);
+        title.addClass(TITLE_CLASS);
+        title.setHitTest(false);
+        header.addChild(title);
+        header.onMouseDown.attachListener((el, event) -> beginMove(event), false, true);
+        content.addChild(header);
         // Marked internal exactly ONCE, while empty. markAsInternal() RECURSES, so stamping a populated
         // subtree marks every descendant internal too -- and removeChild silently refuses internal
         // children. That is the bug that put duplicate, unclickable tabs in the dock; the wrapper is how
@@ -158,6 +200,23 @@ public class QuickPick extends Popover {
         return this;
     }
 
+    /**
+     * Whether a close keeps what was typed, for the next {@link #open}.
+     *
+     * <p>Only useful to a caller that <b>reuses the instance</b> — a picker rebuilt per invocation has
+     * nothing to retain, and this quietly does nothing. That is the arrangement {@code GoToFile} has and
+     * the command palette does not: repeating a search is ordinary, and re-running the command you just
+     * ran is not.</p>
+     */
+    public QuickPick setRetainQuery(boolean retain) {
+        this.retainQuery = retain;
+        return this;
+    }
+
+    public boolean isRetainQuery() {
+        return retainQuery;
+    }
+
     public QuickPick setPlaceholder(String placeholder) {
         search.setPlaceholder(placeholder);
         return this;
@@ -179,17 +238,30 @@ public class QuickPick extends Popover {
     // ── Opening ─────────────────────────────────────────────────────────────────────────────────
 
     /**
-     * Attaches to the window's root if it is not already there, clears the query, and shows.
+     * Attaches to the window's root if it is not already there, resets or restores the query, and shows.
      *
-     * <p>The query is reset on every open rather than remembered. VS Code remembers it and pre-selects
-     * the text; that is a preference-store decision, and a palette that opens showing last time's filter
-     * with no visible indication it is filtered is worse than one that opens blank.</p>
+     * <h3>Whether the query survives a close is the CALLER's to decide</h3>
+     *
+     * <p>This used to always clear, on the ground that "a palette that opens showing last time's filter
+     * with no visible indication it is filtered is worse than one that opens blank". That objection is
+     * real and it is answered by <b>selecting</b> the restored text rather than by throwing it away —
+     * which is exactly what both references do. The first keystroke replaces it, so nothing is stickier
+     * than before; Enter or an arrow reuses it, which is the whole point.</p>
+     *
+     * <p>Default is still to clear, so nothing changes for a caller that has not asked. @see #setRetainQuery</p>
      */
     public QuickPick open(UIWindow window) {
         // hostFor, not the root: a root that refuses public children -- any composite, CrystalEditor
         // included -- would throw here. Null `near` means "window level", which the palette is.
         window.addOverlay(this, null);
-        search.setText("");
+        if (retainQuery && !search.getText().isEmpty()) {
+            // SELECTED, not merely present. An unselected restored query is the "filtered with no visible
+            // indication" complaint this used to answer by clearing; selected, the first character
+            // replaces the lot and the box reads as a fresh one that happens to be pre-filled.
+            search.field().selectAll();
+        } else {
+            search.setText("");
+        }
         // Point-anchored with a null invoker: reposition() below overrides placement entirely, and a null
         // invoker is correct because a palette is not a toggle -- naming a trigger surface as the invoker
         // would exempt that whole surface from light dismiss.
@@ -201,6 +273,61 @@ public class QuickPick extends Popover {
         // be settled while there is no viewport to settle against.
         refresh();
         return this;
+    }
+
+    /** What the header says. Empty hides the bar, so a picker that wants no chrome keeps none. */
+    public QuickPick setTitle(@Nullable String text) {
+        title.setText(text == null ? "" : text);
+        boolean shown = text != null && !text.isEmpty();
+        // `display`, not `opacity` or a detach: a hidden header must take no height, and nothing may enter
+        // or leave the tree here -- this runs while the popup is being built and again whenever a caller
+        // renames it.
+        StyleGroup.importantPipeline(header.getStyle().getLayoutGroup(),
+                l -> l.display(shown ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
+        return this;
+    }
+
+    public String getTitle() {
+        return title.getText();
+    }
+
+    /** The header bar, so a caller can put its own controls in it. @see #setTitle */
+    public UIElement headerBar() {
+        return header;
+    }
+
+    /**
+     * Starts a positional drag of the whole popup from a press on the header.
+     *
+     * <p>Through {@link #moveTo}, which is the one legal way off an anchor: it hands placement over
+     * rather than fighting it, so {@link #reposition} goes quiet and there is still exactly one writer of
+     * {@code left}/{@code top} at any moment. Writing the position directly would have the placement
+     * ticker overwrite the drag on the very next frame.</p>
+     *
+     * <p>Accumulated from a snapshot rather than from the live box, the same as {@code Dialog}'s title
+     * bar: reading the current position each tick compounds the drag's own deltas.</p>
+     */
+    private void beginMove(MouseEvent.Down event) {
+        UIWindow window = getAttachedWindow();
+        if (window == null) return;
+        dragStartLeft = getRuntimeCache().getX();
+        dragStartTop = getRuntimeCache().getY();
+        // Zero threshold: a window must track the very first pixel, and a header has no competing click
+        // interpretation to protect.
+        window.getInputHandler().getDragController().startDrag(header,
+                event.getPosition().x(), event.getPosition().y(),
+                (mx, my, sx, sy, dx, dy) -> moveClamped(dragStartLeft + dx, dragStartTop + dy));
+    }
+
+    /** Writes the dragged position, clamped into the window so it cannot be lost off an edge. */
+    private void moveClamped(float left, float top) {
+        UIElement container = resizeContainingBlock();
+        float maxLeft = Float.MAX_VALUE, maxTop = Float.MAX_VALUE;
+        if (container != null) {
+            maxLeft = Math.max(0f, container.getRuntimeCache().getWidth() - getRuntimeCache().getWidth());
+            maxTop = Math.max(0f, container.getRuntimeCache().getHeight() - getRuntimeCache().getHeight());
+        }
+        moveTo(Math.min(Math.max(0f, left), maxLeft), Math.min(Math.max(0f, top), maxTop));
     }
 
     /** Focus goes to the search field the moment it opens — the caret is the point of the whole widget. */
@@ -221,13 +348,31 @@ public class QuickPick extends Popover {
     @Override
     public void reposition() {
         if (!isOpen()) return;
+        // BEFORE the freely-positioned check, because this is not about position. A resize does not set
+        // that flag -- only a drag does -- but a popup that was dragged AND resized would otherwise never
+        // re-evaluate how its list is sized, and `refresh` alone only runs on a keystroke. So the switch
+        // between measuring and filling is re-decided every frame, which is cheap: both writes no-op on an
+        // unchanged value.
+        sizeListToContent(results.size());
+        // ONCE DRAGGED, THIS GOES QUIET. The base implementation returns on the same flag; an override
+        // that forgot to would overwrite the drag on the very next tick, so the popup would follow the
+        // pointer for one frame and snap back -- which reads as the drag not being implemented.
+        if (isFreelyPositioned()) return;
         UIWindow window = getAttachedWindow();
         if (window == null) return;
         float available = window.getScreenWidth();
         float width = Math.max(0f, Math.min(PREFERRED_WIDTH, available - 2f * MIN_MARGIN));
         float left = Math.max(MIN_MARGIN, (available - width) / 2f);
-        StyleGroup.importantPipeline(getStyle().getLayoutGroup(),
-                l -> l.width(width).left(left).top(TOP_OFFSET));
+        // WIDTH AT DEFAULT, position at IMPORTANT, and the split is what makes `resize` work at all.
+        //
+        // `UIResizer` writes at INLINE, per the CSS spec's rule for a user resize. A widget that writes
+        // its own measurement at IMPORTANT therefore beats the handle -- so the grabber could change the
+        // height and never the width, and half a resize working reads as a broken widget rather than an
+        // unsupported gesture. `UIElement.markUserSized` states the remedy outright: "a widget whose size
+        // the user may take writes that size at a LOWER origin". The position is not the user's until
+        // they drag it, at which point this method stops running.
+        StyleGroup.defaultPipeline(getStyle().getLayoutGroup(), l -> l.width(width));
+        StyleGroup.importantPipeline(getStyle().getLayoutGroup(), l -> l.left(left).top(TOP_OFFSET));
     }
 
     // ── Query and selection ─────────────────────────────────────────────────────────────────────
@@ -301,8 +446,27 @@ public class QuickPick extends Popover {
      * stylesheet height would be overwritten every keystroke anyway, so losing to this is honest.</p>
      */
     private void sizeListToContent(int rowCount) {
+        // ONCE THE USER HAS SET A HEIGHT, THE LIST FILLS RATHER THAN MEASURES.
+        //
+        // Sizing to content inside a box the user has fixed is what broke a resized popup: this engine
+        // defaults `flex-shrink` to **0**, so a parent with a fixed height does NOT compress its children
+        // -- they keep their content size and spill straight out of it. Resize the popup tall while it is
+        // empty, then type, and the rows ran on past the bottom edge and painted over the editor, because
+        // nothing was ever asked to fit.
+        //
+        // `height: 0; flex-grow: 1` is this codebase's fill idiom, and it deliberately does not touch
+        // `flex-shrink` -- the 0 default is what stops content being compressed below its own size, and
+        // overriding it to 1 collapses the box instead. @see AGENTS.md
+        if (isUserSizedHeight()) {
+            StyleGroup.importantPipeline(list.getStyle().getLayoutGroup(),
+                    l -> l.height(0f).flexGrow(1f));
+            return;
+        }
         float height = Math.min(rowCount, MAX_VISIBLE_ROWS) * ROW_HEIGHT;
-        StyleGroup.importantPipeline(list.getStyle().getLayoutGroup(), l -> l.height(height));
+        // flexGrow BACK TO 0, not merely a height: the two are written by the same method and a popup that
+        // was user-sized and then reopened would otherwise keep growing into whatever space it is given.
+        StyleGroup.importantPipeline(list.getStyle().getLayoutGroup(),
+                l -> l.height(height).flexGrow(0f));
     }
 
     private boolean handleKey(int keyCode) {
@@ -351,8 +515,27 @@ public class QuickPick extends Popover {
 
     /** A row's parts, plus the index it is currently showing. */
     private static final class Row extends UIElement {
+        /**
+         * The kind glyph, built with the template and hidden when unused.
+         *
+         * <p>{@link SymbolIcon} rather than a name resolved to a drawable, because that widget is where
+         * the {@code completion-kind-*} vocabulary lives and a second table saying the same thing drifts
+         * invisibly — a class glyph on an interface reads as a row with an icon, not a row with the wrong
+         * one. Built here and not in {@code bind} for the reason {@link #keyBoxes} records at length.</p>
+         */
+        final SymbolIcon icon = new SymbolIcon();
+        /**
+         * The other glyph — a file's, resolved from a name rather than a kind.
+         *
+         * <p>A sibling rather than a mode of {@link #icon}, because the two are drawn by different
+         * machinery: a {@link SymbolIcon} stacks modifier layers as internal children, a file icon is one
+         * overlay drawable. Exactly one is ever shown.</p>
+         */
+        final UIElement fileIcon = new UIElement();
         final UIText category = new UIText("");
         final UIText label = new UIText("");
+        /** Dim, trailing, never highlighted. @see QuickPickItem#description */
+        final UIText description = new UIText("");
         final UIElement spacer = new UIElement();
         /**
          * A ROW of key boxes, not one string.
@@ -390,12 +573,23 @@ public class QuickPick extends Popover {
         @Override
         public UIElement createTemplate() {
             Row row = new Row();
+            row.icon.addClass(ICON_CLASS);
+            row.fileIcon.addClass(FILE_ICON_CLASS);
+            row.fileIcon.setHitTest(false);
             row.category.addClass(CATEGORY_CLASS);
             row.label.addClass(LABEL_CLASS);
+            row.description.addClass(DESCRIPTION_CLASS);
             row.spacer.addClass(SPACER_CLASS);
             row.accelerator.addClass(ACCELERATOR_CLASS);
+            // Unhittable, like every composite part: the row itself takes the press, and an icon that
+            // took it instead would swallow the click that accepts.
+            row.icon.setHitTest(false);
+            row.description.setHitTest(false);
+            row.addChild(row.icon);
+            row.addChild(row.fileIcon);
             row.addChild(row.category);
             row.addChild(row.label);
+            row.addChild(row.description);
             row.addChild(row.spacer);
             row.addChild(row.accelerator);
             for (int i = 0; i < MAX_KEYS_PER_CHORD; i++) {
@@ -444,6 +638,31 @@ public class QuickPick extends Popover {
             row.category.setText(category == null || category.isEmpty() ? "" : category + ": ");
             row.label.setText(item.label());
             setAccelerator(row, item.accelerator());
+
+            // BOTH SET AND CLEARED on every bind, because rows are pooled. A row that once showed a class
+            // and is reused for a command keeps the glyph otherwise -- the same swap-never-add rule the
+            // file tree's `filetype-*` classes and the dock's `decoration-*` ones both follow.
+            String description = item.description();
+            boolean described = description != null && !description.isEmpty();
+            row.description.setText(described ? description : "");
+            show(row.description, described);
+
+            boolean hasKind = item.kind() != null;
+            show(row.icon, hasKind);
+            row.icon.show(item.kind(), item.isAbstract()
+                    ? Collections.singleton(SymbolModifier.ABSTRACT) : Collections.emptySet());
+
+            // KIND WINS. Both being set is a caller's mistake rather than a state to render, and drawing
+            // both would be two glyphs where the sheet has spaced one.
+            CgUiSvg glyph = hasKind || item.iconName() == null || item.iconName().isEmpty()
+                    ? null : CgUiSvg.ofIcon(item.iconName());
+            show(row.fileIcon, glyph != null);
+            // Cleared as well as set: rows are pooled, so a row that showed a `.java` and is reused for a
+            // command would otherwise keep the drawable behind a hidden box -- and reappear with it the
+            // next time anything unhid it.
+            final CgUiDrawable drawable = glyph == null ? CgUiDrawable.EMPTY : glyph;
+            StyleGroup.defaultPipeline(row.fileIcon.getStyle().getGeneralGroup(),
+                    g -> g.overlay(drawable));
 
             // Set AND cleared, because rows are recycled -- a row that showed a disabled command and is
             // reused for an enabled one would otherwise stay dimmed and unclickable-looking forever.

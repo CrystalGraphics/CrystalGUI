@@ -417,6 +417,22 @@ public class Popover extends UIElement {
     }
 
     /**
+     * Whether {@link #moveTo} has taken this popup off its anchor.
+     *
+     * <p>Matters most to a subclass that <b>overrides</b> {@link #reposition()}: the base implementation
+     * returns early on this, and an override that forgets to overwrites the user's drag on the very next
+     * tick — the popup follows the pointer and snaps back, every frame, which reads as the drag not being
+     * implemented rather than as being fought.</p>
+     *
+     * <p>Public rather than protected because it is also the only <em>observable</em> of a move: whether a
+     * popup is still anchored is not derivable from its box, since an anchored one and a dragged one can
+     * be in the same place. {@code NodeCreationMenuTest} asserts on exactly that.</p>
+     */
+    public boolean isFreelyPositioned() {
+        return freelyPositioned;
+    }
+
+    /**
      * A leading-edge resize moves the origin, and here that means <b>handing over from the anchor</b>.
      *
      * <p>The base writes {@code left}/{@code top} directly, which on an anchored popup is the one thing

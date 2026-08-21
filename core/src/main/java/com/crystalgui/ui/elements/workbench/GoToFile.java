@@ -1,76 +1,237 @@
 package com.crystalgui.ui.elements.workbench;
 
+import com.crystalgui.core.search.SearchMatch;
+import com.crystalgui.core.search.SearchMatcher;
+import com.crystalgui.core.search.SearchQuery;
 import com.crystalgui.fs.CgPath;
+import com.crystalgui.fs.Resource;
+import com.crystalgui.render.texture.asset.FileIconTheme;
+import com.crystalgui.text.TextPoint;
+import com.crystalgui.text.lang.TypeSearch;
+import com.crystalgui.text.lang.TypeSearchRegistry;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.chrome.QuickPick;
+import com.crystalgui.ui.elements.chrome.QuickPickEntry;
 import com.crystalgui.ui.elements.chrome.QuickPickItem;
-import com.crystalgui.ui.elements.chrome.QuickPickSource;
+import com.crystalgui.ui.text.TextRange;
+
+import javax.annotation.Nullable;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /**
- * Open a file by typing its name — VS Code's {@code Ctrl+P}, IntelliJ's Go to File.
+ * Go to File — one list over everything you can open, workspace and classpath alike.
  *
- * <h3>It is the palette's widget with a different list in it</h3>
+ * <h3>One picker, not two</h3>
  *
- * <p>{@link QuickPick} already does the search field, the result list, the fuzzy match highlighting and
- * the keyboard handling, and {@code SearchMatcher} — ported from VS Code's {@code filters.ts} — already
- * decides what "matches" means. So this file is a list and a callback. Anything more would be a second
- * idea of how searching works, differing from the palette's in ways nobody chose.</p>
+ * <p>A separate Go to Class would be a second popup that looks identical and behaves differently, and the
+ * question it answers is not a different question: <em>"open the thing called this"</em> does not become a
+ * new gesture because the thing happens to live in a jar. Both references landed here too — IntelliJ's
+ * Ctrl+N and Ctrl+Shift+N are two doors into one window, and VS Code's Ctrl+P is one list.</p>
  *
- * <h3>The path is the category</h3>
+ * <p>So project files and classpath types are ranked <b>against each other</b> by one matcher. That is the
+ * whole reason {@link TypeSearch} does not rank: a provider that scored its own results would be bringing a
+ * second notion of "better match" into a list it shares, and the two orderings would interleave into
+ * something neither of them meant.</p>
  *
- * <p>The row's <b>label</b> is the file name and its <b>category</b> is the folder, which is exactly how
- * both editors present it — you search for {@code Main} and disambiguate by looking at the folder, rather
- * than searching a long string that happens to contain the folder. {@code SearchMatcher} matches the two
- * as separate fields, so typing a folder name still finds it without the query having to spell out the
- * whole path.</p>
+ * <h3>What a row is addressed by</h3>
  *
- * <h3>What it can find</h3>
- *
- * <p>Whatever {@link WorkspaceTreeSource#knownFiles()} has reached. The workbench crawls the workspace in
- * the background from the moment it opens, so the answer is usually "everything" by the time anyone
- * presses the key — and while it is still growing, a partial list is the honest thing to show. Every
- * editor with this feature shows a list that fills in; one that showed nothing until a whole project had
- * been walked would be useless on the first press, which is when it is most wanted.</p>
+ * <p>A {@link Resource}, stringified — {@code project:proj:src/Main.java} or
+ * {@code library:java.util.ArrayList}. Not a bare path, because the list now holds two kinds of thing and
+ * the id has to say which; and not a lookup table, because an id that is the address cannot go stale
+ * between the list being built and a row being chosen. A file deleted in between simply fails to open, and
+ * says so, rather than opening whatever has since taken its index.</p>
  */
 public final class GoToFile {
 
-    public static final String PLACEHOLDER = "Go to file";
+    public static final String PLACEHOLDER = "Go to file or class";
+
+    /** The header bar's text — and the surface the popup is dragged by. @see QuickPick#setTitle */
+    public static final String TITLE = "Go to File";
+
+    /**
+     * How many types to ask for.
+     *
+     * <p>Larger than the forty {@code TypeIndex} returns per bucket, so <b>our</b> cap is never the one
+     * that bites first — a picker that truncated an already-truncated list would report truncation for a
+     * reason the index had nothing to do with, and the two limits would have to be kept in step forever.</p>
+     */
+    private static final int TYPE_LIMIT = 100;
+
+    /**
+     * Group weights, lower first: <b>workspace files 100, classpath types 200</b>.
+     *
+     * <h3>A partition, not a tie-break — and that distinction was measured</h3>
+     *
+     * <p>This is the PRIMARY sort key: every project file comes before every classpath type, and match
+     * quality orders each group internally. The first attempt made it a tie-break under the match score,
+     * on the reasoning that a class and the file declaring it match equally and only need a stable order.
+     * <b>They do not match equally.</b> A class is {@code ArrayList} and its file is
+     * {@code ArrayList.java}, so typing the name is an EXACT hit on the class and a mere prefix on the
+     * file — the type wins on quality and the tie-break is never consulted at all. Typing {@code main}
+     * therefore returned ten {@code Main} classes out of {@code com.sun.tools} before the {@code Main} in
+     * the workspace, with the weights already "corrected" and doing nothing.</p>
+     *
+     * <p>So the rule has to be stated where it can bite. It is also the reference behaviour: IntelliJ does
+     * not blend non-project items into the ranking either — it gates them behind "Include non-project
+     * items" and appends them, which is this partition with a switch on it.</p>
+     *
+     * <p>The cost is real and accepted: a poorly-matching project file outranks a perfect classpath hit.
+     * That is the right trade here, where the classpath is the JDK plus a few hundred jars nobody in this
+     * workspace wrote, and the wrong one in a product whose classpath IS the project.</p>
+     */
+    private static final int WEIGHT_FILE = 100;
+    private static final int WEIGHT_TYPE = 200;
 
     private GoToFile() {
     }
 
-    /** Opens the picker over {@code workbench}'s indexed files. */
+    /**
+     * Opens the picker over the workspace index and every registered {@link TypeSearch} provider.
+     *
+     * <h3>One instance, reused — and that is what makes the query survive</h3>
+     *
+     * <p>Rebuilt per invocation there is nothing to retain: closing would discard the text along with the
+     * widget. So the workbench holds it ({@code Workbench.quickOpen}) and this wires it once. A reused
+     * picker is also why {@code onClosed} disposes nothing — a disposed list cannot be reopened, and a
+     * closed popover is already {@code display: none}, which costs no layout and no paint.</p>
+     *
+     * <p>Repeating a search is ordinary in a way that repeating a <em>command</em> is not, which is why
+     * this retains and the command palette does not.</p>
+     */
     public static QuickPick open(UIWindow window, Workbench workbench) {
+        QuickPick existing = workbench.quickOpen();
+        if (existing != null) return existing.open(window);
+
         QuickPick pick = new QuickPick();
         pick.setPlaceholder(PLACEHOLDER);
-        pick.setSource(QuickPickSource.of(itemsFor(workbench)));
-        pick.onAccepted.connect(id -> workbench.openFile(CgPath.parse(id)));
-        pick.onClosed.connect(() -> {
-            pick.resultList().dispose();
-            pick.removeSelf();
+        pick.setTitle(TITLE);
+        pick.setRetainQuery(true);
+        // THE LIST, NOT THE WORKBENCH. Read per query rather than snapshotted at open, so a listing that
+        // lands while the picker is up is searchable without reopening it.
+        pick.setSource(query -> rowsFor(query, workbench.fileTree().source().knownFiles()));
+        pick.onAccepted.connect(id -> {
+            // THE LOCATION COMES FROM THE QUERY, NOT THE ROW. `Main.java:42` narrows to `Main.java` for
+            // matching, so every row is a match for the name and none of them carries the line — which
+            // belongs to what was typed rather than to what was found. Read live at accept time rather
+            // than stashed when the query ran: the two cannot then disagree.
+            TextPoint at = QueryLocation.parse(pick.searchField().getText()).point();
+            Resource resource = Resource.parse(id);
+            if (resource.isProject()) workbench.openFileAt(resource.asPath(), at);
+            else workbench.openResourceAt(resource, at);
         });
+        workbench.setQuickOpen(pick);
         return pick.open(window);
     }
 
     /**
-     * Every indexed file as a row, name first and folder second.
+     * Ranks and highlights everything that could answer {@code query}.
      *
-     * <p>Public and static so a test can assert the candidate set without a window on screen — which is
-     * the part worth pinning, and it needs no pixels.</p>
+     * <h3>Matched on the name, and on the location — but only the name is lit</h3>
+     *
+     * <p>Both halves are worth having and neither is worth highlighting twice. A folder fragment is a real
+     * way to find a file ({@code render/Cg}), and a package is a real way to find a class — so both are
+     * matched, at {@code FIELD_CONTEXT}, below the name. Only the name's ranges are lit, which is what
+     * both references do: lighting the path would claim it contributed to the ranking when a name hit
+     * outranks it outright.</p>
+     *
+     * <p><b>Public and static so a test can assert the list without a window on screen</b> — which is the
+     * part worth pinning, and it needs no pixels. The predecessor {@code itemsFor} was public for the same
+     * stated reason; driving this through a real {@code UIWindow} would test the shell rather than the
+     * ranking, and the ranking is the part with decisions in it.</p>
      */
-    public static List<QuickPickItem> itemsFor(Workbench workbench) {
-        List<QuickPickItem> items = new ArrayList<>();
-        for (CgPath path : workbench.fileTree().source().knownFiles()) {
-            CgPath parent = path.parent();
-            // The ID IS THE PATH, so accepting a row needs no lookup table and cannot go stale between the
-            // list being built and a row being chosen -- a file deleted in between simply fails to open,
-            // and says so, rather than opening whatever has since taken its index.
-            items.add(new QuickPickItem(path.toString(), path.name(),
-                    parent == null ? null : parent.toString(), null));
+    public static List<QuickPickEntry> rowsFor(SearchQuery query, List<CgPath> files) {
+        // AN EMPTY QUERY LISTS NOTHING, which is the one place this diverges from the command palette's
+        // "empty means everything". Everything, here, is the workspace plus sixty thousand types: not a
+        // list, and not one that could be usefully ordered without a query to order it by.
+        String typed = query == null ? "" : query.text();
+        QueryLocation location = QueryLocation.parse(typed);
+        String name = location.name();
+        if (name.isEmpty()) return List.of();
+
+        // MATCH AGAINST THE STRIPPED NAME, not what was typed. Otherwise the first `:` of a pasted
+        // `Main.java:42` empties the list, which reads as the search breaking on a keystroke.
+        SearchQuery effective = name.equals(typed) ? query : SearchQuery.of(name);
+
+        List<Scored> scored = new ArrayList<>();
+        collectTypes(name, effective, scored);
+        collectFiles(files, effective, scored);
+
+        // GROUP FIRST, then quality within the group. @see WEIGHT_FILE for why this order and not the
+        // other -- as a tie-break under the score it was unreachable.
+        scored.sort(Comparator.comparingInt((Scored s) -> s.weight)
+                .thenComparing(s -> s.match, Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(s -> s.item.label())
+                .thenComparing(s -> s.item.id()));
+
+        List<QuickPickEntry> rows = new ArrayList<>(scored.size());
+        for (Scored s : scored) rows.add(new QuickPickEntry(s.item, rangesOf(s.labelMatch), List.of()));
+        return rows;
+    }
+
+    private static void collectTypes(String name, SearchQuery effective, List<Scored> out) {
+        TypeSearch.Results found = TypeSearchRegistry.search(name, TYPE_LIMIT);
+        for (TypeSearch.Result result : found.results()) {
+            QuickPickItem item = new QuickPickItem(
+                    Resource.of(Resource.SCHEME_LIBRARY, result.qualifiedName()).toString(),
+                    result.simpleName(), result.packageName(), null, null, true,
+                    result.kind(), result.isAbstract(), null);
+            // OUR MATCHER HAS THE LAST WORD, and the first version did not let it.
+            //
+            // `TypeIndex.matching` answers in two buckets -- prefix hits, then arbitrary SUBSEQUENCE hits
+            // -- and keeping everything it returned meant the subsequence bucket landed in the list
+            // wholesale. Typing `main` listed `AlgorithmConstraints`, `AMDMultiDrawIndirect` and
+            // `AWTCanvasImplementation`: all of them genuinely contain m-a-i-n in order, and none of them
+            // is what anybody meant. `SearchMatcher` refuses scattered subsequences unless a consumer
+            // opts in, exactly because "over a few hundred short labels the same rule returns a long tail
+            // nobody meant" -- and this list is sixty thousand. So a row the matcher scores as no match
+            // is not listed, which is what the file half already did.
+            Scored candidate = score(item, effective, WEIGHT_TYPE);
+            if (candidate != null) out.add(candidate);
         }
-        return items;
+    }
+
+    private static void collectFiles(List<CgPath> files, SearchQuery effective, List<Scored> out) {
+        if (files == null) return;
+        for (CgPath path : files) {
+            CgPath parent = path.parent();
+            QuickPickItem item = new QuickPickItem(
+                    Resource.of(path).toString(), path.name(),
+                    parent == null ? null : parent.toString(), null, null, true,
+                    null, false, FileIconTheme.getDefault().iconFor(path.name(), false, false));
+            Scored candidate = score(item, effective, WEIGHT_FILE);
+            // A FILE IS ONLY LISTED IF IT MATCHED. Unlike a type, nothing narrowed it first -- the whole
+            // workspace index is walked here -- so keeping the unmatched ones would list every file in
+            // the project under every query.
+            if (candidate != null) out.add(candidate);
+        }
+    }
+
+    /** Scores one candidate against the name and, failing that, its location. Null when neither hit. */
+    @Nullable
+    private static Scored score(QuickPickItem item, SearchQuery query, int weight) {
+        SearchMatch onLabel = SearchMatcher.match(query, item.label(), SearchMatch.FIELD_PRIMARY);
+        SearchMatch onWhere = SearchMatcher.match(query, item.description(), SearchMatch.FIELD_CONTEXT);
+        SearchMatch best = SearchMatch.best(onLabel, onWhere);
+        if (best == null) return null;
+        // ONLY THE LABEL'S RANGES ARE KEPT. A description hit ranks the row and does not light anything --
+        // lighting it would need ranges against a field the row deliberately never highlights.
+        return new Scored(item, best, best == onLabel ? onLabel : null, weight);
+    }
+
+    private static List<TextRange> rangesOf(@Nullable SearchMatch match) {
+        if (match == null) return List.of();
+        List<TextRange> ranges = new ArrayList<>(match.ranges().size());
+        for (SearchMatch.Range range : match.ranges()) {
+            ranges.add(TextRange.of(range.start(), range.end()));
+        }
+        return ranges;
+    }
+
+    /** A candidate, its ranking match, the match to light up (if any), and its tie-break weight. */
+    private record Scored(QuickPickItem item, @Nullable SearchMatch match,
+                          @Nullable SearchMatch labelMatch, int weight) {
     }
 }

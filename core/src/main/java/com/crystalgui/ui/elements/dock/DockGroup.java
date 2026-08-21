@@ -11,6 +11,7 @@ import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.event.FocusEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.elements.Tab;
+import com.crystalgui.ui.elements.Tooltip;
 import com.crystalgui.ui.elements.InsertionMarker;
 import com.crystalgui.ui.elements.TabView;
 import com.crystalgui.ui.input.FocusPolicy;
@@ -278,6 +279,8 @@ public class DockGroup extends UIElement {
             // than pushed onto the tab: the strip is rebuilt on every rearrangement, and anything pushed
             // would have to be pushed again by somebody who noticed.
             applyDecoration(tab, panel);
+            // AFTER the icon, because the icon is what the tooltip's second answer is anchored to.
+            applyTooltip(tab, panel);
             // CLOSABILITY IS THE PANEL TYPE'S, and it is already recorded there -- a console or an editor
             // may be closed, a region's permanent host may not. Routed to the same `closePanel` the Close
             // Panel command uses, so the mouse and the keyboard cannot come to mean different things.
@@ -347,10 +350,46 @@ public class DockGroup extends UIElement {
      * pooled, so adding would stack a new glyph on the last one every time the panel list moved.</p>
      */
     private static void applyIconElement(Tab tab, UIElement glyph) {
-        UIElement slot = tab.getPreIcon();
-        if (slot == null) return;
-        slot.setDisplayed(true);
-        slot.setOnlyChild(glyph);
+        // THE ELEMENT IS THE SLOT, set the way applyIcon sets its own. This read `getPreIcon()` and
+        // filled it, which answers NULL on a tab that has never had one -- so a viewer tab lost its icon
+        // entirely while every project tab kept theirs, because those go through the NAME path and its
+        // `setPreIcon` is what creates the slot in the first place.
+        //
+        // `setPreIcon` also adds PRE_ICON_CLASS, which is what the sheet sizes and spaces the icon by, so
+        // a child stuffed into an existing slot would have inherited none of that even where one existed.
+        tab.setPreIcon(glyph);
+    }
+
+    /**
+     * Gives a tab its hover text — and its icon a second answer, where the icon means something of its
+     * own.
+     *
+     * <h3>One tooltip with two regions, not two tooltips</h3>
+     *
+     * <p>The icon is unhittable, as every composite part is: click-focus targets the exact element hit
+     * rather than the nearest focusable ancestor, so a hittable icon swallows the press that selects the
+     * tab and the drag that starts from it. An unhittable element never receives {@code mouseenter}, so a
+     * tooltip attached to it could not fire at all — and even if it could, {@code Enter} is dispatched to
+     * every element in the entered chain, so the tab's tooltip and the icon's would both show, stacked.
+     * {@link Tooltip#addRegion} is the one mechanism that answers both.</p>
+     *
+     * <p><b>Built once per tab, never refreshed.</b> Same argument as the icon's: both are functions of
+     * the ref, the ref is immutable, and a panel whose ref changed is a different panel — at which point
+     * {@link #sync} rebuilds the strip anyway. A re-read here would be work that provably cannot find
+     * anything, on a path called from a frame tick. And {@code Tooltip.attach} <em>adds</em> a listener
+     * pair rather than replacing one, so calling it twice on a tab leaves two tooltips showing.</p>
+     *
+     * <p>An icon answer without a tab answer is not wired: the base text is what the tooltip says
+     * everywhere else on the tab, and an empty one draws a bare rounded box over most of the control.</p>
+     */
+    private void applyTooltip(Tab tab, DockPanelRef panel) {
+        String text = area.registry().tooltipOf(panel);
+        if (text == null) return;
+
+        Tooltip tooltip = Tooltip.attach(tab, text);
+        String iconText = area.registry().iconTooltipOf(panel);
+        UIElement icon = tab.getPreIcon();
+        if (iconText != null && icon != null) tooltip.addRegion(icon, iconText);
     }
 
     private static void applyIcon(Tab tab, @Nullable String iconName) {

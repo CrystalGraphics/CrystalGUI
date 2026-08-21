@@ -25,6 +25,7 @@ import com.crystalgui.text.syntax.LanguageRegistry;
 import com.crystalgui.text.syntax.SyntaxTokenizer;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.chrome.Breadcrumbs;
+import com.crystalgui.ui.elements.chrome.QuickPick;
 import com.crystalgui.ui.elements.chrome.StatusBarView;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.SymbolIcon;
@@ -472,6 +473,8 @@ public class Workbench extends UIElement {
         registry.setTitleProvider(this::tabTitleFor);
         registry.setIconProvider(Workbench::tabIconFor);
         registry.setIconElementProvider(Workbench::viewerIconElement);
+        registry.setTooltipProvider(Workbench::tabTooltipFor);
+        registry.setIconTooltipProvider(Workbench::tabIconTooltipFor);
         registry.setDecorationProvider(this::tabDecorationFor);
 
         // Anchors match where defaultLayout() puts them, so closing a panel and reopening it from the
@@ -989,6 +992,35 @@ public class Workbench extends UIElement {
      */
     private final Map<String, TextEditor> viewers = new HashMap<>();
 
+    /**
+     * The one Go to File picker, kept between invocations.
+     *
+     * <h3>Why it is held here rather than by {@code GoToFile}</h3>
+     *
+     * <p>Because it has to be held <em>somewhere</em> for its query to survive a close, and the two
+     * alternatives are worse. A static on {@code GoToFile} is shared by every window in the process, so
+     * two workbenches would fight over one popup and one of them would find it parented elsewhere — the
+     * same class of bug {@code JobScheduler.shared()} caused in this session's tests. Rebuilding it per
+     * open is what it did before and is what makes retention impossible.</p>
+     *
+     * <p>It stays attached and {@code display: none} while closed, like any closed popover, so there is
+     * nothing to dispose and nothing to reattach.</p>
+     */
+    @Nullable
+    private QuickPick quickOpen;
+
+    /** @see #quickOpen */
+    @Nullable
+    public QuickPick quickOpen() {
+        return quickOpen;
+    }
+
+    /** @see #quickOpen */
+    public Workbench setQuickOpen(@Nullable QuickPick picker) {
+        this.quickOpen = picker;
+        return this;
+    }
+
     /** Which viewers have their text — what tells "still reading" from "read and empty" apart. */
     private final Set<String> viewersLoaded = new HashSet<>();
 
@@ -1017,26 +1049,10 @@ public class Workbench extends UIElement {
             // Ctrl+B into anything on the classpath did nothing -- and it read as the engine having
             // no answer, when the engine had simply never been asked for one.
             if (!site.resource().isProject()) {
-                TextPoint into = site.start();
-                // THE VIEWER'S OWN EDITOR, not `activeEditor()`: that resolves through PATH_STATE,
-                // which a viewer panel deliberately does not carry, so it answers null here.
-                openResource(site.resource(), () -> {
-                    TextEditor opened = viewers.get(site.resource().toString());
-                    if (opened == null) return;
-                    opened.revealAt(into);
-                    UIWindow window = getAttachedWindow();
-                    if (window != null) window.getInputHandler().requestFocus(opened);
-                });
+                openResourceAt(site.resource(), site.start());
                 return;
             }
-            TextPoint at = site.start();
-            openFile(site.resource().asPath(), () -> {
-                TextEditor opened = activeEditor();
-                if (opened == null) return;
-                opened.revealAt(at);
-                UIWindow window = getAttachedWindow();
-                if (window != null) window.getInputHandler().requestFocus(opened);
-            });
+            openFileAt(site.resource().asPath(), site.start());
         });
     }
 
@@ -1117,6 +1133,48 @@ public class Workbench extends UIElement {
         }
         open(DockInput.of(ref));
         whenViewerLoaded(resource, onOpened);
+    }
+
+    /**
+     * Opens a non-workspace resource and puts the caret at {@code at}, focusing it.
+     *
+     * <h3>One definition, two callers, and a third coming</h3>
+     *
+     * <p>Ctrl+B into a library class and Go to Class are the same act with different ways of naming the
+     * target — one has a {@code DeclarationSite}, the other has a name and a line somebody typed. The
+     * routing between them was written inline for the first caller; extracting it when the second arrived
+     * is the rule {@code routeDefinitionsOf} already states about its own two halves ("two copies would be
+     * two places for the routing rules to drift").</p>
+     *
+     * <p><b>The viewer's own editor, never {@code activeEditor()}.</b> That resolves through
+     * {@code PATH_STATE}, which a viewer panel deliberately does not carry, so it answers null here — and
+     * a null there is silent: the tab opens at the top of the file and the reveal simply does not happen,
+     * which reads as the declaration having been at line 1.</p>
+     *
+     * @param at where to put the caret, or null to open at the top — which is what a name with no
+     *           location means, and is not an error
+     */
+    public void openFileAt(CgPath path, @Nullable TextPoint at) {
+        if (path == null) return;
+        openFile(path, () -> {
+            TextEditor opened = activeEditor();
+            if (opened == null) return;
+            if (at != null) opened.revealAt(at);
+            UIWindow window = getAttachedWindow();
+            if (window != null) window.getInputHandler().requestFocus(opened);
+        });
+    }
+
+    /** @see #openFileAt — the same act for a resource the workspace does not hold. */
+    public void openResourceAt(Resource resource, @Nullable TextPoint at) {
+        if (resource == null) return;
+        openResource(resource, () -> {
+            TextEditor opened = viewers.get(resource.toString());
+            if (opened == null) return;
+            if (at != null) opened.revealAt(at);
+            UIWindow window = getAttachedWindow();
+            if (window != null) window.getInputHandler().requestFocus(opened);
+        });
     }
 
     /**
@@ -1824,6 +1882,47 @@ public class Workbench extends UIElement {
         SymbolInfo symbol = provider == null ? null : provider.symbolOf(viewed);
         if (symbol == null || symbol.kind() == null) return null;
         return new SymbolIcon().show(symbol.kind(), symbol.modifiers());
+    }
+
+    /**
+     * What a tab says on hover — where the thing it shows actually is.
+     *
+     * <p>The label is a bare name, and a name stops identifying anything the moment two of them collide:
+     * two {@code Main.java} in one workspace, or {@code java.util.List} beside {@code java.awt.List}. The
+     * second pair is the reason a viewer answers with its <b>fully-qualified</b> name rather than a file
+     * path — there often is no file, the tab is a decompilation, and the qualified name is the only thing
+     * that names it uniquely.</p>
+     *
+     * <p>Null for a panel that is not about a location at all — a console, the Problems view — which the
+     * registry reads as "no tooltip", not as an empty one.</p>
+     */
+    @Nullable
+    private static String tabTooltipFor(DockPanelRef panel) {
+        Resource viewed = viewedResource(panel);
+        if (viewed != null) return viewed.path();
+        String path = panel.state(PATH_STATE, "");
+        return path.isEmpty() ? null : path;
+    }
+
+    /**
+     * What a tab's ICON says on hover — what the declaration behind it <em>is</em>.
+     *
+     * <p>The one fact a library tab shows nowhere else. Nothing in {@code ArrayList.class} distinguishes a
+     * class from an interface, an enum or an annotation, and the glyph is where that answer already
+     * lives — so the icon is the part of the tab that has something of its own to say, and this is it in
+     * words. {@link SymbolIcon#describe} is the single source of both, so the picture and the sentence
+     * cannot drift apart.</p>
+     *
+     * <p>Null for a SOURCE-backed tab, matching {@link #viewerIconElement}: that tab carries a Java
+     * <em>file</em> icon, whose meaning the {@code .java} in the label has already given.</p>
+     */
+    @Nullable
+    private static String tabIconTooltipFor(DockPanelRef panel) {
+        Resource viewed = viewedResource(panel);
+        if (viewed == null) return null;
+        ResourceContentProvider provider = ResourceRegistry.providerFor(viewed);
+        SymbolInfo symbol = provider == null ? null : provider.symbolOf(viewed);
+        return symbol == null ? null : SymbolIcon.describe(symbol.kind(), symbol.modifiers());
     }
 
     /** The resource a viewer panel shows, or null for every other kind of tab. */
