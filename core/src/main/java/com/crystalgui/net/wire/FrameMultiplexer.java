@@ -1,6 +1,9 @@
 package com.crystalgui.net.wire;
 
+import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.serialization.CodecException;
+
+import javax.annotation.Nullable;
 
 import java.io.ByteArrayOutputStream;
 import java.util.ArrayDeque;
@@ -115,6 +118,13 @@ public final class FrameMultiplexer {
     private long fragmentingBytes;
 
     private boolean closed;
+
+    /** Streams refused since this connection opened. @see #pump */
+    private int refusedStreams;
+
+    /** Why the last one was refused, for a test and for a log. */
+    @Nullable
+    private String lastRefusal;
 
     /**
      * @param maxFrameBytes the platform's own per-frame ceiling — <b>asked for, never assumed</b>. It
@@ -256,13 +266,39 @@ public final class FrameMultiplexer {
     /**
      * <b>Game thread.</b> Processes what arrived, delivers whole messages, then sends what is queued.
      *
+     * <h3>A stream error is not a connection error, and this is where that becomes true</h3>
+     *
+     * <p>{@code handleData} has always said <i>"refuse the stream rather than the connection: one
+     * oversized transfer should not take down an editor session that is otherwise fine"</i> — and it was
+     * not true. The refusal was a {@link StreamRefused} thrown out of {@code accept}, straight through
+     * this loop, so it abandoned every frame still queued behind it <b>and skipped {@link #replenish}
+     * and {@link #flush} for the tick</b>: no credit granted, nothing sent, on a connection whose other
+     * streams were perfectly healthy. It survived only because {@code CgUiConnections.tickSafely}
+     * catches two layers up, which made the comment true by accident rather than by construction — and
+     * not true at all for the harness, a test, or any caller that pumps directly.</p>
+     *
+     * <p>The split is HTTP/2's, which is where the rest of this class comes from. A <b>stream</b> error
+     * (RFC 9113 §5.4.2) resets one stream and the connection carries on; a <b>connection</b> error
+     * (§5.4.1) means the peer is not speaking this protocol and there is nothing to salvage. So
+     * {@link StreamRefused} is caught per frame and counted, while an unknown opcode or DATA on the
+     * connection stream still propagates.</p>
+     *
      * @return how many whole messages were delivered
      */
     public int pump() {
         int delivered = 0;
         byte[] frame;
         while ((frame = arrived.poll()) != null) {
-            delivered += accept(frame);
+            try {
+                delivered += accept(frame);
+            } catch (StreamRefused refused) {
+                // Already dropped and RESET by the thrower. Counted rather than rethrown, and said once
+                // per refusal rather than per frame -- a peer that keeps pushing a stream we have
+                // abandoned would otherwise cost a log line for every frame of it.
+                refusedStreams++;
+                lastRefusal = refused.getMessage();
+                CrystalGuiCore.LOGGER.warn("[wire] refused a stream: {}", refused.getMessage());
+            }
         }
         replenish();
         flush();
@@ -279,7 +315,22 @@ public final class FrameMultiplexer {
             return 0;
         }
         if (opcode == FrameCodec.OP_RESET) {
+            // BOTH DIRECTIONS. drop() forgets what we were reassembling; cancel() stops us sending a
+            // message the peer has already abandoned.
+            //
+            // Only drop() used to run, and the consequence is CORRUPTION rather than waste. The peer
+            // refuses a stream at its reassembly cap, drops its buffer and RESETs; we ignore that and
+            // send the remainder; the peer -- having dropped -- opens a FRESH buffer for the same stream
+            // id, and our last frame carries FIN. So it reassembles the TAIL and delivers it as a whole
+            // message. A refused 9 MB transfer arrives as a ~1 MB one that looks perfectly complete, and
+            // nothing anywhere reports a problem.
+            //
+            // Measured, not reasoned: removing this line makes three tests fail with `expected:<1> but
+            // was:<2>` -- the second message being that tail. The first draft of this comment claimed the
+            // fault was wasted bytes and a repeated warning, which is what it looks like from the code
+            // and is not what it does.
             drop(streamId);
+            cancel(streamId);
             return 0;
         }
         if (opcode != FrameCodec.OP_DATA) {
@@ -303,10 +354,12 @@ public final class FrameMultiplexer {
 
         if (reassemblyBytes + length > MAX_REASSEMBLY_BYTES) {
             // Refuse the stream rather than the connection: one oversized transfer should not take down
-            // an editor session that is otherwise fine.
+            // an editor session that is otherwise fine. StreamRefused rather than a bare CodecException
+            // is what makes that sentence true -- see #pump for what it used to do instead.
             drop(streamId);
             sink.send(FrameCodec.reset(streamId));
-            throw new CodecException("reassembly would exceed " + MAX_REASSEMBLY_BYTES + " bytes");
+            throw new StreamRefused("stream " + streamId + ": reassembly would exceed "
+                    + MAX_REASSEMBLY_BYTES + " bytes");
         }
 
         ByteArrayOutputStream buffer =
@@ -325,6 +378,25 @@ public final class FrameMultiplexer {
     private void drop(int streamId) {
         ByteArrayOutputStream buffer = reassembling.remove(streamId);
         if (buffer != null) reassemblyBytes -= buffer.size();
+    }
+
+    /**
+     * Abandons an outbound message the peer has RESET, giving its admission budget back.
+     *
+     * <p>{@link #drop} is the inbound half of the same idea and the two are deliberately separate: a
+     * stream id is one direction's, so at most one of these ever has anything to do.</p>
+     */
+    private void cancel(int streamId) {
+        for (Iterator<Outbound> it = outbound.iterator(); it.hasNext(); ) {
+            Outbound message = it.next();
+            if (message.streamId != streamId) continue;
+            // Only a message that STARTED fragmenting was ever counted, so only that one is released.
+            if (message.sent > 0 && message.fragments(maxPayloadBytes)) {
+                fragmentingBytes -= message.bytes.length;
+            }
+            it.remove();
+            return;
+        }
     }
 
     /**
@@ -375,6 +447,17 @@ public final class FrameMultiplexer {
     /** Bytes of outbound messages that have begun fragmenting and not finished. @see #admits */
     public long fragmentingBytes() {
         return fragmentingBytes;
+    }
+
+    /** How many streams this connection has refused. @see #pump */
+    public int refusedStreams() {
+        return refusedStreams;
+    }
+
+    /** Why the last refusal happened, or {@code null} if there has not been one. */
+    @Nullable
+    public String lastRefusal() {
+        return lastRefusal;
     }
 
     /** What the peer currently allows us to send. */

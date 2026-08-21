@@ -1,6 +1,5 @@
 package com.crystalgui.headless;
 
-import com.crystalgui.serialization.CodecException;
 import com.crystalgui.net.wire.FrameMultiplexer;
 
 import org.junit.Test;
@@ -137,18 +136,21 @@ public class ConcurrentTransferAdmissionTest {
      * always admitted however large — otherwise one bigger than the budget would never be sent at all —
      * so it goes, and the receiver refuses it at the documented limit rather than stalling silently,
      * which is a far worse failure to diagnose.</p>
+     *
+     * <p><b>Asserted on the counter rather than on a throw.</b> It used to be the throw, because the
+     * refusal escaped {@code pump} — which was itself the defect: it took the rest of the tick with it.
+     * A refusal is now a stream error the connection absorbs, so what is observable is that it happened
+     * and that nothing arrived. @see StreamErrorIsolationTest</p>
      */
     @Test
     public void oneMessageOverTheCapIsStillRefused() {
         Pair pair = new Pair();
         pair.a.send(bytes(9 * 1024 * 1024, 1));
-        try {
-            pair.settle();
-            fail("a message larger than MAX_REASSEMBLY_BYTES must be refused, not quietly buffered");
-        } catch (CodecException refused) {
-            assertTrue("the message must name the bound: " + refused.getMessage(),
-                    refused.getMessage().contains(String.valueOf(FrameMultiplexer.MAX_REASSEMBLY_BYTES)));
-        }
+        pair.settle();
+
+        assertEquals("exactly one stream refused", 1, pair.b.refusedStreams());
+        assertTrue("the reason must name the bound: " + pair.b.lastRefusal(),
+                pair.b.lastRefusal().contains(String.valueOf(FrameMultiplexer.MAX_REASSEMBLY_BYTES)));
         assertEquals("and nothing must have been delivered from it", 0, pair.received.size());
     }
 
