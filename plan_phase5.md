@@ -221,15 +221,65 @@ that should (the single-window regression, the mutual-exclusion refusal, and vie
 windows is the easy half and would pass against the broken version; what the suite actually pins is that
 a delta, an event and an RPC each reach **exactly one** window, and that a closed window gives its id back.
 
-### 5.8 Server-contributed commands · `command/*`
+### 5.8 Server-contributed commands · `command/*` · **done 2026-08-21**
 
-`CommandRegistry`'s javadoc already anticipates *"a command sent from a server"*, and `Protocols` makes
-the namespace straightforward — `command/*` alongside `ui/*` and `workspace/*`, registered the way the
-workspace now is. Nothing implements it.
+Four messages, and the direction of each is the design. Everything *about* a command flows server →
+client as a notification, because the server is the only one that knows: `command/contribute`,
+`command/withdraw`, `command/setEnabled`. The single thing flowing the other way is **the user did it**,
+and that is a **request**, because a command can fail and the person who pressed the key deserves to be
+told — a command that fails silently is indistinguishable from a keybinding that was never wired up.
 
-**Watch for:** this is the first thing that would let a server change what a client's palette *does*,
-which is a trust boundary the protocol has not needed until now. `ScriptPolicy`'s reasoning is the
-precedent — a control nobody will configure is worse than a leaky one that gets used.
+A contributed command is an ordinary `Command`: the palette enumerates it, a menu renders it, the keymap
+resolves it, and nothing downstream knows that running it sends a packet. That is the point — a
+server-driven action should not be a second kind of action with its own surface.
+
+**Enablement is pushed, and the cache is read at ask time.** `isEnabled` is consulted while a menu is
+being built, so it has to answer immediately; asking across the wire there would put a round trip inside
+a UI gesture. Capturing the boolean when the command was contributed would have been the obvious bug —
+`command/setEnabled` would then arrive, update nothing anybody reads, and the menu would render the first
+answer forever. **An id nobody has said anything about is enabled**, which is the same call 5.4 has to
+make and for the same reason: a wrongly-greyed command is a thing the user cannot do and cannot explain,
+while a wrongly-live one fails with a message the server wrote.
+
+#### The trust boundary, which is most of the work
+
+~~**Watch for:** this is the first thing that would let a server change what a client's palette *does*.~~
+Correct, and the mechanism is worse than that framing suggests: `CommandRegistry.register` **replaces by
+id**, on purpose (that is how a theme or a mod overrides a built-in). So without a rule a server could
+claim `edit.save` and the client's own Save would quietly become a packet.
+
+`ScriptPolicy` is the precedent and settled two things worth reusing. *A control nobody will configure is
+worse than a leaky one that gets used*, so the default is safe and needs no host to think about it. And
+*a filter its subject can switch off is not a filter*, which is why `ALWAYS_REFUSED` is a **floor**
+checked ahead of everything rather than a default a host may edit away.
+
+Here the floor is a **namespace**: a server may only claim ids under `server.`. Strictly stronger than a
+denylist of built-ins and needs no maintenance — a built-in added next year is protected by
+construction, whereas a list of protected ids is a list somebody forgets to add to. It costs a server
+nothing real, since `server.restart` is a fine id and the **label** is what a user reads.
+
+Three more limits, each about a broken peer rather than a malicious one: a **count cap** (a palette
+listing ten thousand rows is unusable), **label sanitisation** (a control character becomes a space
+rather than being stripped, so two words cannot be run together into a third nobody wrote; overlong is
+**cut, not refused** — a clumsy label beats a missing command), and **withdrawal only of what this
+connection contributed**, so the floor is true a second way rather than one typo away from failing.
+
+**Refusal is per command, never per message** — one bad entry in a batch of twenty must not cost the
+other nineteen, the same rule a state delta already follows.
+
+#### Two smaller things worth recording
+
+`CommandProtocolBinding` decides its side by `peer() == null`, exactly as `CgUiWorkspaceHost` does.
+Without that a single-player process binds both ends of its own wire and whichever registered first wins
+— not hypothetical there, which is why it was copied rather than re-derived.
+
+And `setPolicy` **throws** after registration rather than applying. A contributor only binds connections
+opened *after* it, so a change made later reaches nobody currently connected and everybody connected
+afterwards — the kind of half-applied setting that reads as the setting not working.
+
+`ServerContributedCommandsTest`, 15 tests, of which nine are the boundary. Mutation-checked: removing the
+namespace floor fails 4, including the one that matters — a server registering `edit.save` and the
+client's own Save being what still runs.
 
 ### 5.9 The wire under real conditions · **the concurrency half done 2026-08-21**
 
