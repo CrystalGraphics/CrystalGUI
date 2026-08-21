@@ -6,6 +6,7 @@ import com.crystalgui.language.engine.JavaEngine;
 import com.crystalgui.language.engine.bridge.SourceAnalyzer;
 import com.crystalgui.language.java.assist.AttachedSources;
 import com.crystalgui.language.java.classpath.HostClasspath;
+import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.lang.DeclarationSite;
 import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.text.markup.MarkupParser;
@@ -961,5 +962,134 @@ public class JavaDocBodyTest {
         } finally {
             analysis.close();
         }
+    }
+
+    // ── V5: services for a document nobody can edit ────────────────────────────────
+
+    /**
+     * <b>A JDK source file resolves — which it cannot do at the band's ordinary compliance.</b>
+     *
+     * <p>The trap this exists for: a file declaring {@code package java.util} parsed at Java 9 or above
+     * lands in the unnamed module against a package {@code java.base} owns, and JDT reports <em>"the
+     * package java.util conflicts with a package accessible from another module"</em>. That single error
+     * is not local — it poisons resolution for the entire unit, so <b>every</b> name in the file becomes
+     * unresolvable. A viewer given ordinary services would open every JDK class fully underlined with
+     * nothing hoverable, which is worse than opening it with no services at all.</p>
+     *
+     * <p>Asserted by resolving a name INSIDE such a file, because that is the thing the conflict takes
+     * away. Counting errors would pass against a build where diagnostics are simply suppressed — which
+     * they also are, and which is the sibling test below.</p>
+     */
+    @Test
+    public void aPlatformSourceResolvesAtTheOlderCompliance() {
+        String source = ""
+                + "package java.util;\n"
+                + "public class Probe {\n"
+                + "    java.util.List<String> rows;\n"
+                + "    int count() { return rows.size(); }\n"
+                + "}\n";
+        SourceAnalyzer.Analysis analysis = engine.analyzer().analyze(
+                "java.util.Probe", source, HostClasspath.detect(), 8, 1L);
+        try {
+            SymbolInfo symbol = analysis.resolveAt(source.indexOf("size()"));
+            assertNotNull("a name inside a java.* file resolved to nothing -- the module conflict "
+                    + "poisoned the unit, which is what compliance 8 exists to avoid", symbol);
+            assertEquals("size", symbol.name());
+        } finally {
+            analysis.close();
+        }
+    }
+
+    /**
+     * <b>And the same file at the band's own compliance is the failure being avoided.</b>
+     *
+     * <p>The negative control. Without it the test above passes on a band whose ceiling happens to be 8
+     * and proves nothing at all — and it would keep passing if the compliance choice were deleted.
+     * Skipped rather than asserted when the band <em>is</em> 8, because there is then no second level to
+     * compare against and no conflict to provoke.</p>
+     */
+    @Test
+    public void theSameFileAtTheBandsCeilingIsWhyTheOlderOneIsChosen() {
+        Assume.assumeTrue("this band compiles at 8, so there is no higher level to contrast with",
+                engine.releaseLevel() > 8);
+        String source = ""
+                + "package java.util;\n"
+                + "public class Probe {\n"
+                + "    java.util.List<String> rows;\n"
+                + "    int count() { return rows.size(); }\n"
+                + "}\n";
+        SourceAnalyzer.Analysis analysis = engine.analyzer().analyze(
+                "java.util.Probe", source, HostClasspath.detect(), engine.releaseLevel(), 1L);
+        try {
+            boolean conflicted = false;
+            for (Diagnostic problem : analysis.diagnostics()) {
+                if (problem.message() != null && problem.message().contains("conflicts with a package")) {
+                    conflicted = true;
+                }
+            }
+            assertTrue("the module conflict did not occur, so compliance 8 is guarding nothing -- "
+                    + "check this before deleting it", conflicted);
+        } finally {
+            analysis.close();
+        }
+    }
+
+    /**
+     * <b>A library document announces no diagnostics, and still resolves.</b>
+     *
+     * <p>Both halves in one test, because either alone passes against the wrong thing: a document that
+     * reports nothing <em>because it analysed nothing</em> would satisfy the first assertion and is the
+     * failure being avoided.</p>
+     *
+     * <p>Why suppress at all: the problems of a borrowed class are <b>ours</b>. Its classpath is one we
+     * approximate, its compliance is one we chose for it, and a decompiled body is a reconstruction that
+     * need not compile. Filing them puts rows in the Problems panel that name somebody else's correct
+     * code, that nobody can act on, and that push the reader's own problems off the list. IntelliJ draws
+     * the same line — a decompiled file navigates and highlights and is never inspected.</p>
+     */
+    @Test
+    public void aLibraryDocumentReportsNothingAndStillResolves() {
+        // A DELIBERATE ERROR, so "no diagnostics" cannot be true by accident.
+        TextBuffer buffer = new TextBuffer(""
+                + "public class Probe {\n"
+                + "    java.util.List<String> rows = nonsense();\n"
+                + "}\n");
+        LanguageServices ordinary = new JavaLanguageServices(
+                buffer, engine, null, "Probe", HostClasspath.detect());
+        int reportedNormally;
+        try {
+            reportedNormally = countDiagnostics(ordinary);
+        } finally {
+            ordinary.close();
+        }
+        assertTrue("the fixture compiles cleanly, so suppression cannot be observed",
+                reportedNormally > 0);
+
+        LanguageServices library = JavaLanguageServices.forLibrary(
+                new TextBuffer(buffer.toString()), engine, null, "Probe", HostClasspath.detect(), false);
+        try {
+            assertEquals("a borrowed document filed problems nobody can act on",
+                    0, countDiagnostics(library));
+            AtomicReference<SymbolInfo> answered = new AtomicReference<>();
+            library.resolver().describe("java.util.List",
+                    (Versioned<SymbolInfo> v) -> answered.set(v.value()));
+            assertNotNull("suppressing diagnostics also switched the analysis off", answered.get());
+            assertEquals("List", answered.get().name());
+        } finally {
+            library.close();
+        }
+    }
+
+    /** How many problems a services object announces for the text it holds. */
+    private static int countDiagnostics(LanguageServices services) {
+        AtomicReference<List<Diagnostic>> reported = new AtomicReference<>(List.of());
+        services.onDiagnostics(versioned -> reported.set(versioned.value()));
+        // ANALYSIS IS DEBOUNCED AND SCHEDULED. With no scheduler it runs inline on the first ask, which
+        // is why these are constructed with a null one -- but the announcement still arrives through the
+        // listener rather than as a return value, so it is read after.
+        for (int i = 0; i < 4 && reported.get().isEmpty(); i++) {
+            services.resolver().describe("java.lang.String", versioned -> { });
+        }
+        return reported.get().size();
     }
 }

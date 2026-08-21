@@ -6,6 +6,7 @@ import com.crystalgui.fs.Resource;
 import com.crystalgui.language.engine.EngineHost;
 import com.crystalgui.language.engine.EngineSource;
 import com.crystalgui.language.engine.JavaEngine;
+import com.crystalgui.language.java.assist.AttachedSources;
 import com.crystalgui.language.java.classpath.HostClasspath;
 import com.crystalgui.language.java.exec.ScriptHost;
 import com.crystalgui.language.map.MappingSet;
@@ -254,6 +255,12 @@ public final class JavaLanguage {
         // colours from the grammar and analyses nothing -- and it is the state a first launch is in while
         // the band is still arriving.
         if (ready == null) return null;
+        // A BORROWED DOCUMENT gets services configured for one: no diagnostics, and compliance 8 when
+        // the text came out of src.zip. @see JavaLanguageServices#forLibrary
+        if (resource != null && Resource.SCHEME_LIBRARY.equals(resource.scheme())) {
+            return JavaLanguageServices.forLibrary(buffer, ready, scheduler, resource.path(), classpath,
+                    AttachedSources.forClasspath(classpath).isPlatformSource(resource.path()));
+        }
         return new JavaLanguageServices(buffer, ready, scheduler, classNameFor(resource), classpath);
     }
 

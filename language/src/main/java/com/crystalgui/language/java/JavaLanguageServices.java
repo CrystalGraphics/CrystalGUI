@@ -54,10 +54,63 @@ public final class JavaLanguageServices extends AnalysedLanguageServices {
     /** Same supplier arrangement, same reason. @see JavaCodeActions */
     private final JavaCodeActions actions;
 
+    /**
+     * Services for a document the reader cannot edit — a class opened in the library viewer.
+     *
+     * <p>Two differences from an ordinary document, and both are load-bearing.</p>
+     *
+     * <p><b>Diagnostics are suppressed entirely.</b> @see #reportsDiagnostics</p>
+     *
+     * <p><b>A platform source is parsed at compliance 8</b>, which is the last level with no module
+     * system. Above it, a file declaring {@code package java.util} conflicts with {@code java.base} and
+     * that single error stops the whole unit resolving — so the class would open fully underlined with
+     * nothing hoverable, which is strictly worse than opening it with no services. {@code AttachedSources}
+     * has parsed platform sources this way all along for the documentation popup; this is the same rule
+     * reaching the same files through a different door.</p>
+     *
+     * @param platform whether the text came out of the JDK's own {@code src.zip} — asked of the archive
+     *                 by {@code AttachedSources.isPlatformSource}, never of the package name
+     */
+    public static JavaLanguageServices forLibrary(TextBuffer buffer, JavaEngine engine,
+                                                  JobScheduler scheduler, String className,
+                                                  List<String> classpath, boolean platform) {
+        return new JavaLanguageServices(buffer, engine, scheduler, className, classpath, true, platform);
+    }
+
+    /** True when this document is a borrowed one. @see #forLibrary */
+    private final boolean library;
+
+    /** True when it came out of {@code src.zip}, which decides the compliance. @see #forLibrary */
+    private final boolean platform;
+
+    @Override
+    protected boolean reportsDiagnostics() {
+        return !library;
+    }
+
+    /**
+     * The compliance this document is analysed at.
+     *
+     * <p>The band's ceiling for everything a person writes, and 8 for a platform source. Derived rather
+     * than configurable: there is exactly one file shape that needs the older level and exactly one
+     * reason, and a setting for it would be a way to get it wrong.</p>
+     */
+    private int releaseLevel() {
+        return library && platform ? 8 : engine.releaseLevel();
+    }
+
     public JavaLanguageServices(TextBuffer buffer, JavaEngine engine, JobScheduler scheduler,
                                 String className, List<String> classpath) {
+        this(buffer, engine, scheduler, className, classpath, false, false);
+    }
+
+    private JavaLanguageServices(TextBuffer buffer, JavaEngine engine, JobScheduler scheduler,
+                                 String className, List<String> classpath,
+                                 boolean library, boolean platform) {
         super(ID, buffer, scheduler);
         this.engine = engine;
+        this.library = library;
+        this.platform = platform;
         this.className = className;
         this.classpath = classpath == null ? Collections.emptyList() : new ArrayList<>(classpath);
         this.completion = new JavaCompletionProvider(buffer, this::current,
@@ -82,8 +135,11 @@ public final class JavaLanguageServices extends AnalysedLanguageServices {
      */
     @Override
     protected Analysis analyse(String source, long version) {
-        if (ScriptPrelude.declaresType(source)) {
-            return engine.analyzer().analyze(className, source, classpath, engine.releaseLevel(), version);
+        // A LIBRARY DOCUMENT IS ALWAYS A UNIT, never a snippet. It declares a type by construction --
+        // it is somebody's compilation unit or a decompiler's rendering of one -- and running it through
+        // the prelude would wrap a whole class inside a synthesized method.
+        if (library || ScriptPrelude.declaresType(source)) {
+            return engine.analyzer().analyze(className, source, classpath, releaseLevel(), version);
         }
         ScriptPrelude.Wrapped wrapped = ScriptHost.preludeFor(className, ScriptBindings.types()).wrap(source);
         Analysis unit = engine.analyzer().analyze(wrapped.className(), wrapped.unitSource(), classpath,
