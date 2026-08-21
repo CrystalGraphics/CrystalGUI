@@ -231,14 +231,69 @@ workspace now is. Nothing implements it.
 which is a trust boundary the protocol has not needed until now. `ScriptPolicy`'s reasoning is the
 precedent — a control nobody will configure is worse than a leaky one that gets used.
 
-### 5.9 The wire under real conditions
+### 5.9 The wire under real conditions · **the concurrency half done 2026-08-21**
 
 Everything so far is **localhost with tiny payloads**: the in-game probe moved a 44-byte file, and the
 1.25 MB chunked test was in-memory over an `InMemoryTransport`. Credit flow control, fragmentation and
 the 8 MB reassembly bound have never met latency, loss, or a genuinely large file over a socket.
 
-**Watch for:** `MAX_REASSEMBLY_BYTES` is connection-wide rather than per-stream and does not scale with
-the platform ceiling — several large transfers in flight together is the case that has never run.
+#### ~~Watch for: several large transfers in flight together~~ — **ran it. Worse than that.**
+
+The suspicion was right and aimed at the wrong workload. `flush` round-robins across **every** queued
+message, so all of them fragment simultaneously and the receiver must buffer all of them at once:
+reassembly demand is the **sum** of what is in flight, not the largest of it. Measured on an in-memory
+pair at the 1.7.10 client frame size:
+
+| Sent | Before | After |
+|---|---|---|
+| one 7 MB | delivered | delivered |
+| one 9 MB (over the cap) | refused at the cap | refused at the cap |
+| three 4 MB (12 MB) | **delivered 0** | delivered 3 |
+| eight 2 MB (16 MB) | **delivered 0** | delivered 8 |
+| forty 512 KB (20 MB) | **delivered 0** | delivered 40 |
+
+**Forty half-megabyte messages is a workspace listing, not an attack**, and not one of them arrived. So
+this was never a large-file problem: it is *many ordinary ones*, which is far likelier to happen and
+reads as the connection dying under load rather than as a transfer being refused.
+
+#### The fix: admission, denominated in bytes
+
+A message begins fragmenting only while what is already in flight leaves room for it — HTTP/2's
+`SETTINGS_MAX_CONCURRENT_STREAMS`, counted in **bytes** rather than in streams, because bytes is what the
+receiver's bound is denominated in and a count cannot tell forty 512 KB messages from forty 5 MB ones.
+
+Three properties, each deliberate:
+
+- **A message that fits in one frame is never gated.** The receiver delivers it straight out of the frame
+  without touching a reassembly buffer, so there is nothing to ration — which means every UI packet,
+  event and RPC on this wire is completely unaffected. Pinned on `fragmentingBytes`, since a throughput
+  assertion would pass whether or not the exemption exists.
+- **The first message is always admitted, however large.** Otherwise one bigger than the budget would
+  never be sent at all; instead it goes and is refused at the documented cap, which is a far easier
+  failure to diagnose than a silent stall.
+- **Round-robin is untouched among admitted messages**, so the small-behind-large property it exists for
+  still holds. Admission bounds the interleaving; it does not remove it.
+
+`MAX_REASSEMBLY_BYTES` now has two jobs — the receiver's guard against a hostile peer, and the sender's
+self-imposed budget. Both sides share the constant rather than negotiating it; a negotiated limit is the
+right shape eventually (HTTP/2 sends one in SETTINGS) and needs a handshake this protocol does not have.
+
+`ConcurrentTransferAdmissionTest`, 7 tests, mutation-checked: making `admits` return `true`
+unconditionally fails **3 of the 7**, and the four survivors are the ones that should (the single-message
+cases and the two invariants).
+
+#### Still open, and unchanged by the above
+
+**Latency, loss and a real socket.** Everything measured here is an in-memory pair pumped in a loop, so
+credit replenishment is instantaneous and no frame is ever reordered or lost. What a 200 ms round trip
+does to a 256 KB window is arithmetic nobody has done, and `DEFAULT_WINDOW_BYTES` still says of itself
+that it "wants measuring against a real server under load".
+
+**A `CodecException` from `accept` aborts the whole pump**, skipping `replenish` and `flush` for that
+tick, and `handleData`'s comment claims the opposite (*"refuse the stream rather than the connection"*).
+It is survivable only because `CgUiConnections.tickSafely` catches two layers up and the next tick
+continues — which is to say the comment is true by accident rather than by construction, and is not true
+at all for the harness or a test calling `pump()` directly. Worth fixing; not fixed here.
 
 ### 5.10 Platform hygiene · **the class of bug that cost three fixes today**
 
