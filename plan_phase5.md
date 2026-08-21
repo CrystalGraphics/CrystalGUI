@@ -170,19 +170,75 @@ separately, so a notification simply found nobody home. Now stated on `notifyCap
 exactly the three about being wrong in the safe direction. Wired into `explorer.delete`, `explorer.rename`
 and both New commands.
 
-### 5.5 The conflict dialog
+### 5.5 The conflict dialog · **done 2026-08-21**
 
-The protocol half is done and was done deliberately: `Failure.isConflict()` carries the live etag, and a
+The protocol half was done deliberately and first: `Failure.isConflict()` carries the live etag, and a
 delta against a file that moved is **refused rather than merged** — merging is a decision with a UI
-attached and does not belong in a write path. The dialog is that UI, and it stopped being hypothetical
-the moment two players could edit one file.
+attached and does not belong in a write path. `ConflictDialog` is that UI.
 
-### 5.6 Presence
+**What it replaces understated the problem twice.** A `Notification` with one action, *"Reopen to take
+theirs"* — and the comment beside it already said the prose had named the fix and that it should be a
+button. But a balloon **fades**, so a user who was not looking takes the default, and the default was
+*"your save silently did not happen"*. And that one button **discards unsaved work in a click**, while the
+opposite resolution — keep mine — was not offered at all, so anyone who wanted it had to know to copy
+their buffer out first.
 
-C1 gives a session its viewers and their peers, which **is** the data presence needs. Nothing displays
-it. Deferred from Phase 4 C5 for exactly this reason — *"broadcasting it wants a consumer that does not
-exist"* — and 5.5 is plausibly that consumer, since knowing somebody else has the file open is what makes
-a conflict comprehensible rather than mysterious.
+| Choice | What it destroys |
+|---|---|
+| Keep mine | Their changes on the server |
+| Take theirs | Your unsaved edits |
+| Cancel | Nothing — the file stays modified and unsaved |
+
+A conflict is one of the few moments in an editor where every route loses something, which is exactly
+what earns a modal: the argument against modals is that they interrupt, and here interrupting is the
+point.
+
+**Cancel is focused, not the first button.** `Dialog`'s focusing steps take the first focusable
+descendant, which would be whichever button reads first — so focus is requested explicitly afterwards,
+as `showModal()`'s own javadoc says a caller should. Escape reaches the same place through the close
+watcher. Both destructive choices need a deliberate click and neither is one keystroke away.
+
+**Built the plain way on purpose**, so window-scoped modality (`plan_windowing.md` W5) retargets it for
+free: through `UIWindow.addOverlay` and `Dialog.showModal()`, with no `left`/`top` written by hand, no
+direct promotion, and no assumption about what the backdrop covers. The same three rules are already
+recorded for anchored popups.
+
+### 5.6 Presence · **done 2026-08-21**
+
+~~C1 gives a session its viewers and their peers, which **is** the data presence needs.~~ Close, and the
+better answer was already on the wire: **`fs.watch` is sent for every file a client reads** and cleared
+when it closes one, so the server has known who has what open since Phase 4. What was missing was a view
+**across** peers — a `WorkspaceWatcher` belongs to one connection and can only ever answer about itself.
+
+So `WorkspacePresence` lives on `WorkspaceService`, the one object every `WorkspaceRpc` already shares,
+and it is **the first piece of workspace state that is per server rather than per connection**.
+Presence rides the watch rather than adding a message: a second thing saying "this client has this file
+open" is a second thing to keep in step, and the two would disagree the first time one was forgotten.
+
+**A version counter, not a broadcast.** `core` cannot reach every connection — the loader holds the
+connection map — so presence counts changes and each peer's existing per-tick poll notices when the
+number has moved. One `int` compare per peer per tick, no new wiring, and it cannot deliver to a peer
+that has gone, because a peer that is gone is not being polled.
+
+**Three things it must not get wrong**, and each is a test:
+
+- **Scoped to what the peer is watching.** Sending the whole server's presence would tell a client which
+  files it cannot read are open and by whom — the same leak `fs.watch` is authorised against, arriving
+  through a different door. Removing that filter fails a test.
+- **A peer that vanishes is forgotten.** A client that crashes never sends the `fs.unwatch` that would
+  clear it, so without `left()` on disconnect it is shown holding those files for the rest of the
+  server's life. Wired into `CgUiWorkspaceHost.forget`.
+- **Empty means "nothing has been said", never "nobody is there."** So it is only ever used to *add*
+  information and never to decide anything, and the status entry is **removed** rather than reading zero
+   — a permanent slot that usually says nothing is one the eye learns to skip.
+
+**Displayed in two places**, which answers the original complaint that nothing did: the conflict dialog
+names who else has the file (5.5 was indeed the consumer the plan predicted), and a status-bar entry
+names them for the active file. Display names throughout — `WorkspaceActor.id()` is what permission
+decisions are made on and `displayName()` is documented as being *"for logs and for the UI"*; an id
+leaking into a presence line would be an identifier the user never chose, shown to other players.
+
+`WorkspacePresenceTest`, 8 tests, mutation-checked on the scoping guard.
 
 ### 5.7 Two windows on one connection · **done 2026-08-21**
 

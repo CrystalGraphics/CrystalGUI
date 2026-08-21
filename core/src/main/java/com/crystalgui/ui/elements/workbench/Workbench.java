@@ -1345,6 +1345,7 @@ public class Workbench extends UIElement {
      */
     private void bindStatusToActiveTab() {
         statusBar.breadcrumbs().setCrumbs(trailFor(activeFilePath()));
+        refreshPresence();
 
         FileDocument active = activeDocument();
         if (active == activeStatusDocument) return;
@@ -1398,22 +1399,65 @@ public class Workbench extends UIElement {
             return false;
         }
         byte[] written = document.encode();
-        client.save(target, written,
-                etag -> {
-                    // THE BYTES THAT WERE WRITTEN become the new baseline, not the document's current
-                    // state: a document edited again while the write was in flight is still modified
-                    // afterwards, and recording what it looks like NOW would call it clean.
-                    open.markSaved(target, written);
-                    refreshTabTitles();
-                },
-                failure -> Notifications.show(failure.isConflict()
-                        // THE PROSE ALREADY NAMED THE FIX -- "reopen to take theirs" -- which is exactly
-                        // the case for making it a button instead of an instruction.
-                        ? Notification.error("Conflict")
-                                .withDetail(target.name() + " changed on disk")
-                                .withAction("Reopen to take theirs", () -> openFile(target))
-                        : saveFailed(target, failure).withAction("Retry", this::saveActiveFile)));
+        client.save(target, written, etag -> saved(target, written),
+                failure -> {
+                    if (failure.isConflict()) {
+                        askWhichVersionSurvives(target, written);
+                        return;
+                    }
+                    Notifications.show(saveFailed(target, failure)
+                            .withAction("Retry", this::saveActiveFile));
+                });
         return true;
+    }
+
+    /**
+     * THE BYTES THAT WERE WRITTEN become the new baseline, not the document's current state: a document
+     * edited again while the write was in flight is still modified afterwards, and recording what it
+     * looks like NOW would call it clean.
+     */
+    private void saved(CgPath target, byte[] written) {
+        open.markSaved(target, written);
+        refreshTabTitles();
+    }
+
+    /**
+     * Phase 5.5 — a conflict is a question, not a notification.
+     *
+     * <p>This was a balloon whose single action was <i>"Reopen to take theirs"</i>, and the comment beside
+     * it already said the prose had named the fix and that it should be a button. It understated the
+     * problem twice. A balloon <b>fades</b>, so a user who was not looking takes the default — and the
+     * default was "your save silently did not happen". And that one button <b>discards unsaved work in a
+     * click</b>, while the opposite resolution, keep mine, was not offered at all.</p>
+     *
+     * <p>Both resolutions destroy something, which is exactly the case that earns a modal.
+     * @see ConflictDialog</p>
+     */
+    /**
+     * Phase 5.6 — who else has this file open, phrased for a human.
+     *
+     * <p>{@code null} rather than an empty string when nobody is known, because the dialog omits the
+     * whole line rather than drawing "nobody has it open" — which would be a claim, and the client cannot
+     * make it: an empty presence list means <em>nothing has been said</em>, not that the file is
+     * unoccupied. @see WorkspaceClient#whoElseHasOpen</p>
+     */
+    @Nullable
+    private String othersEditing(CgPath target) {
+        List<String> others = client.whoElseHasOpen(target);
+        if (others.isEmpty()) return null;
+        if (others.size() == 1) return others.get(0);
+        if (others.size() == 2) return others.get(0) + " and " + others.get(1);
+        return others.get(0) + " and " + (others.size() - 1) + " others";
+    }
+
+    private void askWhichVersionSurvives(CgPath target, byte[] written) {
+        ConflictDialog.ask(this, target, othersEditing(target),
+                () -> client.overwrite(target, written, etag -> saved(target, written),
+                        // A SECOND failure is not another conflict -- overwrite carries no etag, so it
+                        // cannot be refused as stale. Anything arriving here is a real error and belongs
+                        // on the ordinary path rather than reopening the question.
+                        again -> Notifications.show(saveFailed(target, again))),
+                () -> openFile(target));
     }
 
     /**
@@ -2199,6 +2243,40 @@ public class Workbench extends UIElement {
             problemCountEntry.update(entry);
         }
     }
+
+    /**
+     * Phase 5.6 — says who else has the active file open.
+     *
+     * <p>The data has existed since Phase 4 and nothing showed it: {@code fs.watch} is sent for every
+     * file a client reads, so the server has always known. What was missing was a view <em>across</em>
+     * peers — a watcher belongs to one connection — and anywhere to put the answer.</p>
+     *
+     * <p><b>Removed rather than emptied when nobody is there.</b> A permanent "1 person" slot that
+     * usually reads zero is a thing the eye learns to skip, which is the one failure a presence
+     * indicator cannot afford. Same shape as the problem count above, and for the same reason.</p>
+     */
+    private void refreshPresence() {
+        String others = othersEditing(activeFilePath());
+        if (others == null) {
+            if (presenceEntry != null) presenceEntry.dispose();
+            presenceEntry = null;
+            return;
+        }
+        StatusBarEntry entry = new StatusBarEntry("Editing",
+                others, others + " also has this file open", null, StatusBarEntry.Kind.STANDARD);
+        if (presenceEntry == null) {
+            presenceEntry = StatusBar.addEntry(entry, "workbench.presence",
+                    StatusBarAlignment.RIGHT, PRESENCE_PRIORITY);
+        } else {
+            presenceEntry.update(entry);
+        }
+    }
+
+    /** Right of the problem count and left of anything a document contributes. */
+    private static final int PRESENCE_PRIORITY = 50;
+
+    @Nullable
+    private StatusBarEntryAccessor presenceEntry;
 
     /**
      * Keeps the panel pointed at this workspace's index.

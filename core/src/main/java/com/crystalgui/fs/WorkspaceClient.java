@@ -127,6 +127,10 @@ public final class WorkspaceClient<T> {
         // The server pushes these; nothing asks for them. Registered here rather than left to a caller,
         // because a client that reads a file is watching it (see read) and would otherwise be sent
         // notifications with no handler.
+        registrar.register(WorkspaceProtocol.PRESENCE, (args, respond) -> {
+            applyPresence(args);
+            respond.ok(null);
+        });
         registrar.register(WorkspaceProtocol.CAPABILITIES, (args, respond) -> {
             applyCapabilities(args);
             respond.ok(null);
@@ -220,6 +224,49 @@ public final class WorkspaceClient<T> {
 
     @Nullable
     private Runnable onCapabilities;
+
+    /**
+     * Who else has {@code path} open, by display name. Empty when nobody does, or nobody has said yet.
+     *
+     * <p><b>Empty is not "nobody".</b> It is "nothing has been said", and the two are indistinguishable
+     * from here — which is why this is only ever used to <em>add</em> information (a conflict naming who
+     * else is editing, a status line) and never to decide anything. A UI that hid a warning because the
+     * list was empty would hide it exactly when the server had not got round to answering.</p>
+     */
+    public List<String> whoElseHasOpen(@Nullable CgPath path) {
+        if (path == null) return java.util.Collections.emptyList();
+        List<String> others = presence.get(path);
+        return others == null ? java.util.Collections.emptyList() : others;
+    }
+
+    /** Every path this client knows somebody else has open. */
+    public java.util.Set<CgPath> pathsOthersHaveOpen() {
+        return new java.util.LinkedHashSet<>(presence.keySet());
+    }
+
+    /** Told when the presence view changes, so a status line can redraw. */
+    public void onPresenceChanged(Runnable handler) {
+        this.onPresence = handler;
+    }
+
+    private void applyPresence(StateMap<T> in) {
+        // REPLACED WHOLESALE, matching what the server sends. A merge would leave a path that has just
+        // become unoccupied showing its last occupant for ever, because "nobody is here now" arrives as
+        // an ABSENCE from the list rather than as an entry saying zero.
+        presence.clear();
+        for (StateMap<T> entry : in.getList(WorkspaceProtocol.PRESENCE_ENTRIES, e -> e)) {
+            CgPath path = CgPath.parse(entry.getString(WorkspaceProtocol.PATH, ""));
+            List<String> who = entry.getList(WorkspaceProtocol.WHO,
+                    e -> e.getString(WorkspaceProtocol.NAME, ""));
+            if (!who.isEmpty()) presence.put(path, who);
+        }
+        if (onPresence != null) onPresence.run();
+    }
+
+    private final Map<CgPath, List<String>> presence = new HashMap<>();
+
+    @Nullable
+    private Runnable onPresence;
 
     /** What the server reports when a watched file moves. */
     public record FileChanged(CgPath path, String kind, String etag) {
