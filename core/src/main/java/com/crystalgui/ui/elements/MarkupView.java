@@ -199,7 +199,7 @@ public class MarkupView extends UIElement implements UIFrameTicker {
      * <p>Per table rather than per document: two tables in one comment are two grids, and a column in
      * one says nothing about a column in the other. @see #alignTables</p>
      */
-    private final List<List<List<UIElement>>> tables = new ArrayList<>();
+    private final List<List<List<Placed>>> tables = new ArrayList<>();
 
     /** One link's extent within its run, and where it points. */
     private record LinkSpan(int start, int end, String target) {
@@ -503,15 +503,17 @@ public class MarkupView extends UIElement implements UIFrameTicker {
      * back at the container's full width and the first track is never reserved. So the columns are
      * lined up after layout instead, by {@link #alignTables}.</p>
      *
-     * <p><b>First cut:</b> {@code colspan} and {@code rowspan} are ignored and their cells sit in the
-     * grid as ordinary ones. Both are rare in javadoc and a spanning cell changes what a column even
-     * means, so it is a second pass rather than a flag on this one.</p>
+     * <p><b>A spanning cell claims its slots up front.</b> {@code colspan} and {@code rowspan} decide
+     * which COLUMN each following cell lands in, so a table containing one cannot be aligned by counting
+     * cells from the left — every column after the span would be compared against the wrong one, which
+     * is a table whose rules and text disagree rather than a table missing a feature. The grid is built
+     * here, once, and {@link #alignTables} reads the slots rather than the list positions.</p>
      */
     private UIElement table(MarkupBlock block) {
         UIElement box = new TableGrid();
         box.addClass(TABLE_CLASS);
 
-        List<List<UIElement>> rows = new ArrayList<>();
+        List<List<Placed>> rows = new ArrayList<>();
         for (MarkupBlock child : block.children()) {
             if (child.kind() == MarkupBlock.Kind.CAPTION) {
                 box.addChild(text(spansOf(child), TABLE_CAPTION_CLASS));
@@ -523,16 +525,63 @@ public class MarkupView extends UIElement implements UIFrameTicker {
             row.addClass(TABLE_ROW_CLASS);
             box.addChild(row);
 
-            List<UIElement> cells = new ArrayList<>();
+            List<Placed> cells = new ArrayList<>();
             for (MarkupBlock cellBlock : child.children()) {
                 UIElement cell = cell(cellBlock);
                 row.addChild(cell);
-                cells.add(cell);
+                cells.add(new Placed(cell, 0, cellBlock.colspan(), cellBlock.rowspan()));
             }
             if (!cells.isEmpty()) rows.add(cells);
         }
-        if (!rows.isEmpty()) tables.add(rows);
+        if (!rows.isEmpty()) tables.add(place(rows));
         return box;
+    }
+
+    /**
+     * One cell and the column it starts in.
+     *
+     * <p>{@code column} is what a span makes non-obvious: without one it is the cell's index in its row,
+     * and with one it is not, in that row or in any row a {@code rowspan} reaches into.</p>
+     */
+    private record Placed(UIElement cell, int column, int colspan, int rowspan) {
+    }
+
+    /**
+     * Assigns every cell the column it actually starts in.
+     *
+     * <p>The HTML table model, in the one form this needs: walk the rows in order, and for each cell take
+     * the leftmost slot nothing has already claimed. A {@code colspan} claims the slots beside it and a
+     * {@code rowspan} claims the same slots in the rows below, so a cell that follows one is pushed right
+     * exactly as a browser pushes it.</p>
+     *
+     * <p><b>A {@code rowspan} is honoured for PLACEMENT and not for painting.</b> The cell keeps the
+     * height of its own row rather than growing down through the rows it covers, because a row here is a
+     * flex box and a child cannot escape one — a real vertical merge means abandoning row boxes for
+     * absolute placement, which would also take the grid drawing with it. Stated rather than quietly
+     * dropped: the columns line up, and a cell that says it covers three rows is drawn covering one.</p>
+     */
+    private static List<List<Placed>> place(List<List<Placed>> rows) {
+        // WHAT EACH ROW BELOW HAS ALREADY HAD TAKEN FROM IT, by column. A rowspan writes into these.
+        List<java.util.Set<Integer>> taken = new ArrayList<>();
+        for (int i = 0; i < rows.size(); i++) taken.add(new java.util.HashSet<>());
+
+        List<List<Placed>> placed = new ArrayList<>(rows.size());
+        for (int r = 0; r < rows.size(); r++) {
+            List<Placed> out = new ArrayList<>(rows.get(r).size());
+            int column = 0;
+            for (Placed cell : rows.get(r)) {
+                while (taken.get(r).contains(column)) column++;
+                out.add(new Placed(cell.cell(), column, cell.colspan(), cell.rowspan()));
+                for (int c = column; c < column + cell.colspan(); c++) {
+                    for (int down = r + 1; down < r + cell.rowspan() && down < rows.size(); down++) {
+                        taken.get(down).add(c);
+                    }
+                }
+                column += cell.colspan();
+            }
+            placed.add(out);
+        }
+        return placed;
     }
 
     /**
@@ -622,10 +671,27 @@ public class MarkupView extends UIElement implements UIFrameTicker {
                 float y = cache.getY() + cache.getHeight();
                 stroke(ctx, left, y, right, y, colour);
             }
-            for (int i = 0; i + 1 < columns.size(); i++) {
-                var cache = columns.get(i).getRuntimeCache();
-                float x = cache.getX() + cache.getWidth();
-                stroke(ctx, x, top, x, bottom, colour);
+            // A COLUMN LINE IS DRAWN PER ROW, not once down the whole table.
+            //
+            // Full-height lines are one stroke each and are wrong the moment anything spans: a cell with
+            // `colspan="2"` has no internal boundary, so a line down the table draws a rule THROUGH it —
+            // which reads as the header being two cells whose divider someone forgot to remove, rather
+            // than as one cell. Asking each row for its own boundaries needs no placement data at all: a
+            // spanning cell simply has one fewer edge to report, and a table with no spans draws exactly
+            // what it drew before, in as many strokes as it has rows.
+            //
+            // Clamped to the inset edges so an interior line meets the outer rule instead of poking half
+            // a stroke past it at the top and bottom.
+            for (UIElement row : rows) {
+                var cache = row.getRuntimeCache();
+                float y0 = Math.max(cache.getY(), top);
+                float y1 = Math.min(cache.getY() + cache.getHeight(), bottom);
+                List<UIElement> cells = row.getChildren();
+                for (int i = 0; i + 1 < cells.size(); i++) {
+                    var cell = cells.get(i).getRuntimeCache();
+                    float x = cell.getX() + cell.getWidth();
+                    stroke(ctx, x, y0, x, y1, colour);
+                }
             }
             ctx.flush();
         }
@@ -695,23 +761,39 @@ public class MarkupView extends UIElement implements UIFrameTicker {
      * it.</p>
      */
     private void alignTables() {
-        for (List<List<UIElement>> rows : tables) {
+        for (List<List<Placed>> rows : tables) {
             int columns = 0;
-            for (List<UIElement> row : rows) columns = Math.max(columns, row.size());
-            for (int column = 0; column < columns; column++) {
-                float widest = 0f;
-                for (List<UIElement> row : rows) {
-                    if (column >= row.size()) continue;
-                    widest = Math.max(widest, row.get(column).getRuntimeCache().getWidth());
+            for (List<Placed> row : rows) {
+                for (Placed cell : row) columns = Math.max(columns, cell.column() + cell.colspan());
+            }
+
+            // ONLY SINGLE-COLUMN CELLS MEASURE A COLUMN. A cell covering three of them says nothing about
+            // how wide any ONE of them is, and letting it vote makes every column under a wide header as
+            // wide as the header -- which is the table three times too wide, from a construct that was
+            // supposed to be cosmetic. Browsers resolve this the same way round.
+            float[] width = new float[columns];
+            for (List<Placed> row : rows) {
+                for (Placed cell : row) {
+                    if (cell.colspan() != 1) continue;
+                    width[cell.column()] =
+                            Math.max(width[cell.column()], cell.cell().getRuntimeCache().getWidth());
                 }
-                // NOTHING MEASURED YET is the first layout of a freshly built document, where every box
-                // is zero. Equalising to zero would latch it.
-                if (widest <= 0f) continue;
-                final float shared = widest;
-                for (List<UIElement> row : rows) {
-                    if (column >= row.size()) continue;
-                    StyleGroup.importantPipeline(row.get(column).getStyle().getLayoutGroup(),
-                            l -> l.minWidth(shared));
+            }
+
+            for (List<Placed> row : rows) {
+                for (Placed cell : row) {
+                    // A SPANNING CELL TAKES THE SUM of what it covers, so the columns beneath it stay
+                    // where the rest of the table put them.
+                    float shared = 0f;
+                    for (int c = cell.column(); c < cell.column() + cell.colspan() && c < columns; c++) {
+                        shared += width[c];
+                    }
+                    // NOTHING MEASURED YET is the first layout of a freshly built document, where every
+                    // box is zero. Equalising to zero would latch it.
+                    if (shared <= 0f) continue;
+                    final float min = shared;
+                    StyleGroup.importantPipeline(cell.cell().getStyle().getLayoutGroup(),
+                            l -> l.minWidth(min));
                 }
             }
         }

@@ -56,6 +56,24 @@ final class Inline {
                 }
             }
 
+            // AN IMAGE IS ITS ALT TEXT, and it has to be recognised BEFORE the link below it: the syntax
+            // is a link with a `!` in front, so a link handler reaching it first turns `![alt](src)` into
+            // a stray exclamation mark followed by a followable link to a picture nothing can open.
+            // Nothing can be drawn either way — a JSDoc `src` names a file relative to the page a doc
+            // tool would have generated, which exists nowhere in a jar — so the label is what is left,
+            // and it is what the label is for.
+            if (c == '!' && at + 1 < text.length() && text.charAt(at + 1) == '[') {
+                int label = matching(text, at + 1, '[', ']');
+                if (label > at + 1 && label + 1 < text.length() && text.charAt(label + 1) == '(') {
+                    int target = matching(text, label + 1, '(', ')');
+                    if (target > label) {
+                        out.append(render(text.substring(at + 2, label)));
+                        at = target + 1;
+                        continue;
+                    }
+                }
+            }
+
             if (c == '[') {
                 int label = matching(text, at, '[', ']');
                 if (label > at && label + 1 < text.length() && text.charAt(label + 1) == '(') {

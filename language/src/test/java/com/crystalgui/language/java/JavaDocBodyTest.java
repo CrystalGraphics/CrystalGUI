@@ -211,6 +211,44 @@ public class JavaDocBodyTest {
     }
 
     /**
+     * <b>{@code @inheritDoc} resolves through the WHOLE chain, not one hop.</b>
+     *
+     * <p>The middle of a three-level hierarchy is the case, and it is not exotic — an abstract class
+     * between an interface and its implementation is the ordinary shape, and the comment it carries is
+     * very often nothing but the marker, written to mean "the same as above". One hop took that text and
+     * stripped its marker, which yields the empty string: the bottom method rendered its own prose and
+     * lost the sentence it had explicitly asked for, while a two-level hierarchy — every fixture written
+     * before this one — worked perfectly.</p>
+     */
+    @Test
+    public void inheritDocFollowsMoreThanOneLevel() {
+        String source = ""
+                + "public class Script {\n"
+                + "    interface Source {\n"
+                + "        /** Reads the next row. */\n"
+                + "        String read();\n"
+                + "    }\n"
+                + "    static abstract class Base implements Source {\n"
+                + "        /** {@inheritDoc} */\n"
+                + "        public abstract String read();\n"
+                + "    }\n"
+                + "    static class Impl extends Base {\n"
+                + "        /** {@inheritDoc} Blocks until one arrives. */\n"
+                + "        public String read() { return \"\"; }\n"
+                + "    }\n"
+                + "    String use(Impl impl) { return impl.read(); }\n"
+                + "}\n";
+        String read = MarkupParser.parse(docAt(source, "read(); }")).text();
+
+        assertTrue("the sentence two levels up never arrived: <" + read + ">",
+                read.contains("Reads the next row"));
+        assertTrue("the overriding method lost its own prose: <" + read + ">",
+                read.contains("Blocks until one arrives"));
+        assertTrue("the marker leaked to the reader: <" + read + ">",
+                !read.contains("inheritDoc"));
+    }
+
+    /**
      * <b>A qualified name resolves to a symbol without any position meaning it.</b>
      *
      * <p>What a documentation link needs, and what every other {@code Resolver} method cannot give:
@@ -239,6 +277,52 @@ public class JavaDocBodyTest {
     @Test
     public void anUnknownQualifiedNameDescribesNothing() {
         assertNull(describe("no.such.Type"));
+    }
+
+    /**
+     * <b>A member reference answers with the MEMBER, not with its owning type.</b>
+     *
+     * <p>{@code List#add} opened {@code List} — related, and not what was asked. It was recorded as
+     * needing a probe that CALLS the member so overload resolution picks one, which is what
+     * {@code InteropResolver.describeMember} builds and is child-side. That reasoning was sound and its
+     * conclusion was wrong: a call is not the only construct JDT resolves a member through, and the
+     * other one is the reference the author already typed. The probe is a doc comment.</p>
+     */
+    @Test
+    public void aMemberReferenceDescribesTheMember() {
+        SymbolInfo member = describe("java.util.List#add");
+        assertNotNull("a member reference described nothing at all", member);
+        assertEquals("the owning type answered instead of the member", "add", member.name());
+    }
+
+    /**
+     * And the argument list picks the overload, exactly as javadoc's own rules do.
+     *
+     * <p>Asserted on the PARAMETER COUNT rather than on the name, because both overloads are called
+     * {@code add} — a test on the name passes against a probe that ignores the argument list entirely,
+     * which is the whole thing being checked here.</p>
+     */
+    @Test
+    public void anArgumentListPicksTheOverload() {
+        SymbolInfo two = describe("java.util.List#add(int, java.lang.Object)");
+        assertNotNull("an overload written with its argument types described nothing", two);
+        assertEquals("add", two.name());
+        assertEquals("the argument list did not choose the overload", 2, two.parameters().size());
+    }
+
+    /**
+     * A member nothing declares falls back to the type it was qualified by.
+     *
+     * <p>An unresolvable javadoc reference reports <b>no diagnostic</b> — the javadoc problems are
+     * options of their own and are off — so the probe cannot be checked the way the type probe is, and
+     * the answer's own name is the assertion. It falls back rather than answering null because the type
+     * half of the reference did resolve, and opening it is a useful answer where opening nothing is not.
+     */
+    @Test
+    public void anUnknownMemberFallsBackToItsType() {
+        SymbolInfo fallback = describe("java.util.List#noSuchMemberAnywhere");
+        assertNotNull("neither the member nor the type it names answered", fallback);
+        assertEquals("List", fallback.name());
     }
 
     /** What the engine says a name refers to, with no offset involved. */

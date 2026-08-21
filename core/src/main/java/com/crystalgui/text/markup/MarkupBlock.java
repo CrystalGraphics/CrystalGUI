@@ -10,7 +10,8 @@ import java.util.List;
  * items. Allowing both would make "what does a LIST's own span list mean" a question every consumer has
  * to answer, and they would answer it differently.</p>
  */
-public record MarkupBlock(Kind kind, List<MarkupSpan> spans, List<MarkupBlock> children, int level) {
+public record MarkupBlock(Kind kind, List<MarkupSpan> spans, List<MarkupBlock> children, int level,
+                          int colspan, int rowspan) {
 
     public enum Kind {
         /** Running text. */
@@ -73,24 +74,37 @@ public record MarkupBlock(Kind kind, List<MarkupSpan> spans, List<MarkupBlock> c
     }
 
     public static MarkupBlock paragraph(List<MarkupSpan> spans) {
-        return new MarkupBlock(Kind.PARAGRAPH, List.copyOf(spans), List.of(), 0);
+        return new MarkupBlock(Kind.PARAGRAPH, List.copyOf(spans), List.of(), 0, 1, 1);
     }
 
     public static MarkupBlock code(String text) {
-        return new MarkupBlock(Kind.CODE, List.of(MarkupSpan.of(text, MarkupSpan.CODE)), List.of(), 0);
+        return new MarkupBlock(Kind.CODE, List.of(MarkupSpan.of(text, MarkupSpan.CODE)), List.of(), 0, 1, 1);
     }
 
     public static MarkupBlock heading(List<MarkupSpan> spans, int level) {
-        return new MarkupBlock(Kind.HEADING, List.copyOf(spans), List.of(), level);
+        return new MarkupBlock(Kind.HEADING, List.copyOf(spans), List.of(), level, 1, 1);
     }
 
     public static MarkupBlock of(Kind kind, List<MarkupBlock> children, int level) {
-        return new MarkupBlock(kind, List.of(), List.copyOf(children), level);
+        return new MarkupBlock(kind, List.of(), List.copyOf(children), level, 1, 1);
     }
 
+    /** A cell that covers more than one column or row — {@code colspan}/{@code rowspan}. */
+    public static MarkupBlock cell(List<MarkupBlock> children, int header, int colspan, int rowspan) {
+        return new MarkupBlock(Kind.CELL, List.of(), List.copyOf(children), header, colspan, rowspan);
+    }
+
+    /**
+     * @param colspan how many COLUMNS this cell covers, and {@code rowspan} how many rows — both 1 for
+     *                every block that is not a spanning cell. Clamped to at least 1 rather than
+     *                validated: {@code colspan="0"} is legal HTML meaning "to the end of the group", and
+     *                a renderer that treated it as zero would collapse the cell out of its own table.
+     */
     public MarkupBlock {
         spans = spans == null ? List.of() : Collections.unmodifiableList(spans);
         children = children == null ? List.of() : Collections.unmodifiableList(children);
+        colspan = Math.max(1, colspan);
+        rowspan = Math.max(1, rowspan);
     }
 
     /** Every span's text, joined — what a consumer with no styling to offer draws. */
