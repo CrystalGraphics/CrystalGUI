@@ -481,6 +481,10 @@ public final class MarkupParser {
             // has to be closed first, or the item everything after the final `<li>` went into is dropped
             // along with the close tag that never came.
             while (!lists.isEmpty()) {
+                if (openList().kind == MarkupBlock.Kind.QUOTE) {
+                    closeQuote();
+                    continue;
+                }
                 closeOpenRow();
                 closeList();
             }
@@ -559,7 +563,13 @@ public final class MarkupParser {
                     setRowKind("dt".equals(tag) ? MarkupBlock.Kind.TERM : MarkupBlock.Kind.DETAIL);
                     break;
                 case "blockquote":
+                    // A CONTAINER, which it had never been. `MarkupBlock.QUOTE` has existed since the
+                    // model did and `MarkupView` has always known how to draw one -- rule down the left
+                    // edge and all -- but nothing ever produced one: this case closed the open block and
+                    // stopped, so a `<blockquote>` was a paragraph break and its content came out as
+                    // ordinary prose. Silent, and it looked like the sheet not styling quotes.
                     closeBlock();
+                    lists.add(new OpenList(MarkupBlock.Kind.QUOTE, false));
                     break;
                 case "h1": case "h2": case "h3": case "h4": case "h5": case "h6":
                     closeBlock();
@@ -618,8 +628,11 @@ public final class MarkupParser {
                     closeOpenRow();
                     closeList();
                     break;
-                case "p": case "blockquote":
+                case "p":
                     closeBlock();
+                    break;
+                case "blockquote":
+                    closeQuote();
                     break;
                 case "h1": case "h2": case "h3": case "h4": case "h5": case "h6":
                     closeBlock();
@@ -722,6 +735,26 @@ public final class MarkupParser {
             list.rowBlocks.clear();
             list.rowKind = MarkupBlock.Kind.ITEM;
             list.rowLevel = 0;
+        }
+
+        /**
+         * Ends a {@code <blockquote>}, taking the blocks inside it as its CHILDREN.
+         *
+         * <p>Not through {@link #closeOpenRow}, which wraps what it has gathered in a row — a quote has
+         * no rows, and wrapping would put an anonymous {@code ITEM} between the quote and its own
+         * prose. Everything a quote holds is simply a block it holds.</p>
+         */
+        private void closeQuote() {
+            closeBlock();
+            OpenList list = openList();
+            if (list == null || list.kind != MarkupBlock.Kind.QUOTE) return;
+            lists.remove(lists.size() - 1);
+            if (list.rowBlocks.isEmpty()) return;
+            MarkupBlock quote = MarkupBlock.of(MarkupBlock.Kind.QUOTE,
+                    new ArrayList<>(list.rowBlocks), 0);
+            OpenList parent = openList();
+            if (parent == null) blocks.add(quote);
+            else parent.rowBlocks.add(quote);
         }
 
         private void closeList() {

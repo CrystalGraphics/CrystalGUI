@@ -58,9 +58,21 @@ public class JsLanguageRegistrationTest {
 
         Assume.assumeTrue("no staged engine directory; run :language:stageEngines",
                 EngineHost.defaultSource() != EngineSource.NONE);
-        JavaLanguage.register(null, EngineHost.defaultSource());
+        // JAVASCRIPT FIRST, DELIBERATELY -- this is the order that breaks, and it used to break silently.
+        // `JsLanguage.register` lends the Java engine to its interop tier by calling
+        // `JavaLanguage.engine()`, which OPENS the engine without registering anything; `JavaLanguage`
+        // then guarded its own registration on `engine != null`, so the call below returned true on its
+        // first line and never wrote either of the two things this class asserts. `.java` kept the bare
+        // entry `LanguageRegistry`'s static initializer installs (no services, so `newServices` answers
+        // null), and `ScriptRuntimes` never heard Java can run.
+        //
+        // It was FOUND BY LUCK: statics are shared across a suite, so this reproduced only when this
+        // class ran before anything that had already registered Java, which Gradle decides run by run.
+        // Writing the breaking order down here is what turns it from a coin toss into a test. Java-first
+        // is `JavaLanguageRegistrationTest`'s, so both orders stay covered.
         Assume.assumeTrue("the staged directory has no Rhino for this band",
                 JsLanguage.register(null, EngineHost.defaultSource()));
+        JavaLanguage.register(null, EngineHost.defaultSource());
     }
 
     private static LanguageRegistry.Entry entryFor(String fileName) {

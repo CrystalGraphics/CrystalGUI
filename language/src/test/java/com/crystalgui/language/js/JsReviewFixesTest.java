@@ -94,7 +94,11 @@ public class JsReviewFixesTest {
 
         assertNotNull(symbol);
         assertEquals(SymbolKind.FUNCTION, symbol.kind());
-        assertEquals("the JSDoc description was lost to the run", "Joins them.", symbol.documentation());
+        // THE DESCRIPTION IS MARKUP NOW, not the source it was written in -- so this asks whether the
+        // words survived the run rather than comparing against the raw comment. @see JsDocs
+        assertNotNull("the JSDoc description was lost to the run", symbol.documentation());
+        assertTrue("the JSDoc description was lost to the run: " + symbol.documentation(),
+                symbol.documentation().contains("Joins them."));
         assertNotNull("the JSDoc return type was replaced by the live `function`", symbol.type());
         assertEquals("string", symbol.type().displayName());
         assertEquals("the parameter list came from the live entry rather than the declaration",
