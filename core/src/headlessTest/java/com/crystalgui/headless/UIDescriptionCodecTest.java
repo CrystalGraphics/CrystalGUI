@@ -145,7 +145,10 @@ public class UIDescriptionCodecTest {
             CODEC.decode(JsonOps.INSTANCE, button);
             fail("expected a CodecException for children on a Button");
         } catch (CodecException expected) {
-            assertTrue(expected.getMessage().contains("does not accept public children"));
+            // Wording moved with C3 ("public" -> "described"); the REFUSAL is what this pins, and
+            // it still fires -- a Button neither accepts public children nor describes any.
+            assertTrue(expected.getMessage(),
+                    expected.getMessage().contains("does not accept described children"));
         }
     }
 

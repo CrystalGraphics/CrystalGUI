@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements;
 
+import com.crystalgui.serialization.StateMap;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIFrameTicker;
@@ -168,4 +169,24 @@ public class ProgressBar extends UIElement implements UIFrameTicker {
         StyleGroup.importantPipeline(fill.getStyle().getLayoutGroup(),
                 l -> l.marginLeftPercent(marginPercent).widthPercent(widthPercent));
     }
+
+    /**
+     * The fraction, and nothing else.
+     *
+     * <p>Everything else about a progress bar is appearance, which the cascade already carries. This is
+     * the one thing a server knows and a client cannot derive — C4's whole point: a stateful widget with
+     * no {@code writeState} does not fail, it <b>arrives blank</b>, which reads as a rendering bug.</p>
+     */
+    @Override
+    protected <T> void writeState(StateMap<T> out) {
+        out.putFloat("fraction", fraction);
+    }
+
+    @Override
+    protected <T> void readState(StateMap<T> in) {
+        // -1 is INDETERMINATE, not "empty". Defaulting to 0 would turn a spinner into a bar stuck
+        // at zero, which looks like a stalled operation rather than an unknown one.
+        setFraction(in.getFloat("fraction", -1f));
+    }
+
 }

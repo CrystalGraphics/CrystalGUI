@@ -69,7 +69,7 @@ public final class UIDescriptionCodec {
             // it stays a lambda on the session that declared it.
             out.optionalList("events", Codecs.STRING, List.copyOf(input.getReportedEvents()));
 
-            List<UIElement> children = publicChildrenOf(input);
+            List<UIElement> children = input.describedChildrenFor();
             if (!children.isEmpty()) {
                 List<T> encoded = new ArrayList<>(children.size());
                 for (UIElement child : children) encoded.add(encode(ops, child));
@@ -102,36 +102,30 @@ public final class UIDescriptionCodec {
             element.setHitTest((flags & FLAG_HIT_TEST) != 0);
             element.setFocusPolicy(in.optional("focus", Codecs.enumOf(FocusPolicy.class), FocusPolicy.NONE));
 
-            T state = in.raw("state");
-            if (state != null) element.readStateFrom(new StateMap<>(ops, state));
-
             for (String kind : in.optionalList("events", Codecs.STRING)) element.addReportedEvent(kind);
 
             T children = in.raw("children");
             if (children != null) {
                 List<T> raw = ops.getListValue(children);
-                if (!raw.isEmpty() && !element.acceptsPublicChildren()) {
-                    throw new CodecException("<" + tag + "> does not accept public children, but its "
+                if (!raw.isEmpty() && !element.acceptsDescribedChildrenFor()) {
+                    throw new CodecException("<" + tag + "> does not accept described children, but its "
                             + "description carries " + raw.size() + " — its internals are rebuilt by its "
                             + "constructor and must not be serialized");
                 }
-                for (T child : raw) element.addChild(decode(ops, child));
+                for (T child : raw) element.addDescribedChildFrom(decode(ops, child));
             }
+
+            // STATE AFTER CHILDREN, and this ordering is load-bearing. A widget's state is routinely an
+            // index INTO its children -- a TabView's selected tab, a Dropdown's selected option -- and an
+            // index applied to an empty widget is refused as out-of-range and silently lost. Nothing
+            // needs the reverse order: state that does not reference children is unaffected by it, so
+            // there is no trade here, only a correction. The same argument Slider's own readState makes
+            // about range before value, one level up.
+            T state = in.raw("state");
+            if (state != null) element.readStateFrom(new StateMap<>(ops, state));
             return element;
         }
     };
-
-    /**
-     * Public children only. A composite widget's internals are rebuilt by its constructor, so
-     * serializing them would duplicate the whole structure on decode.
-     */
-    private static List<UIElement> publicChildrenOf(UIElement element) {
-        List<UIElement> out = new ArrayList<>();
-        for (UIElement child : element.getChildren()) {
-            if (!child.isInternalUI()) out.add(child);
-        }
-        return out;
-    }
 
     /**
      * Author classes only. {@code __name__} classes are a widget's own structural markers, applied by
