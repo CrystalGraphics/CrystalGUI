@@ -181,9 +181,25 @@ the platform ceiling — several large transfers in flight together is the case 
   services are `private final X = new X()` inside a `static final INSTANCE`, so they are built at *class
   init* rather than at preInit. Half the fix already applies, since `CgPlatform.register` is shared.
   Whether it actually fails depends on what those service classes import, which was not finished.
-- **CrystalGraphics' import guard is disabled** — its own `AGENTS.md` says so, and warns against
-  assuming otherwise by analogy with CrystalGUI's active one. It is precisely what would have caught
-  today's three server-side load failures.
+- ~~**CrystalGraphics' import guard is disabled**, and is what would have caught today's failures.~~
+  **Half right, corrected 2026-08-21 while enabling it.** The guard *was* disabled — its own `AGENTS.md`
+  warns against assuming otherwise by analogy with CrystalGUI's active one — and it is now **on**, with
+  `org.lwjgl` added, which the commented-out original omitted. Both `core/` and `platform/` were already
+  clean, so it cost nothing and only prevents a regression; it is verified to fire by compiling a
+  deliberate violation.
+
+  **But it would not have caught any of the three.** All three were in `mc1710/`, where `org.lwjgl` is a
+  **legal** import, or in `CgPlatform`, which imports nothing offending and simply *called*
+  `platform.gl()`. The class of bug is *"a client-only class is constructed on a server"* — a **runtime**
+  property that no import scan can see.
+
+- **What does catch it is booting a dedicated server**, which found all three in one run. `runServer`
+  works now, so making that a repeatable smoke check — boot, assert `[cgui-net] connection lifecycle
+  installed`, kill — turns a class of bug that was invisible to 1090 headless tests and to the harness
+  into something a build can fail on. This is the item; the guard was the consolation prize.
+
+  > The same reasoning `core/src/headlessTest/` already embodies — *"the absence is the assertion"*.
+  > A server is simply a second environment no test reproduces, and until today nothing had ever run one.
 
 > **Today's three, for the record**, because they are one shape: eager construction of client-only
 > services (`NoClassDefFoundError: org/lwjgl/LWJGLException`), `CgPlatform.register` pulling GL itself,
