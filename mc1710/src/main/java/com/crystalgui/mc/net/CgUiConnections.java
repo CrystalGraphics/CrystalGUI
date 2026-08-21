@@ -110,6 +110,18 @@ public final class CgUiConnections {
                 Protocols.contributors());
     }
 
+    /**
+     * Whether {@link #register()} actually installed the lifecycle.
+     *
+     * <p>Exists because both of its failure paths are a {@code warn} and a {@code return} rather than a
+     * throw — an unavailable channel, or the raw transport probe owning it — so a server with no
+     * networking at all boots perfectly happily and looks healthy. Read by
+     * {@link CgUiServerSmoke}, which is the thing that turns that into an exit code.</p>
+     */
+    public static synchronized boolean isRegistered() {
+        return registered;
+    }
+
     /** The connection to this player, or {@code null} if they have none — they left, or never had one. */
     @Nullable
     public static ProtocolConnection<Object> forPlayer(EntityPlayer player) {

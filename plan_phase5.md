@@ -177,10 +177,43 @@ the platform ceiling — several large transfers in flight together is the case 
 
 ### 5.10 Platform hygiene · **the class of bug that cost three fixes today**
 
-- **`PlatformService1201` has the same eager-construction shape** just fixed on 1.7.10, and worse: its
-  services are `private final X = new X()` inside a `static final INSTANCE`, so they are built at *class
-  init* rather than at preInit. Half the fix already applies, since `CgPlatform.register` is shared.
-  Whether it actually fails depends on what those service classes import, which was not finished.
+- ~~**`PlatformService1201` has the same eager-construction shape**~~ — **checked and fixed
+  2026-08-21.** It did, and worse. Eight services were `private final X = new X()` inside a
+  `static final INSTANCE`, so they were built at **class init**, a step earlier than 1710's preInit, and
+  the `@Mod` constructor calling `getInstance()` runs on **both sides** on Forge and NeoForge. (Fabric is
+  exempt by construction — `CrystalGraphics1201Fabric` is a `ClientModInitializer`.)
+
+  **The concrete hazard is `GL1201Context`**, which holds `private volatile GLCapabilities caps` — an
+  `org.lwjgl.opengl` **field descriptor**, and a dedicated 1.20.x server has no LWJGL on its classpath.
+  `CursorService1201`, `ResourceService1201` and `RenderingService1201` name `net.minecraft.client` types
+  that a server distribution does not ship either; those are method-body references today, so they
+  survive *loading* — but only by luck, and nothing stops the next edit adding a field.
+
+  Fixed by applying the 1710 shape ahead of the failure rather than after it: every service is now built
+  on demand and every field is **typed as its SPI interface**, so the LWJGL-touching class is named only
+  inside a method body.
+
+  **Two things are worth keeping from this, because neither is obvious.**
+
+  The class javadoc asserted *"No GL calls are made in the constructor or static initializer."* That was
+  true, and it is about what the code **does** — whereas the failure is about whether a class can be
+  **loaded**. It is the same trap `PlatformService1710.onInit` already records about
+  `processAllRequirements()` being documented as *"a no-op on dedicated server"*: true of its behaviour,
+  irrelevant to its loadability. A safety claim phrased in terms of execution cannot cover a
+  class-loading fault, and reads exactly as though it does.
+
+  And **whether a dev `runServer` would catch it is unknown.** This first read as a flat assertion that
+  ModDevGradle's joined artifact carries client classes *and* LWJGL, so the eager version would boot
+  happily. The joined artifact does carry client classes; the LWJGL half was a guess, and the equivalent
+  guess about 1.7.10 turned out **wrong in the reassuring direction** — see below, where the smoke check
+  measured RFG's server run and found no LWJGL at all. A guess that was wrong once is not a basis for the
+  other loader family, and mc1201 compiles from no build we have, so this stays open.
+
+  **Unverified, and unverifiable from here.** `mc1201` is commented out of `settings.gradle.kts` in
+  *both* repos, so nothing compiles it. The check that was available is a parse against the `platform`
+  sourcepath: zero syntax errors, all remaining errors being the absent MC/LWJGL/Lombok packages —
+  which corroborates the finding without proving the fix. That is why the shape was made unable to fail
+  rather than argued about.
 - ~~**CrystalGraphics' import guard is disabled**, and is what would have caught today's failures.~~
   **Half right, corrected 2026-08-21 while enabling it.** The guard *was* disabled — its own `AGENTS.md`
   warns against assuming otherwise by analogy with CrystalGUI's active one — and it is now **on**, with
@@ -193,10 +226,35 @@ the platform ceiling — several large transfers in flight together is the case 
   `platform.gl()`. The class of bug is *"a client-only class is constructed on a server"* — a **runtime**
   property that no import scan can see.
 
-- **What does catch it is booting a dedicated server**, which found all three in one run. `runServer`
-  works now, so making that a repeatable smoke check — boot, assert `[cgui-net] connection lifecycle
-  installed`, kill — turns a class of bug that was invisible to 1090 headless tests and to the harness
-  into something a build can fail on. This is the item; the guard was the consolation prize.
+- ~~**What does catch it is booting a dedicated server.**~~ **Built and run, 2026-08-21:**
+  `./gradlew :mc1710:serverSmoke` — boots, asserts, stops, ~48s, exit 0 on pass and 1 on fail.
+
+  It asserts more than the one log line the item asked for, because a line only proves a line was
+  printed: the platform bundle registered, the network channel is available, the connection lifecycle
+  installed (both its failure paths are a `warn` and a `return`, so a server with **no networking at all**
+  boots looking healthy), the protocol contributors bound, a UI description round-trips and
+  content-hashes stably with no GL anywhere, and — the one that targets the original bug class — that
+  **no client-only class has been loaded**. `CommonProxy`'s javadoc has always stated that contract
+  ("a static reference from a common class is enough to fail class loading there") and nothing checked it.
+
+  **Three things came out of running it that could not have come out of writing it.**
+
+  1. **The first run was green having executed nothing.** Port 25565 was in use, the bind failed, FML
+     forced `SERVER_STOPPED`, `FMLServerStartedEvent` never fired, not one assertion ran — and Gradle
+     said `BUILD SUCCESSFUL`. *A check that is green when it did not run is worse than no check, because
+     it is now also a claim.* Fixed in two places: the run takes **its own port** (25599, `-PcgSmokePort`
+     to override — 1.7.10's `MinecraftServer.main` parses `--port`, so no code of ours), and the mod
+     writes a **report file** the task deletes beforehand and requires afterwards, so *"never ran"* is a
+     failure with a message. The mod's `halt(1)` only ever covered *"ran and failed"*.
+  2. **A dev server is closer to production than claimed.** The write-up asserted LWJGL is on RFG's
+     server classpath. It is not: `CgPlatform.register` takes its `NoClassDefFoundError` fallback and the
+     check reports *"GL backend is not installed on this server — matching production"*. So on 1.7.10
+     the dev server is production-shaped for exactly the failure that prompted this. Corrected in the
+     class, in `PlatformService1201`, and in the bullet above.
+  3. **`net.minecraft.client.Minecraft` and `CgUiScreen` are present and unloaded**, which is what makes
+     that assertion falsifiable rather than a tautology — on a real server the classes are simply absent.
+
+  The guard was the consolation prize; this is the item.
 
   > The same reasoning `core/src/headlessTest/` already embodies — *"the absence is the assertion"*.
   > A server is simply a second environment no test reproduces, and until today nothing had ever run one.

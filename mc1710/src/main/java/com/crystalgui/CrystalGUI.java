@@ -16,9 +16,11 @@ import org.apache.logging.log4j.Logger;
 
 import cpw.mods.fml.common.Mod;
 import cpw.mods.fml.common.SidedProxy;
+import cpw.mods.fml.common.event.FMLServerStartedEvent;
 import cpw.mods.fml.common.event.FMLServerStoppingEvent;
 
 import com.crystalgui.mc.net.CgUiConnections;
+import com.crystalgui.mc.net.CgUiServerSmoke;
 
 import java.io.File;
 import cpw.mods.fml.common.event.FMLInitializationEvent;
@@ -95,6 +97,21 @@ public class CrystalGUI {
     @Mod.EventHandler
     public void postInit(FMLPostInitializationEvent event) {
         LOGGER.info("{}: postInit", NAME);
+    }
+
+    /**
+     * The dedicated-server smoke check, when {@code -PcgServerSmoke} asked for it.
+     *
+     * <p><b>Started, not Starting.</b> {@code FMLServerStartedEvent} is the first moment the server is
+     * genuinely up — world loaded, ticking — which is what makes "it booted" a real claim rather than
+     * "it got as far as init". It is also late enough that a mod which failed to construct has already
+     * taken the process down with it, so arriving here is itself most of the assertion.</p>
+     *
+     * <p>Costs one {@code Boolean.getBoolean} on every normal server start. @see CgUiServerSmoke</p>
+     */
+    @Mod.EventHandler
+    public void serverStarted(FMLServerStartedEvent event) {
+        if (CgUiServerSmoke.enabled()) CgUiServerSmoke.run();
     }
 
     /**
