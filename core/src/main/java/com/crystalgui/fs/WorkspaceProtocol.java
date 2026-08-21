@@ -150,6 +150,19 @@ public final class WorkspaceProtocol {
     /** The list {@link #CAPABILITIES} carries, of {@code {project, read, write}}. */
     public static final String PROJECT_CAPABILITIES = "caps";
 
+    /**
+     * Who else has a file open — server → client, pushed.
+     *
+     * <p>Carries {@link #PRESENCE_ENTRIES}, a list of {@code {path, who[]}} covering every path this
+     * peer is watching. <b>Whole-state rather than a delta</b>, and deliberately: the list is bounded by
+     * how many files one client has open, so it is small, and a delta stream that a peer joins halfway
+     * through has to be reconciled against a full state anyway. One shape, no reconciliation.</p>
+     */
+    public static final String PRESENCE = "fs.presence";
+
+    public static final String PRESENCE_ENTRIES = "presence";
+    public static final String WHO = "who";
+
     public static final String PROJECT = "project";
     public static final String MAY_READ = "read";
     public static final String MAY_WRITE = "write";

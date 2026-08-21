@@ -1737,6 +1737,40 @@ popover.__prompt__ textfield {
     padding-left: 2px;
 }
 
+/* ── Conflict dialog (5.5) ────────────────────────────────────────────────────────
+ *
+ * Somebody else changed the file. Every route out of this loses something, which is why it interrupts.
+ *
+ * GEOMETRY ONLY, as everywhere in the user-agent sheet: no left/top, because a dialog is positioned by
+ * the engine and hand-writing a position is what stops window-scoped modality retargeting it later. */
+dialog.__conflict__ {
+    width: 340px;
+}
+
+dialog.__conflict__ .__conflict-message__ {
+    width: 100%;
+    color: var(--dialog-fg, #DDDDDD);
+}
+
+/* Dimmer than the message: it adds context rather than stating the problem. Absent entirely when
+ * nobody is known to have the file open -- see ConflictDialog, which omits the element rather than
+ * drawing an empty line, because "nobody" is a claim the client cannot make. */
+dialog.__conflict__ .__conflict-who__ {
+    width: 100%;
+    color: var(--fg-secondary, #9A9A9A);
+}
+
+/* ROW, right-aligned, with the way out last -- the ordinary arrangement. What makes it safe is not the
+ * order but that focus and Escape both land on Cancel, which ConflictDialog does from Java. */
+dialog.__conflict__ .__conflict-actions__ {
+    width: 100%;
+    flex-direction: row;
+    justify-content: flex-end;
+    align-items: center;
+    gap-all: 6px;
+    margin-top: 4px;
+}
+
 /* ── Preferences ───────────────────────────────────────────────────────────────
  *
  * A dialog VARIANT, spelled as a class on a real `dialog` -- like `dialog.__picker__` above. Not a tag:

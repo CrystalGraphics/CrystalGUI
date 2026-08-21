@@ -70,6 +70,19 @@ public final class WorkspaceService {
     }
 
     /**
+     * Who has what open, across every peer.
+     *
+     * <p>Lives here because this is the one object every {@link WorkspaceRpc} shares — each has its own
+     * actor and its own watcher, so a per-connection home could only ever answer about itself, which is
+     * the opposite of what presence means. @see WorkspacePresence</p>
+     */
+    public WorkspacePresence presence() {
+        return presence;
+    }
+
+    private final WorkspacePresence presence = new WorkspacePresence();
+
+    /**
      * What this actor may do in each project it can see.
      *
      * <p>Asked against the project's own <b>root</b>, so it is a per-project answer to a per-path

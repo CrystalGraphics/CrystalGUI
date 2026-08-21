@@ -283,10 +283,16 @@ public final class WorkspaceRpc<T> {
             // existence and every subsequent change to it.
             service.read(actor, path);
             watcher.watch(actor, path);
+            // PRESENCE RIDES THE WATCH, because a watch is already exactly "this client has this file
+            // open" -- it is sent on every read and cleared on every close. A second message saying the
+            // same thing would be a second thing to keep in step, and the two would disagree the first
+            // time one of them was forgotten.
+            service.presence().opened(actor, path);
             respond.ok(null);
         }));
 
         registry.register(WorkspaceProtocol.UNWATCH, (args, respond) -> guard(respond, () -> {
+            service.presence().closed(actor, path(args));
             watcher.unwatch(path(args));
             respond.ok(null);
         }));
@@ -303,6 +309,7 @@ public final class WorkspaceRpc<T> {
      * @return how many notifications were sent
      */
     public int pollAndNotify(Notifier<T> notifier, com.crystalgui.serialization.DynamicOps<T> ops) {
+        pollPresence(notifier, ops);
         List<WorkspaceWatcher.Change> changes = watcher.poll(actor);
         for (WorkspaceWatcher.Change change : changes) {
             StateMap<T> args = new StateMap<T>(ops)
@@ -313,6 +320,41 @@ public final class WorkspaceRpc<T> {
         }
         return changes.size();
     }
+
+    /**
+     * Sends this peer its presence view, but only when something has actually changed.
+     *
+     * <p>Rides the poll the host already runs every tick, which is what lets presence exist at all
+     * without {@code core} knowing how to reach every connection — the loader holds the connection map,
+     * and {@code WorkspacePresence} therefore counts rather than broadcasts. Cost when nothing is
+     * happening is one {@code int} comparison per peer per tick.</p>
+     *
+     * <p>Scoped to <b>what this peer is watching</b>. Sending the whole server's presence would tell a
+     * client which files it cannot read are open, and by whom — the same leak {@code fs.watch} is
+     * authorised against, arriving by a different door.</p>
+     */
+    private void pollPresence(Notifier<T> notifier, com.crystalgui.serialization.DynamicOps<T> ops) {
+        int now = service.presence().version();
+        if (now == presenceVersionSent) return;
+        presenceVersionSent = now;
+
+        List<CgPath> mine = new java.util.ArrayList<>();
+        for (CgPath path : service.presence().paths()) {
+            if (watcher.isWatching(path)) mine.add(path);
+        }
+
+        StateMap<T> out = new StateMap<>(ops);
+        out.putList(WorkspaceProtocol.PRESENCE_ENTRIES, mine, (entry, path) -> {
+            entry.putString(WorkspaceProtocol.PATH, path.toString());
+            List<String> others = service.presence().whoElseHasOpen(actor, path);
+            entry.putList(WorkspaceProtocol.WHO, others,
+                    (who, name) -> who.putString(WorkspaceProtocol.NAME, name));
+        });
+        notifier.notify(WorkspaceProtocol.PRESENCE, out);
+    }
+
+    /** The presence version this peer has already been told about. @see #pollPresence */
+    private int presenceVersionSent;
 
     // ── Chunked transfers (P6.1.10 D11) ─────────────────────────────────────
 
