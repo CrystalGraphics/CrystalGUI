@@ -21,7 +21,17 @@ import com.crystalgraphics.gl.texture.CgTextureManager;
 import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.text.render.CgTextRenderer;
 import com.crystalgraphics.util.io.CgIO;
-import com.crystalgui.lifecycle.CgUiLifecycle;
+import com.crystalgraphics.api.font.CgFontFamily;
+import com.crystalgraphics.gl.lifecycle.CgGraphicsLifecycle;
+import com.crystalgraphics.text.cache.CgFontRegistry;
+import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.render.text.FontFamilyCache;
+import com.crystalgui.render.texture.asset.FileIconTheme;
+import com.crystalgui.render.texture.svg.SvgDocument;
+import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.style.sheet.StyleRule;
+import com.crystalgui.style.sheet.StyleSheet;
+import com.crystalgui.ui.UIWindow;
 import lombok.Getter;
 import lombok.Setter;
 import org.joml.Matrix4f;
@@ -31,8 +41,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.Deque;
 import java.util.List;
+import java.util.Set;
 
 /**
  * True immediate-mode 2D paint context for CrystalGUI's box-model layer.
@@ -52,8 +66,9 @@ import java.util.List;
  * owns that lifecycle must call {@link #destroy()} on context destruction — see that method for what
  * is and isn't freed, and why the distinction matters.</p>
  *
- * <p>Wraps frame lifecycle in {@link CgGlScope} for GL state isolation and saves/restores
- * {@link CgFrameData} so UI rendering does not corrupt the 3D pipeline state.</p>
+ * <p>Wraps frame lifecycle in {@link CgGlScope} for GL state isolation. It does <em>not</em> restore
+ * {@link CgFrameData}, which it overwrites with a screen-space camera — see {@link #beginFrame} for
+ * why that needs no restore and what does.</p>
  *
  * <p>Integrates {@link ScissorStack} for nested clip regions — GL scissor is applied
  * at draw time when a scissor rect is active.</p>
@@ -84,24 +99,53 @@ public final class CgUiPaintContext {
             DEFAULT_FONT_ASSET,
     };
 
-    static {
-        // Self-wire CrystalGUI's lifecycle the moment this class comes into play.
-        //
-        // Touching CgUiPaintContext at all is the event "CrystalGUI is about to own things that must
-        // be released on context loss" — so binding teardown to class initialization makes the two
-        // impossible to get out of step. The alternative, an explicit CgUiLifecycle.register() call
-        // in every loader and harness scene, is a step that can be forgotten, and forgetting it fails
-        // silently: the next GL context draws from freed materials and atlases rather than throwing.
-        //
-        // Costs nothing where it must cost nothing. A dedicated server never touches this class, so
-        // it never registers and never loads CrystalGraphics — and could not have anyway, since
-        // LAYER_FORMAT below already makes this class unloadable without CrystalGraphics present.
-        CgUiLifecycle.register();
-    }
-
     private static CgUiPaintContext instance;
 
     /** Lazily constructs the singleton on first use. See the class doc for why this must stay lazy. */
+    /**
+     * <b>Compiles the shipped materials now, so the first frame that draws does not.</b>
+     *
+     * <p>{@code CgMaterial.load} in the constructor <em>parses</em> a {@code .shader}; the GLSL is
+     * compiled and linked on the first {@code bind}. So constructing this class early bought nothing —
+     * measured, twice: warming by construction alone left the first frame's material bind at 300 ms
+     * against 286 before. Binding each material once is what actually pays the cost.</p>
+     *
+     * <p>Called from {@link com.crystalgui.lifecycle.CgUiLifecycle#onInit}, which is on the GL thread with
+     * a live context by definition. Never call it from anywhere else: a bind outside a frame is only safe
+     * because nothing is mid-draw, and {@code CgGlScope} is not held here.</p>
+     *
+     * <p>Failures are swallowed. A shader that will not compile is a real problem and the first real
+     * frame will report it in the ordinary way; a warm-up must not be the thing that fails a context.</p>
+     */
+    public void warm(int width, int height) {
+        // Leaks the Pass RenderState of every material below — doBind applies it, unbind() restores
+        // none of it. Scoped by CgUiLifecycle.onInit, which wraps the construction too; no scope here.
+        for (CgMaterial material : new CgMaterial[] { boxModelMaterial, curveMaterial, layerBlitMaterial }) {
+            try {
+                material.bind();
+                material.unbind();
+            } catch (RuntimeException | LinkageError ignored) {
+                // See the note above: an optimisation that fails is silent.
+            }
+        }
+        // AND THE TWO ASSET CACHES, both off the render thread. Neither needs GL, which is what makes
+        // them a removal rather than a move -- see each method.
+        preloadIcons();
+        warmGlyphs(UIWindow.DEFAULT_UI_SCALE);
+
+        // AND ONE EMPTY FRAME, which is the larger half. Compiling the shaders left the first real
+        // beginFrame at 252 ms against 285 -- so most of that cost was never the GLSL: it is the quad
+        // renderer's VAO and instance buffer, the text renderer, the scissor stack and the GL state
+        // save, all built on first use inside this call. A frame that draws nothing pays for all of
+        // them and leaves nothing on screen.
+        try {
+            beginFrame(Math.max(1, width), Math.max(1, height));
+            endFrame();
+        } catch (RuntimeException | LinkageError ignored) {
+            // As above.
+        }
+    }
+
     public static CgUiPaintContext getInstance() {
         if (instance == null) instance = new CgUiPaintContext();
         return instance;
@@ -284,6 +328,112 @@ public final class CgUiPaintContext {
             });
     }
 
+    /**
+     * Parses the shipped icons on worker threads, so the first frame that draws one does not.
+     *
+     * <p>Icon parsing touches no GL — {@code CgIO} through scanning, resolution and tessellation is
+     * arithmetic over strings and floats — so this REMOVES the cost rather than moving it to another
+     * frame. That property is why {@link SvgDocument#preload} exists and is safe to call from here.</p>
+     *
+     * <p>Fire-and-forget: a document that has not parsed when something draws it parses on the render
+     * thread exactly as before, so the worst case is today's behaviour.</p>
+     *
+     * <p>Covers the file-icon theme — 40 of the 49 icons shipped. The other nine are chrome marks named
+     * only from stylesheets ({@code icon("crystalgui:folder")}), and enumerating those needs a
+     * hand-written list: a second copy of a fact the sheets own, and the copy that rots. They stay
+     * lazy.</p>
+     */
+    private static void preloadIcons() {
+        try {
+            Set<String> paths = new LinkedHashSet<>();
+            for (String name : FileIconTheme.getDefault().iconNames()) {
+                paths.add(FileIconTheme.toResourcePath(FileIconTheme.withVariant(name)));
+            }
+            SvgDocument.preload(paths);
+        } catch (RuntimeException | LinkageError broken) {
+            CrystalGuiCore.LOGGER.warn("CgUiPaintContext: icon preload failed; icons parse on demand",
+                    broken);
+        }
+    }
+
+    /**
+     * Rasterises printable ASCII for every face the stylesheets name, before anything draws a string.
+     *
+     * <p>A first frame produces every distinct glyph on it <em>synchronously</em> — asynchronous
+     * generation exists, but a glyph queued by the frame that needs it arrives too late to be drawn.
+     * A warm has no such problem, because nothing has asked yet. Measured on the editor's first paint
+     * at ~181 ms in {@code drawSubtree} before this and ~103 ms after.</p>
+     *
+     * <h3>Read from the sheets, never listed here</h3>
+     *
+     * <p>The faces and sizes come out of {@link StyleSheet#DEFAULT}'s own declarations, because a list
+     * in this file is a second copy of a fact the stylesheets own — and it is the copy that rots. That
+     * is not hypothetical: the first version of this method hardcoded sizes 10/12/14, while the sheets
+     * declare 6, 7, 8, 9, 10 and 11. Five of the six real sizes were never warmed and two of the three
+     * warmed sizes did not exist, and it still measured as an improvement — which is exactly why the
+     * mistake would have survived. Nothing about a wrongly-aimed warm is visible: the work happens, the
+     * cache fills, the glyphs are simply never looked up.</p>
+     *
+     * <p><b>Warmed at {@code size * uiScale}, and that is the whole trick.</b> A bitmap glyph is keyed
+     * by the size it is rasterised at, and the renderer rasterises at the CSS size scaled by the pose,
+     * so warming the CSS size fills entries no draw ever looks up. It is read from
+     * {@link UIWindow#DEFAULT_UI_SCALE} rather than copied, because there is exactly one definition of
+     * what {@code uiScale} means and a second would disagree with it silently — this warm being aimed
+     * at sizes nothing draws is precisely the failure that would follow.</p>
+     *
+     * <p>One {@code CgFont} per family covers every size: {@code toBitmapAtlasGlyphKey} replaces the
+     * font key's own {@code targetPx} with the effective raster size, so the instance a face was
+     * resolved at does not affect which atlas entry a draw looks up. Resolving one per size instead
+     * would also submit the distance-field tier once per size, and those jobs are not {@code equals}
+     * — they would slip past the executor's dedup and generate the same entry six times over.</p>
+     */
+    private static void warmGlyphs(float uiScale) {
+        try {
+            Set<List<String>> families = new LinkedHashSet<>();
+            Set<Integer> cssSizes = new LinkedHashSet<>();
+            // The cascade's own defaults, which no rule has to restate to be in force.
+            families.add(StylePropertyRegistry.FONT_FAMILY.initialValue);
+            cssSizes.add(Math.round(StylePropertyRegistry.FONT_SIZE.initialValue));
+
+            for (StyleRule rule : StyleSheet.DEFAULT.getRules()) {
+                for (StyleRule.Declaration declaration : rule.declarations()) {
+                    // The property is checked BEFORE the value is computed: StyleValue.compute() is
+                    // lazy and cached, and forcing it for every declaration in a 6,000-line sheet to
+                    // find two properties would be most of a stylesheet parse done twice.
+                    if (declaration.property() == StylePropertyRegistry.FONT_FAMILY) {
+                        Object value = declaration.value().compute();
+                        if (value instanceof List) {
+                            @SuppressWarnings("unchecked")
+                            List<String> stack = (List<String>) value;
+                            if (!stack.isEmpty()) families.add(stack);
+                        }
+                    } else if (declaration.property() == StylePropertyRegistry.FONT_SIZE) {
+                        Object value = declaration.value().compute();
+                        if (value instanceof Number) {
+                            int px = Math.round(((Number) value).floatValue());
+                            if (px > 0) cssSizes.add(px);
+                        }
+                    }
+                }
+            }
+
+            int[] effective = new int[cssSizes.size()];
+            int next = 0;
+            for (int cssPx : cssSizes) effective[next++] = Math.round(cssPx * uiScale);
+
+            long frame = CgGraphicsLifecycle.getCurrentFrame();
+            int anySize = cssSizes.iterator().next();
+            for (List<String> stack : families) {
+                CgFontFamily family = FontFamilyCache.resolve(stack, anySize);
+                if (family == null) continue;
+                CgFontRegistry.get().warmAscii(family.getPrimaryFont(), frame, effective);
+            }
+        } catch (RuntimeException | LinkageError broken) {
+            CrystalGuiCore.LOGGER.warn("CgUiPaintContext: glyph warm failed; glyphs rasterise on demand",
+                    broken);
+        }
+    }
+
     private static CgFont loadDefaultFont() {
         // WALKS THE STACK, so the preferred face can be declared before it is shipped and the UI simply
         // keeps using the next one down until it lands. Throwing on the first entry made naming a font
@@ -332,9 +482,9 @@ public final class CgUiPaintContext {
     // ── Frame lifecycle ─────────────────────────────────────────────────────
 
     /**
-     * Saves GL state via {@link CgGlScope}, saves {@link CgFrameData}, sets up
-     * an orthographic screen-space projection, and binds the shared box-model
-     * material. Call once per frame before {@code rootElement.drawSubtree(ctx)}.
+     * Saves GL state via {@link CgGlScope}, overwrites {@link CgFrameData} with an orthographic
+     * screen-space projection, and binds the shared box-model material. Call once per frame before
+     * {@code rootElement.drawSubtree(ctx)}.
      */
     /**
      * Monotonic frame counter, for work a drawable wants to rate-limit to once per frame.
@@ -367,10 +517,21 @@ public final class CgUiPaintContext {
             msaaFbo.resize(w, h);
             msaaResolveFbo.resize(w, h);
         }
+        // The clearColor below outlives this frame — CgFrameBuffer.clear scopes FBO alone and no
+        // CgGlSlot models a clear value. Not ours to fix here (every caller of it leaks the same way)
+        // and harmless against MC, which sets glClearColor immediately before each of its own clears.
+        // Clear DEPTH is never touched: clearColor() passes GL_COLOR_BUFFER_BIT alone, and that one
+        // WOULD matter — MC writes glClearDepth once at startup, like the glDepthFunc it sets there.
         msaaFbo.bind();
         msaaFbo.clearColor(0f, 0f, 0f, 0f);
 
-        // Save CgFrameData
+        // Overwritten and deliberately NOT restored — the javadoc used to claim otherwise and was
+        // corrected rather than implemented. CgFrameData is per-frame scratch that every consumer
+        // repopulates before executing a pass, so at frame level nothing reads what we leave. NESTED
+        // draws are the case that does need it, and already have it: CgPreviewRenderer copies the
+        // camera out and back, because its caller is this frame. Restoring here also costs more than
+        // it saves — prepareFrame() moves the active texture unit, so it needs a TEXTURES scope of its
+        // own or MC's fixed-function present samples the wrong unit and the window goes white.
         CgRenderPipeline pipeline = CgRenderPipeline.getInstance();
         CgFrameData fd = pipeline.getFrameData();
         // Set ortho projection for UI
@@ -416,9 +577,8 @@ public final class CgUiPaintContext {
     }
 
     /**
-     * Unbinds the box-model material, restores {@link CgFrameData}, and restores
-     * GL state via the saved {@link CgGlScope}. Call once after the whole UI tree
-     * has painted.
+     * Unbinds the box-model material and restores GL state via the saved {@link CgGlScope}. Call once
+     * after the whole UI tree has painted.
      */
     public void endFrame() {
         if (!frameActive) return;
@@ -469,7 +629,16 @@ public final class CgUiPaintContext {
         // a glReadPixels there shows the whole editor — while the window shows a flat fill, because the
         // step between the two is broken rather than the drawing. Anything that reads the framebuffer
         // (a screenshot tool, a capture) therefore disagrees with the screen.
-        try (CgGlScope blitScope = CgGlState.save(CgGlSlot.PROGRAM, CgGlSlot.TEXTURES)) {
+        //
+        // THE SLOTS ARE EVERYTHING A MATERIAL BIND CAN WRITE, not just the PROGRAM + TEXTURES the bug
+        // above names: blitLayer applies gui_layer_blit's whole RenderState (Blend, DepthTest ALWAYS,
+        // DepthWrite OFF, Cull OFF) and the frame's own scope closed six lines up. Measured leaving MC
+        // with depthTest on, depthWriteMask false and blend on — a world drawn with no depth
+        // arbitration, so terrain stops occluding its own caves. Listed as the full set CgRenderState
+        // can write, so the next material to declare Stencil or ColorMask does not start it again.
+        try (CgGlScope blitScope = CgGlState.save(CgGlSlot.PROGRAM, CgGlSlot.TEXTURES,
+                CgGlSlot.BLEND, CgGlSlot.DEPTH, CgGlSlot.CULL,
+                CgGlSlot.STENCIL, CgGlSlot.COLOR_MASK)) {
             blitLayer(msaaResolveFbo, 1f);
         }
 

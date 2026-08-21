@@ -1,5 +1,7 @@
 package com.crystalgui.language.engine;
 
+import com.crystalgui.language.cache.Downloads;
+import com.crystalgui.core.async.Progress;
 import com.crystalgui.language.cache.CacheFiles;
 
 import java.io.File;
@@ -196,6 +198,89 @@ public interface EngineSource {
             @Override
             public String toString() {
                 return "EngineSource.extractedFrom(" + resourceRoot + " -> " + into + ")";
+            }
+        };
+    }
+
+    /**
+     * Fetches a band from the URLs in its shipped manifest, into {@code into}.
+     *
+     * <h3>The fallback, not the mechanism</h3>
+     *
+     * <p>Bundled first, this second. A jar carries the band its own platform runs — band 8 for 1.7.10 — so
+     * the ordinary launch needs no network at all; this exists for the host whose band is not that one,
+     * which on 1.7.10 means lwjgl3ify and GTNH. Offline, it answers empty and the editor colours without
+     * analysing, exactly as it does when nothing is bundled.</p>
+     *
+     * <h3>Verified against the manifest's digest, and that is worth more than it looks</h3>
+     *
+     * <p>Unlike the mapping data — whose upstream publishes no checksums, so its digests are still an open
+     * item — these are hashed at build time from the artifacts Gradle resolved. So a fetched jar is
+     * checked against the exact bytes the build was tested with, and {@code CacheFiles.install} writes
+     * through a {@code .part} and deletes on mismatch, so a bad transfer leaves nothing behind to be
+     * mistaken for a good one next launch.</p>
+     *
+     * <p><b>All or nothing.</b> A band is a classpath: fifteen jars that resolve each other. A partial set
+     * is worse than none, because the engine opens and then fails on whichever class was in the jar that
+     * did not arrive — so one failure abandons the whole band and says so.</p>
+     */
+    static EngineSource downloadedFrom(ClassLoader loader, String resourceRoot, Path into,
+                                       Progress progress) {
+        return new EngineSource() {
+            @Override
+            public List<URL> jarsFor(EngineBand band) throws IOException {
+                String prefix = resourceRoot + "/" + band.minimumFeatureVersion() + "/";
+                List<EngineManifest> rows = EngineManifest.listing(loader, prefix);
+                if (rows.isEmpty()) return Collections.emptyList();
+
+                Path directory = into.resolve(String.valueOf(band.minimumFeatureVersion()));
+                List<Path> present = new ArrayList<>(rows.size());
+                List<EngineManifest> missing = new ArrayList<>();
+                for (EngineManifest row : rows) {
+                    Path target = directory.resolve(row.fileName());
+                    if (CacheFiles.isValid(target, row.md5())) {
+                        present.add(target);
+                    } else {
+                        missing.add(row);
+                    }
+                }
+                if (missing.isEmpty()) return urlsOf(present);
+
+                // ONE BATCH, ONE BAR. Sizes are totalled first so it is determinate from its first
+                // frame, each artifact names itself on the detail line, and a failure abandons the set
+                // rather than leaving a partial band -- which loads and then fails on a class nobody can
+                // explain. All of that is Downloads.Batch's, not this method's: it was fifty lines here
+                // and the next consumer would have written them again.
+                List<Downloads.Artifact> artifacts = new ArrayList<>(missing.size());
+                for (EngineManifest row : missing) {
+                    artifacts.add(new Downloads.Artifact(row.fileName(), row.url(), row.md5()));
+                }
+                // NO `cancelledWhen` HERE, and that is a statement rather than an omission: this runs from
+                // EngineHost, which has no JobContext to ask -- the band is acquired before there is a
+                // workbench to cancel from. When it grows one, this is the line that takes the flag.
+                Downloads.Batch.Result fetched = Downloads.batch(artifacts)
+                        .named("Downloading Java engine (band " + band.minimumFeatureVersion() + ")")
+                        .reporting(progress)
+                        .into(directory);
+                if (!fetched.complete()) {
+                    System.err.println("[crystalgui] band " + band.minimumFeatureVersion()
+                            + " was not acquired (" + fetched
+                            + "); the editor will colour but not analyse");
+                    return Collections.emptyList();
+                }
+                for (EngineManifest row : missing) present.add(directory.resolve(row.fileName()));
+                return urlsOf(present);
+            }
+
+            private List<URL> urlsOf(List<Path> jars) throws IOException {
+                List<URL> urls = new ArrayList<>(jars.size());
+                for (Path jar : jars) urls.add(jar.toUri().toURL());
+                return urls;
+            }
+
+            @Override
+            public String toString() {
+                return "EngineSource.downloadedFrom(" + resourceRoot + " -> " + into + ")";
             }
         };
     }

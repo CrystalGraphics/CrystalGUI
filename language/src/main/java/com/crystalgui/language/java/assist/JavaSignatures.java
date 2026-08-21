@@ -674,13 +674,13 @@ public final class JavaSignatures {
         String topLevel = topLevelSourceName(binding);
         if (topLevel == null) return null;
         AttachedSources.Attached source = attached.unitFor(topLevel);
-        if (source == null || source.unit == null) return null;
+        if (source == null || source.unit() == null) return null;
 
         String key = declarationKeyOf(binding);
         if (key == null) return null;
-        ASTNode declaration = source.unit.findDeclaringNode(key);
+        ASTNode declaration = source.unit().findDeclaringNode(key);
         if (declaration == null) return null;
-        return new JavaSignatures(source.unit, source.text, nameCaptures).quotedNode(declaration);
+        return new JavaSignatures(source.unit(), source.text(), nameCaptures).quotedNode(declaration);
     }
 
     /**
@@ -779,10 +779,10 @@ public final class JavaSignatures {
         String topLevel = topLevelSourceName(binding);
         if (topLevel == null) return null;
         AttachedSources.Attached source = attached.unitFor(topLevel);
-        if (source == null || source.unit == null) return null;
+        if (source == null || source.unit() == null) return null;
         String key = declarationKeyOf(binding);
         if (key == null) return null;
-        return renderedDocOf(source.unit.findDeclaringNode(key));
+        return renderedDocOf(source.unit().findDeclaringNode(key));
     }
 
     /**

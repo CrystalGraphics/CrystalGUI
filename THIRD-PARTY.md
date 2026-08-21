@@ -55,11 +55,17 @@ isolation `EngineClassLoader` exists for, not a coincidence.
 > **This is now a LIVE obligation, and the note here used to say it was not.** It read "nothing in this
 > build distributes an engine today … `mc1710/` and `mc1201/` are commented out of
 > `settings.gradle.kts`". Both halves stopped being true at M12: `settings.gradle.kts` carries
-> `include("mc1710")`, and that module's jar task ends `from(bundleEngineBand8)` — so **every `:mc1710`
-> jar carries band 8's fifteen jars, about 13 MB, unconditionally**, and a client with no engine staged
-> falls back to exactly those. This is the sentence the old note asked somebody to come back and change.
+> `include("mc1710")`, and that module's jar task bundles a band — **by default band 8's fifteen jars,
+> about 13 MB**, which a client with no engine staged falls back to. This is the sentence the old note
+> asked somebody to come back and change.
 >
-> **What discharges it today.** `bundleEngineBand8` is a `Sync` of *whole, unmodified jars* rather than a
+> **Which bands ship is `-PcgBundleBands`** (default `8`; also `8,17`, or `none`), so what this obligation
+> covers varies per build. And it introduces a second position beside the first: a band the jar does *not*
+> carry is **fetched by the user's client from Maven Central**, verified against a digest computed at build
+> time from the artifact Gradle resolved. We do not redistribute those — the same position the MCP mapping
+> data is in, and worth stating rather than assuming.
+>
+> **What discharges it today.** `bundleEngineBands` is a `Sync` of *whole, unmodified jars* rather than a
 > shadow or a class merge, so each artifact's own notices travel inside it — verified rather than
 > assumed: the Eclipse jars carry `about.html` and are signed, and Rhino carries `META-INF/LICENSE.txt`
 > and `META-INF/NOTICE.txt`. Nothing is repackaged, relocated or stripped, which is also what keeps the
@@ -101,6 +107,64 @@ Three properties follow from it, and all three are enforced in code rather than 
 > machinery exists and is tested (`MappingCacheTest` covers corrupt-then-repair and reject-on-mismatch);
 > it is the reference data that is missing. Recorded here as well as in `plan_m12.md` §26.13a because
 > this file is where somebody checks before a release.
+
+## OpenJDK sources (fetched, derived on the user's machine, never redistributed)
+
+Hovering `java.util.List.add` in the editor quotes the JDK authors' own declaration and javadoc instead
+of a form assembled from the binding. M13 §25.5, and it is a licence question before it is a feature one.
+
+**OpenJDK source is GPLv2 with Classpath Exception.** The exception covers *linking*, not redistributing
+a modified extract, and a body-stripped copy is arguably a derivative work. There is no LICENSE file in
+this repository at all today, so "GPL-compatible" is not established and nothing derived from OpenJDK may
+travel in any jar we build.
+
+**So nothing does, and the chain is built so that it cannot.** Three steps, in order:
+
+1. **The running JVM's own `src.zip`.** Free, already on the machine, nothing fetched.
+2. **Any other JDK installed on that machine** — `JAVA_HOME`, `JDK_HOME`, the conventional install roots,
+   the Gradle and SDKMAN toolchain caches. This is the step that fires most often in production: a modded
+   player launches on a jlink'd JRE, which carries no `src.zip`, while frequently having installed a full
+   JDK because a pack's guide told them to.
+3. **A fetch, and only when asked.** `Download JDK Sources` in the command palette. The archive is
+   downloaded **by the user's own client, over HTTPS, from whoever publishes the JDK** — we are not in the
+   distribution chain — and the body-stripping transform then runs **on that machine, for that machine**.
+   Producing a derived work for your own use is not distributing it; building the same extract at *our*
+   build time and shipping it would have been redistribution of a modified GPL work, which is exactly what
+   this arrangement refuses.
+
+The default source is Eclipse Adoptium's published `sources` artifact for the running feature version.
+`crystalgui.jdk.sources.url` overrides where it is fetched from, and `crystalgui.jdk.sources` points
+straight at a `src.zip` for anyone who would rather supply their own and fetch nothing.
+
+> **Never automatic**, and that is a licence decision as much as a bandwidth one. The engine bands and the
+> mapping data are fetched on a first launch because without them the feature does not work at all; this
+> one only improves a feature that already works, so it waits to be asked. IntelliJ's *Download
+> documentation* is the same affordance for the same reason.
+
+> **What is ours here:** `SourceHeaders` (the transform), `TarArchive` (a minimal `.tar.gz` reader, since
+> the JDK ships one for zip and not for this) and `JdkSourceExtract`. No OpenJDK code was read to write
+> any of them — the tar format is a published specification and the transform is a scanner over Java's
+> own grammar.
+
+## Chromium — `RateEstimator` (BSD-3-Clause)
+
+`core/src/main/java/com/crystalgui/core/async/RateEstimator.java` is a port of Chromium's download rate
+estimator — `components/download/public/common/rate_estimator.h` and its implementation under
+`components/download/internal/common/` — Copyright The Chromium Authors, licensed BSD-3-Clause.
+
+A fixed ring of one-second buckets, ten of them, giving a rate over a ten-second sliding window, with the
+divisor counting only the buckets that have actually been populated so an early reading is not divided by
+a window that has not elapsed.
+
+**Ported rather than written, after three home-grown attempts failed in front of a user.** A cumulative
+average cannot track a throughput that changes; an exponential moving average tracks it far too well and
+yo-yos. `AGENTS.md`'s *"Port, don't reinvent"* rule names exactly this class of problem, and both
+references consulted — Chromium and wget — independently land on a sliding window.
+
+> **wget's `progress.c` is GPL-3.0 and none of its code is here.** What was taken from it is one design
+> idea, stated in its own comment: *"Don't refresh the ETA too often to avoid jerkiness in predictions.
+> This allows ETA to change approximately once per second."* That throttle lives in `JobContext` and is
+> written from scratch. The same read-for-shape-only rule this repository already applies to Zed.
 
 ## Fonts
 

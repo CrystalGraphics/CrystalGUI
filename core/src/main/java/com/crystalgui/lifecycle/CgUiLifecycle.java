@@ -4,6 +4,9 @@ import com.crystalgui.core.dispose.Disposer;
 
 import com.crystalgraphics.gl.lifecycle.CgGraphicsLifecycle;
 import com.crystalgraphics.gl.lifecycle.CgLifecycleListener;
+import com.crystalgraphics.platform.gl.state.CgGlScope;
+import com.crystalgraphics.platform.gl.state.CgGlSlot;
+import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.CgUiPaintContext;
 
@@ -101,8 +104,13 @@ public final class CgUiLifecycle implements CgLifecycleListener {
         // thread for the same reason.
         Thread glThread = Thread.currentThread();
         Disposer.setGlGate(() -> Thread.currentThread() == glThread, pending::add);
-    }
 
+        // Warmup the paint context, around 1000ms on first init done before world frame time.
+        try (CgGlScope ignored = CgGlState.save(CgGlSlot.DEPTH, CgGlSlot.PROGRAM)) {
+            CgUiPaintContext.getInstance().warm(width, height);
+        }
+    }
+    
     /**
      * Disposals that arrived off the GL thread, waiting for {@link #onFrame}.
      *

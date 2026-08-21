@@ -1,5 +1,6 @@
 package com.crystalgui.text.syntax;
 
+import com.crystalgui.core.signal.Signal;
 import com.crystalgui.fs.FilePatternMap;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.text.TextBuffer;
@@ -115,6 +116,37 @@ public final class LanguageRegistry {
 
     /** Plain text: opens and edits, colours nothing, pairs nothing. */
     public static final Entry PLAIN = new Entry(Language.PLAIN, () -> SyntaxTokenizer.NONE);
+
+    /**
+     * <b>A language can answer more than it could a moment ago</b> — fired when that becomes true.
+     *
+     * <h3>What it is for</h3>
+     *
+     * <p>A language module's services are a feature flag: absent means the editor colours and does not
+     * analyse. That absence is not always permanent — an engine band can arrive by download after the
+     * workbench is up, and {@code JavaLanguage} deliberately retries its resolve rather than caching the
+     * first failure. But a document that was opened while there was nothing to attach <b>keeps its
+     * nothing</b>: services are attached once, when the document is created, so an editor already on
+     * screen stayed dark until it was closed and reopened.</p>
+     *
+     * <p>So the capability change has to be announced. Whoever owns open documents fills in the ones that
+     * have none; nothing already attached is touched, because a live services object holds a compile
+     * result about text that has not changed.</p>
+     *
+     * <h3>Emitted on the caller's thread, and that is a constraint on the emitter</h3>
+     *
+     * <p>A listener here reaches the widget tree — attaching services subscribes to signals a widget
+     * reads — so an emit from a worker would put the cascade on a background thread, which corrupts
+     * {@code StyleEngine}'s dirty-match set with an exception naming nothing related. The one emitter
+     * today fires from a document opening, which is the UI thread by construction. Anything emitting
+     * from a job must hop through {@code JobScheduler.onDone} first.</p>
+     */
+    public static final Signal.Action onCapabilityChanged = new Signal.Action();
+
+    /** Announces that a language now offers services it did not. @see #onCapabilityChanged */
+    public static void capabilityChanged() {
+        onCapabilityChanged.emit();
+    }
 
     private static final FilePatternMap<Entry> RULES = new FilePatternMap<>();
 

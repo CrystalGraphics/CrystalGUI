@@ -1,7 +1,8 @@
 # M12 — Platform integration: 1.7.10
 
-Detail for the M12 row in `plan_syntax.md` §20. This file covers **Phases 1 through 3**, all of which
-have landed; Phase 4 is sketched at the end and deliberately not designed yet.
+Detail for the M12 row in `plan_syntax.md` §20. **Phases 1 through 3 have landed**; **Phase 4 is scoped
+at the end** (2026-08-21) as the network and server layer, with its backlog of platform-deferred
+prerequisites in [`plan_prephase4.md`](plan_prephase4.md).
 
 > **Phase 1 goal, in one sentence:** press a key in a real 1.7.10 client and `CrystalEditor` opens,
 > paints, and can be typed in.
@@ -1118,7 +1119,7 @@ half was a human check and is now machine-verified as well.)*
 | 3 | a script referencing a mixin-added member compiles and links | **met, 2026-08-19.** `MixinMinecraft.cgMixinProbe()` is a PUBLIC member merged into `net.minecraft.client.Minecraft` by CrystalGraphics' existing mixin backend — CrystalGUI has none of its own and this phase was right not to add any. A script writing `Minecraft.getMinecraft().cgMixinProbe()` compiles and runs in the dev client and in the reobfuscated one, printing `cg-mixin-live 854x480` from a member that is in no jar, no source tree and nothing a resource lookup can return. **And the EDITOR offers it**: the completion probe reports 111 members for that receiver with `cgMixinProbe()` among them, confirmed independently by a human with the popup open. That distinction is the point — the compiler and the analyser reach the live bytes through different entry points, and a member the compiler accepts but the editor cannot show is one nobody could have written the call to. Previously: the hard half was met and the literal claim was not, because every member CrystalGraphics' mixins added was a private synthetic
 | 4 | mappings absent on a clean install, acquired on first use, verified, installed atomically | **met, with one honest gap: no digests are pinned.** Upstream publishes no `.md5` beside `methods.csv`/`fields.csv`, so a pin has to be taken from a trusted fetch rather than invented; until then a corrupted download is caught by the parse rather than by the digest. The machinery is there and tested — `MappingCacheTest` covers corrupt-then-repair and reject-on-mismatch — it is the *data* that is missing |
 | 5 | the dev/prod namespace choice is detected, never configured | **met** — dev reports `the runtime already speaks readable names`, obfuscated fetches. No setting selects it |
-| 6 | an offline first run opens the editor, runs scripts, shows runtime names, and says why | **met in unit test, not exercised by being offline.** `UNAVAILABLE` is asserted through an unreachable `file:` URL and carries the reason; nobody has pulled a cable |
+| 6 | an offline first run opens the editor, runs scripts, shows runtime names, and says why | **◐ partly exercised for real.** A cable has now been pulled: with wifi off the JDK-source fetch failed cleanly, reported *"could not reach api.adoptium.net — check your connection"* in the balloon and the timeline, left the client fully usable, and worked again when the network came back. That run also produced two fixes — the balloon had been showing `java.net.UnknownHostException` verbatim, and the retry loop was spending its backoff re-asking a DNS lookup that cannot change. **The other two fetches were not reached and the harness cannot reach them**: mappings short-circuit to `NOT_CONFIGURED` with no coordinates, and the bands are staged locally so they are always present. Those need `:mc1710:runClient` offline. Worth knowing before that run: **offline has two shapes** — wifi off is a DNS failure and is instant, while a network present but dead (cable in, no route, captive portal) hits the 15s connect timeout, and only the second one can stall a launch |
 | 7 | the same script file, unchanged, runs in dev and in a reobfuscated client | **met** — `tile.stone` in both, from one source |
 | 8 | `mc1710`'s `ScriptService` contains no logic beyond a byte route, a path and two data objects | **met, and it grew twice.** A `runtimeClassName` rename joined it so completion can offer a class the jar stores under another name — one line, delegating to the same `IClassNameTransformer` the byte route already finds. 33 non-comment lines in `Mc1710ScriptService` (a path and two constants) and 52 in `LaunchWrapperBytes`. The byte route is bigger than "a dozen lines" because production needs the name untransformed first — but it is still one route, and every line of it is about *obtaining bytes*. Nothing about mappings, caching, probing or compilation leaked down here |
 
@@ -1232,6 +1233,46 @@ Costs, stated: `language/` gains `compileOnly` on `com.crystalgraphics:platform`
 CrystalGraphics dependency at all before. Defensible (pure SPI, `core` takes it the same way, present on
 every host including a dedicated server) and deliberate rather than noticed later.
 
+### Finding 2 — only band 8 is bundled, and 1.7.10 on Java 17 is a real configuration ◐ decided, not built
+
+`EngineBand.detect()` keys purely on the host JVM and `forFeatureVersion` returns the highest band at or
+below it, with **no fallback downward anywhere**. GTNH ships lwjgl3ify and players do run 1.7.10 on 17+.
+On such a client `bundledSource()` looks for `assets/crystalgui/engines/17/`, finds no index, and returns
+empty — one stderr line, and the whole language stack degrades to grammar-only colouring. The same class
+of defect as the one that cost this phase an evening: invisible on the host that builds it.
+
+Shipping all three bands is 41 MB and was rejected. The numbers say why it need not be: the irreducible
+core (jdt.core + ecj + rhino) is 8.4–9.3 MB per band, and the rest is Eclipse platform closure we never
+touch — **`jna` + `jna-platform` alone are 3.4 MB of band 17**, pulled in by `core.resources`, which is
+the workspace layer this engine never opens.
+
+Decided:
+
+- ~~**Trim the closure**~~ — **MEASURED, and not worth doing.** `BandClosureReachabilityTest` walks the
+  constant pools outward from the roots we actually load (`jdt.core`, `ecj`, `rhino`) and reports what
+  nothing reaches. The answer is **two jars and about 200 KB per band** — `core.commands` and
+  `core.expressions` — out of 11–16 MB. **The estimate above was wrong**: JNA and `core.resources` *are*
+  referenced from the roots, so "half of it is dead weight" does not survive contact with the data.
+  Dropping 1.7% from a signed, version-pinned closure is a bad trade against a reflective load the scan
+  cannot see, so the closure stays whole. The test is kept as a report and fails no build.
+- **Drop band 11 from the shipped set.** lwjgl3ify targets 17+, vanilla is 8; Java 11–16 on 1.7.10 is not
+  a configuration anyone ships. Keep it for dev and tests.
+- ✅ **Bundling is a build flag** — `-PcgBundleBands=8` (default), `8,17`, or `none`. `bundleEngineBands`
+  and `checkEngineManifest` both work per selected band.
+- **Download is the fallback, not the mechanism** — a third `EngineSource` behind
+  `firstOf(configured, bundled, downloaded)`, which already returns the first non-empty answer and so
+  needs no change. ✅ **Built and exercised end to end**: with `-PcgBundleBands=none` the dev client
+  fetched all fifteen of band 8's jars from Maven Central, digest-verified against the shipped manifest,
+  and opened the editor — which is the only way to reach that path on a host whose own band is the
+  bundled one. Unlike the mapping data these can be digest-pinned properly — not by
+  fetching Maven's published `.sha1`, but by **hashing the artifacts Gradle resolved** into a shipped
+  resource, which pins the exact bytes the build was tested against and needs no network at build
+  time. `CacheFiles.install` already verifies. See P6.1.13 D16.
+
+The progress UI that download needs is planned in
+[`CrystalGUI_P6.1.13_PROGRESS_PLAN.md`](CrystalGUI_P6.1.13_PROGRESS_PLAN.md), which also takes the MCP
+mapping fetch off the bare `new Thread` it runs on today.
+
 ### Carried forward, not fixed
 
 - **`cacheRoot()` is the only client-shaped member** of `ScriptService1710` — it reads
@@ -1243,20 +1284,102 @@ every host including a dedicated server) and deliberate rather than noticed late
 
 ---
 
-## Phase 4 — sketch only, not designed
+## Phase 4 — the network and server layer
 
-Phases 2 and 3 were sketched here and are now designed, built and documented above — Phase 2 in its own
-section, Phase 3 in §26. **Phase 3 is what closed M6.** What is left:
+**Scoped 2026-08-21.** Phase 4 is **everything network- and server-shaped** across
+`CrystalGUI_TODO.md` and `CrystalGUI_P6_TODO.md`, gathered here because it is one subject that those
+documents record in a dozen places. Phases 2 and 3 were sketched here and then designed; this is that
+step for Phase 4.
 
-- **Phase 4 — the workspace over the wire**, and `mc1201` after it.
+> **The ordering is forced, not chosen.** The client/server connection has to be genuinely established
+> before the workspace can move onto it. That is not a preference about sequencing — there is currently
+> nothing to be remote *over*, and the workspace is the largest consumer of a transport that does not
+> exist yet. Building the consumer first would mean designing against a transport whose framing, size
+> limit and lifecycle are all still open.
 
-Two things worth carrying into it, both learned the expensive way in Phase 3 rather than reasoned about
-in advance:
+### What is already true
+
+Worth stating, because the protocol is much further along than the absence of networking suggests:
+
+| | State |
+|---|---|
+| The protocol | **Real.** `net/` ships `UIPacket`, `UIPacketCodec`, `ServerUiSession`, `ClientUiSession`, `RpcRegistry`, `NetworkIds`, `SheetRef`, `UiEventKinds`, with `serialization/` under it |
+| The workspace over it | **Real, and running in-game.** `Mc1710Workspace` drives `WorkspaceService` over a genuine session pair; every listing, read and write crosses a packet |
+| `UITransport` implementations | **One: `InMemoryTransport`.** There is no Minecraft transport anywhere |
+| mc1710 networking | **None.** No channel, no packet handler, no `SimpleNetworkWrapper` |
+| `CommonProxy` | **Empty by design** — *"The server-side half: nothing … a dedicated server has no screens"* |
+
+So the gap is not the protocol and not the filesystem. It is the **transport and the session
+lifecycle**, plus a server that has never had to do anything.
+
+---
+
+### Stage A — establish the connection
+
+Nothing else in Phase 4 can be validated until this exists.
+
+| # | Item | From |
+|---|---|---|
+| **A1** | **Measure 1.7.10's custom-payload size limit** and freeze framing on it | P6.1.10 §Minecraft — *"its custom-payload size limit must be checked before chunk sizing freezes"*; also [`plan_prephase4.md`](plan_prephase4.md) item 2 |
+| **A2** | **A Minecraft `UITransport`** — a channel plus the codec bridge, sized by A1 | The gap named above; `UITransport` has exactly one implementation today |
+| **A3** | **Server-side registration.** `CommonProxy` stops being empty | M12 §26.14 *"carried forward"* — *"`CommonProxy` is empty, so nothing registers server-side … when that lands both the registration site and that one method move"* |
+| **A4** | **Session lifecycle** — join opens, leave/disconnect/kick closes, server shutdown drains | New. Nothing models it: today both halves are constructed together and die together |
+| **A5** | **`ScriptService1710.cacheRoot()` moves** — it is the one client-shaped member, reading `Minecraft.getMinecraft().mcDataDir` | M12 §26.14 *"carried forward"* |
+| **A6** | **Two-session RPC soak** — real traffic over time, desync visible on screen | `CrystalGUI_TODO.md` P3.1, `TODO`. Written for `InMemoryTransport` and *"touches no Minecraft"*, so it can land before A2 and then be re-pointed at the real transport — which makes it Stage A's validation rather than a separate errand |
+
+> **A6 is worth doing early rather than last.** It was deferred as validation that *"nothing downstream
+> is waiting on"*, which was true when the transport was in-process. It stops being true here: it is the
+> only thing that exercises two sessions over time, and Stage A is precisely where a framing or
+> lifecycle bug hides.
+
+### Stage B — move the workspace onto it
+
+The code was built for this. `Mc1710Workspace`'s own javadoc:
+
+> *Both halves of a real workspace, **in the client process** … Shortcutting that would make the later
+> phase — the same client against a workspace on a dedicated server — **a rewrite rather than a
+> transport swap**.*
+
+| # | Item | From |
+|---|---|---|
+| **B1** | **Swap the transport.** Same client, same `WorkspaceService`, real connection | P6.1.10; the swap the javadoc above reserves |
+| **B2** | **Server-hosted project directories** — the actual vision: files live on the server's machine, singleplayer is the same path because the integrated server *is* one | P6.1.10 §vision — *"This is VS Code Remote, not a file browser"* |
+| **B3** | **D11 chunked transfer + manifest resolve.** Gated on A1 | P6.1.10 D11; P6.1.13 — *"Deferred; protocol shape reserved. Hard cap 100 MB"* |
+| **B4** | **Permissions on a real server.** `WorkspacePermission.ALLOW_ALL` is what mc1710 passes today | `Mc1710Workspace`; fine for one local player, not for a server |
+
+### Stage C — what only matters once it is remote
+
+Every one of these is currently listed as a known gap and none of them bites while both halves share a
+process. From `docs/CGUI_SERVER_AND_SERIALIZATION.md` §8 unless noted:
+
+| # | Item | Note |
+|---|---|---|
+| **C1** | **No multi-viewer fan-out** — *"One session, one client"* | The first thing a real server invalidates |
+| **C2** | **No `TreeDelta`** — a structural change means a new description and a re-open | Explicitly *"a real design problem, not an afternoon"*, because network ids are positional |
+| **C3** | **`TabView` does not round-trip** — tabs and panes live in internal containers the description codec does not descend into | A dock over the wire needs this |
+| **C4** | **Only seven widgets implement `writeState`/`readState`** | *"a new stateful widget must add them or it will silently arrive blank"* |
+| **C5** | `fs.writeDelta`, client cache, `WatchService`, conflict dialog, `fs.rename`/`delete`, resume, multi-user presence | P6.1.10 §"Out — deferred, and each is purely additive" |
+| **C6** | **No slots/inventory** — the Minecraft-specific half of a container GUI | §8. Note this is also what would revive the struck platform-tooltip item |
+
+---
+
+### Explicitly not Phase 4
+
+- **mc1201, and the three per-loader filesystems.** All mc1201 work waits until mc1710 is finished —
+  including **P3.2**, which remains `BLOCKED — needs a call from you`.
+- **`Show Difference`** — needs a Myers diff ported from VS Code's `common/diff/`. Not networking.
+- **Translatable text** — pre-Phase-4 item 1, and a platform seam rather than a network one.
+
+### Two things to carry in
+
+Both learned the expensive way in Phase 3 rather than reasoned about in advance:
 
 - **A client is an environment no test reproduces.** Java 8, `rt.jar` instead of a jrt image, a classpath
   a launcher assembled, and a loader that transforms on the way in. Every defect that survived to a
   client in this phase was invisible to the suite *and* to the harness, and each was found in minutes
   once there was a gated probe inside the game. Build the probe early rather than reasoning from source.
+  **For Phase 4 the equivalent is a dedicated server, not just a client** — `InMemoryTransport` and a
+  singleplayer integrated server will both hide anything that only a real connection does.
 - **The compiler and the editor are different consumers of the same seam, and they fail apart.** A script
   that runs is no evidence the popup works, and a popup that lists members is no evidence a script links.
   Anything Phase 4 adds to that seam wants asking twice.

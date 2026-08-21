@@ -104,6 +104,15 @@ public class StatusBarView extends UIElement {
      */
     private static final int LEFT_GROUP_RESERVED = 1;
 
+    /**
+     * The progress indicator sits at the head of the right group and is not a registry slot.
+     *
+     * <p>Same shape as {@code breadcrumbs} on the left, and for the same reason: a {@link StatusBarEntry}
+     * is text, and progress needs a bar and a cancel. Reserving it here keeps {@code applyGroup} from
+     * treating it as an entry and dropping it on the next refresh.</p>
+     */
+    private static final int RIGHT_GROUP_RESERVED = 1;
+
     private final UIElement leftGroup = new UIElement();
     private final UIElement rightGroup = new UIElement();
     private final UIElement spacer = new UIElement();
@@ -114,6 +123,8 @@ public class StatusBarView extends UIElement {
 
     /** Held so the view stops listening when it leaves the tree; the service outlives every view of it. */
     private final ConnectionGroup subscriptions = new ConnectionGroup();
+
+    private final ProgressStatusItem progress = new ProgressStatusItem();
 
     public StatusBarView() {
         addClass(BAR_CLASS);
@@ -130,6 +141,7 @@ public class StatusBarView extends UIElement {
         spacer.setHitTest(false);
 
         leftGroup.addChild(breadcrumbs);
+        rightGroup.addChild(progress);
         addInternalChild(leftGroup);
         addInternalChild(spacer);
         addInternalChild(rightGroup);
@@ -197,6 +209,11 @@ public class StatusBarView extends UIElement {
      *
      * @see Breadcrumbs#setTrail
      */
+    /** The progress indicator — one job inline, the rest behind a count. @see ProgressStatusItem */
+    public ProgressStatusItem progress() {
+        return progress;
+    }
+
     public Breadcrumbs breadcrumbs() {
         return breadcrumbs;
     }
@@ -236,7 +253,7 @@ public class StatusBarView extends UIElement {
         dropSlotsNotIn(left, right);
 
         applyGroup(leftGroup, left, LEFT_GROUP_RESERVED);
-        applyGroup(rightGroup, right, 0);
+        applyGroup(rightGroup, right, RIGHT_GROUP_RESERVED);
     }
 
     private void dropSlotsNotIn(List<StatusBarEntryAccessor> left, List<StatusBarEntryAccessor> right) {

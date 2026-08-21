@@ -241,3 +241,25 @@ tasks.named<JavaCompile>("compileJava") {
         }
     }
 }
+
+// ── M13 §25.4 — our own sources, shipped ─────────────────────────────────────────────────────────
+//
+// A hover over `UIElement.addChild` in a shipped client quotes the declaration its author wrote, with
+// its javadoc, instead of the assembled form. `SourceArchives.ResourceArchive` reads them straight off
+// the loader; the read path is one `getResourceAsStream` because the JVM already indexed the jar's
+// central directory when it opened it.
+//
+// LOOSE ENTRIES, NOT A NESTED ZIP. `ZipFile` needs a real file and cannot open an archive inside
+// another; `ZipInputStream` works over a resource stream and is strictly sequential, so every hover
+// would decompress entries until it found the one it wanted. The only way out of that is extracting to
+// disk on first run, which buys a temp file, a write and a staleness question at every mod update.
+//
+// WHOLE, NOT STRIPPED. `SourceHeaders` exists for an archive whose size is a problem; ours is 8.2 MB of
+// text that deflates to under 3 MB, and full bodies mean the quoted declaration keeps the author's real
+// layout. The transform is what makes a 43 MB `src.zip` viable, not this.
+//
+// It reaches the mod jar for free: `:mc1710`'s shadowJar copies `core.jar` with `from(zipTree(...))`,
+// which takes every entry including these.
+tasks.jar {
+    from(sourceSets.main.get().allJava) { into("assets/crystalgui/sources") }
+}

@@ -289,6 +289,7 @@ public class Workbench extends UIElement {
         // writing its own entry into the one static bar -- one per test in the suite, so the entries
         // accumulated and every later change did O(entries) work in every live view.
         markerWatch.disconnectAll();
+        capabilityWatch.disconnectAll();
         if (current == null) {
             if (problemCountEntry != null) problemCountEntry.dispose();
             problemCountEntry = null;
@@ -298,6 +299,10 @@ public class Workbench extends UIElement {
         // document map -- a forward reference the compiler rejects outright.
         open.indexInto(markers);
         markerWatch.add(markers.onDidChange.connect(resource -> refreshProblemCount()));
+        // ATTACHED WORKBENCHES ONLY, for the reason above it: this is a listener on a PROCESS-LIVED
+        // static, so a workbench that subscribed from its constructor would stay reachable for ever and
+        // keep an entire editor tree alive behind it.
+        capabilityWatch.add(LanguageRegistry.onCapabilityChanged.connect(this::attachLateServices));
         refreshProblemCount();
         current.addDataProvider(this);
         // The rail's buttons, once there is a window to take a registry from.
@@ -1575,9 +1580,67 @@ public class Workbench extends UIElement {
      *
      * <p>Open in the sense of "has a document", which is not the same as "has a tab": a file whose tab was
      * closed while a save was in flight still has one, and a session record wants both.</p>
+     *
+     * <p><b>And the gap now points both ways.</b> Since {@code DockGroup} builds a tab's content on first
+     * activation, a session restored with five files open has five tabs and <em>one</em> document — so
+     * this is a subset of {@link #openTabPaths()} as often as it is a superset. Every caller here wants
+     * this one, and wants it for the same reason: they have something to do to a live editor
+     * ({@code upgradeServices}, the settings sweep) or something to read off a live document (the session
+     * record's view state). None of them would be improved by being handed a path with nothing behind it
+     * — and asking for a document by path <em>creates</em> one, so a caller that walked the tabs instead
+     * would build the whole session to look at it.</p>
      */
     public java.util.List<CgPath> openPaths() {
         return open.paths();
+    }
+
+    /**
+     * Every file with a <b>tab</b>, built or not, in strip order across every group.
+     *
+     * <p>The counterpart to {@link #openPaths()}, and the one that answers "what is open" the way a user
+     * would mean it: a restored tab is a title until something activates it, and it is no less open for
+     * having no widget behind it yet. Read off the dock's own panel refs, which carry the path — so it
+     * costs a walk and builds nothing.</p>
+     */
+    public java.util.List<CgPath> openTabPaths() {
+        java.util.List<CgPath> paths = new ArrayList<>();
+        for (DockLeaf leaf : dock.layout().leaves()) {
+            for (DockPanelRef panel : leaf.panels()) {
+                String path = panel.state(PATH_STATE, "");
+                if (path.isEmpty()) continue;
+                CgPath parsed = CgPath.parse(path);
+                // The same file can be open in two groups -- a split of one document is two tabs and one
+                // document -- and this is a set of files, not of tabs.
+                if (!paths.contains(parsed)) paths.add(parsed);
+            }
+        }
+        return paths;
+    }
+
+    /**
+     * <b>Fills in documents that were opened before their language could answer.</b>
+     *
+     * <p>Services are attached once, when a document is created, and that is right — they hold a compile
+     * result about <em>this</em> text and re-creating them would throw one away. It is also why an editor
+     * already on screen when an engine band finished downloading stayed dark until it was closed and
+     * reopened: {@code JavaLanguage} retries its resolve per document, so a document opened <em>after</em>
+     * the band arrived was fine and one opened before it was not, which reads as the feature working for
+     * some files and not others.</p>
+     *
+     * <p><b>Only the nulls.</b> Anything already attached is left alone — replacing a live services object
+     * would discard a compile result about text that has not changed, and re-subscribe every listener that
+     * hangs off it. Filling a gap is not the same operation as refreshing.</p>
+     *
+     * <p>On the UI thread, because {@code LanguageRegistry.onCapabilityChanged} is emitted there — see
+     * that signal's own note for why an emit from a job would be a different and much worse thing.</p>
+     */
+    private void attachLateServices() {
+        for (CgPath path : openPaths()) {
+            TextEditor editor = editorFor(path);
+            if (editor == null || editor.languageServices() != null) continue;
+            LanguageRegistry.Entry entry = LanguageRegistry.forFileName(path.name());
+            editor.setLanguageServices(entry.newServices(editor.buffer(), Resource.of(path)));
+        }
     }
 
     /** The text editor for a path, or null when that file is not opened by a text editor. */
@@ -1737,6 +1800,19 @@ public class Workbench extends UIElement {
     }
 
     private final ConnectionGroup markerWatch = new ConnectionGroup();
+
+    /**
+     * ONE connection for the workbench, not one per document.
+     *
+     * <p>The tempting place to subscribe is beside the attach, inside the document factory — which would
+     * add a listener per file opened, all of them doing the same whole-workspace sweep. The question
+     * "which open documents are missing services" is about the workspace, so it is asked once.</p>
+     *
+     * <p>In a group so it is released with everything else this workbench holds: a static signal outliving
+     * a disposed workbench is a leak that keeps a whole editor tree alive, and this one is on
+     * {@code LanguageRegistry}, which lives for the process.</p>
+     */
+    private final ConnectionGroup capabilityWatch = new ConnectionGroup();
 
     @Nullable
     private StatusBarEntryAccessor problemCountEntry;

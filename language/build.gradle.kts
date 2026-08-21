@@ -612,6 +612,24 @@ val engineBand8Bundle: Configuration by configurations.creating {
     extendsFrom(engineBand8)
 }
 
+// AND THE OTHER TWO, exposed for their MANIFESTS rather than their jars. A loader writes one manifest per
+// band -- artifact name, digest, URL -- so a host whose band is not the bundled one can fetch it instead
+// of silently having no analysis at all. That is the GTNH case exactly: 1.7.10 on Java 17 selects band 17,
+// finds nothing bundled, and would otherwise degrade to grammar-only colouring with one line to say so.
+//
+// Exposing them costs nothing in the jar. Only `engineBand8Bundle` is ever copied INTO one.
+val engineBand11Bundle: Configuration by configurations.creating {
+    isCanBeConsumed = true
+    isCanBeResolved = false
+    extendsFrom(engineBand11)
+}
+
+val engineBand17Bundle: Configuration by configurations.creating {
+    isCanBeConsumed = true
+    isCanBeResolved = false
+    extendsFrom(engineBand17)
+}
+
 /** Where {@code stageEngines} puts them — read by the harness's run task. */
 val stagedEnginesDir: Provider<Directory> = layout.buildDirectory.dir("engines")
 

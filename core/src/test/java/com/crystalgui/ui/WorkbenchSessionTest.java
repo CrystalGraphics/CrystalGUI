@@ -143,6 +143,10 @@ public class WorkbenchSessionTest extends UiTestBase {
      * <p>Nothing in the record lists them: a leaf's {@code DockPanelRef} already carries its path, and the
      * workbench's panel factory reads a file it has not read yet. A separate open-file list would be a
      * second copy of the same fact, and the two disagree the first time a tab is closed.</p>
+     *
+     * <p>Asserted on {@code openTabPaths} rather than {@code openPaths}, and the difference is the point:
+     * a restored tab is a title until something activates it, so a session with two files comes back with
+     * two <b>tabs</b> and one <b>document</b>. Both are "open"; only one has been built.</p>
      */
     @Test
     public void theOpenFilesComeBack() {
@@ -152,14 +156,85 @@ public class WorkbenchSessionTest extends UiTestBase {
         first.session.save(PROJECT, 1200, 800);
 
         Harness second = build();
-        assertTrue("nothing was open in a fresh workbench", second.workbench.openPaths().isEmpty());
+        assertTrue("nothing was open in a fresh workbench", second.workbench.openTabPaths().isEmpty());
         assertTrue(second.session.restore(PROJECT));
         second.settle();
 
-        assertTrue("README did not reopen", second.workbench.openPaths().contains(README));
-        assertTrue("Main did not reopen", second.workbench.openPaths().contains(MAIN));
-        assertEquals("the file's content did not arrive with it",
-                "# hello", second.workbench.editorFor(README).getText());
+        assertTrue("README's tab did not reopen", second.workbench.openTabPaths().contains(README));
+        assertTrue("Main's tab did not reopen", second.workbench.openTabPaths().contains(MAIN));
+
+        // MAIN was opened last, so it is the active tab and the one document that was built.
+        assertEquals("only the active tab may have been materialised",
+                java.util.Collections.singletonList(MAIN), second.workbench.openPaths());
+        assertEquals("the active file's content did not arrive with it",
+                FOLDABLE, second.workbench.editorFor(MAIN).getText());
+    }
+
+    /**
+     * <b>And a background tab's content arrives when it is activated</b>, not before.
+     *
+     * <p>The other half of the row above, and the one that says the deferral is a deferral rather than a
+     * loss. This is VS Code's behaviour exactly: a restored editor is a placeholder, and selecting it is
+     * what reads the file.</p>
+     */
+    @Test
+    public void aBackgroundTabLoadsWhenItIsActivated() {
+        first.workbench.openFile(README);
+        first.workbench.openFile(MAIN);
+        first.settle();
+        first.session.save(PROJECT, 1200, 800);
+
+        Harness second = build();
+        assertTrue(second.session.restore(PROJECT));
+        second.settle();
+        assertFalse("README must not have been read yet", second.workbench.openPaths().contains(README));
+
+        second.workbench.openFile(README);
+        second.settle();
+        assertEquals("activating it must read the file", "# hello",
+                second.workbench.editorFor(README).getText());
+    }
+
+    /**
+     * <b>A file nobody opened keeps its caret across a re-save.</b>
+     *
+     * <p>The silent loss lazy tabs would otherwise introduce, and the reason {@code WorkbenchSession.save}
+     * writes back what it is still holding. A record's per-file view state is read into
+     * {@code pendingViewState} and consumed when that file's document arrives — so for a tab nobody
+     * activated, it is never consumed, and saving from the live documents alone drops it.</p>
+     *
+     * <p>It fails invisibly, which is what makes it worth a test: every tab still comes back, so nothing
+     * looks lost until a file you had not touched opens at the top. Restart twice and it is gone for
+     * good.</p>
+     */
+    @Test
+    public void anUntouchedTabKeepsItsViewStateAcrossASave() {
+        int caret = FOLDABLE.indexOf("three()");
+        assertTrue(caret > 0);
+        first.workbench.openFile(MAIN);
+        first.settle();
+        first.workbench.editorFor(MAIN).setCaret(caret);
+        // AND THEN OPEN SOMETHING ELSE, so MAIN is the background tab in the record.
+        first.workbench.openFile(README);
+        first.settle();
+        first.session.save(PROJECT, 1200, 800);
+
+        // Restore, touch nothing, save again -- MAIN is the background tab and was never built.
+        Harness second = build();
+        assertTrue(second.session.restore(PROJECT));
+        second.settle();
+        assertFalse("MAIN must be the unbuilt one for this to test anything",
+                second.workbench.openPaths().contains(MAIN));
+        second.session.save(PROJECT, 1200, 800);
+
+        // And now open it from THAT record. The caret has to have survived a round trip it sat out.
+        Harness third = build();
+        assertTrue(third.session.restore(PROJECT));
+        third.settle();
+        third.workbench.openFile(MAIN);
+        third.settle();
+        assertEquals("the caret of a tab nobody opened was dropped on the way through",
+                caret, third.workbench.editorFor(MAIN).getCaret());
     }
 
     /**

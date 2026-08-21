@@ -436,6 +436,13 @@ editor scheme's.
 | `--problems-tree-line-fg` | `var(--fg-hint)` | base.css |
 | `--problems-unnecessary-fg` | `var(--fg-hint)` | base.css |
 | `--problems-warning-fg` | `var(--warning-icon)` | base.css |
+| `--progress-cancel-hover-bg` | `var(--hover-bg)` | base.css |
+| `--progress-cancel-hover-fg` | `var(--fg)` | base.css |
+| `--progress-cancelling-fg` | `var(--fg-disabled)` | base.css |
+| `--progress-fill-bg` | `var(--accent)` | base.css |
+| `--progress-hide-fg` | `var(--link)` | base.css |
+| `--progress-hide-hover-fg` | `var(--accent-hover)` | base.css |
+| `--progress-track-bg` | `var(--border-base)` | base.css |
 | `--prompt-bg` | `var(--surface-panel)` | base.css |
 | `--prompt-border` | `var(--border-base)` | base.css |
 | `--prompt-caption-fg` | `var(--fg)` | base.css |
@@ -512,6 +519,7 @@ editor scheme's.
 | `--statusbar-error-fg` | `var(--error)` | base.css |
 | `--statusbar-fg` | `var(--fg-secondary)` | base.css |
 | `--statusbar-hover-fg` | `var(--fg)` | base.css |
+| `--statusbar-item-dim-fg` | `var(--fg-hint)` | base.css |
 | `--statusbar-item-fg` | `var(--fg-secondary)` | base.css |
 | `--statusbar-sep` | `var(--border-base)` | base.css |
 | `--statusbar-warning-fg` | `var(--warning)` | base.css |
