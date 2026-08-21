@@ -37,12 +37,17 @@ import java.util.List;
  * main tree by construction. Its geometry is written from Java at <b>IMPORTANT</b> for the same reason
  * the overlay layer's is: the surface the compositor draws on must not be movable by a stylesheet.</p>
  *
- * <p><b>Zero-sized until it holds a window</b>, which is what keeps it free rather than merely cheap.
+ * <p><b>Zero-sized until a window exists</b>, which is what keeps it free rather than merely cheap.
  * An always-full-size overlay would sit in front of the root's own content and swallow every click that
- * missed a window — so it takes up no space and hit-tests nothing at all while empty, and claims the
- * surface only once there is genuinely a compositor to be in front. Once a window IS open, clicks on
- * bare desktop belong to the desktop (that is what W2's empty-desktop blur means), and W7 removes the
- * question entirely by making the editor itself a frame.</p>
+ * missed a window — so it takes up no space and hit-tests nothing at all until there is genuinely a
+ * compositor to be in front. Once a window IS open, clicks on bare desktop belong to the desktop (that
+ * is what W2's empty-desktop blur means), and W7 removes the question entirely by making the editor
+ * itself a frame.</p>
+ *
+ * <p><b>Exists, not is visible.</b> A desktop whose every window is minimised is a desktop in use: it
+ * still has a taskbar, and that strip is the only way any of those windows comes back. Keying this on
+ * the window layer instead collapsed the whole desktop the moment the last window was minimised — see
+ * {@code syncPresence}.</p>
  *
  * <h3>The window layer is internal; the frames on it are public</h3>
  * <p>Exactly {@code UIWindow.windowOverlayLayer}'s arrangement, and for the same reason: a layer added
@@ -102,6 +107,11 @@ public class Desktop extends UIElement {
         // bar simply re-flows the layer to full height.
         taskbar = new Taskbar();
         addInternalChild(taskbar);
+
+        // DRIVEN BY THE REGISTRY, not by the layer. The layer never sees a window destroyed while it was
+        // already hidden, and it sees a hide as a removal -- so hanging presence off it both missed the
+        // moment the surface should be given back and gave it back while windows were still retained.
+        registry.onDidChange.connect(this::syncPresence);
         syncPresence();
 
         // A PRESS ON BARE DESKTOP DEACTIVATES. Target-only on both elements, so a press inside a window
@@ -113,7 +123,7 @@ public class Desktop extends UIElement {
     }
 
     /**
-     * Fills the root while there is a window to show, and takes up no space at all while there is not.
+     * Fills the root while any window <b>exists</b>, and takes up no space at all while none does.
      *
      * <p><b>IMPORTANT origin</b>, matching {@code UIWindow.windowOverlayLayer}: this is the compositor's
      * own surface, and a stylesheet that could move or resize it could put every window somewhere the
@@ -124,9 +134,22 @@ public class Desktop extends UIElement {
      * sitting over an application's own root would eat every click that landed on bare background —
      * a UI that had never opened a window would simply stop responding, and nothing about the symptom
      * would point here.</p>
+     *
+     * <h3>"Live" is the REGISTRY, never the window layer</h3>
+     *
+     * <p>Written against the layer first, and it is the same mistake the taskbar exists to correct, one
+     * level down: the layer holds the <em>visible</em> windows, so minimising the last one emptied it
+     * and collapsed the whole desktop to 0×0 in the corner — <b>taking the taskbar with it</b>. Every
+     * window was retained and there was no longer anything on screen to bring one back with, which is
+     * precisely the failure W3 and W4 ship together to prevent. Reported from the harness as "the bar
+     * goes off screen to the top left", which is exactly what a zero-sized desktop at the origin looks
+     * like.</p>
+     *
+     * <p>A desktop with a hidden window is a desktop in use. The zero-sized case is for one that has
+     * never held a window at all — and once every window is genuinely gone, the surface goes back.</p>
      */
     private void syncPresence() {
-        boolean live = !windows.frames.isEmpty();
+        boolean live = isLive();
         StyleGroup.importantPipeline(getStyle().getLayoutGroup(), l -> {
             l.positionType(TaffyPosition.ABSOLUTE).left(0).top(0);
             if (live) l.widthPercent(100f).heightPercent(100f);
@@ -134,9 +157,9 @@ public class Desktop extends UIElement {
         });
     }
 
-    /** Whether any window is on the desktop — i.e. whether the compositor is currently the surface. */
+    /** Whether any window <b>exists</b>, visible or hidden — i.e. whether the compositor is the surface. */
     public boolean isLive() {
-        return !windows.frames.isEmpty();
+        return !registry.windows().isEmpty();
     }
 
     // ── Stacking and activation ─────────────────────────────────────────────
@@ -442,7 +465,6 @@ public class Desktop extends UIElement {
             // then be undone by that removal. Index-matched so the list order is the child order, which
             // is what makes "insertion order" in windows() mean anything.
             frames.add(Math.min(index, frames.size()), (WindowFrame) child);
-            syncPresence();
             return this;
         }
 
@@ -451,10 +473,6 @@ public class Desktop extends UIElement {
             boolean removed = super.removeChild(child);
             if (removed) {
                 frames.remove(child);
-                // THE LAST WINDOW LEAVING GIVES THE SURFACE BACK. Without this a desktop that has ever
-                // been used goes on covering the application's own root forever, so closing the last
-                // window would leave a UI that paints correctly and answers no clicks.
-                syncPresence();
                 // THE STATE FOLLOWS THE TREE. Detaching a frame IS hiding it, whichever route did the
                 // detaching -- so a bare removeSelf() cannot leave a window that is out of the tree and
                 // still claims to be visible.
