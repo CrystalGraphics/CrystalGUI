@@ -360,4 +360,39 @@ public class JsDocBodyTest {
         assertFalse("a bare lowercase heading was drawn beside the capitalised ones: " + docs,
                 docs.contains("<dt>fires</dt>"));
     }
+
+    /**
+     * <b>A Java symbol reached from JavaScript reports where it is declared — for nothing.</b>
+     *
+     * <p>{@code InteropResolver} answers with the Java engine's own {@code SymbolInfo} and
+     * {@code RhinoResolution} already carries {@code declaration()} across, so the moment the Java engine
+     * started producing {@code library://} sites, Ctrl+Click in a {@code .js} file gained a target with
+     * <b>no JavaScript-side change at all</b>.</p>
+     *
+     * <p>Which is exactly why it is pinned. A capability nobody wrote code for is a capability nobody
+     * will think to check, and the two ways it silently disappears are both one line: the hover path
+     * rebuilding the symbol from the member list instead of the probe (which is how the javadoc came to
+     * be dropped, one field at a time), or the probe's site being cherry-picked away like the
+     * documentation was.</p>
+     */
+    @Test
+    public void aJavaSymbolReachedFromJavaScriptReportsItsDeclarationSite() {
+        String source = ""
+                + "var names = new java.util.ArrayList();\n"
+                + "names.add('first');\n";
+        Analysis analysis = JsLanguage.analyzer().analyze("Probe.js", source, 1L);
+
+        SymbolInfo type = analysis.resolveAt(source.indexOf("ArrayList"));
+        assertNotNull("the type itself did not resolve", type);
+        Assume.assumeTrue("no attached Java sources on this host, so nothing can be located",
+                type.declaration() != null);
+        assertEquals("library://java.util.ArrayList", type.declaration().resource().toString());
+
+        SymbolInfo member = analysis.resolveAt(source.indexOf("add("));
+        assertNotNull("the member did not resolve", member);
+        assertNotNull("the type located itself and the member dropped its site", member.declaration());
+        assertEquals("library://java.util.ArrayList", member.declaration().resource().toString());
+        assertTrue("a Java member reached from JavaScript claimed to be in the .js file",
+                !member.declaration().isSameDocument());
+    }
 }

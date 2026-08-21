@@ -385,7 +385,14 @@ public final class InteropResolver {
                 declared == null ? SymbolKind.CLASS : declared.kind(),
                 staticSide ? JsTypeRef.javaClass(binaryName) : type,
                 container, declared == null ? null : declared.documentation(),
-                declared == null ? Set.of() : declared.modifiers(), null);
+                declared == null ? Set.of() : declared.modifiers(),
+                // AND WHERE IT IS DECLARED. The probe resolves against the real classpath, so its answer
+                // carries a site the moment the Java engine can produce one -- and passing null here
+                // threw it away, which made Ctrl+Click on a Java TYPE in a .js file do nothing while the
+                // same click on one of its MEMBERS worked, because the member path hands the probe's
+                // answer back whole. Third field this hand-built symbol has quietly dropped: the kind
+                // and the signature were the first two, and each read as a different feature failing.
+                declared == null ? null : declared.declaration());
         return declared == null ? described : described.withSignature(declared.signature());
     }
 
