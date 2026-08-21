@@ -8,6 +8,7 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.text.lang.CompletionItem;
 import com.crystalgui.text.lang.SymbolModifier;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.elements.SymbolIcon;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.Menu;
@@ -665,20 +666,11 @@ public final class CompletionPopup extends Popover {
                 event.stopPropagation();
             }, false, false);
 
-            row.icon.addClass(ICON_CLASS);
-            row.icon.setHitTest(false);
+            // THE SHARED WIDGET builds the box and both marks. This was written here first, and a
+            // library viewer's tab then grew a second implementation of the same picture beside it --
+            // one that had no marks at all, because those are elements rather than an icon name. @see
+            // SymbolIcon
             row.addChild(row.icon);
-            // MODIFIER MARKS ARE FULL-SIZE LAYERS OVER THE ICON, not small badges in a corner box.
-            // JetBrains draws each mark on its own 16x16 canvas with the glyph already in the right corner
-            // -- staticMark bottom-left, finalMark top-left -- so they compose by being stacked at the same
-            // size, and they can both show at once because they occupy different corners. Scaling one into
-            // a 9px box instead re-does positioning the artwork already did, badly.
-            row.staticMark.addClass(STATIC_MARK_CLASS);
-            row.staticMark.setHitTest(false);
-            row.icon.addChild(row.staticMark);
-            row.finalMark.addClass(FINAL_MARK_CLASS);
-            row.finalMark.setHitTest(false);
-            row.icon.addChild(row.finalMark);
 
             row.label.addClass(LABEL_CLASS);
             row.label.setHitTest(false);
@@ -705,19 +697,10 @@ public final class CompletionPopup extends Popover {
             row.index = index;
             CompletionItem item = value.item();
 
-            // SWAPPED, not added -- a template is a different row every time the view reuses it, so a
-            // kind class left behind from the last binding would join the new one and the cascade would
-            // resolve whichever it preferred. Same rule ProjectFileTree.swapPrefixedClass states.
-            swapPrefixed(row.icon, KIND_CLASS_PREFIX,
-                    KIND_CLASS_PREFIX + (item.kind() == null ? "unknown"
-                            : item.kind().name().toLowerCase(java.util.Locale.ROOT)));
-            // KIND AND MODIFIER ARE ORTHOGONAL, so abstract is a second class rather than a second kind --
-            // an abstract method and a concrete one are the same kind and draw differently. Folding it into
-            // SymbolKind would double every entry in that enum for one bit.
-            swapPrefixed(row.icon, MODIFIER_CLASS_PREFIX,
-                    item.is(SymbolModifier.ABSTRACT) ? MODIFIER_CLASS_PREFIX + "abstract" : null);
-            row.staticMark.setDisplayed(item.is(SymbolModifier.STATIC));
-            row.finalMark.setDisplayed(item.is(SymbolModifier.FINAL));
+            // KIND, MODIFIERS AND BOTH MARKS, in one call. The swapping this used to do inline lives in
+            // the widget now, along with the reason for it -- a template is a different row every time the
+            // view reuses it, so a class left behind from the last binding joins the new one.
+            row.icon.show(item.kind(), item.modifiers());
 
             // THE NAME AND ITS PARAMETER LIST ARE TWO ELEMENTS, because IntelliJ draws them in two
             // weights: the name bright and bold, the parameters dimmed. One UIText cannot say that, and
@@ -821,11 +804,8 @@ public final class CompletionPopup extends Popover {
     private static final class Row extends UIElement {
         /** Which model row this template currently shows, or -1 while pooled. Read at click time. */
         int index = -1;
-        /** A box with a background, not a glyph -- the drawing comes from the cascade. */
-        final UIElement icon = new UIElement();
-        /** Modifier overlays, parented to the icon so they follow it. */
-        final UIElement staticMark = new UIElement();
-        final UIElement finalMark = new UIElement();
+        /** Kind glyph plus its static/final marks. @see SymbolIcon */
+        final SymbolIcon icon = new SymbolIcon();
         final UIText label = new UIText("");
         /** The dimmed parameter list, when the label has one. */
         final UIText params = new UIText("");

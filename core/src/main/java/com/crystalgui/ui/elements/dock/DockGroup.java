@@ -269,7 +269,11 @@ public class DockGroup extends UIElement {
 
         for (DockPanelRef panel : wanted) {
             Tab tab = tabs.addTab(area.registry().titleOf(panel));
-            applyIcon(tab, area.registry().iconOf(panel));
+            // AN ELEMENT FIRST, because a name cannot carry a declaration's static and final marks --
+            // those are stacked layers rather than a picture. @see DockPanelRegistry#iconElementOf
+            UIElement glyph = area.registry().iconElementOf(panel);
+            if (glyph != null) applyIconElement(tab, glyph);
+            else applyIcon(tab, area.registry().iconOf(panel));
             // AT BUILD TIME, which is the whole reason the decoration is pulled from a provider rather
             // than pushed onto the tab: the strip is rebuilt on every rearrangement, and anything pushed
             // would have to be pushed again by somebody who noticed.
@@ -336,6 +340,19 @@ public class DockGroup extends UIElement {
      * path a name maps to. The dock learns a name and resolves it; it never learns what a {@code .java}
      * is.</p>
      */
+    /**
+     * Puts a caller's own element in the tab's icon slot.
+     *
+     * <p>{@code setOnlyChild} rather than an add: a strip is rebuilt on every rearrangement and a tab is
+     * pooled, so adding would stack a new glyph on the last one every time the panel list moved.</p>
+     */
+    private static void applyIconElement(Tab tab, UIElement glyph) {
+        UIElement slot = tab.getPreIcon();
+        if (slot == null) return;
+        slot.setDisplayed(true);
+        slot.setOnlyChild(glyph);
+    }
+
     private static void applyIcon(Tab tab, @Nullable String iconName) {
         if (iconName == null) return;
         CgUiSvg glyph = CgUiSvg.ofIcon(iconName);

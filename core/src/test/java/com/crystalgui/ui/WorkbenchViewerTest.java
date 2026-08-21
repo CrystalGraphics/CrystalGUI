@@ -67,6 +67,7 @@ public class WorkbenchViewerTest extends UiTestBase {
 
     private UIWindow window;
     private Workbench workbench;
+    private JobScheduler scheduler;
     private final AtomicInteger reads = new AtomicInteger();
 
     private static WorkspaceClient<Object> client() {
@@ -91,7 +92,11 @@ public class WorkbenchViewerTest extends UiTestBase {
                     ? SOURCE.getBytes(StandardCharsets.UTF_8) : new byte[0];
         });
 
-        workbench = new Workbench(client());
+        // ITS OWN SCHEDULER, RUNNING ON THIS THREAD. The shared pool is a static, so a job this test
+        // submits can complete during the NEXT test's drain -- which is what made this class pass alone
+        // and fail as a whole three separate times. `JobScheduler`'s own note prescribes exactly this.
+        scheduler = new JobScheduler(Runnable::run, System::currentTimeMillis, 1);
+        workbench = new Workbench(client()).setJobScheduler(scheduler);
         UIElement root = new UIElement().layout(l -> l.widthPercent(100f).heightPercent(100f)
                 .flexDirection(FlexDirection.COLUMN));
         root.addChild(workbench);
@@ -115,7 +120,7 @@ public class WorkbenchViewerTest extends UiTestBase {
      */
     private void settle() {
         for (int i = 0; i < 12; i++) {
-            if (JobScheduler.hasShared()) JobScheduler.shared().drain();
+            scheduler.drain();
             window.updateWithoutPainting();
             window.getInputHandler().beginFrame();
             window.getInputHandler().endFrame();
