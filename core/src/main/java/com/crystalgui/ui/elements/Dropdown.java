@@ -141,15 +141,32 @@ public class Dropdown extends Button {
      *
      * <p>{@link Button#writeState} would record the <em>text</em>, which here is derived from the
      * selection — restoring it would put the right words on a control that still believes nothing is
-     * selected. The option list is structure and is rebuilt by the caller, so only the index travels.</p>
+     * selected. So the selection travels as an INDEX.</p>
+     *
+     * <p><b>And the options travel with it.</b> This used to say the option list was "structure, rebuilt
+     * by the caller", which is true of a caller that constructs the widget in Java and false of the one
+     * that matters here: {@code UIDescriptionCodec} carries tag, id, classes, style, flags, focus, state
+     * and children, and an option list is <em>none of those</em> — it is a field. So a dropdown crossing
+     * the wire arrived with zero options, at which point {@link #select} refuses every index as
+     * out-of-range and the control renders empty and unselectable. Nothing threw; it just did not
+     * work.</p>
+     *
+     * <p>Order is load-bearing on the way back in, for the same reason it is on {@code Slider}: the
+     * options must exist before an index into them can mean anything.</p>
      */
     @Override
     protected <T> void writeState(StateMap<T> out) {
+        out.putList("options", options, (entry, label) -> entry.putString("label", label));
         out.putInt("selected", selectedIndex);
     }
 
     @Override
     protected <T> void readState(StateMap<T> in) {
+        List<String> restored = in.getList("options", entry -> entry.getString("label", ""));
+        if (!restored.isEmpty()) {
+            clearOptions();
+            for (String label : restored) addOption(label);
+        }
         select(in.getInt("selected", -1));
     }
 }
