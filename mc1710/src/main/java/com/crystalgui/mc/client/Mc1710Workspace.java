@@ -1,138 +1,83 @@
 package com.crystalgui.mc.client;
 
-import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.fs.LocalFileSystem;
-import com.crystalgui.fs.ProjectRegistry;
-import com.crystalgui.fs.WorkspaceActor;
 import com.crystalgui.fs.WorkspaceClient;
-import com.crystalgui.fs.WorkspacePermission;
-import com.crystalgui.fs.WorkspaceProject;
-import com.crystalgui.fs.WorkspaceRpc;
-import com.crystalgui.fs.WorkspaceService;
 import com.crystalgui.language.LanguageStack;
-import com.crystalgui.net.ClientUiSession;
-import com.crystalgui.net.InMemoryTransport;
-import com.crystalgui.net.ServerUiSession;
-import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.ui.UIElement;
-
-import java.io.IOException;
-import java.nio.charset.Charset;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Collections;
-import java.util.List;
+import com.crystalgui.mc.net.CgUiConnections;
+import com.crystalgui.net.protocol.ProtocolConnection;
 
 /**
- * Both halves of a real workspace, in the client process.
+ * The client half of a workspace that lives on the server — Phase 4 <b>B1</b>.
  *
- * <p>Modelled on the harness's {@code HarnessWorkspace} and deliberately not simplified: the client
- * here has <b>no reference to the filesystem</b>, only to a {@link WorkspaceClient}, and every listing,
- * read and write crosses {@link InMemoryTransport} as a real packet. Shortcutting that would make the
- * later phase — the same client against a workspace on a dedicated server — a rewrite rather than a
- * transport swap.</p>
+ * <p>This class used to be <i>both</i> halves in the client process: a {@code WorkspaceService} over
+ * local disk, a {@code ServerUiSession}, a {@code WorkspaceRpc}, and an {@code InMemoryTransport} pair
+ * between them. Its own javadoc explained why it was built that way — the client held no filesystem
+ * handle, so the later phase would be <i>"a transport swap rather than a rewrite"</i>.</p>
  *
- * <h3>The language stack is switched on here, but not decided here</h3>
+ * <p><b>That claim held.</b> Everything server-shaped moved to {@code CgUiWorkspaceHost}, which
+ * contributes the workspace to every connection, and what is left here is one line: a
+ * {@link WorkspaceClient} over the connection {@link CgUiConnections} already opened. The transport, the
+ * pumping and the lifecycle are all somebody else's now, which is why {@link #pump} does nothing and
+ * exists only so the caller's frame loop did not have to change with it.</p>
  *
- * <p>{@link LanguageStack#registerAll()} — which grammars exist, which engines, in what order and what
- * a missing one means are facts about {@code language/}, not about this platform. This constructor's
- * only contribution is the <em>moment</em>: before anything opens a document. {@code ClientProxy} calls
- * it earlier still, at FML init, and the two overlapping is free because it is idempotent.</p>
+ * <h3>Why it is lazy</h3>
+ *
+ * <p>A screen can be opened before the connection exists — on the title screen there is no server at
+ * all. So the client is built on first use and {@link #isConnected()} answers honestly until then,
+ * rather than a constructor failing or, worse, handing back something that silently answers nothing.</p>
  */
 public final class Mc1710Workspace {
 
+    /** Matches {@code CgUiWorkspaceHost.PROJECT_ID}: the id is the client's handle on the project. */
     static final String PROJECT_ID = "minecraft.workspace";
 
-    private final InMemoryTransport<Object> fromServer;
-    private final InMemoryTransport<Object> fromClient;
-    private final ServerUiSession<Object> server;
-    private final ClientUiSession<Object> session;
-    private final WorkspaceClient<Object> client;
-    private final WorkspaceRpc<Object> rpc;
+    private WorkspaceClient<Object> client;
+    private ProtocolConnection<Object> boundTo;
 
-    /** Seconds until the next filesystem watcher poll. @see #pump */
-    private float untilPoll;
-
-    Mc1710Workspace(Path root) {
+    Mc1710Workspace() {
+        // Which grammars and engines exist is a fact about language/, not about this platform. This
+        // constructor's only contribution is the MOMENT: before anything opens a document. ClientProxy
+        // calls it earlier still, and the overlap is free because it is idempotent.
         LanguageStack.registerAll();
-        seed(root);
-
-        ProjectRegistry registry = new ProjectRegistry().register(() -> Collections.singletonList(
-                new WorkspaceProject(PROJECT_ID, "Workspace", root)));
-
-        // ALLOW_ALL, and worth being explicit about: the default is DENY_ALL precisely so a host has to
-        // make this choice on purpose. This is a single-player client, against local disk, with no other
-        // actor to guard against -- there is no one to deny. THIS IS THE LINE THAT CHANGES when a
-        // server-hosted workspace lands, and it is deliberately easy to find.
-        WorkspaceService service = new WorkspaceService(
-                registry, new LocalFileSystem(registry), WorkspacePermission.ALLOW_ALL);
-
-        InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
-        fromServer = pair[0];
-        fromClient = pair[1];
-
-        server = new ServerUiSession<Object>(1, new UIElement(), fromServer, PlainOps.INSTANCE);
-        rpc = new WorkspaceRpc<Object>(service, WorkspaceActor.LOCAL);
-        rpc.installOn(server::onCall);
-        server.open();
-
-        session = new ClientUiSession<Object>(fromClient, PlainOps.INSTANCE);
-        client = new WorkspaceClient<Object>(session, PlainOps.INSTANCE);
     }
 
+    /**
+     * The file client, or {@code null} until there is a connection to carry it.
+     *
+     * <p>Rebuilt if the connection is replaced — a reconnect is a different wire, and a client still
+     * holding the old one would call into a router whose peer is gone and see every request time out.</p>
+     */
     WorkspaceClient<Object> client() {
+        ProtocolConnection<Object> connection = CgUiConnections.client();
+        if (connection == null) {
+            client = null;
+            boundTo = null;
+            return null;
+        }
+        if (client == null || boundTo != connection) {
+            boundTo = connection;
+            client = new WorkspaceClient<>(connection);
+        }
         return client;
     }
 
     /**
-     * True once the session has a window id.
+     * True once there is a connection to the server.
      *
-     * <p>Before that the server discards every packet addressed to another window, so a call made too
-     * early is thrown away with <b>no error at all</b> — and the file tree simply stays empty with
-     * nothing to explain it. Whoever asks for the project list has to wait for this.</p>
+     * <p>Before that, a call has nowhere to go. The old version asked whether a session had been given a
+     * window id, for the same reason and with a worse failure: a call made too early was discarded with
+     * no error at all, and the file tree simply stayed empty.</p>
      */
     boolean isConnected() {
-        return session.windowId() >= 0;
-    }
-
-    /** One network tick, plus the watcher poll when it is due. Called once a frame. */
-    void pump(float deltaSeconds) {
-        fromServer.deliver();
-        fromClient.deliver();
-        session.tick();
-        server.tick();
-
-        untilPoll -= deltaSeconds;
-        if (untilPoll <= 0f) {
-            untilPoll = 0.5f;
-            rpc.pollAndNotify((method, args) -> server.call(method, args, null, null), PlainOps.INSTANCE);
-        }
+        return CgUiConnections.client() != null;
     }
 
     /**
-     * Creates the workspace directory, and a README the first time.
+     * Nothing — {@link CgUiConnections} ticks the connection on the client tick.
      *
-     * <p>An empty file tree and a broken file tree look identical, which is the whole reason for the
-     * README: the first launch needs something in it that proves a listing crossed the transport.</p>
+     * <p>Kept so the caller's frame loop reads the same, and so that anyone looking for where the
+     * pumping went finds this rather than concluding it was dropped. Ticking here as well would drain
+     * the same mailbox twice, which is harmless and is still two answers to one question.</p>
      */
-    private static void seed(Path root) {
-        try {
-            Files.createDirectories(root);
-            Path readme = root.resolve("README.md");
-            if (!Files.exists(readme)) {
-                List<String> lines = java.util.Arrays.asList(
-                        "# CrystalGUI workspace",
-                        "",
-                        "This directory is served to the editor through the same RPC protocol a remote",
-                        "workspace would use — the client holds no filesystem handle of its own.",
-                        "",
-                        "Anything you put here shows up in the file tree.");
-                Files.write(readme, lines, Charset.forName("UTF-8"));
-            }
-        } catch (IOException e) {
-            // Not fatal: the tree will simply be empty, and the editor still opens. Failing the whole
-            // screen because a README could not be written would be a worse trade.
-            CrystalGuiCore.LOGGER.warn("Could not seed the workspace at " + root, e);
-        }
+    void pump(float deltaSeconds) {
     }
 }

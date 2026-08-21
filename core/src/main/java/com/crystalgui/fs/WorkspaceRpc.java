@@ -3,7 +3,9 @@ package com.crystalgui.fs;
 import com.crystalgui.net.protocol.Call;
 import com.crystalgui.serialization.StateMap;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Binds a {@link WorkspaceService} onto the UI channel's RPC.
@@ -86,10 +88,59 @@ public final class WorkspaceRpc<T> {
         }));
 
         registry.register(WorkspaceProtocol.READ, (args, respond) -> guard(respond, () -> {
-            WorkspaceService.FileContent content = service.read(actor, path(args));
+            CgPath target = path(args);
+            // STAT FIRST. It is what enforces the cap before an allocation, and what decides inline
+            // versus chunked without reading a byte the caller may not be able to receive.
+            CgFileEntry entry = service.stat(actor, target);
+            if (entry.size() > WorkspaceService.MAX_FILE_BYTES) {
+                throw CgFileSystemException.tooLarge(target, entry.size(), WorkspaceService.MAX_FILE_BYTES);
+            }
+
+            WorkspaceService.FileContent content = service.read(actor, target);
+            if (content.content().length <= INLINE_MAX_BYTES) {
+                respond.ok(new StateMap<T>(args.ops())
+                        .putBytes(WorkspaceProtocol.CONTENT, content.content())
+                        .putString(WorkspaceProtocol.ETAG, content.etag()));
+                return;
+            }
+
+            // Too big for one message -- not as a policy but as a fact: the transport bounds a single
+            // reassembled message, so a large file CANNOT arrive whole however patient anyone is.
+            String id = openTransfer(content);
             respond.ok(new StateMap<T>(args.ops())
-                    .putBytes(WorkspaceProtocol.CONTENT, content.content())
+                    .putBool(WorkspaceProtocol.CHUNKED, true)
+                    .putString(WorkspaceProtocol.TRANSFER, id)
+                    .putInt(WorkspaceProtocol.SIZE, content.content().length)
                     .putString(WorkspaceProtocol.ETAG, content.etag()));
+        }));
+
+        registry.register(WorkspaceProtocol.READ_CHUNK, (args, respond) -> guard(respond, () -> {
+            String id = args.getString(WorkspaceProtocol.TRANSFER, "");
+            Transfer transfer = transfers.get(id);
+            if (transfer == null) {
+                // Expired, completed, or invented. All three are the same answer -- saying which would
+                // let a client probe for what other transfers exist.
+                throw new CgFileSystemException(CgFileError.FILE_NOT_FOUND, "no such transfer: " + id);
+            }
+            int offset = args.getInt(WorkspaceProtocol.OFFSET, 0);
+            int asked = args.getInt(WorkspaceProtocol.LENGTH, CHUNK_BYTES);
+            if (offset < 0 || offset > transfer.content.length) {
+                throw new CgFileSystemException(CgFileError.INVALID_PATH,
+                        "offset " + offset + " is outside a " + transfer.content.length + " byte transfer");
+            }
+            int length = Math.min(Math.min(asked <= 0 ? CHUNK_BYTES : asked, CHUNK_BYTES),
+                    transfer.content.length - offset);
+            byte[] slice = new byte[length];
+            System.arraycopy(transfer.content, offset, slice, 0, length);
+            boolean eof = offset + length >= transfer.content.length;
+            // Released on the chunk that finishes it, so a completed transfer stops costing memory
+            // immediately rather than at the next sweep.
+            if (eof) transfers.remove(id);
+            else transfer.touchedAt = System.currentTimeMillis();
+            respond.ok(new StateMap<T>(args.ops())
+                    .putBytes(WorkspaceProtocol.CONTENT, slice)
+                    .putInt(WorkspaceProtocol.OFFSET, offset)
+                    .putBool(WorkspaceProtocol.EOF, eof));
         }));
 
         registry.register(WorkspaceProtocol.WRITE, (args, respond) -> guard(respond, () -> {
@@ -202,6 +253,71 @@ public final class WorkspaceRpc<T> {
             notifier.notify(WorkspaceProtocol.CHANGED, args);
         }
         return changes.size();
+    }
+
+    // ── Chunked transfers (P6.1.10 D11) ─────────────────────────────────────
+
+    /**
+     * Below this, a read answers with the bytes inline and nothing else happens.
+     *
+     * <p>1 MB, chosen against the transport rather than by taste: one message must fit inside the
+     * multiplexer's reassembly bound with room for every other stream sharing the connection. Above it,
+     * a transfer is opened and the client pulls.</p>
+     */
+    public static final int INLINE_MAX_BYTES = 1024 * 1024;
+
+    /**
+     * The most one {@code fs.readChunk} will answer with — 256 KB, one credit window.
+     *
+     * <p>Matching the window means a chunk is in flight as a single burst rather than stalling halfway
+     * for a {@code WINDOW_UPDATE}, and it is a ceiling rather than a fixed size, so a client asking for
+     * less gets less and a client asking for more is clamped rather than refused.</p>
+     */
+    public static final int CHUNK_BYTES = 256 * 1024;
+
+    /** How long an untouched transfer survives. A client that abandoned a download must not leak it. */
+    private static final long TRANSFER_TTL_MILLIS = 60_000L;
+
+    /**
+     * How many a single actor may hold open at once.
+     *
+     * <p>Each one holds its file in memory, so this is the actual memory bound: {@code MAX_CONCURRENT ×
+     * MAX_FILE_BYTES} worst case. It is deliberately small. <b>The better fix is a ranged read on
+     * {@code CgFileSystem}</b>, which would let a transfer hold a path and an etag instead of bytes —
+     * recorded here rather than in a plan, because this is the line that would change.</p>
+     */
+    private static final int MAX_CONCURRENT_TRANSFERS = 4;
+
+    private static final class Transfer {
+        final byte[] content;
+        long touchedAt;
+
+        Transfer(byte[] content, long touchedAt) {
+            this.content = content;
+            this.touchedAt = touchedAt;
+        }
+    }
+
+    /** Insertion-ordered, so evicting the oldest is what happens when a client opens too many. */
+    private final Map<String, Transfer> transfers = new LinkedHashMap<>();
+
+    private long nextTransferId;
+
+    private String openTransfer(WorkspaceService.FileContent content) {
+        long now = System.currentTimeMillis();
+        transfers.entrySet().removeIf(entry -> now - entry.getValue().touchedAt > TRANSFER_TTL_MILLIS);
+        while (transfers.size() >= MAX_CONCURRENT_TRANSFERS) {
+            String oldest = transfers.keySet().iterator().next();
+            transfers.remove(oldest);
+        }
+        String id = actor.id() + ":" + (++nextTransferId);
+        transfers.put(id, new Transfer(content.content(), now));
+        return id;
+    }
+
+    /** How many transfers this actor has open. Diagnostics, and what a leak would show up in. */
+    public int openTransfers() {
+        return transfers.size();
     }
 
     /** The watcher, for a host that wants to seed or inspect it directly. */

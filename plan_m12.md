@@ -1339,9 +1339,14 @@ the two in-game probes prove the transport and the protocol separately: `-PcgNet
 > only thing that exercises two sessions over time, and Stage A is precisely where a framing or
 > lifecycle bug hides.
 
-### Stage B — move the workspace onto it
+### Stage B — move the workspace onto it ✅ **COMPLETE (2026-08-21)**
 
-The code was built for this. `Mc1710Workspace`'s own javadoc:
+The code was built for this, and the claim held: **nothing in `fs/` needed redesigning.** `WorkspaceRpc`
+already installed onto anything with a `register(method, handler)`, and `WorkspaceClient` only ever used
+its session to `call` and to `onCall` — which is exactly what a `ProtocolConnection` offers. What they
+needed was somewhere to be plugged in, which is what `Protocols` became.
+
+`Mc1710Workspace`'s own javadoc, which is what reserved this:
 
 > *Both halves of a real workspace, **in the client process** … Shortcutting that would make the later
 > phase — the same client against a workspace on a dedicated server — **a rewrite rather than a
@@ -1349,10 +1354,10 @@ The code was built for this. `Mc1710Workspace`'s own javadoc:
 
 | # | Item | From |
 |---|---|---|
-| **B1** | **Swap the transport.** Same client, same `WorkspaceService`, real connection | P6.1.10; the swap the javadoc above reserves |
-| **B2** | **Server-hosted project directories** — the actual vision: files live on the server's machine, singleplayer is the same path because the integrated server *is* one | P6.1.10 §vision — *"This is VS Code Remote, not a file browser"* |
-| **B3** | **D11 chunked transfer + manifest resolve.** Gated on A1 | P6.1.10 D11; P6.1.13 — *"Deferred; protocol shape reserved. Hard cap 100 MB"* |
-| **B4** | **Permissions on a real server.** `WorkspacePermission.ALLOW_ALL` is what mc1710 passes today | `Mc1710Workspace`; fine for one local player, not for a server |
+| **B1** ✅ | **Swap the transport.** `WorkspaceClient` gained a `ProtocolConnection` constructor and `Mc1710Workspace` went from ~160 lines holding *both* halves to a client-side handle over `CgUiConnections.client()`. The `InMemoryTransport` pair, the `ServerUiSession` and the local `WorkspaceService` are gone from the client | P6.1.10; the swap the javadoc above reserves |
+| **B2** ✅ | **Server-hosted project directories** — `CgUiWorkspaceHost` serves `<serverdir>/crystalgui/workspace` through `MinecraftServer.getFile`, contributed to every connection. One code path: single-player is the remote case with a very short wire, because the integrated server *is* a server. **A client connection is skipped** (`peer() == null`) or a single-player process would serve itself from its own client end too, both ends answering `fs.*` with whichever registered first winning | P6.1.10 §vision — *"This is VS Code Remote, not a file browser"* |
+| **B3** ✅ | **D11 chunked transfer.** `fs.read` answers inline below 1 MB and otherwise opens a transfer the client pulls with `fs.readChunk`; hard cap 100 MB, refused as `FILE_TOO_LARGE` **against a stat, before any bytes are read**. Not a performance choice — the transport bounds one reassembled message at 8 MB, so a large file *cannot* cross whole. Pull rather than push, so a client sets the pace and a resume is the same request with a different offset. `ChunkedTransferTest` pins that a caller cannot tell which path was taken | P6.1.10 D11; P6.1.13 — *"Deferred; protocol shape reserved. Hard cap 100 MB"* |
+| **B4** ✅ | **Permissions on a real server.** `OperatorsMayWrite`: everyone reads, operators write. It **reuses Minecraft's own model** rather than inventing one — `func_152596_g` is the may-use-commands check, and it already answers correctly for the case that would otherwise need special handling, since in single-player it is true for the world's owner with cheats on | `Mc1710Workspace`; fine for one local player, not for a server |
 
 ### Stage C — what only matters once it is remote
 

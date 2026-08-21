@@ -1,6 +1,7 @@
 package com.crystalgui.fs;
 
 import com.crystalgui.net.ClientUiSession;
+import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.serialization.StateMap;
 
 import java.util.ArrayList;
@@ -26,7 +27,7 @@ import java.util.function.Consumer;
  */
 public final class WorkspaceClient<T> {
 
-    private final ClientUiSession<T> session;
+    private final Caller<T> caller;
     private final com.crystalgui.serialization.DynamicOps<T> ops;
 
     /**
@@ -41,17 +42,47 @@ public final class WorkspaceClient<T> {
     /** Paths this client has asked the server to watch, so a re-read does not ask twice. */
     private final java.util.Set<CgPath> watched = new java.util.HashSet<>();
 
+    /** Somewhere to send a request. The two constructors below supply the two real ones. */
+    @FunctionalInterface
+    public interface Caller<T> {
+        void call(String method, StateMap<T> args,
+                  Consumer<StateMap<T>> onResult, Consumer<String> onError);
+    }
+
+    /** Told how far a chunked read has got. Both figures are bytes; {@code total} never changes. */
+    @FunctionalInterface
+    public interface Progress {
+        void at(int done, int total);
+    }
+
     /**
      * @param ops the wire format. Taken here rather than read off the session, which does not expose
      *            its own — widening {@code ClientUiSession} for one caller would be the worse trade.
      */
     public WorkspaceClient(ClientUiSession<T> session, com.crystalgui.serialization.DynamicOps<T> ops) {
-        this.session = session;
+        this(session::call, session::onCall, ops);
+    }
+
+    /**
+     * Rides a connection, so the workspace shares one wire with the UI and everything else on it.
+     *
+     * <p>This is Phase 4 B1 in one line, and the class needed nothing else: it only ever used the session
+     * to {@code call} and to {@code onCall}, which is exactly what a {@link ProtocolConnection} offers —
+     * so the swap the earlier design reserved really was a transport swap rather than a rewrite. The ops
+     * comes off the connection here, because a connection <em>does</em> expose its own.</p>
+     */
+    public WorkspaceClient(ProtocolConnection<T> connection) {
+        this(connection::call, connection::onRequest, connection.ops());
+    }
+
+    private WorkspaceClient(Caller<T> caller, WorkspaceRpc.Registrar<T> registrar,
+                            com.crystalgui.serialization.DynamicOps<T> ops) {
+        this.caller = caller;
         this.ops = ops;
         // The server pushes these; nothing asks for them. Registered here rather than left to a caller,
         // because a client that reads a file is watching it (see read) and would otherwise be sent
         // notifications with no handler.
-        session.onCall(WorkspaceProtocol.CHANGED, (args, respond) -> {
+        registrar.register(WorkspaceProtocol.CHANGED, (args, respond) -> {
             CgPath path = CgPath.parse(args.getString(WorkspaceProtocol.PATH, ""));
             String kind = args.getString(WorkspaceProtocol.KIND, WorkspaceProtocol.KIND_MODIFIED);
             String etag = args.has(WorkspaceProtocol.ETAG)
@@ -151,17 +182,76 @@ public final class WorkspaceClient<T> {
      * pair is {@link #forget}, which unwatches.</p>
      */
     public void read(CgPath path, Consumer<Document> onResult, Consumer<Failure> onError) {
+        read(path, onResult, onError, null);
+    }
+
+    /**
+     * Reads, reporting progress — and transparently pulling a large file in chunks.
+     *
+     * <p><b>A caller cannot tell which happened</b>, and that is the point: the reply says whether the
+     * content came with it, and this follows up if it did not. The threshold is the server's, so a client
+     * must never assume one. {@code progress} fires for every chunk on the chunked path and not at all on
+     * the inline one, because there is nothing to report about something that already arrived.</p>
+     *
+     * <p>Refused above {@link WorkspaceService#MAX_FILE_BYTES} with {@code FILE_TOO_LARGE}, which reaches
+     * a caller as an ordinary {@link Failure} — <em>"file too large to open"</em> is an answer, not a
+     * timeout.</p>
+     */
+    public void read(CgPath path, Consumer<Document> onResult, Consumer<Failure> onError,
+                     Progress progress) {
         call(WorkspaceProtocol.READ, args().putString(WorkspaceProtocol.PATH, path.toString()),
                 result -> {
                     String etag = result.getString(WorkspaceProtocol.ETAG, "");
-                    etags.put(path, etag);
-                    if (watched.add(path)) {
-                        call(WorkspaceProtocol.WATCH,
-                                args().putString(WorkspaceProtocol.PATH, path.toString()),
-                                ignored -> { }, ignored -> watched.remove(path));
+                    if (!result.getBool(WorkspaceProtocol.CHUNKED, false)) {
+                        finishRead(path, result.getBytes(WorkspaceProtocol.CONTENT), etag, onResult);
+                        return;
                     }
-                    onResult.accept(new Document(path, result.getBytes(WorkspaceProtocol.CONTENT), etag));
+                    int size = result.getInt(WorkspaceProtocol.SIZE, 0);
+                    String transfer = result.getString(WorkspaceProtocol.TRANSFER, "");
+                    if (progress != null) progress.at(0, size);
+                    pullChunk(path, transfer, size, etag, new byte[size], 0, onResult, onError, progress);
                 }, onError);
+    }
+
+    /**
+     * One chunk, then itself again — a continuation rather than a loop, because every call is async.
+     *
+     * <p>The buffer is allocated once from the size the server reported and filled in place, so a 90 MB
+     * file costs one array rather than a chain of concatenations. A slice that would run past the end is
+     * <b>clamped rather than trusted</b>: the size and the chunks are two statements from the other side
+     * and nothing here needs them to agree.</p>
+     */
+    private void pullChunk(CgPath path, String transfer, int size, String etag,
+                           byte[] buffer, int offset,
+                           Consumer<Document> onResult, Consumer<Failure> onError, Progress progress) {
+        call(WorkspaceProtocol.READ_CHUNK, args()
+                        .putString(WorkspaceProtocol.TRANSFER, transfer)
+                        .putInt(WorkspaceProtocol.OFFSET, offset),
+                result -> {
+                    byte[] slice = result.getBytes(WorkspaceProtocol.CONTENT);
+                    int room = Math.max(0, buffer.length - offset);
+                    int copied = Math.min(slice.length, room);
+                    System.arraycopy(slice, 0, buffer, offset, copied);
+                    int next = offset + copied;
+                    if (progress != null) progress.at(next, size);
+                    // Either signal ends it. A server that says eof is believed; one that stops making
+                    // progress would otherwise recurse forever on a zero-length slice.
+                    if (result.getBool(WorkspaceProtocol.EOF, false) || next >= size || copied == 0) {
+                        finishRead(path, buffer, etag, onResult);
+                        return;
+                    }
+                    pullChunk(path, transfer, size, etag, buffer, next, onResult, onError, progress);
+                }, onError);
+    }
+
+    /** The half both paths share: remember the etag, start watching, hand the document over. */
+    private void finishRead(CgPath path, byte[] content, String etag, Consumer<Document> onResult) {
+        etags.put(path, etag);
+        if (watched.add(path)) {
+            call(WorkspaceProtocol.WATCH, args().putString(WorkspaceProtocol.PATH, path.toString()),
+                    ignored -> { }, ignored -> watched.remove(path));
+        }
+        onResult.accept(new Document(path, content, etag));
     }
 
     /**
@@ -326,7 +416,7 @@ public final class WorkspaceClient<T> {
 
     private void call(String method, StateMap<T> args,
                       Consumer<StateMap<T>> onResult, Consumer<Failure> onError) {
-        session.call(method, args, onResult::accept,
+        caller.call(method, args, onResult::accept,
                 error -> onError.accept(Failure.parse(error)));
     }
 }
