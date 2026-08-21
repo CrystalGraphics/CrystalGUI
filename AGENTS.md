@@ -59,15 +59,46 @@ cross-agent tool use permitted is asking the orchestrator a clarifying question,
 ./gradlew :core:test              # unit tests, CrystalGraphics ON the classpath
 ./gradlew :core:headlessTest      # server-side tests, CrystalGraphics CORE deliberately absent
 ./gradlew :core:check             # both test tasks
+./gradlew :mc1710:compileJava     # the 1.7.10 loader — IS in the build, see below
 ```
 
-There is **no in-game Minecraft integration reachable from this build.** The two things you can
-compile and run end-to-end today are `core/` and the harness. Do not claim otherwise.
+> ~~There is **no in-game Minecraft integration reachable from this build.**~~ **False since Phase 4,
+> corrected 2026-08-21.** This paragraph told three sessions in a row that only `core/` and the harness
+> could be run end to end, and ended with *"do not claim otherwise"* — so it read as a rule rather than
+> as a fact that had gone stale. `mc1710` is in `settings.gradle.kts` and carries the whole networking
+> integration: `CgUiScreen`, `CgUiConnections`, `CgUiWorkspaceHost`, `Mc1710NetworkChannel` and four
+> probes. **Every server-side defect found this week was found by running it**, and none of them was
+> reachable from `core/` or the harness — see [Running Minecraft](#running-minecraft-mc1710-is-in-the-build).
+
+## Running Minecraft — `mc1710` IS in the build
+
+**For anything that crosses the loader seam — networking, the workspace over a wire, platform services,
+class loading on a server — this is the only thing that can see it.** `headlessTest` asserts by absence
+and reaches no loader; the GL harness is a client with a context by design.
+
+```bash
+./gradlew :mc1710:runClient                       # the dev client
+./gradlew :mc1710:runServer                       # a dedicated server
+./gradlew :mc1710:serverSmoke                     # boot a server, assert the stack came up, stop. ~48s
+./gradlew :mc1710:runObfClient                    # SRG names — production, and the only run that is
+./gradlew :mc1710:runClient -PcgJoin=localhost:25565   # join a server: TWO PROCESSES, ONE SOCKET
+./gradlew :mc1710:runClient -PcgSessionProbe      # a real Server/ClientUiSession pair over the wire
+./gradlew :mc1710:runClient -PcgNetProbe          # the raw transport, below the session layer
+```
+
+> **`serverSmoke` is the one to reach for first.** Three fatal defects — CrystalGraphics building its
+> platform services eagerly, `CgPlatform.register` demanding a GL backend, a client-only guard one level
+> too high — shipped undetected because every one is a *runtime* property ("a client-only class is
+> constructed on a server") that no test and no import scan can see. Booting a server found all three in
+> one run. It also asserts that no client-only class was **loaded**, which is the contract
+> `CommonProxy`'s javadoc has always stated and nothing checked.
 
 ## Render testing — the GL debug harness
 
-For anything visual, **do not test via Minecraft** — it isn't wired up. Use the harness: it boots in
-seconds, needs no Minecraft context, and gives you a real GL surface.
+For anything visual, **prefer the harness over Minecraft**: it boots in seconds, needs no Minecraft
+context, and gives you a real GL surface. *(This used to say Minecraft "isn't wired up", which stopped
+being true — `runClient` works. The advice survives the correction: the harness is faster and isolates
+rendering from everything else. What it cannot see is anything that crosses the loader seam.)*
 
 ```bash
 ./gradlew :gl-debug-harness:runHarness --args="--mode=cgui-gallery"   # start here
@@ -129,8 +160,8 @@ Harness scenes live in `gl-debug-harness/src/main/java/.../harness/scene/ui/`; r
 > **The two `java`/`js` axes differ on purpose.** In `.java` the loader question is mechanical — a class that imports `org.eclipse.jdt` is child-side, and that is thirty-six of its fifty — so directories spend themselves on the axis that is *not* readable off the file. In `.js` it is the loader question that cannot be read: six classes import neither Rhino nor anything of ours and are child-side only because every one of their callers is. *(Was `syntax-treesitter/` until M4.)* |
 | `gl-debug-harness/` | ✅ | Git submodule (branch `crystalgui`). 16 CrystalGUI scenes. The only way to run the UI. |
 | `CrystalGraphics/` | ✅ (composite) | The rendering backend. Consumed, never reimplemented. |
-| `mc1710/` | ❌ commented out | Bare `@Mod` stub. No CrystalGUI integration at all. Scaffolding. |
-| `mc1201/` | ❌ commented out | Has *real* code (`CgPlatformService1201`, per-loader entrypoints, event bridges, mixins) but does not compile from this build. |
+| `mc1710/` | ✅ | **The 1.7.10 loader, and the only in-game integration that exists.** `CgUiScreen` (the `GuiScreen` host), `CgUiInput`, `Mc1710Workspace`, and the networking half: `Mc1710NetworkChannel` over Forge's `SimpleNetworkWrapper`, `CgUiConnections` (per-player `ProtocolConnection` lifecycle), `CgUiWorkspaceHost` (serves `<serverdir>/crystalgui/workspace`), plus `CgUiServerSmoke` and three probes. *(This row read "❌ commented out — bare `@Mod` stub, no CrystalGUI integration at all" until 2026-08-21, which was three claims and all three were false.)* |
+| `mc1201/` | ❌ commented out | Has *real* code (`PlatformService1201`, per-loader entrypoints, event bridges, mixins) but compiles from **no** build — it is commented out of `settings.gradle.kts` in this repo *and* in CrystalGraphics. So nothing in it is verified, which is why its known defects are fixed by making the shape unable to fail rather than by testing it. @see `plan_phase5.md` §5.10 |
 
 `core/build.gradle.kts` runs an **import guard** as a `doLast` on `compileJava`: any source line
 importing `net.minecraft.*`, `cpw.mods.fml.*`, `net.minecraftforge.*`, or `org.lwjgl.*` fails the
