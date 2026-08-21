@@ -274,6 +274,19 @@ public class DockGroup extends UIElement {
             // than pushed onto the tab: the strip is rebuilt on every rearrangement, and anything pushed
             // would have to be pushed again by somebody who noticed.
             applyDecoration(tab, panel);
+            // CLOSABILITY IS THE PANEL TYPE'S, and it is already recorded there -- a console or an editor
+            // may be closed, a region's permanent host may not. Routed to the same `closePanel` the Close
+            // Panel command uses, so the mouse and the keyboard cannot come to mean different things.
+            //
+            // THIS WAS LOST IN A MERGE and nothing noticed for two days. `1f9b5b3` added it directly
+            // above the `contentFor` line; `d397b9d` resolved that hunk in favour of the other side and
+            // took both. `TabCloseAndRevealTest` stayed green throughout because it drives `Tab` on its
+            // own -- the WIDGET never broke, only the wiring to it, which is the half no test reached.
+            // `aDockTabCarriesACloseButton` is that half now.
+            if (area.registry().isClosable(panel)) {
+                tab.setClosable(true);
+                tab.onCloseRequested.connect(() -> area.closePanel(panel));
+            }
             // AND NO CONTENT. See showContent: a tab is a title until it is looked at.
             tabByPanel.put(panel, tab);
             area.installTabDrag(this, panel, tab);

@@ -29,6 +29,9 @@ theme {
     --surface-raised: #E4E4E8;
     --surface-recessed: #FFFFFF;
     --surface-editor: #FFFFFF;
+    /* @see crystal-dark.css. Warm and pale here for the same reason it is warm and dark there: it has
+     * to separate from neutral surfaces without reading as an error. */
+    --surface-borrowed: #FBF3E8;
     --surface-overlay: #FFFFFF;
     --border-base: #C4C4C8;
     --border-strong: #9A9AA0;

@@ -201,4 +201,81 @@ public class DockTabPresentationTest extends UiTestBase {
         assertEquals("crystalgui:folder",
                 bare.iconOf(new DockPanelRef(FILE_TYPE).withState(DockPanelRef.ICON, "crystalgui:folder")));
     }
+
+    // ── The close affordance, at the DOCK level ───────────────────────────────────
+
+    /**
+     * <b>A tab whose type is closable is built with a close button.</b>
+     *
+     * <h3>Why this test is here and not with the widget's own</h3>
+     *
+     * <p>{@code TabCloseAndRevealTest} covers {@link Tab#setClosable} thoroughly — that a button
+     * appears, that revoking it removes one, that pressing it does not select the tab. Every one of
+     * those kept passing while <b>no dock tab had a close button at all</b>, because they drive a
+     * {@code Tab} the test constructs itself. The widget never broke; the WIRING to it did.</p>
+     *
+     * <p>It was lost in a merge: {@code 1f9b5b3} added the block directly above the {@code contentFor}
+     * line in {@code rebuildStrip}, and {@code d397b9d} resolved that hunk in favour of the other side
+     * and took both. Two days, a visible feature, and a green suite — which is what a test that stops
+     * one layer short of the seam buys you.</p>
+     */
+    @Test
+    public void aDockTabCarriesACloseButton() {
+        setUp(javaFile);
+        Tab tab = tabFor(javaFile);
+        assertNotNull("no tab was built", tab);
+        assertTrue("a closable panel type produced a tab with no close button", tab.isClosable());
+    }
+
+    /**
+     * <b>And a type that says it cannot be closed gets none.</b>
+     *
+     * <p>The negative half, without which the assertion above passes against a strip that makes every
+     * tab closable — including a region's permanent host, which would then be possible to shut with no
+     * way to bring it back.</p>
+     */
+    @Test
+    public void aPanelTypeThatRefusesClosingHasNoButton() {
+        DockPanelRegistry<UIElement> registry = new DockPanelRegistry<>();
+        // singleton = true, closable = FALSE -- the shape a region host has.
+        registry.register(new DockPanelDescriptor(TOOL_TYPE, "Tool", true, false), ref -> new UIElement());
+        DockPanelRef pinned = new DockPanelRef(TOOL_TYPE);
+
+        leaf = new DockLeaf(pinned);
+        area = new DockArea(registry, DockLayout.of(leaf));
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400)
+                .flexDirection(FlexDirection.COLUMN));
+        root.addChild(area);
+        area.layout(l -> l.width(600).height(400));
+        window = new UIWindow(Ui.of(root));
+        window.getStyleEngine().addStylesheet(StyleSheetRegistry.of("crystalgui:ore"));
+        window.init(1200, 800);
+        frame();
+        frame();
+
+        Tab tab = area.groupFor(leaf).tabFor(pinned);
+        assertNotNull("no tab was built", tab);
+        assertTrue("a panel that refuses closing was given a close button", !tab.isClosable());
+    }
+
+    /**
+     * <b>Pressing it closes that panel</b> — through the same {@code closePanel} the command uses.
+     *
+     * <p>Asserted through the signal rather than by synthesising a click, because what broke was the
+     * CONNECTION: a button that appears and is wired to nothing looks identical until pressed.</p>
+     */
+    @Test
+    public void pressingCloseRemovesThePanel() {
+        setUp(javaFile, toolWindow);
+        Tab tab = tabFor(javaFile);
+        assertNotNull(tab);
+        assertTrue(tab.isClosable());
+
+        tab.onCloseRequested.emit();
+        frame();
+        frame();
+
+        assertTrue("the close request did not reach the dock", leaf.indexOf(javaFile) < 0);
+        assertTrue("it took the wrong panel with it", leaf.indexOf(toolWindow) >= 0);
+    }
 }

@@ -91,6 +91,30 @@ public final class LibrarySources implements ResourceContentProvider {
         ResourceRegistry.register(Resource.SCHEME_LIBRARY, new LibrarySources());
     }
 
+    /**
+     * {@code ArrayList.java} for a type with attached source, {@code FlexDirection.class} for one
+     * without.
+     *
+     * <p>The extension is the honest one rather than a decoration: with source, the tab really is
+     * showing a {@code .java} file somebody wrote; without it, what is on screen was reconstructed from
+     * a {@code .class} and IntelliJ names it that way for the same reason. It also picks the icon, since
+     * a file-icon theme keys on the name — so the two say the same thing without being told to.</p>
+     *
+     * <p>Asked of the archive rather than of the content, so it costs one cached lookup and does not
+     * depend on having already read the file.</p>
+     */
+    @Override
+    public String displayName(Resource resource) {
+        if (resource == null) return null;
+        String binaryName = resource.path();
+        int dot = binaryName.lastIndexOf('.');
+        String simple = dot < 0 ? binaryName : binaryName.substring(dot + 1);
+        if (simple.isEmpty()) return null;
+        boolean hasSource =
+                AttachedSources.forClasspath(HostClasspath.detect()).textOf(binaryName) != null;
+        return simple + (hasSource ? ".java" : ".class");
+    }
+
     @Override
     public byte[] read(Resource resource) {
         if (resource == null) return NOTHING;
