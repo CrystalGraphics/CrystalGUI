@@ -126,14 +126,49 @@ project a resource pack could ship.
 > With 5.1 in place this becomes *"persist the retained set"* rather than *"persist dirty buffers"* —
 > a better-shaped problem, because the retained set is already the thing that knows what mattered.
 
-### 5.4 `enabledWhen` is evaluated locally
+### 5.4 `enabledWhen` is evaluated locally · **done 2026-08-21**
 
-A command's `enabledWhen` runs on the client, so it cannot ask the server *may I?*. `explorer.delete`
-looks enabled to a non-operator and the refusal arrives as a `NO_PERMISSIONS` failure after a round trip.
+A command's `enabledWhen` runs on the client while a menu is being built, so it cannot ask the server
+*may I?*. `explorer.delete` looked perfectly available to a non-operator and the refusal arrived as a
+`NO_PERMISSIONS` failure after a round trip. Asking per menu open is worse — that is a round trip inside
+a UI gesture.
 
-**Not a bug fix.** Making it honest needs the permission answer cached client-side, which is a real
-feature: what is cached, when it is invalidated, and what a command shows while the answer is unknown.
-The alternative — asking the server per menu open — is a round trip inside a UI gesture and is worse.
+So the answer is **cached and pushed**: VS Code's context-key model, where the far side volunteers what
+it knows and the near side reads it synchronously. `fs.capabilities` is **one method name in both
+directions** — a request the client makes once when the projects load, and a push the server sends when
+the answer changes. `MessageRouter` keys request and notification handlers separately, so one name serves
+both without ambiguity, and it should: they are the same question, asked and volunteered.
+
+#### The three questions the item asked, answered
+
+**What is cached** — per project, `read` and `write`, asked against the project's own root. That is a
+**real coarsening**: `WorkspacePermission` takes a *path*, so a host may allow writes under `src/` and
+refuse them under `config/`, and no per-project broadcast can say so. It is therefore a **hint for
+enablement and never the authority** — every operation is still authorised server-side on its real path,
+and a test pins that a client which ignores the hint is still refused.
+
+**When it is invalidated** — never by the client. The server pushes, because an operator promoted
+mid-session is not something a file listing reveals, and a client that only asked at connect would draw a
+greyed-out Delete for the rest of the session.
+
+**What a command shows while the answer is unknown** — **available**, and this is the decision the whole
+design turns on. A wrongly-*greyed* command is a thing the user cannot do and cannot explain: no message,
+no dialog, nothing to search for. A wrongly-*live* one fails with a reason the server wrote. Being wrong
+in the second direction is recoverable and being wrong in the first is not. The same rule covers a server
+too old to know the method — greying out every write against an otherwise working workspace, because one
+method is missing, is far worse than offering a write that fails.
+
+#### A trap worth recording
+
+**A server → client push on this subsystem is a `call`, not a `notify`.** `WorkspaceClient` registers its
+inbound methods through `WorkspaceRpc.Registrar`, which is `onRequest`, so `fs.changed` has always
+arrived as a *request* the client answers with `respond.ok(null)`. The first draft of the tests used
+`notify` and the two push cases failed while everything else passed — the router keys the two kinds
+separately, so a notification simply found nobody home. Now stated on `notifyCapabilities` itself.
+
+`WorkspaceCapabilitiesTest`, 9 tests, mutation-checked: making unknown mean *denied* fails 3, which are
+exactly the three about being wrong in the safe direction. Wired into `explorer.delete`, `explorer.rename`
+and both New commands.
 
 ### 5.5 The conflict dialog
 
