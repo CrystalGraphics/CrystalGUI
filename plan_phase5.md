@@ -369,10 +369,56 @@ cases and the two invariants).
 
 #### Still open, and unchanged by the above
 
-**Latency, loss and a real socket.** Everything measured here is an in-memory pair pumped in a loop, so
-credit replenishment is instantaneous and no frame is ever reordered or lost. What a 200 ms round trip
-does to a 256 KB window is arithmetic nobody has done, and `DEFAULT_WINDOW_BYTES` still says of itself
-that it "wants measuring against a real server under load".
+~~**Latency, loss and a real socket.**~~ **Latency done; the socket is still open.**
+
+**Loss is not a hazard here, and listing it was a mistake.** Every supported platform's channel rides
+the loader's own networking — `SimpleNetworkWrapper`, `SimpleChannel`, Fabric — which is Minecraft's
+Netty pipeline, which is TCP. A frame that is sent is delivered, in order. Simulating loss would have
+tested something that cannot happen, and would have invited retransmission logic whose only effect is to
+duplicate TCP. What is real is **latency** and, more importantly, **tick granularity**: `pump()` runs
+once per game tick on each end, so a round trip costs two ticks — 100 ms at 20 tps — before any network.
+
+#### What measuring it found
+
+**`flush` made a single round-robin pass per call**, so the connection was capped at **one frame per
+message per tick** regardless of how much credit the peer had granted. A lone 1 MB message is 32 frames,
+so it took **34 ticks — 1.7 seconds at zero latency** — with seven-eighths of the window unspent.
+
+That also made `DEFAULT_WINDOW_BYTES`' own justification false. It said *"256 KB is eight client→server
+frames, which is enough to keep the pipe busy"*; exactly one of those eight was ever in flight. **Tuning
+the constant would have changed nothing**, which is the tell that it was never the limit.
+
+Repeating the pass while credit lasts (the inner pass still gives every message one turn, so
+anti-head-of-line-blocking is untouched):
+
+| | before | after |
+|---|---|---|
+| 256 KB, no latency | 10 ticks | **2 ticks** |
+| 1 MB, no latency | 34 ticks (1.70s) | **8 ticks (0.40s)** |
+| 1 MB, 400 ms RTT | 58 ticks | **29 ticks** |
+| 16 MB burst, 400 ms RTT | 686 ticks | **509 ticks** |
+
+The limit is now the credit window, which is where it belongs and is genuinely tunable. **Cold credit
+plus a burst does not deadlock** — the reconnect shape, where admission holds messages back waiting on
+one in flight while that one waits on credit a round trip away.
+
+#### A test had to be rewritten, and why that was legitimate
+
+`aSmallMessageIsNotBlockedBehindALargeOne` pumped four times and asserted the receiver held exactly one
+message — using *"the large one has not finished yet"* as a proxy for *"we are still early"*. The proxy
+stopped holding the moment the wire got four times faster, so it failed against a version where the
+property it names was intact. **The property is ordering, not timing.** It now asserts the small message
+arrives first, with the large one sized from `DEFAULT_WINDOW_BYTES` so raising the window cannot turn it
+back into a test of how fast the wire happens to be.
+
+`WireUnderLatencyTest`, 5 tests, mutation-checked: restoring the single pass fails 2.
+
+#### Still open
+
+**A real socket, on two machines.** Everything above is a simulated link in one JVM: the delay is exact,
+there is no jitter, no MTU, no Nagle, and no competing traffic from the game itself — which on a busy
+server is the thing most likely to matter. And `DEFAULT_WINDOW_BYTES` still wants measuring under real
+load; it is now a knob that would actually move something, which it was not before.
 
 ~~**A `CodecException` from `accept` aborts the whole pump.**~~ **Fixed.** It did, skipping `replenish`
 and `flush` for that tick while `handleData`'s comment claimed the opposite (*"refuse the stream rather

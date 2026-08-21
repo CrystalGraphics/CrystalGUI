@@ -66,8 +66,14 @@ public final class FrameMultiplexer {
      *
      * <p>256 KB is eight client→server frames, which is enough to keep the pipe busy without letting one
      * transfer own the connection. HTTP/2 starts streams at 65,535 and treats the number as tunable
-     * rather than derived; so is this. It wants measuring against a real server under load, and is
-     * deliberately a constant in one place until then.</p>
+     * rather than derived; so is this.</p>
+     *
+     * <p><b>That sentence was false for as long as it existed.</b> {@link #flush} made a single
+     * round-robin pass per call and {@code pump()} runs once per game tick, so exactly ONE of those eight
+     * frames was ever in flight: a lone 1 MB message took 32 ticks — 1.7 seconds at zero latency — with
+     * seven-eighths of the granted window unspent. Tuning this number would have changed nothing, which
+     * is the tell that the constant was never the limit. Measured and fixed in {@code flush}; the figure
+     * itself still wants measuring against a real server under load.</p>
      */
     public static final int DEFAULT_WINDOW_BYTES = 256 * 1024;
 
@@ -214,34 +220,59 @@ public final class FrameMultiplexer {
      * </ul>
      */
     public void flush() {
-        int spins = outbound.size();
-        while (spins-- > 0 && sendCredit > 0 && !outbound.isEmpty()) {
-            Outbound message = outbound.pollFirst();
+        // ROUND-ROBIN PASSES, REPEATED WHILE CREDIT LASTS -- and the repetition is the fix, not a detail.
+        //
+        // This was a SINGLE pass: `spins = outbound.size()`, one turn each, done. Fair, and it silently
+        // capped the connection at ONE FRAME PER MESSAGE PER TICK, because pump() runs once per game
+        // tick. A lone 1 MB message is 32 frames, so it took 32 ticks -- 1.7 SECONDS AT ZERO LATENCY --
+        // with 224 KB of granted credit sitting unspent the entire time.
+        //
+        // Which made DEFAULT_WINDOW_BYTES' own justification false: it says "256 KB is eight
+        // client->server frames, which is enough to keep the pipe busy", and exactly one of those eight
+        // was ever in flight. The window was advisory; the flush loop was the real limit, and no amount
+        // of tuning the constant would have moved it.
+        //
+        // The inner pass still gives every message one turn before any message gets a second, so the
+        // anti-head-of-line-blocking property below is untouched. The outer loop only decides HOW MANY
+        // rounds happen, and credit -- which is what the peer actually promised to buffer -- decides
+        // that. Termination: every round either sends (strictly decreasing finite credit) or breaks.
+        while (sendCredit > 0 && !outbound.isEmpty()) {
+            int spins = outbound.size();
+            boolean progressed = false;
 
-            if (message.sent == 0 && message.fragments(maxPayloadBytes)) {
-                if (!admits(message.bytes.length)) {
-                    // Back of the queue, untouched. The spin counter is what stops this looping over a
-                    // queue where nothing can start.
-                    outbound.addLast(message);
-                    continue;
+            while (spins-- > 0 && sendCredit > 0 && !outbound.isEmpty()) {
+                Outbound message = outbound.pollFirst();
+
+                if (message.sent == 0 && message.fragments(maxPayloadBytes)) {
+                    if (!admits(message.bytes.length)) {
+                        // Back of the queue, untouched. The spin counter bounds one pass; `progressed`
+                        // is what stops the OUTER loop spinning over a queue where nothing can start.
+                        outbound.addLast(message);
+                        continue;
+                    }
+                    fragmentingBytes += message.bytes.length;
                 }
-                fragmentingBytes += message.bytes.length;
+
+                int remaining = message.remaining();
+                int chunk = (int) Math.min(Math.min(remaining, maxPayloadBytes), sendCredit);
+                boolean fin = chunk == remaining;
+
+                sink.send(FrameCodec.data(message.streamId, message.bytes, message.sent, chunk, fin));
+                message.sent += chunk;
+                sendCredit -= chunk;
+                progressed = true;
+
+                if (fin) {
+                    if (message.fragments(maxPayloadBytes)) fragmentingBytes -= message.bytes.length;
+                } else {
+                    // Back of the queue if there is more, so the next message gets a turn before this.
+                    outbound.addLast(message);
+                }
             }
 
-            int remaining = message.remaining();
-            int chunk = (int) Math.min(Math.min(remaining, maxPayloadBytes), sendCredit);
-            boolean fin = chunk == remaining;
-
-            sink.send(FrameCodec.data(message.streamId, message.bytes, message.sent, chunk, fin));
-            message.sent += chunk;
-            sendCredit -= chunk;
-
-            if (fin) {
-                if (message.fragments(maxPayloadBytes)) fragmentingBytes -= message.bytes.length;
-            } else {
-                // Back of the queue if there is more, so the next message gets a turn before this one.
-                outbound.addLast(message);
-            }
+            // Nothing in the whole queue could move: everything left is waiting on admission, which
+            // waits on a message that is already in flight finishing. More rounds cannot help.
+            if (!progressed) break;
         }
     }
 
