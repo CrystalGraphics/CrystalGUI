@@ -8,8 +8,8 @@ import java.util.function.BiConsumer;
  * The whole platform contribution to networking: move an opaque {@code byte[]}, and say how big one may be.
  *
  * <p><b>Four methods, and that is the design.</b> Every decision worth getting wrong — framing, stream
- * ids, fragmentation, flow control, cancellation, what a packet even means — lives in {@code core} above
- * this line. A loader never sees a {@code UIPacket}, never learns a stream id and never picks a chunk
+ * ids, fragmentation, flow control, cancellation, what a message even means — lives in {@code core} above
+ * this line. A loader never sees an {@code Envelope}, never learns a stream id and never picks a chunk
  * size. It registers a channel and forwards arrays. That is what "packets are owned by core" reduces to
  * in practice, and it is the reason a second platform is an afternoon rather than a re-implementation.</p>
  *

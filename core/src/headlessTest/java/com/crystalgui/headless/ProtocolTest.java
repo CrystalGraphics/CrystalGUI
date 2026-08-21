@@ -5,7 +5,11 @@ import com.crystalgui.net.protocol.EnvelopeCodec;
 import com.crystalgui.net.protocol.MessageRouter;
 import com.crystalgui.net.protocol.ProtocolErrors;
 import com.crystalgui.serialization.CodecException;
+import com.crystalgui.serialization.DynamicOps;
+import com.crystalgui.serialization.Codecs;
+import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.serialization.PlainOps;
+import com.crystalgui.serialization.StateMap;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -14,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -64,6 +69,80 @@ public class ProtocolTest {
         assertEquals(payload("c"), notification.payload());
 
         assertEquals(9, ((Envelope.Cancel) roundTrip(new Envelope.Cancel(9))).id());
+    }
+
+    /**
+     * The same four kinds through a completely different representation, so nothing about the envelope
+     * depends on {@code PlainOps}.
+     *
+     * <p>Inherited from {@code SessionHandshakeTest.everyPacketTypeRoundTrips}, which asserted this of
+     * {@code UIPacketCodec}. The packet union is gone and the property is not: a JSON transport is the
+     * whole reason {@code DynamicOps} exists, and an envelope that only round-trips through the one ops
+     * the tests happen to use would fail on the first non-PlainOps peer rather than here.</p>
+     */
+    @Test
+    public void everyKindRoundTripsThroughAnyOps() {
+        assertKindsSurvive(PlainOps.INSTANCE);
+        assertKindsSurvive(JsonOps.INSTANCE);
+    }
+
+    /**
+     * Note the payload is built THROUGH the ops under test, not handed in.
+     *
+     * <p>A {@code PlainOps} map cannot ride a JSON envelope — {@code JsonOps} is
+     * {@code DynamicOps<JsonElement>}, so a {@code LinkedHashMap} payload is not a value it can carry.
+     * Writing the test the other way compiles only by erasure and then fails at the first nesting, which
+     * is exactly the mistake a real second transport would make.</p>
+     */
+    private <T> void assertKindsSurvive(DynamicOps<T> ops) {
+        StateMap<T> map = new StateMap<>(ops);
+        map.putString("tag", "a");
+        T payload = map.encode();
+
+        Envelope.Request<T> request = (Envelope.Request<T>) reencode(ops,
+                new Envelope.Request<>(7, "workspace/read", payload));
+        assertEquals(7, request.id());
+        assertEquals("workspace/read", request.method());
+        assertEquals(payload, request.payload());
+
+        Envelope.Response<T> ok = (Envelope.Response<T>) reencode(ops, Envelope.Response.ok(7, payload));
+        assertTrue(ok.ok());
+        assertEquals(payload, ok.payload());
+
+        Envelope.Response<T> failed = (Envelope.Response<T>) reencode(ops, Envelope.Response.failed(7, "nope"));
+        assertFalse(failed.ok());
+        assertEquals("nope", failed.error());
+        assertNull(failed.payload());
+
+        Envelope.Notification<T> notification = (Envelope.Notification<T>) reencode(ops,
+                new Envelope.Notification<>("ui/stateDelta", payload));
+        assertEquals("ui/stateDelta", notification.method());
+        assertEquals(payload, notification.payload());
+
+        assertEquals(9, ((Envelope.Cancel) reencode(ops, new Envelope.Cancel(9))).id());
+    }
+
+    private static <T> Envelope reencode(DynamicOps<T> ops, Envelope envelope) {
+        return EnvelopeCodec.decode(ops, EnvelopeCodec.encode(ops, envelope));
+    }
+
+    /**
+     * Absent fields are omitted, not written null — what keeps an envelope's overhead near the payload.
+     *
+     * <p>Inherited from {@code SessionHandshakeTest.absentOptionalFieldsAreOmitted}. It matters more now
+     * than it did for packets: every message on the wire wears this envelope, so a null written per
+     * absent field is a cost paid per message rather than per packet type.</p>
+     */
+    @Test
+    public void absentFieldsAreOmittedRatherThanWrittenNull() {
+        var ok = Codecs.read(PlainOps.INSTANCE,
+                EnvelopeCodec.encode(PlainOps.INSTANCE, Envelope.Response.ok(3, null)));
+        assertFalse("a successful response carries no error string", ok.has("e"));
+        assertFalse("and no payload when there is none", ok.has("p"));
+
+        var notification = Codecs.read(PlainOps.INSTANCE,
+                EnvelopeCodec.encode(PlainOps.INSTANCE, new Envelope.Notification<>("ui/closeWindow", null)));
+        assertFalse("a notification has no id to write", notification.has("i"));
     }
 
     @Test

@@ -4,11 +4,9 @@ import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.net.SheetRef;
-import com.crystalgui.net.UIPacket;
 import com.crystalgui.net.protocol.Envelope;
 import com.crystalgui.net.protocol.EnvelopeCodec;
 import com.crystalgui.net.protocol.UiMethods;
-import com.crystalgui.net.UIPacketCodec;
 import com.crystalgui.serialization.Codecs;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
@@ -86,7 +84,7 @@ public class SessionHandshakeTest {
     /**
      * Counts messages by METHOD, which is what a message is addressed by now.
      *
-     * <p>Replaces {@code countPacketsOfType}, which decoded through {@code UIPacketCodec} and read
+     * <p>Replaces {@code countPacketsOfType}, which decoded a packet union and read
      * {@code packet.type()}. The assertions are the same questions — how many description requests, how
      * many bodies — asked of the vocabulary rather than of a union of record types.</p>
      */
@@ -302,25 +300,7 @@ public class SessionHandshakeTest {
         assertFalse(server.isOpen());
     }
 
-    // ── Packet round-trips ──────────────────────────────────────────────────
-
-    @Test
-    public void everyPacketTypeRoundTrips() {
-        assertRoundTrips(new UIPacket.OpenWindow(1, 3, "h", 5, List.of(SheetRef.ofResource("a:b", "hh")), true));
-        assertRoundTrips(new UIPacket.OpenWindow(1, 3, "h", 0, List.of(), false));
-        assertRoundTrips(new UIPacket.RequestDescription(3, "h"));
-        assertRoundTrips(new UIPacket.CloseWindow(3, "because"));
-        assertRoundTrips(new UIPacket.CloseWindow(3, ""));
-    }
-
-    private void assertRoundTrips(UIPacket packet) {
-        Object encoded = UIPacketCodec.encode(PlainOps.INSTANCE, packet);
-        assertEquals(packet, UIPacketCodec.decode(PlainOps.INSTANCE, encoded));
-        // And through a completely different representation, so nothing depends on PlainOps.
-        var json = com.crystalgui.serialization.JsonOps.INSTANCE;
-        var viaJson = UIPacketCodec.encode(json, packet);
-        assertEquals(packet, UIPacketCodec.decode(json, viaJson));
-    }
+    // ── Delivery ────────────────────────────────────────────────────────────
 
     /** Nothing moves until asked — the property that makes these orderings reproducible. */
     @Test
@@ -333,11 +313,4 @@ public class SessionHandshakeTest {
         assertNull("delivered, but not yet processed — that is tick()'s job", client.root());
     }
 
-    /** Unused, but proves Codecs' optional handling is what keeps packets small. */
-    @Test
-    public void absentOptionalFieldsAreOmitted() {
-        Object encoded = UIPacketCodec.encode(PlainOps.INSTANCE, new UIPacket.CloseWindow(3, ""));
-        var read = Codecs.read(PlainOps.INSTANCE, encoded);
-        assertFalse("an empty reason should not be written at all", read.has("reason"));
-    }
 }

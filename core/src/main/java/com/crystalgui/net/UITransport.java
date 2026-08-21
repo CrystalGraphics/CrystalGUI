@@ -3,9 +3,10 @@ package com.crystalgui.net;
 import java.util.function.Consumer;
 
 /**
- * Carries already-encoded packets between the two halves of a session.
+ * Carries already-encoded messages between the two halves of a session.
  *
- * <p>Deliberately takes {@code T} rather than {@link UIPacket}: sessions encode before handing over,
+ * <p>Deliberately takes {@code T} rather than an {@link com.crystalgui.net.protocol.Envelope}:
+ * sessions encode before handing over,
  * so every implementation — including the in-memory one used by tests — exercises the real codec on
  * every hop. A transport that passed object references would let a field somebody forgot to encode
  * pass every test and fail only in game.</p>

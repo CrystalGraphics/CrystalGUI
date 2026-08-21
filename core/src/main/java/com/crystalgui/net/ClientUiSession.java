@@ -1,6 +1,7 @@
 package com.crystalgui.net;
 
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.net.protocol.Call;
 import com.crystalgui.net.protocol.Envelope;
 import com.crystalgui.net.protocol.EnvelopeCodec;
 import com.crystalgui.net.protocol.MessageRouter;
@@ -48,12 +49,10 @@ public final class ClientUiSession<T> {
 
     private final Deque<T> mailbox = new ArrayDeque<>();
 
-    private final RpcRegistry<T> rpc;
-
     /** Everything inbound goes through here; nothing is dispatched by type. @see #registerUiMethods */
     private final MessageRouter<T> router;
 
-    /** Matches the 10s {@code RpcRegistry} defaulted to. @see ServerUiSession */
+    /** How long a call waits before its error handler is told. @see ServerUiSession */
     private long callTimeoutMillis = 10_000L;
 
     private int windowId = -1;
@@ -71,7 +70,6 @@ public final class ClientUiSession<T> {
     public ClientUiSession(UITransport<T> transport, DynamicOps<T> ops) {
         this.transport = transport;
         this.ops = ops;
-        this.rpc = new RpcRegistry<>(ops);
         this.router = new MessageRouter<>(envelope -> transport.send(EnvelopeCodec.encode(ops, envelope)));
         registerUiMethods();
         transport.setReceiver(packet -> {
@@ -301,11 +299,11 @@ public final class ClientUiSession<T> {
     }
 
     /** Registers a client-side RPC method the server may call. */
-    public ClientUiSession<T> onCall(String method, RpcRegistry.Handler<T> handler) {
+    public ClientUiSession<T> onCall(String method, Call.Handler<T> handler) {
         // Same handler type, so nothing that calls this moves; underneath, an RPC is now an ordinary
-        // REQUEST and its correlation is the router's rather than a second id space of RpcRegistry's.
+        // REQUEST and its correlation is the router's rather than a second id space of its own.
         router.onRequest(method, (payload, respond) ->
-                handler.invoke(read(payload), new RpcRegistry.Responder<T>() {
+                handler.invoke(read(payload), new Call.Responder<T>() {
                     @Override
                     public void ok(@Nullable StateMap<T> value) {
                         respond.ok(value == null ? null : value.encode());

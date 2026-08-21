@@ -4,14 +4,13 @@ import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.NetworkIds;
 import com.crystalgui.net.ServerUiSession;
-import com.crystalgui.net.UIPacket;
 import com.crystalgui.net.protocol.Envelope;
 import com.crystalgui.net.protocol.EnvelopeCodec;
 import com.crystalgui.net.protocol.UiMethods;
-import com.crystalgui.net.UIPacketCodec;
 import com.crystalgui.net.UiEventKinds;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
+import com.crystalgui.serialization.UIDescriptionCodec;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.Checkbox;
@@ -140,7 +139,7 @@ public class ServerBehaviourLoopTest {
         clientChild(2, Checkbox.class).setChecked(true);
         settle();
 
-        assertEquals(0, countOfType(clientLink, UIPacket.UiEvent.TYPE));
+        assertEquals(0, countMethod(clientLink, UiMethods.EVENT));
     }
 
     // ── Batching ────────────────────────────────────────────────────────────
@@ -212,16 +211,32 @@ public class ServerBehaviourLoopTest {
         InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
         ClientUiSession<Object> fresh = new ClientUiSession<>(pair[1], PlainOps.INSTANCE);
         // Claim one more element than the description actually contains.
-        pair[0].send(UIPacketCodec.encode(PlainOps.INSTANCE,
-                new UIPacket.OpenWindow(UIPacketCodec.PROTOCOL_VERSION, 1, hash,
-                        NetworkIds.count(root) + 1, List.of(), false)));
+        StateMap<Object> open = new StateMap<>(PlainOps.INSTANCE);
+        open.putInt("protocol", EnvelopeCodec.VERSION);
+        open.putInt(UiMethods.WINDOW, 1);
+        open.putString("hash", hash);
+        open.putInt("count", NetworkIds.count(root) + 1);
+        pair[0].send(EnvelopeCodec.encode(PlainOps.INSTANCE,
+                new Envelope.Notification<>(UiMethods.OPEN_WINDOW, open.encode())));
         pair[1].deliver();
         fresh.tick();
-        // Answer the description request with the real (shorter) tree.
+
+        // Answer the description request with the real (shorter) tree. The id is READ OFF THE WIRE
+        // rather than assumed: a response the client cannot correlate is dropped before it reaches the
+        // structural check, which would pass this test for entirely the wrong reason.
         pair[1].deliver();
-        pair[0].send(UIPacketCodec.encode(PlainOps.INSTANCE,
-                new UIPacket.Description<>(1, hash,
-                        com.crystalgui.serialization.UIDescriptionCodec.CODEC.encode(PlainOps.INSTANCE, root))));
+        int askId = pair[1].sent().stream()
+                .map(raw -> EnvelopeCodec.decode(PlainOps.INSTANCE, raw))
+                .filter(e -> e instanceof Envelope.Request)
+                .map(e -> ((Envelope.Request<?>) e).id())
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("the client never asked for the description"));
+
+        StateMap<Object> body = new StateMap<>(PlainOps.INSTANCE);
+        body.putInt(UiMethods.WINDOW, 1);
+        body.putString("hash", hash);
+        body.putRaw("root", UIDescriptionCodec.CODEC.encode(PlainOps.INSTANCE, root));
+        pair[0].send(EnvelopeCodec.encode(PlainOps.INSTANCE, Envelope.Response.ok(askId, body.encode())));
         pair[1].deliver();
         fresh.tick();
 
@@ -303,14 +318,15 @@ public class ServerBehaviourLoopTest {
 
     // ── Helpers ─────────────────────────────────────────────────────────────
 
-    private long countOfType(InMemoryTransport<Object> link, String type) {
+    /** Counts outbound messages by METHOD, which is what a message is addressed by now. */
+    private long countMethod(InMemoryTransport<Object> link, String method) {
         return link.sent().stream()
-                .map(raw -> UIPacketCodec.decode(PlainOps.INSTANCE, raw))
-                .filter(p -> p.type().equals(type))
+                .map(raw -> EnvelopeCodec.decode(PlainOps.INSTANCE, raw))
+                .filter(e -> e instanceof Envelope.Notification<?> n && method.equals(n.method())
+                        || e instanceof Envelope.Request<?> r && method.equals(r.method()))
                 .count();
     }
 
-    @SuppressWarnings("unchecked")
     /** How many entries each state-delta carried, which is all any caller asked a delta for. */
     private List<Integer> deltaEntryCounts(InMemoryTransport<Object> link) {
         List<Integer> counts = new java.util.ArrayList<>();

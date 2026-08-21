@@ -23,9 +23,9 @@ import java.util.function.Consumer;
  *
  * <h3>Where the encoding happens</h3>
  *
- * <p>{@code UITransport} takes {@code T} rather than a {@code UIPacket} precisely so that <i>"every
+ * <p>{@code UITransport} takes {@code T} rather than an {@code Envelope} precisely so that <i>"every
  * implementation — including the in-memory one used by tests — exercises the real codec on every
- * hop"</i>. That is upheld here and extended by one step: the session encodes its packet to a
+ * hop"</i>. That is upheld here and extended by one step: the session encodes its envelope to a
  * {@code PlainOps} tree, and this encodes that tree to bytes through {@link BinaryFormat}. The tree
  * crossing an in-memory transport today and the bytes crossing a socket tomorrow describe the same
  * value, which is what keeps a headless test meaningful about production.</p>
