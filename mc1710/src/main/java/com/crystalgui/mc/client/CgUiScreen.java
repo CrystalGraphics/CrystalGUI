@@ -151,9 +151,18 @@ public final class CgUiScreen extends GuiScreen {
 
         trace("begin");
         File dataDir = mc.mcDataDir;
-        workspace = new Mc1710Workspace(new File(dataDir, "crystalgui/workspace").toPath());
+        // NO ROOT. The files live on the SERVER now (Phase 4 B2) -- in single-player that is the
+        // integrated server, which is why there is one code path rather than a local special case.
+        workspace = new Mc1710Workspace();
         trace("workspace + language registration");
 
+        if (!workspace.isConnected()) {
+            // Should be impossible -- this screen opens from inside a world, and the connection is opened
+            // on join. Named rather than left to NPE somewhere in the file tree, because "the editor has
+            // no workspace" and "the editor is broken" look identical from the outside.
+            CrystalGuiCore.LOGGER.error("Opening the editor with no server connection: the file tree will "
+                    + "be empty. CgUiConnections.client() is null, which means the join event never fired.");
+        }
         editor = new CrystalEditor(workspace.client());
         trace("CrystalEditor construction");
         // BESIDE the workspace, not inside it: a session record is private and must not become part of

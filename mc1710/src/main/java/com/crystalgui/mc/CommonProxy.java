@@ -1,6 +1,7 @@
 package com.crystalgui.mc;
 
 import com.crystalgui.mc.net.CgUiConnections;
+import com.crystalgui.mc.net.CgUiWorkspaceHost;
 import com.crystalgui.mc.net.Mc1710NetworkChannel;
 
 /**
@@ -43,6 +44,11 @@ public class CommonProxy {
         Mc1710NetworkChannel.register();
         // Phase 4 A4. Must follow the channel: it takes the channel's inbound handler, and a handler
         // installed onto an unavailable channel is silently discarded.
+        // CONTRIBUTORS BEFORE CONNECTIONS. Nothing depends on it here -- no peer can exist at init, so
+        // both orders bind the same set -- but a contributor is only bound to connections opened AFTER
+        // it registers, so this is the order that stays correct if anything ever opens one earlier. It
+        // also makes the lifecycle's own "contributors: [...]" line true rather than an empty list.
+        CgUiWorkspaceHost.register();
         CgUiConnections.register();
     }
 }

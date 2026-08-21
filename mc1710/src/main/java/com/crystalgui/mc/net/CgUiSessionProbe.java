@@ -1,6 +1,9 @@
 package com.crystalgui.mc.net;
 
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.fs.CgFileEntry;
+import com.crystalgui.fs.CgPath;
+import com.crystalgui.fs.WorkspaceClient;
 import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.net.protocol.ProtocolConnection;
@@ -69,6 +72,10 @@ public final class CgUiSessionProbe {
     private static volatile boolean deltaSeen;
     private static volatile boolean eventReceived;
     private static volatile boolean callAnswered;
+    /** Phase 4 B1/B2: a real listing, off the SERVER's disk, over the same connection. */
+    private static volatile boolean workspaceListed;
+    private static volatile boolean workspaceAsked;
+    private static volatile WorkspaceClient<Object> files;
 
     private static volatile boolean deltaSent;
     private static volatile boolean eventSent;
@@ -224,13 +231,33 @@ public final class CgUiSessionProbe {
                 }
             }
 
+            // 5/5 -- the workspace, which lives on the SERVER and is reached over this same wire.
+            if (callAnswered && !workspaceAsked) {
+                workspaceAsked = true;
+                files = new WorkspaceClient<>(CgUiConnections.client());
+                files.list(CgPath.ofProject("minecraft.workspace"),
+                        entries -> {
+                            boolean readme = false;
+                            for (CgFileEntry entry : entries) {
+                                if ("README.md".equals(entry.name())) readme = true;
+                            }
+                            workspaceListed = readme;
+                            CrystalGuiCore.LOGGER.info("[session-probe] 5/5 workspace listed {} entries "
+                                    + "from the server, README.md present={}", entries.size(), readme);
+                        },
+                        failure -> CrystalGuiCore.LOGGER.error(
+                                "[session-probe] workspace listing failed: {}", failure.code()));
+            }
+
             if (clientTicks % 40 == 0) {
                 CrystalGuiCore.LOGGER.info("[session-probe] tick {} — tree={} delta={} event={} call={} "
                                 + "(connections open: {})",
                         clientTicks, treeArrived, deltaSeen, eventReceived, callAnswered,
                         CgUiConnections.openConnections());
+                CrystalGuiCore.LOGGER.info("[session-probe]   workspace listed={} boundPeers={}",
+                        workspaceListed, CgUiWorkspaceHost.boundPeers());
             }
-            if (treeArrived && deltaSeen && eventReceived && callAnswered) {
+            if (treeArrived && deltaSeen && eventReceived && callAnswered && workspaceListed) {
                 finish(true, "");
             } else if (clientTicks > DEADLINE_TICKS) {
                 finish(false, "timed out");
@@ -251,13 +278,14 @@ public final class CgUiSessionProbe {
         private void finish(boolean pass, String why) {
             reported = true;
             if (pass) {
-                CrystalGuiCore.LOGGER.info("[session-probe] PASS — the whole protocol crossed a real "
-                        + "Minecraft connection, over the connection lifecycle that ships: description "
-                        + "request/response, state delta, event, and a server->client call");
+                CrystalGuiCore.LOGGER.info("[session-probe] PASS — the whole stack crossed a real "
+                        + "Minecraft connection, over the lifecycle that ships: description "
+                        + "request/response, state delta, event, a server->client call, AND a workspace "
+                        + "listing off the server's own disk");
             } else {
-                CrystalGuiCore.LOGGER.error("[session-probe] FAIL ({}) — tree={} delta={} event={} call={}. "
-                                + "The first false is the exchange that stalled.",
-                        why, treeArrived, deltaSeen, eventReceived, callAnswered);
+                CrystalGuiCore.LOGGER.error("[session-probe] FAIL ({}) — tree={} delta={} event={} "
+                                + "call={} workspace={}. The first false is the exchange that stalled.",
+                        why, treeArrived, deltaSeen, eventReceived, callAnswered, workspaceListed);
             }
             Minecraft.getMinecraft().shutdown();
         }

@@ -32,6 +32,17 @@ public final class WorkspaceProtocol {
     /** A whole file, with the etag it was read at. */
     public static final String READ = "fs.read";
 
+    /**
+     * Pulls one slice of a transfer {@link #READ} opened. <b>Client-driven</b>, deliberately.
+     *
+     * <p>A push would work — the transport has credit flow control, so the server could stream and the
+     * receiver would exert backpressure. Pull was chosen for two reasons that outlast this method: the
+     * client decides the pace, so a UI can pause or abandon a download without a cancel protocol, and a
+     * resume is the same request with a different {@link #OFFSET}, which is what D11's *"resume"* row
+     * becomes rather than a new mechanism. HTTP range requests are the same shape for the same reason.</p>
+     */
+    public static final String READ_CHUNK = "fs.readChunk";
+
     /** Replace a file, quoting the etag it was read at. */
     public static final String WRITE = "fs.write";
 
@@ -107,6 +118,29 @@ public final class WorkspaceProtocol {
     public static final String PATH = "path";
     public static final String CONTENT = "content";
     public static final String ETAG = "etag";
+
+    /**
+     * On a {@link #READ} reply: true when the content did not come with it and must be pulled.
+     *
+     * <p>Absent means inline, so an old client reading a small file sees exactly what it always did.
+     * The threshold is the server's to choose and the client must not assume one — it reads the flag.</p>
+     */
+    public static final String CHUNKED = "chunked";
+
+    /** Identifies an open transfer, for {@link #READ_CHUNK}. */
+    public static final String TRANSFER = "transfer";
+
+    // Total bytes in the file, so a client can size a progress bar before pulling anything -- the same
+    // SIZE a manifest entry already uses, deliberately not a second name for one number.
+
+    /** Where a chunk starts. */
+    public static final String OFFSET = "offset";
+
+    /** How many bytes a chunk asks for; the server may answer with fewer. */
+    public static final String LENGTH = "length";
+
+    /** True on the chunk that completes a transfer, after which the id is no longer valid. */
+    public static final String EOF = "eof";
     public static final String ENTRIES = "entries";
     public static final String PROJECT_LIST = "projects";
     public static final String NAME = "name";

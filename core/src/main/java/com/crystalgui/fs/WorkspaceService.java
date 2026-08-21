@@ -88,6 +88,29 @@ public final class WorkspaceService {
         return kept;
     }
 
+    /**
+     * The hard ceiling on a single file — P6.1.10 D11's *"chunked with progress; hard cap 100 MB,
+     * refused as file too large to open"*.
+     *
+     * <p>A cap has to exist somewhere and this is the honest place for it: a client asking for a 4 GB
+     * file is not a request to serve slowly, it is one to refuse. Note it is <b>not</b> the same number
+     * as the transport's {@code MAX_REASSEMBLY_BYTES} and must not be confused with it — that bounds one
+     * <em>message</em>, which is precisely why anything approaching this limit has to be chunked at the
+     * protocol level rather than handed over whole.</p>
+     */
+    public static final long MAX_FILE_BYTES = 100L * 1024 * 1024;
+
+    /**
+     * A file's metadata, authorised the same way a read is.
+     *
+     * <p>Exists so a caller can ask "how big, and may I" without paying for the bytes — which is what
+     * lets the cap be enforced before an allocation rather than after one.</p>
+     */
+    public CgFileEntry stat(WorkspaceActor actor, CgPath path) {
+        authorise(actor, path, WorkspaceOperation.READ);
+        return files.stat(path);
+    }
+
     /** A file, with the etag a later write must quote back. */
     public FileContent read(WorkspaceActor actor, CgPath path) {
         authorise(actor, path, WorkspaceOperation.READ);
@@ -95,6 +118,10 @@ public final class WorkspaceService {
         // file as it is once the bytes are in hand, which is a different moment.
         CgFileEntry entry = files.stat(path);
         if (entry.isDirectory()) throw CgFileSystemException.isADirectory(path);
+        // Before files.read, so the refusal costs a stat rather than the allocation it is refusing.
+        if (entry.size() > MAX_FILE_BYTES) {
+            throw CgFileSystemException.tooLarge(path, entry.size(), MAX_FILE_BYTES);
+        }
         return new FileContent(path, files.read(path), entry.etag());
     }
 

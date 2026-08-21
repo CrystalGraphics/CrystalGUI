@@ -187,6 +187,9 @@ public final class CgUiConnections {
         public void onPlayerLeave(PlayerEvent.PlayerLoggedOutEvent event) {
             Peer peer = SERVER.remove(event.player);
             if (peer == null) return;
+            // Anything that bound per-peer state must be told, or its maps grow for the life of the
+            // server -- a leak that only shows on a box that has been up for a week.
+            CgUiWorkspaceHost.forget(event.player);
             closePeer(peer, "player left");
             CrystalGuiCore.LOGGER.info("[cgui-net] connection closed for {} ({} open)",
                     event.player.getCommandSenderName(), openConnections());
@@ -250,6 +253,7 @@ public final class CgUiConnections {
      */
     public static void closeAll(String reason) {
         int had = openConnections();
+        CgUiWorkspaceHost.reset();
         for (Peer peer : SERVER.values()) closePeer(peer, reason);
         SERVER.clear();
         closePeer(client, reason);
