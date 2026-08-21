@@ -240,7 +240,12 @@ is collapsible. That is the whole reason `collapse()` cannot survive as a final 
 
 ### 3.7 Deliberately out of scope
 
-- `<table>` beyond the simplest two-column form. A table layout in a hover popup is a project of its own.
+- ~~`<table>` beyond the simplest two-column form. A table layout in a hover popup is a project of its
+  own.~~ **Reversed — a real table shipped.** The judgement was wrong about which part was expensive: the
+  layout is `MarkupView`'s existing column equalisation applied a second time, since `display: grid` does
+  not work in this engine and the rows were already being measured. What actually cost something was the
+  grid itself, because a one-sided `border-width-*` either draws all four edges or none, so the rules are
+  stroked with `ctx.curve()` from a `TableGrid` overlay. `colspan`/`rowspan` are still out.
 - Images. A popup that reads from disk to render a hover is not worth it.
 - Arbitrary HTML. Anything unrecognised degrades to its text, which is what stripping already does and
   is the right failure.
@@ -436,9 +441,12 @@ the feature is worse than none.
 
 ## 6. What is left
 
-Thirteen of thirteen audit rows are shipped. **One item remains**: JavaScript has no documentation at
-all, which was always going to be last. Doc-tag reference colouring (§6.2) shipped and is kept below as
-the record of what it turned out to be.
+Thirteen of thirteen audit rows are shipped, and so is everything §6 named. JavaScript documentation
+(§6.1) was the last of it and went in with the Markdown converter; doc-tag reference colouring (§6.2)
+shipped before it. Both are kept below as the record of what they turned out to be.
+
+**What is genuinely left is §6.3's two partials**, both of which are decisions rather than omissions,
+plus the three exclusions in §3.7 — of which the table one no longer holds, see below.
 
 ### 6.1 JavaScript gets the renderer and none of the emitter — **shipped**
 
