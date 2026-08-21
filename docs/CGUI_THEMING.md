@@ -618,6 +618,14 @@ editor scheme's.
 | `--tab-library-bg` | `var(--surface-borrowed)` | base.css |
 | `--tab-pane-bg` | `#00000000` | base.css |
 | `--tab-strip-bg` | `#00000000` | base.css |
+| `--taskbar-bg` | `var(--surface-overlay)` | base.css |
+| `--taskbar-border` | `var(--border-base)` | base.css |
+| `--taskbar-entry-active-bg` | `var(--accent-soft)` | base.css |
+| `--taskbar-entry-active-fg` | `var(--fg)` | base.css |
+| `--taskbar-entry-fg` | `var(--fg-secondary)` | base.css |
+| `--taskbar-entry-hidden-fg` | `var(--fg-disabled)` | base.css |
+| `--taskbar-entry-hover-bg` | `var(--hover-bg)` | base.css |
+| `--taskbar-entry-hover-fg` | `var(--fg)` | base.css |
 | `--tooltip-bg` | `#1E1E1EF0` | crystal-dark.css |
 | `--tooltip-border` | `#00000080` | crystal-dark.css |
 | `--tooltip-fg` | `var(--fg)` | base.css |
@@ -634,7 +642,6 @@ editor scheme's.
 | `--tree-twisty-fg` | `var(--fg-secondary)` | base.css |
 | `--warning` | `#CCA700` | crystal-dark.css |
 | `--warning-icon` | `#FFAF0F` | crystal-dark.css |
-| `--window-active-border` | `var(--accent)` | base.css |
 | `--window-bg` | `var(--surface-panel)` | base.css |
 | `--window-border` | `var(--border-strong)` | base.css |
 | `--window-close-hover-bg` | `var(--error)` | base.css |

@@ -20,6 +20,7 @@ import com.crystalgui.ui.elements.TextField;
 import com.crystalgui.ui.elements.Tooltip;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.elements.desktop.Desktop;
+import com.crystalgui.ui.elements.desktop.Taskbar;
 import com.crystalgui.ui.elements.desktop.WindowFrame;
 
 import javax.annotation.Nullable;
@@ -107,6 +108,7 @@ public final class ElementRegistry {
         // that ever changes, which is the same argument `tooltip` is registered under.
         register("desktop", Desktop.class, Desktop::new);
         register("window", WindowFrame.class, () -> new WindowFrame(""));
+        register("taskbar", Taskbar.class, Taskbar::new);
     }
 
     /**

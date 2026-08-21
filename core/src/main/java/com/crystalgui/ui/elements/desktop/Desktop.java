@@ -96,6 +96,12 @@ public class Desktop extends UIElement {
         // failing: no clamp, no cascade, windows written wherever they were asked to go.
         windows.addClass(WINDOW_LAYER_CLASS);
         addInternalChild(windows);
+        // AFTER the layer, so the strip is laid out below it. That order IS the work area: the taskbar is
+        // laid out rather than overlaid, so what is left for windows needs no bar-shaped subtraction
+        // anywhere -- maximise (W6) fills the layer, drags clamp at it, and W13's fullscreen hiding the
+        // bar simply re-flows the layer to full height.
+        taskbar = new Taskbar();
+        addInternalChild(taskbar);
         syncPresence();
 
         // A PRESS ON BARE DESKTOP DEACTIVATES. Target-only on both elements, so a press inside a window
@@ -147,6 +153,9 @@ public class Desktop extends UIElement {
 
     /** Every live window, visible or hidden. @see WindowRegistry */
     private final WindowRegistry registry = new WindowRegistry();
+
+    /** The strip along the bottom. @see Taskbar */
+    private final Taskbar taskbar;
 
     @Nullable
     private WindowFrame activeWindow;
@@ -216,12 +225,15 @@ public class Desktop extends UIElement {
         // the distinction the flag carries.
         if (frame.state() == WindowState.HIDDEN) frame.show(true);
         raise(frame);
-        registry.activated(frame);
         if (activeWindow != frame) {
             if (activeWindow != null) activeWindow.setActive(false);
             activeWindow = frame;
             frame.setActive(true);
         }
+        // AFTER the assignment above, not before it. This emits, and what listens re-renders the whole
+        // model -- so announcing while `activeWindow` still points at the previous window highlights the
+        // wrong entry until the next unrelated change happens to correct it.
+        registry.activated(frame);
         frame.restoreFocus(programmatic);
     }
 
@@ -317,6 +329,12 @@ public class Desktop extends UIElement {
     void reattach(WindowFrame frame) {
         if (frame.getParent() == null) windows.addChild(frame);
         raise(frame);
+        registry.changed();
+    }
+
+    /** The strip along the bottom — the registry, rendered. @see Taskbar */
+    public Taskbar taskbar() {
+        return taskbar;
     }
 
     /** The window layer — the work area's box, and the containing block every frame is placed in. */
@@ -442,6 +460,7 @@ public class Desktop extends UIElement {
                 // still claims to be visible.
                 WindowFrame frame = (WindowFrame) child;
                 frame.markHidden();
+                registry.changed();
                 // AND THE ACTIVE WINDOW CANNOT BE ONE THAT LEFT. Windows activates the next one down
                 // when you close the front one; leaving the field pointing at a detached frame would
                 // instead leave a desktop whose keyboard target is not in the tree.

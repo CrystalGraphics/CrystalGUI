@@ -48,6 +48,89 @@ desktop .__windows__ {
     overflow: clip;
 }
 
+/* ── The taskbar ────────────────────────────────────────────────────────────────────────────────
+ * BOTTOM, WITH THE ENTRIES CENTRED — the same place, and roughly the same shape, as Minecraft's
+ * hotbar. Deliberate: it is where a player's eye already lives, so the compositor's one permanent
+ * landmark costs no new habit.
+ *
+ * The band is full width for LAYOUT and paints nothing; only the island in the middle draws. Two
+ * things come out of that split. The work area stays trivial — the taskbar is laid out rather than
+ * overlaid, so what is left for windows is simply the window layer's box, with no bar-shaped
+ * subtraction for maximise, drag-clamping or fullscreen to remember. And the corners stay free for
+ * whatever a shell later puts in them.
+ *
+ * There is no conflict with the real hotbar: this strip exists only on the DESKTOP screen, where the
+ * game is paused and the cursor is free. In game there is no taskbar at all — the cursor is grabbed
+ * for look control, so nothing there could be clicked. What has to respect the hotbar is W14's
+ * pinned windows, which do paint over the running game. */
+taskbar {
+    width: 100%;
+    flex-shrink: 0;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    padding-top: 3px;
+    padding-bottom: 3px;
+}
+
+taskbar .__entries__ {
+    flex-direction: row;
+    align-items: center;
+    gap-all: 2px;
+    padding-all: 2px;
+    background: var(--taskbar-bg, #2B2D30);
+    outline: 1px var(--taskbar-border, #393B40);
+    border-radius: var(--radius-panel, 8px);
+}
+
+/* A GLYPH-AND-LABEL row rather than a button face — the same escape from the base `button` rule the
+ * window controls make, and for the same reasons: `min-height` is a different property from `height`
+ * (so the base rule's 14px floor wins whatever height is written here), and dropping the drawable
+ * takes `background: none` before `background-color` means anything. */
+taskbar .__entry__ {
+    height: 16px;
+    min-height: 0px;
+    padding-left: 6px;
+    padding-right: 6px;
+    padding-top: 0px;
+    padding-bottom: 0px;
+    gap-all: 4px;
+    flex-shrink: 1;
+    min-width: 0;
+    border-radius: 4px;
+    background: none;
+    background-color: transparent;
+    color: var(--taskbar-entry-fg, #9DA0A8);
+}
+
+taskbar .__entry__:hover {
+    color: var(--taskbar-entry-hover-fg, #DFE1E5);
+    background: none;
+    background-color: var(--taskbar-entry-hover-bg, #2E3033);
+}
+
+/* THE ACTIVE ENTRY, in the same accent as the active caption — one colour means one thing across the
+ * whole compositor, so the bar and the window agree about which is yours without anyone having to
+ * look twice. */
+taskbar .__entry__.__active__ {
+    color: var(--taskbar-entry-active-fg, #DFE1E5);
+    background: none;
+    background-color: var(--taskbar-entry-active-bg, #2E436E);
+}
+
+/* A minimised window's entry is DIMMED, not hidden — hiding it is the failure the strip exists to
+ * prevent. Dim rather than absent is also what both menu renderers already do with a disabled row:
+ * a list whose entries appear and vanish is a list whose entries are never in the same place twice. */
+taskbar .__entry__.__hidden__ {
+    color: var(--taskbar-entry-hidden-fg, #5A5D63);
+}
+
+taskbar .__entry__ .__icon__ {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+}
+
 /* ── A window ───────────────────────────────────────────────────────────────────────────────────
  * `resize: both` is what gives a frame its eight handles — UIResizer builds them from this property,
  * and the four LEADING ones only because a window is `position: absolute` (set at DEFAULT origin in
@@ -112,12 +195,11 @@ window.__active__ > .__title-bar__ {
     color: var(--window-title-active-fg, #DFE1E5);
 }
 
-/* The edge brightens too, which is what separates the front window from the one directly behind it
- * when the two overlap and both captions are off-screen above the work area. `outline-color` alone,
- * so the width stays whatever the base rule (or a theme) said. */
-window.__active__ {
-    outline-color: var(--window-active-border, #3574F0);
-}
+/* THE CAPTION SAYS IT, AND NOTHING ELSE DOES. An accent border on the active window shipped for
+ * exactly one round and read as a focus ring round the whole pane — which is the noise ua/core.css
+ * carves pane-sized widgets out of `:focus-visible` to avoid, arriving through a different property.
+ * The rule that the carve-out states is the rule here: the active window is marked where you are
+ * already looking, the way IntelliJ and VS Code mark the active editor through its tab. */
 
 /* An ellipsized title — the web's canonical truncation recipe, and every part of it is load-bearing.
  * `dialog .__title-bar__ .__label__` carries the full account of why each line is needed; the short
@@ -127,6 +209,15 @@ window.__active__ {
  *
  * Named `__title__` rather than `__label__` precisely so this rule cannot reach the close button's
  * own label — see WindowFrame.TITLE_CLASS. */
+/* The window's own icon, beside its title. Hidden until setIcon gives it something to draw — the
+ * title bar has no `gap-all`, so a hidden slot occupies nothing at all. */
+window > .__title-bar__ > .__icon__ {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    margin-right: 4px;
+}
+
 window > .__title-bar__ > .__title__ {
     flex-grow: 1;
     flex-basis: 0;

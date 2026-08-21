@@ -267,10 +267,10 @@ state. The declarative description layer it seeded now lives in `serialization/U
 
 ## `ElementRegistry`
 
-Bidirectional `tag ↔ class` map with a factory per tag; `bootstrapBuiltins()` registers twenty-two:
+Bidirectional `tag ↔ class` map with a factory per tag; `bootstrapBuiltins()` registers twenty-three:
 `element`, `button`, `checkbox`, `scroller`, `scrollerview`, `progressbar`, `slider`, `splitview`,
 `switch`, `tab`, `tabview`, `textfield`, `text`, `tooltip`, `dialog`, `popover`, `menu`, `menuitem`,
-`dropdown`, `colorselector`, `desktop`, `window`.
+`dropdown`, `colorselector`, `desktop`, `window`, `taskbar`.
 Unknown tags **throw** on decode — a typo must not silently become a
 styleless div.
 
@@ -875,6 +875,7 @@ int value types.
 | `Tab` | `tab` | `cgui-tabview` |
 | `Desktop` | `desktop` | `cgui-desktop` — **nobody constructs one**; `UIWindow.desktop()` owns it |
 | `WindowFrame` | `window` | `cgui-desktop` — opened with `UIWindow.openWindow(frame)` |
+| `Taskbar` | `taskbar` | `cgui-desktop` — the `WindowRegistry`, rendered; built by `Desktop` |
 
 ## Conventions — all enforced in code
 
@@ -895,7 +896,7 @@ int value types.
   __resizer__  __resizer-{top,bottom,left,right}__
   __resizer-{top,bottom}-{left,right}__  __thumb__   __title-bar__
   __top__     __track__   __v-scroller__  __vertical__
-  __controls__ __title__  __windows__
+  __controls__ __entries__ __entry__  __title__  __windows__
   ```
 - **No sizes, no timings, no colours in Java.** Widgets write structure and state; `default.css` gives
   functional geometry, `ore.css` gives appearance. `Switch`'s knob animation is a CSS `transition` on
@@ -1495,7 +1496,9 @@ com.crystalgui.ui              UIElement, UIWindow, Ui, UITransform, EventListen
                                WindowRegistry (every LIVE window, visible or hidden, in two orders: open
                                order for the taskbar, MRU for the switcher — and neither is derivable
                                from the other, since a hidden window has left the stacking order while
-                               keeping its place in the sequence), WindowState and WindowPolicy.
+                               keeping its place in the sequence), Taskbar (that registry RENDERED, never
+                               a second list — laid out along the bottom, entries centred, so the work
+                               area is simply what is left above it), WindowState and WindowPolicy.
                                HIDE IS DETACH, which is what makes the freeze real rather than promised:
                                a detached subtree matches no selector, lays out and paints nothing, and
                                has had every input reference dropped by onRemoved. Close is a REQUEST

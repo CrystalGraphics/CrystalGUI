@@ -1,5 +1,7 @@
 package com.crystalgui.ui.elements.desktop;
 
+import com.crystalgui.core.signal.Signal;
+
 import javax.annotation.Nullable;
 
 import java.util.ArrayList;
@@ -42,6 +44,15 @@ public final class WindowRegistry {
      * gets found by a player and not by a test.</p>
      */
     public static final int DEFAULT_HIDDEN_CAP = 8;
+
+    /**
+     * The set changed: a window opened, was destroyed, was activated, or was hidden or shown.
+     *
+     * <p>What the taskbar refreshes on. Deliberately one signal rather than four — every consumer of
+     * this model renders <em>all</em> of it, so a listener that had to reassemble which of four things
+     * happened would be doing the reconciliation twice.</p>
+     */
+    public final Signal.Action onDidChange = new Signal.Action();
 
     /** Open order — the taskbar's. */
     private final List<WindowFrame> live = new ArrayList<>();
@@ -107,17 +118,25 @@ public final class WindowRegistry {
         // offer, or the attention flash becomes a focus steal with one keystroke of delay. Activation is
         // what moves it, and opening a window by hand activates it a moment later anyway.
         if (!mru.contains(frame)) mru.add(frame);
+        changed();
     }
 
     void activated(WindowFrame frame) {
         if (!live.contains(frame)) return;
         mru.remove(frame);
         mru.add(0, frame);
+        changed();
     }
 
     void destroyed(WindowFrame frame) {
         live.remove(frame);
         mru.remove(frame);
+        changed();
+    }
+
+    /** Announces a change the registry did not make itself — a window hidden or shown. */
+    void changed() {
+        onDidChange.emit();
     }
 
     /**

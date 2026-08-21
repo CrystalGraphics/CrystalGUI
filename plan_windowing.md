@@ -570,6 +570,14 @@ exactly what every precedent ships. So:
 
 - **On the desktop: a persistent `Taskbar`**, docked bottom, part of `Desktop`'s chrome. Never a
   window itself — not in the registry, not minimisable, not modal-blockable.
+- **The entries are CENTRED, and the band paints nothing** — decided at W4, 2026-08-22. The strip
+  lands in the same place, and roughly the same shape, as Minecraft's hotbar: that is where a
+  player's eye already lives, so the compositor's one permanent landmark costs no new habit. The
+  band spans the full width for *layout* (which is what keeps the work area a plain flex box) while
+  only the island in the middle draws, leaving the corners free. There is no conflict with the real
+  hotbar, and the reason is structural rather than lucky: the taskbar exists **only on the desktop
+  screen**, where the game is paused and the cursor is free. What genuinely has to respect the
+  hotbar is W14's pinned windows, which paint over the running game.
 - **From the game: the keybind** summons the desktop screen (the existing `openEditor` binding's
   successor). There is no HUD strip, same reasoning as before.
 
@@ -791,7 +799,7 @@ snap; hover thumbnails stay deferred.
 | **W1** ✅ | `WindowFrame` + `Desktop`: chrome, `resize: both`, title-bar drag with clamping, tags + `ua/desktop.css`; harness scene `cgui-desktop` with two floating windows | everything visual | **Shipped 2026-08-22.** No lifecycle yet — geometry and chrome only. `Dialog` and `CanvasOverlayMove` are the quarries; the scene joins `SceneRegistry` **and** the AGENTS.md scene table in the same commit — those lists go stale silently |
 | **W2** ✅ | Stacking + activation: z-assignment raise, `__active__`, per-frame focus memory, empty-desktop blur | W3's "active frame" routing | **Shipped 2026-08-22.** The raise-is-not-a-reparent rule is load-bearing here. Two activation paths, both needed: a capture-phase press on the frame (a right-click moves no focus at all) and the focus owner moving into one (Tab, a command, W10's switcher) |
 | **W3** ✅ | Lifecycle + registry: states, hide-as-detach, `persisted` show, destroy → `Disposer`, eviction, the ticker/input-forget contracts | W4, W5 | **Shipped 2026-08-22.** The freeze tests land here. Two decisions made concrete: the default policy is `DESTROY_ON_CLOSE` (Swing's `HIDE_ON_CLOSE` default is a famous footgun, and until W4 a hidden window has no way back), and eviction **passes over** a window whose content refuses rather than stopping at it — the cap is a budget, and stopping lets retention grow by one window per unsaved document |
-| **W4** | `Taskbar` over the registry: entries, active highlight, activate/minimise clicks, context menu | W3 being safe to ship | **W3 and W4 ship together or not at all** — minimise with no way back is worse than destroy |
+| **W4** ✅ | `Taskbar` over the registry: entries, active highlight, activate/minimise clicks, context menu | W3 being safe to ship | **Shipped 2026-08-22**, minus the per-entry context menu — that needs the `window.*` commands, and `MenuBuilder` is the ONE place commands become rows, so it lands with W13's system menu where the same rows serve the title bar, the strip and `Alt+Space`. **W3 and W4 ship together or not at all** — minimise with no way back is worse than destroy |
 | **W5** | Window-scoped modality: per-scope stacks, the frame overlay slot, `overlayHost`/`Dialog.showModal` retargeting, Escape per-frame | server windows, editor dialogs behaving | The four-points warning applies; one test per point |
 | **W6** | Maximise/restore: restore rect, double-click, restore-drag, `__maximized__` | W7's editor-maximised default | Unblocked by W1, no longer deferred |
 | **W7** | The loader seam: engine-owned desktop, `CgUiScreen` as viewport, the editor as a maximised `HIDE_ON_CLOSE` frame, Escape end-to-end | the actual product | The no-visible-change migration; in-game verification here |
@@ -840,7 +848,7 @@ artifact:
 | W1 ✅ | two floating windows: title-bar drag, eight-handle resize, clamping — plus a live geometry readout (the only way to watch the clamp arithmetic *while* dragging) and **F2** to open a cascaded window |
 | W2 ✅ | overlap + click-to-raise (with the click still landing), `__active__` chrome, focus memory across activation — two buttons per window, because with one the focus delegate *is* the remembered control and the test passes by coincidence |
 | W3 ✅ | minimise/close via the chrome against the real lifecycle — including an on-screen ticker counter that provably **stops** while its window is hidden and **resumes from where it stopped** on restore, which is the difference between retention and a rebuilt window. F3 restores the most recently used hidden window: scaffolding, because minimise with no way back is worse than no minimise, and W4's taskbar is what retires it |
-| W4 | the taskbar: entries, active highlight, restore/minimise clicks, the context menu |
+| W4 ✅ | the taskbar: entries, active highlight, restore/minimise clicks — and it retires W3's F3 scaffolding, which is the point of the pairing |
 | W5 | a modal in window A with window B and the taskbar still live; the backdrop dimming exactly one frame |
 | W6 | maximise/restore, double-click, restore-drag |
 | W8–W9 | a window hosting a small dock: stripe float-out, Dock/Hide, tab tear-out into a new frame (`cgui-dock` keeps owning dock-*internal* behaviour) |
