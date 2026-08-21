@@ -534,6 +534,42 @@ viewcontainer:focus-within .__problem-tab__.__selected__ {
     border-color: var(--tab-focused-border, #4A88C7);
 }
 
+/* ── A BORROWED FILE'S TAB ────────────────────────────────────────────────────────
+ *
+ * A library class opened read-only. IntelliJ tints the tab BODY rather than its label, and the
+ * instrument is the right one: a fill reads as a property of the container, and what is being said is
+ * about the whole pane -- this is not yours, and nothing you type here is kept.
+ *
+ * HERE RATHER THAN IN decorations.css, where this started. That sheet is a theme fragment nothing
+ * installs -- not UiThemeManager, not the workbench, not a harness scene -- so the rule resolved
+ * nowhere and the tab stayed grey while every part of the Java side was working. `filetypes.css` is in
+ * the same position. Both are worth wiring up; a feature that needs one of them to be loaded is not the
+ * place to find out that neither is.
+ *
+ * SPECIFICITY IS THE WHOLE DESIGN OF THIS BLOCK. `tab` is 1, `tab:checked` and `tab:hover` are 11, and
+ * `dockgroup:focus-within tab:checked` is 22 -- so a single class at 10 loses to every state a tab can
+ * be in, and the tint would appear only on an idle unselected tab. Each rule below therefore carries
+ * the state it must outrank.
+ *
+ * AND EACH SETS THE BACKGROUND ALONE. Selection and focus are still said by `border-color` and `color`
+ * from the rules above, which keep applying because nothing here overrides them -- so a borrowed tab
+ * that is selected in the focused group still reads as selected, in brown. That is IntelliJ's own
+ * arrangement: the provenance survives the selection rather than being replaced by it. */
+tab.decoration-library {
+    background: none;
+    background-color: var(--tab-library-bg, #281F1C);
+}
+tab.decoration-library:hover,
+tab.decoration-library:checked {
+    background: none;
+    background-color: var(--tab-library-active-bg, #3B2E28);
+}
+dockgroup:focus-within tab.decoration-library:checked,
+viewcontainer:focus-within tab.decoration-library:checked {
+    background: none;
+    background-color: var(--tab-library-active-bg, #3B2E28);
+}
+
 tab:disabled {
     background: var(--tab-disabled-bg, #4A4A4A);
     color: var(--tab-disabled-fg, #6E6E6E);
