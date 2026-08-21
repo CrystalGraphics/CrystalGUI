@@ -471,10 +471,49 @@ back into a test of how fast the wire happens to be.
 
 #### Still open
 
-**A real socket, on two machines.** Everything above is a simulated link in one JVM: the delay is exact,
-there is no jitter, no MTU, no Nagle, and no competing traffic from the game itself — which on a busy
-server is the thing most likely to matter. And `DEFAULT_WINDOW_BYTES` still wants measuring under real
-load; it is now a knob that would actually move something, which it was not before.
+~~**A real socket, on two machines.**~~ **The socket half ran, 2026-08-21.** `CgUiWireProbe`, over
+`runServer` + `runClient -PcgJoin=localhost:25565 -PcgWireProbe`: two processes, Forge's own channel,
+real ticks on both ends. It moves 4 MB each way and measures.
+
+| | rate |
+|---|---|
+| upload 4 MB, streamed | **1.40 MB/s** |
+| download 900 KB, inline (one message) | **1.42 MB/s** |
+| download 4 MB, chunked (16 pulls) | **0.64 MB/s** |
+
+#### The result contradicts the obvious explanation, which is why the control mattered
+
+The frame ceilings are **32,766 up and 2,097,050 down** — a factor of 64 in the download's favour — and
+the download is **2.2× slower**. The first version of this probe reported exactly that and attributed it
+to the ceilings, which is wrong. Adding a **sub-inline download as a control** settled it in one run: at
+900 KB the download runs at 1.42 MB/s, the same rate as the upload. **Only the chunked path is slow, and
+the ceiling has nothing to do with it.**
+
+A read above `WorkspaceRpc.INLINE_MAX_BYTES` (1 MB) becomes a **pull**: the client asks for each
+`CHUNK_BYTES` (256 KB) piece and waits a full round trip, so 4 MB is 16 serial round trips — measured at
+7.9 ticks each, which is throughput of *one window per round trip* and matches 640 KB/s exactly. A write
+of any size is **one streamed message**. So the asymmetry is not up-versus-down at all; it is
+**pull-versus-push**, and the 2 MB server→client ceiling sits **12.5% used** because a chunk is 256 KB.
+
+#### Open: the chunked read is serial · **new, and not a constant to tweak**
+
+`CHUNK_BYTES` is 256 KB because it matches `DEFAULT_WINDOW_BYTES` — *"a chunk is in flight as a single
+burst rather than stalling halfway for a `WINDOW_UPDATE`"*, which is sound and still is. Raising it alone
+would trade one stall for another. **The fix is to pipeline the pull** — request chunk N+1 before N
+arrives — which is a real change to `WorkspaceClient`'s read loop with ordering and reassembly to get
+right, not an end-of-session constant edit.
+
+Worth knowing what it costs today: a 4 MB file opens in 6.5 s where the transport could do it in 3.
+
+#### Still open
+
+**Two machines.** Localhost has no jitter, no MTU worth the name and a round trip dominated by the tick
+loop rather than the network. What it *did* prove is everything the in-JVM model could not: the real
+channel, the real asymmetric ceilings, the real tick timing, and Minecraft's own traffic beside ours.
+
+**`DEFAULT_WINDOW_BYTES` under real load.** Now a knob that would move something, which it was not before
+— and the measurement above says where it would show up first: the chunked pull, whose rate *is* one
+window per round trip.
 
 ~~**A `CodecException` from `accept` aborts the whole pump.**~~ **Fixed.** It did, skipping `replenish`
 and `flush` for that tick while `handleData`'s comment claimed the opposite (*"refuse the stream rather
