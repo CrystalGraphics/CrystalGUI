@@ -133,6 +133,16 @@ public final class JavaLanguage {
         // on the engine having opened: source attachment is the editor's, not the compiler's.
         JdkSourceCommands.register(CommandRegistry.global());
 
+        // AND WHAT SERVES A `library://` RESOURCE, so go-to-declaration into a classpath type has
+        // somewhere to land. Registered here rather than by the workbench for the reason every other
+        // contribution is: the shell must not name a language, and `ResourceRegistry` is the seam that
+        // lets it open a scheme without knowing what fills it.
+        //
+        // NOT conditional on the engine having opened, like the command above and for the same reason:
+        // the archives are the editor's, not the compiler's. An engineless host produces no declaration
+        // sites to follow, so the provider simply goes unasked.
+        LibrarySources.register();
+
         // AND WARM THE ENGINE, off this thread. @see #warm
         warm(classpath);
 
