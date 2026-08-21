@@ -48,6 +48,64 @@ public class SymbolIcon extends UIElement {
     /** The box itself. Sized and given its picture by the cascade. */
     public static final String ICON_CLASS = "__completion-icon__";
 
+    /**
+     * The same answer in words — "Final class", "Interface", "Abstract class".
+     *
+     * <p>Beside the glyph on purpose. A tooltip over an icon says what the icon means, so the picture and
+     * the wording are one answer given twice, and the ordinary failure is that they drift: the glyph
+     * gains a kind the sentence has never heard of and reads as "Unknown" over a perfectly good picture.
+     * Both are switched off {@link SymbolKind} here, in one file.</p>
+     *
+     * <p><b>{@code abstract} and {@code final} lead; {@code static} does not.</b> The first two qualify
+     * the noun — an abstract class is a kind of class — while a static <em>type</em> is a nested type,
+     * which is a statement about where it is declared rather than what it is, and IntelliJ does not say
+     * it either. The mark is still drawn; it is just not read out.</p>
+     *
+     * <p>Null for a kind with nothing worth saying, so a caller can leave the tooltip off entirely rather
+     * than showing the word "Unknown" — which is worse than silence, because it looks like an answer.</p>
+     */
+    @Nullable
+    public static String describe(@Nullable SymbolKind kind, @Nullable Set<SymbolModifier> modifiers) {
+        String noun = nounFor(kind);
+        if (noun == null) return null;
+        Set<SymbolModifier> marks = modifiers == null ? Collections.emptySet() : modifiers;
+        // ABSTRACT before FINAL, and never both: the two are mutually exclusive on a type in every
+        // language this draws, so the order only decides which wins if a broken engine reports both.
+        if (marks.contains(SymbolModifier.ABSTRACT)) return "Abstract " + noun.toLowerCase(Locale.ROOT);
+        if (marks.contains(SymbolModifier.FINAL)) return "Final " + noun.toLowerCase(Locale.ROOT);
+        return noun;
+    }
+
+    /** The bare noun for a kind, capitalised, or null where there is nothing useful to say. */
+    @Nullable
+    private static String nounFor(@Nullable SymbolKind kind) {
+        if (kind == null) return null;
+        switch (kind) {
+            case CLASS:          return "Class";
+            case INTERFACE:      return "Interface";
+            case ENUM:           return "Enum";
+            case RECORD:         return "Record";
+            case EXCEPTION:      return "Exception";
+            case ANNOTATION:     return "Annotation";
+            case TYPE_PARAMETER: return "Type parameter";
+            case METHOD:         return "Method";
+            case CONSTRUCTOR:    return "Constructor";
+            case FUNCTION:       return "Function";
+            case FIELD:          return "Field";
+            case ENUM_MEMBER:    return "Enum constant";
+            case CONSTANT:       return "Constant";
+            case PARAMETER:      return "Parameter";
+            case LOCAL_VARIABLE: return "Local variable";
+            case PROPERTY:       return "Property";
+            case PACKAGE:        return "Package";
+            case MODULE:         return "Module";
+            // KEYWORD, LABEL and UNKNOWN deliberately fall through. A keyword has no declaration to
+            // describe, and "Unknown" is a worse answer than none -- it reads as a fact rather than as
+            // the absence of one.
+            default:             return null;
+        }
+    }
+
     public static final String STATIC_MARK_CLASS = "__completion-mark-static__";
     public static final String FINAL_MARK_CLASS = "__completion-mark-final__";
 
