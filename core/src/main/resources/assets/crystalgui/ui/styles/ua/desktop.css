@@ -73,11 +73,25 @@ taskbar {
     padding-bottom: 3px;
 }
 
+/* THE ISLAND IS BOUNDED BY THE DESKTOP, and both lines are load-bearing rather than tidiness. The
+ * band centres its island, so an unbounded row of entries grows off BOTH ends — twenty windows made
+ * a 1232px island on a 400px desktop, putting the entries at each end past the screen edge. That is
+ * the worst failure a taskbar has available: an entry is the only way back to a minimised window, so
+ * an entry that is off-screen is a window that cannot be recovered at all.
+ *
+ * `max-width` bounds the box and `overflow` bounds what paints, which are two different questions —
+ * children of a max-width box still spill out of it visibly. Entries compress first (they shrink and
+ * their labels ellipsize), so clipping only begins once compression has run out, which on a 400px
+ * desktop is around thirty windows. THAT is where the deferred overflow affordance — a chevron, or
+ * grouping — genuinely starts to be needed, and it is now a documented threshold rather than
+ * something that happened from the eighth window onwards. */
 taskbar .__entries__ {
     flex-direction: row;
     align-items: center;
     gap-all: 2px;
     padding-all: 2px;
+    max-width: 100%;
+    overflow: hidden;
     background: var(--taskbar-bg, #2B2D30);
     outline: 1px var(--taskbar-border, #393B40);
     border-radius: var(--radius-panel, 8px);

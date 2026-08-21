@@ -238,6 +238,28 @@ public class DesktopTaskbarTest extends UiTestBase {
         assertFalse(second.isActive());
     }
 
+    /**
+     * <b>The strip never spills off the desktop.</b> Entries accumulate — the plan's own harness key
+     * opens one per press — and a row that simply grows would push its ends off both sides, since the
+     * band centres its island. Off-screen is the worst failure available to a taskbar: the entry is the
+     * only way back to a minimised window, so a window whose entry has left the screen is a window that
+     * cannot be recovered at all.
+     */
+    @Test
+    public void theStripStaysOnTheDesktopHoweverManyWindowsThereAre() {
+        build();
+        for (int i = 0; i < 20; i++) open("Window " + i);
+        settle();
+
+        float deskWidth = desktop.getRuntimeCache().getWidth();
+        float islandWidth = taskbar.entries().getRuntimeCache().getWidth();
+        assertTrue("twenty entries must not overflow a " + deskWidth + "px desktop: island is "
+                + islandWidth, islandWidth <= deskWidth + 0.51f);
+
+        float left = taskbar.entries().getRuntimeCache().getX() - desktop.getRuntimeCache().getX();
+        assertTrue("...and must not hang off the left either: " + left, left >= -0.51f);
+    }
+
     /** The strip is laid out, never overlaid — so the work area is simply what is left above it, and
      * every geometry rule that reads it needs no bar-shaped special case. */
     @Test
