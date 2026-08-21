@@ -38,7 +38,12 @@ public final class StyleSheetRegistry {
             "crystalgui:ua/inspector",
             "crystalgui:ua/workbench",
             "crystalgui:ua/panels",
-            "crystalgui:ua/search"
+            "crystalgui:ua/search",
+            // LAST, and deliberately: CrystalOS's window chrome contains widgets from every part above
+            // it, so an equal-specificity tie between a frame's own rule and something inside the frame
+            // resolves in favour of the frame. Nothing depends on that today -- every rule in the part is
+            // tag- or child-scoped -- but `dialog .__close__` records what an accidental tie costs.
+            "crystalgui:ua/desktop"
     );
     
     private static final ConcurrentHashMap<String, StyleSheet> CACHE = new ConcurrentHashMap<>();
@@ -113,10 +118,11 @@ public final class StyleSheetRegistry {
      * The source text behind a registry key — one file for everything except {@link #DEFAULT_SHEET},
      * which is the concatenation of {@link #DEFAULT_SHEET_PARTS} in manifest order.
      *
-     * <p>A missing <em>part</em> warns and is skipped rather than blanking the whole sheet: nine
-     * files are nine chances for a packaging slip, and eight ninths of a user-agent sheet keeps most
-     * of the UI functional while the log names what is gone — where an empty sheet lays every widget
-     * out at 0x0 and points at nothing.</p>
+     * <p>A missing <em>part</em> warns and is skipped rather than blanking the whole sheet: every file
+     * in the manifest is another chance for a packaging slip, and all-but-one of a user-agent sheet
+     * keeps most of the UI functional while the log names what is gone — where an empty sheet lays
+     * every widget out at 0x0 and points at nothing. (Counted "nine" until CrystalOS added a tenth,
+     * which is the kind of number not worth restating in prose.)</p>
      */
     private static String fetchSource(String namespacedPath) {
         if (!DEFAULT_SHEET.equals(namespacedPath)) {

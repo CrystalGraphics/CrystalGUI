@@ -150,11 +150,33 @@ appended to `DEFAULT_SHEET_PARTS`); colours as `var(--token, #fallback)` like ev
 | Piece | Kind | Responsibility |
 |---|---|---|
 | `WindowFrame` (tag `window`) | widget, `acceptsPublicChildren() == false` | chrome (`__title-bar__`, `__title__`, `__icon__`, `__controls__` with `__minimize__`/`__maximize__`/`__close__`, `__content__` slot — **never targeted by a descendant selector**, per the thrice-paid rule), the state machine, `WindowPolicy`, per-frame focus memory, its own overlay slot (see Modality), and a **role** — top-level or owned — deciding its control set: minimise/maximise/close for a top-level frame, Dock/Hide for a floating tool window (see Views) |
-| `Desktop` (tag `desktop`) | element, the compositor host | owns the **window layer** (an internal child; frames are *public* children of it, exactly the `windowOverlayLayer` pattern — the layer internal, its occupants public, so frames can still remove themselves), the `Taskbar`, placement (cascade), clamp-on-resize, click-on-empty-desktop = blur |
+| `Desktop` (tag `desktop`) | element, the compositor host — **owned by `UIWindow`, never built by an application** | owns the **window layer** (an internal child; frames are *public* children of it, exactly the `windowOverlayLayer` pattern — the layer internal, its occupants public, so frames can still remove themselves), the `Taskbar`, placement (cascade), clamp-on-resize, click-on-empty-desktop = blur |
 | `WindowRegistry` | model, no GL | the retained set (`open` → joins, `destroy` → leaves), MRU order, eviction policy, lookup by key |
 | `Taskbar` (tag `taskbar`) | widget inside `Desktop` | the registry, rendered — one entry per live window |
 | `WindowSwitcher` | overlay | MRU-ordered cycling on a keybind |
 | `WindowPolicy` | enum on the frame | `HIDE_ON_CLOSE` (application windows) / `DESTROY_ON_CLOSE` (transients) — Swing's `setDefaultCloseOperation`, minus `DO_NOTHING` until someone needs it |
+
+### Who owns the desktop — decided at W1, 2026-08-22
+
+**`UIWindow` owns it, and nothing else may build one.** The first draft of this plan left the desktop
+as an element a host constructs and hands to `Ui.of(...)`, which is a compositor every application
+would assemble slightly differently. It is engine infrastructure, so it is owned exactly like the
+window's other engine-owned layer: `UIWindow.desktop()` builds it on first use and hands out the same
+one forever, `UIWindow.openWindow(frame)` is the whole of the API, and a host provides nothing but a
+root with a size.
+
+Two consequences that are not obvious and are both load-bearing:
+
+- **It sits *over* the root rather than being it.** That is the band model spelled structurally — the
+  root's own children are the *desktop content* band, the desktop is the *windows* band above them,
+  and the top layer is above both by construction. It also means no existing UI changes shape: the
+  desktop is an internal child, so `ui.rootElement` still means what it always did, and the 220-odd
+  windows in the test suite are untouched.
+- **It is zero-sized until a window is open.** An overlay hit-tests, so a full-size empty desktop
+  would swallow every click that landed on background — an application that never opened a window
+  would go dead with nothing pointing at a compositor. It claims the surface when the first window
+  opens and gives it back when the last one closes. W7's migration removes the transitional question
+  entirely by making the editor itself a frame.
 
 A `WindowFrame` declares a **title**, an **icon**, and a **policy**; content goes in via `content()`.
 It is **client chrome**: the server ships a window's *content* tree (`UIDescriptionCodec` never needs
@@ -766,7 +788,7 @@ snap; hover thumbnails stay deferred.
 
 | # | Step | Unblocks | Notes |
 |---|---|---|---|
-| **W1** | `WindowFrame` + `Desktop`: chrome, `resize: both`, title-bar drag with clamping, tags + `ua/desktop.css`; harness scene `cgui-desktop` with two floating windows | everything visual | No lifecycle yet — geometry and chrome only. `Dialog` and `CanvasOverlayMove` are the quarries; the scene joins `SceneRegistry` **and** the AGENTS.md scene table in the same commit — those lists go stale silently |
+| **W1** ✅ | `WindowFrame` + `Desktop`: chrome, `resize: both`, title-bar drag with clamping, tags + `ua/desktop.css`; harness scene `cgui-desktop` with two floating windows | everything visual | **Shipped 2026-08-22.** No lifecycle yet — geometry and chrome only. `Dialog` and `CanvasOverlayMove` are the quarries; the scene joins `SceneRegistry` **and** the AGENTS.md scene table in the same commit — those lists go stale silently |
 | **W2** | Stacking + activation: z-assignment raise, `__active__`, per-frame focus memory, empty-desktop blur | W3's "active frame" routing | The raise-is-not-a-reparent rule is load-bearing here |
 | **W3** | Lifecycle + registry: states, hide-as-detach, `persisted` show, destroy → `Disposer`, eviction, the ticker/input-forget contracts | W4, W5 | The freeze tests land here |
 | **W4** | `Taskbar` over the registry: entries, active highlight, activate/minimise clicks, context menu | W3 being safe to ship | **W3 and W4 ship together or not at all** — minimise with no way back is worse than destroy |
@@ -815,7 +837,7 @@ artifact:
 
 | After | The scene demonstrates |
 |---|---|
-| W1 | two floating windows: title-bar drag, eight-handle resize, clamping |
+| W1 ✅ | two floating windows: title-bar drag, eight-handle resize, clamping — plus a live geometry readout (the only way to watch the clamp arithmetic *while* dragging) and **F2** to open a cascaded window |
 | W2 | overlap + click-to-raise, `__active__` chrome, focus memory across activation |
 | W3 | minimise/close via the chrome against the real lifecycle — including an on-screen ticker counter that provably **stops** while its window is hidden |
 | W4 | the taskbar: entries, active highlight, restore/minimise clicks, the context menu |

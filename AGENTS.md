@@ -92,6 +92,7 @@ seconds, needs no Minecraft context, and gives you a real GL surface.
 | `cgui-nineslice` | `CgUiNineSliceScene` | `CgUiSprite` 9-slice |
 | `cgui-ore-theme` | `CgUiOreThemeScene` | `ore.css` + sprite registry end-to-end |
 | `cgui-visual-layers` | `CgUiVisualLayersScene` | FBO layer opacity + masking |
+| `cgui-desktop` | `CgUiDesktopScene` | **CrystalOS** — stacking windows, drag, resize, clamp, cascade. *Grows with `plan_windowing.md`: every W with something visible adds its demonstration here in the same commit* |
 
 Harness scenes live in `gl-debug-harness/src/main/java/.../harness/scene/ui/`; register new ones in
 `SceneRegistry`. Harness authoring rules are in `gl-debug-harness/AGENTS.md` — never call raw GL.
@@ -266,11 +267,17 @@ state. The declarative description layer it seeded now lives in `serialization/U
 
 ## `ElementRegistry`
 
-Bidirectional `tag ↔ class` map with a factory per tag; `bootstrapBuiltins()` registers eighteen:
-`element`, `button`, `checkbox`, `scroller`, `scrollerview`, `slider`, `splitview`, `switch`, `tab`,
-`tabview`, `textfield`, `text`, `tooltip`, `dialog`, `popover`, `menu`, `menuitem`, `dropdown`.
+Bidirectional `tag ↔ class` map with a factory per tag; `bootstrapBuiltins()` registers twenty-two:
+`element`, `button`, `checkbox`, `scroller`, `scrollerview`, `progressbar`, `slider`, `splitview`,
+`switch`, `tab`, `tabview`, `textfield`, `text`, `tooltip`, `dialog`, `popover`, `menu`, `menuitem`,
+`dropdown`, `colorselector`, `desktop`, `window`.
 Unknown tags **throw** on decode — a typo must not silently become a
 styleless div.
+
+> This list goes stale the same way `StylePropertyRegistry`'s does, and had already: `progressbar`
+> and `colorselector` shipped while it still said eighteen. `ElementStateCoverageTest` is the guard
+> that actually holds — it fails on any registered tag nobody has classified as carrying state or not,
+> which is what caught `desktop`/`window` on the day they were added.
 
 ## `UITreeObserver`
 
@@ -866,6 +873,8 @@ int value types.
 | `SplitView` | `splitview` | `cgui-splitview` |
 | `TabView` | `tabview` | `cgui-tabview` |
 | `Tab` | `tab` | `cgui-tabview` |
+| `Desktop` | `desktop` | `cgui-desktop` — **nobody constructs one**; `UIWindow.desktop()` owns it |
+| `WindowFrame` | `window` | `cgui-desktop` — opened with `UIWindow.openWindow(frame)` |
 
 ## Conventions — all enforced in code
 
@@ -886,6 +895,7 @@ int value types.
   __resizer__  __resizer-{top,bottom,left,right}__
   __resizer-{top,bottom}-{left,right}__  __thumb__   __title-bar__
   __top__     __track__   __v-scroller__  __vertical__
+  __controls__ __title__  __windows__
   ```
 - **No sizes, no timings, no colours in Java.** Widgets write structure and state; `default.css` gives
   functional geometry, `ore.css` gives appearance. `Switch`'s knob animation is a CSS `transition` on
@@ -972,6 +982,8 @@ The things that are invisible from any single class and expensive to rediscover.
 | A promoted element's **containing block is the root** — so anything resolving `%`, `left`/`top`, or a clamp against "the parent" must ask the root, not `getParent()` | Percentages size against the wrong box, and a clamp stops a drag dead at the DOM parent's edge with the window still free |
 | `UIWindow.getRootNodeId()` is **derived** from the root element, never stored | It was a field nothing assigned, so it was permanently null — and both reparenting methods bail out silently on null, which made top-layer promotion never move a Taffy node at all |
 | Top-layer stacking is insertion order; `z-index` is irrelevant there (per spec) | Promoted elements stack unpredictably against each other |
+| **The desktop is engine-owned and must take up NO SPACE until a window is open** — `UIWindow.desktop()` builds it, nothing else may, and `Desktop` sizes itself from whether it holds a frame | It is an overlay over the application's own root, so a full-size empty one hit-tests across the whole window and eats every click that lands on background: a UI that never opened a window simply stops responding, and nothing about that symptom points at a compositor. The mirror case is the one that bites later — the LAST window closing has to give the surface back, or a desktop that was used once keeps the application dead |
+| **The desktop's window layer is the WORK AREA, and it only means anything once it is `.__windows__`** | Its whole geometry is one CSS rule; without the class the layer sizes to content, its children are all absolutely positioned, and it measures 0x0. Nothing then fails — every rule that reads the work area is guarded against a zero box on purpose, so the clamp and the cascade both quietly stand down and windows land wherever they were asked to go. Cost a full test run to see, and the fix was one `addClass` |
 | `Enter`/`Leave` dispatch to every element in the entered/left chain | A container with children never receives hover events at all |
 | `setHitTest(false)` applies to the whole **subtree**, like CSS `pointer-events: none` | A transparent container is transparent everywhere except where its content is — hit testing looks random |
 | While a pointer is captured, no boundary events reach anything else | `:hover` flickers across every element a drag crosses |
@@ -1476,6 +1488,14 @@ com.crystalgui.ui              UIElement, UIWindow, Ui, UITransform, EventListen
                                WorkspaceTreeSource is the MODEL (explorerModel.ts) — listings, sorting,
                                compact folders, what matches. The parts sit BESIDE the view and reach it
                                through package-private accessors, as TextEditor's ten view parts do
+    .desktop                   CrystalOS — Desktop (the compositor host) and WindowFrame (one window).
+                               NOBODY CONSTRUCTS EITHER: every UIWindow owns a desktop and hands it out
+                               through desktop(), the way it already owns its overlay layer, and a UI
+                               opens a window with UIWindow.openWindow(frame). The desktop is an
+                               internal child of the root, above the root's own content (the band model:
+                               desktop content < windows < pinned < top layer) and ZERO-SIZED until a
+                               window is open, so an unused compositor cannot swallow clicks meant for
+                               the application under it. plan_windowing.md
     .workbench.decoration      FileDecoration, FileDecorationProvider, FileDecorations — VS Code's
                                IDecorationsProvider. Independent contributors (dirty, read-only, errors,
                                VCS) merged per field, with bubbling up to ancestor folders
@@ -1539,7 +1559,7 @@ three-phase event types are in `ui/event/` — there is no `core/event/` package
 
 | Path | Notes |
 |---|---|
-| `ui/styles/ua/*.css` | **User-agent sheet, in nine domain parts** (core, widgets, editor, overlays, config-kit, inspector, workbench, panels, search) concatenated in `StyleSheetRegistry.DEFAULT_SHEET_PARTS` order into `StyleSheet.DEFAULT` — one sheet, one parse, one variable scope, and cross-part order is as load-bearing as order within a file. Functional geometry for every widget with no theme loaded; every colour is `var(--token, #fallback)`. Was a single 6,200-line `default.css` until plan_styling.md step 8. |
+| `ui/styles/ua/*.css` | **User-agent sheet, in ten domain parts** (core, widgets, editor, overlays, config-kit, inspector, workbench, panels, search, desktop) concatenated in `StyleSheetRegistry.DEFAULT_SHEET_PARTS` order into `StyleSheet.DEFAULT` — one sheet, one parse, one variable scope, and cross-part order is as load-bearing as order within a file. Functional geometry for every widget with no theme loaded; every colour is `var(--token, #fallback)`. Was a single 6,200-line `default.css` until plan_styling.md step 8. |
 | `ui/themes/base.css`, `ui/themes/crystal-dark.css` | The token tables: component→system derivations, and the default theme (pins today's look exactly). See `docs/CGUI_THEMING.md`. |
 | `ui/schemes/dark-plus.css` | The default editor colour scheme — the second, independently-selectable axis. |
 | `ui/styles/ore.css` | Minecraft Ore UI theme, ported from LDLib2's `ore.lss`. |

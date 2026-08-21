@@ -1,0 +1,175 @@
+/* ua/desktop.css — one part of StyleSheet.DEFAULT, the user-agent sheet.
+ *
+ * CrystalOS: the desktop, its work area, and one window frame's chrome (plan_windowing.md, W1).
+ *
+ * The parts concatenate IN MANIFEST ORDER (StyleSheetRegistry.DEFAULT_SHEET_PARTS) into the one
+ * sheet the engine loads, and equal-specificity ties fall to source order. This part is LAST in
+ * that manifest, which is the safe end for a shell: a window contains widgets from every other
+ * part, so a tie between "this window's chrome" and "some widget inside it" should resolve in
+ * favour of the chrome. Nothing relies on that today — every rule below is scoped through the
+ * `window`/`desktop` tag or a child combinator — but the ordering costs nothing to get right and
+ * `dialog .__close__` records what an accidental tie looks like from the losing side.
+ *
+ * The sheet-wide contract (no !important, no asset(), colours only as var() fallbacks) lives at
+ * the top of ua/core.css and is enforced by StyleGovernanceTest. */
+
+/* ── The desktop ────────────────────────────────────────────────────────────────────────────────
+ * NO RULE, and there is nothing missing.
+ *
+ * The desktop's own geometry — absolute, pinned to its root's corner, filling it while a window is
+ * open and zero-sized while none is — is written by UIWindow at IMPORTANT origin, exactly as the
+ * window's overlay layer's is, because the surface the compositor draws on must not be movable by a
+ * stylesheet. Every window's position is clamped against that box, so a sheet that could resize it
+ * could put a window somewhere the clamp does not agree with.
+ *
+ * And it PAINTS NOTHING, which is a decision rather than an omission: in game the paused world
+ * behind it IS the wallpaper (doesGuiPauseGame stays true), so an opaque ground here would throw
+ * away the one piece of art the compositor gets for free. In the harness the clear colour shows
+ * through instead. A theme that wants a wallpaper writes `desktop { background: ... }` itself,
+ * which is exactly the layer that should own that choice. */
+
+/* ── The work area ──────────────────────────────────────────────────────────────────────────────
+ * The window layer's box IS the work area: the taskbar (W4) is LAID OUT as a bottom bar rather than
+ * overlaid, so maximise, drag-clamping and fullscreen all need no bar-shaped special case anywhere
+ * — they read this box and it is already correct. Windows' own model, for free.
+ *
+ * `width: 100%; height: 0; flex-grow: 1` is the recorded fill idiom, and all three parts of it are
+ * load-bearing: this engine's flex-shrink defaults to 0, so a grow-only child keeps its content size
+ * and overhangs its parent. It has cost a session on the dock, a RegionHost and a ViewContainer.
+ *
+ * `clip`, NOT `hidden`: both clip, and only `hidden` also makes this a scroll container. A desktop
+ * with a scrollTop is a desktop something can silently scroll — and a window dragged half off the
+ * right edge (which the clamp deliberately allows) is exactly the content that would make it
+ * scrollable. `clip` is CSS's value for "clipped and genuinely not scrollable". */
+desktop .__windows__ {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+    overflow: clip;
+}
+
+/* ── A window ───────────────────────────────────────────────────────────────────────────────────
+ * `resize: both` is what gives a frame its eight handles — UIResizer builds them from this property,
+ * and the four LEADING ones only because a window is `position: absolute` (set at DEFAULT origin in
+ * WindowFrame's constructor, so any rule here still outranks it). The handles' own geometry is in
+ * ua/overlays.css with every other resizable element's.
+ *
+ * The minimums are here rather than in Java, per the no-pixels-in-widgets rule, and they are read by
+ * more than layout: UIResizer.clampToStyleRange reads min-width/min-height off the live Taffy style
+ * to predict the size a drag will settle at. A window with no minimum can be resized to nothing and
+ * then never grabbed again.
+ *
+ * OVERFLOW STAYS VISIBLE. Only `> .__content__` clips (below). W5 puts an owned-window slot on the
+ * frame — a modal dialog, a floating tool window — which is allowed to overhang its owner's edge,
+ * and a clip here would cut it off.
+ *
+ * SQUARE, deliberately: a `border-radius` on the frame alone leaves the title bar's own square top
+ * corners poking out of the rounded body, because the bar paints its own rect on top. Rounding a
+ * window means rounding the bar's top two corners to match, which is a theme's job and needs the
+ * per-corner properties. */
+window {
+    min-width: 120px;
+    min-height: 48px;
+    resize: both;
+    background: var(--window-bg, #191A1C);
+    outline: 1px var(--window-border, #5A5D63);
+    color: var(--window-fg, #DFE1E5);
+}
+
+/* The caption. 18px against 10px text — two more than `dialog`'s bar, because a window's is a
+ * furniture strip you grab rather than a header you read, and 16 left the close glyph touching both
+ * edges of it.
+ *
+ * Explicit `row`: this engine's Taffy default is COLUMN, not CSS's `row`, so without this the
+ * controls stack underneath the title instead of sitting beside it.
+ *
+ * `flex-shrink: 0` because the default is already 0 and stating it is free insurance: the title bar
+ * is the one part of a window that must survive the window being resized to its minimum, since it
+ * is what the next drag has to grab. */
+window > .__title-bar__ {
+    height: 18px;
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+    padding-left: 6px;
+    padding-right: 3px;
+    background: var(--window-title-bg, #2B2B2B);
+    color: var(--window-title-fg, #DFE1E5);
+}
+
+/* An ellipsized title — the web's canonical truncation recipe, and every part of it is load-bearing.
+ * `dialog .__title-bar__ .__label__` carries the full account of why each line is needed; the short
+ * version is that growing from a zero basis sizes the label to what is LEFT after the controls,
+ * `min-width: 0` is what allows a flex item to be narrower than its own text at all, and
+ * `text-overflow` does not inherit so it has to sit on the UIText itself.
+ *
+ * Named `__title__` rather than `__label__` precisely so this rule cannot reach the close button's
+ * own label — see WindowFrame.TITLE_CLASS. */
+window > .__title-bar__ > .__title__ {
+    flex-grow: 1;
+    flex-basis: 0;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* The button strip. `gap-all` is safe here for the reason it usually is not — it applies between
+ * EVERY pair of children, so it is only ever right where every child is a peer, and these are:
+ * minimise, maximise and close as they arrive (W3, W6). */
+window .__controls__ {
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+    gap-all: 2px;
+}
+
+/* A GLYPH, not a labelled button — the same five-line escape from the base `button` rule that the
+ * find bar's controls make, and for the same reasons, each of which cost a round:
+ *   min-height   — `button { min-height: 14px }` is a DIFFERENT PROPERTY from `height`, so a base
+ *                  rule's minimum silently beats any height written at higher specificity here.
+ *   padding-all  — the base rule's padding is what makes a button a box round a word.
+ *   background   — `background` and `background-color` are separate properties: dropping the
+ *                  drawable takes `background: none`, and the fill is then `background-color`.
+ *   overlay      — the mark itself, drawn through CgUiSvg as currentColor, so `color` below tints it.
+ *
+ * Three class components (specificity 21) rather than the shorter `window .__close__`, which would
+ * tie with the config kit's `.__config-control__ button` at 11 — a tie that has already been paid
+ * for once, on `dialog`'s close button, where the later rule silently won a size fight. */
+window .__title-bar__ .__close__ {
+    width: 14px;
+    height: 12px;
+    min-height: 0px;
+    padding-all: 0px;
+    flex-shrink: 0;
+    border-radius: 2px;
+    background: none;
+    background-color: transparent;
+    overlay: icon("crystalgui:x");
+    overlay-fit: contain;
+    color: var(--window-control-fg, #9DA0A8);
+}
+
+/* Red on hover, which is Windows' and VS Code's convention for the one control that is destructive.
+ * The fill is what carries it — the glyph goes white on top rather than red, or a hovered close
+ * button reads as an error state rather than a target. */
+window .__title-bar__ .__close__:hover {
+    color: var(--window-close-hover-fg, #FFFFFF);
+    background: none;
+    background-color: var(--window-close-hover-bg, #F14C4C);
+}
+
+/* THE CHILD COMBINATOR IS NOT OPTIONAL HERE. `window .__content__` would reach CrystalEditor's,
+ * ProjectFileTree's and every ConfiguratorGroup's `__content__` inside any window and zero their
+ * heights — the trap that has now been sprung three times, each time reading as a panel bug.
+ *
+ * A window contains its content: it is user-movable and user-resizable, and an unclipped panel
+ * spills the moment either shrinks it below what is inside. `hidden` rather than `clip` because a
+ * window's content legitimately scrolls programmatically (scrollIntoView from inside a panel). */
+window > .__content__ {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+    overflow: hidden;
+}

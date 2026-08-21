@@ -68,6 +68,14 @@ public class ElementStateCoverageTest {
         STATEFUL.put("popover", false);        // shown/hidden is imperative and transient
         STATEFUL.put("menu", false);           // built by its owner each time it opens
         STATEFUL.put("menuitem", false);       // label is structure; enablement is resolved live
+        // CrystalOS. The desktop is engine-owned compositor host -- an internal child of the window's
+        // root, which UIDescriptionCodec skips by construction, so it is never described at all.
+        STATEFUL.put("desktop", false);
+        // And a window frame is CLIENT CHROME (plan_windowing.md): the server ships a window's CONTENT
+        // tree and the client wraps it in a frame, so a description never carries this tag. Its title
+        // comes from whatever opened it, and its geometry is per-window client config (W12) rather than
+        // element state -- the same document/view line that keeps scroll position out of a description.
+        STATEFUL.put("window", false);
     }
 
     /**
