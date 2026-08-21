@@ -237,20 +237,38 @@ public class FrameMultiplexerTest {
         }
     }
 
+    /**
+     * The small message overtakes the large one it was queued behind.
+     *
+     * <p><b>Rewritten when flush stopped emitting one frame per message per pump.</b> The original
+     * pumped four times and asserted the receiver held exactly ONE message — using "the large one has
+     * not finished yet" as a proxy for "we are still early". That proxy stopped holding the moment the
+     * connection got four times faster, and the test failed against a version where the property it
+     * names was perfectly intact. The property is <em>ordering</em>, not timing.</p>
+     *
+     * <p>So it now asserts what it is called: the small message arrives, and arrives <b>first</b>. The
+     * large one is sized from {@link FrameMultiplexer#DEFAULT_WINDOW_BYTES} rather than a literal, so
+     * raising the window cannot quietly turn this back into a test of how fast the wire happens to be.</p>
+     */
     @Test
     public void aSmallMessageIsNotBlockedBehindALargeOne() {
         Pair pair = new Pair(4096);
-        pair.a.send(bytes(400_000, 1));   // many frames
-        pair.a.send(bytes(10, 2));        // one frame, queued behind it
+        // Four windows' worth, so no single credit grant can carry it whatever the window is set to.
+        byte[] large = bytes(FrameMultiplexer.DEFAULT_WINDOW_BYTES * 4, 1);
+        byte[] small = bytes(10, 2);
 
-        // Deliberately only a few pumps: far too few to finish the large message.
-        for (int i = 0; i < 4; i++) {
-            pair.a.pump();
-            pair.b.pump();
-        }
+        pair.a.send(large);
+        pair.a.send(small);        // one frame, queued behind many
 
-        assertEquals("the small message should already be through", 1, pair.bReceived.size());
-        assertArrayEquals(bytes(10, 2), pair.bReceived.get(0));
+        pair.a.pump();
+        pair.b.pump();
+
+        assertEquals("the small message must not wait for the large one", 1, pair.bReceived.size());
+        assertArrayEquals("and it must be the small one", small, pair.bReceived.get(0));
+
+        pair.settle();
+        assertEquals("both arrive in the end", 2, pair.bReceived.size());
+        assertArrayEquals("the large one last, intact", large, pair.bReceived.get(1));
     }
 
     @Test
