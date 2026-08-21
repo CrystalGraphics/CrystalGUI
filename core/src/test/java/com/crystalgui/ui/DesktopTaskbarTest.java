@@ -239,6 +239,41 @@ public class DesktopTaskbarTest extends UiTestBase {
     }
 
     /**
+     * <b>Minimising every window must leave the strip on screen.</b>
+     *
+     * <p>The one state where the taskbar is the <em>only</em> thing there is, so losing it there loses
+     * every window at once — which is the failure W3 and W4 ship together to prevent, arriving through
+     * the back door. It did: the desktop's "am I live?" test read the window LAYER, so minimising the
+     * last window emptied it and collapsed the whole desktop to 0×0 at the origin, taking the taskbar
+     * with it. Reported from the harness as "the bar goes off screen to the top left", which is exactly
+     * what that looks like.</p>
+     */
+    @Test
+    public void minimisingEveryWindowLeavesTheTaskbarOnScreen() {
+        build();
+        WindowFrame first = open("One");
+        WindowFrame second = open("Two");
+
+        first.hide();
+        second.hide();
+        settle();
+
+        assertTrue("a desktop with retained windows is a desktop in use", desktop.isLive());
+        assertEquals("and it still fills the root", 400f, desktop.getRuntimeCache().getWidth(), 0.01f);
+        assertTrue("the strip is still there", taskbar.getRuntimeCache().getHeight() > 0f);
+        assertTrue("...and its entries are still clickable",
+                entry(first).getRuntimeCache().getWidth() > 0f);
+
+        // AND THE SURFACE STILL GOES BACK once the windows are genuinely gone, which is the half the
+        // layer-based version got right and must not be lost in fixing the half it got wrong.
+        first.destroy();
+        second.destroy();
+        settle();
+        assertFalse(desktop.isLive());
+        assertEquals(0f, desktop.getRuntimeCache().getWidth(), 0.01f);
+    }
+
+    /**
      * <b>The strip never spills off the desktop.</b> Entries accumulate — the plan's own harness key
      * opens one per press — and a row that simply grows would push its ends off both sides, since the
      * band centres its island. Off-screen is the worst failure available to a taskbar: the entry is the
