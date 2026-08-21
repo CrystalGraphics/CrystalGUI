@@ -235,6 +235,12 @@ public class TabView extends UIElement {
         return true;
     }
 
+    /** Removes the tabs, which is what this view's described children are. */
+    @Override
+    protected void clearDescribedChildren() {
+        for (Tab tab : new ArrayList<>(tabs)) removeTab(tab);
+    }
+
     /**
      * Which tab is selected — a TabView-wide invariant, so it belongs here and not on {@code Tab}.
      *

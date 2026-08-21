@@ -59,6 +59,14 @@ public final class ServerUiSession<T> implements UITreeObserver {
     private final Set<UIElement> dirtyState = new LinkedHashSet<>();
     private final Set<UIElement> dirtyIdentity = new LinkedHashSet<>();
 
+    /**
+     * Elements whose described children changed — the input to {@code ui/treeDelta}.
+     *
+     * <p>Separate from {@link #dirtyIdentity}, which is about an element's own id/class/enabled state.
+     * A structural change is about the SHAPE around an element, and the two coincide only by accident.</p>
+     */
+    private final Set<UIElement> structuralAnchors = new LinkedHashSet<>();
+
     /** Element -> kind -> lambda. Lives here, never on the element: that is what keeps behaviour on
      * the side that owns it while the client holds only a description. */
     private final Map<UIElement, Map<String, Consumer<UiEventContext<T>>>> handlers = new LinkedHashMap<>();
@@ -66,13 +74,43 @@ public final class ServerUiSession<T> implements UITreeObserver {
     private String descHash;
     private T encodedDescription;
     /**
-     * Everything inbound goes through here, and nothing is dispatched by type.
+     * One client watching this window: its router, and who it is.
      *
-     * <p>What used to be an {@code instanceof} chain over five packet types is now three registrations
-     * in {@link #registerUiMethods}, and adding a sixth message touches this class alone rather than the
-     * union, both codec switches and every session.</p>
+     * <p>{@code peer} is the platform's own handle, opaque here — it exists so a handler can tell
+     * <em>which</em> viewer acted, which is the first thing that stops being obvious once there is more
+     * than one.</p>
      */
-    private final MessageRouter<T> router;
+    private static final class Viewer<T> {
+        final MessageRouter<T> router;
+        @Nullable
+        final Object peer;
+        boolean opened;
+
+        Viewer(MessageRouter<T> router, @Nullable Object peer) {
+            this.router = router;
+            this.peer = peer;
+        }
+    }
+
+    /**
+     * Everyone watching. Usually one; the point of C1 is that it need not be.
+     *
+     * <p>The tree is the session's, not a viewer's — so a fan-out is a list of <em>routers</em> rather
+     * than a list of sessions over one tree. The alternative was rejected on a fact about the engine:
+     * {@code UIElement.setObserver} holds ONE observer, so two sessions cannot both watch one tree, and
+     * making it a list would put a per-viewer cost on every mutation in the application to serve a case
+     * most windows never have.</p>
+     */
+    private final List<Viewer<T>> viewers = new ArrayList<>();
+
+    /**
+     * Every method {@link #onCall} registered, kept so a viewer that joins later gets them.
+     *
+     * <p>Without this a late joiner is served the UI vocabulary and refused every application method,
+     * which fails as METHOD_NOT_FOUND on one client and works on another — a difference nothing in the
+     * code would explain.</p>
+     */
+    private final Map<String, Call.Handler<T>> serverMethods = new LinkedHashMap<>();
 
     /**
      * How long a call waits before its error handler is told.
@@ -82,6 +120,10 @@ public final class ServerUiSession<T> implements UITreeObserver {
      * the router already takes the deadline per request so it need not hold an opinion.</p>
      */
     private long callTimeoutMillis = 10_000L;
+
+    /** What {@link #open()} sent, replayed verbatim to anyone who joins afterwards. */
+    @Nullable
+    private T openPayload;
 
     private int elementCount;
     private boolean open = false;
@@ -95,13 +137,12 @@ public final class ServerUiSession<T> implements UITreeObserver {
         this.root = root;
         this.ops = ops;
         this.ownsConnection = true;
-        this.router = new MessageRouter<>(envelope -> transport.send(EnvelopeCodec.encode(ops, envelope)));
         transport.setReceiver(packet -> {
             synchronized (mailbox) {
                 mailbox.add(packet);
             }
         });
-        registerUiMethods();
+        addViewer(new MessageRouter<>(envelope -> transport.send(EnvelopeCodec.encode(ops, envelope))), null);
     }
 
     /**
@@ -122,8 +163,49 @@ public final class ServerUiSession<T> implements UITreeObserver {
         this.root = root;
         this.ops = connection.ops();
         this.ownsConnection = false;
-        this.router = connection.router();
-        registerUiMethods();
+        addViewer(connection.router(), connection.peer());
+    }
+
+    // ── C1: fan-out ─────────────────────────────────────────────────────────
+
+    /**
+     * Adds a viewer. If the window is already open, it is told immediately.
+     *
+     * <p>That second half is what makes late joining work at all: a player who opens a shared window
+     * after it was created must not wait for the next mutation to discover it exists.</p>
+     *
+     * <p><b>One session per connection still holds.</b> Two <em>windows</em> on one wire would register
+     * {@code ui/description} twice and the router refuses a duplicate — that is a different problem, and
+     * the fix for it is dispatching on the window id as well as the method. This adds viewers to one
+     * window, which needs no such thing.</p>
+     */
+    public ServerUiSession<T> addViewer(ProtocolConnection<T> connection) {
+        Viewer<T> viewer = addViewer(connection.router(), connection.peer());
+        if (open) sendOpenTo(viewer);
+        return this;
+    }
+
+    /**
+     * Stops sending to a viewer. Safe to call for one that was never added.
+     *
+     * <p>Does not close the window: a window with no viewers left is a legitimate state — the server is
+     * still holding the tree, and somebody may join. Closing it here would make a reconnect lose work.</p>
+     */
+    public boolean removeViewer(ProtocolConnection<T> connection) {
+        MessageRouter<T> router = connection.router();
+        return viewers.removeIf(viewer -> viewer.router == router);
+    }
+
+    /** How many clients are watching. */
+    public int viewerCount() {
+        return viewers.size();
+    }
+
+    private Viewer<T> addViewer(MessageRouter<T> router, @Nullable Object peer) {
+        Viewer<T> viewer = new Viewer<>(router, peer);
+        viewers.add(viewer);
+        registerUiMethods(viewer);
+        return viewer;
     }
 
     public int windowId() {
@@ -169,6 +251,9 @@ public final class ServerUiSession<T> implements UITreeObserver {
         root.setObserver(this);
         dirtyState.clear();
         dirtyIdentity.clear();
+        // setObserver walks the subtree and reports every element as attached, so the snapshot just
+        // taken would otherwise be followed by a delta restating the whole tree.
+        structuralAnchors.clear();
 
         StateMap<T> out = new StateMap<>(ops);
         out.putInt("protocol", EnvelopeCodec.VERSION);
@@ -178,7 +263,23 @@ public final class ServerUiSession<T> implements UITreeObserver {
         List<T> encodedSheets = new ArrayList<>(sheets.size());
         for (SheetRef ref : sheets) encodedSheets.add(SheetRef.CODEC.encode(ops, ref));
         out.putRaw("sheets", ops.createList(encodedSheets));
-        notifyClient(UiMethods.OPEN_WINDOW, out);
+        out.putInt(UiMethods.WINDOW, windowId);
+        openPayload = out.encode();
+        for (Viewer<T> viewer : viewers) sendOpenTo(viewer);
+    }
+
+    /**
+     * Tells one viewer the window exists.
+     *
+     * <p>The payload is built once in {@link #open()} and kept, so a viewer joining an hour later is sent
+     * exactly what the first one saw. Rebuilding it per viewer would re-encode the description and
+     * re-hash it, and any drift between the two would show as a client fetching a body that no longer
+     * matches the hash it was given.</p>
+     */
+    private void sendOpenTo(Viewer<T> viewer) {
+        if (viewer.opened || openPayload == null) return;
+        viewer.opened = true;
+        viewer.router.notify(UiMethods.OPEN_WINDOW, openPayload);
     }
 
     /**
@@ -195,7 +296,8 @@ public final class ServerUiSession<T> implements UITreeObserver {
         // swept once per session on a shared wire rather than once per connection.
         if (ownsConnection) {
             drainMailbox();
-            router.tickTimeouts(System.currentTimeMillis());
+            long now = System.currentTimeMillis();
+            for (Viewer<T> viewer : viewers) viewer.router.tickTimeouts(now);
         }
         flush();
     }
@@ -205,25 +307,45 @@ public final class ServerUiSession<T> implements UITreeObserver {
         // The handler type is unchanged, so nothing that calls this moves. What changed is underneath:
         // an RPC is now an ordinary REQUEST, so its correlation, timeout and "answer exactly once" are
         // the router's for every method rather than a second id space kept for this one.
-        router.onRequest(method, (payload, respond) ->
-                handler.invoke(read(payload), new Call.Responder<T>() {
-                    @Override
-                    public void ok(@Nullable StateMap<T> value) {
-                        respond.ok(value == null ? null : value.encode());
-                    }
-
-                    @Override
-                    public void fail(String error) {
-                        respond.fail(error);
-                    }
-                }));
+        // On EVERY viewer, and on any that joins later -- remembered so addViewer can replay them.
+        // A method served to whoever connected first and refused to everyone else is the shape of bug
+        // that only appears on a busy server.
+        serverMethods.put(method, handler);
+        for (Viewer<T> viewer : viewers) registerCall(viewer, method, handler);
         return this;
     }
 
-    /** Calls a client-side method. {@code onResult} may be null for fire-and-forget. */
+    /**
+     * Calls a client-side method on the one viewer.
+     *
+     * <p>Throws when there is more than one, deliberately: a request has exactly one answer, so
+     * "call the client" stops meaning anything the moment there are several. Use
+     * {@link #callViewer} and say which.</p>
+     */
     public void call(String method, @Nullable StateMap<T> args,
                      @Nullable Consumer<StateMap<T>> onResult, @Nullable Consumer<String> onError) {
-        router.request(method, args == null ? null : args.encode(),
+        if (viewers.size() != 1) {
+            throw new IllegalStateException("call() is ambiguous with " + viewers.size()
+                    + " viewers — use callViewer(peer, …) and name one");
+        }
+        request(viewers.get(0), method, args, onResult, onError);
+    }
+
+    /** Calls a client-side method on one named viewer. */
+    public void callViewer(@Nullable Object peer, String method, @Nullable StateMap<T> args,
+                           @Nullable Consumer<StateMap<T>> onResult, @Nullable Consumer<String> onError) {
+        for (Viewer<T> viewer : viewers) {
+            if (viewer.peer == peer || (peer != null && peer.equals(viewer.peer))) {
+                request(viewer, method, args, onResult, onError);
+                return;
+            }
+        }
+        if (onError != null) onError.accept("no such viewer");
+    }
+
+    private void request(Viewer<T> viewer, String method, @Nullable StateMap<T> args,
+                         @Nullable Consumer<StateMap<T>> onResult, @Nullable Consumer<String> onError) {
+        viewer.router.request(method, args == null ? null : args.encode(),
                 value -> {
                     if (onResult != null) onResult.accept(read(value));
                 },
@@ -259,7 +381,15 @@ public final class ServerUiSession<T> implements UITreeObserver {
     public record UiEventContext<T>(ServerUiSession<T> session, UIElement element, StateMap<T> payload) {
     }
 
+    /**
+     * <b>Structure before state, with a renumber in between.</b>
+     *
+     * <p>Order is the whole correctness argument. A tree delta renumbers both sides, so any state delta
+     * in the same tick must be computed <em>after</em> that and sent <em>after</em> it — the transport
+     * preserves order within a stream, so the client applies them the same way round.</p>
+     */
     private void flush() {
+        flushStructure();
         if (dirtyState.isEmpty()) return;
         List<T> entries = new ArrayList<>(dirtyState.size());
         for (UIElement element : dirtyState) {
@@ -277,6 +407,70 @@ public final class ServerUiSession<T> implements UITreeObserver {
         StateMap<T> out = new StateMap<>(ops);
         out.putRaw("entries", ops.createList(entries));
         notifyClient(UiMethods.STATE_DELTA, out);
+    }
+
+    /**
+     * Sends {@code ui/treeDelta} for every anchor whose children changed, then renumbers.
+     *
+     * <p>An anchor is re-described <em>in full</em> rather than as a list of inserts and removes. That is
+     * a deliberate trade and the reasoning is the same one the description itself makes: a minimal edit
+     * script would have to be computed against what the client has, which the server does not keep, and
+     * getting it subtly wrong produces a tree that is plausibly-but-not-actually right. Re-describing a
+     * subtree is bounded by that subtree, and the common case — one row appended to one list — sends
+     * that list rather than the window.</p>
+     */
+    private void flushStructure() {
+        if (!open || structuralAnchors.isEmpty()) return;
+
+        // SHALLOWEST ONLY. Adding a subtree dirties every parent inside it, and re-describing an anchor
+        // already covers everything beneath it -- so a descendant entry is both redundant and wrong,
+        // since the client would have replaced it before reaching the entry that names it.
+        List<UIElement> anchors = new ArrayList<>();
+        for (UIElement candidate : structuralAnchors) {
+            if (candidate.getNetworkId() < 0) continue;
+            boolean covered = false;
+            for (UIElement other : structuralAnchors) {
+                if (other != candidate && other.getNetworkId() >= 0 && isAncestor(other, candidate)) {
+                    covered = true;
+                    break;
+                }
+            }
+            if (!covered) anchors.add(candidate);
+        }
+        structuralAnchors.clear();
+        if (anchors.isEmpty()) return;
+
+        List<T> entries = new ArrayList<>(anchors.size());
+        for (UIElement anchor : anchors) {
+            List<T> described = new ArrayList<>();
+            for (UIElement child : anchor.describedChildrenFor()) {
+                described.add(UIDescriptionCodec.CODEC.encode(ops, child));
+            }
+            StateMap<T> entry = new StateMap<>(ops);
+            entry.putInt("nid", anchor.getNetworkId());
+            entry.putRaw("children", ops.createList(described));
+            entries.add(entry.encode());
+        }
+
+        // RENUMBER, then say what the new total is. The client re-derives the same numbering from the
+        // same tree, and the count is the same cross-check open() uses -- a disagreement is refused
+        // rather than silently misapplied.
+        elementCount = NetworkIds.assign(root);
+        encodedDescription = UIDescriptionCodec.CODEC.encode(ops, root);
+        descHash = ContentHash.of(ops, encodedDescription);
+
+        StateMap<T> out = new StateMap<>(ops);
+        out.putRaw("entries", ops.createList(entries));
+        out.putInt("count", elementCount);
+        out.putString("hash", descHash);
+        notifyClient(UiMethods.TREE_DELTA, out);
+    }
+
+    private static boolean isAncestor(UIElement maybeAncestor, UIElement element) {
+        for (UIElement walk = element.getParent(); walk != null; walk = walk.getParent()) {
+            if (walk == maybeAncestor) return true;
+        }
+        return false;
     }
 
     public void close(String reason) {
@@ -308,13 +502,18 @@ public final class ServerUiSession<T> implements UITreeObserver {
                         windowId, malformed.getMessage());
                 continue;
             }
-            router.accept(envelope);
+            // The owned-transport shape has exactly one viewer by construction, so this is not a
+            // broadcast: it is "the one router", written without assuming the index.
+            for (Viewer<T> viewer : viewers) viewer.router.accept(envelope);
         }
     }
 
-    /** The UI half of the vocabulary. RPC methods register themselves through {@link #onCall}. */
-    private void registerUiMethods() {
-        router.onRequest(UiMethods.DESCRIPTION, (payload, respond) -> {
+    /** The UI half of the vocabulary, on one viewer. RPC methods come through {@link #onCall}. */
+    private void registerUiMethods(Viewer<T> viewer) {
+        for (Map.Entry<String, Call.Handler<T>> entry : serverMethods.entrySet()) {
+            registerCall(viewer, entry.getKey(), entry.getValue());
+        }
+        viewer.router.onRequest(UiMethods.DESCRIPTION, (payload, respond) -> {
             StateMap<T> in = read(payload);
             if (!mine(in)) {
                 respond.fail("wrong window");
@@ -335,7 +534,7 @@ public final class ServerUiSession<T> implements UITreeObserver {
             respond.ok(out.encode());
         });
 
-        router.onNotify(UiMethods.EVENT, payload -> {
+        viewer.router.onNotify(UiMethods.EVENT, payload -> {
             StateMap<T> in = read(payload);
             if (!mine(in)) return;
             int nid = in.getInt("nid", -1);
@@ -375,23 +574,63 @@ public final class ServerUiSession<T> implements UITreeObserver {
         return in.getInt(UiMethods.WINDOW, windowId) == windowId;
     }
 
+    /**
+     * Tells every viewer. Encoded once, sent N times.
+     *
+     * <p>The encode is deliberately outside the loop: a state delta on a busy window would otherwise be
+     * re-serialised per viewer, which is the cost that makes people avoid fan-out in the first place.</p>
+     */
     private void notifyClient(String method, StateMap<T> payload) {
         payload.putInt(UiMethods.WINDOW, windowId);
-        router.notify(method, payload.encode());
+        T encoded = payload.encode();
+        for (Viewer<T> viewer : viewers) viewer.router.notify(method, encoded);
+    }
+
+    private void registerCall(Viewer<T> viewer, String method, Call.Handler<T> handler) {
+        viewer.router.onRequest(method, (payload, respond) ->
+                handler.invoke(read(payload), new Call.Responder<T>() {
+                    @Override
+                    public void ok(@Nullable StateMap<T> value) {
+                        respond.ok(value == null ? null : value.encode());
+                    }
+
+                    @Override
+                    public void fail(String error) {
+                        respond.fail(error);
+                    }
+                }));
     }
 
     // ── UITreeObserver ──────────────────────────────────────────────────────
 
     @Override
     public void onAttached(UIElement element) {
-        // Structural deltas arrive in the next milestone; recorded now so nothing is lost meanwhile.
         dirtyIdentity.add(element);
+        noteStructuralChange(element);
     }
 
     @Override
     public void onDetached(UIElement element) {
         dirtyState.remove(element);
         dirtyIdentity.remove(element);
+        // CAPTURED NOW, and it has to be. UIElement calls setObserver(null) "before the parent link is
+        // cleared, so an observer can still see where it was" -- by flush time getParent() is null and
+        // there is nothing left to anchor the delta to.
+        noteStructuralChange(element);
+    }
+
+    /**
+     * Records where the tree changed, as an ANCHOR the client already knows a number for.
+     *
+     * <p>Walks up from the changed element's parent past anything the client has never seen — a subtree
+     * grafted in one go has several new elements, and only the first ancestor that existed at the last
+     * numbering can be addressed. An element that has never been numbered reports {@code -1}, which is
+     * exactly the test.</p>
+     */
+    private void noteStructuralChange(UIElement element) {
+        UIElement anchor = element.getParent();
+        while (anchor != null && anchor.getNetworkId() < 0) anchor = anchor.getParent();
+        if (anchor != null) structuralAnchors.add(anchor);
     }
 
     @Override

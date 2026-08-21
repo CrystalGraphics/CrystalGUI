@@ -92,6 +92,12 @@ public class Tab extends Button {
         return true;
     }
 
+    /** Empties the pane, not the tab. */
+    @Override
+    protected void clearDescribedChildren() {
+        pane.clearAllChildren();
+    }
+
     /**
      * Only the label. Selection is deliberately absent: it is a TabView-wide invariant (exactly one
      * tab), so it belongs to the TabView's own state, and a Tab restoring {@code selected} on its own
