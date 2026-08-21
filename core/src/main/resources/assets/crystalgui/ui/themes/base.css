@@ -609,4 +609,29 @@ theme {
     --activitybar-dot-fg: var(--accent);
     --activitybar-item-focused-bg: var(--accent);
     --activitybar-item-focused-fg: var(--fg-on-accent);
+
+    /* CrystalOS — a window on the desktop (plan_windowing.md).
+     *
+     * The BODY is a panel surface, because that is what a window's content is: the same ground an
+     * editor or a tool panel would have had docked. The CAPTION is raised above it, which is the whole
+     * of what makes a title bar read as furniture rather than as the first row of the content.
+     *
+     * The border is `--border-strong` rather than `--border-base`: a window's edge is the only thing
+     * separating it from ANOTHER WINDOW of the same colour, which is a harder job than separating a
+     * panel from the chrome around it. It is also what the nothing-drawn-in-the-colour-of-what-it-sits-on
+     * rule is checking here — a window outlined in its own fill is a window you cannot see the edge of,
+     * and this is a compositor, so overlapping is the normal case rather than the exception. */
+    --window-bg: var(--surface-panel);
+    --window-fg: var(--fg);
+    --window-border: var(--border-strong);
+    --window-title-bg: var(--surface-raised);
+    --window-title-fg: var(--fg);
+    /* The control glyphs are secondary until hovered — a title bar's buttons are not what you are
+     * looking at. */
+    --window-control-fg: var(--fg-secondary);
+    /* Close, hovered: the destructive-control convention every window manager and VS Code share. The
+     * glyph goes to the on-accent colour on top of it, or a hovered close button reads as an error
+     * state rather than as a target. */
+    --window-close-hover-bg: var(--error);
+    --window-close-hover-fg: var(--fg-on-accent);
 }

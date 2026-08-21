@@ -19,6 +19,8 @@ import com.crystalgui.ui.elements.TabView;
 import com.crystalgui.ui.elements.TextField;
 import com.crystalgui.ui.elements.Tooltip;
 import com.crystalgui.ui.elements.UIText;
+import com.crystalgui.ui.elements.desktop.Desktop;
+import com.crystalgui.ui.elements.desktop.WindowFrame;
 
 import javax.annotation.Nullable;
 import java.util.Map;
@@ -95,6 +97,16 @@ public final class ElementRegistry {
         register("menuitem", MenuItem.class, () -> new MenuItem(""));
         register("dropdown", Dropdown.class, () -> new Dropdown(""));
         register("colorselector", ColorSelector.class, ColorSelector::new);
+
+        // CrystalOS. A widget's cascade identity is its TAG, so ua/desktop.css cannot style either of
+        // these until they are registered here -- `Dropdown extends Button` and matching no `button {}`
+        // rule is the recorded version of that lesson.
+        //
+        // The server never ships either tag: it sends a window's CONTENT tree and the client wraps it in
+        // a frame (plan_windowing.md). Registering them anyway costs nothing and keeps decode honest if
+        // that ever changes, which is the same argument `tooltip` is registered under.
+        register("desktop", Desktop.class, Desktop::new);
+        register("window", WindowFrame.class, () -> new WindowFrame(""));
     }
 
     /**

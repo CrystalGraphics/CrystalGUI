@@ -29,6 +29,8 @@ import javax.annotation.Nullable;
 
 import java.util.*;
 import com.crystalgui.ui.elements.Popover;
+import com.crystalgui.ui.elements.desktop.Desktop;
+import com.crystalgui.ui.elements.desktop.WindowFrame;
 
 /**
  * Runtime engine. Owns the paint context, the live
@@ -288,6 +290,41 @@ public final class UIWindow {
     public <T extends UIElement> T addOverlay(T overlay, @Nullable UIElement near) {
         if (overlay.getParent() == null) overlayHost(near).addChild(overlay);
         return overlay;
+    }
+
+    /** @see #desktop() */
+    private final Desktop desktop = new Desktop();
+
+    /**
+     * This window's <b>desktop</b> — CrystalOS's compositor, and the parent of every {@code WindowFrame}
+     * ({@code plan_windowing.md}).
+     *
+     * <p>Every window has one and nothing constructs it, which is the whole point: a UI opens a window
+     * with {@link #openWindow}, it does not first assemble a window manager. Same ownership as
+     * {@link #windowOverlayLayer()} above and for the same reasons — attached with
+     * {@code addInternalChild} so it is legal under a root that accepts no children, built on first use
+     * so a window that never opens one pays a field and nothing else, and reachable in any order
+     * relative to {@link #init}.</p>
+     *
+     * <p>It sits <em>over</em> the root, which is the band model: the root's own children are the desktop
+     * content band, the desktop is the windows band above it, and the top layer is above both by
+     * construction. While no window is open the desktop is zero-sized and hit-tests nothing, so it
+     * cannot swallow clicks meant for the application underneath — see {@code Desktop}'s own note, which
+     * is where that rule is stated in full.</p>
+     */
+    public Desktop desktop() {
+        if (desktop.getParent() == null) ui.rootElement.addInternalChild(desktop);
+        return desktop;
+    }
+
+    /**
+     * Opens a window on this window's desktop — the one call an application makes.
+     *
+     * <p>A frame with no position of its own is cascaded from the last one (Win32's
+     * {@code CW_USEDEFAULT}); a frame that was given one keeps it, clamped.</p>
+     */
+    public <T extends WindowFrame> T openWindow(T frame) {
+        return desktop().addWindow(frame);
     }
 
     /** The root's declared width/height, or {@code auto} when unset. */
