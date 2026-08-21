@@ -1723,8 +1723,13 @@ public class Workbench extends UIElement {
     private static String tabIconFor(DockPanelRef panel) {
         Resource viewed = viewedResource(panel);
         if (viewed != null) {
-            // THROUGH THE SAME NAME THE TAB SHOWS, which is what keeps the two honest: a tab reading
-            // `.class` cannot carry a source icon, because both come from one string.
+            // THE PROVIDER'S ANSWER FIRST, because a file name cannot tell an interface from a class and
+            // every `.class` would otherwise carry the same glyph. @see ResourceContentProvider#iconName
+            ResourceContentProvider provider = ResourceRegistry.providerFor(viewed);
+            String named = provider == null ? null : provider.iconName(viewed);
+            if (named != null && !named.isEmpty()) return named;
+            // AND THE NAME AS A FALLBACK, which is right for the source case: a `.java` tab is a Java
+            // FILE and takes the file icon, exactly as one in the project does.
             String name = viewerDisplayName(viewed);
             return name == null ? null : FileIconTheme.getDefault().iconFor(name, false, false);
         }
