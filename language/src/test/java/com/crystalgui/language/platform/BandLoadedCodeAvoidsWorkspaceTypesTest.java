@@ -61,7 +61,8 @@ public class BandLoadedCodeAvoidsWorkspaceTypesTest {
      */
     private static final List<String> BAND_MARKERS = List.of(
             "org/eclipse/jdt/",
-            "org/mozilla/javascript/");
+            "org/mozilla/javascript/",
+            "org/benf/cfr/");
 
     /** What such a class may not name. */
     private static final String FORBIDDEN = "com/crystalgui/fs/";
