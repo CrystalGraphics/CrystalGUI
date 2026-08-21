@@ -5,6 +5,9 @@ import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.NetworkIds;
 import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.net.UIPacket;
+import com.crystalgui.net.protocol.Envelope;
+import com.crystalgui.net.protocol.EnvelopeCodec;
+import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.net.UIPacketCodec;
 import com.crystalgui.net.UiEventKinds;
 import com.crystalgui.serialization.PlainOps;
@@ -155,9 +158,9 @@ public class ServerBehaviourLoopTest {
         for (int i = 1; i <= 10; i++) status.setText("step " + i);
         server.tick();
 
-        List<UIPacket.StateDelta<Object>> deltas = deltasFrom(serverLink);
-        assertEquals("one packet", 1, deltas.size());
-        assertEquals("one entry, not ten", 1, deltas.get(0).entries().size());
+        List<Integer> deltas = deltaEntryCounts(serverLink);
+        assertEquals("one message", 1, deltas.size());
+        assertEquals("one entry, not ten", 1, (int) deltas.get(0));
 
         settle();
         assertEquals("and it carries the final value",
@@ -308,11 +311,17 @@ public class ServerBehaviourLoopTest {
     }
 
     @SuppressWarnings("unchecked")
-    private List<UIPacket.StateDelta<Object>> deltasFrom(InMemoryTransport<Object> link) {
-        return link.sent().stream()
-                .map(raw -> UIPacketCodec.decode(PlainOps.INSTANCE, raw))
-                .filter(p -> p instanceof UIPacket.StateDelta)
-                .map(p -> (UIPacket.StateDelta<Object>) p)
-                .toList();
+    /** How many entries each state-delta carried, which is all any caller asked a delta for. */
+    private List<Integer> deltaEntryCounts(InMemoryTransport<Object> link) {
+        List<Integer> counts = new java.util.ArrayList<>();
+        for (Object raw : link.sent()) {
+            Envelope envelope = EnvelopeCodec.decode(PlainOps.INSTANCE, raw);
+            if (envelope instanceof Envelope.Notification<?> notification
+                    && UiMethods.STATE_DELTA.equals(notification.method())) {
+                StateMap<Object> in = new StateMap<>(PlainOps.INSTANCE, (Object) notification.payload());
+                counts.add(in.getList("entries", entry -> entry).size());
+            }
+        }
+        return counts;
     }
 }

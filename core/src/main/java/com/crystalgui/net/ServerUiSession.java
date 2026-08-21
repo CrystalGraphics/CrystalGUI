@@ -1,6 +1,10 @@
 package com.crystalgui.net;
 
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.net.protocol.Envelope;
+import com.crystalgui.net.protocol.EnvelopeCodec;
+import com.crystalgui.net.protocol.MessageRouter;
+import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.serialization.ContentHash;
 import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.serialization.UIDescriptionCodec;
@@ -61,6 +65,24 @@ public final class ServerUiSession<T> implements UITreeObserver {
 
     private String descHash;
     private T encodedDescription;
+    /**
+     * Everything inbound goes through here, and nothing is dispatched by type.
+     *
+     * <p>What used to be an {@code instanceof} chain over five packet types is now three registrations
+     * in {@link #registerUiMethods}, and adding a sixth message touches this class alone rather than the
+     * union, both codec switches and every session.</p>
+     */
+    private final MessageRouter<T> router;
+
+    /**
+     * How long a call waits, matching the 10s {@code RpcRegistry} defaulted to.
+     *
+     * <p>Kept as a field rather than folded into the router because it is a policy of <em>this</em>
+     * session, not of the routing machinery: a UI call and a file transfer want different patience, and
+     * the router already takes the deadline per request so it need not hold an opinion.</p>
+     */
+    private long callTimeoutMillis = 10_000L;
+
     private int elementCount;
     private boolean open = false;
 
@@ -70,11 +92,13 @@ public final class ServerUiSession<T> implements UITreeObserver {
         this.transport = transport;
         this.ops = ops;
         this.rpc = new RpcRegistry<>(ops);
+        this.router = new MessageRouter<>(envelope -> transport.send(EnvelopeCodec.encode(ops, envelope)));
         transport.setReceiver(packet -> {
             synchronized (mailbox) {
                 mailbox.add(packet);
             }
         });
+        registerUiMethods();
     }
 
     public int windowId() {
@@ -121,8 +145,15 @@ public final class ServerUiSession<T> implements UITreeObserver {
         dirtyState.clear();
         dirtyIdentity.clear();
 
-        send(new UIPacket.OpenWindow(UIPacketCodec.PROTOCOL_VERSION, windowId, descHash, elementCount,
-                List.copyOf(sheets), useUserAgentSheet));
+        StateMap<T> out = new StateMap<>(ops);
+        out.putInt("protocol", EnvelopeCodec.VERSION);
+        out.putString("hash", descHash);
+        out.putInt("count", elementCount);
+        out.putBool("ua", useUserAgentSheet);
+        List<T> encodedSheets = new ArrayList<>(sheets.size());
+        for (SheetRef ref : sheets) encodedSheets.add(SheetRef.CODEC.encode(ops, ref));
+        out.putRaw("sheets", ops.createList(encodedSheets));
+        notifyClient(UiMethods.OPEN_WINDOW, out);
     }
 
     /**
@@ -135,21 +166,39 @@ public final class ServerUiSession<T> implements UITreeObserver {
     public void tick() {
         if (!open) return;
         drainMailbox();
-        rpc.sweepTimeouts(System.currentTimeMillis());
+        router.tickTimeouts(System.currentTimeMillis());
         flush();
     }
 
     /** Registers a server-side RPC method the client may call. */
     public ServerUiSession<T> onCall(String method, RpcRegistry.Handler<T> handler) {
-        rpc.register(method, handler);
+        // The handler type is unchanged, so nothing that calls this moves. What changed is underneath:
+        // an RPC is now an ordinary REQUEST, so its correlation, timeout and "answer exactly once" are
+        // the router's for every method rather than a second id space RpcRegistry kept for this one.
+        router.onRequest(method, (payload, respond) ->
+                handler.invoke(read(payload), new RpcRegistry.Responder<T>() {
+                    @Override
+                    public void ok(@Nullable StateMap<T> value) {
+                        respond.ok(value == null ? null : value.encode());
+                    }
+
+                    @Override
+                    public void fail(String error) {
+                        respond.fail(error);
+                    }
+                }));
         return this;
     }
 
     /** Calls a client-side method. {@code onResult} may be null for fire-and-forget. */
     public void call(String method, @Nullable StateMap<T> args,
                      @Nullable Consumer<StateMap<T>> onResult, @Nullable Consumer<String> onError) {
-        int callId = rpc.beginCall(onResult, onError, System.currentTimeMillis());
-        send(new UIPacket.RpcCall<>(windowId, callId, method, args == null ? null : args.encode()));
+        router.request(method, args == null ? null : args.encode(),
+                value -> {
+                    if (onResult != null) onResult.accept(read(value));
+                },
+                onError,
+                System.currentTimeMillis() + callTimeoutMillis);
     }
 
     // ── Server-held behaviour ───────────────────────────────────────────────
@@ -182,23 +231,31 @@ public final class ServerUiSession<T> implements UITreeObserver {
 
     private void flush() {
         if (dirtyState.isEmpty()) return;
-        List<UIPacket.StateDelta.Entry<T>> entries = new ArrayList<>(dirtyState.size());
+        List<T> entries = new ArrayList<>(dirtyState.size());
         for (UIElement element : dirtyState) {
             if (element.getNetworkId() < 0) continue;   // never numbered: not part of the open tree
             StateMap<T> state = new StateMap<>(ops);
             element.writeStateTo(state);
-            entries.add(new UIPacket.StateDelta.Entry<>(element.getNetworkId(), state.encode()));
+            StateMap<T> entry = new StateMap<>(ops);
+            entry.putInt("nid", element.getNetworkId());
+            entry.putRaw("s", state.encode());
+            entries.add(entry.encode());
         }
         dirtyState.clear();
         dirtyIdentity.clear();
-        if (!entries.isEmpty()) send(new UIPacket.StateDelta<>(windowId, entries));
+        if (entries.isEmpty()) return;
+        StateMap<T> out = new StateMap<>(ops);
+        out.putRaw("entries", ops.createList(entries));
+        notifyClient(UiMethods.STATE_DELTA, out);
     }
 
     public void close(String reason) {
         if (!open) return;
         open = false;
         root.setObserver(null);
-        send(new UIPacket.CloseWindow(windowId, reason));
+        StateMap<T> out = new StateMap<>(ops);
+        out.putString("reason", reason == null ? "" : reason);
+        notifyClient(UiMethods.CLOSE_WINDOW, out);
     }
 
     public boolean isOpen() {
@@ -213,82 +270,84 @@ public final class ServerUiSession<T> implements UITreeObserver {
             mailbox.clear();
         }
         for (T raw : batch) {
-            UIPacket packet;
+            Envelope envelope;
             try {
-                packet = UIPacketCodec.decode(ops, raw);
+                envelope = EnvelopeCodec.decode(ops, raw);
             } catch (RuntimeException malformed) {
-                CrystalGuiCore.LOGGER.warn("Session {}: dropping an undecodable packet: {}",
+                CrystalGuiCore.LOGGER.warn("Session {}: dropping an undecodable message: {}",
                         windowId, malformed.getMessage());
                 continue;
             }
-            if (packet.windowId() != windowId) {
-                // Not ours. A packet in flight when a window closed would otherwise be applied to
-                // whatever session took its place.
-                continue;
-            }
-            handle(packet);
+            router.accept(envelope);
         }
     }
 
-    @SuppressWarnings("unchecked")
-    private void handle(UIPacket packet) {
-        if (packet instanceof UIPacket.RequestDescription request) {
-            if (!request.descHash().equals(descHash)) {
-                CrystalGuiCore.LOGGER.warn("Session {}: client asked for description {} but this "
-                        + "session is serving {}", windowId, request.descHash(), descHash);
+    /** The UI half of the vocabulary. RPC methods register themselves through {@link #onCall}. */
+    private void registerUiMethods() {
+        router.onRequest(UiMethods.DESCRIPTION, (payload, respond) -> {
+            StateMap<T> in = read(payload);
+            if (!mine(in)) {
+                respond.fail("wrong window");
                 return;
             }
-            send(new UIPacket.Description<>(windowId, descHash, encodedDescription));
+            String wanted = in.getString("hash", "");
+            if (!wanted.equals(descHash)) {
+                // Answered rather than dropped, which the old RequestDescription could not do: a client
+                // asking for a description this session no longer serves now learns that, instead of
+                // waiting on a reply that was never coming.
+                respond.fail("this session serves " + descHash + ", not " + wanted);
+                return;
+            }
+            StateMap<T> out = new StateMap<>(ops);
+            out.putInt(UiMethods.WINDOW, windowId);
+            out.putString("hash", descHash);
+            out.putRaw("root", encodedDescription);
+            respond.ok(out.encode());
+        });
 
-        } else if (packet instanceof UIPacket.UiEvent<?> event) {
-            UIElement element = NetworkIds.find(root, event.nid());
+        router.onNotify(UiMethods.EVENT, payload -> {
+            StateMap<T> in = read(payload);
+            if (!mine(in)) return;
+            int nid = in.getInt("nid", -1);
+            UIElement element = NetworkIds.find(root, nid);
             if (element == null) {
-                CrystalGuiCore.LOGGER.warn("Session {}: event for unknown element {}", windowId, event.nid());
+                CrystalGuiCore.LOGGER.warn("Session {}: event for unknown element {}", windowId, nid);
                 return;
             }
+            String kind = in.getString("kind", "");
             var byKind = handlers.get(element);
-            var handler = byKind == null ? null : byKind.get(event.kind());
+            var handler = byKind == null ? null : byKind.get(kind);
             if (handler == null) {
-                // A client reporting something nobody asked for. Not fatal, but not normal either —
+                // A client reporting something nobody asked for. Not fatal, but not normal either --
                 // it means the two sides disagree about the description.
                 CrystalGuiCore.LOGGER.warn("Session {}: no handler for '{}' on element {}",
-                        windowId, event.kind(), event.nid());
+                        windowId, kind, nid);
                 return;
             }
-            T payload = (T) event.payload();
+            T carried = in.getRaw("p");
             handler.accept(new UiEventContext<>(this, element,
-                    payload == null ? new StateMap<>(ops) : new StateMap<>(ops, payload)));
-
-        } else if (packet instanceof UIPacket.RpcCall<?> call) {
-            dispatchRpc((UIPacket.RpcCall<T>) call);
-
-        } else if (packet instanceof UIPacket.RpcResult<?> result) {
-            UIPacket.RpcResult<T> typed = (UIPacket.RpcResult<T>) result;
-            rpc.complete(typed.callId(), typed.ok(), typed.value(), typed.error());
-        }
-    }
-
-    private void dispatchRpc(UIPacket.RpcCall<T> call) {
-        rpc.dispatch(call.method(), call.args(), new RpcRegistry.Responder<T>() {
-            @Override
-            public void ok(StateMap<T> value) {
-                if (call.callId() != 0) {
-                    send(new UIPacket.RpcResult<>(windowId, call.callId(), true,
-                            value == null ? null : value.encode(), ""));
-                }
-            }
-
-            @Override
-            public void fail(String error) {
-                if (call.callId() != 0) {
-                    send(new UIPacket.RpcResult<>(windowId, call.callId(), false, null, error));
-                }
-            }
+                    carried == null ? new StateMap<>(ops) : new StateMap<>(ops, carried)));
         });
     }
 
-    private void send(UIPacket packet) {
-        transport.send(UIPacketCodec.encode(ops, packet));
+    private StateMap<T> read(@Nullable T payload) {
+        return payload == null ? new StateMap<>(ops) : new StateMap<>(ops, payload);
+    }
+
+    /**
+     * Whether this message is for this window.
+     *
+     * <p>One transport serves one session, so this is not routing between concurrent windows: it is the
+     * guard the old {@code packet.windowId() != windowId} check was — a message still in flight when a
+     * window closed must not be applied to whatever session took its place.</p>
+     */
+    private boolean mine(StateMap<T> in) {
+        return in.getInt(UiMethods.WINDOW, windowId) == windowId;
+    }
+
+    private void notifyClient(String method, StateMap<T> payload) {
+        payload.putInt(UiMethods.WINDOW, windowId);
+        router.notify(method, payload.encode());
     }
 
     // ── UITreeObserver ──────────────────────────────────────────────────────
