@@ -388,7 +388,32 @@ public class DockArea extends UIElement implements UIFrameTicker {
         return true;
     }
 
+    /**
+     * <b>Where a first rebuild's time goes</b> — {@code -Dcrystalgui.startup.trace=true}, once.
+     *
+     * <p>Measured at 1,144 ms in a real client, which is the single largest item in a four-second first
+     * editor open — three times the shader compile and six times every font and icon together. A rebuild
+     * is where the workbench is actually constructed: {@code CrystalEditor}'s constructor produces a
+     * layout and this produces the widgets, a frame later.</p>
+     */
+    private static final boolean TRACE = Boolean.getBoolean("crystalgui.startup.trace");
+
+    private static boolean traced;
+
+    private static long phaseNanos;
+
+    private static void phase(String what) {
+        if (!TRACE || traced) return;
+        long now = System.nanoTime();
+        if (phaseNanos != 0) {
+            com.crystalgui.core.CrystalGuiCore.LOGGER.info("[startup]       {} — {} ms", what,
+                    (now - phaseNanos) / 1_000_000);
+        }
+        phaseNanos = now;
+    }
+
     private void rebuild() {
+        phase("begin");
         // Weights are pulled BEFORE each mutation (see captureDividerPositions), not here: by now the
         // layout has already changed shape and a branch's child count may no longer match its split's
         // pane count. What is left here is the no-structural-change case -- a plain requestRebuild after
@@ -399,7 +424,9 @@ public class DockArea extends UIElement implements UIFrameTicker {
         pruneStaleGroups();
         splitBranches.clear();
 
+        phase("clear + prune");
         UIElement built = buildNode(layout.root(), 0);
+        phase("buildNode (the whole tree)");
         if (built != null) {
             // flex-grow plus a zero basis, and deliberately NOT an explicit width/height: this area is a
             // flex container, so the child fills the main axis by growing and the cross axis by stretch.
@@ -417,6 +444,8 @@ public class DockArea extends UIElement implements UIFrameTicker {
         // only fires when the GROUP moved, which a close within one group does not.
         announceActivePanel();
         announceLayoutChange();
+        phase("announce");
+        traced = TRACE;
     }
 
     /**
@@ -465,8 +494,18 @@ public class DockArea extends UIElement implements UIFrameTicker {
     private UIElement buildNode(DockNode node, int depth) {
         if (node.isLeaf()) {
             DockLeaf leaf = (DockLeaf) node;
+            long started = TRACE && !traced ? System.nanoTime() : 0L;
             DockGroup group = groups.computeIfAbsent(leaf, l -> new DockGroup(this, l));
             group.sync();
+            if (started != 0L) {
+                long cost = (System.nanoTime() - started) / 1_000_000;
+                // A leaf is a tab group, so this names the PANELS in it -- which is what a reader needs
+                // to know which tool window is expensive, rather than that "a leaf" was.
+                if (cost >= 5) {
+                    com.crystalgui.core.CrystalGuiCore.LOGGER.info("[startup]         leaf {} — {} ms",
+                            leaf.panels(), cost);
+                }
+            }
             return group;
         }
 

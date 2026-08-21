@@ -276,15 +276,35 @@ public final class WorkbenchSession {
         List<CgPath> expanded = workbench.fileTree().treeView().expandedItems();
         out.putList(KEY_EXPANDED, expanded, (entry, path) -> entry.putString(KEY_PATH, path.toString()));
 
-        List<CgPath> withViewState = new ArrayList<>();
+        // ASKED OF THE DOCUMENTS THAT EXIST, and only those: `documentFor` CREATES on demand, so walking
+        // anything wider here would build every editor in the session just to save it -- which is the
+        // cost lazy tabs exist to avoid, paid at the one moment nobody is watching for it.
+        Map<CgPath, JsonElement> files = new LinkedHashMap<>();
         for (CgPath path : workbench.openPaths()) {
-            if (workbench.documentFor(path) instanceof DocumentViewState) withViewState.add(path);
-        }
-        out.putList(KEY_FILES, withViewState, (entry, path) -> {
-            entry.putString(KEY_PATH, path.toString());
+            if (!(workbench.documentFor(path) instanceof DocumentViewState stateful)) continue;
             StateMap<JsonElement> view = new StateMap<>(JsonOps.INSTANCE);
-            ((DocumentViewState) workbench.documentFor(path)).writeViewState(view);
-            entry.putRaw(KEY_VIEW, view.encode());
+            stateful.writeViewState(view);
+            files.put(path, view.encode());
+        }
+        // AND THEN WHAT WE ARE STILL HOLDING FOR A TAB NOBODY OPENED.
+        //
+        // A restored tab is a title until it is activated, so a session with five files open comes back
+        // with one live document and four that have never been built -- and `openPaths` reports the
+        // documents, correctly, because that is what it is asked by everything else. Saving from that
+        // alone silently drops the other four files' carets and scroll positions on the first save after
+        // any restart, and it is invisible: the tabs all come back, so nothing looks lost until you
+        // notice a file you had not touched now opens at the top.
+        //
+        // `pendingViewState` is exactly the right answer and already exists -- it holds what a record
+        // said, keyed by path, and an entry is REMOVED the moment its document arrives and consumes it.
+        // So whatever is still in there is precisely the set that was restored and never looked at.
+        // putIfAbsent rather than put: a document that has since been built has the newer word.
+        for (Map.Entry<CgPath, JsonElement> untouched : pendingViewState.entrySet()) {
+            files.putIfAbsent(untouched.getKey(), untouched.getValue());
+        }
+        out.putList(KEY_FILES, new ArrayList<>(files.keySet()), (entry, path) -> {
+            entry.putString(KEY_PATH, path.toString());
+            entry.putRaw(KEY_VIEW, files.get(path));
         });
 
         return new GsonBuilder().setPrettyPrinting().create().toJson(out.encode()) + "\n";

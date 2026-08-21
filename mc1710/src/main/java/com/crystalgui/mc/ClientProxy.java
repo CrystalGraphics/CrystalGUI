@@ -1,34 +1,25 @@
 package com.crystalgui.mc;
 
-import com.crystalgraphics.platform.CgPlatform;
-import com.crystalgui.language.platform.ScriptServices;
+import com.crystalgui.lifecycle.CgUiLifecycle;
 import com.crystalgui.mc.client.CgUiAutoTest;
 import com.crystalgui.mc.client.CgUiInput;
-import com.crystalgui.mc.platform.service.script.ScriptService1710;
 
 /**
  * The client half: register the key binding and the input pump.
  *
- * <p>Deliberately does no GL work and touches no CrystalGraphics resource. Every GL object CrystalGUI
- * owns is built lazily on first paint, and the paint context registers itself with
- * {@code CgGraphicsLifecycle} from its own class initialiser — so there is nothing to set up here, and
- * anything that were set up would run before a context exists.</p>
+ * <p>Registration itself does no GL work, but it can <em>cause</em> some, which is the non-obvious
+ * part: {@link CgUiLifecycle#register()} delivers {@code onInit} immediately when a context is already
+ * live, and that hook constructs and warms the paint context. The warm binds materials, so it writes
+ * GL state on the host's context from inside what looks like a pure registration call. It is scoped
+ * there — see the comment in {@code CgUiLifecycle.onInit} for what leaks and what it cost.</p>
  */
 public class ClientProxy extends CommonProxy {
 
     @Override
     public void preInit() {
         super.preInit();
-        // INTO THE PLATFORM STACK, not beside it. `ScriptServices.SERVICE` is a `CgService` slot, so
-        // this is the same registry every other platform service goes through and `CgService.declared()`
-        // can print it alongside them -- rather than a second, parallel registry a loader has to know to
-        // look for. Registration is a statement of facts about this platform (a byte route, a cache
-        // path, mapping coordinates), so it costs nothing and has no ordering requirement of its own.
-        //
-        // CLIENT-side only because of ONE member: `cacheRoot()` reads `Minecraft.getMinecraft().mcDataDir`.
-        // The other four are installation-level, so when server-side scripting lands this moves to
-        // CommonProxy and that one method grows a side-aware answer.
-        CgPlatform.provide(ScriptServices.SERVICE, new ScriptService1710());
+        
+        CgUiLifecycle.register();
         CgUiInput.register();
         CgUiAutoTest.register();
     }

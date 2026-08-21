@@ -1,6 +1,8 @@
 package com.crystalgui.core.async;
 
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.notify.Notification;
+import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.core.dispose.Disposable;
 
 import java.util.ArrayList;
@@ -232,6 +234,11 @@ public final class JobScheduler implements Disposable {
      * <p>Bumps the generation, so a result already in flight is discarded when it lands.</p>
      */
     public void cancel(JobKey key) {
+        // MARKED, not removed. Cancellation is cooperative, so there is a real gap between asking and the
+        // worker noticing -- and a row that vanished on the click would claim the work had stopped when it
+        // had not. @see ActiveJob#cancelRequested()
+        Tracked shown = tracked.get(key);
+        if (shown != null) shown.cancelRequested = true;
         generations.merge(key, 1, Integer::sum);
         waiting.remove(key);
         Running inFlight = running.get(key);
@@ -272,19 +279,24 @@ public final class JobScheduler implements Disposable {
         deliverCompleted();
         promoteDue();
         deliverCompleted();
-        return !waiting.isEmpty() || !running.isEmpty();
+        // LAST, and on this thread. Every visibility decision -- has it earned a place on screen, has it
+        // been there long enough to leave -- is made here, where the rest of this class's decisions are
+        // made, so none of it can be reached from a worker. @see #active()
+        updateTracked(clockMillis.getAsLong());
+        return !waiting.isEmpty() || !running.isEmpty() || !tracked.isEmpty();
     }
 
     private void deliverCompleted() {
         Completion<?> completion;
         while ((completion = completed.poll()) != null) {
-            running.remove(completion.key);
+            Running finished = running.remove(completion.key);
             // The generation check is the whole of supersession. A result whose key has been re-submitted
             // describes a question nobody is asking any more.
             Integer current = generations.get(completion.key);
             if (current == null || current != completion.generation) continue;
             if (completion.failure != null) {
                 CrystalGuiCore.LOGGER.warn("job {} failed", completion.key, completion.failure);
+                reportFailure(finished, completion.failure);
                 continue;
             }
             try {
@@ -295,6 +307,33 @@ public final class JobScheduler implements Disposable {
                 CrystalGuiCore.LOGGER.warn("job {} completion handler failed", completion.key, failed);
             }
         }
+    }
+
+    /**
+     * A failed job that had <b>announced itself</b> raises a notification.
+     *
+     * <p>Silent disappearance is indistinguishable from success, and a download that fails after showing
+     * a bar for ten seconds is the case that makes it obvious: the bar leaves, and the only difference
+     * between that and finishing is that nothing happened.</p>
+     *
+     * <p><b>Only announced jobs.</b> The opt-in from {@link Progress#begin} again: an analysis runs on
+     * every keystroke and a broken one would otherwise raise a notification per character. If a job was
+     * never worth a place in the chrome, its failure is not worth interrupting anyone for — the log line
+     * above is the whole report.</p>
+     *
+     * <p>On the UI thread, because {@link #drain()} is.</p>
+     */
+    private void reportFailure(Running finished, Throwable failure) {
+        // FROM THE JOB'S OWN CONTEXT, not from `tracked`. A failure is delivered before updateTracked has
+        // run for that job -- and a job that fails quickly is never tracked at all -- so looking it up
+        // there finds nothing and the notification silently never happens, which is the bug this method
+        // exists to prevent wearing a different hat.
+        if (finished == null) return;
+        ProgressState announced = finished.context().progressState();
+        if (announced == null) return;
+        String reason = failure.getMessage() == null
+                ? failure.getClass().getSimpleName() : failure.getMessage();
+        Notifications.show(Notification.error(announced.what() + " failed: " + reason));
     }
 
     private void promoteDue() {
@@ -314,9 +353,34 @@ public final class JobScheduler implements Disposable {
         Iterator<Waiting<?>> iterator = due.iterator();
         while (iterator.hasNext() && running.size() < maxConcurrent) {
             Waiting<?> next = iterator.next();
+            if (!hasSlotFor(next.lane)) continue;
             waiting.remove(next.key);
             start(next);
         }
+    }
+
+    /**
+     * <b>{@link JobLane#BACKGROUND} may not take the last slot.</b>
+     *
+     * <p>{@code maxConcurrent} is scheduler-wide, so a long job holds a slot for its whole life — and
+     * background work is precisely the long kind. A 16 MB download and a classpath index are minutes
+     * between them, and an analysis wants a slot on the next keystroke.</p>
+     *
+     * <p>The starvation guard does not help here and it is worth saying why, because it looks as though it
+     * should: it promotes a job that has been <em>waiting</em> too long, and cannot evict one that is
+     * <em>running</em>. A queue of interactive work behind two downloads is not starved by ordering, it is
+     * starved by occupancy.</p>
+     *
+     * <p>So background is capped one below the pool. With a pool of one it may still run — a machine that
+     * can only do one thing at a time should do the thing that was asked for rather than nothing.</p>
+     */
+    private boolean hasSlotFor(JobLane lane) {
+        if (lane != JobLane.BACKGROUND || maxConcurrent <= 1) return true;
+        int backgroundRunning = 0;
+        for (Running inFlight : running.values()) {
+            if (inFlight.lane() == JobLane.BACKGROUND) backgroundRunning++;
+        }
+        return backgroundRunning < maxConcurrent - 1;
     }
 
     /**
@@ -339,8 +403,8 @@ public final class JobScheduler implements Disposable {
     }
 
     private <T> void start(Waiting<T> job) {
-        JobContext context = new JobContext();
-        running.put(job.key, new Running(context));
+        JobContext context = new JobContext(clockMillis);
+        running.put(job.key, new Running(context, job.lane));
         executor.execute(() -> {
             T result = null;
             Throwable failure = null;
@@ -389,13 +453,102 @@ public final class JobScheduler implements Disposable {
         return running.size();
     }
 
+    // ── Progress, and what is on screen ─────────────────────────────────────────────────────────
+
+    /** How long a job must have been running before it earns a place in the chrome. @see #active() */
+    public static final long DEFAULT_SHOW_AFTER_MILLIS = 400L;
+
+    /** How long it stays once it has appeared, however fast it then finishes. @see #active() */
+    public static final long DEFAULT_MINIMUM_VISIBLE_MILLIS = 500L;
+
+    private long showAfterMillis = DEFAULT_SHOW_AFTER_MILLIS;
+    private long minimumVisibleMillis = DEFAULT_MINIMUM_VISIBLE_MILLIS;
+
+    private final Map<JobKey, Tracked> tracked = new LinkedHashMap<>();
+
+    public JobScheduler setShowAfterMillis(long millis) {
+        this.showAfterMillis = Math.max(0, millis);
+        return this;
+    }
+
+    public JobScheduler setMinimumVisibleMillis(long millis) {
+        this.minimumVisibleMillis = Math.max(0, millis);
+        return this;
+    }
+
+    /**
+     * What the chrome should be drawing, most recently begun first.
+     *
+     * <h3>Two policies, and both exist to stop the status bar flickering</h3>
+     *
+     * <p><b>A job appears only once it has called {@link Progress#begin}</b>, and only after
+     * {@link #DEFAULT_SHOW_AFTER_MILLIS}. An analysis runs on every keystroke; if everything appeared the
+     * chrome would strobe continuously, and most work finishes before anyone could read its name.</p>
+     *
+     * <p><b>And once it has appeared it stays</b> for {@link #DEFAULT_MINIMUM_VISIBLE_MILLIS}, so a job
+     * that finishes just after crossing the delay does not flash in and out.</p>
+     *
+     * <p>Most recently begun first, not by how far along: ordering by progress reorders rows under the
+     * cursor, which is the one thing a list with buttons in it must not do.</p>
+     *
+     * <p>Safe to call every frame — it allocates one list and reads volatile references. The decisions
+     * were all made in {@link #drain()}.</p>
+     */
+    public List<ActiveJob> active() {
+        if (tracked.isEmpty()) return List.of();
+        List<ActiveJob> shown = new ArrayList<>(tracked.size());
+        for (Map.Entry<JobKey, Tracked> entry : tracked.entrySet()) {
+            Tracked value = entry.getValue();
+            if (value.shownAtMillis == 0L || value.state == null) continue;
+            shown.add(new ActiveJob(entry.getKey(), value.state, value.cancelRequested));
+        }
+        shown.sort(Comparator.comparingLong((ActiveJob job) -> job.state().begunAtMillis()).reversed());
+        return List.copyOf(shown);
+    }
+
+    /**
+     * Folds this frame's running jobs into what is on screen.
+     *
+     * <p>A tracked entry outlives its job deliberately: {@link #DEFAULT_MINIMUM_VISIBLE_MILLIS} is
+     * measured from when the row appeared, so the record has to survive the job it describes. One that was
+     * never shown leaves immediately — there is nothing for a minimum to protect.</p>
+     */
+    private void updateTracked(long now) {
+        for (Map.Entry<JobKey, Running> entry : running.entrySet()) {
+            ProgressState state = entry.getValue().context().progressState();
+            if (state == null) continue;
+            Tracked value = tracked.computeIfAbsent(entry.getKey(), key -> new Tracked());
+            value.state = state;
+            value.finishedAtMillis = 0L;
+            if (value.shownAtMillis == 0L && now - state.begunAtMillis() >= showAfterMillis) {
+                value.shownAtMillis = now;
+            }
+        }
+        tracked.entrySet().removeIf(entry -> {
+            Tracked value = entry.getValue();
+            if (running.containsKey(entry.getKey())) return false;
+            if (value.shownAtMillis == 0L) return true;
+            if (value.finishedAtMillis == 0L) value.finishedAtMillis = now;
+            return now - value.shownAtMillis >= minimumVisibleMillis;
+        });
+    }
+
+    /** Mutable, owned by the UI thread, and never handed out — {@link ActiveJob} is what escapes. */
+    private static final class Tracked {
+        private ProgressState state;
+        private long shownAtMillis;
+        private long finishedAtMillis;
+        private boolean cancelRequested;
+    }
+
     // ── Internals ───────────────────────────────────────────────────────────────────────────────
 
     private record Waiting<T>(JobKey key, JobLane lane, int generation, long submittedAt, long dueAt,
                               Function<JobContext, T> work, Consumer<T> onDone) {
     }
 
-    private record Running(JobContext context) {
+    /** The lane is carried so {@link #hasSlotFor} can count occupancy without a second map. */
+    private record Running(JobContext context, JobLane lane) {
     }
 
     private record Completion<T>(JobKey key, int generation, T result, Throwable failure,

@@ -3,6 +3,7 @@ package com.crystalgui.mc.client;
 import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.core.dispose.Disposer;
+import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.editor.CrystalEditor;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.fs.LocalConfigStorage;
@@ -112,6 +113,33 @@ public final class CgUiScreen extends GuiScreen {
         closeRequested = true;
     }
 
+    /**
+     * Where the first open's time actually goes — {@code -Dcrystalgui.startup.trace=true}.
+     *
+     * <p>Off by default and one block per session when on. It exists because the first F6 was reported as
+     * a three-second freeze and the honest answer to "what is slow" was that nobody knew: the two pieces
+     * measurable without a client came to about a second between them (the user-agent sheet's nine-part
+     * parse, and opening the engine band plus ECJ's first analysis), and the rest is behind GL — fonts,
+     * glyph atlases, icon parsing, the first layout of a whole workbench — which no unit test can reach.</p>
+     *
+     * <p>The same lesson §26.13a records from Phase 3: <b>a client is an environment no test reproduces,
+     * and the way to find out what it is doing is to ask it rather than to reason from the source.</b></p>
+     */
+    private static final boolean TRACE = Boolean.getBoolean("crystalgui.startup.trace");
+
+    private static long traceStart;
+
+    private static boolean tracedFirstPaint;
+
+    private static void trace(String phase) {
+        if (!TRACE) return;
+        long now = System.nanoTime();
+        if (traceStart != 0) {
+            CrystalGuiCore.LOGGER.info("[startup] {} — {} ms", phase, (now - traceStart) / 1_000_000);
+        }
+        traceStart = now;
+    }
+
     @Override
     public void initGui() {
         // Held-key repeat. Without it a held arrow moves the caret exactly once and backspace deletes
@@ -121,10 +149,13 @@ public final class CgUiScreen extends GuiScreen {
 
         if (uiWindow != null) return;
 
+        trace("begin");
         File dataDir = mc.mcDataDir;
         workspace = new Mc1710Workspace(new File(dataDir, "crystalgui/workspace").toPath());
+        trace("workspace + language registration");
 
         editor = new CrystalEditor(workspace.client());
+        trace("CrystalEditor construction");
         // BESIDE the workspace, not inside it: a session record is private and must not become part of
         // a project a resource pack could ship. Same reason the trash lives outside.
         editor.useConfig(new LocalConfigStorage(new File(dataDir, "config/crystalgui").toPath()));
@@ -146,11 +177,13 @@ public final class CgUiScreen extends GuiScreen {
                 new File(dataDir, "config/crystalgui/script-cache").toPath());
         if (scripting != null) editor.workbench().revealPanel(RunPanels.RUN_TYPE);
 
+        trace("scripting install");
         uiWindow = new UIWindow(Ui.of(editor));
         // NOT INSTALLED FOR YOU. Without this the window matches no selector at all and the editor
         // renders as an unstyled column of boxes.
         uiWindow.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
         uiWindow.getStyleEngine().addStylesheet(StyleSheet.parse(HOST_STYLES));
+        trace("UIWindow + stylesheets");
     }
 
     @Override
@@ -235,6 +268,12 @@ public final class CgUiScreen extends GuiScreen {
         CgGlState.invalidateAllIfPresent();
 
         uiWindow.paintFrame();
+        if (TRACE && !tracedFirstPaint) {
+            tracedFirstPaint = true;
+            // THE ONE THAT NEEDS A CLIENT. Fonts, glyph atlases, icon SVGs and the first layout of the
+            // whole workbench all happen here and nowhere a test can reach.
+            trace("first paint");
+        }
 
         // HAND MINECRAFT BACK THE STATE ITS OWN RENDERER ASSUMES.
         //

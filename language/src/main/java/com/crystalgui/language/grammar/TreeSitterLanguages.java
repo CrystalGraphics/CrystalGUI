@@ -32,24 +32,36 @@ public final class TreeSitterLanguages {
      * <p>Idempotent — {@link LanguageRegistry#registerExtensions} replaces a rule for the same
      * extension, so calling this twice leaves one registration rather than two.</p>
      */
-    public static void register() {
-        register(JobScheduler.shared());
+    public static boolean register() {
+        return register(JobScheduler.shared());
     }
 
-    /** @param scheduler where reparses run, or {@code null} to parse on the calling thread */
-    public static void register(JobScheduler scheduler) {
+    /**
+     * @param scheduler where reparses run, or {@code null} to parse on the calling thread
+     * @return whether the native loaded and the grammars are now in front of core's lexers
+     */
+    public static boolean register(JobScheduler scheduler) {
         try {
             // Built once here purely to fail fast: if the native will not load on this platform, we must
             // leave core's lexer in place rather than registering a supplier that throws on first open.
             TreeSitterTokenizer probe = Grammar.JAVA.newTokenizer(scheduler);
             probe.close();
         } catch (Throwable nativeUnavailable) {
-            System.err.println("[crystalgui] tree-sitter unavailable here; keeping the built-in lexer: "
-                    + nativeUnavailable);
             // Not an error. The fork ships natives for five platform/arch pairs and this is one of the
             // others, which is exactly the case the built-in lexer exists to cover.
-            return;
+            System.err.println("[crystalgui] tree-sitter unavailable here; keeping the built-in lexer: "
+                    + nativeUnavailable);
+            return false;
         }
+        // AND SAY SO WHEN IT WORKS. This probe is the only thing that actually loads the JNI library --
+        // everything below merely records suppliers -- so it is the one place that knows. A host used to
+        // repeat it reflectively for exactly that reason, which is a duplicate of these six lines and was
+        // documented as necessary because "register() is LAZY". It has not been lazy since the probe was
+        // added. Colouring from a word list and colouring from a parse tree also look alike on most
+        // lines, so a silent success is indistinguishable from a silent miss until somebody notices a
+        // type and a call sharing a colour -- the same rule the engine bands are held to.
+        System.err.println("[crystalgui] tree-sitter grammars are live - "
+                + Grammar.values().length + " languages parsing");
 
         // ONE LOOP OVER THE TABLE. This was six near-identical blocks, each restating a language's
         // extensions and its Language beside a factory that also knew them -- so adding XML meant getting
@@ -69,5 +81,6 @@ public final class TreeSitterLanguages {
                             () -> grammar.newTokenizer(scheduler), current.services()),
                     grammar.extensions().toArray(new String[0]));
         }
+        return true;
     }
 }

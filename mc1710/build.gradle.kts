@@ -1,3 +1,4 @@
+import java.security.MessageDigest
 import xyz.wagyourtail.jvmdg.gradle.task.DowngradeJar
 
 plugins {
@@ -12,8 +13,25 @@ val engineApi: Configuration by configurations.creating {
     isCanBeResolved = true
 }
 
-/** Band 8's jars, carried inside the mod jar as resources. @see bundleEngineBand8 */
+/** Band 8's jars — bundled by default. @see bundleEngineBands */
 val engineBand8: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+
+/**
+ * Bands 11 and 17, resolved for their MANIFESTS and never copied into the jar.
+ *
+ * A 1.7.10 client on Java 17 -- which lwjgl3ify and GTNH make an ordinary configuration -- selects band
+ * 17, finds nothing bundled, and has no analysis at all. Shipping all three bands is 41 MB; shipping a
+ * manifest per band is a few hundred bytes and lets the client fetch the one it needs.
+ */
+val engineBand11: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+
+val engineBand17: Configuration by configurations.creating {
     isCanBeConsumed = false
     isCanBeResolved = true
 }
@@ -73,8 +91,10 @@ dependencies {
     // :language's engine API, for the DOWNGRADE CLASSPATH ONLY -- see downgradeJar below.
     engineApi(project(path = ":language", configuration = "engineApi"))
 
-    // Band 8's jars, to be carried INSIDE the mod jar as resources -- see bundleEngineBand8 below.
+    // The bands, for bundling and for manifests -- see bundleEngineBands and writeEngineManifests.
     engineBand8(project(path = ":language", configuration = "engineBand8Bundle"))
+    engineBand11(project(path = ":language", configuration = "engineBand11Bundle"))
+    engineBand17(project(path = ":language", configuration = "engineBand17Bundle"))
 
     // The version the GTNH convention already puts on the DEV run -- stated here because only the dev
     // variant is on that classpath and an obf mods folder needs the release one. @see obfMixinBootstrap
@@ -96,27 +116,166 @@ dependencies {
 // The INDEX is what makes them findable. A ClassLoader cannot list a resource directory, and every route
 // that fakes it is a special case of where the resource physically lives; one text file reads the same
 // however it is stored. @see EngineBundle
-val bundleEngineBand8 = tasks.register<Sync>("bundleEngineBand8") {
+/**
+ * Which bands this jar CARRIES. `-PcgBundleBands=8`, `8,17`, or `none`.
+ *
+ * Default 8, because that is what a 1.7.10 client runs. A pack that ships lwjgl3ify and Java 17 can bake
+ * 17 instead -- or both, at about 29 MB -- and a slim build can bake none and rely entirely on the
+ * download. The runtime path is identical either way: bundled is tried first, the download second, and
+ * `firstOf` takes the first non-empty answer.
+ */
+val bundledBands: List<Int> = providers.gradleProperty("cgBundleBands").orNull
+    ?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() && it != "none" }?.map { it.toInt() }
+    ?: listOf(8)
+
+fun configurationForBand(band: Int): Configuration = when (band) {
+    8 -> engineBand8
+    11 -> engineBand11
+    17 -> engineBand17
+    else -> throw GradleException("unknown engine band $band; known bands are 8, 11 and 17")
+}
+
+val bundleEngineBands = tasks.register<Sync>("bundleEngineBands") {
     group = "build"
-    description = "Lays band 8's jars out as jar resources, with the index EngineBundle reads."
-    // The Sync's OWN destination is the bundle root and the band is a path INSIDE it. Syncing straight
-    // into the band directory instead makes that directory the task's output, so `from(bundleEngineBand8)`
-    // in shadowJar copies its CONTENTS -- fifteen jars and an index at the root of the mod jar, with the
-    // assets/ prefix silently gone and nothing to say so.
+    description = "Lays the selected bands' jars out as jar resources, with the index EngineBundle reads."
+    // The Sync's OWN destination is the bundle root and each band is a path INSIDE it. Syncing straight
+    // into a band directory instead makes that directory the task's output, so `from(...)` in shadowJar
+    // copies its CONTENTS -- jars and an index at the root of the mod jar, with the assets/ prefix
+    // silently gone and nothing to say so.
     into(layout.buildDirectory.dir("engine-bundle"))
-    into("assets/crystalgui/engines/8") { from(engineBand8) }
+    for (band in bundledBands) {
+        into("assets/crystalgui/engines/$band") { from(configurationForBand(band)) }
+    }
     doLast {
-        val directory = layout.buildDirectory.dir("engine-bundle/assets/crystalgui/engines/8").get().asFile
-        val jars = directory.listFiles()?.filter { it.name.endsWith(".jar") }?.map { it.name }?.sorted()
-            ?: emptyList()
-        // SORTED, so the classpath order is identical on every machine that builds this. `Sync` copies in
-        // whatever order the filesystem reports, and two jars declaring the same package would otherwise
-        // resolve differently per build host -- the bug that reproduces for one person and nobody else.
-        directory.resolve("index.txt").writeText(
-            "# Band 8 engine jars, in classpath order. Written by :mc1710:bundleEngineBand8.\n"
-                    + jars.joinToString("\n") + "\n")
+        for (band in bundledBands) {
+            val directory = layout.buildDirectory
+                .dir("engine-bundle/assets/crystalgui/engines/$band").get().asFile
+            val jars = directory.listFiles()?.filter { it.name.endsWith(".jar") }?.map { it.name }?.sorted()
+                ?: emptyList()
+            // SORTED, so the classpath order is identical on every machine that builds this. `Sync` copies
+            // in whatever order the filesystem reports, and two jars declaring the same package would
+            // otherwise resolve differently per build host -- the bug that reproduces for one person only.
+            directory.resolve("index.txt").writeText(
+                "# Band $band engine jars, in classpath order. Written by :mc1710:bundleEngineBands.\n"
+                        + jars.joinToString("\n") + "\n")
+        }
     }
 }
+
+/**
+ * One manifest per band: artifact name, digest, and where to fetch it.
+ *
+ * WHY THE DIGEST IS COMPUTED HERE rather than read from Maven's published `.sha1`. Hashing the file
+ * Gradle resolved pins *the exact bytes this build was tested against*, needs no network at build time,
+ * and can be verified offline. Reading upstream's checksum pins whatever the remote says today, which is
+ * a different claim and a weaker one.
+ *
+ * It is MD5 because `CacheFiles` computes MD5, and that is honest about what it buys: a
+ * corruption-and-drift check -- a truncated transfer, a mirror serving something else, a half-written
+ * cache entry. It is NOT a security boundary and must not be described as one; authenticity comes from
+ * HTTPS to Maven Central.
+ *
+ * The URL is derived from the module coordinates rather than taken from the resolver, because a developer
+ * resolving through a mirror or a local cache would otherwise bake their own machine's addresses into a
+ * shipped artifact.
+ *
+ * DECLARED BEFORE ITS USES. A .gradle.kts script runs top to bottom, so a forward reference to a
+ * script-level fun or val does not resolve -- unlike a class, where member order is free.
+ */
+fun manifestFor(band: Int, configuration: Configuration) {
+    // A SEPARATE OUTPUT TREE from bundleEngineBands', and that is not tidiness. That task is a `Sync`,
+    // and a Sync DELETES whatever is not in its source -- so manifests written into engine-bundle/ would
+    // survive or vanish depending on which task ran last, which is the kind of thing that works on the
+    // machine that wrote it and fails in CI.
+    val directory = layout.buildDirectory.dir("engine-manifests/assets/crystalgui/engines/$band").get().asFile
+    directory.mkdirs()
+    val rows = configuration.resolvedConfiguration.resolvedArtifacts
+        .map { artifact ->
+            val id = artifact.moduleVersion.id
+            val path = id.group.replace('.', '/') + "/" + id.name + "/" + id.version
+            val fileName = artifact.file.name
+            val digest = MessageDigest.getInstance("MD5")
+                .digest(artifact.file.readBytes())
+                .joinToString("") { "%02x".format(it) }
+            "$fileName|$digest|https://repo1.maven.org/maven2/$path/$fileName"
+        }
+        // SORTED, for the same reason index.txt is: two hosts must produce byte-identical output, or the
+        // manifest changes with the filesystem's mood and every build shows a diff nobody made.
+        .sorted()
+    directory.resolve("manifest.txt").writeText(
+        "# Band $band engine jars: name|md5|url. Written by :mc1710:writeEngineManifests.\n"
+                + rows.joinToString("\n") + "\n")
+}
+
+val writeEngineManifests = tasks.register("writeEngineManifests") {
+    group = "build"
+    description = "Writes one name|md5|url manifest per engine band, for bands the jar does not carry."
+    outputs.dir(layout.buildDirectory.dir("engine-manifests"))
+    doLast {
+        manifestFor(8, engineBand8)
+        manifestFor(11, engineBand11)
+        manifestFor(17, engineBand17)
+    }
+}
+
+/**
+ * Fails the build if a bundled band's jars and its manifest disagree.
+ *
+ * The two are written by different tasks from the same configuration, so they can drift: a re-pin that
+ * regenerates one and not the other ships a jar whose digest describes the previous version. Nothing at
+ * runtime would notice -- the bundled band is used as-is and the manifest is only read when a band is
+ * MISSING -- so the mismatch would surface as a download that always fails its digest on some other
+ * host, which is about as far from the cause as a symptom can get.
+ *
+ * WHAT IT CAN AND CANNOT CATCH, since it depends on writeEngineManifests and therefore always compares
+ * against a freshly written file: it catches the two tasks DISAGREEING ABOUT THEIR INPUTS -- a different
+ * configuration, a filter added to one and not the other, a band bundled from one source and described
+ * from another. It cannot catch a hand-edited manifest, because the generator overwrites one before the
+ * comparison runs. That is the drift worth guarding: nobody edits these by hand, and the tasks are edited
+ * separately.
+ *
+ * Part of `check`, because a guard nobody runs is a guard that is not there.
+ */
+val checkEngineManifest = tasks.register("checkEngineManifest") {
+    group = "verification"
+    description = "Fails if any bundled band's jars and its manifest disagree."
+    dependsOn(bundleEngineBands, writeEngineManifests)
+    doLast {
+        for (band in bundledBands) {
+            val bundled = layout.buildDirectory
+                .dir("engine-bundle/assets/crystalgui/engines/$band").get().asFile
+            val manifest = layout.buildDirectory
+                .file("engine-manifests/assets/crystalgui/engines/$band/manifest.txt").get().asFile
+            if (!manifest.isFile) {
+                throw GradleException("band $band has no manifest; run writeEngineManifests")
+            }
+
+            val declared = manifest.readLines()
+                .filter { it.isNotBlank() && !it.startsWith("#") }
+                .associate { row -> row.split("|").let { it[0] to it[1] } }
+            val present = (bundled.listFiles() ?: emptyArray())
+                .filter { it.name.endsWith(".jar") }
+                .associate { jar ->
+                    jar.name to MessageDigest.getInstance("MD5").digest(jar.readBytes())
+                        .joinToString("") { "%02x".format(it) }
+                }
+
+            val missing = present.keys - declared.keys
+            val extra = declared.keys - present.keys
+            val wrong = present.filter { (name, digest) -> declared[name]?.equals(digest) == false }.keys
+            if (missing.isNotEmpty() || extra.isNotEmpty() || wrong.isNotEmpty()) {
+                throw GradleException(
+                    "band $band's manifest does not describe its bundled jars.\n"
+                            + "  bundled but not declared: $missing\n"
+                            + "  declared but not bundled: $extra\n"
+                            + "  declared with a stale digest: $wrong"
+                )
+            }
+        }
+    }
+}
+
+tasks.named("check") { dependsOn(checkEngineManifest) }
 
 // ECJ, Rhino and the two Eclipse platform jars the adapter names, on `downgradeJar`'s classpath.
 //
@@ -191,8 +350,13 @@ tasks.named<JavaExec>(runTask) {
     // nothing on this classpath reads, and extraction would report an empty band while the jar it was
     // testing is perfectly correct.
     if (providers.gradleProperty("cgBundledEngines").isPresent) {
-        dependsOn(tasks.named("bundleEngineBand8"))
+        dependsOn(tasks.named("bundleEngineBands"), tasks.named("writeEngineManifests"))
         classpath(layout.buildDirectory.dir("engine-bundle"))
+        // AND THE MANIFESTS, which is what makes -PcgBundleBands=none a usable test rather than just a
+        // smaller jar: with no band bundled the client falls through to the DOWNLOAD, and the download
+        // reads its name|md5|url list from here. It is the only way to exercise that path on a host whose
+        // own band is the bundled one.
+        classpath(layout.buildDirectory.dir("engine-manifests"))
     } else {
         dependsOn(":language:stageEngines")
         systemProperty("crystalgui.engines.dir",
@@ -206,6 +370,12 @@ tasks.named<JavaExec>(runTask) {
     // ArtifactService.requestCapture gives the GL debug harness. Every render defect before this was
     // diagnosed by a person launching the game and describing what they saw, which is slow and puts a
     // human in a loop that is really "render N frames and read the pixels".
+    // -PcgTrace prints where the first editor open spends its time. Separate from cgAutoTest because it
+    // is just as useful on a hand-driven run, where the freeze was noticed in the first place.
+    if (providers.gradleProperty("cgTrace").isPresent) {
+        systemProperty("crystalgui.startup.trace", "true")
+    }
+
     if (providers.gradleProperty("cgAutoTest").isPresent) {
         systemProperty("crystalgui.autotest", "true")
         systemProperty("crystalgui.autotest.out",
@@ -300,7 +470,11 @@ tasks.shadowJar {
     // The band, as resources. Shadow rewrites .class entries and copies everything else verbatim, so a
     // nested jar crosses intact -- which is required: relocating inside ECJ would rename types its own
     // reflection looks up by string.
-    from(bundleEngineBand8)
+    from(bundleEngineBands)
+    // AND THE MANIFESTS, which are the other half of the same directory: band 8's jars plus a
+    // name|md5|url list per band, so a host on a band the jar does not carry can fetch its own.
+    dependsOn(writeEngineManifests)
+    from(writeEngineManifests)
     exclude("module-info.class")
     exclude("kotlin/**")
     exclude("org/jetbrains/kotlin/**")

@@ -584,7 +584,7 @@ Assembly over finished parts, which is why it is last:
 - **Image preview** — a `UIElement` with a `background` built from fetched bytes
 - **Anything else** — name / size / type, and *no viewer for this file type*. Additive later.
 - **Conflict dialog** — `Dialog`, two buttons in v1
-- **Progress** — determinate bar during chunked transfer; *Loading project…* while a manifest resolves
+- **Progress** — determinate bar during chunked transfer; *Loading project…* while a manifest resolves. **📄 Designed in full 2026-08-19: [`CrystalGUI_P6.1.13_PROGRESS_PLAN.md`](CrystalGUI_P6.1.13_PROGRESS_PLAN.md)** — this line was the whole specification, and the feature turned out to have two consumers before this one (the engine-band download, and the MCP mapping fetch that already ships silently on a bare thread), so it is built there rather than here
 
 ---
 

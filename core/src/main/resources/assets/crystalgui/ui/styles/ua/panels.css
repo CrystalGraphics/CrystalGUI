@@ -171,7 +171,13 @@ notificationsview > .__notification-list__ {
  * long title give way rather than pushing the time off the card. */
 .__notification__ .__entry-head__ {
     flex-direction: row;
-    align-items: center;
+    /* THE ICON SITS ON THE FIRST LINE, not in the middle of the block.
+     *
+     * `center` is right while every message is one line and wrong the moment one wraps: a four-line
+     * message put the severity glyph level with line two and a half, floating beside the text rather than
+     * introducing it. Both references align it to the first baseline for the same reason — the icon says
+     * what KIND of thing this is, which you read before the words, not halfway through them. */
+    align-items: flex-start;
     gap-all: 6px;
     width: 100%;
 }
@@ -1154,4 +1160,181 @@ runpanel .__run-notice__ {
     color: var(--run-notice-fg, #7A7A7A);
     white-space: nowrap;
     text-overflow: ellipsis;
+}
+
+/* ── Progress: the status bar indicator and the Processes popup ──────────────────────────────────
+ *
+ * Functional geometry only, as everywhere in this sheet. Every colour is a token with a fallback, so a
+ * theme owns the appearance and this still renders with none loaded.
+ *
+ * The bar's fill is sized by ProgressBar in PERCENT at IMPORTANT -- that is the data, not a style, and
+ * it is the one number the widget writes. Nothing here may set the fill's width.
+ */
+
+/* THE POINTER, which the shared rule cannot give this one.
+ *
+ * `.__status-bar__ .__status-item__.__clickable__` is a COMPOUND selector and this element deliberately
+ * does not wear `__status-item__` — that class marks a registry entry and `contents` collects by it, so
+ * wearing it made a reserved slot count as an entry and shifted every index in the bar. So the entry
+ * carrying the most obviously clickable thing in the bar was the one entry with no pointer, and the class
+ * that would have fixed it is the one it must not have. A reserved slot styles itself, as breadcrumbs
+ * does. */
+.__progress-item__,
+.__progress-item__ .__cancel__ {
+    cursor: pointer;
+}
+
+.__progress-item__ {
+    flex-direction: row;
+    align-items: center;
+    gap-all: 6px;
+    flex-shrink: 0;
+}
+
+.__progress-item__ .__label__ {
+    font-size: 9px;
+    color: var(--statusbar-item-fg, #9DA0A8);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    max-width: 240px;
+}
+
+.__progress-item__ .__count__ {
+    font-size: 9px;
+    color: var(--statusbar-item-dim-fg, #6E7178);
+    white-space: nowrap;
+}
+
+/* A track needs a width of its own: it has no content, so content-sizing gives it zero. */
+progressbar {
+    width: 120px;
+    height: 4px;
+    flex-shrink: 0;
+    background-color: var(--progress-track-bg, #3C3F41);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+progressbar .__fill__ {
+    height: 100%;
+    background-color: var(--progress-fill-bg, #3D7AB8);
+    border-radius: 2px;
+}
+
+/* THE GLYPH GOES IN `overlay`, NOT `background` — which is what lets it have a hover chip at all.
+ *
+ * `background` and `background-color` are separate properties and the drawable wins the paint, so an
+ * icon in the background channel means a `background-color` on hover is painted straight over. That is
+ * why these two crosses were the only close-shaped controls in the application that lit up by changing
+ * colour and nothing else: not a missing rule, an occupied channel. `.__notification__ .__close__` has
+ * always drawn its cross with `overlay: shape("cross")` for exactly this reason, and this now matches it
+ * — same chip, same radius, same idea. */
+.__progress-item__ .__cancel__ {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    overlay: icon("crystalgui:x");
+    color: var(--statusbar-item-dim-fg, #6E7178);
+    border-radius: 2px;
+}
+
+.__progress-item__ .__cancel__:hover {
+    color: var(--progress-cancel-hover-fg, #FFFFFF);
+    background-color: var(--progress-cancel-hover-bg, #5A5F62);
+}
+
+/* The Processes popup. */
+
+.__processes__ {
+    flex-direction: column;
+    min-width: 320px;
+    padding-all: 10px;
+    gap-all: 8px;
+    background-color: var(--menu-bg, #3C3F41);
+    border-width-left: 1px;
+    border-color: var(--menu-border, #4E5254);
+    border-radius: 4px;
+}
+
+/* WIDTH FIRST, then alignment. text-align centres text within the element's box, and a UIText in a
+ * column is sized to its own content -- so there is nothing to centre within and the rule reads as
+ * having been ignored. The fill idiom is the answer here as everywhere: width 0, grow 1. */
+.__processes__ .__title__ {
+    font-size: 9px;
+    color: var(--menu-fg, #BBBBBB);
+    width: 0;
+    flex-grow: 1;
+    text-align: center;
+    margin-bottom: 4px;
+}
+
+/* Inter-row separation must clearly exceed intra-row, or the rows read as one block: a row's own parts
+ * are 3px apart and the rows 12px, so the eye groups by proximity the way it should. Padding on the row
+ * rather than a gap on the list, because a gap applies between EVERY pair of children and the list has a
+ * title above it that wants its own spacing. */
+.__processes__ .__process-row__ {
+    flex-direction: column;
+    gap-all: 3px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+}
+
+.__processes__ .__process-row__ .__label__ {
+    font-size: 9px;
+    color: var(--menu-fg, #BBBBBB);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.__processes__ .__process-row__ .__detail__ {
+    font-size: 8px;
+    color: var(--statusbar-item-dim-fg, #6E7178);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* The row's bar fills the row; only the status bar's is a fixed 120px. */
+.__processes__ .__process-row__ progressbar {
+    width: 0;
+    flex-grow: 1;
+}
+
+/* Same as the status bar's, and for the same reason — see the note there. */
+.__processes__ .__process-row__ .__cancel__ {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    margin-left: 8px;
+    overlay: icon("crystalgui:x");
+    color: var(--statusbar-item-dim-fg, #6E7178);
+    border-radius: 2px;
+}
+
+.__processes__ .__process-row__ .__cancel__:hover {
+    color: var(--progress-cancel-hover-fg, #FFFFFF);
+    background-color: var(--progress-cancel-hover-bg, #5A5F62);
+}
+
+/* Asked for and not yet acknowledged: inert, but the bar stays -- the work has not stopped. */
+.__processes__ .__process-row__.__cancelling__ .__label__ {
+    color: var(--statusbar-item-dim-fg, #6E7178);
+}
+
+.__processes__ .__process-row__.__cancelling__ .__cancel__ {
+    color: var(--progress-cancelling-fg, #4E5254);
+}
+
+/* The foot: IntelliJ's "Hide processes (N)". A link, not a button -- it dismisses a popup rather than
+ * acting on anything, which is the distinction both references draw. */
+.__processes__ .__hide__ {
+    font-size: 9px;
+    color: var(--progress-hide-fg, #548AF7);
+    width: 0;
+    flex-grow: 1;
+    text-align: center;
+    margin-top: 4px;
+}
+
+.__processes__ .__hide__:hover {
+    color: var(--progress-hide-hover-fg, #6B9BF8);
 }

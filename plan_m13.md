@@ -9,11 +9,63 @@ opposite reasons.
 | § | Item | State |
 |---|---|---|
 | 25.1 | Parameter names from the class file | **done** — `ClassFileParameterNames`, read through the analysis classpath and then the running loader (which is what reaches the JDK's runtime image); `JavaSignatures` falls back to it when the unit does not declare the method. `-parameters` on `core` and `language` is the other half and is asserted, not trusted |
-| 25.2 | The header transform | **M12's** — built from two rules the engine already encodes, and its only consumers are 25.4 and 25.5, so it ships with them |
-| 25.3 | The provider chain | **partly built** — `SourceArchives` is the shape and two of its four producers work today (a real `-sources.jar`, and the JDK's `src.zip` where it is on disk). The other two are 25.4's and M12's mapping data |
-| 25.4 | Bundling our own sources | **M12's** — a packaging question about the loader jar M12 assembles |
-| 25.5 | The JDK, fetched rather than bundled | **M12's**, and a licence decision before any of it — not a question code can settle |
+| 25.2 | The header transform | **done** — `SourceHeaders`, a literal-aware scanner rather than a parse. Its consumer turned out to be 25.5 alone: 25.4 ships whole (see the revision below). 14 tests, two of which put a real compiler over the output |
+| 25.3 | The provider chain | **done** — `SourceArchives.Archive` is now a seam with two implementations, and `discover` is the precedence rule written down: a named/fetched archive, the running JVM, any other JDK on the machine, `-sources.jar`s on the classpath, ours last. Minecraft's remains M12's mapping data |
+| 25.4 | Bundling our own sources | **done** — 601 files under `assets/crystalgui/sources/` in `core.jar`, read by `SourceArchives.ResourceArchive`. **Measured: 5.53 MB of text, 1.84 MB in the jar**, and verified present in the built mod jar. **CrystalGraphics ships its own too** — 249 + 27 files, 775 KB, under `assets/crystalgraphics/sources/`: a namespace per project, because CG is used by mods with no CrystalGUI in the pack and a jar shipping an `assets/crystalgui/` directory to them claims a namespace it does not own. The reader needed no change for it, and neither does anybody else's: `BundledSources` **scans** the classpath for `assets/<namespace>/sources/` rather than consulting a list, so **a mod makes its own API quotable by shipping its sources and nothing else** — no registration, no entry in our source. It began as a two-entry constant, which works for exactly the two projects that can edit that file; a list a third party has to be added to is a list a third party cannot use. Measured: 232 ms cold / ~105 ms warm over 359 jars, once per classpath. It reaches there for free, since `:mc1710`'s shadowJar copies `core.jar` entry for entry — so this needed nothing from M12 after all. **`core` only**: a script may not name `com.crystalgui.language` at all (`ScriptPolicy.ALWAYS_REFUSED`), so shipping that module's sources would be documentation for types the sandbox refuses |
+| 25.5 | The JDK, fetched rather than bundled | **done** — a three-step chain (`JdkSourceExtract`), and the licence decision is recorded below and in `THIRD-PARTY.md`: **we host nothing and the extract is derived on the user's machine.** Step two — any other JDK already installed — is the one that fires most often and needs no network at all |
 | 25.6 | Rendering the doc body | **done for the hover**; the completion pane is the one consumer left, and needs a re-resolve rather than a line — see below. Otherwise: — `EcjOptions` enables doc-comment support, `JavaDocs` renders the node, `JavaSignatures.documentationOf` finds it here or in the attached source and **inherits it for an override**. 8 tests. Plain text; the styled version is still §24.1`s `CgMarkupParser` call |
+
+### Revisions, recorded — what building 25.2, 25.4 and 25.5 changed in the plan
+
+**§25.2 has one consumer, not two, and it is 25.5.** The section said the transform would be "used where
+size or licence demands it, skipped where they do not" and then said our own sources are small enough to
+ship whole. Both are right, and together they mean the build-time application to *our* tree — which the
+section's title, *"one build step, every producer"*, promised — has no reason to exist. The transform runs
+**at fetch time on the user's machine**, over the JDK archive, and nowhere else. That is not a downgrade:
+it is what makes the licence position below hold, because the derivation happens where it is not
+distribution.
+
+**And therefore it is a scanner, not an application of JDT.** It has to run host-side, on a Minecraft
+client, where JDT lives behind the engine band — reaching it would mean opening a band to strip a
+download. A scanner also degrades better on exactly the input this meets: a `src.zip` for a JDK newer than
+the running band is a file a parser rejects and a scanner copies.
+
+**Bodies become `{}` rather than vanishing.** A concrete method with no body is a *parse* error and a unit
+with one produces no bindings at all; a method with an empty body is at worst a missing return, which is
+semantic, in a unit nothing ever compiles. The whole contract — *"the output is still valid Java"* —
+turns on that distinction, and it is asserted by putting a real compiler over the result rather than by
+reading it.
+
+**The initializer half of the rule is not applied.** §25.2 paired the body cut with `JavaSignatures.isValue`
+— keep a literal, drop an expression. Dropping one turns `static final int X = compute();` into an
+uninitialised final, which *is* a definite-assignment error where the body cut produces none; and the
+popup **quotes the initializer** (that is what `appendInitializerExpression` is for), so dropping it would
+degrade the one output the transform exists to feed. Initializers are also not where the bytes are.
+
+**§25.5's chain had three steps and the plan only specified the first and the third.** *"The player has a
+JDK → read their `src.zip`"* was written as though `java.home` answered it. It does not: a modded player
+launches on a jlink'd JRE — Mojang's launcher ships one — while frequently having installed a full JDK
+because a pack guide told them to, and that `src.zip` is sitting on their disk unread. `JAVA_HOME`, the
+conventional install roots and the toolchain caches are now candidates. **This is the step that fires most
+often, costs nothing, needs no network and raises no licence question at all**, and it was one line in a
+numbered list.
+
+**There is no downloadable `src.zip`, so the fetch is of the upstream source archive.** `src.zip` is a file
+*inside* a JDK installation and nobody publishes it alone; what is publishable is the OpenJDK source tree,
+as a gzipped tar. Hence `TarArchive` — eighty lines of a thirty-year-old format, against the alternative of
+fetching a 190 MB JDK to read one entry out of it. What lands in the cache is a flat zip in exactly the
+shape a real `src.zip` has, which is the risk control: **every developer with a JDK exercises the reader
+daily and almost nobody exercises the producer**, so the producer's output is made indistinguishable from
+what the common path already reads.
+
+**The licence decision, made explicit.** OpenJDK source is GPLv2 with Classpath Exception; the exception
+covers linking rather than redistributing a modified extract, and this repository has no LICENSE file, so
+"GPL-compatible" is not established. Two structural consequences rather than a note: **we host nothing** —
+the archive is fetched by the user's own client from whoever publishes the JDK, the same position the MCP
+mapping data is in — and **the extract is derived on that machine, for that machine**, which is not
+distribution. Building it at *our* build time and shipping it would have been redistribution of a modified
+GPL work, which is precisely what §25.5 refused. It follows that the fetch is **never automatic**: it is a
+command somebody runs, which is also what IntelliJ does and what `plan_m11.md` §24.1 already named.
 
 ### The two findings this milestone is built on, both measured
 
@@ -112,6 +164,12 @@ And both rules already exist in the engine:
 
 So this is a build-time application of decisions the engine has already made, not new judgement. That is
 what makes it safe to apply to somebody else's source tree.
+
+> **Measured after building it: the strip removes 27%, not the majority this section assumes.** The kept
+> packages are javadoc-heavy — 23.0 MB of text becomes 16.8 MB — because javadoc is precisely what is
+> being kept. Against a 110 MB fetch it is worth about 1.3 MB of cache. It is retained (built, tested,
+> and verified to leave every javadoc tag intact) but its justification is weaker than written here,
+> and it is the one thing making the cached extract differ in content from a real `src.zip`.
 
 **Used where size or licence demands it, skipped where they do not.** Our own sources are small enough to
 ship whole, and shipping them whole is *better* — full bodies mean the quoted declaration keeps the
@@ -237,6 +295,7 @@ the body is prose and may be baked; the signature is code and may not.
 |---|---|
 | engines already shipped (bands 8 + 11 + 17) | **42 MB** |
 | our whole source tree (888 files, 8.2 MB raw) | **2.8 MB** zipped |
+| **what actually shipped** — `core` alone, 601 files, 5.53 MB raw | **1.84 MB** in the jar |
 | javadoc as a share of our own source | **41%** — unusually high, so the payoff per shipped MB is too |
 | JDK header+doc extract, 8 packages, 1256 files | **≤ 4.2 MB** zipped (upper bound) |
 | full JDK `src.zip`, for contrast | 42.9 MB |
@@ -245,19 +304,40 @@ the body is prose and may be baked; the signature is code and may not.
 
 ## Exit criteria
 
-- Hovering a **concrete** classpath method shows its real parameter names with **no source attached** —
+- ✅ Hovering a **concrete** classpath method shows its real parameter names with **no source attached** —
   asserted with `src.zip` deliberately out of reach, since that is the production shape and a dev run
   cannot tell the two apart.
-- Hovering one of **our own interface** methods shows its parameter names, which only `-parameters` can
+- ✅ Hovering one of **our own interface** methods shows its parameter names, which only `-parameters` can
   deliver.
-- The header transform's output **parses and quotes identically** to the source it came from, for a
-  fixture containing a record, a sealed interface and a generic method with bounds.
-- Our sources resolve **out of the mod jar** through the same `SourceArchives` chain, with a real
-  `-sources.jar` taking precedence over the bundled copy where both exist.
-- A javadoc body renders for a symbol with a doc comment, and for an `@Override` with none via
+- ✅ The header transform's output **parses and quotes identically** to the source it came from, for a
+  fixture containing a record, a sealed interface and a generic method with bounds. Asked of the
+  compiler — `Analysis.optionalProblemsAnalysed()` is the published signal for "this file parsed", and is
+  the one answer that cannot be confused with "it parsed and then resolved badly", which a stripped unit
+  legitimately does. The record and sealed half is gated on a band whose JDT can read that syntax.
+- ✅ Our sources resolve **out of the mod jar** through the same `SourceArchives` chain, with a real
+  `-sources.jar` taking precedence over the bundled copy where both exist. The precedence is asserted as
+  an ordering of `discover`, and the packaging is asserted against the **running classloader** rather than
+  a fixture — `tasks.jar` is one line nothing refers to, and a hover cannot tell "no source shipped" from
+  "no source found".
+- ✅ A javadoc body renders for a symbol with a doc comment, and for an `@Override` with none via
   `{@inheritDoc}`.
-- The JDK producer is absent from the jar; with it fetched, `List.add` shows both its parameter name and
-  its prose.
+- ✅ The JDK producer is absent from the jar; with it fetched, `List.add` shows both its parameter name and
+  its prose. **Verified in a real client, against the real upstream**: the Adoptium `sources` artifact for
+  Java 21 downloaded, stripped and installed to `crystalgui-cache/jdk-sources/jdk-21-sources.zip` —
+  **4.33 MB, 1,178 entries**, `java/util/List.java` carrying its `@param` prose and `boolean add(` with the
+  bodies gone. That closes the one caveat this row carried: nothing in the build reaches the network, so
+  the URL's shape had been taken from Adoptium's published API rather than from a request anybody had made.
+  Somebody has now made it.
+
+> **The real tree is now a test, and it is there because it earned its place.** `TarArchive.next()` skipped
+> `padding(remaining)` — correct until a caller reads an entry, after which `remaining` is zero, so the
+> content's 512-byte padding stayed in the stream and every later header landed mid-block. Against real
+> data it produced **one file out of 14,212 and threw nothing**. Every hand-written fixture passed against
+> it, *for the wrong reason*: everything after the first entry turned to garbage and yielded nothing, which
+> happened to equal the expected count. `theProducerRunsOverARealJdkSourceTree` re-tars a couple of hundred
+> entries out of whatever `src.zip` the machine has, and `aFileReadInFullDoesNotDesynchroniseTheStream`
+> pins the specific arithmetic. **Real data has the property a fixture is built without: nobody chose what
+> is in it.**
 
 ## Order
 

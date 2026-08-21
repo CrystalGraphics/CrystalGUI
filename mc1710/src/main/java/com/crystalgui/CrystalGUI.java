@@ -1,7 +1,16 @@
 package com.crystalgui;
 
+import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgui.core.async.JobKey;
+import com.crystalgui.core.async.JobLane;
+import com.crystalgui.core.async.JobScheduler;
+import com.crystalgui.language.LanguageStack;
+import com.crystalgui.language.map.PlatformMappings;
+import com.crystalgui.language.platform.ScriptServices;
+import com.crystalgui.mc.ClientProxy;
 import com.crystalgui.mc.CommonProxy;
 
+import com.crystalgui.mc.platform.service.script.ScriptService1710;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -63,10 +72,33 @@ public class CrystalGUI {
     public void init(FMLInitializationEvent event) {
         LOGGER.info("{}: init", NAME);
         proxy.init();
+        scriptInit();
     }
 
     @Mod.EventHandler
     public void postInit(FMLPostInitializationEvent event) {
         LOGGER.info("{}: postInit", NAME);
+    }
+
+    private void scriptInit() {
+        CgPlatform.provide(ScriptServices.SERVICE, new ScriptService1710());
+        LanguageStack.registerAll();
+
+        // CLIENT-side only because of ONE member: `cacheRoot()` reads `Minecraft.getMinecraft().mcDataDir`.
+        // The other four are installation-level, so when server-side scripting lands this moves to
+        // CommonProxy and that one method grows a side-aware answer.
+
+        // MAPPINGS ACQUIRED INSIDE A JOB, so the fetch reports into the status bar instead of being a
+        // silent stall on first launch. Threading is the caller's decision, and this caller has a UI.
+        // CLAIMED NOW, DONE LATER, and the order is the whole point.
+        // Safe to defer because a claim made here is always honoured: the job is already submitted, and a
+        // client that never opens the editor never needs a mapping.
+        if (PlatformMappings.claim()) {
+            JobScheduler.shared().job(JobKey.of(PlatformMappings.class, "mappings"), JobLane.BACKGROUND,
+                    context -> {
+                        PlatformMappings.acquireClaimed(context.progress(), context::isCancelled);
+                        return null;
+                    }).submit();
+        }
     }
 }

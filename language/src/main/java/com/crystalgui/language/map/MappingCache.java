@@ -1,6 +1,7 @@
 package com.crystalgui.language.map;
 
 import com.crystalgui.language.cache.CacheFiles;
+import com.crystalgui.language.cache.Downloads;
 import com.crystalgui.language.map.format.MappingFiles;
 import com.crystalgui.language.platform.MappingCoordinates;
 
@@ -94,8 +95,6 @@ public final class MappingCache {
     }
 
     /** Long enough for a slow connection, short enough that an unreachable host does not hang a launch. */
-    private static final int TIMEOUT_MILLIS = 15_000;
-
     private MappingCache() {
     }
 
@@ -109,6 +108,17 @@ public final class MappingCache {
      * </pre>
      */
     public static Result load(MappingCoordinates coordinates, Path cacheRoot) {
+        return load(coordinates, cacheRoot, () -> false);
+    }
+
+    /**
+     * The same, stoppable partway through the network half.
+     *
+     * <p>The two-argument form is for the <b>cached</b> path, which is a parse and no network — there is
+     * nothing there worth interrupting, and giving it a flag would suggest otherwise.</p>
+     */
+    public static Result load(MappingCoordinates coordinates, Path cacheRoot,
+                              java.util.function.BooleanSupplier cancelled) {
         if (coordinates == null || coordinates.isNone() || cacheRoot == null) {
             return new Result(State.NOT_CONFIGURED, MappingSet.IDENTITY,
                     "no mapping coordinates; runtime names will be shown as they are");
@@ -128,7 +138,12 @@ public final class MappingCache {
                 continue;
             }
             try {
-                if (!CacheFiles.install(target, open(coordinates.urlOf(fileName)), digest)) {
+                // NO `reporting` HERE ON PURPOSE. PlatformMappings has already announced this as a
+                // SWEEP -- the two CSVs are small and their host declares no length worth trusting, so a
+                // bar would be invented rather than measured -- and a second announce from inside would
+                // retarget the very thing that decided a sweep was the honest answer.
+                if (!Downloads.from(coordinates.urlOf(fileName))
+                        .verifying(digest).cancelledWhen(cancelled).into(target)) {
                     return new Result(State.UNAVAILABLE, MappingSet.IDENTITY,
                             fileName + " did not match its expected digest and was discarded; "
                                     + "runtime names will be shown as they are");
@@ -172,16 +187,6 @@ public final class MappingCache {
      * redirects, and a connection that does not follow one reports a 302 body as the file. That failure
      * arrives as a digest mismatch, which reads as corruption rather than as a redirect.</p>
      */
-    private static InputStream open(String url) throws IOException {
-        URLConnection connection = new URL(url).openConnection();
-        connection.setConnectTimeout(TIMEOUT_MILLIS);
-        connection.setReadTimeout(TIMEOUT_MILLIS);
-        if (connection instanceof HttpURLConnection) {
-            ((HttpURLConnection) connection).setInstanceFollowRedirects(true);
-        }
-        return connection.getInputStream();
-    }
-
     /** Where {@code load} caches — exposed so a caller can report or clear it. */
     public static Path directoryFor(MappingCoordinates coordinates, Path cacheRoot) {
         if (coordinates == null || coordinates.isNone() || cacheRoot == null) return null;
