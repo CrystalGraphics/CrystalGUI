@@ -61,6 +61,8 @@ public final class ExplorerCommands {
     /** Open a file by name — VS Code's Ctrl+P, IntelliJ's Go to File. */
     public static final String GO_TO_FILE = "explorer.goToFile";
 
+
+
     /** Opens the tree's search box. Ctrl+F, which is what everybody presses. */
     public static final String FIND_IN_TREE = "explorer.find";
 
@@ -208,7 +210,12 @@ public final class ExplorerCommands {
                 .enabledWhen(context -> workbenchFor(context) != null));
 
         registry.register(Command.of(GO_TO_FILE, "Go to File…")
-                .binding("Mod+P")
+                // THREE CHORDS, ONE LIST, which is the reference behaviour rather than a convenience:
+                // IntelliJ's Ctrl+N and Ctrl+Shift+N are two doors into one window. Mod+P is VS Code's,
+                // Mod+T is its Go to Symbol in Workspace, Mod+Shift+T is Eclipse's Open Type -- and every
+                // one of them opens the same picker, because "open the thing called this" does not become
+                // a different gesture when the thing lives in a jar. IntelliJ's own Mod+N is New File here.
+                .binding("Mod+P", "Mod+T", "Mod+Shift+T")
                 // FILE ▸ OPEN, and this is the honest version of it. There is no native file dialog to
                 // reach -- that is a platform service this engine deliberately does not have -- and a
                 // workspace-scoped quick-open is what both references put on Ctrl+P anyway. Naming it
