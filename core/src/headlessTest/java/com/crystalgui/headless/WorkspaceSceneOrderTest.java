@@ -68,9 +68,23 @@ public class WorkspaceSceneOrderTest {
         return new Rig(server, session, new WorkspaceClient<>(session, PlainOps.INSTANCE), pair);
     }
 
-    /** The trap, pinned: called too early, the request never arrives and nothing reports it. */
+    /**
+     * The trap this class was written for is <b>gone</b>, and that is the assertion now.
+     *
+     * <p>It used to read: called too early, the request never arrives and nothing reports it. The cause
+     * was that an RPC travelled as {@code UIPacket.RpcCall}, which carried a {@code windowId} because
+     * every packet did — so before the window existed the call went out addressed to window {@code -1}
+     * and the server's {@code packet.windowId() != windowId} guard silently discarded it. Nothing
+     * surfaced until the RPC timeout, which is why this needed pinning.</p>
+     *
+     * <p>On the envelope an RPC is an ordinary REQUEST and carries no window at all, because a workspace
+     * call was never a window concern — it only looked like one while it was tunnelled through a UI
+     * packet. The guard still exists and still protects {@code ui/*} messages, which are genuinely
+     * per-window. So the ordering trap disappears rather than being fixed: there is no longer a wrong
+     * moment to call.</p>
+     */
     @Test
-    public void aCallBeforeTheWindowExistsIsDropped() {
+    public void aCallBeforeTheWindowExistsNowArrives() {
         Rig rig = rig();
         assertEquals("the client has no window yet", -1, rig.session().windowId());
 
@@ -79,12 +93,12 @@ public class WorkspaceSceneOrderTest {
         rig.client().projects(got::set, failed::set);
         rig.pump(10);
 
-        org.junit.Assert.assertNull("the server discards a packet for another window", got.get());
-        org.junit.Assert.assertNull(
-                "and nothing fails synchronously — only the RPC timeout will ever notice", failed.get());
+        assertNotNull("an RPC no longer depends on a window — failure was " + failed.get(), got.get());
+        assertEquals(1, got.get().size());
+        org.junit.Assert.assertNull(failed.get());
     }
 
-    /** And the pattern that works: let the session settle, then call. */
+    /** Still true, and no longer the only pattern that works. */
     @Test
     public void aCallAfterTheWindowIsEstablishedArrives() {
         Rig rig = rig();

@@ -1,6 +1,10 @@
 package com.crystalgui.net;
 
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.net.protocol.Envelope;
+import com.crystalgui.net.protocol.EnvelopeCodec;
+import com.crystalgui.net.protocol.MessageRouter;
+import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.serialization.UIDescriptionCodec;
@@ -46,6 +50,12 @@ public final class ClientUiSession<T> {
 
     private final RpcRegistry<T> rpc;
 
+    /** Everything inbound goes through here; nothing is dispatched by type. @see #registerUiMethods */
+    private final MessageRouter<T> router;
+
+    /** Matches the 10s {@code RpcRegistry} defaulted to. @see ServerUiSession */
+    private long callTimeoutMillis = 10_000L;
+
     private int windowId = -1;
     private int expectedElementCount = -1;
     @Nullable
@@ -62,6 +72,8 @@ public final class ClientUiSession<T> {
         this.transport = transport;
         this.ops = ops;
         this.rpc = new RpcRegistry<>(ops);
+        this.router = new MessageRouter<>(envelope -> transport.send(EnvelopeCodec.encode(ops, envelope)));
+        registerUiMethods();
         transport.setReceiver(packet -> {
             synchronized (mailbox) {
                 mailbox.add(packet);
@@ -115,80 +127,93 @@ public final class ClientUiSession<T> {
             mailbox.clear();
         }
         for (T raw : batch) {
-            UIPacket packet;
+            Envelope envelope;
             try {
-                packet = UIPacketCodec.decode(ops, raw);
+                envelope = EnvelopeCodec.decode(ops, raw);
             } catch (RuntimeException malformed) {
-                CrystalGuiCore.LOGGER.warn("Dropping an undecodable packet: {}", malformed.getMessage());
+                CrystalGuiCore.LOGGER.warn("Dropping an undecodable message: {}", malformed.getMessage());
                 continue;
             }
-            handle(packet);
+            router.accept(envelope);
         }
-        rpc.sweepTimeouts(System.currentTimeMillis());
+        router.tickTimeouts(System.currentTimeMillis());
     }
 
-    private void handle(UIPacket packet) {
-        if (packet instanceof UIPacket.OpenWindow open) {
-            if (open.protocol() != UIPacketCodec.PROTOCOL_VERSION) {
+    /** The UI half of the vocabulary. RPC methods register themselves through {@link #onCall}. */
+    private void registerUiMethods() {
+        router.onNotify(UiMethods.OPEN_WINDOW, payload -> {
+            StateMap<T> in = read(payload);
+            int protocol = in.getInt("protocol", -1);
+            int id = in.getInt(UiMethods.WINDOW, -1);
+            if (protocol != EnvelopeCodec.VERSION) {
                 // Refuse rather than open something we will misread. A version mismatch that opens
                 // anyway shows up as a UI that is subtly wrong, which is far harder to trace than a
                 // window that plainly did not appear.
                 CrystalGuiCore.LOGGER.error("Refusing window {}: server protocol {} but this client "
-                        + "speaks {}", open.windowId(), open.protocol(), UIPacketCodec.PROTOCOL_VERSION);
+                        + "speaks {}", id, protocol, EnvelopeCodec.VERSION);
                 return;
             }
-            this.windowId = open.windowId();
-            this.sheets = open.sheets();
-            this.useUserAgentSheet = open.useUserAgentSheet();
-            this.expectedElementCount = open.elementCount();
+            this.windowId = id;
+            this.sheets = in.getList("sheets", entry -> SheetRef.CODEC.decode(ops, entry.encode()));
+            this.useUserAgentSheet = in.getBool("ua", false);
+            this.expectedElementCount = in.getInt("count", 0);
 
-            T cached = descriptionCache.get(open.descHash());
+            String hash = in.getString("hash", "");
+            T cached = descriptionCache.get(hash);
             if (cached != null) {
                 buildFrom(cached);
-            } else {
-                send(new UIPacket.RequestDescription(open.windowId(), open.descHash()));
+                return;
             }
+            // A REQUEST now, where it used to be a bare RequestDescription with nothing tying the answer
+            // back to it. The id correlates, so two opens in flight cannot cross their descriptions.
+            StateMap<T> ask = new StateMap<>(ops);
+            ask.putInt(UiMethods.WINDOW, id);
+            ask.putString("hash", hash);
+            router.request(UiMethods.DESCRIPTION, ask.encode(),
+                    answer -> {
+                        StateMap<T> body = read(answer);
+                        T encoded = body.getRaw("root");
+                        if (encoded == null) return;
+                        descriptionCache.put(body.getString("hash", hash), encoded);
+                        buildFrom(encoded);
+                    },
+                    error -> CrystalGuiCore.LOGGER.warn("Description for window {} refused: {}", id, error));
+        });
 
-        } else if (packet instanceof UIPacket.Description<?> description) {
-            if (description.windowId() != windowId) return;
-            @SuppressWarnings("unchecked")
-            T encoded = (T) description.root();
-            descriptionCache.put(description.descHash(), encoded);
-            buildFrom(encoded);
-
-        } else if (packet instanceof UIPacket.StateDelta<?> delta) {
-            if (delta.windowId() != windowId || root == null) return;
-            for (UIPacket.StateDelta.Entry<?> entry : delta.entries()) {
-                UIElement target = NetworkIds.find(root, entry.nid());
+        router.onNotify(UiMethods.STATE_DELTA, payload -> {
+            StateMap<T> in = read(payload);
+            if (in.getInt(UiMethods.WINDOW, windowId) != windowId || root == null) return;
+            for (StateMap<T> entry : in.getList("entries", e -> e)) {
+                int nid = entry.getInt("nid", -1);
+                UIElement target = NetworkIds.find(root, nid);
                 if (target == null) {
-                    CrystalGuiCore.LOGGER.warn("State update for unknown element {}", entry.nid());
+                    CrystalGuiCore.LOGGER.warn("State update for unknown element {}", nid);
                     continue;
                 }
                 if (shouldSuppress(target)) continue;
-                @SuppressWarnings("unchecked")
-                T state = (T) entry.state();
+                T state = entry.getRaw("s");
+                if (state == null) continue;
                 try {
                     target.readStateFrom(new StateMap<>(ops, state));
                 } catch (RuntimeException bad) {
                     // Per-entry, so one malformed update cannot take the rest of the batch with it.
-                    CrystalGuiCore.LOGGER.warn("Bad state for element {}: {}", entry.nid(), bad.getMessage());
+                    CrystalGuiCore.LOGGER.warn("Bad state for element {}: {}", nid, bad.getMessage());
                 }
             }
+        });
 
-        } else if (packet instanceof UIPacket.RpcCall<?> call) {
-            dispatchRpc((UIPacket.RpcCall<T>) call);
-
-        } else if (packet instanceof UIPacket.RpcResult<?> result) {
-            @SuppressWarnings("unchecked")
-            UIPacket.RpcResult<T> typed = (UIPacket.RpcResult<T>) result;
-            rpc.complete(typed.callId(), typed.ok(), typed.value(), typed.error());
-
-        } else if (packet instanceof UIPacket.CloseWindow close) {
-            if (close.windowId() != windowId) return;
+        router.onNotify(UiMethods.CLOSE_WINDOW, payload -> {
+            StateMap<T> in = read(payload);
+            if (in.getInt(UiMethods.WINDOW, windowId) != windowId) return;
+            String reason = in.getString("reason", "");
             root = null;
             windowId = -1;
-            if (onWindowClosed != null) onWindowClosed.accept(close.reason());
-        }
+            if (onWindowClosed != null) onWindowClosed.accept(reason);
+        });
+    }
+
+    private StateMap<T> read(@Nullable T payload) {
+        return payload == null ? new StateMap<>(ops) : new StateMap<>(ops, payload);
     }
 
     /**
@@ -267,43 +292,41 @@ public final class ClientUiSession<T> {
     }
 
     private void report(UIElement element, String kind, @Nullable StateMap<T> payload) {
-        send(new UIPacket.UiEvent<>(windowId, element.getNetworkId(), kind,
-                payload == null ? null : payload.encode()));
+        StateMap<T> out = new StateMap<>(ops);
+        out.putInt(UiMethods.WINDOW, windowId);
+        out.putInt("nid", element.getNetworkId());
+        out.putString("kind", kind);
+        if (payload != null) out.putRaw("p", payload.encode());
+        router.notify(UiMethods.EVENT, out.encode());
     }
 
     /** Registers a client-side RPC method the server may call. */
     public ClientUiSession<T> onCall(String method, RpcRegistry.Handler<T> handler) {
-        rpc.register(method, handler);
+        // Same handler type, so nothing that calls this moves; underneath, an RPC is now an ordinary
+        // REQUEST and its correlation is the router's rather than a second id space of RpcRegistry's.
+        router.onRequest(method, (payload, respond) ->
+                handler.invoke(read(payload), new RpcRegistry.Responder<T>() {
+                    @Override
+                    public void ok(@Nullable StateMap<T> value) {
+                        respond.ok(value == null ? null : value.encode());
+                    }
+
+                    @Override
+                    public void fail(String error) {
+                        respond.fail(error);
+                    }
+                }));
         return this;
     }
 
     /** Calls a server-side method. */
     public void call(String method, @Nullable StateMap<T> args,
                      @Nullable Consumer<StateMap<T>> onResult, @Nullable Consumer<String> onError) {
-        int callId = rpc.beginCall(onResult, onError, System.currentTimeMillis());
-        send(new UIPacket.RpcCall<>(windowId, callId, method, args == null ? null : args.encode()));
-    }
-
-    private void dispatchRpc(UIPacket.RpcCall<T> call) {
-        rpc.dispatch(call.method(), call.args(), new RpcRegistry.Responder<T>() {
-            @Override
-            public void ok(StateMap<T> value) {
-                if (call.callId() != 0) {
-                    send(new UIPacket.RpcResult<>(windowId, call.callId(), true,
-                            value == null ? null : value.encode(), ""));
-                }
-            }
-
-            @Override
-            public void fail(String error) {
-                if (call.callId() != 0) {
-                    send(new UIPacket.RpcResult<>(windowId, call.callId(), false, null, error));
-                }
-            }
-        });
-    }
-
-    private void send(UIPacket packet) {
-        transport.send(UIPacketCodec.encode(ops, packet));
+        router.request(method, args == null ? null : args.encode(),
+                value -> {
+                    if (onResult != null) onResult.accept(read(value));
+                },
+                onError,
+                System.currentTimeMillis() + callTimeoutMillis);
     }
 }
