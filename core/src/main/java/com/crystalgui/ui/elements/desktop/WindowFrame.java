@@ -1,5 +1,7 @@
 package com.crystalgui.ui.elements.desktop;
 
+import com.crystalgui.core.dispose.Disposable;
+import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
@@ -14,6 +16,8 @@ import dev.vfyjxf.taffy.style.FlexDirection;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
 import javax.annotation.Nullable;
+
+import java.util.function.BooleanSupplier;
 
 /**
  * One window on the {@link Desktop} — chrome around a content slot, moved by its title bar and resized
@@ -55,13 +59,9 @@ import javax.annotation.Nullable;
  *
  * <h3>What is deliberately not here yet</h3>
  * <ul>
- *   <li><b>Minimise and maximise buttons.</b> Their behaviour is W3 and W6. A control that looks
- *       clickable and does nothing is the lie the disabled-control rule already forbids, so they arrive
- *       with the state machine they operate rather than as greyed furniture.</li>
- *   <li><b>{@code WindowPolicy}</b> ({@code HIDE_ON_CLOSE} / {@code DESTROY_ON_CLOSE}) — W3. Until then
- *       {@link #requestClose()} detaches the frame, which is what {@code DESTROY_ON_CLOSE} will do
- *       through the policy switch. Named so its absence reads as a decision, the way
- *       {@code ToolWindowState.type} named its own.</li>
+ *   <li><b>A maximise button.</b> Its behaviour is W6. A control that looks clickable and does nothing
+ *       is the lie the disabled-control rule already forbids, so it arrives with the geometry it
+ *       operates rather than as greyed furniture.</li>
  *   <li><b>An icon slot.</b> W4, with the taskbar — a frame's icon is drawn in two places or in
  *       neither, and building an empty box now leaves every theme hiding it.</li>
  *   <li><b>A focus policy.</b> W2 brings activation, per-frame focus memory and the focus-ring
@@ -76,7 +76,7 @@ import javax.annotation.Nullable;
  * this clamp starts), and the fix belongs with W6's maximise/restore geometry rather than in a special
  * case here.</p>
  */
-public class WindowFrame extends UIElement {
+public class WindowFrame extends UIElement implements Disposable {
 
     /** The drag handle, and everything drawn in it. */
     public static final String TITLE_BAR_CLASS = "__title-bar__";
@@ -114,14 +114,34 @@ public class WindowFrame extends UIElement {
      */
     public static final String ACTIVE_CLASS = "__active__";
 
-    /** Emitted after the frame closes, however it was closed. */
-    public final Signal.Action onClosed = new Signal.Action();
+    /** The minimise affordance. Hides; never destroys, whatever the policy says. */
+    public static final String MINIMIZE_CLASS = "__minimize__";
+
+    /**
+     * Emitted when the window comes back, carrying <b>{@code persisted}</b> — whether it was restored
+     * from retention rather than shown for the first time.
+     *
+     * <p>bfcache's {@code pageshow} event and its {@code event.persisted} flag, and the reason it is a
+     * flag rather than two signals is the reason that spec gives: a restored page must
+     * <em>revalidate</em> — reconnect what it disconnected, re-read what may have changed — while a
+     * first show has nothing to revalidate against. "The user pressed Escape" and "the world went away"
+     * have to stay different signals, and this is where they diverge. Nothing in the engine reads it
+     * yet; W11 is where a workspace client rebinds on it.</p>
+     */
+    public final Signal.Value<Boolean> onShown = new Signal.Value<>();
+
+    /** Emitted when the window is hidden — retained, but no longer participating in anything. */
+    public final Signal.Action onHidden = new Signal.Action();
+
+    /** Emitted when the window is destroyed, after {@code Disposer} has run. */
+    public final Signal.Action onDestroyed = new Signal.Action();
 
     private final UIElement titleBar;
     private final UIElement controls;
     private final UIElement content;
     private final UIText titleLabel;
     private final Button closeButton;
+    private final Button minimizeButton;
 
     /** What was asked for, never clamped. @see WindowFrame */
     private float wantedLeft, wantedTop;
@@ -141,6 +161,26 @@ public class WindowFrame extends UIElement {
     /** This window's place in the stack, as last assigned. @see Desktop#raise */
     private int stackOrder;
 
+    private WindowState state = WindowState.VISIBLE;
+    private WindowPolicy policy = WindowPolicy.DESTROY_ON_CLOSE;
+
+    /**
+     * The desktop this window belongs to — a <b>field, not a tree walk</b>.
+     *
+     * <p>It has to be, once hiding exists: a hidden window is detached, so walking up from it finds
+     * nothing, and yet it very much still belongs to a desktop — that is what retention means. The
+     * walk was only ever a way of asking this question while the answer happened to be reachable.</p>
+     */
+    @Nullable
+    private Desktop owner;
+
+    /** @see #key() */
+    @Nullable
+    private String key;
+
+    /** @see #setDiscardGuard */
+    private BooleanSupplier discardGuard = () -> true;
+
     public WindowFrame(String title) {
         // Out of flow and positioned: a window is placed by left/top against the desktop's window layer,
         // not laid out among its siblings. This also earns the four LEADING resize handles --
@@ -157,6 +197,13 @@ public class WindowFrame extends UIElement {
 
         controls = new UIElement();
         controls.addClass(CONTROLS_CLASS);
+
+        // MINIMISE FIRST, so the strip reads minimise-then-close left to right as every window manager
+        // draws it, and so the destructive control is the one furthest from the rest.
+        minimizeButton = new Button("");
+        minimizeButton.addClass(MINIMIZE_CLASS);
+        minimizeButton.attachListener(this::hide);
+        controls.addChild(minimizeButton);
 
         closeButton = new Button("");
         closeButton.addClass(CLOSE_CLASS);
@@ -252,6 +299,10 @@ public class WindowFrame extends UIElement {
         return closeButton;
     }
 
+    public Button minimizeButton() {
+        return minimizeButton;
+    }
+
     public WindowFrame setTitle(String title) {
         titleLabel.setText(title == null ? "" : title);
         return this;
@@ -332,23 +383,159 @@ public class WindowFrame extends UIElement {
         return false;
     }
 
-    // ── Closing ─────────────────────────────────────────────────────────────
+    // ── Lifecycle ───────────────────────────────────────────────────────────
+
+    public WindowState state() {
+        return state;
+    }
+
+    public WindowPolicy policy() {
+        return policy;
+    }
+
+    /** @see WindowPolicy */
+    public WindowFrame setPolicy(WindowPolicy policy) {
+        this.policy = policy == null ? WindowPolicy.DESTROY_ON_CLOSE : policy;
+        return this;
+    }
 
     /**
-     * The close-watcher hook — "dismiss me". The close button and (from W3) Escape both arrive here, so
-     * there is exactly one dismissal path.
+     * A stable name for this window, or null.
      *
-     * <p><b>W3 replaces this body with the policy switch</b> — {@code HIDE_ON_CLOSE} minimises to the
-     * taskbar, {@code DESTROY_ON_CLOSE} does what this does today. Detaching is the honest W1 answer
-     * rather than a stub: it is what destroy will be, and everything the engine already does at
-     * {@code unregisterElement} (session capture, modal/popover/close-watcher cleanup) happens for free.</p>
+     * <p>What geometry is persisted against (W12) and what "reopen the thing I had open" looks a window
+     * up by. Anonymous windows are legal and simply never match.</p>
+     */
+    @Nullable
+    public String key() {
+        return key;
+    }
+
+    public WindowFrame setKey(@Nullable String key) {
+        this.key = key;
+        return this;
+    }
+
+    /**
+     * Whether this window's content may be thrown away — asked before a destroying close and before
+     * eviction, so content answers it once and both paths agree.
+     *
+     * <p>The dock's {@code setCloseGuard} in a second place, with its contract intact: a caller that
+     * needs to <em>prompt</em> runs the prompt itself and re-enters from its own callback, because the
+     * prompt is asynchronous and the honest answer at the moment of the veto is "not now" rather than
+     * "yes eventually".</p>
+     */
+    public WindowFrame setDiscardGuard(@Nullable BooleanSupplier guard) {
+        this.discardGuard = guard == null ? () -> true : guard;
+        return this;
+    }
+
+    boolean canDiscard() {
+        return discardGuard.getAsBoolean();
+    }
+
+    /**
+     * The close-watcher hook — "dismiss me" — routed through {@link WindowPolicy}.
+     *
+     * <p>The close button and Escape both arrive here, so there is exactly one dismissal path. By the
+     * time anything reaches a window, the Escape cascade has already filtered: a live drag, a popover
+     * and a modal each consume it first, and all three genuinely should.</p>
+     *
+     * <p>Returns {@code true} for "handled", which includes a refusal: a guard that says no has still
+     * dealt with the request, and answering false would let the key fall through to whatever is behind
+     * — closing the screen the window is on, in the worst case.</p>
      */
     @Override
     public boolean requestClose() {
-        if (getParent() == null) return false;
-        removeSelf();
-        onClosed.emit();
+        if (state == WindowState.DESTROYED) return false;
+        if (policy == WindowPolicy.HIDE_ON_CLOSE) {
+            hide();
+            return true;
+        }
+        if (!canDiscard()) return true;
+        destroy();
         return true;
+    }
+
+    /**
+     * Retains the window and takes it off the desktop — <b>by detaching it</b>, which is what makes the
+     * freeze real. See {@link WindowState#HIDDEN}.
+     *
+     * <p>Everything that has to happen on the way out already happens at the seams:
+     * {@code unregisterElement} captures session state and pops the modal, popover, close-watcher and
+     * top-layer entries, and {@code onRemoved} recurses the subtree telling the input handler to forget
+     * every element in it. A window hidden with a dialog open therefore cannot leave the desktop inert,
+     * which is the documented unrecoverable state.</p>
+     */
+    public void hide() {
+        if (state != WindowState.VISIBLE) return;
+        UIElement layer = getParent();
+        if (layer == null) {
+            state = WindowState.HIDDEN;
+            onHidden.emit();
+            return;
+        }
+        // The layer's removeChild is what flips the state and tells the registry -- so a bare
+        // removeSelf() by some other caller means exactly the same thing as hide(), rather than leaving
+        // a window that is detached and still claims to be visible.
+        layer.removeChild(this);
+    }
+
+    /**
+     * Puts the window back on its desktop.
+     *
+     * @param persisted whether this is a restore rather than a first show — see {@link #onShown}.
+     */
+    public void show(boolean persisted) {
+        if (state == WindowState.DESTROYED) {
+            throw new IllegalStateException("a destroyed window cannot be shown again: " + getTitle());
+        }
+        if (state == WindowState.VISIBLE && getParent() != null) return;
+        if (owner == null) return;
+        state = WindowState.VISIBLE;
+        owner.reattach(this);
+        onShown.emit(persisted);
+    }
+
+    /**
+     * Ends the window: {@code Disposer} runs, the registry drops it, and the instance must never be
+     * shown again.
+     *
+     * <p>{@code Disposer.dispose} rather than a direct call, so anything registered against this frame
+     * — a workspace client, a subscription, a document view — goes with it, in reverse registration
+     * order and with a throw from one teardown not stopping the rest. That ownership tree is what the
+     * class exists for, and eviction leans on it entirely.</p>
+     */
+    public void destroy() {
+        Disposer.dispose(this);
+    }
+
+    /**
+     * The {@code Disposable} half of {@link #destroy()} — the teardown itself.
+     *
+     * <p>Called by {@code Disposer}, which has already marked it disposed and will not call it twice,
+     * so this needs no re-entrancy guard of its own beyond the state check.</p>
+     */
+    @Override
+    public void dispose() {
+        if (state == WindowState.DESTROYED) return;
+        hide();
+        state = WindowState.DESTROYED;
+        Desktop desktop = owner;
+        owner = null;
+        if (desktop != null) desktop.registry().destroyed(this);
+        onDestroyed.emit();
+    }
+
+    /** Set by {@link Desktop#addWindow}; cleared when the window is destroyed. */
+    void setOwner(@Nullable Desktop desktop) {
+        this.owner = desktop;
+    }
+
+    /** Flips the state on the way out of the tree, whichever route detached it. */
+    void markHidden() {
+        if (state != WindowState.VISIBLE) return;
+        state = WindowState.HIDDEN;
+        onHidden.emit();
     }
 
     // ── Geometry ────────────────────────────────────────────────────────────
@@ -453,13 +640,16 @@ public class WindowFrame extends UIElement {
         if (desktop != null) desktop.placeByCascade(this);
     }
 
-    /** The desktop this window is on, or null while it is detached. */
+    /**
+     * The desktop this window belongs to, or null once it has been destroyed.
+     *
+     * <p><b>Not a tree walk.</b> A hidden window is detached and still belongs to its desktop — that is
+     * what retention means — so the walk would answer null for exactly the windows the registry, the
+     * taskbar and the switcher are all about.</p>
+     */
     @Nullable
     public Desktop desktop() {
-        for (UIElement element = getParent(); element != null; element = element.getParent()) {
-            if (element instanceof Desktop) return (Desktop) element;
-        }
-        return null;
+        return owner;
     }
 
     /** The caption's measured height — the cascade step, and the sliver the clamp keeps on screen. */

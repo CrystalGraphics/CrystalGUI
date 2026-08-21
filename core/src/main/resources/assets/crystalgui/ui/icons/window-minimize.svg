@@ -1,0 +1,5 @@
+<!-- Drawn for CrystalGUI to Feather's geometry and stroke conventions, not copied from any icon set.
+     A window control rather than a chrome mark: a single centred rule, which is what every window
+     manager since Windows 95 has drawn for minimise. Stroked in currentColor like x.svg beside it, so
+     the title bar's own colour reaches it and no _dark companion is needed. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 12 L18 12"/></svg>

@@ -983,6 +983,7 @@ The things that are invisible from any single class and expensive to rediscover.
 | `UIWindow.getRootNodeId()` is **derived** from the root element, never stored | It was a field nothing assigned, so it was permanently null — and both reparenting methods bail out silently on null, which made top-layer promotion never move a Taffy node at all |
 | Top-layer stacking is insertion order; `z-index` is irrelevant there (per spec) | Promoted elements stack unpredictably against each other |
 | **The desktop is engine-owned and must take up NO SPACE until a window is open** — `UIWindow.desktop()` builds it, nothing else may, and `Desktop` sizes itself from whether it holds a frame | It is an overlay over the application's own root, so a full-size empty one hit-tests across the whole window and eats every click that lands on background: a UI that never opened a window simply stops responding, and nothing about that symptom points at a compositor. The mirror case is the one that bites later — the LAST window closing has to give the surface back, or a desktop that was used once keeps the application dead |
+| **A `UIFrameTicker` whose element has left the tree must return `false`** — the contract is on the interface, and hiding a window is what makes it routine | Registration is one-way by design, so the only thing that stops a ticker is the ticker. Everything else about a hidden window genuinely stops — no selector matches it, no layout, no paint, and the input handler has dropped every reference — and a ticker is the one thing that carries on, invisibly. It is the *hidden editor that keeps compiling*, and most tickers satisfy it by construction (a caret stops blinking on blur, and hiding blurs), which is exactly why the ones that do not will look fine |
 | **A raise is a `z-index` assignment and NEVER a child-list move** — `Desktop.raise` writes IMPORTANT-origin z; `sortedChildren` already keeps paint order and hit-testing agreeing | `removeChild`/`addChild` is `unregisterElement`/`registerElement` over the whole frame subtree — session state captured and re-applied, modal/popover/close-watcher stacks popped, every Taffy node destroyed and rebuilt — and a raise happens **on a click**, which is exactly when a widget must never rebuild the elements it is being clicked on. It would work, and the window would slowly lose state nobody could attribute to clicking it |
 | **A window's own edges belong to its eight resize handles** — anything pressing "just inside" a frame in a test or a fixture hits `__resizer-left__`, not the content | The handles are absolutely positioned over the border box and hit-test first, which is correct. It presents as an activation or focus bug: the press lands, focus walks up to the frame (a resizer is not focusable), and the control four pixels away never sees it. Press an element's CENTRE |
 | **The desktop's window layer is the WORK AREA, and it only means anything once it is `.__windows__`** | Its whole geometry is one CSS rule; without the class the layer sizes to content, its children are all absolutely positioned, and it measures 0x0. Nothing then fails — every rule that reads the work area is guarded against a zero box on purpose, so the clamp and the cascade both quietly stand down and windows land wherever they were asked to go. Cost a full test run to see, and the fix was one `addClass` |
@@ -1490,8 +1491,18 @@ com.crystalgui.ui              UIElement, UIWindow, Ui, UITransform, EventListen
                                WorkspaceTreeSource is the MODEL (explorerModel.ts) — listings, sorting,
                                compact folders, what matches. The parts sit BESIDE the view and reach it
                                through package-private accessors, as TextEditor's ten view parts do
-    .desktop                   CrystalOS — Desktop (the compositor host) and WindowFrame (one window).
-                               NOBODY CONSTRUCTS EITHER: every UIWindow owns a desktop and hands it out
+    .desktop                   CrystalOS — Desktop (the compositor host), WindowFrame (one window),
+                               WindowRegistry (every LIVE window, visible or hidden, in two orders: open
+                               order for the taskbar, MRU for the switcher — and neither is derivable
+                               from the other, since a hidden window has left the stacking order while
+                               keeping its place in the sequence), WindowState and WindowPolicy.
+                               HIDE IS DETACH, which is what makes the freeze real rather than promised:
+                               a detached subtree matches no selector, lays out and paints nothing, and
+                               has had every input reference dropped by onRemoved. Close is a REQUEST
+                               routed through the policy; destroy runs Disposer; retention is bounded by
+                               an LRU cap that passes over any window whose content refuses to be
+                               discarded.
+                               NOBODY CONSTRUCTS ANY OF IT: every UIWindow owns a desktop and hands it out
                                through desktop(), the way it already owns its overlay layer, and a UI
                                opens a window with UIWindow.openWindow(frame). The desktop is an
                                internal child of the root, above the root's own content (the band model:

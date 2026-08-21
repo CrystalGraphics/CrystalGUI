@@ -637,8 +637,10 @@ theme {
      * overlap and neither caption is in view. */
     --window-active-border: var(--accent);
     /* The control glyphs are secondary until hovered — a title bar's buttons are not what you are
-     * looking at. */
+     * looking at. Minimise takes a neutral hover fill where close takes a red one: it is the one
+     * control that loses nothing, and dressing it as destructive would misstate what it does. */
     --window-control-fg: var(--fg-secondary);
+    --window-control-hover-fg: var(--fg);
     /* Close, hovered: the destructive-control convention every window manager and VS Code share. The
      * glyph goes to the on-accent colour on top of it, or a hovered close button reads as an error
      * state rather than as a target. */

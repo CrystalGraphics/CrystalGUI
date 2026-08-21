@@ -158,6 +158,31 @@ window .__controls__ {
  * Three class components (specificity 21) rather than the shorter `window .__close__`, which would
  * tie with the config kit's `.__config-control__ button` at 11 — a tie that has already been paid
  * for once, on `dialog`'s close button, where the later rule silently won a size fight. */
+window .__title-bar__ .__minimize__ {
+    width: 14px;
+    height: 12px;
+    min-height: 0px;
+    padding-all: 0px;
+    flex-shrink: 0;
+    border-radius: 2px;
+    background: none;
+    background-color: transparent;
+    overlay: icon("crystalgui:window-minimize");
+    overlay-fit: contain;
+    color: var(--window-control-fg, #9DA0A8);
+}
+
+/* THE GLYPH BRIGHTENS AND NOTHING ELSE — no hover fill, where close takes a red one. Two reasons, and
+ * the second is the one that decided it. Minimise loses nothing (the window is retained and its entry
+ * is how it comes back), so dressing it as destructive would misstate what pressing it does. And a
+ * fill would have to be a lighter grey than `--surface-raised`, which the system vocabulary has no
+ * name for: `--hover-bg` is designed to sit on a panel, and on a raised caption it lands within three
+ * points of the bar itself — painted, and effectively absent. `problemspanel .__view-options__` makes
+ * the same choice for the same reason. */
+window .__title-bar__ .__minimize__:hover {
+    color: var(--window-control-hover-fg, #DFE1E5);
+}
+
 window .__title-bar__ .__close__ {
     width: 14px;
     height: 12px;
