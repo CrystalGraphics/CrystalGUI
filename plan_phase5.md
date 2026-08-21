@@ -81,225 +81,26 @@ Recorded so nobody re-derives them.
 
 ## The items
 
-### 5.1 A window lifecycle, in the engine · **hide is not close, and close is not destroy**
+### 5.1–5.2 Windowing · **moved to [`plan_windowing.md`](plan_windowing.md)**
 
-**Researched 2026-08-21** against Win32, X11/ICCCM, Cocoa, the W3C Page Lifecycle API, bfcache and
-Android, because this is a solved problem everywhere and the failure modes are already documented.
+Started here — a disconnect discards unsaved work — and outgrew the phase. It is **engine work, not
+networking**: a lifecycle for `UIWindow` where hide, close and destroy are three different things, the
+registry that owns the retained set, and the strip that makes a hidden window findable again. Every
+window benefits, not just the editor, and it changes what a loader is for — `CgUiScreen` stops *owning* a
+window and starts *attaching* to one.
 
-#### The problem
+The numbers are left as they are rather than closing the gap, so anything citing 5.3–5.10 keeps meaning
+what it meant.
 
-The window's lifetime is owned by the wrong layer. `CgUiScreen.initGui` constructs the workspace, the
-editor and the `UIWindow`; `onGuiClosed` nulls all three. `AGENTS.md` already says *"`UIWindow`
-deliberately implements no platform Screen/widget interface — loader modules own that"* — and the
-**lifetime leaked to the loader anyway**. Escape-destroys-everything is a `GuiScreen` accident rather
-than a decision, and it takes the undo history, every open buffer and every cached analysis with it.
+**What stays in this phase** is the half that is genuinely about the wire:
 
-The instinct is already in the code: `initGui` opens with `if (uiWindow != null) return;`, so the window
-survives a resize. That is retention — scoped to one screen instance instead of to the engine.
-
-#### What every other platform does
-
-| System | Hide (retained) | Close (a *request*) | Destroy |
-|---|---|---|---|
-| Win32 | `ShowWindow(SW_MINIMIZE/SW_HIDE)` | `WM_CLOSE` — the app may ignore it | `DestroyWindow` → `WM_DESTROY` |
-| X11 / ICCCM | `IconicState` | `WM_DELETE_WINDOW` — the client decides | `WithdrawnState`, then destroy |
-| Cocoa | `orderOut:` | `windowShouldClose:` **can veto** | `close` + `releasedWhenClosed` |
-| Web | `visibilitychange` → hidden, then **frozen** | `beforeunload` | terminated / **discarded** |
-| Android | `onStop` | back press | `onDestroy` |
-
-**Three findings, and all three are load-bearing here.**
-
-1. **Close is universally a request, not an action.** `WM_CLOSE`, `WM_DELETE_WINDOW`,
-   `windowShouldClose:`, `beforeunload` — every one of them *asks*. CrystalGUI already has this
-   primitive: `UIElement.requestClose()` and the close-watcher cascade, where a live drag eats Escape
-   before a popover and a popover before a modal. So the window level does not need a new mechanism, it
-   needs to **answer** the one that already exists.
-
-2. **When something else owns the lifetime, close stops destroying.** Cocoa is explicit:
-   `releasedWhenClosed` *"is ignored for windows owned by window controllers."* That is precisely the
-   model — a retained registry owns the instance, so closing a window returns it to the registry rather
-   than freeing it. We are not inventing a policy; we are adopting the one AppKit already ships.
-
-3. **A hidden thing must stop working.** The Page Lifecycle API does not merely mark a page hidden — it
-   **freezes** it, and *"normally HIDDEN pages will be frozen to conserve resources."* `requestAnimationFrame`
-   stops firing. Android has `onStop`. This is not an optimisation anyone chose to add later; it is part
-   of the state.
-
-#### The state model
-
-Four states, which is the intersection of all five systems above:
-
-```
-        show()                    hide()
-  ┌──────────────┐          ┌──────────────┐
-  │   VISIBLE    │ ───────► │    HIDDEN    │   retained, ticking stopped
-  └──────────────┘ ◄─────── └──────────────┘
-         │  requestClose()          │
-         │  (cascade first)         │ evicted / world gone
-         ▼                          ▼
-  ┌───────────────────────────────────────┐
-  │              DESTROYED                │   Disposer runs, registry drops it
-  └───────────────────────────────────────┘
-```
-
-- **`requestClose()` at window level means "dismiss me"**, and the window's **policy** decides whether
-  that hides or destroys. Escape reaching the window is safe *because the cascade already filtered* —
-  a modal, a popover and a live drag all consume it first, and those genuinely should be destroyed.
-- Escape therefore defaults to **hide** for an application window and **destroy** for a transient one.
-  A global "Escape always hides" rule would be wrong; the policy belongs on the window.
-
-#### The rules that fall out, each with a source
-
-- **A hidden window stops ticking.** `UIFrameTicker`s, smooth scrolls, transitions — and, importantly,
-  the language services, which analyse on a debounce. A hidden editor that keeps compiling is worse than
-  one that was destroyed. Page Lifecycle's *frozen* is the precedent.
-- **Connections are dropped on hide and re-established on show.** This is the one that matters most here,
-  and browsers have already been through it: an open WebSocket used to make a page **ineligible for
-  bfcache**, and the resolution was not to refuse retention but to *"close or pause open connections,
-  timers, and observers in your `pagehide`/`freeze` handling, and re-establish them in your
-  `pageshow`/`resume` handling when `event.persisted` is true."*
-
-  > **This is the answer to the correction recorded above.** Retaining the editor un-strikes the stale
-  > `WorkspaceClient` — five sites capture it at construction and nothing rebinds them — and the fix is
-  > not "refuse to retain a window with a connection" but **rebind on show**. `show()` must carry the
-  > equivalent of `persisted`, so the window knows it came back from retention and revalidates rather
-  > than assuming its world is unchanged. "The user pressed Escape" and "the world went away" stay
-  > distinct signals.
-
-- **Input state does not survive hide.** Hover, pointer capture, press targets, a live drag. The pointer
-  moved while the window was not looking. `AGENTS.md` already records what happens when input state
-  outlives its tree — a stale hover made the diff walk two trees and run off the end — and show/hide is
-  the same boundary.
-- **Retention is bounded.** bfcache evicts; Android destroys; the Page Lifecycle API has a whole
-  *discarded* state and a `wasDiscarded` flag for it. A retained editor holds every open document's
-  `Rope`, its undo stacks, ECJ analyses and tree-sitter trees. So the registry needs an eviction
-  policy, and `destroy()` drives `Disposer`, which already exists to *"release on CLOSE rather than on
-  exit"*.
-
-#### The three buttons
-
-Minecraft has no OS chrome, so CrystalGUI draws its own — the same thing VS Code does with
-`window.titleBarStyle: custom` and IntelliJ does by merging the controls into the main toolbar row,
-right-aligned above the right activity stripe. That placement is the reference.
-
-| Button | Meaning | Confidence |
-|---|---|---|
-| **Minimise** | `hide()` — retained, frozen | Unambiguous |
-| **Close** | `requestClose()` → policy | Unambiguous |
-| **Maximise / restore** | **needs a decision** | See below |
-
-**Maximise is the one that does not map.** There is no OS window to maximise. It is only meaningful once
-a window can be less than full-screen — and the machinery for that exists (`UIResizer`, out-of-flow
-positioning, the graph's floating panels). The coherent reading is *remember the current rect, fill the
-screen, restore on toggle*. **Recommended: ship minimise and close first, and add maximise when there is
-a floating window to restore to.** Shipping a button whose meaning is guessed is how it ends up meaning
-three things.
-
-> **Not the platform's job and not the consumer's.** A loader supplies a surface and input; somebody
-> building a GUI writes widgets. Neither should reimplement retention, and today both would have to.
-> The registry, the state machine and the controls all belong in `core/`, with the loader reduced to
-> *attaching* a view to a retained window and detaching on close.
-
-### 5.2 The window strip and the switcher · **minimise without this is a leak with a UI**
-
-Mandatory rather than a nicety: a hidden window with no way back is a black hole. Every system that has
-minimise has somewhere minimised things go — the Windows taskbar, the macOS Dock, X11's window list,
-Android Recents, browser tabs.
-
-#### The one fact that shapes the whole design
-
-`uiWindow.paintFrame()` is called from **exactly one place**: `CgUiScreen.drawScreen`. CrystalGUI has
-never rendered outside a `GuiScreen`, so an always-visible in-game strip is not a widget — it is a new
-platform capability (a render-overlay hook, a window with no screen, input while the game runs).
-
-And that last part is what rules it out rather than merely pricing it: **in-game the cursor is captured
-for look control.** A taskbar cannot be clicked without freeing the cursor, and freeing the cursor means
-opening a screen — which is the thing the strip was supposed to save. Any always-on clickable HUD
-degenerates into "hold a modifier to free the mouse", which is a worse keybind.
-
-> Even systems that own the entire screen hide their taskbar: the macOS Dock auto-hides by default and
-> the iPadOS Dock is a gesture. Windows' is persistent **because Windows owns everything**. Here we are a
-> guest on somebody else's screen, competing with the hotbar, chat, potion effects and every other mod.
-
-#### So: two surfaces, one model
-
-| Surface | Where | Why it is cheap there |
-|---|---|---|
-| **Switcher** | a keybind, from anywhere | It *is* a screen, so the cursor is free and the game pauses as it already does. Alt+Tab / Cmd+Tab / Recents. Zero screen cost when unused |
-| **Strip** | inside the shell chrome, beside the window controls | There is already a screen, a free cursor and the space |
-
-**Both are views of the retained registry from 5.1** — not a second list to keep in sync. The taskbar
-*is* the registry, rendered.
-
-#### The model
-
-**A window joins on open and leaves only on destroy.** That is Windows' rule and it is the right one:
-the strip shows what is *live*, visible or hidden, with the focused one highlighted — not a bin of
-minimised things. It also falls straight out of 5.1, where `hide()` and `destroy()` are already
-different verbs, so "until explicitly closed" needs no separate bookkeeping.
-
-#### What to take from a real taskbar
-
-| Take | Why it fits | What it reuses |
-|---|---|---|
-| Icon + label per entry | The minimum that makes an entry identifiable | `CgUiSvg`, `icon()` in CSS |
-| **Focused-window highlight** | Otherwise the strip cannot say where you are | a class, per the "state a widget flips itself belongs on a CLASS" rule |
-| **Grouping by window type** | Two editors are two entries; the screenshot has two of one app side by side | — |
-| **Badges** — unsaved dot, error count | The tab strip already draws `*`; the Problems panel already counts | `FileDecoration`'s badge/colour split |
-| **Per-entry context menu** — close, recent files | Right-click is where "close" lives on every taskbar | `ContextMenu` + `MenuBuilder`, which is already the ONE place commands become rows |
-| **Overflow** when the strip is full | The screenshot's `^` chevron | — |
-| **Progress on the entry** | A chunked transfer or an engine-band download has a real duration | `ProgressBar`, `JobScheduler` |
-
-#### What NOT to take, and why
-
-| Leave | Reason |
-|---|---|
-| **The search box** | The command palette already *is* this. Two search surfaces means two matchers that disagree — the exact failure `TreeSearch.Model.setQuery` taking a `String` already caused once |
-| **The clock** | Minecraft has its own time, and the status bar owns that role |
-| **The system tray** | `StatusBarView` already occupies it |
-| **Pinning / launching** | These are not apps a user launches; they are windows a command opens. "Pinned" would have to mean *"retained even when destroyed"*, which is a third lifecycle state nobody asked for |
-| **Auto-hide** | Solves a problem we do not have — the strip lives inside a screen the user chose to open |
-
-#### Icons — what a window has to declare
-
-A taskbar entry needs an icon, so **a window must declare one**, the way a file type does. The
-machinery exists: `ui/icons/*.svg` (Feather, stroked `currentColor` chrome marks) for window icons,
-`FileIconTheme` for anything file-shaped, and `CgUiSvg` to draw them with no atlas and one instanced
-draw call.
-
-Two traps are already recorded and both apply here:
-
-- **Resolve the light/dark variant through `CgUiSvg.ofIcon`.** `TextureValue.parseIcon` once called
-  `of(toResourcePath(...))` instead, so every `icon()` in every stylesheet drew the light file forever
-  and a theme swap changed nothing.
-- **16px, matching the filetype set**, and a modifier overlay (a badge) is a **full-size layer**, not a
-  glyph in a corner box — JetBrains draws `staticMark`/`finalMark` on their own 16×16 canvases with the
-  glyph already placed, so they compose by stacking.
-
-#### Nice-to-haves, explicitly deferred
-
-Each is real and none blocks the strip. Recorded so they are not re-invented:
-
-- **Live thumbnail on hover.** Windows' taskbar previews. Genuinely feasible here — `CgUiPaintContext`
-  already renders a subtree to an FBO for layer opacity and masking, and node previews already do
-  exactly this. Deferred because a preview of a *hidden* window means rendering something frozen, which
-  contradicts 5.1's "a hidden window stops ticking" unless the last frame is kept.
-- **Drag to reorder**, and a remembered order. `UIDragController` is already there.
-- **Middle-click to close**, matching the tab strip.
-- **A "new window" affordance** on the strip, once more than one window type exists.
-
-#### The trap to avoid on day one
-
-**Minimise with no discoverable way back is worse than no minimise.** If the only route is a keybind
-nobody was told about, the feature is a trap. Cheap fix with machinery that exists: fire a
-`Notification` on hide — *"Editor minimised · press F6 to return"* — which balloons and fades.
-
-And the accelerator must be **read from the keymap, never spelled**. `Keymap.acceleratorFor` is what the
-menus already use; a literal `"F6"` is a promise the widget cannot keep the moment anything rebinds it.
-
-> **Not the same thing as tabs or the dock.** `DockPane` and the tab strips are *documents within a
-> window*. This is *windows*. Merging the two is a category error that gets expensive to unpick, and the
-> engine already keeps the levels apart everywhere else.
+- **Reconnect-on-restore** — retention resurrects the stale `WorkspaceClient` this document records as
+  unreachable, and the fix is browsers': close connections on hide, re-establish on show, with the
+  restore carrying the equivalent of `pageshow`'s `event.persisted`. Tracked as `plan_windowing.md` W6
+  because it is a step of that build, and noted here because **this** is the document that struck the
+  defect.
+- **Persisting the retained set** — 5.3 below. Retention is in-memory and survives Escape, not a crash,
+  a quit or a disconnect, so the two are complementary rather than alternatives.
 
 ### 5.3 Persist the retained set · **because retention is always best-effort**
 
@@ -393,6 +194,9 @@ the platform ceiling — several large transfers in flight together is the case 
 ---
 
 ## Sources — read 2026-08-21
+
+> The windowing research (Win32, X11, Cocoa, Page Lifecycle, bfcache) moved with §5.1–5.2 to
+> [`plan_windowing.md`](plan_windowing.md). What remains below is what the rest of this phase cites.
 
 - [Page Lifecycle API](https://developer.chrome.com/docs/web-platform/page-lifecycle-api) and the
   [WICG spec](https://wicg.github.io/page-lifecycle/) — the six states, `freeze`/`resume`, and
