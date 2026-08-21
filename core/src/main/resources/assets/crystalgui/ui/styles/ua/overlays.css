@@ -79,6 +79,14 @@ textfield:disabled {
  * A theme that flips a tooltip above its anchor will want margin-bottom instead. */
 
 tooltip {
+    /* A HOVER IS NOT A REQUEST. The pointer crosses a dozen controls on its way somewhere, and a tooltip
+     * that fires on every one of them flickers a box over the thing you were reading. Waiting for the
+     * pointer to STOP is what turns "passed over" into "asked about" -- which is why every desktop
+     * toolkit has this delay and none of them makes it zero. One second is IntelliJ's own initial
+     * delay; a theme that wants a snappier rail can shorten it per selector.
+     *
+     * The property, not a constant in the widget: this class's own doc asked for it that way. */
+    tooltip-delay: 1;
     background: var(--tooltip-bg, #1E1E1EF0);
     outline: 1px var(--tooltip-border, #00000080);
     padding-left: 4px;

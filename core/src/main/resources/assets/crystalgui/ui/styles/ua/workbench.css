@@ -494,6 +494,70 @@ quickpick .__results__ {
     overflow: auto;
 }
 
+/* THE HEADER, which is a drag handle that happens to have a title on it.
+ *
+ * A popup with no chrome has nowhere to grab: every pixel is either the field (which owns the caret) or a
+ * row (which accepts on press). IntelliJ puts its tab strip here and drags by it -- the bar earns its
+ * height twice, which is the only reason it is worth any height at all. */
+/* A PANEL HEADER, wearing the same clothes as every other one.
+ *
+ * No fill of its own: a tool window's title row does not have one either, and giving this popup a lighter
+ * band across its top made the bar read as a separate widget stapled on rather than as the popup's own
+ * chrome. The height is `--panel-header-h`, which is the shared chrome-row height -- a tool window's title
+ * row and an editor group's tab row are the same thing wearing different content, and this is a third.
+ *
+ * NO RULE UNDER IT either, tried and removed: the search field already carries its own border, so a
+ * hairline above it drew two horizontal lines a few pixels apart and read as a seam rather than a
+ * division.
+ *
+ * `min-height` with no vertical padding, copied deliberately rather than a fixed `height`: padding here
+ * makes the row `max(22, content + padding)`, which is how the Problems panel once grew to 26px while
+ * every title-only header stayed at 22 and the band across the window broke at exactly one panel. */
+/* CLIPS, and that is a guard rather than a look. `flex-shrink` defaults to 0 in this engine, so anything
+ * inside a box whose height the user has fixed keeps its own size and spills out of it -- and a popup that
+ * paints over the editor behind it is the worst version of that, because the stray rows are still hit-
+ * testable. The list is told to fill instead (see QuickPick.sizeListToContent); this makes the failure
+ * invisible rather than merely unlikely if anything else ever overflows. */
+quickpick .__content__ {
+    overflow: hidden;
+    /* CHECK THE PARENT FIRST -- the invariant this cost a round to relearn.
+     *
+     * Telling the LIST to `flex-grow: 1` does nothing while the box it sits in has no free space to give
+     * it, and a content box with no height is sized to its own children, so its height IS their height.
+     * The list then grew by zero, resolved to its `height: 0` basis, and every row vanished: a popup the
+     * user had just dragged taller showed a query and no results at all.
+     *
+     * No `height: 0` here, deliberately, unlike the list. Without a user height the popup is sized to this
+     * box, so a zero basis would collapse the whole popup; with one, there is free space and this takes
+     * it. Growth alone is correct in both states, which is why it is unconditional. */
+    flex-grow: 1;
+}
+
+quickpick .__qp-header__ {
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+    min-height: var(--panel-header-h, 22px);
+    padding: 0px 4px 0px 8px;
+}
+
+quickpick .__qp-title__ {
+    font-size: 10px;
+    font-weight: bold;
+    color: var(--panel-header-fg, #A0A0A0);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+
+/* DRAG-TO-RESIZE, which is only reachable because `reposition` writes the width at DEFAULT origin.
+ * `UIResizer` writes at INLINE per the CSS spec's rule for a user resize, so a widget that wrote its own
+ * measurement at IMPORTANT would beat the handle -- the grabber would move the height and never the
+ * width, and half a resize working reads as a broken widget rather than an unsupported gesture. */
+quickpick {
+    resize: both;
+}
+
 /* Paired with QuickPick.ROW_HEIGHT -- a virtualised list needs its row height in Java to map an index to
  * a scroll offset, and the two must agree or rows drift from the boxes drawn for them. */
 quickpick .__row__ {
@@ -505,7 +569,15 @@ quickpick .__row__ {
      * padded to 6px ran its accelerator underneath it -- the keys were sliced in half by a bar that has
      * no idea they are there. 14 is the bar plus the padding the left side already has. */
     padding-right: 14px;
-    gap-all: 6px;
+    /* NO `gap-all`, and that is the point. It applies between EVERY pair of children, so once the row grew
+     * an icon and a trailing description it was ADDING to the margin each of those already wanted -- a
+     * 4px icon margin drew as 10px, which is what "the gap between the icon and the name is too big"
+     * looked like. The engine has paid for this once already in the completion popup, where it put a
+     * space inside a signature.
+     *
+     * The gap it used to provide was only ever visible in ONE place -- between the category and the label
+     * -- because the two pairs either side of the grow-spacer collapse against it. So it is a margin
+     * there, and every other part spaces itself. */
 }
 
 /* ARROW-KEY selection is BLUE and hover is GREEN, which is a real distinction rather than two skins of
@@ -535,10 +607,44 @@ quickpick .__row__.__qp-disabled__ {
 /* Dimmer than the label, so "Dock: " reads as provenance rather than as part of the name. */
 quickpick .__qp-category__ {
     color: var(--palette-category-fg, #9D9D9D);
+    /* What the row's `gap-all` used to provide, in the one place it was ever visible. */
+    margin-right: 6px;
 }
 
 quickpick .__qp-label__ {
     color: var(--palette-label-fg, #CCCCCC);
+}
+
+/* A symbol's package, after its name. The SAME colour as the category on purpose: both are provenance,
+ * and giving the trailing one its own token would be two ways to say "dimmer than the label" that a theme
+ * has to keep in step.
+ *
+ * `margin-left` rather than `gap-all` on the row -- a gap applies between EVERY pair of children, and the
+ * completion popup already paid for that one: it put a space inside a signature, so `arraycopy (Object,
+ * int)` read as two controls rather than one name. */
+quickpick .__qp-description__ {
+    color: var(--palette-category-fg, #9D9D9D);
+    margin-left: 6px;
+    /* IT MUST BE ABLE TO GIVE WAY. This engine defaults flex-shrink to 0, so in a packed row exactly one
+     * child absorbs every squeeze -- and if it is not this one it is the NAME, which is the thing the row
+     * exists to show. A package is the losable half. */
+    flex-shrink: 1;
+}
+
+/* The kind glyph. Sized here and not by SymbolIcon, which writes structure and no geometry.
+ *
+ * 12px, matching the completion popup rather than the artwork's native 16: JetBrains draws these for a
+ * ~13px UI font and ours is 10px, so 16 reads as 1.6x the text beside it. The two popups are held beside
+ * each other in the same session, so they have to agree. */
+quickpick .__qp-icon__,
+quickpick .__qp-file-icon__ {
+    width: 12px;
+    height: 12px;
+    /* TIGHTER THAN THE OTHER GAPS. An icon and the name it labels are one thing -- the glyph is not a
+     * separate column, it is the first character of the row -- so it sits closer than the name sits to
+     * its location. Both references draw it this way. */
+    margin-right: 0px;
+    flex-shrink: 0;
 }
 
 quickpick .__qp-spacer__ {

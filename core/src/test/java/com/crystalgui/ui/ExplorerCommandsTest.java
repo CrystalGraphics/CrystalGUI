@@ -1,5 +1,9 @@
 package com.crystalgui.ui;
 
+import com.crystalgui.ui.elements.chrome.QuickPickEntry;
+
+import com.crystalgui.core.search.SearchQuery;
+
 import com.crystalgui.core.command.ClipboardCommands;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
@@ -1070,15 +1074,24 @@ public class ExplorerCommandsTest extends UiTestBase {
         for (int i = 0; i < 40; i++) settle();
 
         List<String> names = new ArrayList<>();
-        for (QuickPickItem item : GoToFile.itemsFor(workbench)) names.add(item.label());
+        for (CgPath path : workbench.fileTree().source().knownFiles()) names.add(path.name());
         assertTrue("the crawl never reached a file three folders down: " + names,
                 names.contains("Needle.java"));
     }
 
     /**
-     * A row is the file NAME with its folder as the category, which is how both VS Code and IntelliJ
-     * present it — you search for the name and disambiguate by folder, rather than searching one long
-     * string that happens to contain a path.
+     * A row is the file NAME with its folder beside it, which is how both VS Code and IntelliJ present it
+     * — you search for the name and disambiguate by folder, rather than searching one long string that
+     * happens to contain a path.
+     *
+     * <p><b>The folder moved from {@code category} to {@code description}</b> when the picker merged with
+     * Go to Class: a category renders BEFORE the label ("mymod.proj:src: Main.java", which reads as a
+     * command category) and a description renders after it, which is where both references put a
+     * location. The claim being pinned is unchanged; only the slot is.</p>
+     *
+     * <p>And the id is now a {@code Resource} rather than a bare path, because the list holds two kinds of
+     * thing and the id has to say which — {@code java.util.ArrayList} parsed as a path opens something,
+     * or silently nothing. @see GoToFileTest</p>
      */
     @Test
     public void aRowIsTheNameAndItsFolder() {
@@ -1087,13 +1100,20 @@ public class ExplorerCommandsTest extends UiTestBase {
         for (int i = 0; i < 40; i++) settle();
 
         QuickPickItem main = null;
-        for (QuickPickItem item : GoToFile.itemsFor(workbench)) {
-            if ("Main.java".equals(item.label())) main = item;
+        for (QuickPickEntry entry
+                : GoToFile.rowsFor(SearchQuery.of("Main.java"),
+                        workbench.fileTree().source().knownFiles())) {
+            if ("Main.java".equals(entry.item().label())) main = entry.item();
         }
         assertNotNull("Main.java was never indexed", main);
-        assertEquals("the folder belongs in the category, not glued onto the label",
-                "mymod.proj:src", main.category());
-        assertEquals("the id must be the path, so accepting a row needs no lookup",
+        assertEquals("the folder belongs beside the name, not glued onto it",
+                "mymod.proj:src", main.description());
+        assertNull("a location in the leading slot reads as a command category", main.category());
+        // A PROJECT RESOURCE STRINGIFIES AS A BARE PATH -- `Resource.toString` writes the scheme only
+        // when there is a `://` marker, and a project path has none. That is what makes the id round-trip
+        // through `Resource.parse` without the scheme ever being spelled, and why the old bare-path ids
+        // are still valid addresses.
+        assertEquals("the id must be the resource, so accepting a row needs no lookup",
                 "mymod.proj:src/Main.java", main.id());
     }
 
