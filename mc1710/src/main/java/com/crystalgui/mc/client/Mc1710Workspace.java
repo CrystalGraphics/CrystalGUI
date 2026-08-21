@@ -55,7 +55,9 @@ public final class Mc1710Workspace {
         }
         if (client == null || boundTo != connection) {
             boundTo = connection;
-            client = new WorkspaceClient<>(connection);
+            // forConnection, not the constructor: this wire is shared, and a second client on it
+            // would throw on fs.changed. @see WorkspaceClient#forConnection
+            client = WorkspaceClient.forConnection(connection);
         }
         return client;
     }

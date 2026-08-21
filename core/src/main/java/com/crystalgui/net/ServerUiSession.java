@@ -255,6 +255,24 @@ public final class ServerUiSession<T> implements UITreeObserver {
         // taken would otherwise be followed by a delta restating the whole tree.
         structuralAnchors.clear();
 
+        rebuildOpenPayload();
+        for (Viewer<T> viewer : viewers) sendOpenTo(viewer);
+    }
+
+    /**
+     * Rebuilds what a viewer is told when it joins.
+     *
+     * <p>Called from {@link #open()} and again from {@link #flushStructure()}, and the second is the one
+     * that was missing. <b>A tree delta changes the description hash</b>, so a payload captured at open
+     * describes a tree the session no longer serves — and a viewer added after a reshape is told that
+     * stale hash, asks for it, and is refused with <i>"this session serves X, not Y"</i>.</p>
+     *
+     * <p>Each feature was correct alone: C1 replays the payload so a late viewer sees exactly what the
+     * first one saw, and C2 renumbers and re-hashes. Together they were not, which is what
+     * {@code aViewerAddedAfterAReshapeStillGetsTheWindow} now pins — found by running both in one
+     * client rather than by either test.</p>
+     */
+    private void rebuildOpenPayload() {
         StateMap<T> out = new StateMap<>(ops);
         out.putInt("protocol", EnvelopeCodec.VERSION);
         out.putString("hash", descHash);
@@ -265,7 +283,6 @@ public final class ServerUiSession<T> implements UITreeObserver {
         out.putRaw("sheets", ops.createList(encodedSheets));
         out.putInt(UiMethods.WINDOW, windowId);
         openPayload = out.encode();
-        for (Viewer<T> viewer : viewers) sendOpenTo(viewer);
     }
 
     /**
@@ -458,6 +475,8 @@ public final class ServerUiSession<T> implements UITreeObserver {
         elementCount = NetworkIds.assign(root);
         encodedDescription = UIDescriptionCodec.CODEC.encode(ops, root);
         descHash = ContentHash.of(ops, encodedDescription);
+        // The hash just moved, so what a LATE VIEWER is told has to move with it. @see #rebuildOpenPayload
+        rebuildOpenPayload();
 
         StateMap<T> out = new StateMap<>(ops);
         out.putRaw("entries", ops.createList(entries));

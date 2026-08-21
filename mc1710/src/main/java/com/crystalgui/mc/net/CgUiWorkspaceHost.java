@@ -166,6 +166,17 @@ public final class CgUiWorkspaceHost {
             if (operation == WorkspaceOperation.READ) return true;
             MinecraftServer server = MinecraftServer.getServer();
             if (server == null || server.getConfigurationManager() == null) return false;
+            // THE OWNER OF A SINGLE-PLAYER WORLD, whatever the cheats flag says.
+            //
+            // func_152596_g is the "may use commands" check and it folds the world's allow-cheats flag
+            // into its single-player branch -- correct for commands and wrong here. Cheats gate
+            // COMMANDS; they have nothing to say about whether somebody may edit files in their own
+            // save directory. Found in game: a fresh world has cheats off, so the host of a local world
+            // could list the workspace and not write to it, and the refusal was a correct-looking
+            // NO_PERMISSIONS with no way to tell it from a real one.
+            if (server.isSinglePlayer() && actor.id().equalsIgnoreCase(server.getServerOwner())) {
+                return true;
+            }
             for (Object entry : server.getConfigurationManager().playerEntityList) {
                 EntityPlayerMP player = (EntityPlayerMP) entry;
                 if (!player.getCommandSenderName().equals(actor.id())) continue;

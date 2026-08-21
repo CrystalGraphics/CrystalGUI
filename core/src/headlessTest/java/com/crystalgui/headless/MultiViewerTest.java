@@ -140,6 +140,36 @@ public class MultiViewerTest {
         assertEquals(2, viewerB.root().getChildren().size());
     }
 
+    /**
+     * A viewer joining <b>after a reshape</b> still gets the window — the C1 × C2 seam.
+     *
+     * <p>Each feature was right alone. C1 replays the payload {@code open()} built, so a late viewer sees
+     * exactly what the first one saw; C2 renumbers and re-hashes on a structural change. Together the
+     * replayed payload carried a hash the session no longer served, so the late viewer asked for it and
+     * was refused with <i>"this session serves X, not Y"</i> — and the window simply never appeared.</p>
+     *
+     * <p><b>Found in game, not here.</b> Neither feature's own tests combine them, which is the whole
+     * argument for running the thing rather than only its parts.</p>
+     */
+    @Test
+    public void aViewerAddedAfterAReshapeStillGetsTheWindow() {
+        server.open();
+        settle();
+        assertNotNull(viewerA.root());
+
+        // Reshape: this renumbers and re-hashes the description.
+        root.addChildAt(new com.crystalgui.ui.elements.UIText("inserted"), 0);
+        settle();
+        assertEquals(3, viewerA.root().getChildren().size());
+
+        server.addViewer(serverB);
+        settle();
+
+        assertNotNull("a viewer added after a reshape must still receive the window", viewerB.root());
+        assertEquals("and the CURRENT tree, not the one open() described",
+                3, viewerB.root().getChildren().size());
+    }
+
     /** An event from either client runs the server's one lambda. */
     @Test
     public void anEventFromEitherViewerReachesTheServer() {
