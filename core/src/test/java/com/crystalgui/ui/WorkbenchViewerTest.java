@@ -251,4 +251,35 @@ public class WorkbenchViewerTest extends UiTestBase {
         }
         return null;
     }
+
+    /**
+     * <b>A jump FROM inside a viewer opens another viewer.</b>
+     *
+     * <p>The gap this closes: {@code viewerFor} built its editor and never connected
+     * {@code onDefinitionChosen}, so Ctrl+B inside a library class emitted into a signal nobody was
+     * listening to — and so did the documentation popup's Jump to Source, which is the same call one
+     * layer up. Both read as resolution failing, while a hover in the very same file was drawing the
+     * symbol's full documentation: the engine had the answer throughout and nothing was carrying it.</p>
+     *
+     * <p>Drilling onward is not an edge case — it is what reading a library IS. From {@code ArrayList}
+     * into {@code List}, from {@code List} into {@code Collection}. A viewer that can be entered and not
+     * left is a dead end.</p>
+     */
+    @Test
+    public void aJumpFromInsideAViewerOpensAnotherViewer() {
+        workbench.openResource(ARRAY_LIST, null);
+        settle();
+        TextEditor viewer = viewer();
+        assertNotNull("the first viewer did not open", viewer);
+
+        Resource other = Resource.of(Resource.SCHEME_LIBRARY, "java.util.List");
+        viewer.onDefinitionChosen.emit(DeclarationSite.inLibrary(
+                "java.util.List", new TextPoint(0, 0), new TextPoint(0, 4)));
+        settle();
+
+        assertEquals("the jump out of a viewer went nowhere", 2, viewerTabs());
+        assertTrue("the second viewer is not the one that was asked for",
+                workbench.dock().layout().leaves().stream().anyMatch(
+                        leaf -> leaf.indexOf(workbench.refForResource(other)) >= 0));
+    }
 }

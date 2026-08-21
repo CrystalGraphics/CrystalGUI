@@ -524,33 +524,7 @@ public class Workbench extends UIElement {
             // note. Same-file jumps never arrive here because the editor already made them; this hears
             // only what genuinely needs the workspace, and routes it through the primitive the Problems
             // panel uses so the two cannot disagree about focus or framing.
-            created.onDefinitionChosen.connect(site -> {
-                if (site.resource() == null) return;
-                // A RESOURCE THE WORKSPACE DOES NOT HOLD goes to a viewer. This used to return here, so
-                // Ctrl+B into anything on the classpath did nothing -- and it read as the engine having
-                // no answer, when the engine had simply never been asked for one.
-                if (!site.resource().isProject()) {
-                    TextPoint into = site.start();
-                    // THE VIEWER'S OWN EDITOR, not `activeEditor()`: that resolves through PATH_STATE,
-                    // which a viewer panel deliberately does not carry, so it answers null here.
-                    openResource(site.resource(), () -> {
-                        TextEditor editor = viewers.get(site.resource().toString());
-                        if (editor == null) return;
-                        editor.revealAt(into);
-                        UIWindow window = getAttachedWindow();
-                        if (window != null) window.getInputHandler().requestFocus(editor);
-                    });
-                    return;
-                }
-                TextPoint at = site.start();
-                openFile(site.resource().asPath(), () -> {
-                    TextEditor editor = activeEditor();
-                    if (editor == null) return;
-                    editor.revealAt(at);
-                    UIWindow window = getAttachedWindow();
-                    if (window != null) window.getInputHandler().requestFocus(editor);
-                });
-            });
+            routeDefinitionsOf(created);
             // No command installation here: TextEditor registers its own and binds its own chords, so a
             // document created before this workbench is attached is no longer a special case.
             // Here rather than only from WorkbenchSettings.apply: a document opened after the settings
@@ -1018,6 +992,51 @@ public class Workbench extends UIElement {
     /** What is waiting on a viewer's first read. @see #whenViewerLoaded */
     private final Map<String, List<Runnable>> viewerPending = new HashMap<>();
 
+    /**
+     * Sends this editor's cross-document jumps somewhere — a workspace file, or a viewer.
+     *
+     * <p><b>Every editor the workbench builds needs this, and one of them did not have it.</b> A viewer
+     * was created without it, so Ctrl+B <em>inside</em> a library class emitted into a signal nobody was
+     * listening to — and so did the documentation popup's Jump to Source, which is the same call one
+     * layer up. Both looked like resolution failing, while the hover in the very same file was drawing
+     * the symbol's full documentation: the engine had the answer throughout and nothing was carrying
+     * it.</p>
+     *
+     * <p>Written once and called from both, rather than copied into the viewer, because the two are
+     * expected to stay identical: jumping out of a library class into another library class is the same
+     * gesture as jumping out of your own file, and a reader drilling through the JDK is doing it
+     * repeatedly. Two copies would be two places for the routing rules to drift.</p>
+     */
+    private void routeDefinitionsOf(TextEditor editor) {
+        editor.onDefinitionChosen.connect(site -> {
+            if (site.resource() == null) return;
+            // A RESOURCE THE WORKSPACE DOES NOT HOLD goes to a viewer. This used to return here, so
+            // Ctrl+B into anything on the classpath did nothing -- and it read as the engine having
+            // no answer, when the engine had simply never been asked for one.
+            if (!site.resource().isProject()) {
+                TextPoint into = site.start();
+                // THE VIEWER'S OWN EDITOR, not `activeEditor()`: that resolves through PATH_STATE,
+                // which a viewer panel deliberately does not carry, so it answers null here.
+                openResource(site.resource(), () -> {
+                    TextEditor opened = viewers.get(site.resource().toString());
+                    if (opened == null) return;
+                    opened.revealAt(into);
+                    UIWindow window = getAttachedWindow();
+                    if (window != null) window.getInputHandler().requestFocus(opened);
+                });
+                return;
+            }
+            TextPoint at = site.start();
+            openFile(site.resource().asPath(), () -> {
+                TextEditor opened = activeEditor();
+                if (opened == null) return;
+                opened.revealAt(at);
+                UIWindow window = getAttachedWindow();
+                if (window != null) window.getInputHandler().requestFocus(opened);
+            });
+        });
+    }
+
     /** The panel ref for a resource — a pure function of it, as {@link #refFor} is of a path. */
     public DockPanelRef refForResource(Resource resource) {
         String text = resource.toString();
@@ -1157,6 +1176,8 @@ public class Workbench extends UIElement {
         // onward, no telling a field from a parameter -- which is most of why anybody opens a class
         // they cannot edit.
         created.setLanguageServices(entry.newServices(created.buffer(), resource));
+        // AND ITS JUMPS GO SOMEWHERE. @see #routeDefinitionsOf
+        routeDefinitionsOf(created);
         WorkbenchSettings.applyTo(this, created);
         viewers.put(key, created);
         readViewer(resource, created);

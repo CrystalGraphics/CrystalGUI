@@ -1786,9 +1786,12 @@ documentationpopup .__doc-footer-text__ {
     flex-grow: 1;
 }
 
+/* 12px, MATCHING THE FILE ICON at the other end of the row. At 14 it was the largest thing in the
+ * footer and read as the row's subject rather than as its action -- which is backwards, since the
+ * subject is the file name between them. */
 documentationpopup .__doc-footer-edit__ {
-    width: 14px;
-    height: 14px;
+    width: 12px;
+    height: 12px;
     flex-shrink: 0;
     cursor: pointer;
     background: icon("crystalgui:general/action/edit");
