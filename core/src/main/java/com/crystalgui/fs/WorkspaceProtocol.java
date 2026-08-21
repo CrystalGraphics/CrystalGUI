@@ -43,6 +43,22 @@ public final class WorkspaceProtocol {
      */
     public static final String READ_CHUNK = "fs.readChunk";
 
+    /**
+     * Writes a text file as a {@code ChangeSet} against a known base revision — P6.1.10 <b>D10</b>.
+     *
+     * <p>D10's rule is that <i>writing branches on what the CLIENT is holding, not on what the file
+     * is</i>: a text document with a matching base revision sends a change set, anything else sends the
+     * whole file. That is knowable locally and correct for the awkward cases by construction, since a
+     * binary file cannot produce a change set and takes the whole-file path without anyone remembering a
+     * rule.</p>
+     *
+     * <p>The win is the ordinary case rather than an extreme one: typing a character into a 2 MB file
+     * sends the character instead of the file. The etag is still quoted and still re-stat'd, so the
+     * conflict story is exactly {@link #WRITE}'s — a delta against a file that moved is refused, not
+     * merged.</p>
+     */
+    public static final String WRITE_DELTA = "fs.writeDelta";
+
     /** Replace a file, quoting the etag it was read at. */
     public static final String WRITE = "fs.write";
 
@@ -141,6 +157,29 @@ public final class WorkspaceProtocol {
 
     /** True on the chunk that completes a transfer, after which the id is no longer valid. */
     public static final String EOF = "eof";
+
+    /**
+     * A {@link #WRITE_DELTA} payload: the changes, each carrying {@link #FROM}, {@link #TO} and
+     * {@link #INSERT}.
+     *
+     * <p>{@code FROM} and {@code TO} are the pair {@code fs.rename} already uses — reused rather than
+     * duplicated under a second spelling, because they mean the same thing here (a span) and two names
+     * for one concept is how a protocol starts disagreeing with itself.</p>
+     */
+    public static final String CHANGES = "changes";
+
+    public static final String INSERT = "insert";
+
+    /**
+     * On a {@link #READ}: the etag the client already holds, and on the reply, that nothing changed.
+     *
+     * <p>HTTP's conditional GET, for the same reason — the common re-read is of a file that has not
+     * moved, and answering "still the one you have" costs a few bytes instead of the file. Absent means
+     * "send it regardless", so a client with no cache behaves exactly as before.</p>
+     */
+    public static final String IF_NONE_MATCH = "ifNoneMatch";
+
+    public static final String UNCHANGED = "unchanged";
     public static final String ENTRIES = "entries";
     public static final String PROJECT_LIST = "projects";
     public static final String NAME = "name";

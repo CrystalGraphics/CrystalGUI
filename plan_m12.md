@@ -1359,19 +1359,28 @@ needed was somewhere to be plugged in, which is what `Protocols` became.
 | **B3** ✅ | **D11 chunked transfer.** `fs.read` answers inline below 1 MB and otherwise opens a transfer the client pulls with `fs.readChunk`; hard cap 100 MB, refused as `FILE_TOO_LARGE` **against a stat, before any bytes are read**. Not a performance choice — the transport bounds one reassembled message at 8 MB, so a large file *cannot* cross whole. Pull rather than push, so a client sets the pace and a resume is the same request with a different offset. `ChunkedTransferTest` pins that a caller cannot tell which path was taken | P6.1.10 D11; P6.1.13 — *"Deferred; protocol shape reserved. Hard cap 100 MB"* |
 | **B4** ✅ | **Permissions on a real server.** `OperatorsMayWrite`: everyone reads, operators write. It **reuses Minecraft's own model** rather than inventing one — `func_152596_g` is the may-use-commands check, and it already answers correctly for the case that would otherwise need special handling, since in single-player it is true for the world's owner with cheats on | `Mc1710Workspace`; fine for one local player, not for a server |
 
-### Stage C — what only matters once it is remote
+### Stage C — what only matters once it is remote ✅ **COMPLETE (2026-08-21)**
 
-Every one of these is currently listed as a known gap and none of them bites while both halves share a
-process. From `docs/CGUI_SERVER_AND_SERIALIZATION.md` §8 unless noted:
+Every one of these was listed as a known gap and none bit while both halves shared a process. Four were
+built, one was built in part with the rest argued out, and one was **refused on the plan's own rule**.
+
+> **The pattern across C2, C3 and C4 is the same, and worth naming.** Each was recorded as a gap in a
+> place that could not see the whole shape: C2 said positional ids made deltas "a real design problem",
+> C3 said tabs live in internal containers, C4 said seven widgets implement state. In each case the
+> observation was right and the conclusion did not follow — ids need to be *agreed*, not *stable*;
+> "internal" was answering two questions at once; and the number was ten, with the real defect somewhere
+> else entirely (`Dropdown`'s options never travelled).
+
+From `docs/CGUI_SERVER_AND_SERIALIZATION.md` §8 unless noted:
 
 | # | Item | Note |
 |---|---|---|
-| **C1** | **No multi-viewer fan-out** — *"One session, one client"* | The first thing a real server invalidates |
-| **C2** | **No `TreeDelta`** — a structural change means a new description and a re-open | Explicitly *"a real design problem, not an afternoon"*, because network ids are positional |
-| **C3** | **`TabView` does not round-trip** — tabs and panes live in internal containers the description codec does not descend into | A dock over the wire needs this |
-| **C4** | **Only seven widgets implement `writeState`/`readState`** | *"a new stateful widget must add them or it will silently arrive blank"* |
-| **C5** | `fs.writeDelta`, client cache, `WatchService`, conflict dialog, `fs.rename`/`delete`, resume, multi-user presence | P6.1.10 §"Out — deferred, and each is purely additive" |
-| **C6** | **No slots/inventory** — the Minecraft-specific half of a container GUI | §8. Note this is also what would revive the struck platform-tooltip item |
+| **C1** ✅ | **Multi-viewer fan-out** — `addViewer`/`removeViewer`/`callViewer`. A list of ROUTERS, not of sessions over one tree: `setObserver` holds one observer, so the alternative is not available and making it a list would cost every mutation in the application. A late viewer is sent the window immediately and replayed every `onCall` method; `call()` now *refuses* when it is ambiguous |
+| **C2** ✅ | **`ui/treeDelta`.** The premise was right and the conclusion did not follow: ids are positional, but they need to be **agreed**, not **stable** — two peers applying the same delta in the same order agree by construction, so both renumber. No id table, and the description stays a pure description. An anchor is re-described in full rather than as an edit script, and only the shallowest anchors are sent |
+| **C3** ✅ | **`TabView` round-trips.** "Internal" was answering two questions: a `Switch`'s knob is scaffolding a constructor rebuilds; a **tab is content** that happens to live in an internal container. `describedChildren`/`addDescribedChild`/`clearDescribedChildren` let a composite say which. The codec also now applies **state after children**, or an index into children is refused as out-of-range and lost |
+| **C4** ✅ | **Coverage is answered, not assumed.** It was ten, not seven; `ProgressBar` and `ColorSelector` needed it. The guard is a tag→stateful map asserted to cover `ElementRegistry` exactly, so a new tag fails until somebody decides. Writing it found the real defect: **`Dropdown`'s options never travelled**, so a networked dropdown arrived empty and unselectable with nothing thrown |
+| **C5** ◑ | **Four done, three argued.** `fs.writeDelta` (D10) and the etag-validated client cache (D13) are built and tested; **`fs.rename`/`delete` already existed**; chunked **resume** now recovers from an expired transfer rather than merely being addressable. Deliberately *not* built: **`WatchService`** — `WorkspaceWatcher`'s own javadoc already rejects it (*"quirky per platform and unreliable on network mounts"*) and says a faster path can be layered under it without changing anything above, so this is an optimisation behind an intact seam rather than a gap; the **conflict dialog** — the protocol half is done (`Failure.isConflict()` carries the live etag, and a delta against a moved file is refused rather than merged), and the dialog itself is UI work with no protocol content; **multi-user presence** — C1 gives the session its viewers and their peers, which is the data presence needs, and broadcasting it wants a consumer that does not exist |
+| **C6** ✗ | **Refused, on this plan's own rule.** `plan_prephase4.md` struck platform-delegated tooltips because *"it has no consumer … Building it now would be designing an interface for a caller that does not exist, which is the same mistake §5.1 was deferred to avoid, approached from the other end. Revive it when something renders an item, not before."* Slots are that argument exactly: there is **no item-slot widget**, and `ItemStack` appears nowhere in `core/src/main` or `mc1710/src`. An inventory protocol now would be a shape guessed against no caller, and the guess would be wrong in ways nothing could reveal until one existed. **Revive with the same trigger** |
 
 ---
 

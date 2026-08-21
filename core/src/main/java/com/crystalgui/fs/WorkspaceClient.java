@@ -3,6 +3,7 @@ package com.crystalgui.fs;
 import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.serialization.StateMap;
+import com.crystalgui.text.Change;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -38,6 +39,19 @@ public final class WorkspaceClient<T> {
      * unconditional path exists, but a caller has to ask for it deliberately.</p>
      */
     private final Map<CgPath, String> etags = new HashMap<>();
+
+    /**
+     * The last content read per path, with the etag it was read at — P6.1.10 <b>D13</b>.
+     *
+     * <p>Validated by etag rather than content-addressed, which is what D13 settled on: the etag is
+     * already {@code mtime+size} and already travels, so a conditional read costs one field and no
+     * hashing. On a hit the server sends {@code unchanged} and the bytes never leave the disk — which
+     * matters most for exactly the files a chunked transfer would otherwise re-pull.</p>
+     *
+     * <p>Dropped when a change notification arrives for the path, so a stale entry cannot outlive the
+     * revision it describes.</p>
+     */
+    private final Map<CgPath, byte[]> cachedContent = new HashMap<>();
 
     /** Paths this client has asked the server to watch, so a re-read does not ask twice. */
     private final java.util.Set<CgPath> watched = new java.util.HashSet<>();
@@ -87,6 +101,8 @@ public final class WorkspaceClient<T> {
             String kind = args.getString(WorkspaceProtocol.KIND, WorkspaceProtocol.KIND_MODIFIED);
             String etag = args.has(WorkspaceProtocol.ETAG)
                     ? args.getString(WorkspaceProtocol.ETAG, null) : null;
+            // Before the handler runs: a handler that re-reads must not be served the stale bytes.
+            cachedContent.remove(path);
             if (onChanged != null) onChanged.accept(new FileChanged(path, kind, etag));
             respond.ok(null);
         });
@@ -199,9 +215,25 @@ public final class WorkspaceClient<T> {
      */
     public void read(CgPath path, Consumer<Document> onResult, Consumer<Failure> onError,
                      Progress progress) {
-        call(WorkspaceProtocol.READ, args().putString(WorkspaceProtocol.PATH, path.toString()),
+        StateMap<T> ask = args().putString(WorkspaceProtocol.PATH, path.toString());
+        byte[] cached = cachedContent.get(path);
+        String held = etags.get(path);
+        if (cached != null && held != null) ask.putString(WorkspaceProtocol.IF_NONE_MATCH, held);
+
+        call(WorkspaceProtocol.READ, ask,
                 result -> {
                     String etag = result.getString(WorkspaceProtocol.ETAG, "");
+                    if (result.getBool(WorkspaceProtocol.UNCHANGED, false)) {
+                        byte[] have = cachedContent.get(path);
+                        if (have != null) {
+                            finishRead(path, have, etag, onResult);
+                            return;
+                        }
+                        // The cache went away between asking and answering. Ask again without the
+                        // condition rather than handing back nothing -- rare, and silent if unhandled.
+                        read(path, onResult, onError, progress);
+                        return;
+                    }
                     if (!result.getBool(WorkspaceProtocol.CHUNKED, false)) {
                         finishRead(path, result.getBytes(WorkspaceProtocol.CONTENT), etag, onResult);
                         return;
@@ -209,7 +241,7 @@ public final class WorkspaceClient<T> {
                     int size = result.getInt(WorkspaceProtocol.SIZE, 0);
                     String transfer = result.getString(WorkspaceProtocol.TRANSFER, "");
                     if (progress != null) progress.at(0, size);
-                    pullChunk(path, transfer, size, etag, new byte[size], 0, onResult, onError, progress);
+                    pullChunk(path, transfer, size, etag, new byte[size], 0, onResult, onError, progress, true);
                 }, onError);
     }
 
@@ -223,7 +255,8 @@ public final class WorkspaceClient<T> {
      */
     private void pullChunk(CgPath path, String transfer, int size, String etag,
                            byte[] buffer, int offset,
-                           Consumer<Document> onResult, Consumer<Failure> onError, Progress progress) {
+                           Consumer<Document> onResult, Consumer<Failure> onError, Progress progress,
+                           boolean mayRestart) {
         call(WorkspaceProtocol.READ_CHUNK, args()
                         .putString(WorkspaceProtocol.TRANSFER, transfer)
                         .putInt(WorkspaceProtocol.OFFSET, offset),
@@ -240,18 +273,74 @@ public final class WorkspaceClient<T> {
                         finishRead(path, buffer, etag, onResult);
                         return;
                     }
-                    pullChunk(path, transfer, size, etag, buffer, next, onResult, onError, progress);
-                }, onError);
+                    pullChunk(path, transfer, size, etag, buffer, next, onResult, onError, progress,
+                            mayRestart);
+                },
+                failure -> {
+                    // THE TRANSFER EXPIRED MID-PULL. The server drops one that has gone untouched, which
+                    // is what stops an abandoned download leaking -- and a slow client on a busy link can
+                    // legitimately hit it. Offset-addressed chunks make a resume "the same request with a
+                    // different offset", so the honest recovery is to start again rather than hand the
+                    // caller a not-found for a file that is plainly there. ONCE: a second failure is a
+                    // real one, and retrying forever would turn a broken transfer into a hot loop.
+                    if (mayRestart && failure.error() == CgFileError.FILE_NOT_FOUND) {
+                        read(path, onResult, onError, progress);
+                        return;
+                    }
+                    onError.accept(failure);
+                });
     }
 
     /** The half both paths share: remember the etag, start watching, hand the document over. */
     private void finishRead(CgPath path, byte[] content, String etag, Consumer<Document> onResult) {
         etags.put(path, etag);
+        cachedContent.put(path, content);
         if (watched.add(path)) {
             call(WorkspaceProtocol.WATCH, args().putString(WorkspaceProtocol.PATH, path.toString()),
                     ignored -> { }, ignored -> watched.remove(path));
         }
         onResult.accept(new Document(path, content, etag));
+    }
+
+    /**
+     * Saves a text file as a set of changes rather than as its whole content — P6.1.10 <b>D10</b>.
+     *
+     * <p>D10's rule is that writing branches on <b>what this client is holding</b>, not on what the file
+     * is: a text document with a matching base revision can send a change set, and anything else sends
+     * the whole file. That is knowable locally and correct for the awkward cases by construction — a
+     * binary file cannot produce a change set, so it takes {@link #save} without anyone remembering a
+     * rule.</p>
+     *
+     * <p>The conflict story is unchanged, deliberately: the etag is quoted, the server re-stats, and a
+     * delta against a file that moved is <b>refused rather than merged</b>. Merging is a decision with a
+     * UI attached, and it does not belong in a write path.</p>
+     *
+     * @throws IllegalStateException if the file was never read — there is no base revision for the
+     *                               changes to be against, and guessing one corrupts the file silently
+     */
+    public void writeDelta(CgPath path, List<Change> changes,
+                           Consumer<String> onSaved, Consumer<Failure> onError) {
+        String etag = etags.get(path);
+        if (etag == null) {
+            throw new IllegalStateException("writeDelta() needs a prior read to have a base etag: " + path);
+        }
+        StateMap<T> args = args()
+                .putString(WorkspaceProtocol.PATH, path.toString())
+                .putString(WorkspaceProtocol.ETAG, etag);
+        args.putList(WorkspaceProtocol.CHANGES, changes, (entry, change) -> entry
+                .putInt(WorkspaceProtocol.FROM, change.from())
+                .putInt(WorkspaceProtocol.TO, change.to())
+                .putString(WorkspaceProtocol.INSERT, change.insert()));
+        call(WorkspaceProtocol.WRITE_DELTA, args,
+                result -> {
+                    String written = result.getString(WorkspaceProtocol.ETAG, "");
+                    etags.put(path, written);
+                    // These bytes are no longer what the server holds and this client did not compute
+                    // them -- dropping beats guessing, and the next read is conditional anyway.
+                    cachedContent.remove(path);
+                    onSaved.accept(written);
+                },
+                onError);
     }
 
     /**
