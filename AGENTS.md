@@ -359,7 +359,7 @@ entry is visible rather than merely absent: `background`, `background-color`, `b
 `outline-offset-{top,right,bottom,left}`, `outline-width`, `overflow`, `overlay`, `overlay-fit`,
 `overlay-origin`, `overlay-position`, `resize`, `scroll-behavior`, `scroll-duration`,
 `selection-color`, `text-align`, `text-decoration-color`, `text-decoration-line`, `text-offset-x`, `text-offset-y`,
-`text-overflow`, `text-shadow`, `transform`, `transform-origin-x`, `transform-origin-y`,
+`text-overflow`, `text-shadow`, `tooltip-delay`, `transform`, `transform-origin-x`, `transform-origin-y`,
 `transition`, `white-space`, `z-index` — plus the whole layout set from `LayoutProperties`.
 
 > **This list goes stale silently.** Registering a property is a one-line addition in a 300-line file and
@@ -1472,7 +1472,18 @@ com.crystalgui.ui              UIElement, UIWindow, Ui, UITransform, EventListen
                                plus the bar it lacks, ExplorerEditing is setEditable + renderInputBox, and
                                WorkspaceTreeSource is the MODEL (explorerModel.ts) — listings, sorting,
                                compact folders, what matches. The parts sit BESIDE the view and reach it
-                               through package-private accessors, as TextEditor's ten view parts do
+                               through package-private accessors, as TextEditor's ten view parts do.
+                               Plus GoToFile, which is a CALLER of QuickPick rather than a widget --
+                               ONE list over the workspace index AND the classpath (the latter through
+                               text.lang's TypeSearch seam), because "open the thing called this" does
+                               not become a different gesture when the thing lives in a jar. Project
+                               files are a PARTITION above classpath types rather than a tie-break: a
+                               class is `ArrayList` and its file is `ArrayList.java`, so the type wins on
+                               match quality outright and anything beneath the score is never consulted.
+                               QueryLocation is its trailing ":line" parser, ported verbatim from
+                               IntelliJ's AbstractGotoSEContributor -- separators and all, because the
+                               list is every shape a file-and-line takes when PASTED from a stack trace,
+                               a compiler message, a GitHub link or a log. plan_goto.md
     .workbench.decoration      FileDecoration, FileDecorationProvider, FileDecorations — VS Code's
                                IDecorationsProvider. Independent contributors (dirty, read-only, errors,
                                VCS) merged per field, with bubbling up to ancestor folders
@@ -1500,9 +1511,12 @@ com.crystalgui.text            Rope, TextBuffer, TextSummary, Change/ChangeSet, 
   .lang                        The semantic layer's contracts, INTERFACES ONLY: LanguageServices (the
                                per-DOCUMENT facade), SemanticTokenProvider, Resolver, CompletionProvider
                                + CompletionItem/CompletionList, SymbolInfo/SymbolKind/SymbolModifier,
-                               TypeRef, DeclarationSite, Versioned. Every engine lives in language/;
-                               this package is the whole footprint in core/, and its absence at runtime
-                               is the only feature flag. docs/CGUI_WORKBENCH_SERVICES.md
+                               TypeRef, DeclarationSite, Versioned, and TypeSearch + TypeSearchRegistry
+                               ("which types are on the classpath" — what Go to File asks, inverted for
+                               the same reason as the rest: the INDEX lives in language/ and core/ may
+                               never name it). Every engine lives in language/; this package is the whole
+                               footprint in core/, and its absence at runtime is the only feature flag.
+                               docs/CGUI_WORKBENCH_SERVICES.md
   .diagnostic                  Diagnostic, DiagnosticSet, DiagnosticSeverity, DiagnosticTag, Markers,
                                RelatedInformation — LSP-shaped, per-owner. NOT duplicated in .lang
   .wrap                        LineProjection, ProjectedLines, LineBreaksComputer (SPI),

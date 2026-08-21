@@ -7,6 +7,7 @@ import com.crystalgui.language.engine.EngineHost;
 import com.crystalgui.language.engine.EngineSource;
 import com.crystalgui.language.engine.JavaEngine;
 import com.crystalgui.language.java.assist.AttachedSources;
+import com.crystalgui.language.java.classpath.ClasspathTypeSearch;
 import com.crystalgui.language.java.classpath.HostClasspath;
 import com.crystalgui.language.java.exec.ScriptHost;
 import com.crystalgui.language.map.MappingSet;
@@ -143,6 +144,12 @@ public final class JavaLanguage {
         // the archives are the editor's, not the compiler's. An engineless host produces no declaration
         // sites to follow, so the provider simply goes unasked.
         LibrarySources.register();
+
+        // AND THAT WE CAN ANSWER "WHICH TYPES EXIST". Same seam, same reason: Go to Class lives in the
+        // shell, the index lives here, and `core/` may never name it. Unconditional for the same reason
+        // as the archives above -- the index is a scan of the classpath, not something the compiler owns,
+        // so it answers on a host whose engine never opens.
+        ClasspathTypeSearch.register();
 
         // AND WARM THE ENGINE, off this thread. @see #warm
         warm(classpath);
