@@ -131,6 +131,29 @@ public final class WorkspaceProtocol {
 
     // ── Fields ──────────────────────────────────────────────────────────────────────────────────
 
+    /**
+     * What this actor may do, per project — <b>both directions</b>.
+     *
+     * <p>A REQUEST the client makes once, and a NOTIFICATION the server pushes when the answer changes
+     * (an operator promoted, a permission node revoked). {@code MessageRouter} keys request handlers and
+     * notification handlers separately, so one name serves both without ambiguity, and it should: they
+     * are the same question, asked and volunteered.</p>
+     *
+     * <p><b>Per project, not per path</b>, and that is a real coarsening — {@link WorkspacePermission}
+     * takes a path, so a host may legitimately allow writes under {@code src/} and refuse them under
+     * {@code config/}, which no broadcast can express. This is therefore a <em>hint for enablement</em>
+     * and never the authority: every operation is still authorised server-side on its own path. The
+     * direction of the error is what makes the coarsening safe — see {@code WorkspaceClient.mayWrite}.</p>
+     */
+    public static final String CAPABILITIES = "fs.capabilities";
+
+    /** The list {@link #CAPABILITIES} carries, of {@code {project, read, write}}. */
+    public static final String PROJECT_CAPABILITIES = "caps";
+
+    public static final String PROJECT = "project";
+    public static final String MAY_READ = "read";
+    public static final String MAY_WRITE = "write";
+
     public static final String PATH = "path";
     public static final String CONTENT = "content";
     public static final String ETAG = "etag";

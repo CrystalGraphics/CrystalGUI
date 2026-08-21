@@ -79,6 +79,12 @@ public final class WorkspaceRpc<T> {
             respond.ok(out);
         }));
 
+        registry.register(WorkspaceProtocol.CAPABILITIES, (args, respond) -> guard(respond, () -> {
+            StateMap<T> out = new StateMap<>(args.ops());
+            fillCapabilities(out);
+            respond.ok(out);
+        }));
+
         registry.register(WorkspaceProtocol.MANIFEST, (args, respond) -> guard(respond, () -> {
             CgPath directory = path(args);
             StateMap<T> out = new StateMap<>(args.ops());
@@ -374,6 +380,35 @@ public final class WorkspaceRpc<T> {
     }
 
     /** The watcher, for a host that wants to seed or inspect it directly. */
+    /**
+     * Tells the client its permissions have changed.
+     *
+     * <p><b>Pushed, because the client cannot know.</b> An operator being promoted mid-session is not
+     * something a file listing reveals, and a client that only ever asked at connect would go on drawing
+     * a greyed-out Delete for the rest of the session. The host calls this when whatever backs its
+     * {@link WorkspacePermission} moves.</p>
+     *
+     * <p><b>The notifier must send a REQUEST</b> — {@code (method, args) -> connection.call(method, args,
+     * null, null)}, exactly as {@link #pollAndNotify}'s callers do. {@code WorkspaceClient} registers its
+     * inbound methods through {@link Registrar}, which is {@code onRequest}, and {@code MessageRouter}
+     * keys request and notification handlers separately — so a {@code notify} here finds nobody home and
+     * fails silently, which is precisely how it failed the first time it was written.</p>
+     */
+    public void notifyCapabilities(Notifier<T> notifier, com.crystalgui.serialization.DynamicOps<T> ops) {
+        StateMap<T> out = new StateMap<>(ops);
+        fillCapabilities(out);
+        notifier.notify(WorkspaceProtocol.CAPABILITIES, out);
+    }
+
+    private void fillCapabilities(StateMap<T> out) {
+        out.putList(WorkspaceProtocol.PROJECT_CAPABILITIES, service.capabilities(actor),
+                (entry, capability) -> {
+                    entry.putString(WorkspaceProtocol.PROJECT, capability.project());
+                    entry.putBool(WorkspaceProtocol.MAY_READ, capability.mayRead());
+                    entry.putBool(WorkspaceProtocol.MAY_WRITE, capability.mayWrite());
+                });
+    }
+
     public WorkspaceWatcher watcher() {
         return watcher;
     }
