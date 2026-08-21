@@ -204,6 +204,57 @@ public final class ClientUiSession<T> {
                     error -> CrystalGuiCore.LOGGER.warn("Description for window {} refused: {}", id, error));
         });
 
+        /*
+         * C2. Replaces an anchor's described children, then RE-DERIVES every id.
+         *
+         * The design that looked impossible assumed ids had to be stable. They are a depth-first
+         * position, so an insertion renumbers everything after it -- but they only have to be AGREED,
+         * and two peers applying the same delta to the same tree in the same order agree by
+         * construction. Nothing carries an id table and the description stays a pure description.
+         *
+         * The count is the same cross-check open() uses. A disagreement means the two sides built
+         * different structure from the same description -- a widget constructor that differs between
+         * versions, which no description can reveal -- and it is refused rather than misapplied,
+         * because every id past the divergence would be off by one.
+         */
+        router.onNotify(UiMethods.TREE_DELTA, payload -> {
+            StateMap<T> in = read(payload);
+            if (in.getInt(UiMethods.WINDOW, windowId) != windowId || root == null) return;
+
+            for (StateMap<T> entry : in.getList("entries", e -> e)) {
+                int nid = entry.getInt("nid", -1);
+                UIElement anchor = NetworkIds.find(root, nid);
+                if (anchor == null) {
+                    CrystalGuiCore.LOGGER.warn("Tree delta for unknown element {}", nid);
+                    continue;
+                }
+                anchor.clearDescribedChildrenFor();
+                T children = entry.getRaw("children");
+                if (children == null) continue;
+                for (T child : ops.getListValue(children)) {
+                    UIElement decoded = UIDescriptionCodec.CODEC.decode(ops, child);
+                    anchor.addDescribedChildFrom(decoded);
+                    // WIRE THE NEW SUBTREE. A reported event is a listener this side attaches because
+                    // the description asked for it, and a delta brings elements that have never been
+                    // through buildFrom -- so without this a widget added after open renders correctly,
+                    // responds to the mouse, and reports nothing at all to the server.
+                    wireReportedEvents(decoded);
+                }
+            }
+
+            int assigned = NetworkIds.assign(root);
+            int expected = in.getInt("count", assigned);
+            if (assigned != expected) {
+                CrystalGuiCore.LOGGER.error("Refusing a tree delta: the server numbered {} elements and "
+                        + "this client derived {} — the two sides are building different structure, so "
+                        + "every id past the divergence would be wrong", expected, assigned);
+                root = null;
+                windowId = -1;
+                return;
+            }
+            expectedElementCount = assigned;
+        });
+
         router.onNotify(UiMethods.STATE_DELTA, payload -> {
             StateMap<T> in = read(payload);
             if (in.getInt(UiMethods.WINDOW, windowId) != windowId || root == null) return;

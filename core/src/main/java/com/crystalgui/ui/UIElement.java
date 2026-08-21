@@ -669,7 +669,25 @@ public class UIElement implements SettingsScope, DataProvider {
         return acceptsPublicChildren();
     }
 
+    /**
+     * Removes every described child, so they can be replaced wholesale.
+     *
+     * <p>The third of the trio, and it exists for {@code ui/treeDelta}: re-describing an anchor means
+     * taking out what is there before putting the new set in. The default touches only public children,
+     * so a composite's internals survive — which is the same distinction {@link #describedChildren()}
+     * draws, spelled for removal.</p>
+     */
+    protected void clearDescribedChildren() {
+        for (UIElement child : new ArrayList<>(getChildren())) {
+            if (!child.isInternalUI()) removeChild(child);
+        }
+    }
+
     /** Codec-facing entry points for the three hooks above. */
+    public final void clearDescribedChildrenFor() {
+        clearDescribedChildren();
+    }
+
     public final List<UIElement> describedChildrenFor() {
         return describedChildren();
     }

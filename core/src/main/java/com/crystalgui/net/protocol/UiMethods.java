@@ -39,6 +39,22 @@ public final class UiMethods {
     /** Server → client: these elements' states changed. Notification. */
     public static final String STATE_DELTA = "ui/stateDelta";
 
+    /**
+     * Server → client: the SHAPE of the tree changed. Notification.
+     *
+     * <p>Carries, per entry, an anchor's network id and that anchor's described children in full. Both
+     * sides then re-derive every id from the new tree — which is what makes this possible at all without
+     * transmitting an id table. Ids are a depth-first position, so an insertion renumbers everything
+     * after it; the design that looked impossible assumed ids had to be <em>stable</em>, and they only
+     * have to be <em>agreed</em>. Two peers applying the same delta to the same tree in the same order
+     * agree by construction.</p>
+     *
+     * <p>Ordering is therefore load-bearing, and is exactly what the transport guarantees within a
+     * stream: a state delta computed after a renumber must not overtake the tree delta that caused
+     * it.</p>
+     */
+    public static final String TREE_DELTA = "ui/treeDelta";
+
     /** Server → client: this window is finished. Notification. */
     public static final String CLOSE_WINDOW = "ui/closeWindow";
 
