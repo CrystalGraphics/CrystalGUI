@@ -59,6 +59,12 @@ public final class JavaLanguage {
     private static JavaEngine engine;
     private static JobScheduler scheduler;
     private static EngineSource source;
+    /**
+     * Whether {@link #register} has run — distinct from whether the engine opened. @see #register
+     *
+     * <p>Not cleared by {@link #shutdown()}, which deliberately does not unregister.</p>
+     */
+    private static boolean registered;
 
     private JavaLanguage() {
     }
@@ -78,7 +84,25 @@ public final class JavaLanguage {
      * answer; one that does not can ignore it.</p>
      */
     public static synchronized boolean register(JobScheduler scheduler, EngineSource source) {
-        if (engine != null) return true;
+        // THE GUARD IS "HAVE I REGISTERED", NEVER "IS THE ENGINE OPEN" -- they are not the same question,
+        // and reading the engine for the answer made registering JavaScript FIRST suppress Java entirely.
+        // `JsLanguage.register` lends the Java engine to its interop tier, and it does that by calling
+        // `JavaLanguage.engine()`, which OPENS the engine without registering anything. So by the time a
+        // host called this method the field was already non-null, this returned true on its first line,
+        // and none of what follows ever ran: `.java` kept the bare entry `LanguageRegistry`'s own static
+        // initializer installs, so every Java document opened with NO services, and `ScriptRuntimes` never
+        // heard that Java can run, so the Run panel had no runtime for a `.java` file.
+        //
+        // Nothing failed and nothing was logged -- the editor coloured from the grammar exactly as a
+        // deployment with no engine does, which is a state this stack is designed to degrade through, so
+        // it reads as "no engine here" rather than as a registration that was skipped. And it was decided
+        // by REGISTRATION ORDER, so it reproduced only when a JavaScript host opened first.
+        //
+        // A first call that fails to OPEN the engine still registers, which is the same design D22 gave
+        // `engine()`: the entry and the contribution are written whether or not the band arrived, and the
+        // open is retried per document, so a band that lands late becomes usable without re-registering.
+        if (registered) return true;
+        registered = true;
 
         // THE BAND'S LOADER IS SHARED, not opened here: Rhino ships in the same band as ECJ, and a
         // JavaScript language registering after this one reaches its adapters through the same host.

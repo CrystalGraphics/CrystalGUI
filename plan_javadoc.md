@@ -440,17 +440,63 @@ Thirteen of thirteen audit rows are shipped. **One item remains**: JavaScript ha
 all, which was always going to be last. Doc-tag reference colouring (§6.2) shipped and is kept below as
 the record of what it turned out to be.
 
-### 6.1 JavaScript gets the renderer and none of the emitter
+### 6.1 JavaScript gets the renderer and none of the emitter — **shipped**
 
-Only the Java engine calls `withDocumentation`. `RhinoJsDoc` is "a tag grammar, not a documentation
-renderer" by its own first line, and the JS side forwards a *Java* symbol's documentation through
-`InteropResolver` while producing none of its own — so hovering a documented JavaScript function
-shows a declaration and nothing under it.
+Only the Java engine called `withDocumentation`. `RhinoJsDoc` is "a tag grammar, not a documentation
+renderer" by its own first line, and the JS side forwarded a *Java* symbol's documentation through
+`InteropResolver` while producing none of its own — so hovering a documented JavaScript function showed
+a declaration and nothing under it.
 
-The renderer, the model, the link gesture and `Resolver.describe` are all language-neutral and need no
-change; that is the whole point of them. What is missing is a **JSDoc emitter**, and JSDoc is
-**Markdown** rather than HTML — so it is a second parser feeding the same `MarkupDocument`, not a
-second renderer. `MarkupParser` stays as it is.
+The renderer, the model, the link gesture and `Resolver.describe` were all language-neutral and needed
+no change; that is the whole point of them. What was missing was a **JSDoc emitter**, and JSDoc is
+**Markdown** rather than HTML — so it is a second parser feeding the same `MarkupDocument`, not a second
+renderer. `MarkupParser` is unchanged except for one bug it had all along (below).
+
+**Markdown converts to the HTML the parser already reads** — `com.crystalgui.text.markup.Markdown` plus
+`Inline`, in `core/`, because the output has to be a `MarkupDocument` and that is where the parser is. It
+emits **only tags `MarkupParser` knows**; that constraint is load-bearing and its violation is silent,
+since an unknown tag is dropped and its content kept, which looks exactly like missing markup. So every
+assertion in `MarkdownTest` goes through the parser as well as the converter.
+
+Three things were learned writing it, each of which renders plausibly when wrong:
+
+- **A code span is read before anything else.** Handling emphasis first eats the markers *inside* a span
+  — the text still renders, in the wrong face, with the markers gone.
+- **An underscore inside a word is part of the word.** Doc comments are full of `READ_WRITE`; the
+  flanking rule is what stops a constant becoming a word with a slanted middle.
+- **A table is recognised by its DIVIDER**, never by a header row: a sentence containing a pipe is
+  ordinary prose, and `|---|---|` is not a line anybody writes by accident.
+
+**`<blockquote>` never produced a `QUOTE` block.** `MarkupBlock.Kind.QUOTE` has existed since the model
+did and `MarkupView` has always drawn one, rule down the left edge and all — but the parser's open-tag
+case closed the current block and stopped, so a blockquote was a paragraph break and its content came out
+as ordinary prose. It reads as the sheet not styling quotes. Found only because Markdown emits them.
+
+`JsDocs` renders the description through `Markdown` and the block tags into the same `<dl>` sections
+javadoc uses, so one popup implementation serves both languages. Tags with a subject (`@param`,
+`@property`, `@throws`) render `name` and `{type}` as code with the prose after an em dash; `@example`
+becomes a `<pre>`; everything else is markdown. `RhinoJsDoc` grew a second, layout-preserving pass beside
+its collapsing one — a grammar wants one flat run, and in Markdown the layout *is* the syntax.
+
+**Two Java-side gaps showed up once JavaScript had documentation of its own to compare against**, and both
+were quiet because everything they *did* draw was correct:
+
+- **A Java member hovered from JavaScript dropped its javadoc.** `membersOf` carries none by design, so the
+  hover's probe is the only thing that has one — and the hover took the signature, the container and the
+  declaration site off that probe and left the comment behind. The popup drew a correct owner and a correct
+  signature with nothing under them, which reads as the member being undocumented.
+- **A name inside an `import` did not hover at all.** The statement is blanked before Rhino parses, so no
+  node covers those offsets. The line *coloured* correctly the whole time, from spans `JsImports.Imported`
+  already carries, which is what made it look broken rather than absent. Only the trailing segment resolves;
+  a package has nothing to describe.
+
+> **One production bug fell out of this and had nothing to do with documentation.** `JavaLanguage.register`
+> guarded on `engine != null`, and `JsLanguage.register` opens the Java engine — without registering it —
+> to lend it to the interop tier. So **registering JavaScript first suppressed Java's registration
+> entirely**: no services on `.java`, no Java runtime in the Run panel, nothing thrown and nothing logged,
+> because an engineless `.java` colours from the grammar exactly as a host that ships no engine does. It
+> is recorded as an invariant in `AGENTS.md`; `JsLanguageRegistrationTest` now registers JavaScript first
+> on purpose, since the failure was otherwise decided by Gradle's run-by-run class order.
 
 ### 6.2 A `@see` reference is coloured by its kind — **shipped**
 

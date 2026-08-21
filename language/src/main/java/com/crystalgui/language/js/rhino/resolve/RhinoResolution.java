@@ -104,6 +104,24 @@ public final class RhinoResolution {
         this.sourceName = sourceName;
     }
 
+    /**
+     * The Java type named by an {@code import}, for a caller holding the import's own offsets.
+     *
+     * <p><b>Here rather than in {@link #resolveAt}</b>, because an import statement is not in the tree:
+     * {@code JsImports} blanks it before Rhino parses, so there is no node at those offsets and no amount
+     * of walking finds one. The spans survive on {@code JsImports.Imported} — that is what the class exists
+     * for, and {@code RhinoSemanticTokens} already colours the line from them — so the caller that has them
+     * asks, and this reaches the interop tier the ordinary way.</p>
+     *
+     * <p>Answering null for anything else is the point: the whole file is written in offsets the blanking
+     * preserved, so a wrong guess here would describe a type for a hover somewhere else entirely.</p>
+     */
+    @Nullable
+    public SymbolInfo describeImportedType(String binaryName) {
+        if (interop == null || binaryName == null || binaryName.isEmpty()) return null;
+        return interop.describe(binaryName, false);
+    }
+
     // ── resolveAt ───────────────────────────────────────────────────────────────────────────────
 
     public @Nullable
@@ -256,6 +274,17 @@ public final class RhinoResolution {
                 String owner = described.container();
                 SymbolInfo signed = (owner == null ? owned : owned.withContainer(owner))
                         .withSignature(quoted);
+                // AND THE JAVADOC. `membersOf` carries none -- it answers with hundreds of members for a
+                // completion list and quoting each one's comment would be absurd -- so the probe is the
+                // ONLY thing that has it, and dropping it here is what made a Java member hovered from
+                // JavaScript show its container and its signature with nothing underneath, while the same
+                // member hovered in a .java file showed the whole comment. The failure is quiet in the
+                // worst way: everything the popup DOES draw is correct, so it reads as the member simply
+                // being undocumented rather than as a field being discarded one line before it is used.
+                String documented = described.documentation();
+                if (documented != null && !documented.isEmpty()) {
+                    signed = signed.withDocumentation(documented);
+                }
                 return described.declaration() == null ? signed
                         : signed.withDeclaration(described.declaration());
             }
@@ -402,7 +431,11 @@ public final class RhinoResolution {
 
         SymbolInfo symbol = new SymbolInfo(identifier, declared.kind, type,
                 tier == null ? container : suffixed(container, tier),
-                emptyToNull(doc.description()), modifiersOf(declared, doc.isDeprecated()), site,
+                // RENDERED, not raw. This handed the description across as the author typed it, so a
+                // documented function hovered with its markdown intact -- asterisks around words meant
+                // to be bold, backticks around names meant to be code, and a fenced example as three
+                // lines of prose starting with three backticks. @see JsDocs
+                JsDocs.render(doc), modifiersOf(declared, doc.isDeprecated()), site,
                 parametersOf(declared, doc));
         return signed(symbol.withContainerKind(containerKindOf(declared)), declared);
     }

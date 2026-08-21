@@ -510,7 +510,35 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
 
         @Override
         public SymbolInfo resolveAt(int offset) {
-            return resolution == null ? null : resolution.resolveAt(offset);
+            if (resolution == null) return null;
+            // THE IMPORTS FIRST, because the tree cannot answer for them. `JsImports` blanks each import
+            // statement before Rhino parses -- it has to, or Rhino reads `import a.b.C;` as an ES module
+            // declaration and the error poisons the file -- so there is no node at those offsets and
+            // `resolveAt` walked to nothing. The line COLOURED correctly the whole time, from these same
+            // spans, which is what made it look like hovering was broken rather than absent: the editor
+            // plainly understood the line and simply said nothing about it.
+            SymbolInfo imported = importedTypeAt(offset);
+            return imported != null ? imported : resolution.resolveAt(offset);
+        }
+
+        /**
+         * The imported type whose <b>simple name</b> covers {@code offset}, or null.
+         *
+         * <p>The trailing segment only. Everything before the last dot is a package, and a package has no
+         * symbol to describe — answering with the type there would mean hovering the {@code java} of
+         * {@code java.util.ArrayList} popped up {@code ArrayList}'s documentation, which is worse than the
+         * nothing it says today. {@code RhinoSemanticTokens.markImports} splits the name the same way, so
+         * what hovers is exactly what is drawn in the type colour.</p>
+         */
+        @Nullable
+        private SymbolInfo importedTypeAt(int offset) {
+            for (JsImports.Imported each : imports) {
+                String name = each.binaryName();
+                int typeAt = each.nameStart() + name.lastIndexOf('.') + 1;
+                if (offset < typeAt || offset >= each.nameStart() + name.length()) continue;
+                return resolution.describeImportedType(name);
+            }
+            return null;
         }
 
         @Override
