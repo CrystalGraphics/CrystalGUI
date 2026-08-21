@@ -393,6 +393,14 @@ tasks.named<JavaExec>(runTask) {
         systemProperty("crystalgui.session.probe", "true")
     }
 
+    // -PcgWireProbe moves 4 MB each way over a REAL socket and reports the rate. The frame ceiling is
+    // asymmetric by a factor of 64 on 1.7.10 -- 32,766 bytes up, 2,097,050 down -- so an upload and a
+    // download of one file are not the same transfer, and no in-JVM test can show the difference.
+    // Pair with -PcgJoin against a running :mc1710:runServer.
+    if (providers.gradleProperty("cgWireProbe").isPresent) {
+        systemProperty("crystalgui.wire.probe", "true")
+    }
+
     // -PcgJoin=host[:port] makes the client connect straight to a server instead of the main menu.
     // 1.7.10's own Main parses --server/--port, and Minecraft.startGame goes to GuiConnecting when
     // serverName is set -- so this needs no code of ours, only the arguments.
