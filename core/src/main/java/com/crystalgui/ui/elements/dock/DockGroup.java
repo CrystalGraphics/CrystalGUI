@@ -518,6 +518,31 @@ public class DockGroup extends UIElement {
     }
 
     /**
+     * Drops the cached element for a panel that has been <b>closed</b>.
+     *
+     * <h3>Why the cache needs emptying at all, and why not by {@code prunePanes}</h3>
+     *
+     * <p>{@link #contentFor} memoises per {@link DockPanelRef}, and a ref is a VALUE — reopening the same
+     * file produces an equal one. So a closed tab left its element in the map, and the reopen was handed
+     * back the editor built for the document that had just been disposed. Its tokenizer had been closed
+     * with the document, and the first frame that asked it for folding threw
+     * {@code IllegalStateException: Parser is closed} — from a file that looked perfectly normal until
+     * something touched it.</p>
+     *
+     * <p>Not folded into {@code prunePanes}, which drops what is no longer in this leaf. A panel dragged
+     * to another group is no longer in this leaf either, and forgetting its element there would throw away
+     * the editor's scroll, selection and undo history mid-gesture. That is the same distinction
+     * {@link DockArea#onDidClosePanel} already draws by not firing for a move — so this is driven from the
+     * close, which is the event that means the content will never be wanted again.</p>
+     *
+     * <p>The element is not disposed here. It belongs to a document, and the document's own release is
+     * what disposes it; this only stops the dock handing out a reference to something already released.</p>
+     */
+    void forgetContent(DockPanelRef panel) {
+        content.remove(panel);
+    }
+
+    /**
      * Puts whatever {@link DockBanners} had to say above {@code built}.
      *
      * <h3>Here, because this is the only place every panel passes through</h3>
