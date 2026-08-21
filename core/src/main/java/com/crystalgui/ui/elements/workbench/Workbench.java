@@ -1136,14 +1136,19 @@ public class Workbench extends UIElement {
         created.addClass(FILE_EDITOR_CLASS);
         created.addClass(VIEWER_CLASS);
         created.setReadOnly(true);
-        // COLOURED FROM THE GRAMMAR, and deliberately nothing more. A library document's services need a
-        // compliance chosen by provenance and their diagnostics suppressed -- a JDK file declares a
-        // package `java.base` owns, which at compliance 9+ is one error that poisons resolution for the
-        // whole unit. Handing it ordinary services would open every JDK class under a full-width squiggle
-        // with nothing resolvable, which is worse than no services. That is its own step.
         LanguageRegistry.Entry entry = LanguageRegistry.forFileName(viewerFileNameOf(resource));
         created.setLanguage(entry.language());
         created.setTokenizer(DocComments.refining(entry.newTokenizer()));
+        // AND SERVICES, HANDED THE RESOURCE -- which is what lets the engine recognise a borrowed
+        // document and configure itself for one: no diagnostics, because its problems are ours and
+        // nobody reading it can act on them, and a compliance chosen by where the text came from,
+        // because a JDK file parsed above Java 8 conflicts with the module that owns its package, and
+        // that single error stops the whole unit resolving.
+        //
+        // Without them a viewer colours from the grammar and answers nothing: no hover, no Ctrl+Click
+        // onward, no telling a field from a parameter -- which is most of why anybody opens a class
+        // they cannot edit.
+        created.setLanguageServices(entry.newServices(created.buffer(), resource));
         WorkbenchSettings.applyTo(this, created);
         viewers.put(key, created);
         readViewer(resource, created);
