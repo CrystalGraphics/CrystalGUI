@@ -51,7 +51,7 @@ import com.crystalgui.render.CgUiPaintContext;
  * point. A round join's disc covers the wedge regardless of angle; the double-blend it reintroduces
  * is invisible at the 8–16px sizes these draw at.</p>
  */
-public final class CgUiShape implements CgUiDrawable {
+public record CgUiShape(Kind kind) implements CgUiDrawable {
 
     public enum Kind {
         CHEVRON_UP, CHEVRON_DOWN, CHEVRON_LEFT, CHEVRON_RIGHT,
@@ -75,37 +75,27 @@ public final class CgUiShape implements CgUiDrawable {
      */
     private static final float SIZE_FRACTION = 0.78f;
 
-    private final Kind kind;
-
-    public CgUiShape(Kind kind) {
-        this.kind = kind;
-    }
-
-    public Kind getKind() {
-        return kind;
-    }
-
     /** Parses a catalog name (e.g. {@code "chevron-down"}) into a {@link Kind}, or {@code null}. */
     public static Kind parseKind(String name) {
-        switch (name) {
-            case "chevron-up": return Kind.CHEVRON_UP;
-            case "chevron-down": return Kind.CHEVRON_DOWN;
-            case "chevron-left": return Kind.CHEVRON_LEFT;
-            case "chevron-right": return Kind.CHEVRON_RIGHT;
-            case "triangle-up": return Kind.TRIANGLE_UP;
-            case "triangle-down": return Kind.TRIANGLE_DOWN;
-            case "triangle-left": return Kind.TRIANGLE_LEFT;
-            case "triangle-right": return Kind.TRIANGLE_RIGHT;
-            case "checkmark": return Kind.CHECKMARK;
-            case "cross": return Kind.CROSS;
-            case "plus": return Kind.PLUS;
-            case "minus": return Kind.MINUS;
-            case "arrow-up": return Kind.ARROW_UP;
-            case "arrow-down": return Kind.ARROW_DOWN;
-            case "arrow-left": return Kind.ARROW_LEFT;
-            case "arrow-right": return Kind.ARROW_RIGHT;
-            default: return null;
-        }
+        return switch (name) {
+            case "chevron-up" -> Kind.CHEVRON_UP;
+            case "chevron-down" -> Kind.CHEVRON_DOWN;
+            case "chevron-left" -> Kind.CHEVRON_LEFT;
+            case "chevron-right" -> Kind.CHEVRON_RIGHT;
+            case "triangle-up" -> Kind.TRIANGLE_UP;
+            case "triangle-down" -> Kind.TRIANGLE_DOWN;
+            case "triangle-left" -> Kind.TRIANGLE_LEFT;
+            case "triangle-right" -> Kind.TRIANGLE_RIGHT;
+            case "checkmark" -> Kind.CHECKMARK;
+            case "cross" -> Kind.CROSS;
+            case "plus" -> Kind.PLUS;
+            case "minus" -> Kind.MINUS;
+            case "arrow-up" -> Kind.ARROW_UP;
+            case "arrow-down" -> Kind.ARROW_DOWN;
+            case "arrow-left" -> Kind.ARROW_LEFT;
+            case "arrow-right" -> Kind.ARROW_RIGHT;
+            default -> null;
+        };
     }
 
     /** A mark, not a picture: it has no palette, so the element's {@code color} is its colour.
@@ -200,9 +190,9 @@ public final class CgUiShape implements CgUiDrawable {
     private static void triangle(CgUiPaintContext ctx, float x, float y, float w, float h, int argb,
                                  float fx0, float fy0, float fx1, float fy1, float fx2, float fy2) {
         ctx.triangle()
-                .points(x + w * fx0, y + h * fy0, x + w * fx1, y + h * fy1, x + w * fx2, y + h * fy2)
-                .color(argb)
-                .submit();
+           .points(x + w * fx0, y + h * fy0, x + w * fx1, y + h * fy1, x + w * fx2, y + h * fy2)
+           .color(argb)
+           .submit();
     }
 
     /** Short leg then long leg, sharing the low point — round at every end, including the joint,
@@ -218,18 +208,19 @@ public final class CgUiShape implements CgUiDrawable {
     /** Two independent diagonals — no shared endpoint, so both can round-cap freely. */
     private static void cross(CgUiPaintContext ctx, float x, float y, float w, float h, float hw, int argb) {
         ctx.curve().line(x + w * 0.26f, y + h * 0.26f, x + w * 0.74f, y + h * 0.74f)
-                .width(hw).color(argb).cap(CgVectorRenderer.CAP_ROUND).submit();
+           .width(hw).color(argb).cap(CgVectorRenderer.CAP_ROUND).submit();
         ctx.curve().line(x + w * 0.74f, y + h * 0.26f, x + w * 0.26f, y + h * 0.74f)
-                .width(hw).color(argb).cap(CgVectorRenderer.CAP_ROUND).submit();
+           .width(hw).color(argb).cap(CgVectorRenderer.CAP_ROUND).submit();
     }
 
     /** Horizontal bar, plus an optional vertical one — neither shares an endpoint with the other. */
-    private static void plus(CgUiPaintContext ctx, float x, float y, float w, float h, float hw, int argb, boolean withVertical) {
+    private static void plus(CgUiPaintContext ctx, float x, float y, float w, float h, float hw, int argb,
+                             boolean withVertical) {
         ctx.curve().line(x + w * 0.22f, y + h * 0.5f, x + w * 0.78f, y + h * 0.5f)
-                .width(hw).color(argb).cap(CgVectorRenderer.CAP_ROUND).submit();
+           .width(hw).color(argb).cap(CgVectorRenderer.CAP_ROUND).submit();
         if (withVertical) {
             ctx.curve().line(x + w * 0.5f, y + h * 0.22f, x + w * 0.5f, y + h * 0.78f)
-                    .width(hw).color(argb).cap(CgVectorRenderer.CAP_ROUND).submit();
+               .width(hw).color(argb).cap(CgVectorRenderer.CAP_ROUND).submit();
         }
     }
 
@@ -237,8 +228,8 @@ public final class CgUiShape implements CgUiDrawable {
     private static void arrow(CgUiPaintContext ctx, float x, float y, float w, float h, float hw, int argb,
                               float fx0, float fy0, float fx1, float fy1) {
         ctx.curve().line(x + w * fx0, y + h * fy0, x + w * fx1, y + h * fy1)
-                .width(hw).color(argb)
-                .cap(CgVectorRenderer.CAP_ROUND, CgVectorRenderer.CAP_ARROW)
-                .submit();
+           .width(hw).color(argb)
+           .cap(CgVectorRenderer.CAP_ROUND, CgVectorRenderer.CAP_ARROW)
+           .submit();
     }
 }

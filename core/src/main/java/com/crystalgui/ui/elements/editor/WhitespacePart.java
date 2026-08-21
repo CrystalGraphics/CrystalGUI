@@ -30,7 +30,7 @@ final class WhitespacePart extends EditorViewPart {
 
     WhitespacePart(TextEditor editor) {
         super(editor);
-        this.pool = new DecorationPool(editor::textViewport, TextEditor.WHITESPACE_CLASS, true);
+        this.pool = new DecorationPool(editor::linesLayer, TextEditor.WHITESPACE_CLASS, true);
     }
 
     /** Forces the next pass to re-push the font, after a zoom or a theme change. */
@@ -72,7 +72,7 @@ final class WhitespacePart extends EditorViewPart {
 
                 LineProjection.ViewPosition at =
                         projection.toViewPosition(column, LineProjection.Affinity.RIGHT);
-                final float left = pad + editor.xOfView(viewLine, at.column()) - editor.getScrollLeft();
+                final float left = pad + editor.xOfView(viewLine, at.column());
                 UIElement mark = pool.next();
                 UIText label = (UIText) mark.getChildren().get(0);
                 label.setText(String.valueOf(marker));

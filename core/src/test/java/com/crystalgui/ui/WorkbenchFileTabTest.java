@@ -31,6 +31,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertTrue;
 import com.crystalgui.ui.elements.dock.DockPanelDescriptor;
 import com.crystalgui.ui.elements.dock.DockPanelRef;
@@ -461,4 +462,75 @@ public class WorkbenchFileTabTest extends UiTestBase {
                 new com.crystalgraphics.platform.input.CgSystemInput.Mouse.Event(cx, cy, 0, 0, 0, true, 0f, 0L));
         window.getInputHandler().endFrame();
     }
+    // ── Focus after a close ─────────────────────────────────────────────────────────────────────
+
+    // THE "FOCUS LANDS SOMEWHERE" HALF HAS NO TEST HERE, deliberately, and that is worth stating.
+    //
+    // Three were written and every one measured something else. Pinning WHICH editor takes over asserts
+    // the dock's succession policy, which this fix does not touch and which differs under a full suite.
+    // Weakening it to "an editor has focus" then passed with the fix REMOVED -- something else focuses an
+    // editor in this fixture -- so it proved nothing at all. A green assertion that cannot fail is worse
+    // than no assertion, because the next person reads it as cover.
+    //
+    // What the fix does is fill a NULL focus owner after a close, and this fixture never reaches that
+    // state on its own. The behaviour is confirmed in the dock harness. The half below, which says the
+    // fill must never TAKE focus, is the half a test can hold onto and it stays.
+
+    /**
+     * <b>...and it never TAKES focus from somewhere else.</b>
+     *
+     * <p>The gate that keeps this from becoming the auto-focus coupling just removed from the project
+     * tree. Closing a background tab from a menu, or closing one while the caret is elsewhere, must leave
+     * focus exactly where the user put it — this fills a vacuum, it does not claim one.</p>
+     */
+    @Test
+    public void closingATabDoesNotTakeFocusFromElsewhere() {
+        CgPath first = CgPath.parse("mymod.proj:First.java");
+        CgPath second = CgPath.parse("mymod.proj:Second.java");
+        openWithContent(first);
+        openWithContent(second);
+
+        UIElement elsewhere = workbench.fileTree().treeView();
+        elsewhere.setFocusPolicy(com.crystalgui.ui.input.FocusPolicy.FOCUSABLE);
+        window.getInputHandler().requestFocus(elsewhere);
+        settle();
+        assertSame(elsewhere, window.getInputHandler().getFocusedElement());
+
+        workbench.dock().closePanel(workbench.refFor(second));
+        settle();
+
+        assertSame("a close must not pull focus out of whatever the user was using",
+                elsewhere, window.getInputHandler().getFocusedElement());
+    }
+
+    /**
+     * <b>Reopening a closed file shows the LIVE document's editor, not the dead one.</b>
+     *
+     * <p>{@code DockGroup.contentFor} memoises the built element per {@link DockPanelRef}, and a ref is a
+     * VALUE — reopening the same file produces an equal one. So a closed tab left its element in the map
+     * and the reopen was handed back the editor built for the document that had just been disposed.</p>
+     *
+     * <p>It looked perfectly normal until something touched it, and then threw
+     * {@code IllegalStateException: Parser is closed} out of a frame tick — the document's dispose closes
+     * its tokenizer, and the first folding pass asked the closed parser to parse. Asserted as identity
+     * rather than by typing, because "which editor is on screen" is the actual defect and a crash is only
+     * how it happened to surface.</p>
+     */
+    @Test
+    public void reopeningAClosedFileShowsTheLiveEditor() {
+        CgPath path = CgPath.parse("mymod.proj:First.java");
+        TextEditor first = openWithContent(path);
+        assertNotNull("attached while open", first.getAttachedWindow());
+
+        workbench.dock().closePanel(workbench.refFor(path));
+        settle();
+
+        TextEditor reopened = openWithContent(path);
+
+        assertNotSame("the disposed document's editor must not come back", first, reopened);
+        assertSame("and what is on screen is what the live document owns",
+                workbench.editorFor(path), reopened);
+        assertNotNull("which has to actually be in the tree", reopened.getAttachedWindow());
+    }
+
 }

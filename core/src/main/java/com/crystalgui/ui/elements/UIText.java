@@ -12,6 +12,9 @@ import com.crystalgraphics.text.render.CgTextRenderer;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.texture.CgUiRoundedRect;
+
+import javax.annotation.Nullable;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.StyleOrigin;
@@ -108,6 +111,18 @@ import java.util.Set;
  * every single frame, forever.</p>
  */
 public final class UIText extends UIElement {
+
+    /**
+     * Marks a text run as <b>coloured by a syntax scheme</b> — what every {@code ::highlight(<capture>)}
+     * rule in a scheme is scoped to.
+     *
+     * <p>Here rather than on {@code TextEditor}, which is where it used to live and is no longer the only
+     * thing that draws code: a documentation popup's declaration line carries it, and so does a code
+     * sample inside a rendered doc comment. The class marks a <em>text element</em>, so this is the type
+     * that should name it — and a general-purpose widget must not have to import the editor to say that
+     * its text is code.</p>
+     */
+    public static final String SYNTAX_CLASS = "__syntax__";
 
     static {
         // `font-size`/`font-family` are GeneralGroup/visual properties, never routed through TaffyBridge
@@ -801,6 +816,76 @@ public final class UIText extends UIElement {
 
 
     /**
+     * The source character at a point in this element's own coordinates, or {@code -1}.
+     *
+     * <h3>Run granularity, and that is not an approximation</h3>
+     *
+     * <p>The walk resolves to a shaped RUN and answers that run's first character, which sounds coarse
+     * and is exactly right for what asks: <b>a span boundary is a shaping-run boundary</b>. A highlighted
+     * range therefore <em>is</em> one or more runs — the property {@code paintHighlightBands} is built on
+     * — so "which span was clicked" is answered precisely even though "which letter" is not. A caller
+     * needing the letter would need per-glyph advances, which nothing does yet.</p>
+     *
+     * <p>Same walk as the band painter, deliberately: if the two disagreed about where a run sits, a
+     * click would land on text other than the one under the pointer, and both are derived from the same
+     * layout for the same reason the hit-test and the pose share {@code UITransform.applyTo}.</p>
+     *
+     * <p>Answers {@code -1} when the element has never been laid out or the point is above the first
+     * line — never a clamped guess, because "nothing here" and "the first character" are different
+     * answers and a caller that wants the clamp can say so.</p>
+     */
+    public int offsetAt(float localX, float localY) {
+        var taffy = getTaffyLayout();
+        if (taffy == null) return -1;
+        float contentWidth = taffy.contentBoxWidth();
+        float x = localX - taffy.border().left - taffy.padding().left;
+        float y = localY - taffy.border().top - taffy.padding().top;
+        if (y < 0f) return -1;
+
+        float maxWidthForWrap = getStyle().getGeneralGroup().whiteSpace().wraps() ? contentWidth : 0f;
+        CgTextLayout textLayout = ensureShaped().layout(maxWidthForWrap, 0f);
+        List<List<CgShapedRun>> lines = textLayout.lines();
+        if (lines.isEmpty()) return -1;
+
+        float lineHeight = textLayout.totalHeight() / lines.size();
+        int lineIndex = lineHeight <= 0f ? 0 : (int) (y / lineHeight);
+        if (lineIndex < 0 || lineIndex >= lines.size()) return -1;
+
+        float at = 0f;
+        for (CgShapedRun run : lines.get(lineIndex)) {
+            at += run.totalAdvance();
+            if (x < at) return run.sourceStart();
+        }
+        return -1;
+    }
+
+    /**
+     * The source character under a raw pointer position, or {@code -1}.
+     *
+     * <h3>Two "local" spaces, and mixing them is silent</h3>
+     *
+     * <p><b>{@link #screenToLocal} does not answer this element's own coordinates.</b> It answers the
+     * space this element's BOX is expressed in — the one {@code isMouseOverElement} tests a point
+     * against {@link RuntimeCache#getX()}/{@link RuntimeCache#getY()} in. {@link #offsetAt} wants
+     * coordinates relative to this element's own top-left. The two differ by exactly the box origin,
+     * so feeding one to the other is off by however far the element sits from its container's
+     * origin.</p>
+     *
+     * <p>Which is why this exists rather than the two calls at each site. It fails the way coordinate
+     * bugs always do — correctly at the origin and wrong everywhere else — so it survives every
+     * fixture built around a single element at (0,0) and breaks on the first real layout. Measured on
+     * the documentation popup: a link 38px down a paragraph sitting at y=453 resolved to {@code -1},
+     * and the same point less the box origin resolved to the link's first character exactly.</p>
+     *
+     * <p>Both link gestures in {@code MarkupView} — the press that follows a link and the hover that
+     * underlines one — had written it out longhand, and both were wrong in the same way.</p>
+     */
+    public int offsetAtScreen(float screenX, float screenY) {
+        var local = screenToLocal(screenX, screenY);
+        return offsetAt(local.x() - getRuntimeCache().getX(), local.y() - getRuntimeCache().getY());
+    }
+
+    /**
      * Fills the {@code background-color} band behind every highlighted range — CSS Custom Highlight's
      * one genuinely <em>positional</em> property.
      *
@@ -831,22 +916,73 @@ public final class UIText extends UIElement {
         float y = contentY;
         for (List<CgShapedRun> line : lines) {
             float x = contentX;
+            // ADJACENT RUNS OF ONE HIGHLIGHT ARE ONE BAND, accumulated here and flushed when the style
+            // changes. Drawing per run was indistinguishable while a band was a plain rect -- two
+            // abutting rects of the same colour look like one -- and stops being so the moment a band has
+            // GEOMETRY: per-run padding would open a gap inside a single highlighted phrase and per-run
+            // rounding would round every interior boundary, so `{@code a b}` would draw as two pills.
+            // Shaping breaks a run for reasons of its own (a font fallback, a script change), so "one
+            // highlight" and "one run" were never the same thing.
+            HighlightStyle pending = null;
+            float pendingX = x;
+            float pendingWidth = 0f;
             for (CgShapedRun run : line) {
                 float advance = run.totalAdvance();
                 int at = run.sourceStart();
                 // The run's FIRST character decides, because a run cannot span two highlights: the
                 // boundary that made them different styles is also a shaping boundary.
                 HighlightStyle style = at >= 0 && at < perChar.length ? perChar[at] : null;
-                int band = style == null ? 0 : style.backgroundColor();
-                // Alpha zero is "no band" and not "a transparent band" — see HighlightStyle.
-                if (band != 0 && (band >>> 24) != 0) {
-                    ctx.fillRect(x, y, advance, lineHeight, band);
+                if (style != pending) {
+                    paintBand(ctx, pending, pendingX, y, pendingWidth, lineHeight);
+                    pending = style;
+                    pendingX = x;
+                    pendingWidth = 0f;
                 }
+                pendingWidth += advance;
                 x += advance;
             }
+            paintBand(ctx, pending, pendingX, y, pendingWidth, lineHeight);
             y += lineHeight;
         }
     }
+
+    /**
+     * One highlight's band on one line.
+     *
+     * <p>Square and unpadded is the overwhelmingly common case — an editor's selection, a search hit, a
+     * bracket match — so it keeps {@code fillRect}, which batches with every other quad in the frame. A
+     * band with geometry goes through the SDF rounded-rect material instead, which is a material switch
+     * and therefore its own draw call; that is the right price for a few words of inline code and the
+     * wrong one for every selected line in a document, which is why the fast path is not merely an
+     * optimisation.</p>
+     */
+    private void paintBand(CgUiPaintContext ctx, @Nullable HighlightStyle style,
+                           float x, float y, float width, float height) {
+        if (style == null || width <= 0f) return;
+        int band = style.backgroundColor();
+        // Alpha zero is "no band" and not "a transparent band" — see HighlightStyle.
+        if (band == 0 || (band >>> 24) == 0) return;
+
+        float padLeft = style.bandPadLeft(width);
+        float padRight = style.bandPadRight(width);
+        float bandX = x - padLeft;
+        float bandWidth = width + padLeft + padRight;
+        float[] radii = style.cornerRadii(bandWidth, height);
+
+        if (radii == null) {
+            ctx.fillRect(bandX, y, bandWidth, height, band);
+            return;
+        }
+        if (bandDrawable == null) bandDrawable = new CgUiRoundedRect();
+        bandDrawable.setFillColor(band)
+                .setCornerRadius(radii[0], radii[1], radii[2], radii[3],
+                        radii[4], radii[5], radii[6], radii[7]);
+        bandDrawable.draw(ctx, 0f, 0f, bandX, y, bandWidth, height);
+    }
+
+    /** Reused across frames — a drawable is a description, and building one per band per frame is churn. */
+    @Nullable
+    private CgUiRoundedRect bandDrawable;
 
     /**
      * The layout the {@code text-shadow} pass should draw — the ordinary one unless a span carries an

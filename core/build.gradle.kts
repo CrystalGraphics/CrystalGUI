@@ -192,6 +192,17 @@ tasks.named("check") { dependsOn(headlessTestTask) }
 // codepoint: a failure no test asserting on offsets or counts would notice, on developer machines only.
 // JDK 18+ happens to default to UTF-8 already, which makes the bug invisible here and waiting for
 // whoever builds on an older toolchain.
+tasks.withType<Test>().configureEach {
+    // `-Pbench` runs the timing measurements, which `check` must not.
+    //
+    // Not squeamishness about slow tests -- these numbers MOVE WITH TEST ORDER. The same assertion
+    // measured 727us of avoidable work with the fix disabled and 978us with it enabled, in a run where
+    // ninety other tests had warmed the JVM first. A threshold that can be beaten by JIT state is not a
+    // regression guard, it is a coin toss that fails on somebody else's machine. What ships instead is
+    // the DETERMINISTIC half: the decoration must not go stale. See EditorFrameCostTest.
+    systemProperty("cgui.test.bench", project.hasProperty("bench").toString())
+}
+
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
     // NAMES FOR THE EDITOR, and the only mechanism that reaches an INTERFACE method (M13 §25.1).

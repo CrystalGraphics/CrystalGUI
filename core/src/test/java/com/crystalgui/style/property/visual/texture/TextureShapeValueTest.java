@@ -28,7 +28,7 @@ public class TextureShapeValueTest {
             CgUiDrawable d = TextureValue.parseDrawable("shape(\"" + name + "\")");
             assertNotNull("shape(\"" + name + "\") failed to parse", d);
             assertTrue(d instanceof CgUiShape);
-            assertEquals(name, CgUiShape.parseKind(name), ((CgUiShape) d).getKind());
+            assertEquals(name, CgUiShape.parseKind(name), ((CgUiShape) d).kind());
         }
     }
 
@@ -36,7 +36,7 @@ public class TextureShapeValueTest {
     public void singleQuotesAreAcceptedTheSameAsDouble() {
         CgUiDrawable d = TextureValue.parseDrawable("shape('checkmark')");
         assertNotNull(d);
-        assertEquals(CgUiShape.Kind.CHECKMARK, ((CgUiShape) d).getKind());
+        assertEquals(CgUiShape.Kind.CHECKMARK, ((CgUiShape) d).kind());
     }
 
     /** An unrecognised name is a parse FAILURE (null), not a silent no-op drawable — same convention

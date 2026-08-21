@@ -432,6 +432,65 @@ tab .__pre-icon__ {
     overlay-fit: contain;
 }
 
+/* ── THE CLOSE BUTTON ────────────────────────────────────────────────────────────────────────────
+ *
+ * ITS SPACE IS ALWAYS PAID FOR AND ITS GLYPH IS NOT. Faded rather than hidden until the pointer is over
+ * the tab or the tab is the selected one, which is what IntelliJ, VS Code and every browser draw — and
+ * the reason is layout rather than taste. A tab that GROWS a button on hover changes width, so every tab
+ * to its right moves; on a strip that means the tab under the pointer slides out from under it, and a
+ * press where a label was closes the neighbour. `opacity` costs the width unconditionally and draws
+ * nothing, which is the only way to have both.
+ *
+ * So never `display: none` here. Being invisible and still hit-testable costs nothing: reaching it needs
+ * the pointer on the tab, and that is exactly what makes it appear — there is no state in which a user
+ * can press a button they cannot see.
+ *
+ * MIN-HEIGHT AND PADDING ARE CLEARED, and neither is optional. `button { min-height: 14px }` is a
+ * DIFFERENT PROPERTY from the height below, so it does not compete with it — it simply wins whenever it
+ * is the larger number, and at 14px around a 9px box it is. The base button padding is the same story
+ * one property along: left at 4px either side, an 9px glyph sits in a 17px box and the tab grows by the
+ * difference. This is the third time that pair has cost a round; see the menu-bar and search-toggle
+ * notes for the other two. */
+tab .__close__ {
+    width: 11px;
+    height: 11px;
+    min-height: 0;
+    min-width: 0;
+    padding-all: 0;
+    margin-left: 3px;
+    flex-shrink: 0;
+    flex-grow: 0;
+    opacity: 0;
+    /* `background` and `background-color` are separate properties, and a button arrives with a DRAWABLE
+     * from the base rule — setting only the colour leaves that drawable painted over it. Both, always. */
+    background: none;
+    background-color: #00000000;
+    /* `shape("cross")` rather than an icon file, as `searchfield .__clear__` already draws: it is
+     * procedural, so it stays crisp at 9px where a rasterised 16px glyph would not, and it takes its
+     * colour from the element instead of from artwork. */
+    overlay: shape("cross");
+    cursor: pointer;
+    /* DIMMER THAN THE LABEL. The cross is an affordance rather than information -- it says "this can be
+     * closed", which the reader already knows -- so drawn at the label's weight it competes with the
+     * filename for attention on every tab at once. A `button` also arrives with `color: #222222` SPECIFIED
+     * on it by the base rule, which no inherited colour from the tab can beat, so this has to be stated
+     * here whatever the surrounding text is doing. */
+    color: var(--tab-close-fg, #5A5D63);
+}
+/* Shown on the tab's own hover, not the button's: the affordance appears when you approach the tab,
+ * which is the whole point of reserving the space. `:hover` walks the chain, so hovering the button
+ * itself keeps the tab hovered too and the glyph does not blink out from under the pointer. */
+tab:hover .__close__,
+tab:checked .__close__ {
+    opacity: 1;
+}
+/* And its own hover is the usual affordance a control gets, so it reads as pressable rather than as a
+ * mark printed on the tab. */
+tab .__close__:hover {
+    background-color: var(--tab-close-hover-bg, #5A5A5A);
+    color: var(--tab-close-hover-fg, #DDDDDD);
+}
+
 tab:hover,
 .__problem-tab__:hover {
     background: var(--tab-hover-bg, #8C8C8C);
@@ -475,7 +534,339 @@ viewcontainer:focus-within .__problem-tab__.__selected__ {
     border-color: var(--tab-focused-border, #4A88C7);
 }
 
+/* ── A BORROWED FILE'S TAB, AT REST ─────────────────────────────────────────────────
+ *
+ * A library class opened read-only. IntelliJ tints the tab BODY rather than its label, and the
+ * instrument is the right one: a fill reads as a property of the container, and what is being said is
+ * about the whole pane -- this is not yours, and nothing you type here is kept.
+ *
+ * IDLE ONLY. Hover and selection are the states the user is ASKING ABOUT, and while they are asking
+ * the tab should answer in the vocabulary every other tab uses -- so the tint yields to them rather
+ * than tinting over them. It says what a tab IS when nothing is happening to it, which is when a
+ * reader is scanning the strip and is the only moment the answer is wanted.
+ *
+ * ONE CLASS AND NO TYPE, which is what expresses that in the cascade rather than in a rule order.
+ * `.decoration-library` weighs 10; `tab` is 1, so an idle tab takes the tint, and `tab:hover` and
+ * `tab:checked` are 11 and `dockgroup:focus-within tab:checked` is 22, so every state outranks it
+ * without naming it. Adding the element name here would make this 11, tie with hover and checked, and
+ * silently hand the win to whichever rule came later in the file.
+ *
+ * AND IT SETS `background`, NOT `background-color`. They are separate properties -- a rule setting only
+ * the colour is painted over by whatever drawable won -- so competing on the drawable is what makes the
+ * yielding above exact rather than dependent on whether the hover fill happens to be opaque.
+ *
+ * HERE RATHER THAN IN decorations.css, where this started. That sheet is a theme fragment nothing
+ * installs -- not UiThemeManager, not the workbench, not a harness scene -- so the rule resolved
+ * nowhere and the tab stayed grey while every part of the Java side was working. `filetypes.css` is in
+ * the same position. Both are worth wiring up; a feature that needs one of them to be loaded is not the
+ * place to find out that neither is. */
+.decoration-library {
+    background: var(--tab-library-bg, #281F1C);
+}
+
 tab:disabled {
     background: var(--tab-disabled-bg, #4A4A4A);
     color: var(--tab-disabled-fg, #6E6E6E);
+}
+
+
+/* ═══ MARKUPVIEW ══════════════════════════════════════════════════════════════════════════════════
+ *
+ * A parsed `MarkupDocument`, drawn: a paragraph is ONE wrapping text run with a `::highlight()` band per
+ * inline style, a `<pre>` is a box with a background of its own, a list is a bullet beside a column.
+ * General-purpose by construction — a javadoc body today, a JSDoc comment or a shader node's description
+ * on exactly these rules.
+ *
+ * EVERY TEXT PROPERTY IS SET ON THE TEXT, NEVER ON THE VIEW. `ua/core.css` opens with
+ * `* { font-size: 10 }`, a candidate at STYLESHEET origin on every element — so `font-size` does not
+ * effectively inherit, and a consumer scoping the body's size must name `.__markup-paragraph__` and not
+ * `markupview`. A rule on the container computes correctly on the container and changes nothing visible,
+ * which is the failure that cost a probe on the menu bar. */
+
+markupview {
+    flex-direction: column;
+    width: 100%;
+    gap-all: 6px;
+}
+
+markupview .__markup-paragraph__ {
+    width: 100%;
+    white-space: normal;
+}
+
+/* THE INLINE BANDS. `::highlight()` permits colour, background-colour, the decorations and — as a
+ * deliberate divergence from CSS, argued in `HighlightStyle` — weight and style. That is the whole
+ * inline vocabulary a document needs, which is why the renderer needs no new engine capability.
+ *
+ * Headings carry the same bands: a `<b>` inside an `<h3>` is legal markup and the parser reports it. */
+
+markupview .__markup-paragraph__::highlight(markup-code),
+markupview .__markup-heading__::highlight(markup-code),
+markupview .__markup-bullet__::highlight(markup-code) {
+    color: var(--markup-code-fg, #C9D1D9);
+    /* THE BAND IS WHY THIS IS A HIGHLIGHT AND NOT JUST A COLOUR. Inline code reads as code because it
+     * sits on a plate; recoloured alone it reads as an arbitrarily tinted word. It is paintable because
+     * shaping already breaks a run at every span boundary — see `HighlightStyle`. */
+    background-color: var(--markup-code-bg, #2E3033);
+    /* A PLATE, not a tint -- rounded, so a short identifier reads as code rather than as an arbitrarily
+     * highlighted word.
+     *
+     * THE PLATE'S BREATHING ROOM IS THIS PADDING; the gap to the words either side is a real U+00A0
+     * that `MarkupView` puts OUTSIDE the band. They have to be two different things: padding inflates
+     * the painted rect without moving a glyph, so anything it adds comes out of the gap to the
+     * neighbour -- with the pad characters inside the plate, raising this pushed the plate out until a
+     * chip and the comma after it were touching. Outside the band, layout honours the pad and the plate
+     * cannot reach it however large this grows.
+     *
+     * Vertical padding is not permitted at all -- a band is as tall as its line box, and inflating that
+     * overlaps the line above. @see HighlightStyle */
+    padding-left: 3px;
+    padding-right: 3px;
+    border-radius: 3px;
+}
+
+markupview .__markup-paragraph__::highlight(markup-strong),
+markupview .__markup-heading__::highlight(markup-strong) {
+    font-weight: bold;
+}
+
+markupview .__markup-paragraph__::highlight(markup-emphasis),
+markupview .__markup-heading__::highlight(markup-emphasis) {
+    font-style: italic;
+}
+
+/* NO UNDERLINE AT REST. A documentation body is full of references -- a `See Also` of four, a `{@link}`
+ * every other sentence -- and underlining them all turns prose into a ruled page. The colour already says
+ * it is a link; the underline is what says THIS one is under the pointer. Both references do it this
+ * way. */
+markupview .__markup-paragraph__::highlight(markup-link) {
+    color: var(--markup-link-fg, #548AF7);
+}
+
+/* The one the pointer is over. A separate BAND rather than a `:hover` rule, because a paragraph is one
+ * text element: `:hover` on it is true anywhere in the sentence and would underline every link at once.
+ *
+ * The colour is RESTATED rather than inherited from the rule above. Two bands over the same characters
+ * do not layer -- the later-written name wins the character outright -- so leaving it out would drop the
+ * link's blue at the moment the pointer reached it.
+ * @see MarkupView#LINK_HOVER_RANGE */
+markupview .__markup-paragraph__::highlight(markup-link-hover) {
+    color: var(--markup-link-fg, #548AF7);
+    text-decoration-line: underline;
+    text-decoration-color: var(--markup-link-fg, #548AF7);
+}
+
+/* The CURSOR half of the same state, and it has to be a class on the element: `cursor` is a property of
+ * an element, so it cannot be range-sized the way the underline is. `MarkupView.hover` toggles it.
+ * @see MarkupView#LINK_HOVER_CLASS */
+markupview .__markup-link-hover__ {
+    cursor: pointer;
+}
+
+/* HEADINGS. Sized per level rather than one rule for all six: a doc comment that uses `<h3>` for its
+ * sections and `<h4>` inside them is saying something with the difference. */
+
+markupview .__markup-heading__ {
+    width: 100%;
+    white-space: normal;
+    font-weight: bold;
+    color: var(--markup-heading-fg, #DFE1E5);
+    margin-top: 2px;
+}
+
+markupview .__markup-h1__ { font-size: 13; }
+markupview .__markup-h2__ { font-size: 12; }
+markupview .__markup-h3__ { font-size: 11; }
+markupview .__markup-h4__ { font-size: 10; }
+markupview .__markup-h5__ { font-size: 10; }
+markupview .__markup-h6__ { font-size: 10; }
+
+/* A `<pre>` SAMPLE. Its own box, so the background covers the whole block including the ends of short
+ * lines — a highlight band would stop at the glyphs, which is right for a word and wrong for a sample.
+ *
+ * `white-space: pre` is the point of the element: the parser deliberately does not collapse whitespace
+ * inside `<pre>`, because there the identical characters are the content. A rule that let this wrap
+ * would undo that decision one layer later. */
+
+markupview .__markup-code__ {
+    flex-direction: column;
+    width: 100%;
+    background-color: var(--markup-pre-bg, #2B2B2B);
+    padding-all: 6px;
+    border-radius: 3px;
+    overflow: auto;
+    /* AN OUTLINE, not a border. A one-sided `border-width-*` in this engine either draws all four edges or
+     * none depending on which edge is named, so a uniform frame is spelled with `outline` -- which is what
+     * the popup around this uses for its own hairline. */
+    outline-width: 1px;
+    outline-color: var(--markup-pre-border, #393B40);
+}
+
+markupview .__markup-code__ > text {
+    white-space: pre;
+    color: var(--markup-pre-fg, #C9D1D9);
+    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
+}
+
+/* LISTS. The bullet is a fixed column and the body takes the rest, so a wrapped second line aligns
+ * under the first word rather than under the bullet — which is the only thing that makes a list read
+ * as a list once any item is longer than one line.
+ *
+ * `width: 0; flex-grow: 1` on the body, not `width: 100%`: this is a ROW, and 100% there means the
+ * parent's full width with the bullet still beside it, so the row overflows by exactly the bullet. */
+
+markupview .__markup-list__ {
+    flex-direction: column;
+    width: 100%;
+    gap-all: 2px;
+    /* INDENTED AS A BLOCK, which is the whole visual job of a list: the marker column has to start inside
+     * the prose's left edge or the items read as more paragraphs that happen to begin with a number.
+     * On the list rather than the item, so a nested list indents against its parent for free. */
+    padding-left: 14px;
+}
+
+markupview .__markup-item__ {
+    flex-direction: row;
+    width: 100%;
+    gap-all: 4px;
+}
+
+markupview .__markup-bullet__ {
+    flex-shrink: 0;
+    color: var(--markup-bullet-fg, #9DA0A8);
+}
+
+markupview .__markup-item-body__ {
+    flex-direction: column;
+    width: 0;
+    flex-grow: 1;
+    gap-all: 4px;
+}
+
+/* A `<blockquote>`. The rule down its left is an ELEMENT, because a one-sided `border-width-*` in this
+ * engine either draws all four edges or none depending on which edge is named. `.__status-sep__` is the
+ * same shape. */
+
+markupview .__markup-quote__ {
+    flex-direction: row;
+    width: 100%;
+    gap-all: 6px;
+}
+
+markupview .__markup-quote-rule__ {
+    width: 2px;
+    flex-shrink: 0;
+    background-color: var(--markup-quote-rule, #4A4D52);
+}
+
+/* A `<dl>` — what a documentation section table is drawn as: `Since:` beside `1.0`, `See Also:` beside
+ * its references. Rows rather than two independent columns, because a label that wraps must stay beside
+ * its own value: "Implementation Requirements:" is longer than the column and breaks inside it. */
+
+markupview .__markup-definitions__ {
+    flex-direction: column;
+    width: 100%;
+    gap-all: 4px;
+}
+
+/* The label column is given ONE SHARED WIDTH after layout, by `MarkupView.alignTerms` -- a grid would be
+ * the CSS answer and does not work here (measured: the value cell comes back at the container's full
+ * width, so the first track is never reserved). A fixed width is the other answer and is what made
+ * `Since:` sit a third of the popup away from `1.0`. */
+markupview .__markup-definition__ {
+    flex-direction: row;
+    width: 100%;
+    gap-all: 8px;
+}
+
+/* Quieter than the value it introduces: the label is how you find the row, the value is what you came
+ * for. No width of its own -- `MarkupView.alignTerms` gives every label the width of the widest, which
+ * is what makes the values line up while the gap stays the same on every row. */
+markupview .__markup-term__ {
+    /* NOT SHRINKABLE, or the row squeezes the label back below the shared width it was just given. */
+    flex-shrink: 0;
+    white-space: normal;
+    /* CAPPED, so `Implementation Requirements:` wraps rather than pushing the value column off the box.
+     * Below the cap the measured width decides, and every label lines up with no gap to spare. */
+    max-width: 132px;
+    color: var(--markup-term-fg, #9DA0A8);
+}
+
+/* `width: 0; flex-grow: 1` and never `width: 100%` -- this is a ROW, so 100% is the parent's full width
+ * with the label still beside it, and the row then overflows by exactly the label's width. */
+markupview .__markup-detail__ {
+    flex-direction: column;
+    width: 0;
+    flex-grow: 1;
+    gap-all: 3px;
+}
+
+
+/* A `<table>` — because the JDK's own documentation is full of them. Measured before this was written:
+ * `java.util.Formatter` carries NINETEEN tables in 88k characters of comment and its whole purpose is
+ * the conversion reference; `java.util.regex.Pattern` three, `DateTimeFormatter` two. Without them
+ * every cell concatenated into one run of prose, which reads as the renderer failing rather than as a
+ * construct nobody implemented.
+ *
+ * The columns are lined up by `MarkupView.alignTables` AFTER layout, for the reason the definition list
+ * already documents: `display: grid` is non-functional here, so a real grid track cannot be asked for.
+ * A definition list is a table of one column and this is the same measurement over N. */
+
+markupview .__markup-table__ {
+    flex-direction: column;
+    width: 100%;
+    gap-all: 2px;
+}
+
+/* Above the rows and quieter than them: a caption names the table, the rows are what you came for. */
+markupview .__markup-caption__ {
+    white-space: normal;
+    padding-bottom: 2px;
+    color: var(--markup-term-fg, #9DA0A8);
+}
+
+/* NO GAP. The cells carry their own padding instead, which puts every column boundary at a single
+ * coordinate — the edge of one cell IS the edge of the next. That is what lets `TableGrid` draw an
+ * interior line and the outer edge with the same call, rather than guessing a midpoint in a gap. */
+markupview .__markup-row__ {
+    flex-direction: row;
+    width: 100%;
+}
+
+/* NOT SHRINKABLE, or the row squeezes a cell back below the shared width its column was just given —
+ * the same rule `.__markup-term__` needs and for the same reason. */
+markupview .__markup-cell__ {
+    flex-direction: column;
+    flex-shrink: 0;
+    white-space: normal;
+    /* INSIDE the cell, so the grid line never touches a glyph and the column measurement includes the
+     * space it needs. A gap on the row could not do the second half: it separates boxes without giving
+     * either of them room. */
+    padding-left: 6px;
+    padding-right: 6px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    /* CAPPED, so one long cell wraps rather than pushing the rest of the row off the box. Below the cap
+     * the measured width decides and the column lines up with no gap to spare. */
+    max-width: 240px;
+}
+
+/* A `<th>`. Weight rather than a fill: a rule under the header would need a one-sided border, which in
+ * this engine either draws all four edges or none depending on which edge is named. */
+markupview .__markup-header-cell__ {
+    font-weight: bold;
+    color: var(--markup-term-fg, #9DA0A8);
+}
+
+/* THE GRID IS STROKED, not built out of boxes -- `MarkupView.TableGrid` reads these two colours back
+ * out of the cascade and draws every line in one paint pass. A line per row pair AND per column pair
+ * would otherwise be one element each, and a column line would have to live inside every row.
+ *
+ * ONE colour and one width for every line, outer edge included: a table's edge and its interior rules
+ * are the same object seen from different sides, and drawing the head's darker made it read as two
+ * tables stacked. `border-color` is a registered property rather than an invented name -- the same
+ * trick the node graph uses to keep its port palette in the sheet. Nothing draws a border here: no
+ * `border-width` is set, so the box itself has none. */
+markupview .__markup-table__ {
+    border-color: var(--markup-table-rule, #3A3D42);
 }

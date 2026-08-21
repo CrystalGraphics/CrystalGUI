@@ -1,10 +1,14 @@
 package com.crystalgui.language.java.assist;
 
+import com.crystalgui.text.TextPoint;
+import com.crystalgui.text.lang.DeclarationSite;
 import com.crystalgui.text.lang.Signature;
 import com.crystalgui.text.lang.SymbolKind;
 
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTVisitor;
+import org.eclipse.jdt.core.dom.AbstractTypeDeclaration;
+import org.eclipse.jdt.core.dom.EnumConstantDeclaration;
 import org.eclipse.jdt.core.dom.BodyDeclaration;
 import org.eclipse.jdt.core.dom.BooleanLiteral;
 import org.eclipse.jdt.core.dom.ChildListPropertyDescriptor;
@@ -129,6 +133,40 @@ public final class JavaSignatures {
     private static final int MAX_SIGNATURE_LINE = 72;
 
     public Signature of(IBinding binding, SymbolKind kind, String name) {
+        // A TYPE DECLARATION IS ASSEMBLED, NEVER QUOTED, and it is the one shape where the quote is worth
+        // less than the render.
+        //
+        // Quoting is faithful to the AUTHOR, which is what makes it right for a method: the parameter
+        // names, the line the author broke a long list on, the annotations as written. A class
+        // declaration's supertype list has no such content -- it is a set, and where the JDK's own source
+        // happens to break it is that file's house style rather than anything a reader of this popup
+        // benefits from. `String.java` breaks it as
+        //
+        //     public final class String
+        //         implements java.io.Serializable, Comparable<String>, CharSequence,
+        //                    Constable, ConstantDesc {
+        //
+        // which is a 69-character line, and the popup is sized by its widest signature line -- so quoting
+        // it made the box half again as wide as it needed to be, with the prose beside it inheriting the
+        // width. IntelliJ renders one interface per line for exactly this reason, and that layout is what
+        // `appendSupertypes` already produces when it is asked to break. It simply was never asked,
+        // because the quote returned first.
+        //
+        // BROKEN WHENEVER THERE IS A LIST TO BREAK -- two or more supertype entries -- rather than only
+        // when the flat form overruns. A list is the part a reader scans, and stacking it is what makes
+        // the popup as narrow as its longest single entry instead of as wide as all of them.
+        //
+        // ONE ENTRY STAYS FLAT, and that is not a special case for its own sake: `class Script implements
+        // Serializable` is a sentence rather than a list, and breaking it costs a line to say nothing. It
+        // still falls back to the broken form if it happens to be long, which is the rule everything else
+        // here follows.
+        if (binding instanceof ITypeBinding type && !type.isTypeVariable()) {
+            if (supertypeEntries(type) > 1) return render(binding, kind, name, true);
+            Signature single = render(binding, kind, name, false);
+            return longestLine(single.text()) <= MAX_SIGNATURE_LINE ? single
+                    : render(binding, kind, name, true);
+        }
+
         // QUOTED FIRST, AND NEVER RE-WRAPPED. The author chose that layout; MAX_SIGNATURE_LINE is a rule
         // for text this class invents, not for text it copies, and applying it to a quote would only
         // re-render the identical slice. Hoisted out of the three branches below when quoting learned to
@@ -146,6 +184,25 @@ public final class JavaSignatures {
         // declaration and breaks parameter lists that would have fit comfortably.
         return longestLine(flat.text()) <= MAX_SIGNATURE_LINE ? flat
                 : render(binding, kind, name, true);
+    }
+
+    /**
+     * How many supertypes this declaration names — what decides whether the list is stacked.
+     *
+     * <p>Counted on the same terms {@code appendSupertypes} prints on, or the two would disagree about
+     * whether there is a list: {@code extends Object} is on every class and in no source file, and an
+     * enum's and an interface's implicit supertype are the same story.</p>
+     */
+    private static int supertypeEntries(ITypeBinding type) {
+        int entries = 0;
+        ITypeBinding superclass = type.getSuperclass();
+        if (superclass != null && !"java.lang.Object".equals(superclass.getQualifiedName())
+                && !type.isEnum() && !type.isInterface()) {
+            entries++;
+        }
+        ITypeBinding[] interfaces = type.getInterfaces();
+        if (interfaces != null) entries += interfaces.length;
+        return entries;
     }
 
     private static int longestLine(String text) {
@@ -651,16 +708,76 @@ public final class JavaSignatures {
     @Nullable
     public String documentationOf(@Nullable IBinding binding) {
         String own = docTextOf(binding);
-        if (own != null) return own;
+        if (own != null) return spliceInheritedDoc(own, binding);
         if (!(binding instanceof IMethodBinding)) return null;
         return inheritedDocOf((IMethodBinding) binding);
+    }
+
+    /**
+     * Replaces every {@code {@inheritDoc}} in a comment with the text it is asking for.
+     *
+     * <p>The <b>bare</b> case — a method with no comment at all — is handled above and is the
+     * one that matters most: an overriding method usually carries {@code @Override} and nothing else, so
+     * without it a large fraction of methods render empty. This is the other case, where an author wrote
+     * their own prose <em>and</em> asked for the inherited text at a particular point in it. Java's own
+     * tooling and IntelliJ both honour it; until now it rendered as nothing, so a comment reading
+     * "{@code {@inheritDoc} Additionally, …}" lost its first half silently.</p>
+     *
+     * <p><b>Resolved through the whole chain, one hop at a time.</b> A supertype's comment may contain
+     * the tag too, and this used to strip those markers rather than follow them — on the reasoning that
+     * a hover should not be a comment assembled from three levels of a hierarchy. But that is not what
+     * the alternative produced: the argument assumes each level ADDS prose, and the level that most
+     * often carries the marker is the one that is <em>only</em> the marker, written to say "the same as
+     * above" through an intermediate class. Stripping it there yields nothing at all, so a two-hop chain
+     * — the ordinary shape of an abstract class between an interface and its implementation — rendered
+     * empty. Following it costs one more walk from a binding already in hand, and the assembled hover
+     * the old note feared is bounded by {@link #MAX_DOC_HOPS} either way.</p>
+     */
+    @Nullable
+    private String spliceInheritedDoc(String own, @Nullable IBinding binding) {
+        return spliceInheritedDoc(own, binding, 0);
+    }
+
+    @Nullable
+    private String spliceInheritedDoc(@Nullable String own, @Nullable IBinding binding, int hop) {
+        if (own == null || !own.contains(JavaDocs.INHERIT_DOC)) return own;
+        String text = "";
+        if (hop < MAX_DOC_HOPS && binding instanceof IMethodBinding) {
+            IMethodBinding above = documentedSuperOf((IMethodBinding) binding);
+            // FROM THE BINDING WHOSE TEXT WAS TAKEN, not from the original: the next hop's supertypes are
+            // the ones above THAT declaration, and asking the original again would re-answer with the
+            // same level forever. Strictly upward, so the recursion cannot cycle.
+            String inherited = above == null ? null : spliceInheritedDoc(docTextOf(above), above, hop + 1);
+            if (inherited != null) text = inherited;
+        }
+        // AT THE BOUND, OR WITH NOTHING ABOVE IT, the marker is dropped rather than shown. It is an
+        // instruction to a doc tool, and a reader who sees it has been shown the machinery.
+        text = text.replace(JavaDocs.INHERIT_DOC, "");
+        String spliced = own.replace(JavaDocs.INHERIT_DOC, text).trim();
+        // A COMMENT THAT WAS ONLY THE TAG, with nothing above it to inherit, is not an empty comment --
+        // it is a comment with nothing to say, and the popup hides a blank body rather than drawing a
+        // gap under the declaration. Null is how that is spelled everywhere else here.
+        return spliced.isEmpty() ? null : spliced;
     }
 
     /** How far up a hierarchy to look for an inherited comment. Deeper than any real API, cheaper than a search. */
     private static final int MAX_DOC_HOPS = 6;
 
+    /**
+     * The nearest overridden method that has a comment, resolved through <em>its</em> own inheritance.
+     *
+     * <p>Split from the walk below so the recursion has a binding to continue from — the text alone
+     * cannot say which declaration it came from, and the next hop's supertypes are that declaration's.</p>
+     */
     @Nullable
     private String inheritedDocOf(IMethodBinding method) {
+        IMethodBinding above = documentedSuperOf(method);
+        return above == null ? null : spliceInheritedDoc(docTextOf(above), above, 1);
+    }
+
+    /** The nearest overridden method carrying a comment of its own — superclass first, then interfaces. */
+    @Nullable
+    private IMethodBinding documentedSuperOf(IMethodBinding method) {
         ITypeBinding declaring = method.getDeclaringClass();
         if (declaring == null) return null;
         List<ITypeBinding> queue = new ArrayList<>();
@@ -670,8 +787,7 @@ public final class JavaSignatures {
             if (candidate == null) continue;
             for (IMethodBinding above : candidate.getDeclaredMethods()) {
                 if (!method.overrides(above) && !above.isSubsignature(method)) continue;
-                String inherited = docTextOf(above);
-                if (inherited != null) return inherited;
+                if (docTextOf(above) != null) return above;
             }
             addSupertypes(candidate, queue);
         }
@@ -769,6 +885,122 @@ public final class JavaSignatures {
         if (binding instanceof IMethodBinding) return ((IMethodBinding) binding).getDeclaringClass();
         if (binding instanceof IVariableBinding) return ((IVariableBinding) binding).getDeclaringClass();
         return null;
+    }
+
+    /**
+     * Where a binding is declared, when the declaration is in <b>attached source</b> rather than here.
+     *
+     * <h3>The other half of a question the analyser could only half answer</h3>
+     *
+     * <p>{@code EcjSourceAnalyzer.declarationOf} asks {@code unit.findDeclaringNode(binding)}, which by
+     * construction only ever finds a declaration in the unit being edited. For everything on the
+     * classpath it answers null — which {@code DeclarationSite} documents as "the ordinary case, a
+     * member of a compiled class with no source attached, which is most of the JDK". That was true when
+     * nothing could read a classpath type's source. {@link AttachedSources} can, and has been quoting
+     * declarations out of it for the documentation popup this whole time.</p>
+     *
+     * <p>So this is the same two-step lookup {@link #quoted} and {@code documentationOf} already do,
+     * asked for a third thing: not the text of the declaration and not its comment, but <b>where it
+     * is</b>. Written beside them rather than folded in, for the reason stated there — one walk, three
+     * extractions, wanted in different places and only sometimes together.</p>
+     *
+     * <h3>Rows against the attached text, not against ours</h3>
+     *
+     * <p>The positions are computed from the attached unit, so they are only legal against <em>that</em>
+     * text — the same rule every diagnostic in this stack follows. Whatever serves the viewer has to
+     * read through this same {@link AttachedSources}, or the caret lands on the wrong line in a file the
+     * reader cannot edit to correct it.</p>
+     *
+     * <p>Null when there is no attached source, which stays the ordinary answer for a jar that ships
+     * none. A decompiler answers those, and answers them somewhere else: it has no positions to give
+     * until it has run, so it cannot contribute here.</p>
+     */
+    @Nullable
+    public DeclarationSite declarationInAttachedSource(@Nullable IBinding binding) {
+        if (binding == null || attached == null) return null;
+        String topLevel = topLevelSourceName(binding);
+        if (topLevel == null) return null;
+        AttachedSources.Attached source = attached.unitFor(topLevel);
+        if (source == null || source.unit() == null) return null;
+        String key = declarationKeyOf(binding);
+        if (key == null) return null;
+        ASTNode declaration = source.unit().findDeclaringNode(key);
+        if (declaration == null) return null;
+        return siteOf(source.unit(), declaration, topLevel);
+    }
+
+    /**
+     * Where a binding is declared when <b>nothing has its source</b> — the type, and no position.
+     *
+     * <h3>Why a site with no position is still worth producing</h3>
+     *
+     * <p>Without this the decompiler is unreachable. The chain runs
+     * site → viewer → provider → CFR, and it starts with a site: a class shipping no
+     * {@code -sources.jar} produced none, so navigation stopped at the first step and the decompiler
+     * sat behind a door nothing opened. Every part of it worked; nothing asked.</p>
+     *
+     * <p><b>The position is (0,0) because none exists yet.</b> A decompiled file has no coordinates
+     * until it has been decompiled, and decompiling here — inside a resolve, on the analysis thread,
+     * to answer a question that may not be acted on — would put hundreds of milliseconds behind every
+     * hover. So the site names the TYPE and the reader lands at the top of it, which is where a
+     * class-level jump wants to be anyway. Locating a member inside reconstructed output is a separate
+     * step and honestly a separate problem: the member's name survives decompilation but its line
+     * number does not.</p>
+     *
+     * <h3>Only for a binding that really resolved</h3>
+     *
+     * <p>{@code setBindingsRecovery} is on, so JDT answers a plausible binding for a name nothing
+     * declares — {@code no.such.Type} comes back as a class in a package that does not exist. Producing
+     * a site for one would open a viewer on a type nobody has, which is a worse answer than the nothing
+     * it replaced. {@link IBinding#isRecovered} is the published way to tell them apart.</p>
+     */
+    @Nullable
+    public DeclarationSite declarationWithoutSource(@Nullable IBinding binding) {
+        if (binding == null || binding.isRecovered()) return null;
+        String topLevel = topLevelSourceName(binding);
+        if (topLevel == null) return null;
+        return DeclarationSite.inLibrary(topLevel, new TextPoint(0, 0), new TextPoint(0, 0));
+    }
+
+    /**
+     * The name's own range within {@code unit}, as rows and columns.
+     *
+     * <p><b>The NAME, not the declaration.</b> A method declaration node spans its javadoc, its
+     * modifiers, its body and all — opening a viewer on that range would select a screenful and put the
+     * caret on the comment above what was asked for. Every navigation target in this stack is the
+     * identifier, which is what {@code declarationOf} already slices for a fragment.</p>
+     */
+    @Nullable
+    private static DeclarationSite siteOf(CompilationUnit unit, ASTNode declaration, String topLevel) {
+        ASTNode named = nameNodeOf(declaration);
+        int start = named.getStartPosition();
+        int line = unit.getLineNumber(start);
+        // -1 IS JDT'S "NO LINE INFORMATION", and it is reachable here in a way it is not for our own
+        // unit: an attached source is parsed with recovery, from an archive whose text we did not
+        // produce. A site built from it would be row -2 after the zero-basing below.
+        if (line < 1) return null;
+        int endLine = unit.getLineNumber(start + named.getLength());
+        return DeclarationSite.inLibrary(topLevel,
+                new TextPoint(line - 1, unit.getColumnNumber(start)),
+                new TextPoint(Math.max(line, endLine) - 1,
+                        unit.getColumnNumber(start + named.getLength())));
+    }
+
+    /** The identifier a declaration node introduces, or the node itself when it has no separate name. */
+    private static ASTNode nameNodeOf(ASTNode declaration) {
+        if (declaration instanceof VariableDeclarationFragment) {
+            return ((VariableDeclarationFragment) declaration).getName();
+        }
+        if (declaration instanceof MethodDeclaration) {
+            return ((MethodDeclaration) declaration).getName();
+        }
+        if (declaration instanceof AbstractTypeDeclaration) {
+            return ((AbstractTypeDeclaration) declaration).getName();
+        }
+        if (declaration instanceof EnumConstantDeclaration) {
+            return ((EnumConstantDeclaration) declaration).getName();
+        }
+        return declaration;
     }
 
     /** The key of the DECLARATION a binding came from, which is the only key a source file contains. */

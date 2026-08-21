@@ -29,6 +29,15 @@ theme {
     --surface-raised: #E4E4E8;
     --surface-recessed: #FFFFFF;
     --surface-editor: #FFFFFF;
+    /* @see crystal-dark.css. Warm and pale here for the same reason it is warm and dark there: it has
+     * to separate from neutral surfaces without reading as an error. */
+    --surface-borrowed: #FBF3E8;
+    /* @see crystal-dark.css. Warm and pale here for the same reason it is warm and dark there: it has
+     * to separate from neutral surfaces without reading as an error. */
+    --surface-borrowed: #FBF3E8;
+    /* @see crystal-dark.css. Warm and pale here for the same reason it is warm and dark there: it has
+     * to separate from neutral surfaces without reading as an error. */
+    --surface-borrowed: #FBF3E8;
     --surface-overlay: #FFFFFF;
     --border-base: #C4C4C8;
     --border-strong: #9A9AA0;
@@ -105,6 +114,8 @@ theme {
      * this theme rather than of the vocabulary. */
     --editorfind-bg: #F7F8FA;
 
+    /* The light pair: the same gap, in the direction this theme dims. See the dark file. */
+    --doc-body-fg: #3A3B40;
     --dock-drop-overlay: #3574F033;
     --dock-floating-bg: #F2F2F4F5;
     --dock-insertion-bg: #3574F028;

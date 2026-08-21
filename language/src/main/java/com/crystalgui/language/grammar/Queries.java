@@ -1,12 +1,16 @@
 package com.crystalgui.language.grammar;
 
+import org.treesitter.TSQuery;
+
 import javax.annotation.Nullable;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -208,7 +212,19 @@ final class Queries {
     }
 
     /** A query ready to compile, plus the text conditions that have to be applied in Java. */
-    record Prepared(String text, Map<String, Pattern> captureFilters) {
+    /**
+     * One {@code #match?} taken out of the query text, and where it was.
+     *
+     * <p>{@code at} is a <b>byte</b> offset into {@link Prepared#text}, because that is the coordinate
+     * {@code TSQuery.getStartByteForPattern} answers in and comparing a char offset against it would
+     * drift the moment a query contained one non-ASCII character. It is the position the predicate
+     * occupied, which is inside its own pattern by construction — so the pattern it belongs to is
+     * whichever one's byte range contains it.</p>
+     */
+    record LiftedFilter(int at, String capture, Pattern regex) {
+    }
+
+    record Prepared(String text, Map<String, Pattern> captureFilters, List<LiftedFilter> lifted) {
     }
 
     /**
@@ -297,6 +313,37 @@ final class Queries {
      * is the status quo rather than a regression. Under-reaching here costs a colour; over-reaching
      * deletes one that works.</p>
      */
+    /**
+     * Which lifted filter applies to which <b>pattern</b>, resolved once the query has been compiled.
+     *
+     * <p>This is what makes the lift exact rather than approximate. The filter used to be re-applied by
+     * CAPTURE NAME, which is only sound when every use of that name is guarded by the same test — so a
+     * capture used both guarded and bare could not be lifted at all, and its guarded patterns stayed
+     * inert. {@code @type} is exactly that case: four patterns guard it with {@code ^[A-Z]} and a dozen
+     * use it bare, so {@code System.out.println} reported two plain variables and the grammar's stand-in
+     * for resolution was silently absent. The editor hid it — the Java engine's semantic tokens replace
+     * the grammar's guess — and a documentation popup, which has no engine, showed it plainly.</p>
+     *
+     * <p>A pattern's byte range is a fact the compiled query already knows, so keying on it needs no
+     * parsing of our own: the predicate was written inside its pattern, so the pattern whose range
+     * contains the position it was lifted from is the pattern it guarded.</p>
+     */
+    static Map<Integer, Map<String, Pattern>> filtersByPattern(TSQuery query, Prepared prepared) {
+        if (prepared.lifted().isEmpty()) return Map.of();
+        Map<Integer, Map<String, Pattern>> byPattern = new HashMap<>();
+        int patterns = query.getPatternCount();
+        for (LiftedFilter filter : prepared.lifted()) {
+            for (int pattern = 0; pattern < patterns; pattern++) {
+                if (filter.at() < query.getStartByteForPattern(pattern)) continue;
+                if (filter.at() >= query.getEndByteForPattern(pattern)) continue;
+                byPattern.computeIfAbsent(pattern, any -> new HashMap<>())
+                        .put(filter.capture(), filter.regex());
+                break;
+            }
+        }
+        return byPattern;
+    }
+
     private static Prepared liftUnambiguousPredicates(String query) {
         Map<String, Pattern> filters = new HashMap<>();
         Map<String, Integer> predicateCount = new HashMap<>();
@@ -311,25 +358,46 @@ final class Queries {
             regexOf.put(name, lua ? toJavaRegex(pattern) : pattern);
         }
 
+        // EVERY translatable predicate is lifted now, not only the unambiguous ones. The restriction
+        // existed because re-application could only match on a capture NAME; `filtersByPattern` resolves
+        // each filter to the pattern it came from, so a capture used both guarded and bare is no longer a
+        // reason to leave four patterns inert. What is still refused is a predicate this JVM cannot
+        // express -- see below -- because stripping one of those would make its pattern fire
+        // UNCONDITIONALLY, which is a wrong colour rather than a missing one.
+        List<LiftedFilter> lifted = new ArrayList<>();
         StringBuffer out = new StringBuffer(query.length());
         Matcher rewrite = MATCH_PREDICATE.matcher(query);
         while (rewrite.find()) {
             String name = rewrite.group(2);
-            int uses = countCaptureUses(query, name);
-            boolean unambiguous = uses == 2 * predicateCount.getOrDefault(name, 0);
+            boolean lua = rewrite.group(1) != null;
+            String source = lua ? toJavaRegex(unescape(rewrite.group(3))) : unescape(rewrite.group(3));
             // A Lua pattern with no safe Java equivalent translates to null; leaving the predicate in
             // place keeps its pattern inert, which is what it already was.
-            if (!unambiguous || regexOf.get(name) == null) continue;
+            if (source == null) continue;
+            Pattern compiled;
             try {
-                filters.put(name, Pattern.compile(regexOf.get(name)));
-                rewrite.appendReplacement(out, "");            // the pattern now fires bare
+                compiled = Pattern.compile(source);
             } catch (RuntimeException badRegex) {
                 // A regex this JVM cannot compile is not worth failing a language over.
-                filters.remove(name);
+                continue;
             }
+            rewrite.appendReplacement(out, "");                // the pattern now fires bare
+            // RECORDED AT THE POSITION THE PREDICATE OCCUPIED IN THE STRIPPED TEXT, which is inside the
+            // pattern it guarded -- the coordinate `filtersByPattern` resolves against.
+            lifted.add(new LiftedFilter(out.length(), name, compiled));
         }
         rewrite.appendTail(out);
-        return new Prepared(out.toString(), filters);
+
+        String text = out.toString();
+        // CHAR OFFSETS BECOME BYTE OFFSETS, once, now that the text is final. A query is ASCII in
+        // practice and `getStartByteForPattern` is not, so converting is the difference between exact
+        // and exact-until-somebody-writes-a-comment-with-an-accent in it.
+        List<LiftedFilter> byBytes = new ArrayList<>(lifted.size());
+        for (LiftedFilter filter : lifted) {
+            int bytes = text.substring(0, filter.at()).getBytes(StandardCharsets.UTF_8).length;
+            byBytes.add(new LiftedFilter(bytes, filter.capture(), filter.regex()));
+        }
+        return new Prepared(text, filters, byBytes);
     }
 
     /**

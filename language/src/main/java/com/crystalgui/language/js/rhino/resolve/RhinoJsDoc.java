@@ -38,21 +38,51 @@ import java.util.Map;
 final class RhinoJsDoc {
 
     /** No comment — every field empty rather than a null to check at each use. */
-    static final RhinoJsDoc NONE = new RhinoJsDoc("", Map.of(), null, null, false);
+    static final RhinoJsDoc NONE =
+            new RhinoJsDoc("", Map.of(), null, null, false, "", List.of());
+
+    /** One block tag, in the order the author wrote it, with its own lines intact. */
+    record Tag(String name, String text) {
+    }
 
     private final String description;
     private final Map<String, String> paramTypes;
     @Nullable private final String returnType;
     @Nullable private final String declaredType;
     private final boolean deprecated;
+    /**
+     * The description as the author laid it out — the source a renderer reads.
+     *
+     * <p>Separate from {@link #description} because the two want opposite things. A TYPE grammar wants
+     * one flat run: whitespace collapsed, lines joined, ready to be a container suffix or a completion
+     * row. Markdown wants the layout kept, because in it the layout IS the syntax — a blank line ends a
+     * paragraph, two spaces of indent nest a list, and three backticks on their own line open a code
+     * block. Collapsing them turns a documented function's example into one long line of prose.</p>
+     */
+    private final String markdown;
+    /** Every block tag, in source order. @see #markdown for why the text is not collapsed. */
+    private final List<Tag> tags;
 
     private RhinoJsDoc(String description, Map<String, String> paramTypes,
-                       @Nullable String returnType, @Nullable String declaredType, boolean deprecated) {
+                       @Nullable String returnType, @Nullable String declaredType, boolean deprecated,
+                       String markdown, List<Tag> tags) {
         this.description = description;
         this.paramTypes = paramTypes;
         this.returnType = returnType;
         this.declaredType = declaredType;
         this.deprecated = deprecated;
+        this.markdown = markdown;
+        this.tags = tags;
+    }
+
+    /** The description as written, for a renderer. @see #markdown */
+    String markdown() {
+        return markdown;
+    }
+
+    /** Every block tag in source order. @see #tags */
+    List<Tag> tags() {
+        return tags;
     }
 
     String description() {
@@ -81,8 +111,13 @@ final class RhinoJsDoc {
     }
 
     boolean isEmpty() {
+        // AND ANY TAG AT ALL, because this stopped being only a type grammar. The four tags below are
+        // the ones a RESOLVER can act on, and a comment carrying none of them used to be discarded as
+        // saying nothing -- which was true when nothing else read it. A renderer reads every tag now, so
+        // `/** @since 2.0 */` is a comment with something to say and was coming back as NONE.
         return this == NONE || (description.isEmpty() && paramTypes.isEmpty()
-                && returnType == null && declaredType == null && !deprecated);
+                && returnType == null && declaredType == null && !deprecated
+                && markdown.isEmpty() && tags.isEmpty());
     }
 
     // ── Finding the comment ─────────────────────────────────────────────────────────────────────
@@ -169,6 +204,8 @@ final class RhinoJsDoc {
     static RhinoJsDoc parse(String raw) {
         if (raw == null || raw.isEmpty()) return NONE;
         StringBuilder description = new StringBuilder();
+        StringBuilder source = new StringBuilder();
+        List<Tag> collected = new ArrayList<>();
         Map<String, String> params = new LinkedHashMap<>();
         String returns = null;
         String declared = null;
@@ -179,6 +216,24 @@ final class RhinoJsDoc {
         // reports no type at all -- while every multi-line fixture passes, because there the tag does
         // start its line. The description is what precedes the first tag; a tag runs to the next one,
         // so its own text may wrap across lines.
+        // TWICE OVER THE SAME SPLIT, on two strippings of one comment. The grammar reads the collapsed
+        // form and a renderer reads the laid-out one; running the split twice is cheaper than teaching
+        // every branch below which of the two it is looking at, and it keeps `markdown` exactly what the
+        // author typed rather than something reassembled from collapsed pieces.
+        List<String> laidOut = splitOnTags(strippedKeepingLayout(raw));
+        for (String segment : laidOut) {
+            String trimmed = segment.strip();
+            if (!trimmed.startsWith("@")) {
+                if (!trimmed.isEmpty()) {
+                    if (source.length() > 0) source.append("\n\n");
+                    source.append(trimEnd(segment));
+                }
+                continue;
+            }
+            String name = tagOf(trimmed);
+            collected.add(new Tag(name, trimEnd(trimmed.substring(name.length() + 1)).stripLeading()));
+        }
+
         List<String> segments = splitOnTags(stripped(raw));
         for (String segment : segments) {
             String trimmed = segment.trim();
@@ -218,7 +273,7 @@ final class RhinoJsDoc {
             }
         }
         RhinoJsDoc parsed = new RhinoJsDoc(description.toString().trim(), params, returns, declared,
-                deprecated);
+                deprecated, source.toString().strip(), List.copyOf(collected));
         return parsed.isEmpty() ? NONE : parsed;
     }
 
@@ -261,6 +316,41 @@ final class RhinoJsDoc {
             out.append(trimmed);
         }
         return out.toString();
+    }
+
+    /**
+     * The comment's body with its LAYOUT intact — the ` * ` gone and nothing else.
+     *
+     * <p>{@link #stripped} trims each line, which is right for a grammar and destroys markdown: the
+     * indent that nests a list and the one that opens a code block are both leading whitespace, and a
+     * trim removes exactly those. Only the decoration is taken here — any leading whitespace, one
+     * asterisk, and at most one space after it, which is the amount every doc-comment convention adds
+     * and the amount every reader of one removes.</p>
+     */
+    private static String strippedKeepingLayout(String raw) {
+        String body = raw.trim();
+        if (body.startsWith("/**")) body = body.substring(3);
+        else if (body.startsWith("/*")) body = body.substring(2);
+        if (body.endsWith("*/")) body = body.substring(0, body.length() - 2);
+        StringBuilder out = new StringBuilder(body.length());
+        for (String line : body.split("\\R", -1)) {
+            String kept = line;
+            int at = 0;
+            while (at < kept.length() && (kept.charAt(at) == ' ' || kept.charAt(at) == '\t')) at++;
+            if (at < kept.length() && kept.charAt(at) == '*') {
+                at++;
+                if (at < kept.length() && kept.charAt(at) == ' ') at++;
+                kept = kept.substring(at);
+            }
+            if (out.length() > 0) out.append('\n');
+            out.append(kept);
+        }
+        return out.toString();
+    }
+
+    /** Trailing whitespace only — leading whitespace is markdown's own syntax. */
+    private static String trimEnd(String text) {
+        return text.stripTrailing();
     }
 
     private static String tagOf(String line) {

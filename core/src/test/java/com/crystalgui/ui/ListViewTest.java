@@ -284,6 +284,44 @@ public class ListViewTest extends UiTestBase {
     }
 
     /**
+     * <b>A list must not claim a focus vacancy it did not create.</b>
+     *
+     * <p>This regressed twice, and the second time it survived the first fix.
+     * {@code restoreFocusIfRealised} guards with "focus is elsewhere, leave it there" — and {@code null} is
+     * not elsewhere, it is NOWHERE, so a list with a focused index took any opening that appeared while it
+     * happened to refresh.</p>
+     *
+     * <p>Which is how closing an editor tab focused the PROJECT TREE: Ctrl+W detaches the focused editor,
+     * {@code UIInputHandler} correctly forgets it, and the next refresh of the tree pocketed the vacancy.
+     * Switching off the tree's auto-reveal removed one trigger of a refresh; any other one did it just as
+     * well, which is why the bug came back looking unchanged.</p>
+     *
+     * <p>The two vacancies a list MAY fill are its own — {@code setFocusedIndex}, where a caller is asking,
+     * and its own recycle, which blurred the row. Both are covered by the tests either side of this one,
+     * which is what stops this being fixed by refusing every null.</p>
+     */
+    @Test
+    public void aRefreshDoesNotTakeFocusNobodyIsHolding() {
+        build(10_000);
+        list.setFocusedIndex(3);
+        settle();
+        UIElement rowThree = list.realisedRows().get(3);
+        assertSame(rowThree, window.getInputHandler().getFocusedElement());
+
+        // The focused element goes away for a reason that has nothing to do with this list -- which is what
+        // closing an editor tab does to the editor that had focus.
+        window.getInputHandler().blurIfFocused(rowThree);
+        assertNull(window.getInputHandler().getFocusedElement());
+
+        // And now the list refreshes, as it does whenever anything at all moves.
+        list.setScrollTop(40f);
+        settle();
+
+        assertNull("a refresh must not pocket a vacancy the list did not make",
+                window.getInputHandler().getFocusedElement());
+    }
+
+    /**
      * <b>Focus that arrives on a row directly — by click or Tab — is tracked too.</b>
      *
      * <p>The first version only knew about {@code setFocusedIndex}, which nothing in a real UI calls: a

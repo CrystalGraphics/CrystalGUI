@@ -35,7 +35,9 @@ final class LineNumbersPart extends EditorViewPart {
     LineNumbersPart(TextEditor editor, UIElement gutter) {
         super(editor);
         this.gutter = gutter;
-        this.numbers = new DecorationPool(() -> gutter, TextEditor.LINE_NUMBER_CLASS, true);
+        // Into the GUTTER'S scroll layer, not the gutter: the numbers follow the rows, so they are
+        // positioned in document coordinates and moved by one transform. @see TextEditor#linesLayer()
+        this.numbers = new DecorationPool(editor::gutterLayer, TextEditor.LINE_NUMBER_CLASS, true);
     }
 
     @Override

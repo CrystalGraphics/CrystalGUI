@@ -2,11 +2,14 @@ package com.crystalgui.language.engine;
 
 import com.crystalgui.language.engine.bridge.ScriptCompiler;
 import com.crystalgui.language.engine.bridge.SourceAnalyzer;
+import com.crystalgui.language.engine.bridge.Decompiler;
 import com.crystalgui.language.engine.bridge.TypeBytes;
 import com.crystalgui.language.java.classpath.PlatformTypeBytes;
+import javax.annotation.Nullable;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.List;
 
 /**
  * A live Java engine: the two ECJ adapters, reached through a band's {@link EngineHost}.
@@ -31,11 +34,25 @@ public final class JavaEngine implements Closeable {
     /** The adapters, by name. Reached reflectively because the host cannot see their types. */
     private static final String COMPILER = "com.crystalgui.language.java.ecj.EcjScriptCompiler";
     private static final String ANALYZER = "com.crystalgui.language.java.ecj.EcjSourceAnalyzer";
+    private static final String DECOMPILER = "com.crystalgui.language.java.cfr.CfrDecompiler";
 
     private final EngineHost host;
     private final boolean ownsHost;
     private final ScriptCompiler compiler;
     private final SourceAnalyzer analyzer;
+
+    /**
+     * Null when this band has no decompiler staged, which is an ordinary deployment.
+     *
+     * <p>Unlike the compiler and the analyser, this one is <b>optional</b>: a band assembled before CFR
+     * was added, or one a host trimmed, still opens and still does everything else. So it is resolved
+     * defensively rather than through the constructor, and its absence costs the viewer its fallback and
+     * nothing else.</p>
+     */
+    private final Decompiler decompiler;
+
+    /** The live bytes both sides resolve through — also what feeds the decompiler. @see #decompile */
+    private final TypeBytes types;
 
     private JavaEngine(EngineHost host, boolean ownsHost, ScriptCompiler compiler,
                        SourceAnalyzer analyzer) {
@@ -55,8 +72,55 @@ public final class JavaEngine implements Closeable {
         // disagree about what exists -- which they did: the compiler resolved live and the analyser read
         // files, so an obfuscated host compiled and ran a script the editor could not resolve at all.
         TypeBytes types = PlatformTypeBytes.of();
+        this.types = types;
         this.compiler = compiler.resolveAgainst(types);
         this.analyzer = analyzer.resolveAgainst(types);
+        this.decompiler = optionalAdapter(host);
+    }
+
+    /**
+     * The decompiler adapter, or null.
+     *
+     * <p>Caught rather than thrown, and that is the whole difference between this and the two adapters
+     * above. A missing compiler is a broken deployment worth failing at the point of opening; a missing
+     * decompiler is a band that predates the feature, and the right response is a viewer that shows
+     * attached source and says nothing for a class without any. <b>Announced on stderr</b> either way,
+     * because "the decompiler is absent" and "the decompiler returned nothing" look identical on
+     * screen — the same rule the mapping and the live name environment are held to.</p>
+     */
+    private static Decompiler optionalAdapter(EngineHost host) {
+        try {
+            return host.adapter(DECOMPILER, Decompiler.class);
+        } catch (RuntimeException | LinkageError absent) {
+            System.err.println("[crystalgui] no decompiler in engine band " + host.band()
+                    + "; a class with no attached source will show nothing: " + absent);
+            return null;
+        }
+    }
+
+    /**
+     * The decompiled source of a class, or null when nothing can produce one.
+     *
+     * <p><b>Fed from {@link TypeBytes} first and the classpath second</b>, which is what makes this
+     * different from pointing a decompiler at a jar: on a live Minecraft host the bytes are the ones the
+     * runtime holds — after every transformer and mixin, and already remapped to readable names — so
+     * the view shows the class as the game has it rather than as it shipped. Where no platform is
+     * registered, which is the harness and every test, {@code TypeBytes.NONE} answers null for everything
+     * and the classpath fallback carries it.</p>
+     */
+    @Nullable
+    public String decompile(String binaryName, List<String> classpath) {
+        Decompiler ready = decompiler;
+        if (ready == null) return null;
+        ClasspathBytes files = new ClasspathBytes(classpath);
+        try {
+            return ready.decompile(binaryName, internal -> {
+                byte[] live = types.readable(internal);
+                return live != null ? live : files.read(internal);
+            });
+        } finally {
+            files.close();
+        }
     }
 
     /**

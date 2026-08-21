@@ -324,4 +324,58 @@ public class RopeTest {
         }
         return out.toString();
     }
+    // ── Reading a range, as opposed to carving one out ───────────────────────────────────────────
+
+    /**
+     * {@code text} agrees with the carve-it-out spelling it replaced, at every boundary.
+     *
+     * <p>Driven against {@code slice(..).toString()} rather than against hand-written expectations,
+     * because that IS the definition — the point of {@link Rope#text} is to be the same answer without
+     * building a tree to get it. A document longer than one chunk, so the walk crosses leaves.</p>
+     */
+    @Test
+    public void readingARangeAgreesWithSlicingOne() {
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < 400; i++) builder.append("row ").append(i).append(" of the document\n");
+        Rope rope = Rope.of(builder.toString());
+
+        int length = rope.length();
+        int[] offsets = { 0, 1, 7, 63, 64, 65, 511, 512, 513, length / 2, length - 1, length };
+        for (int from : offsets) {
+            for (int to : offsets) {
+                if (to < from) continue;
+                assertEquals("[" + from + ", " + to + ")",
+                        rope.slice(from, to).toString(), rope.text(from, to));
+            }
+        }
+    }
+
+    /** Out-of-range offsets clamp rather than throw — {@code slice}'s contract, kept. */
+    @Test
+    public void readingARangeClampsLikeSlicing() {
+        Rope rope = Rope.of("alpha\nbeta\n");
+        assertEquals("alpha\nbeta\n", rope.text(-50, 500));
+        assertEquals("", rope.text(5, 5));
+        assertEquals("", rope.text(9, 3));
+    }
+
+    /**
+     * Every row reads back identically after the rewrite.
+     *
+     * <p>{@link Rope#line} is the hottest read in the editor and it changed implementation, so this
+     * walks the whole document rather than sampling: an off-by-one at a chunk boundary would otherwise
+     * show up only for whichever rows happen to straddle one.</p>
+     */
+    @Test
+    public void everyRowReadsBackWithoutItsNewline() {
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < 500; i++) builder.append("    value").append(i).append(" = ").append(i).append(";\n");
+        Rope rope = Rope.of(builder.toString());
+
+        String[] expected = builder.toString().split("\n", -1);
+        for (int row = 0; row < expected.length; row++) {
+            assertEquals("row " + row, expected[row], rope.line(row));
+        }
+    }
+
 }

@@ -37,12 +37,15 @@ import com.crystalgui.text.wrap.*;
 import com.crystalgui.ui.ClipboardActions;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UiDataKeys;
+import com.crystalgui.text.WordOperations;
+import com.crystalgui.ui.UITransform;
 import com.crystalgui.ui.elements.ScrollerView;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.text.HighlightRegistry;
+import com.crystalgui.ui.text.SyntaxHighlighting;
 import com.crystalgui.ui.text.TextRange;
 import dev.vfyjxf.taffy.style.LengthPercentageAuto;
 import dev.vfyjxf.taffy.style.TaffyPosition;
@@ -123,7 +126,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * this class and gets the same rules. Public because the documentation popup is the second consumer
      * and will not be the last.</p>
      */
-    public static final String SYNTAX_CLASS = "__syntax__";
+    /** @see UIText#SYNTAX_CLASS — the definition; kept here because every scheme and half the editor
+     * already names it through this class. */
+    public static final String SYNTAX_CLASS = UIText.SYNTAX_CLASS;
     public static final String CARET_CLASS = "__caret__";
     public static final String SELECTION_CLASS = "__selection__";
     public static final String GUTTER_CLASS = "__gutter__";
@@ -133,6 +138,14 @@ public class TextEditor extends ScrollerView implements UndoScope {
     public static final String WHITESPACE_CLASS = "__whitespace__";
     public static final String RULER_CLASS = "__ruler__";
     public static final String GUTTER_EDGE_CLASS = "__gutter-edge__";
+
+    /**
+     * A container that carries the scroll offset for everything inside it — see {@link #linesLayer()}.
+     *
+     * <p>One class for all three because they differ only in which axes their transform uses, and that
+     * is decided in Java where the offsets are. A sheet has nothing to say about any of them.</p>
+     */
+    public static final String SCROLL_LAYER_CLASS = "__scroll-layer__";
     public static final String TEXT_VIEWPORT_CLASS = "__text-viewport__";
     public static final String ZOOM_INDICATOR_CLASS = "__zoom-indicator__";
     public static final String ZOOM_LABEL_CLASS = "__zoom-label__";
@@ -208,6 +221,15 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     /** Clips everything drawn in document coordinates — see {@link #textViewport()}. */
     private UIElement textViewport;
+
+    /** @see #linesLayer() */
+    private UIElement linesLayer;
+
+    /** @see #gutterLayer() */
+    private UIElement gutterLayer;
+
+    /** @see #foldLayer() */
+    private UIElement foldLayer;
 
     /** Widest line realised since the last edit, font change or reprojection. */
     private float widestSeen;
@@ -307,6 +329,20 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * which means "never asked". Conflating them re-queries blank lines forever.</p>
      */
     private final Map<Integer, List<SyntaxToken>> rowSyntax = new HashMap<>();
+
+    /**
+     * Rows whose text has changed since their tokens were computed — see {@link #settleSyntaxIfIdle}.
+     *
+     * <p>They keep showing those tokens, mapped forward. This is a list of what to re-ask about once
+     * typing stops, <b>not</b> a list of what to blank.</p>
+     */
+    private final Set<Integer> staleRows = new HashSet<>();
+
+    /** When the document was last edited. Only ever read while {@link #editing} — see the note there. */
+    private long lastEditNanos;
+
+    /** An edit has landed and typing has not settled since. */
+    private boolean editing;
 
     /**
      * The engine behind this document, or null — and null is the ordinary case.
@@ -613,7 +649,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
             invalidateMeasuredRows(change);
             // Same rule, same reason, and it must read previousLineCount while it still says what it said
             // before this edit -- so it belongs beside the call above rather than anywhere later.
-            invalidateRowSyntax(change);
+            //
+            // MAPPED, not dropped -- see settleSyntaxIfIdle for why those are different things.
+            mapRowSyntaxThroughEdit(change);
             // NOT invalidateWindow() unless the line COUNT changed.
             //
             // Recycling every line on every keystroke clears each one's highlights -- recycleLine has to,
@@ -1961,7 +1999,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // "scrolled by an unknown amount" and "not scrolled" are the same picture for a document that has
         // not been scrolled, and the alternative is a popup nobody can find.
         float localX = textOriginX() + xOfView(viewLine, view.column()) - finiteOrZero(getScrollLeft());
-        float localY = topOfViewLine(viewLine);
+        float localY = screenTopOfViewLine(viewLine);
         if (!Float.isFinite(localX) || !Float.isFinite(localY)) return null;
         return new float[] { getWindowX() + localX, getWindowY() + localY, lineHeight() };
     }
@@ -2092,8 +2130,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
                     // correctly and then took `function`'s colour anyway, and the distinction the query
                     // was adjusted to make disappeared before it reached the screen.
                     String general = token.generalName();
-                    if (general != null) addRange(byName, general, range);
-                    addRange(byName, token.name(), range);
+                    if (general != null) SyntaxHighlighting.addRange(byName, general, range);
+                    SyntaxHighlighting.addRange(byName, token.name(), range);
                 }
             }
 
@@ -2189,14 +2227,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * carry <em>the same name</em>, so they resolve to the same colour, and the fallback exists only to
      * cover what a specific name did not. Anything it duplicates is by definition already handled.</p>
      */
-    private static void addRange(Map<String, List<TextRange>> byName, String name, TextRange range) {
-        List<TextRange> ranges = byName.computeIfAbsent(name, key -> new ArrayList<>());
-        for (TextRange existing : ranges) {
-            if (range.start() < existing.end() && existing.start() < range.end()) return;
-        }
-        ranges.add(range);
-    }
-
     /** The highlight name {@link DiagnosticTag#UNNECESSARY} is styled through. */
     static final String UNNECESSARY_HIGHLIGHT = "unnecessary";
 
@@ -2236,8 +2266,115 @@ public class TextEditor extends ScrollerView implements UndoScope {
             int start = Math.max(tracked.from(), lineStart);
             int end = Math.min(tracked.to(), lineEnd);
             if (end <= start) continue;
-            addRange(byName, UNNECESSARY_HIGHLIGHT, TextRange.of(start - lineStart, end - lineStart));
+            SyntaxHighlighting.addRange(byName, UNNECESSARY_HIGHLIGHT, TextRange.of(start - lineStart, end - lineStart));
         }
+    }
+
+    /**
+     * How long a pause counts as having stopped typing.
+     *
+     * <p>IntelliJ's {@code DaemonCodeAnalyzerSettings.getAutoReparseDelay()}, whose default is the same
+     * 300ms.</p>
+     */
+    private static final long TYPING_SETTLE_NANOS = 300_000_000L;
+
+    /**
+     * <b>Nothing is re-highlighted while you are typing.</b>
+     *
+     * <h3>Two reasons a row's colours can be wrong, and they are not the same</h3>
+     *
+     * <p>The text <b>moved</b> — the offsets are stale and the colours are still right. The text
+     * <b>changed meaning</b> — the colours are stale. This used to answer both by dropping the row and
+     * re-querying, and conflating them is what made typing churn: a row that only needed shifting was
+     * thrown away and rebuilt from whatever the parser currently believed.</p>
+     *
+     * <p>So an edit now <b>maps</b> tokens forward ({@link #mapRowSyntaxThroughEdit}) and records the row
+     * as stale, and a new answer is only <b>adopted</b> once typing has settled.</p>
+     *
+     * <h3>Why waiting is the point rather than an optimisation</h3>
+     *
+     * <p>{@code TreeSitterTokenizer} answers from a stale tree while a reparse is in flight, on the
+     * grounds that it is "structurally behind but positionally correct". That is true of <em>positions</em>
+     * and false of <em>colours</em>. When the reparse lands it is a <b>correct parse of incomplete
+     * text</b>: tree-sitter recovers from the half-written token, and the recovery re-classifies
+     * everything after it. Adopting that repainted the whole rest of the file a beat after each keystroke,
+     * and again a few keystrokes later with a different recovery — reported as "typing invalidates all the
+     * following lines for a second or two".</p>
+     *
+     * <p>IntelliJ never shows this, and not because its parser is better: the pass that would is
+     * <em>cancelled</em> by every keystroke and restarted on the delay above. Its lexer tier can afford to
+     * run eagerly because a lexer is <b>local</b> — a stray character cannot change how the next line
+     * lexes. A parse is not local. The engine already recorded this from the other end, where one
+     * unparseable {@code import} line decoloured every line below it.</p>
+     *
+     * <h3>The word being typed goes plain by construction</h3>
+     *
+     * <p>{@link #mapRowSyntaxThroughEdit} drops any token <em>touching</em> the edit point and shifts the
+     * rest, so the identifier under the caret loses its colour the moment it is edited while the rest of
+     * the row keeps its own — which is exactly what IntelliJ draws, with no separate machinery for it. A
+     * previous attempt suppressed the word explicitly and needed a snapshot, a burst range and a shift to
+     * do it; all three were the mapping, written out longhand for one row.</p>
+     *
+     * <p>Cost, measured on a 2,000-line Java file with the production scheduler installed: the grammar
+     * tier is <b>424µs a keystroke</b>, of which 68µs is the per-row query this skips. The other 356µs is
+     * {@code edited()} keeping the tree in sync and cannot be skipped without desynchronising it.</p>
+     */
+    private void settleSyntaxIfIdle() {
+        if (!editing) return;
+        // Guarded on `editing` rather than on a "long ago" sentinel: nanoTime has an arbitrary origin and
+        // may be negative, so a sentinel subtraction can overflow into a SMALL elapsed time.
+        if (System.nanoTime() - lastEditNanos < TYPING_SETTLE_NANOS) return;
+        editing = false;
+        if (!staleRows.isEmpty()) highlightsDirty = true;
+    }
+
+    /**
+     * Moves a row's tokens through an edit instead of discarding them.
+     *
+     * <p>Row-relative, so only the edited row's own tokens move — and a token <b>touching</b> the edit
+     * point is dropped rather than moved, because it is the one being written. That is what draws the
+     * identifier under the caret in the plain foreground: typing at the end of {@code value} extends that
+     * token rather than following it, so keeping it would colour a name that no longer exists.</p>
+     */
+    private void shiftRowSyntax(int row, int column, int delta) {
+        List<SyntaxToken> tokens = rowSyntax.get(row);
+        if (tokens == null || tokens.isEmpty()) return;
+        List<SyntaxToken> moved = new ArrayList<>(tokens.size());
+        for (SyntaxToken token : tokens) {
+            if (token.end() < column) moved.add(token);
+            else if (token.start() > column) {
+                moved.add(new SyntaxToken(token.start() + delta, token.end() + delta, token.name()));
+            }
+            // Touching the edit -- it is being written, so it has no colour until the text settles.
+        }
+        rowSyntax.put(row, moved);
+    }
+
+    /**
+     * Renumbers the cache when an edit changed the line COUNT.
+     *
+     * <p>The map is keyed by row index, so inserting or removing a line makes every row below describe
+     * someone else's text. Dropping them all is the easy answer and it is what made pressing Enter
+     * repaint the viewport; moving the keys keeps every untouched row's colours through it.</p>
+     */
+    private void renumberRowSyntax(int atRow, int delta) {
+        Map<Integer, List<SyntaxToken>> moved = new HashMap<>();
+        for (Map.Entry<Integer, List<SyntaxToken>> entry : rowSyntax.entrySet()) {
+            int row = entry.getKey();
+            if (row < atRow) moved.put(row, entry.getValue());
+            else if (row > atRow && row + delta > atRow) moved.put(row + delta, entry.getValue());
+            // The edited row itself is dropped: it was split, or something was joined onto it.
+        }
+        rowSyntax.clear();
+        rowSyntax.putAll(moved);
+
+        Set<Integer> stale = new HashSet<>();
+        for (int row : staleRows) {
+            if (row < atRow) stale.add(row);
+            else if (row > atRow && row + delta > atRow) stale.add(row + delta);
+        }
+        staleRows.clear();
+        staleRows.addAll(stale);
     }
 
     /**
@@ -2256,6 +2393,13 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * covers.</p>
      */
     private void ensureRowSyntax(int firstViewLine, int lastViewLine) {
+        // ADOPTED HERE AND NOWHERE ELSE. Everything upstream only ever RECORDS that a row's answer has
+        // changed; this is the one place a new one replaces what is on screen, and it runs only once
+        // typing has settled. See settleSyntaxIfIdle.
+        if (!editing && !staleRows.isEmpty()) {
+            for (int row : staleRows) rowSyntax.remove(row);
+            staleRows.clear();
+        }
         SemanticTokenProvider semantic = languageServices == null
                 ? SemanticTokenProvider.NONE : languageServices.semanticTokens();
         if (tokenizer == SyntaxTokenizer.NONE && semantic == SemanticTokenProvider.NONE) return;
@@ -2279,16 +2423,26 @@ public class TextEditor extends ScrollerView implements UndoScope {
         int spanEnd = clampToDocument(buffer.document().lineStartOffset(lastMissing)
                 + buffer.line(lastMissing).length());
 
-        // Seed every row in the span as "queried, nothing found" FIRST. A row with no captures at all --
-        // a blank line, a line of punctuation the grammar does not name -- would otherwise stay absent and
-        // be re-queried on every single refresh, which is the cache failing exactly where it looks like it
-        // is working.
+        // Seed every row THIS PASS IS FILLING as "queried, nothing found" first. A row with no captures
+        // at all -- a blank line, a line of punctuation the grammar does not name -- would otherwise stay
+        // absent and be re-queried on every single refresh, which is the cache failing exactly where it
+        // looks like it is working.
+        //
+        // A row already in the cache is NOT one of them, and the distinction only started to matter when
+        // rows began surviving an invalidation on purpose (see keepsColoursThroughRecovery). The span runs
+        // from the first missing row to the last, so it sweeps past rows that are present; seeding those
+        // too threw away exactly the colours that had just been kept, and it did it one frame later, which
+        // made it look as though the keeping had never happened.
+        Set<Integer> filling = new HashSet<>();
         for (int row = firstMissing; row <= lastMissing; row++) {
+            if (rowSyntax.containsKey(row)) continue;
             rowSyntax.put(row, new ArrayList<>());
+            filling.add(row);
         }
+        if (filling.isEmpty()) return;
 
         for (SyntaxToken token : tokenizer.tokenize(buffer.document(), spanStart, spanEnd)) {
-            distributeToRows(token, firstMissing, lastMissing);
+            distributeToRows(token, firstMissing, lastMissing, filling);
         }
 
         // SEMANTIC TOKENS LAND SECOND AND WIN. Both sources speak the same capture vocabulary and describe
@@ -2308,10 +2462,10 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // true things about one range, drawn as a colour and a strike-through by two different rules.
         List<SyntaxToken> semanticTokens = semantic.tokensIn(spanStart, spanEnd);
         for (SyntaxToken token : semanticTokens) {
-            clearGrammarUnder(token, firstMissing, lastMissing);
+            clearGrammarUnder(token, firstMissing, lastMissing, filling);
         }
         for (SyntaxToken token : semanticTokens) {
-            distributeToRows(token, firstMissing, lastMissing);
+            distributeToRows(token, firstMissing, lastMissing, filling);
         }
     }
 
@@ -2324,11 +2478,12 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * walk the list in — the same class of bug as the capture-precedence one, and just as invisible,
      * since both names are legitimate and both resolve to a real colour.</p>
      */
-    private void clearGrammarUnder(SyntaxToken token, int firstRow, int lastRow) {
+    private void clearGrammarUnder(SyntaxToken token, int firstRow, int lastRow, Set<Integer> filling) {
         int startRow = buffer.document().offsetToPoint(clampToDocument(token.start())).row();
         int endRow = buffer.document().offsetToPoint(
                 clampToDocument(Math.max(token.start(), token.end() - 1))).row();
         for (int row = Math.max(startRow, firstRow); row <= Math.min(endRow, lastRow); row++) {
+            if (!filling.contains(row)) continue;
             List<SyntaxToken> bucket = rowSyntax.get(row);
             if (bucket == null) continue;
             int rowStart = buffer.document().lineStartOffset(row);
@@ -2336,8 +2491,52 @@ public class TextEditor extends ScrollerView implements UndoScope {
             final int from = Math.max(token.start(), rowStart) - rowStart;
             final int to = Math.min(token.end(), rowEnd) - rowStart;
             if (to <= from) continue;
-            bucket.removeIf(existing -> from < existing.end() && existing.start() < to);
+            bucket.removeIf(existing -> replacedBySemantic(existing, from, to));
         }
+    }
+
+    /**
+     * Whether a grammar token is displaced by a semantic one over {@code [from, to)}.
+     *
+     * <p>ONE NAMED RULE rather than the two halves spelled out at the call site, so a test asks the
+     * same question the merge does. Written out inline, a test could only restate it — and a restated
+     * rule agrees with itself forever while saying nothing about the editor.</p>
+     */
+    static boolean replacedBySemantic(SyntaxToken existing, int from, int to) {
+        return overlaps(existing, from, to) && !contains(existing, from, to);
+    }
+
+    /** Whether {@code existing} shares any character with {@code [from, to)}. */
+    private static boolean overlaps(SyntaxToken existing, int from, int to) {
+        return from < existing.end() && existing.start() < to;
+    }
+
+    /**
+     * Whether {@code existing} strictly CONTAINS {@code [from, to)} — and so is not a competing answer.
+     *
+     * <h3>Why a container survives a semantic token</h3>
+     *
+     * <p>"The engine's answer beats the grammar's" is a statement about two sources describing <b>the
+     * same thing</b>: the grammar called {@code count} a {@code variable} from its shape, the engine
+     * knows it is a {@code variable.parameter}. Both answer "what is this identifier", so the better
+     * answer replaces the worse one.</p>
+     *
+     * <p>A token that contains the semantic one answers a different question — "what is this identifier
+     * <em>inside</em>" — and both are true at once. {@code DocComments} emits a coarse
+     * {@code comment.doc} over the WHOLE comment before the pieces within it, so once doc-tag references
+     * began resolving, a single {@code {@link List}} cleared that container for its entire row: the
+     * prose either side lost the comment's colour and its italic, while a line whose reference happened
+     * not to resolve kept both. It was reported as the highlighting being inconsistent from one line to
+     * the next, which is precisely how it looked.</p>
+     *
+     * <p>Keeping it is safe because the semantic tokens are added <b>after</b> and the last name written
+     * wins the character — so the container styles the prose and the engine still styles the name it
+     * resolved. STRICT, because a token with exactly the semantic one\u2019s bounds is describing the same
+     * characters and nothing else, which makes it a competing answer rather than a context.</p>
+     */
+    private static boolean contains(SyntaxToken existing, int from, int to) {
+        return existing.start() <= from && existing.end() >= to
+                && (existing.start() < from || existing.end() > to);
     }
 
     /**
@@ -2347,10 +2546,11 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * one. Storing it only under the row it starts on leaves every row after the first uncoloured, which
      * reads as the comment ending early rather than as a cache bug.</p>
      */
-    private void distributeToRows(SyntaxToken token, int firstRow, int lastRow) {
+    private void distributeToRows(SyntaxToken token, int firstRow, int lastRow, Set<Integer> filling) {
         int startRow = buffer.document().offsetToPoint(clampToDocument(token.start())).row();
         int endRow = buffer.document().offsetToPoint(clampToDocument(Math.max(token.start(), token.end() - 1))).row();
         for (int row = Math.max(startRow, firstRow); row <= Math.min(endRow, lastRow); row++) {
+            if (!filling.contains(row)) continue;
             List<SyntaxToken> bucket = rowSyntax.get(row);
             if (bucket == null) continue;
             int rowStart = buffer.document().lineStartOffset(row);
@@ -2370,29 +2570,91 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * describe someone else's text. Removing that guard breaks nothing that any existing test would
      * notice, and shows up as colour from one line appearing on another after a newline is typed.</p>
      */
-    private void invalidateRowSyntax(ChangeSet change) {
+    private void mapRowSyntaxThroughEdit(ChangeSet change) {
+        editing = true;
+        lastEditNanos = System.nanoTime();
+
         List<Change> changes = change.changes();
-        if (changes.size() != 1 || buffer.lineCount() != previousLineCount) {
+        // More than one change is a multi-cursor edit or a replace-all: cheap to reason about only by
+        // starting over, and rare enough that a full re-tokenise on settle is the right trade.
+        if (changes.size() != 1) {
             rowSyntax.clear();
+            staleRows.clear();
             return;
         }
         Change edit = changes.get(0);
         int start = clampToDocument(change.mapPos(edit.from(), -1));
-        int end = clampToDocument(start + edit.insert().length());
         int firstRow = buffer.document().offsetToPoint(start).row();
-        int lastRow = buffer.document().offsetToPoint(end).row();
-        for (int row = firstRow; row <= lastRow; row++) rowSyntax.remove(row);
+        int lineDelta = buffer.lineCount() - previousLineCount;
+        if (lineDelta != 0) {
+            renumberRowSyntax(firstRow, lineDelta);
+            staleRows.add(firstRow);
+            return;
+        }
+        // LOCAL TO ONE ROW, or there is nothing worth carrying forward. Mapping exists for typing; a
+        // wholesale `buffer.load()` replaces every character while frequently leaving the line COUNT
+        // alone, so the checks above let it through and every row kept the previous document's colours.
+        int rowStart = buffer.document().lineStartOffset(firstRow);
+        int rowLength = buffer.line(firstRow).length();
+        int replaced = edit.to() - edit.from();
+        int inserted = edit.insert().length();
+        if (start + inserted > rowStart + rowLength || replaced > rowLength) {
+            rowSyntax.clear();
+            staleRows.clear();
+            return;
+        }
+        shiftRowSyntax(firstRow, start - rowStart, inserted - replaced);
+        staleRows.add(firstRow);
     }
 
-    /** Drops cached tokens across a document range — what a backend reports when a background parse lands. */
+    /**
+     * Whether a row should keep the colours it has rather than take the ones a recovered parse offers.
+     *
+     * <p><b>Only a row the user has not touched, and only inside the recovery.</b> The line being written
+     * takes whatever the parser says about it — that is the line whose colours are genuinely in question,
+     * and it is the one that goes plain while it is unfinished. What it may not do is drag its neighbours
+     * with it: an unfinished statement makes the parser recover, and the recovery re-classifies the rows
+     * it swallows, so the line below the one you are writing changed colour and changed back when you
+     * added the semicolon.</p>
+     *
+     * <p>Scoped through {@link SyntaxTokenizer#recoveredAround} rather than "does this file parse",
+     * because the second is false for almost every file that is being edited and would hold the colours of
+     * the whole document whenever anything anywhere was unfinished.</p>
+     *
+     * <p>A row with nothing cached has nothing to keep, so it is always queried — otherwise scrolling into
+     * a region near an unfinished statement would show blank rows.</p>
+     */
+    private boolean keepsColoursThroughRecovery(int row) {
+        List<SyntaxToken> existing = rowSyntax.get(row);
+        if (existing == null || existing.isEmpty()) return false;
+        int rowStart = buffer.document().lineStartOffset(row);
+        return tokenizer.recoveredAround(rowStart, rowStart + buffer.line(row).length());
+    }
+
+    /**
+     * Records that a backend has new answers for a range — what it reports when a background parse lands.
+     *
+     * <p><b>Recorded rather than applied.</b> A parse that finishes while the caret is mid-word is a
+     * correct parse of incomplete text, and adopting it repaints every line the parser recovered
+     * differently. The rows are marked and re-queried on settle. See {@link #settleSyntaxIfIdle}.</p>
+     */
     private void invalidateRowSyntax(int fromOffset, int toOffset) {
-        if (toOffset >= SyntaxTokenizer.InvalidationListener.EVERYTHING || fromOffset <= 0 && toOffset >= buffer.length()) {
-            rowSyntax.clear();
+        highlightsDirty = true;
+        if (toOffset >= SyntaxTokenizer.InvalidationListener.EVERYTHING
+                || fromOffset <= 0 && toOffset >= buffer.length()) {
+            // OVER WHAT IS CACHED, not over every row in the document: a row nobody has looked at has
+            // nothing to invalidate, and walking a 20,000-line file to say so costs a lineStartOffset per
+            // row on an announcement that arrives every few keystrokes.
+            if (editing) staleRows.addAll(rowSyntax.keySet());
+            else rowSyntax.keySet().removeIf(row -> !keepsColoursThroughRecovery(row));
             return;
         }
         int firstRow = buffer.document().offsetToPoint(clampToDocument(fromOffset)).row();
         int lastRow = buffer.document().offsetToPoint(clampToDocument(toOffset)).row();
-        for (int row = firstRow; row <= lastRow; row++) rowSyntax.remove(row);
+        for (int row = firstRow; row <= lastRow; row++) {
+            if (editing) staleRows.add(row);
+            else if (!keepsColoursThroughRecovery(row)) rowSyntax.remove(row);
+        }
     }
 
     // ── Indentation ─────────────────────────────────────────────────────────────────────────────
@@ -3327,7 +3589,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             int start = Math.max(range.start(), lineStart);
             int end = Math.min(range.end(), lineEnd);
             if (end <= start) continue;
-            addRange(byName, name, TextRange.of(start - lineStart, end - lineStart));
+            SyntaxHighlighting.addRange(byName, name, TextRange.of(start - lineStart, end - lineStart));
         }
     }
 
@@ -3567,7 +3829,26 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * somewhere new should degrade to zero rather than flatten the document.</p>
      */
     float topOfViewLine(int viewLine) {
-        return textOriginY() + viewLine * lineHeight() - finiteOrZero(getScrollTop());
+        return textOriginY() + viewLine * lineHeight();
+    }
+
+    /**
+     * <b>Where a view line's top edge is on SCREEN</b> — the same row, in the space that has been
+     * scrolled.
+     *
+     * <p>The distinction is the whole of the scroll-layer design and it is not a detail: a decoration
+     * inside {@link #linesLayer()} is positioned in <em>document</em> coordinates and moved by the
+     * layer's transform, so it must use {@link #topOfViewLine}; anything measured against the editor's
+     * own box — a popup anchor, a band that spans the viewport, a marker parented outside the layers —
+     * lives in <em>viewport</em> coordinates and must use this. Getting it backwards is silent while
+     * the document is scrolled to the top, which is exactly the state every test and every screenshot
+     * starts in.</p>
+     *
+     * <p>{@code finiteOrZero} for the reason {@link #lineHeight()} records: a NaN offset minus anything
+     * is NaN, and every row then lands at the same y with nothing having thrown.</p>
+     */
+    float screenTopOfViewLine(int viewLine) {
+        return topOfViewLine(viewLine) - finiteOrZero(getScrollTop());
     }
 
     /**
@@ -3920,6 +4201,113 @@ public class TextEditor extends ScrollerView implements UndoScope {
             addInternalChild(textViewport);
         }
         return textViewport;
+    }
+
+    /**
+     * <b>Where everything that scrolls with the text lives.</b>
+     *
+     * <h3>Why a container at all</h3>
+     *
+     * <p>{@link UIElement#applyScrollOffset} says it plainly: <em>"Position only — no relayout. The
+     * offset never reaches Taffy; it lives purely in the transform chain."</em> A scroll container moves
+     * its children by one matrix, and that is why scrolling a list costs nothing. The text viewport
+     * opts out of that — it is {@code setScrollExempt(true)} because it has to be a <em>window</em>
+     * that holds still while content moves behind it — and its own javadoc names the price: "its
+     * children no longer get the scroll translate for free and subtract the offsets by hand".</p>
+     *
+     * <p>Subtracting by hand means every realised row, every indent guide, every whitespace marker,
+     * every selection band, squiggle and caret has its {@code left} and {@code top} rewritten into the
+     * CASCADE on every frame the view moves — and cascade writes reach Taffy, so a layout pass follows.
+     * Measured side by side in one window with no GL: a scrolled frame cost <b>1,628µs</b> for the
+     * editor against <b>367µs</b> for an ordinary scroller, and the gap is work the scroller simply
+     * does not do.</p>
+     *
+     * <p>So the exemption stays on the viewport, which is what needs it, and a layer inside it takes
+     * the translate back. Children are positioned in <b>document coordinates</b> that do not change
+     * when the view moves; the layer carries one {@link UITransform}, which is layout-free by
+     * construction — Taffy never sees it. A scroll frame writes one matrix instead of several hundred
+     * style values and runs no layout at all. This is Monaco's {@code linesContent}.</p>
+     *
+     * <h3>Three of them, because there are three coordinate spaces</h3>
+     *
+     * <p>Not every decoration follows both axes, and the two that do not are documented as such where
+     * they are drawn. The current-line band "spans the viewport and does NOT move with horizontal
+     * scroll", and a ruler marks a column at a fixed screen height. So:</p>
+     *
+     * <table>
+     *   <tr><th>space</th><th>carried by</th><th>holds</th></tr>
+     *   <tr><td>document x, document y</td><td>{@code linesLayer}</td>
+     *       <td>lines, selections, indent guides, whitespace, squiggles, carets</td></tr>
+     *   <tr><td>gutter x, document y</td><td>{@link #gutterLayer()}, {@link #foldLayer()}</td>
+     *       <td>line numbers, fold arrows, the quick-fix bulb</td></tr>
+     *   <tr><td>viewport x, viewport y</td><td>nothing — the editor's own box</td>
+     *       <td>current-line bands, rulers, the collapsed-region marker</td></tr>
+     * </table>
+     *
+     * <p>The third group is the one to be careful with: it uses {@link #screenTopOfViewLine} while
+     * everything in a layer uses {@link #topOfViewLine}.</p>
+     *
+     * <h3>Stacking is preserved, and that is not automatic</h3>
+     *
+     * <p>z-index only orders siblings, so splitting one parent into layers could have reordered the
+     * whole editor. It does not, because the three spaces do not interleave: the sheet puts
+     * {@code __current-line__} at -2, {@code __selection__} and {@code __indent-guide__} at -1,
+     * {@code __line__} and {@code __whitespace__} at 0, {@code __caret__} at 1 and {@code __ruler__} at
+     * 4 — so everything moving into a layer occupies -1..1 with the viewport-space decorations strictly
+     * below and strictly above. The layer sits at 0 between them and the inner order is untouched.</p>
+     */
+    UIElement linesLayer() {
+        if (linesLayer == null) linesLayer = scrollLayer(textViewport());
+        return linesLayer;
+    }
+
+    /** The gutter's scroll layer — its numbers follow the rows. @see #linesLayer() */
+    UIElement gutterLayer() {
+        if (gutterLayer == null) gutterLayer = scrollLayer(gutter);
+        return gutterLayer;
+    }
+
+    /** The fold column's scroll layer — its arrows follow the rows. @see #linesLayer() */
+    UIElement foldLayer() {
+        if (foldLayer == null) foldLayer = scrollLayer(foldColumn());
+        return foldLayer;
+    }
+
+    /**
+     * One scroll layer, over a host that is scroll-exempt.
+     *
+     * <p><b>Hit-testing is left alone, and that is not an oversight.</b> {@code setHitTest(false)}
+     * applies to the whole SUBTREE, like CSS {@code pointer-events: none} — so switching it off here to
+     * mirror the viewport would make every fold arrow unclickable, and the fold column exists precisely
+     * because {@code gutter.setHitTest(false)} already swallowed them once. A layer inherits whatever
+     * its host decided: the text viewport is already untestable, the gutter already is, and the fold
+     * column deliberately is not.</p>
+     */
+    private UIElement scrollLayer(UIElement host) {
+        UIElement layer = new UIElement();
+        layer.addClass(SCROLL_LAYER_CLASS);
+        layer.markAsInternal();
+        host.addInternalChild(layer);
+        return layer;
+    }
+
+    /**
+     * Moves the scroll layers, once a frame.
+     *
+     * <p>The whole cost of scrolling, in three writes. {@code replaceOrPutCandidate} no-ops on an
+     * unchanged value and {@link UITransform} compares by value, so a frame that did not scroll writes
+     * nothing at all — and a frame that did writes one matrix per layer rather than two style values
+     * per decoration.</p>
+     *
+     * <p>Only what already exists: a layer is built on first use by whichever part needs it, and an
+     * editor with no gutter never makes one.</p>
+     */
+    private void syncScrollLayers() {
+        final float x = -finiteOrZero(getScrollLeft());
+        final float y = -finiteOrZero(getScrollTop());
+        if (linesLayer != null) linesLayer.setTransform(UITransform.translate(x, y));
+        if (gutterLayer != null) gutterLayer.setTransform(UITransform.translate(0f, y));
+        if (foldLayer != null) foldLayer.setTransform(UITransform.translate(0f, y));
     }
 
     /** Width of the code area — the client box, less the gutter and whatever the vertical bar covers. */
@@ -4520,6 +4908,12 @@ public class TextEditor extends ScrollerView implements UndoScope {
             part.render(first, last);
         }
         insetHorizontalBarPastGutter();
+        // AFTER the parts have rendered, so a layer built on this frame is moved on this frame rather
+        // than drawing once at the unscrolled origin. It is a transform, so nothing below it re-lays out.
+        syncScrollLayers();
+        // The pause that finishes a word, checked once a frame -- there is no other timer in the editor
+        // and adding one for this would be a thread to keep in step with the frame it reports to.
+        settleSyntaxIfIdle();
         // THE POPUP RE-ANCHORS HERE, once a frame, and not only when the caret moves.
         //
         // The anchor is derived from measured row widths, and those are computed in this very method --
@@ -4569,7 +4963,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             line.addChild(new UIText("").addClass(SYNTAX_CLASS));
         }
         layOutLine(viewLine, line);
-        if (line.getParent() == null) textViewport().addInternalChild(line);
+        if (line.getParent() == null) linesLayer().addInternalChild(line);
         return line;
     }
 
@@ -4584,7 +4978,8 @@ public class TextEditor extends ScrollerView implements UndoScope {
      */
     private void layOutLine(int viewLine, UIElement line) {
         final float top = topOfViewLine(viewLine);
-        final float left = codeLeftPad() + carriedIndentPx(viewLine) - getScrollLeft();
+        // DOCUMENT COORDINATES. linesLayer() carries the horizontal offset for everything inside it.
+        final float left = codeLeftPad() + carriedIndentPx(viewLine);
         // A DEFINITE WIDTH IS REQUIRED. An absolutely-positioned box with no width resolves to zero, and
         // a zero-width line lays its text out as though it had no extent -- which shaved the first
         // character off every row on screen. Wide enough for the text, and at least the viewport, so a
@@ -4611,7 +5006,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // A pooled line reused for a different row would otherwise keep the old row's highlights, which
         // is worse than none: the ranges are offsets into a string that has been replaced.
         textOf(line).highlights().clear();
-        textViewport().removeInternalChild(line);
+        linesLayer().removeInternalChild(line);
         linePool.addLast(line);
     }
 

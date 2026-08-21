@@ -78,6 +78,16 @@ public interface Analysis extends AutoCloseable {
     /** What the name at {@code offset} refers to, or null. */
     SymbolInfo resolveAt(int offset);
 
+    /**
+     * What a qualified name refers to, or null — the engine side of {@code Resolver.describe}.
+     *
+     * <p>Default null so an engine that cannot answer stays compiling and answers honestly. The name is
+     * in whatever form that language writes references in; nothing above this seam parses it.</p>
+     */
+    default SymbolInfo describe(String name) {
+        return null;
+    }
+
     /** The type the language expects at {@code offset}, or null. */
     TypeRef expectedTypeAt(int offset);
 

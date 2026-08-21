@@ -29,6 +29,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiPredicate;
 import java.util.function.Predicate;
 import com.crystalgui.language.engine.bridge.Analysis;
 import com.crystalgui.language.js.rhino.exec.RhinoGlobals;
@@ -126,6 +127,7 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
         InteropResolver previous = interop;
         InteropResolver opened = new InteropResolver(java, classpath, releaseLevel);
         opened.restrictTo(allowsClass);
+        opened.restrictMembersTo(allowsMember);
         opened.useMemberNames(memberNames);
         interop = opened;
         if (previous != null) previous.close();
@@ -133,6 +135,9 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
 
     /** What a script may reach, or null for everything. @see JsSourceAnalyzer#restrictTo */
     private volatile Predicate<String> allowsClass;
+
+    /** Which members it may see. @see JsSourceAnalyzer#restrictMembersTo */
+    private volatile BiPredicate<String, String> allowsMember;
 
     /** How member names are shown. @see JsSourceAnalyzer#useMemberNames */
     private volatile MemberNameMapper memberNames = MemberNameMapper.IDENTITY;
@@ -142,6 +147,13 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
         memberNames = mapper == null ? MemberNameMapper.IDENTITY : mapper;
         InteropResolver current = interop;
         if (current != null) current.useMemberNames(memberNames);
+    }
+
+    @Override
+    public void restrictMembersTo(BiPredicate<String, String> policy) {
+        this.allowsMember = policy;
+        InteropResolver current = interop;
+        if (current != null) current.restrictMembersTo(policy);
     }
 
     @Override
@@ -491,15 +503,42 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
                 // in front of it. Lazy like everything here, and the resolver caches per class, so a
                 // file mentioning one Java type asks about it once. @see RhinoSemanticTokens#markJavaMembers
                 tokens = root == null ? List.of()
-                        : RhinoSemanticTokens.of(root, scopes, hostBindings, imports,
-                                resolution::memberCaptureAt);
+                        : RhinoSemanticTokens.of(root, scopes, hostBindings, imports, resolution::memberCaptureAt);
             }
             return tokens;
         }
 
         @Override
         public SymbolInfo resolveAt(int offset) {
-            return resolution == null ? null : resolution.resolveAt(offset);
+            if (resolution == null) return null;
+            // THE IMPORTS FIRST, because the tree cannot answer for them. `JsImports` blanks each import
+            // statement before Rhino parses -- it has to, or Rhino reads `import a.b.C;` as an ES module
+            // declaration and the error poisons the file -- so there is no node at those offsets and
+            // `resolveAt` walked to nothing. The line COLOURED correctly the whole time, from these same
+            // spans, which is what made it look like hovering was broken rather than absent: the editor
+            // plainly understood the line and simply said nothing about it.
+            SymbolInfo imported = importedTypeAt(offset);
+            return imported != null ? imported : resolution.resolveAt(offset);
+        }
+
+        /**
+         * The imported type whose <b>simple name</b> covers {@code offset}, or null.
+         *
+         * <p>The trailing segment only. Everything before the last dot is a package, and a package has no
+         * symbol to describe — answering with the type there would mean hovering the {@code java} of
+         * {@code java.util.ArrayList} popped up {@code ArrayList}'s documentation, which is worse than the
+         * nothing it says today. {@code RhinoSemanticTokens.markImports} splits the name the same way, so
+         * what hovers is exactly what is drawn in the type colour.</p>
+         */
+        @Nullable
+        private SymbolInfo importedTypeAt(int offset) {
+            for (JsImports.Imported each : imports) {
+                String name = each.binaryName();
+                int typeAt = each.nameStart() + name.lastIndexOf('.') + 1;
+                if (offset < typeAt || offset >= each.nameStart() + name.length()) continue;
+                return resolution.describeImportedType(name);
+            }
+            return null;
         }
 
         @Override

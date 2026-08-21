@@ -20,17 +20,19 @@ import java.util.stream.Stream;
 /**
  * Every type a compiled class names — the primitive under this module's ownership-boundary tests.
  *
- * <p>Shared by {@link ExecutionNeedsNoGrammarTest} and {@link RunShellIsEngineNeutralTest}, because two
- * copies of a bytecode scan is how one of them stops detecting anything: the negative control each test
- * carries proves the scan sees <em>something</em>, but not that both scans see the same things.</p>
+ * <p>Shared by {@link ExecutionNeedsNoGrammarTest}, {@link RunShellIsEngineNeutralTest} and the band
+ * crossing scan in {@code com.crystalgui.language.platform}, because two copies of a bytecode scan is how
+ * one of them stops detecting anything: the negative control each test carries proves the scan sees
+ * <em>something</em>, but not that both scans see the same things. Public for the same reason — the
+ * third caller is in another package, and a second copy there would be exactly the drift this avoids.</p>
  */
-final class ClassReferences {
+public final class ClassReferences {
 
     private ClassReferences() {
     }
 
     /** This module's compiled main output, found beside the test output the caller was loaded from. */
-    static Path mainClassesRoot(Class<?> testClass) {
+    public static Path mainClassesRoot(Class<?> testClass) {
         Path testClasses = Path.of(testClass.getProtectionDomain()
                 .getCodeSource().getLocation().getPath().replace("%20", " ").replaceFirst("^/", ""));
         return testClasses.getParent().resolve("main");
@@ -40,7 +42,7 @@ final class ClassReferences {
      * Every {@code file references type} pair under {@code packageDirectory} whose type starts with one
      * of {@code forbidden}, as {@code relative/path.class references internal/Name} strings.
      */
-    static List<String> offences(Path root, String packageDirectory, List<String> forbidden)
+    public static List<String> offences(Path root, String packageDirectory, List<String> forbidden)
             throws IOException {
         List<String> offences = new ArrayList<>();
         Path directory = root.resolve(packageDirectory);
@@ -66,7 +68,7 @@ final class ClassReferences {
      * reference put there by a method body is a reference regardless of whether the source has an
      * {@code import}, and a fully-qualified name in a signature has no import at all.</p>
      */
-    static Set<String> referencesOf(Path classFile) throws IOException {
+    public static Set<String> referencesOf(Path classFile) throws IOException {
         Set<String> names = new LinkedHashSet<>();
         try (InputStream stream = Files.newInputStream(classFile)) {
             ClassReader reader = new ClassReader(stream);

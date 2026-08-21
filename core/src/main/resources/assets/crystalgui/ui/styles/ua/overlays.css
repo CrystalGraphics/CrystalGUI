@@ -246,14 +246,18 @@ menu .__items__ {
     gap-all: 2px;
 }
 
+/* The gap stays 2px while the rows tightened, and that is deliberate: it is what keeps two focus bars
+ * from touching, which is a different job from the space around the text. Tightening it as well is what
+ * would make a run of highlighted rows read as one block. */
+
 /* THE FRAME INSET IS THE ROW'S PADDING PLUS THE GAP, which is what makes the first label sit the
  * same distance from
  * the top of the menu as two labels sit from each other. See menuitem for the derivation. Vertical only:
  * the horizontal inset is the popup padding plus the row's own 4px margin, which is the inset-bar look
  * and has nothing to do with the vertical rhythm. */
 menu {
-    padding-top: 4px;
-    padding-bottom: 4px;
+    padding-top: 3px;
+    padding-bottom: 3px;
 }
 
 /* A grouping rule, as every native context menu uses. Margins rather than padding on the neighbours:
@@ -298,12 +302,19 @@ menuitem {
      * nothing was wrong.
      *
      * Expressed as padding so the slack is symmetric and known, and the menu's own vertical padding is
-     * then set to the row's padding plus the gap -- the one relation that makes the first label's
-     * inset equal the distance between two labels, whatever the font measures. */
+     * then set to the row's padding plus the gap -- the one relation that makes the first label's inset
+     * equal the distance between two labels, whatever the font measures. Padding 1 + gap 2 = the menu's 3.
+     *
+     * MIN-HEIGHT HAS TO COME DOWN WITH THE PADDING or none of this shows. It is a DIFFERENT PROPERTY, so
+     * it does not compete with the padding above -- it wins outright whenever it is the larger number, and
+     * at 13px around a 10.4px label it was: dropping the padding from 2 to 1 would have left every row
+     * exactly as tall as before, with nothing in the cascade to look at. It stays as a floor for a row
+     * whose content is shorter than a label (a separator's neighbour, an icon-only entry), which is what
+     * it is for; it is simply no longer the number that decides an ordinary row. */
     align-items: center;
-    padding-top: 2px;
-    padding-bottom: 2px;
-    min-height: 13px;
+    padding-top: 1px;
+    padding-bottom: 1px;
+    min-height: 11px;
     padding-left: 6px;
     padding-right: 6px;
     justify-content: flex-start;

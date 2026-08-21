@@ -1,6 +1,7 @@
 package com.crystalgui.ui.elements;
 
 import com.crystalgui.serialization.StateMap;
+import javax.annotation.Nullable;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
@@ -98,6 +99,15 @@ public class TabView extends UIElement {
     private final Scroller bar;
     private final UIElement panes;
     private final List<Tab> tabs = new ArrayList<>();
+    /**
+     * A tab that has been selected and not yet scrolled to — see {@link #revealPendingTab}.
+     *
+     * <p>Held rather than acted on, because selection routinely happens to a tab that has no geometry
+     * yet.</p>
+     */
+    @Nullable
+    private Tab pendingReveal;
+
     /** Guards the two-way sync between {@link #bar} and {@link #rail} from feeding back on itself. */
     private boolean syncingBar = false;
 
@@ -135,6 +145,9 @@ public class TabView extends UIElement {
             protected void onLayoutChanged() {
                 super.onLayoutChanged();
                 refreshStripBar();
+                // HERE, for the same reason the bar refreshes here: this is the moment the rail knows how
+                // wide its content is, and revealing a tab is a question about exactly that.
+                revealPendingTab();
             }
         };
         this.rail.addClass(RAIL_CLASS);
@@ -368,9 +381,51 @@ public class TabView extends UIElement {
         selectedTab = tab;
         if (selectedTab != null) selectedTab.setSelected(true);
         updateTabStops();
+        // SCROLLED TO, not just selected. A strip with more tabs than fit gains a rail, and opening a
+        // file then selected a tab nobody could see -- the editor changed and the strip did not move, so
+        // it read as the wrong file having opened.
+        //
+        // Recorded AND attempted: see revealPendingTab.
+        //
+        // Attempted now because `onLayoutChanged` is not enough on its own -- it fires when the layout
+        // CHANGES, and selecting a tab changes colours rather than geometry, so a tab that was already on
+        // screen would sit pending forever with no pass coming to spend it. The deferral is for the other
+        // case, where the tab was added this instant and a layout pass is already on its way.
+        pendingReveal = selectedTab;
+        revealPendingTab();
 
         onTabSelected.emit(selectedTab);
         return this;
+    }
+
+    /**
+     * Scrolls the selected tab into view, once it has a size to scroll to.
+     *
+     * <p><b>Deferred, and it has to be.</b> A tab is usually selected the instant it is added — that is
+     * what opening a file does — and at that moment it has never been laid out: its width is zero, the
+     * rail's content width does not include it, and {@code scrollIntoView} would compute a distance
+     * against numbers that are about to change. So the request is recorded and spent on the first layout
+     * pass that gives the tab a width.</p>
+     *
+     * <p>Waiting for a <b>non-zero width</b> rather than for one pass is the difference between working
+     * and nearly working. A tab's label is a {@code UIText}, which settles its own size over two or three
+     * passes; taking the first pass would scroll to where the tab was before its text was measured, which
+     * is short by however much the filename is wide. Leaving the request pending until there is something
+     * to measure is self-correcting and costs one field read per layout.</p>
+     *
+     * <p>{@code scrollIntoView} moves the minimum distance and does nothing to an element already in
+     * view, so this is also correct for the ordinary case of clicking a tab that is already on screen.</p>
+     */
+    private void revealPendingTab() {
+        Tab wanted = pendingReveal;
+        if (wanted == null) return;
+        if (wanted.getParent() == null) {
+            pendingReveal = null;
+            return;
+        }
+        if (!(wanted.getRuntimeCache().getWidth() > 0f)) return;
+        pendingReveal = null;
+        wanted.scrollIntoView();
     }
 
     public TabView selectIndex(int index) {

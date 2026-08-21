@@ -91,6 +91,34 @@ public interface SyntaxTokenizer {
         int EVERYTHING = Integer.MAX_VALUE;
     }
 
+    /**
+     * Whether the answer for {@code [from, to)} comes from a region the backend had to <b>recover</b>
+     * around — i.e. text it could not parse.
+     *
+     * <h3>Why a consumer needs to know</h3>
+     *
+     * <p>A parser is not a lexer. A lexer is <b>local</b>: a half-written token cannot change how the next
+     * line lexes, which is why IntelliJ can re-run its lexer on every keystroke and why a missing
+     * semicolon there leaves the line below it untouched. A parser recovers, and the recovery
+     * re-classifies whole regions — so the line under the one you are writing changes colour, and changes
+     * back when you finish the statement.</p>
+     *
+     * <p>The answer is not wrong; it is what the grammar says about incomplete text. It is just less
+     * useful than what the consumer already had, so a consumer may reasonably decline to adopt it for
+     * rows the user has not touched and keep the last colours those rows were given.</p>
+     *
+     * <p><b>Asked per range rather than per document on purpose.</b> "Does this file parse" is true of
+     * almost no file that is being edited, so a consumer keying on that would freeze the colours of the
+     * whole document whenever anything anywhere was unfinished. This is scoped to the blast radius of the
+     * incomplete text, so a broken line 900 cannot hold line 10.</p>
+     *
+     * <p>Defaults to {@code false}: a lexer never recovers from anything, and a backend that cannot answer
+     * should say so by letting its answers be adopted rather than by holding them back.</p>
+     */
+    default boolean recoveredAround(int fromOffset, int toOffset) {
+        return false;
+    }
+
     /** Releases anything native. Called when the editor goes away; a no-op for pure-Java tokenizers. */
     default void close() {
     }

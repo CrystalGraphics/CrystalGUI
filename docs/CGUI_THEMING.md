@@ -111,6 +111,7 @@ crystal-dark.css is a migration-era pin awaiting the Islands pass; dark-plus.css
 editor scheme's.
 
 <!-- TOKENS:BEGIN -->
+
 | Token | Value | Defined in |
 |---|---|---|
 | `--accent` | `#3574F0` | crystal-dark.css |
@@ -336,6 +337,17 @@ editor scheme's.
 | `--list-hover-bg` | `var(--hover-bg)` | base.css |
 | `--list-selected-bg` | `var(--selection-bg)` | base.css |
 | `--list-selected-inactive-bg` | `var(--selection-inactive-bg)` | base.css |
+| `--markup-bullet-fg` | `var(--fg-hint)` | base.css |
+| `--markup-code-bg` | `var(--hover-bg)` | base.css |
+| `--markup-code-fg` | `var(--fg)` | base.css |
+| `--markup-heading-fg` | `var(--fg)` | base.css |
+| `--markup-link-fg` | `var(--link)` | base.css |
+| `--markup-pre-bg` | `var(--surface-raised)` | base.css |
+| `--markup-pre-border` | `var(--border-base)` | base.css |
+| `--markup-pre-fg` | `var(--fg)` | base.css |
+| `--markup-quote-rule` | `var(--divider)` | base.css |
+| `--markup-table-rule` | `var(--border-base)` | base.css |
+| `--markup-term-fg` | `var(--fg-secondary)` | base.css |
 | `--menu-accelerator` | `var(--fg-hint)` | base.css |
 | `--menu-arrow` | `var(--fg-secondary)` | base.css |
 | `--menu-bg` | `var(--surface-base)` | base.css |
@@ -517,6 +529,7 @@ editor scheme's.
 | `--success` | `#3C8527` | crystal-dark.css |
 | `--success-icon` | `#5FAD65` | crystal-dark.css |
 | `--surface-base` | `#26282B` | crystal-dark.css |
+| `--surface-borrowed` | `#281F1C` | crystal-dark.css |
 | `--surface-editor` | `#191A1C` | crystal-dark.css |
 | `--surface-overlay` | `#2B2D30` | crystal-dark.css |
 | `--surface-panel` | `#191A1C` | crystal-dark.css |
@@ -540,6 +553,12 @@ editor scheme's.
 | `--syntax-constant-weight` | `normal` | dark-plus.css |
 | `--syntax-constructor` | `#4EC9A0` | dark-plus.css |
 | `--syntax-deprecated` | `#808080` | dark-plus.css |
+| `--syntax-doc-markup` | `#569CD6` | dark-plus.css |
+| `--syntax-doc-tag` | `#569CD6` | dark-plus.css |
+| `--syntax-doc-tag-style` | `normal` | dark-plus.css |
+| `--syntax-doc-tag-weight` | `normal` | dark-plus.css |
+| `--syntax-doc-value` | `#9CDCFE` | dark-plus.css |
+| `--syntax-doc-value-style` | `normal` | dark-plus.css |
 | `--syntax-embedded` | `#D4D4D4` | dark-plus.css |
 | `--syntax-error` | `#F44747` | dark-plus.css |
 | `--syntax-function` | `#DCDCAA` | dark-plus.css |
@@ -586,6 +605,9 @@ editor scheme's.
 | `--tab-active-border` | `var(--border-base)` | base.css |
 | `--tab-active-fg` | `var(--fg)` | base.css |
 | `--tab-bg` | `#00000000` | base.css |
+| `--tab-close-fg` | `var(--fg-disabled)` | base.css |
+| `--tab-close-hover-bg` | `var(--hover-bg)` | base.css |
+| `--tab-close-hover-fg` | `var(--fg)` | base.css |
 | `--tab-disabled-bg` | `var(--surface-raised)` | base.css |
 | `--tab-disabled-fg` | `var(--fg-disabled)` | base.css |
 | `--tab-fg` | `var(--fg-secondary)` | base.css |
@@ -593,6 +615,7 @@ editor scheme's.
 | `--tab-focused-border` | `var(--accent)` | base.css |
 | `--tab-focused-fg` | `var(--fg)` | base.css |
 | `--tab-hover-bg` | `var(--hover-bg)` | base.css |
+| `--tab-library-bg` | `var(--surface-borrowed)` | base.css |
 | `--tab-pane-bg` | `#00000000` | base.css |
 | `--tab-strip-bg` | `#00000000` | base.css |
 | `--tooltip-bg` | `#1E1E1EF0` | crystal-dark.css |
@@ -606,8 +629,11 @@ editor scheme's.
 | `--tree-match-fg` | `var(--fg)` | base.css |
 | `--tree-selected-bg` | `var(--accent-soft)` | base.css |
 | `--tree-selected-fg` | `var(--fg-on-accent)` | base.css |
+| `--tree-selected-inactive-bg` | `var(--surface-raised)` | base.css |
+| `--tree-selected-inactive-fg` | `var(--fg-secondary)` | base.css |
 | `--tree-twisty-fg` | `var(--fg-secondary)` | base.css |
 | `--warning` | `#CCA700` | crystal-dark.css |
 | `--warning-icon` | `#FFAF0F` | crystal-dark.css |
 | `--workbench-bg` | `var(--surface-base)` | base.css |
+
 <!-- TOKENS:END -->
