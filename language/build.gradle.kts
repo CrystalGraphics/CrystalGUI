@@ -81,6 +81,18 @@ val eclipseTextBand8 = "3.11.0"
 // this jar and must ship the same version -- see mc1710/dependencies.gradle.
 val asmVersion = providers.gradleProperty("asmVersion").get()
 val rhinoModern = "1.9.1"      // needs Java 11 -- so bands 11 and 17 SHARE it; see EngineBand
+// THE ONE BAND ARTIFACT WITH NO PER-BAND PIN, and that is a property of CFR rather than a shortcut.
+// It is written in Java 6, so one jar loads on every band we ship -- where ECJ and Rhino each need a
+// version chosen against the band's class-file ceiling. It also has NO transitive dependencies, so the
+// open-ranges trap that forced `isTransitive = false` everywhere else cannot fire; the flag is written
+// anyway, because it is the band's rule and not a judgement about one artifact.
+//
+// 0.152 is the last PUBLISHED release (December 2021) and its ceiling is around Java 17 -- records,
+// sealed classes, instanceof patterns, switch expressions, but not Java 21's record patterns. That is
+// above everything this will actually be handed: a mod jar cannot be newer than the JVM that loads it,
+// so 1.7.10 is Java 8 bytecode and 1.20.x is 17, and the JDK never reaches a decompiler at all because
+// it comes from src.zip. The author resumed work in March 2026 with nothing published yet.
+val cfrVersion = "0.152"       // MIT, written in Java 6, no dependencies -- one jar for every band
 
 // ── The Eclipse platform closure, pinned per band ───────────────────────────────────────────────
 //
@@ -269,6 +281,9 @@ dependencies {
     // The probe is what says which SYNTAX each band accepts; this says which API all of them carry.
     // Two different questions about the same jars, and neither answers the other.
     engineApi("org.mozilla:rhino:$rhinoBand8") { isTransitive = false }
+    // The adapter compiles against CFR's own API. One version for every band, so unlike ECJ and Rhino
+    // there is no "oldest band's API" to be careful about here.
+    engineApi("org.benf:cfr:$cfrVersion") { isTransitive = false }
 
     // AND ON THE TEST COMPILE PATH, so a fix's test can write `IProblem.UnusedImport` instead of the
     // literal 268435844. That is not merely nicer to read: a correction is keyed on a problem id, and a
@@ -280,6 +295,7 @@ dependencies {
     // opens is narrow and loud: naming a non-constant JDT API here compiles and then dies at runtime with
     // NoClassDefFoundError, since jdt.core is on no test RUNTIME classpath. Constants only.
     testCompileOnly("org.eclipse.jdt:org.eclipse.jdt.core:$jdtBand8") { isTransitive = false }
+    testCompileOnly("org.benf:cfr:$cfrVersion") { isTransitive = false }
 
     // ── ASM, for the mapping boundary (§15.5) ───────────────────────────────────────────────────
     //
@@ -309,10 +325,12 @@ dependencies {
     // jar (52/55/61) and ignoring META-INF/versions/, which an older JVM never looks at.
     engineBand8("org.eclipse.jdt:org.eclipse.jdt.core:$jdtBand8")
     engineBand8("org.mozilla:rhino:$rhinoBand8")
+    engineBand8("org.benf:cfr:$cfrVersion") { isTransitive = false }
     platformBand8.forEach { engineBand8(it) }
 
     engineBand11("org.eclipse.jdt:org.eclipse.jdt.core:$jdtBand11")
     engineBand11("org.mozilla:rhino:$rhinoModern")
+    engineBand11("org.benf:cfr:$cfrVersion") { isTransitive = false }
     platformBand11.forEach { engineBand11(it) }
 
     // Band 17 takes what the ranges resolve to: its ceiling is "whatever is newest", so the two
@@ -321,6 +339,7 @@ dependencies {
     // adapter does not exist. `checkEngineBands` still holds it to major 61.
     engineBand17("org.eclipse.jdt:org.eclipse.jdt.core:$jdtBand17")
     engineBand17("org.mozilla:rhino:$rhinoModern")
+    engineBand17("org.benf:cfr:$cfrVersion") { isTransitive = false }
 }
 
 /** Highest class-file major among a jar's BASE entries — `META-INF/versions/` is what an old JVM ignores. */
