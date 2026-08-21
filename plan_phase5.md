@@ -81,32 +81,148 @@ Recorded so nobody re-derives them.
 
 ## The items
 
-### 5.1 Hot exit — dirty buffers survive being disconnected · **the only item that loses work**
+### 5.1 A window lifecycle, in the engine · **hide is not close, and close is not destroy**
 
-**The defect.** `WorkbenchSession` persists **view state only** — its own words: *"a caret, a scroll
-offset, a fold set — is applied when the file's content arrives."* It does not carry buffer content. So
-the session restores *which* files were open and where the caret was, and the unsaved text is gone.
+**Researched 2026-08-21** against Win32, X11/ICCCM, Cocoa, the W3C Page Lifecycle API, bfcache and
+Android, because this is a solved problem everywhere and the failure modes are already documented.
 
-**Why it is Phase 5 and not a general editor item.** There *is* an unsaved-changes guard —
-`Workbench.java:495` sets `dock.setCloseGuard(this::confirmClose)` — but it guards **closing a tab**. The
-window path does not consult it: `CgUiScreen.onGuiClosed` calls `saveSession`, `savePreferences`, then
-nulls everything. Locally that was survivable because closing was the user's choice. **On a server,
-disconnection is not**, and it goes straight down the unguarded path.
+#### The problem
 
-**The fix is not a prompt.** A connection loss cannot be prompted. It is VS Code's *hot exit*: persist
-dirty buffers client-side and restore them on the next open. `LocalConfigStorage` already exists for
-exactly this class of state, and the session record already restores which files were open — content is
-the natural extension of a record that is already there.
+The window's lifetime is owned by the wrong layer. `CgUiScreen.initGui` constructs the workspace, the
+editor and the `UIWindow`; `onGuiClosed` nulls all three. `AGENTS.md` already says *"`UIWindow`
+deliberately implements no platform Screen/widget interface — loader modules own that"* — and the
+**lifetime leaked to the loader anyway**. Escape-destroys-everything is a `GuiScreen` accident rather
+than a decision, and it takes the undo history, every open buffer and every cached analysis with it.
 
-**Watch for:** the buffers must be stored **client-side**, not written back to the workspace. The whole
-reason they need saving is that the server may be unreachable, and a "recovery" that requires the server
-is no recovery. Storing them in the workspace would also put private in-progress state into a project.
+The instinct is already in the code: `initGui` opens with `if (uiWindow != null) return;`, so the window
+survives a resize. That is retention — scoped to one screen instance instead of to the engine.
 
-### 5.2 A window-close guard · **cheap, and the half the user does control**
+#### What every other platform does
 
-The tab guard exists and works; the window path skips it. Escape out of the editor with a dirty buffer
-and it is gone with no prompt. Same code path as 5.1 and the same decision, which is why they are
-adjacent rather than one item — 5.1 handles what cannot be prompted, this handles what can.
+| System | Hide (retained) | Close (a *request*) | Destroy |
+|---|---|---|---|
+| Win32 | `ShowWindow(SW_MINIMIZE/SW_HIDE)` | `WM_CLOSE` — the app may ignore it | `DestroyWindow` → `WM_DESTROY` |
+| X11 / ICCCM | `IconicState` | `WM_DELETE_WINDOW` — the client decides | `WithdrawnState`, then destroy |
+| Cocoa | `orderOut:` | `windowShouldClose:` **can veto** | `close` + `releasedWhenClosed` |
+| Web | `visibilitychange` → hidden, then **frozen** | `beforeunload` | terminated / **discarded** |
+| Android | `onStop` | back press | `onDestroy` |
+
+**Three findings, and all three are load-bearing here.**
+
+1. **Close is universally a request, not an action.** `WM_CLOSE`, `WM_DELETE_WINDOW`,
+   `windowShouldClose:`, `beforeunload` — every one of them *asks*. CrystalGUI already has this
+   primitive: `UIElement.requestClose()` and the close-watcher cascade, where a live drag eats Escape
+   before a popover and a popover before a modal. So the window level does not need a new mechanism, it
+   needs to **answer** the one that already exists.
+
+2. **When something else owns the lifetime, close stops destroying.** Cocoa is explicit:
+   `releasedWhenClosed` *"is ignored for windows owned by window controllers."* That is precisely the
+   model — a retained registry owns the instance, so closing a window returns it to the registry rather
+   than freeing it. We are not inventing a policy; we are adopting the one AppKit already ships.
+
+3. **A hidden thing must stop working.** The Page Lifecycle API does not merely mark a page hidden — it
+   **freezes** it, and *"normally HIDDEN pages will be frozen to conserve resources."* `requestAnimationFrame`
+   stops firing. Android has `onStop`. This is not an optimisation anyone chose to add later; it is part
+   of the state.
+
+#### The state model
+
+Four states, which is the intersection of all five systems above:
+
+```
+        show()                    hide()
+  ┌──────────────┐          ┌──────────────┐
+  │   VISIBLE    │ ───────► │    HIDDEN    │   retained, ticking stopped
+  └──────────────┘ ◄─────── └──────────────┘
+         │  requestClose()          │
+         │  (cascade first)         │ evicted / world gone
+         ▼                          ▼
+  ┌───────────────────────────────────────┐
+  │              DESTROYED                │   Disposer runs, registry drops it
+  └───────────────────────────────────────┘
+```
+
+- **`requestClose()` at window level means "dismiss me"**, and the window's **policy** decides whether
+  that hides or destroys. Escape reaching the window is safe *because the cascade already filtered* —
+  a modal, a popover and a live drag all consume it first, and those genuinely should be destroyed.
+- Escape therefore defaults to **hide** for an application window and **destroy** for a transient one.
+  A global "Escape always hides" rule would be wrong; the policy belongs on the window.
+
+#### The rules that fall out, each with a source
+
+- **A hidden window stops ticking.** `UIFrameTicker`s, smooth scrolls, transitions — and, importantly,
+  the language services, which analyse on a debounce. A hidden editor that keeps compiling is worse than
+  one that was destroyed. Page Lifecycle's *frozen* is the precedent.
+- **Connections are dropped on hide and re-established on show.** This is the one that matters most here,
+  and browsers have already been through it: an open WebSocket used to make a page **ineligible for
+  bfcache**, and the resolution was not to refuse retention but to *"close or pause open connections,
+  timers, and observers in your `pagehide`/`freeze` handling, and re-establish them in your
+  `pageshow`/`resume` handling when `event.persisted` is true."*
+
+  > **This is the answer to the correction recorded above.** Retaining the editor un-strikes the stale
+  > `WorkspaceClient` — five sites capture it at construction and nothing rebinds them — and the fix is
+  > not "refuse to retain a window with a connection" but **rebind on show**. `show()` must carry the
+  > equivalent of `persisted`, so the window knows it came back from retention and revalidates rather
+  > than assuming its world is unchanged. "The user pressed Escape" and "the world went away" stay
+  > distinct signals.
+
+- **Input state does not survive hide.** Hover, pointer capture, press targets, a live drag. The pointer
+  moved while the window was not looking. `AGENTS.md` already records what happens when input state
+  outlives its tree — a stale hover made the diff walk two trees and run off the end — and show/hide is
+  the same boundary.
+- **Retention is bounded.** bfcache evicts; Android destroys; the Page Lifecycle API has a whole
+  *discarded* state and a `wasDiscarded` flag for it. A retained editor holds every open document's
+  `Rope`, its undo stacks, ECJ analyses and tree-sitter trees. So the registry needs an eviction
+  policy, and `destroy()` drives `Disposer`, which already exists to *"release on CLOSE rather than on
+  exit"*.
+
+#### The three buttons
+
+Minecraft has no OS chrome, so CrystalGUI draws its own — the same thing VS Code does with
+`window.titleBarStyle: custom` and IntelliJ does by merging the controls into the main toolbar row,
+right-aligned above the right activity stripe. That placement is the reference.
+
+| Button | Meaning | Confidence |
+|---|---|---|
+| **Minimise** | `hide()` — retained, frozen | Unambiguous |
+| **Close** | `requestClose()` → policy | Unambiguous |
+| **Maximise / restore** | **needs a decision** | See below |
+
+**Maximise is the one that does not map.** There is no OS window to maximise. It is only meaningful once
+a window can be less than full-screen — and the machinery for that exists (`UIResizer`, out-of-flow
+positioning, the graph's floating panels). The coherent reading is *remember the current rect, fill the
+screen, restore on toggle*. **Recommended: ship minimise and close first, and add maximise when there is
+a floating window to restore to.** Shipping a button whose meaning is guessed is how it ends up meaning
+three things.
+
+> **Not the platform's job and not the consumer's.** A loader supplies a surface and input; somebody
+> building a GUI writes widgets. Neither should reimplement retention, and today both would have to.
+> The registry, the state machine and the controls all belong in `core/`, with the loader reduced to
+> *attaching* a view to a retained window and detaching on close.
+
+### 5.2 Persist the retained set · **because retention is always best-effort**
+
+Retention is in-memory: it survives Escape, and not a crash, not quitting the game, not a disconnect.
+**Every system that retains also persists**, and says so — the Page Lifecycle API ships `wasDiscarded`
+precisely so a page can tell it was dropped and needs a full reload, and Android's `onSaveInstanceState`
+exists because being stopped may become being destroyed without warning.
+
+So this does not merge into 5.1 and must not be skipped because 5.1 covers the common path.
+
+**What is missing today.** `WorkbenchSession` persists **view state only** — its own words, *"a caret, a
+scroll offset, a fold set — is applied when the file's content arrives."* It does not carry buffer
+content. There *is* an unsaved-changes guard — `Workbench.java:495` sets
+`dock.setCloseGuard(this::confirmClose)` — but it guards closing a **tab**, and
+`CgUiScreen.onGuiClosed` does not consult it. Locally that was survivable because closing was the
+user's choice; **on a server, disconnection is not**.
+
+**Stored client-side, always.** The whole reason the buffers need saving is that the server may be
+unreachable, so a recovery that requires the server is not one. `LocalConfigStorage` already exists for
+this class of state, and writing them into the workspace would also put private in-progress work into a
+project a resource pack could ship.
+
+> With 5.1 in place this becomes *"persist the retained set"* rather than *"persist dirty buffers"* —
+> a better-shaped problem, because the retained set is already the thing that knows what mattered.
 
 ### 5.3 `enabledWhen` is evaluated locally
 
@@ -174,6 +290,21 @@ the platform ceiling — several large transfers in flight together is the case 
 > server**. CrystalGraphics had never run on one.
 
 ---
+
+## Sources — read 2026-08-21
+
+- [Page Lifecycle API](https://developer.chrome.com/docs/web-platform/page-lifecycle-api) and the
+  [WICG spec](https://wicg.github.io/page-lifecycle/) — the six states, `freeze`/`resume`, and
+  `wasDiscarded`
+- [Back/forward cache](https://web.dev/articles/bfcache) — eligibility, `pageshow` + `event.persisted`,
+  and the connection rule this phase adopts wholesale
+- [Disconnect WebSockets on BFCache entry](https://groups.google.com/a/chromium.org/g/blink-dev/c/52nlr8z3Png)
+  — the change from *"an open connection blocks retention"* to *"close it on entry, reconnect on
+  restore"*, which is the shape 5.1 takes
+- [Opening and Closing Windows](https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/WinPanel/Tasks/OpeningClosingWindows.html)
+  — `orderOut:` vs `close`, `releasedWhenClosed`, and that it is **ignored under a window controller**
+- [Using Window Notifications and Delegate Methods](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/WinPanel/Tasks/UsingWindowNotDel.html)
+  — `windowShouldClose:` as a veto
 
 ## Explicitly not in this phase
 

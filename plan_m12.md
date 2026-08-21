@@ -1393,9 +1393,11 @@ editor browses, edits and runs scripts off the server's disk.
 Getting there needed three CrystalGraphics fixes, because **it had never been able to load on a
 dedicated server at all** — see Phase 5 §5.9, which is the shape rather than the three instances.
 
-Phase 5 is the gap between "the workspace is served" and "a person can use it without losing work". Its
-first item is the only one that loses work: a disconnect discards every unsaved buffer, silently, and
-cannot be prompted.
+Phase 5 is the gap between "the workspace is served" and "a person can use it without losing work". It
+opens with a **window lifecycle in the engine** — hide is not close and close is not destroy, which every
+one of Win32, X11, Cocoa, the web and Android agrees on and this engine currently does not have. Escape
+destroying the editor, its undo history and every open buffer is a `GuiScreen` accident rather than a
+decision.
 
 ### Explicitly not Phase 4
 
