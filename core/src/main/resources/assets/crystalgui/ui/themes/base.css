@@ -575,10 +575,6 @@ theme {
      * far enough from --tab-active-bg to read at a glance beside one, and far enough from --error that it
      * is never mistaken for a file that will not compile. */
     --tab-library-bg: var(--surface-borrowed);
-    /* The same provenance, lifted — a borrowed tab that is selected or hovered. Derived from the raised
-     * surface rather than from a second borrowed role, because what changes between the two is DEPTH and
-     * the vocabulary already has a word for that. */
-    --tab-library-active-bg: var(--surface-borrowed-raised);
     --tab-pane-bg: #00000000;
     --tab-strip-bg: #00000000;
 

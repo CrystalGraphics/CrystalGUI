@@ -27,7 +27,6 @@ theme {
      * glance from every other surface here -- all of which are neutral greys -- without being the red
      * that already means "will not compile". IntelliJ tints the same tab the same way. */
     --surface-borrowed: #281F1C;
-    --surface-borrowed-raised: #3B2E28;
     --border-base: #393B40;
     --border-strong: #5A5D63;
     --border-field: #393B40;
