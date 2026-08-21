@@ -238,3 +238,195 @@ credits are consumed by the sender and replenished by the drain.
   the "split, send, reconstitute, either in the app or in a custom channel" framing
 - In-repo: `build/rfg/minecraft-src/java/net/minecraft/network/**` (1.7.10) and
   `research_repos/mc1201_sources/net/minecraft/network/**` (1.20.1)
+
+---
+
+# Part 2 — the protocol layer
+
+**Researched and designed 2026-08-21.** Part 1 moves bytes. This is the layer above it: what a message
+*is*, how it is addressed, and who handles it. The prototype works end to end in a client, and its
+protocol layer is the part that will not survive contact with a real feature set.
+
+## The problem, measured rather than felt
+
+Adding one message type today means editing **four** places:
+
+| # | File | What you add |
+|---|---|---|
+| 1 | `UIPacket.java` | a record in the sealed union |
+| 2 | `UIPacketCodec.encode` | a branch |
+| 3 | `UIPacketCodec.decode` | a branch |
+| 4 | every session's `handle(UIPacket)` | an `instanceof` arm |
+
+That is textbook shotgun surgery, and it gets worse rather than better: the union and both switches are
+shared by every subsystem, so the workspace, the script runtime and the UI all edit the same three files
+and conflict with each other. `ServerUiSession.handle` is already an `instanceof` chain over five types
+and it has exactly one feature in it.
+
+**The codebase already knows the answer**, one layer up: `RpcRegistry.register(method, handler)` and
+`ServerUiSession.on(element, kind, handler)` are both open registries keyed by a string. Nothing central
+enumerates the methods or the event kinds, and adding one touches only the code that owns it. The packet
+layer is the only place that is still a closed union — and it is the layer where a closed union hurts
+most, because it is shared by everything.
+
+## What the references actually do
+
+### VS Code — `vs/base/parts/ipc` (MIT, portable)
+
+Two interfaces and a name registry:
+
+```ts
+IChannel        call<T>(command: string, arg?, cancellationToken?): Promise<T>
+                listen<T>(event: string, arg?): Event<T>
+IServerChannel  // the same, plus a context parameter
+```
+
+**There is no message union.** There are four request kinds and five response kinds — `Promise`,
+`PromiseCancel`, `EventListen`, `EventDispose`; `Initialize`, `PromiseSuccess`, `PromiseError`,
+`PromiseErrorObj`, `EventFire` — and everything else is a **command name**. Correlation is a numeric
+request id against a `Map<number, IHandler>`.
+
+Three details worth stealing:
+
+- **`ChannelServer` holds `Map<string, IServerChannel>`**, and a request names its channel. A subsystem
+  registers one channel; nothing central lists them.
+- **A request for a channel that has not registered yet is held in `pendingRequests` and retried**, with
+  a timeout. That is a registration race solved once, in the framework, rather than by every caller
+  ordering its startup carefully.
+- **The transport is genuinely swappable** — the docs state the abstraction directly: *"in web or remote
+  scenarios the transport layer changes to WebSocket or MessagePort, but the channel abstraction stays
+  identical."* Which is the same seam `CgNetworkChannel` already is.
+
+`ProxyChannel.fromService` / `toService` go further, turning a plain interface into a channel by
+reflection. **Deliberately not copied** — see "what we are not taking".
+
+### LSP / JSON-RPC 2.0 — the closest match to what we carry
+
+VS Code's own IDE protocol, and shaped like ours: an editor talking to a peer about documents.
+
+- **Request vs notification is a first-class distinction.** *"Every processed request must send a response
+  back … notifications don't require responses."* Our `UIPacket` mixes both with no way to tell: a
+  `StateDelta` is a notification and an `RpcCall` is a request, and only the handler knows which.
+- **Methods are namespaced strings** — `textDocument/hover`, `workspace/symbol`. A prefix is all the
+  "channel" an IDE protocol needs.
+- **Progress rides a token separate from the request id**, which *"allows reporting progress out of band
+  and also for notifications"*. Directly relevant: D11 chunked transfer and
+  `CrystalGUI_P6.1.13_PROGRESS_PLAN.md` both need progress on work that is not one request/response pair.
+- **Partial results on cancellation** — a cancelled request may still have produced something useful.
+
+### IntelliJ — RD, and why it is the wrong model here
+
+JetBrains' Rider protocol is not RPC at all: it is a reactive graph of distributed properties and signals
+that synchronise across the boundary. Elegant, and a poor fit — it assumes both ends share a generated
+model and a code generator to keep them in step. Our two ends are a mod jar and the same mod jar, but the
+protocol has to stay legible without a codegen step, and a server must be able to talk to a client one
+version behind it. Recorded because "IntelliJ does it differently" is worth knowing, not because it is a
+lead.
+
+## The design
+
+### The envelope is closed. The vocabulary is open.
+
+That distinction is the whole change. A closed set is right for the **grammar** and wrong for the
+**words**:
+
+```
+REQUEST       id, method, payload
+RESPONSE      id, ok, payload | error
+NOTIFICATION      method, payload
+CANCEL        id
+```
+
+Four kinds, and they are meant to stay four. Everything that is today a `UIPacket` subtype becomes a
+**method name** on a REQUEST or a NOTIFICATION:
+
+| today | becomes |
+|---|---|
+| `OpenWindow`, `Description`, `CloseWindow` | `ui/openWindow`, `ui/description`, `ui/closeWindow` — notifications |
+| `RequestDescription` | `ui/description` — a **request**, which is what it always was |
+| `StateDelta` | `ui/stateDelta` — a notification |
+| `UiEvent` | `ui/event` — a notification |
+| `RpcCall` / `RpcResult` | the REQUEST/RESPONSE envelope itself, which is what they were re-implementing |
+
+`RpcCall`/`RpcResult` disappearing is the tell that this is the right shape: they exist today because the
+union has no general request/response, so RPC had to build its own correlation on top. With the envelope
+carrying it, `RpcRegistry`'s id bookkeeping is the framework's job and its handler map is the router's.
+
+### One router, keyed by method
+
+```java
+router.onRequest("workspace/read",   (ctx, payload) -> ...);   // must answer
+router.onNotify ("ui/event",         (ctx, payload) -> ...);   // must not
+```
+
+Registration lives beside the code that owns the method. The workspace registers `workspace/*` from
+`WorkspaceService`; the UI registers `ui/*` from the session; a script runtime registers `script/*` from
+`language/` without `core` learning it exists. **Nothing enumerates the set** — which is the property
+`RpcRegistry` already has and the packet union does not.
+
+An unknown method is answered, not dropped: a REQUEST gets a `METHOD_NOT_FOUND` response and a
+NOTIFICATION is logged once. Today an unrecognised packet falls off the end of an `instanceof` chain.
+
+### Payloads stay opaque until a handler claims them
+
+The envelope codec reads `id`, `method`, `kind` and hands the payload over **undecoded**. Only the
+registered handler knows the shape, and it decodes with its own `Codec`. So:
+
+- `UIPacketCodec`'s two switches collapse into one envelope codec that never grows.
+- A subsystem's wire format is private to that subsystem.
+- A large payload can be skipped without being parsed — which matters when the router is deciding whether
+  to route a 10 MB file body at all.
+
+### What this deletes
+
+| gone | replaced by |
+|---|---|
+| `UIPacket` (9 records, sealed) | a 4-kind envelope |
+| `UIPacketCodec` encode/decode switches | one envelope codec + per-handler codecs |
+| `ServerUiSession.handle` instanceof chain | `router.dispatch(envelope)` |
+| `ClientUiSession.handle` instanceof chain | the same router |
+| `RpcRegistry`'s correlation | the envelope's `id` |
+
+Adding a message goes from four edits to one registration.
+
+## What we are not taking, and why
+
+- **`ProxyChannel`'s reflective interface-to-channel mapping.** It is the most impressive part of VS
+  Code's design and the least portable: it leans on JS `Proxy` and duck-typed `on[A-Z]` property naming.
+  The Java equivalent is dynamic proxies plus an annotation, which trades an explicit registration line
+  for a reflection layer that is worse to debug and hostile to the Java 8 bytecode target. Explicit
+  registration is three words longer and always readable.
+- **A code generator.** RD needs one; LSP does not, and neither do we.
+- **Events as a separate primitive** (`listen`/`EventFire`/`EventDispose`). VS Code needs it because a
+  renderer subscribes to main-process events. Ours are all fan-out from the server to one client, which a
+  NOTIFICATION already is. Adding a subscription lifecycle before anything needs one is speculative.
+
+## Sequencing
+
+The wire layer is finished and proven; **none of this touches it.** `FrameMultiplexer` moves opaque byte
+arrays and does not know an envelope from a packet, which is exactly why this can be rewritten under the
+sessions without re-testing the transport.
+
+1. The envelope + its codec, headless.
+2. The router, headless.
+3. Port `ServerUiSession` / `ClientUiSession` onto it, deleting both `instanceof` chains.
+4. Retire `UIPacket` and `RpcRegistry`.
+5. Re-run the in-game probe — the transport is unchanged, so this confirms rather than explores.
+
+## Open questions
+
+1. **Do notifications need ordering guarantees across methods?** The transport gives per-stream ordering,
+   but a `ui/stateDelta` and a `ui/closeWindow` on different streams can be reordered. Probably wants
+   one stream per logical channel rather than per message.
+2. **Where does progress live?** LSP's out-of-band token is the right shape, but it interacts with
+   D11 chunked transfer and P6.1.13's progress UI, and those should be designed together.
+3. **Version negotiation.** `UIPacketCodec.PROTOCOL_VERSION` exists and nothing negotiates it. With
+   method names, a mismatch degrades naturally to `METHOD_NOT_FOUND` — which may be better than a
+   version gate, and is worth deciding rather than inheriting.
+
+## Sources
+
+- [VS Code `vs/base/parts/ipc/common/ipc.ts`](https://github.com/microsoft/vscode/blob/main/src/vs/base/parts/ipc/common/ipc.ts) — `IChannel`/`IServerChannel`, request/response kinds, channel registry, `ProxyChannel`
+- [LSP 3.17 specification](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/) — request vs notification, namespaced methods, progress tokens, partial results
+- [vscode-languageserver-node](https://github.com/microsoft/vscode-languageserver-node) — the reference handler-registration implementation
+- [Understanding VS Code's IPC Architecture](https://www.besthub.dev/articles/understanding-vs-code-s-ipc-architecture-and-channel-mechanism-69a50eb94a89) and [IPC Decoded](https://roopik.com/blog/vscode-internals-advanced-ipc) — the transport-swappability point
