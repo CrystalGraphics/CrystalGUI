@@ -184,33 +184,101 @@ One shape covering four cases, which is why the id is optional rather than the i
 A session also carries `useUserAgentSheet`, so the client knows whether to apply `StyleSheet.DEFAULT`
 underneath.
 
-## 7. Packets and sessions
+## 7. The protocol, the transport, and sessions
 
-`net/UIPacket.java`, `UIPacketCodec.java`, `UITransport.java`, `ServerUiSession.java`, `ClientUiSession.java`
+`net/protocol/` (`Envelope`, `EnvelopeCodec`, `MessageRouter`, `Call`, `UiMethods`, `ProtocolErrors`),
+`net/wire/` (`FrameCodec`, `FrameMultiplexer`, `WireTransport`, `CgNetworkChannel`),
+`net/UITransport.java`, `ServerUiSession.java`, `ClientUiSession.java`
 
-**Every packet carries a `windowId`.** LDLib2 resolves incoming packets against "whatever menu the
-player has open", so a packet in flight when a GUI closes lands on the *next* one and is applied to
-whatever element happens to share its index. Four bytes makes that impossible.
+### A closed envelope over an open vocabulary
 
-| Packet | Direction | Payload |
+There is **no packet union**. `UIPacket`'s nine record types, `UIPacketCodec`'s two switches and
+`RpcRegistry`'s parallel id space are gone; every message on the wire is one of **four** kinds, and what
+it *means* is a string:
+
+| Kind | Wire tag | Carries | Must be answered? |
+|---|---|---|---|
+| `Request<T>` | `q` | id, method, payload | **yes**, exactly once |
+| `Response<T>` | `r` | id, ok, payload \| error | — it *is* the answer |
+| `Notification<T>` | `n` | method, payload | **no** — and must not be |
+| `Cancel` | `x` | id | no |
+
+This is JSON-RPC's request/notification split and VS Code's `vs/base/parts/ipc` channel shape. The
+value of it is that the two axes move independently: **adding a message is adding a string**, touching
+one class, where it used to mean a record in the union, an arm in each of two codec switches, and an
+`instanceof` branch in whichever session handled it.
+
+`EnvelopeCodec.VERSION = 1`, carried in the `ui/openWindow` payload and checked on open.
+
+Methods are namespaced with a slash, after LSP's `textDocument/hover` — `ui/*` here, `workspace/*` for
+the file protocol, `script/*` for a runtime in `language/` that `core` never learns about. `UiMethods`
+lists the `ui/*` names as **a convenience, not a registry**: nothing enumerates them and nothing
+validates against them. A peer may send any string, and an unknown one is answered with
+`ProtocolErrors.METHOD_NOT_FOUND` rather than dropped. The moment that file becomes the list of legal
+methods it is `UIPacket` again with different syntax.
+
+| Method | Kind | Direction |
 |---|---|---|
-| `OpenWindow` (`open`) | S→C | protocol, windowId, descHash, elementCount, sheets, useUserAgentSheet |
-| `Description` (`desc`) | S→C | the encoded tree, sent only when asked |
-| `RequestDescription` (`req-desc`) | C→S | "I don't have that hash" |
-| `StateUpdate` (`state`) | S→C | list of `(nid, state)` entries |
-| `UiEvent` (`event`) | C→S | nid + kind + payload |
-| `RpcCall` (`rpc`) / `RpcResult` (`rpc-result`) | both | method, args, call id |
-| `CloseWindow` (`close`) | S→C | reason |
+| `ui/openWindow` | notification | S→C |
+| `ui/description` | **request** | C→S, answered with the tree |
+| `ui/stateDelta` | notification | S→C |
+| `ui/closeWindow` | notification | S→C |
+| `ui/event` | notification | C→S |
+| anything from `onCall` | **request** | either |
 
-`UIPacketCodec.PROTOCOL_VERSION = 1`, checked on open.
+> `ui/description` being a *request* is the one shape change worth noticing. `RequestDescription` and
+> `Description` were two packet types spelling one ask-and-answer with the correlation left implicit —
+> nothing tied a body to the request that wanted it. As a request it correlates by id for free, a client
+> that asks twice cannot confuse the answers, and a server that no longer serves that window **refuses**
+> instead of staying silent, so the client learns rather than waiting out a timeout.
 
-`UITransport<T>` is one interface — `send(T)` and `setReceiver(Consumer<T>)` — deliberately shaped so
-the loader modules can back it with whatever packet channel their platform has.
-`InMemoryTransport.pair()` gives two ends wired to each other for tests, with `deliver()`,
-`dropNext(n)` and `corruptNext(mutator)` for failure injection.
+**Every `ui/*` payload carries `w`, the window id** — in the payload rather than the envelope, because it
+is a fact about the UI protocol and the envelope is not allowed to know one. LDLib2 resolves incoming
+packets against "whatever menu the player has open", so a packet in flight when a GUI closes lands on
+the *next* one. Four bytes makes that impossible.
 
-**`ServerUiSession<T>`** is the server half. It implements `UITreeObserver`, so it is told when
-elements attach, detach or go state-dirty, and coalesces those into one `StateUpdate` per `tick()`.
+`MessageRouter<T>` owns correlation, the pending map, exactly-once responding (`OnceResponder`),
+per-request deadlines, cancellation and `failAllPending` on a dropped link — for every method, rather
+than for RPC alone as `RpcRegistry` did.
+
+### Getting bytes across
+
+`UITransport<T>` is unchanged: `send(T)` and `setReceiver(Consumer<T>)`, taking `T` rather than an
+`Envelope` so every implementation exercises the real codec on every hop. `InMemoryTransport.pair()`
+gives two ends wired to each other, with `deliver()`, `dropNext(n)` and `corruptNext(mutator)`.
+
+`WireTransport` is the real one, and it is a stack:
+
+```
+session  →  Envelope  →  PlainOps tree  →  BinaryFormat bytes  →  FrameMultiplexer  →  CgNetworkChannel
+```
+
+`FrameMultiplexer` is HTTP/2's shape at Minecraft scale: many logical streams over one channel,
+`[u8 opcode][u8 flags][varint streamId][payload]` frames, FIN-terminated fragmentation (no chunk index —
+TCP already orders), `WINDOW_UPDATE` credit flow control, and `RESET` per stream. Credit is not
+optional here: `NetworkManager.outboundPacketsQueue` is an **unbounded** `ConcurrentLinkedQueue` shared
+with the whole game, so an unthrottled sender degrades the session it is not part of.
+
+`onFrameReceived` is one add to a `ConcurrentLinkedQueue`; everything real happens in `pump()` on the
+thread that owns the tree. Round-robin across streams means arrival order is guaranteed **within** a
+stream and deliberately not **across** them — a small message overtakes a large one already in flight,
+which is the point.
+
+### Cross-version
+
+`CgNetworkChannel` is four methods — send to server, send to a player, install an inbound sink, report a
+frame ceiling — plus `isAvailable()`. **The frame ceiling is the only version-varying quantity that
+reaches `core`**, which is what makes cross-version support testable rather than hopeful:
+`FrameMultiplexerTest.everyPlatformCeilingCarriesTheSameMessagesIntact` runs the engine at 32,766
+(1.7.10 C→S), 32,767 (1.20.x C→S), 1,048,576 (1.20.x S→C), 2,097,050 (1.7.10 S→C) and at 128 B and 4 MB,
+which no platform imposes. Channel names, payload types, player handles and the delivery thread are all
+private to an adapter. The full table, and the packaging step a new loader must not skip, are in
+`CgNetworkChannel`'s own javadoc.
+
+### The sessions
+
+**`ServerUiSession<T>`** implements `UITreeObserver`, so it is told when elements attach, detach or go
+state-dirty, and coalesces those into one `ui/stateDelta` per `tick()`.
 
 ```java
 var session = new ServerUiSession<>(windowId, root, transport, PlainOps.INSTANCE)
@@ -229,10 +297,15 @@ session.tick();
 Event kinds are the small closed set in `UiEventKinds`: `activate`, `toggle`, `value`, `text`. The
 handler receives a `UiEventContext<T>` of `(session, element, payload)`.
 
-**`ClientUiSession<T>`** is the mirror: it holds the description cache (`hasCached(hash)`,
-`cacheSize()`), rebuilds the tree on open, exposes `root()`/`sheets()`/`useUserAgentSheet()`, and has
-the same symmetric `onCall`/`call` RPC surface. `RpcRegistry` handles both directions with a
-configurable `setTimeoutMillis`.
+**`ClientUiSession<T>`** is the mirror: description cache (`hasCached(hash)`, `cacheSize()`), rebuilds
+the tree on open, exposes `root()`/`sheets()`/`useUserAgentSheet()`, and the same symmetric
+`onCall`/`call` surface.
+
+> **`onCall`'s signature did not change.** `Call.Handler<T>`/`Call.Responder<T>` are `RpcRegistry`'s two
+> interfaces under a new roof — they were what a *caller* writes against, and the point of the rewrite
+> was that callers do not move. An RPC is now an ordinary request, so its correlation and timeout are the
+> router's; the per-session patience is a `callTimeoutMillis` field, defaulting to the 10s
+> `RpcRegistry` used.
 
 ## 8. Known gaps — stated honestly
 

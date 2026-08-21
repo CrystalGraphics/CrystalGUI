@@ -22,6 +22,49 @@ import java.util.function.BiConsumer;
  * genuinely painful and easy to get subtly wrong. Bypassing them costs <em>more</em> per-platform code,
  * not less, and it differs by version anyway.</p>
  *
+ * <h3>What actually differs between versions — the whole list</h3>
+ *
+ * <table>
+ *   <tr><th>Differs</th><th>Where it is absorbed</th></tr>
+ *   <tr><td>Channel identity: a ≤20-char string on 1.7.10, a {@code ResourceLocation} on 1.20.x</td>
+ *       <td>Private to the adapter; {@code core} never names a channel</td></tr>
+ *   <tr><td>Payload type: raw {@code ByteBuf} on 1.7.10, a registered {@code CustomPacketPayload}
+ *           record with a {@code StreamCodec} from 1.20.5</td>
+ *       <td>Private to the adapter; both reduce to carrying a {@code byte[]}</td></tr>
+ *   <tr><td>Player handle: {@code EntityPlayerMP} / {@code ServerPlayer}</td>
+ *       <td>{@link #sendToPlayer}'s {@code Object}, never inspected above this seam</td></tr>
+ *   <tr><td>Delivery thread: Netty on 1.7.10, main thread on Fabric and NeoForge</td>
+ *       <td>{@link #setInboundHandler} — enqueue-only, so either is correct</td></tr>
+ *   <tr><td>Frame ceiling: four different numbers across two eras</td>
+ *       <td>{@link #maxFrameBytes()}, asked for and never assumed</td></tr>
+ * </table>
+ *
+ * <p><b>Nothing else reaches {@code core}</b>, which is what makes "does this work on a version nobody
+ * has written an adapter for" a question with a testable answer rather than a hope:
+ * {@code FrameMultiplexerTest.everyPlatformCeilingCarriesTheSameMessagesIntact} runs the engine at every
+ * ceiling in the table above plus one below and one above them all.</p>
+ *
+ * <h3>The one thing that is not this interface's problem, and bites anyway</h3>
+ *
+ * <p>{@code core} compiles to <b>Java 21 bytecode</b>. A loader module must downgrade it to its target's
+ * JVM floor, or every class fails to load with {@code UnsupportedClassVersionError} — which is a
+ * packaging property, not a networking one, and is why it is recorded here rather than discovered per
+ * adapter:</p>
+ *
+ * <table>
+ *   <tr><th>Target</th><th>JVM</th><th>Needed</th></tr>
+ *   <tr><td>1.7.10</td><td>Java 8</td><td>jvmDowngrader to 8 — <i>in place and verified</i></td></tr>
+ *   <tr><td>1.20.1 / 1.20.4</td><td>Java 17</td><td>the same step with {@code downgradeTargetVersion = 17}</td></tr>
+ *   <tr><td>1.21 and later</td><td>Java 21</td><td>nothing</td></tr>
+ * </table>
+ *
+ * <p>The 1.7.10 pipeline is the reference and its second half is the half that is forgotten: {@code
+ * downgradeJar} rewrites a record's supertype to a jvmDowngrader stub, and {@code shadeDowngradedApi}
+ * is what puts that stub <em>in the jar</em>, relocated under the mod's own package so two mods shipping
+ * jvmDowngrader do not collide. Run only the first and every record in {@code core} — {@link
+ * com.crystalgui.net.protocol.Envelope}'s four kinds among them — loads against a superclass that is
+ * nowhere on the classpath.</p>
+ *
  * <h3>{@link #maxFrameBytes()} is asked for, never assumed</h3>
  *
  * <p>Measured from the sources rather than documentation, and it is asymmetric in a way no constant
@@ -34,6 +77,22 @@ import java.util.function.BiConsumer;
 public interface CgNetworkChannel {
 
     /**
+     * The smallest ceiling any supported platform imposes, and therefore one that is safe everywhere.
+     *
+     * <p>It is <b>not</b> a 1.7.10 number even though it happens to be 1.7.10's: client→server is a
+     * vanilla <em>signed short</em> in every era, so the four measured limits are 32,766 (1.7.10 c→s),
+     * 32,767 (1.20.x c→s), 1,048,576 (1.20.x s→c) and 2,097,050 (1.7.10 s→c, which Forge widens). This is
+     * the minimum of those, so an implementation that cannot determine its own limit — or a host with no
+     * networking at all — can return it without being wrong on any platform.</p>
+     *
+     * <p>It is a <em>floor</em>, never a default to build on: a platform that can carry more should say
+     * so, and one that carries less than this does not exist among the targets. {@link #maxFrameBytes()}
+     * is still asked for rather than assumed, which is what makes {@code core} correct for a version
+     * nobody has written an adapter for yet.</p>
+     */
+    int SAFE_FLOOR_BYTES = 32_766;
+
+    /**
      * The slot. Declared here because CrystalGUI owns this contract — it is not something the rendering
      * framework requires, so it does not belong in {@code CgPlatformService}'s closed bundle.
      *
@@ -43,7 +102,7 @@ public interface CgNetworkChannel {
     CgService<CgNetworkChannel> SERVICE = CgService.of("crystalgui:network", new CgNetworkChannel() {
         @Override
         public int maxFrameBytes() {
-            return 32_766;
+            return SAFE_FLOOR_BYTES;
         }
 
         @Override
@@ -87,12 +146,19 @@ public interface CgNetworkChannel {
     void sendToPlayer(Object player, byte[] frame);
 
     /**
-     * Installs the inbound sink. <b>Called on the network thread.</b>
+     * Installs the inbound sink. <b>Safe to call from any thread.</b>
      *
-     * <p>The handler hands straight to {@link FrameMultiplexer#onFrameReceived}, which only enqueues — see
-     * that class's threading note. An implementation must <em>not</em> schedule onto the game thread
-     * itself: doing so would make the frame's arrival and the session's pump two different orderings, and
-     * the engine already owns that hop.</p>
+     * <p>The handler hands straight to {@link FrameMultiplexer#onFrameReceived}, whose whole body is one
+     * add to a {@code ConcurrentLinkedQueue} — everything real happens in {@code pump()} on the thread
+     * that owns the tree. So an adapter should not add a hop of its own, and <em>equally</em> need not
+     * fight a platform that hops for it: Fabric's {@code registerGlobalReceiver} and NeoForge's default
+     * {@code IPayloadHandler} both deliver on the main thread and cannot be told otherwise, while
+     * 1.7.10's {@code SimpleNetworkWrapper} delivers on the Netty thread. Both are correct here.
+     *
+     * <p>This used to read "must <em>not</em> schedule onto the game thread itself", which is not
+     * something two of the four targets let an adapter promise. What actually matters is weaker and
+     * achievable: <b>enqueue, never dispatch</b>. Ordering survives either way, because one queue is fed
+     * in arrival order whichever thread does the feeding.</p>
      *
      * <p>The first argument is the sender: the player handle on a server, and ignored on a client, where
      * there is only ever one peer.</p>

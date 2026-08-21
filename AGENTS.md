@@ -933,8 +933,11 @@ talks to the client over RPC and bindings.
 - **`serialization/`** — `Codec<A>`/`DynamicOps<T>`/`Codecs` (DFU-shaped), `JsonOps`, `PlainOps`,
   `StateMap` (widget state), `UIDescriptionCodec`, `ContentHash`; `serialization/style/` holds
   `StyleValueCodecs` and `InlineStyleCodec`.
-- **`net/`** — `UIPacket`, `UIPacketCodec`, `UITransport`, `InMemoryTransport`, `ServerUiSession`,
-  `ClientUiSession`, `RpcRegistry`, `NetworkIds`, `SheetRef`, `UiEventKinds`.
+- **`net/`** — `UITransport`, `InMemoryTransport`, `ServerUiSession`, `ClientUiSession`,
+  `NetworkIds`, `SheetRef`, `UiEventKinds`; `net/protocol/` holds the four-kind `Envelope`,
+  `EnvelopeCodec`, `MessageRouter`, `Call` and the `UiMethods` vocabulary; `net/wire/` holds the
+  multiplexed byte transport (`FrameCodec`, `FrameMultiplexer`, `WireTransport`) over the
+  four-method `CgNetworkChannel` platform seam.
 
 Three design facts worth knowing before you touch it:
 
@@ -1512,8 +1515,8 @@ com.crystalgui.serialization   Codec<A>, DynamicOps<T>, Codecs, CodecException, 
                                StateMap, UIDescriptionCodec, ContentHash
   .style                       StyleValueCodecs, InlineStyleCodec
 
-com.crystalgui.net             UIPacket, UIPacketCodec, UITransport, InMemoryTransport,
-                               ServerUiSession, ClientUiSession, RpcRegistry, NetworkIds, SheetRef,
+com.crystalgui.net             UITransport, InMemoryTransport,
+                               ServerUiSession, ClientUiSession, NetworkIds, SheetRef,
                                UiEventKinds
 ```
 
