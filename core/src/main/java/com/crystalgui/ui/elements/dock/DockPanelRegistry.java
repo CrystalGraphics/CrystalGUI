@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.dock;
 
+import com.crystalgui.ui.UIElement;
 import com.crystalgui.core.signal.Signal;
 
 import javax.annotation.Nullable;
@@ -233,5 +234,35 @@ public final class DockPanelRegistry<C> {
         }
         String icon = ref.state(DockPanelRef.ICON, "");
         return icon.isEmpty() ? null : icon;
+    }
+
+    /** An ELEMENT for a tab's icon slot, when a name cannot say enough. @see #iconElementOf */
+    @Nullable
+    private Function<DockPanelRef, UIElement> iconElementProvider;
+
+    public DockPanelRegistry<C> setIconElementProvider(
+            @Nullable Function<DockPanelRef, UIElement> provider) {
+        this.iconElementProvider = provider;
+        return this;
+    }
+
+    /**
+     * A whole element to put in a tab's icon slot, or null to use {@link #iconOf}'s name.
+     *
+     * <h3>Why a name is not always enough</h3>
+     *
+     * <p>A file's icon is one picture and a name resolves it. A DECLARATION's is not: a class that is
+     * {@code static} and {@code final} carries two more marks stacked over the glyph, and those are
+     * elements rather than a name — JetBrains draws each on its own full-size canvas with the mark
+     * already in its corner, which is what lets both show at once.</p>
+     *
+     * <p>So a caller that has a symbol hands over the widget that knows how to draw one, and the dock
+     * stays ignorant of what a symbol is — it puts an element in a slot. That is also what makes this
+     * the union point: the completion popup builds the same widget, so a tab and a completion row cannot
+     * come to disagree about what an interface looks like.</p>
+     */
+    @Nullable
+    public UIElement iconElementOf(DockPanelRef ref) {
+        return iconElementProvider == null ? null : iconElementProvider.apply(ref);
     }
 }

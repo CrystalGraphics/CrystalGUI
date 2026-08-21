@@ -1,5 +1,7 @@
 package com.crystalgui.fs;
 
+import com.crystalgui.text.lang.SymbolInfo;
+
 /**
  * Supplies the bytes behind a {@link Resource} whose scheme is not the workspace.
  *
@@ -48,22 +50,23 @@ public interface ResourceContentProvider {
     }
 
     /**
-     * The icon this resource should be shown with, as a name {@code CgUiSvg.ofIcon} resolves — or null
-     * to let the caller derive one from {@link #displayName}.
+     * The DECLARATION this resource shows, when it shows one — or null.
      *
-     * <h3>Why the provider, again</h3>
+     * <h3>Why the provider, and why a symbol rather than an icon</h3>
      *
-     * <p>Because a file name cannot answer it. {@code FlexDirection.class} is an ENUM and
-     * {@code Runnable.class} is an INTERFACE, and the extension is the same both times — so deriving the
-     * icon from the name draws a class glyph on every one of them. That is not a cosmetic slip: this
+     * <p>A file name cannot answer what a resource holds. {@code FlexDirection.class} is an ENUM and
+     * {@code Runnable.class} is an INTERFACE, and the extension is the same both times — so deriving a
+     * glyph from the name draws a class icon on every one of them. That is not a cosmetic slip: this
      * codebase has already paid for it once, when a hand-built symbol reported {@code java.util.List} as
      * a class and the documentation popup drew a class glyph beside an interface, in the same session
      * where a {@code .java} file drew the right one.</p>
      *
-     * <p>Only whatever serves the resource knows what it holds. For a library class that means asking the
-     * engine what the type IS, which is a question with an exact answer.</p>
+     * <p><b>A symbol rather than an icon name</b>, because the picture is not the only thing that
+     * follows from it: a {@code static final} class carries two more marks over the glyph, and a tooltip
+     * says "Final class" in words. Handing over the icon would answer one of those and leave the others
+     * to be derived a second way, which is how the two tables this replaced came to exist.</p>
      */
-    default String iconName(Resource resource) {
+    default SymbolInfo symbolOf(Resource resource) {
         return null;
     }
 }

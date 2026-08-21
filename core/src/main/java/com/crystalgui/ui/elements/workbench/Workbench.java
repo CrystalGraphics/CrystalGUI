@@ -27,6 +27,8 @@ import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.chrome.Breadcrumbs;
 import com.crystalgui.ui.elements.chrome.StatusBarView;
 import com.crystalgui.ui.UIWindow;
+import com.crystalgui.ui.elements.SymbolIcon;
+import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.ui.elements.InputDialog;
 import com.crystalgui.ui.elements.chrome.NotificationBalloons;
 import com.crystalgui.ui.elements.chrome.NotificationsView;
@@ -469,6 +471,7 @@ public class Workbench extends UIElement {
         // someone who noticed.
         registry.setTitleProvider(this::tabTitleFor);
         registry.setIconProvider(Workbench::tabIconFor);
+        registry.setIconElementProvider(Workbench::viewerIconElement);
         registry.setDecorationProvider(this::tabDecorationFor);
 
         // Anchors match where defaultLayout() puts them, so closing a panel and reopening it from the
@@ -1037,6 +1040,30 @@ public class Workbench extends UIElement {
         });
     }
 
+    /**
+     * Where this workbench schedules background work — the shared pool unless a caller says otherwise.
+     *
+     * <h3>Injectable because {@code JobScheduler}'s own note says so</h3>
+     *
+     * <p>"Tests construct their own instead, which is what the injecting constructor is for", and "a
+     * same-thread executor makes every test deterministic". Reaching for {@code shared()} inside the
+     * viewer's read ignored both, and it cost three separate rounds of chasing a test that passed alone
+     * and failed in its class: a job submitted by one test completes during the NEXT one's drain, so a
+     * viewer is filled late, or a completion the next test was waiting for is consumed by the previous
+     * one. Nothing about the symptom points at the scheduler — it reads as the feature being flaky.</p>
+     */
+    private JobScheduler jobs = JobScheduler.shared();
+
+    private JobScheduler jobs() {
+        return jobs;
+    }
+
+    /** @see #jobs */
+    public Workbench setJobScheduler(@Nullable JobScheduler scheduler) {
+        this.jobs = scheduler == null ? JobScheduler.shared() : scheduler;
+        return this;
+    }
+
     /** The panel ref for a resource — a pure function of it, as {@link #refFor} is of a path. */
     public DockPanelRef refForResource(Resource resource) {
         String text = resource.toString();
@@ -1124,7 +1151,7 @@ public class Workbench extends UIElement {
         ResourceContentProvider provider = ResourceRegistry.providerFor(resource);
         if (provider == null) return;
         String key = resource.toString();
-        JobScheduler.shared()
+        jobs()
                 // KEYED ON THE EDITOR, which is what a JobKey's owner is for — it is compared by
                 // identity, and there is exactly one editor per resource. Two opens of the same class
                 // while the first read is in flight therefore replace rather than race.
@@ -1723,19 +1750,36 @@ public class Workbench extends UIElement {
     private static String tabIconFor(DockPanelRef panel) {
         Resource viewed = viewedResource(panel);
         if (viewed != null) {
-            // THE PROVIDER'S ANSWER FIRST, because a file name cannot tell an interface from a class and
-            // every `.class` would otherwise carry the same glyph. @see ResourceContentProvider#iconName
-            ResourceContentProvider provider = ResourceRegistry.providerFor(viewed);
-            String named = provider == null ? null : provider.iconName(viewed);
-            if (named != null && !named.isEmpty()) return named;
-            // AND THE NAME AS A FALLBACK, which is right for the source case: a `.java` tab is a Java
-            // FILE and takes the file icon, exactly as one in the project does.
+            // A DECLARATION'S GLYPH IS AN ELEMENT, not a name -- see viewerIconElement, which the dock
+            // asks for first. This is the fallback for a viewer showing a FILE: a `.java` tab takes the
+            // file icon, exactly as one in the project does.
             String name = viewerDisplayName(viewed);
             return name == null ? null : FileIconTheme.getDefault().iconFor(name, false, false);
         }
         String path = panel.state(PATH_STATE, "");
         if (path.isEmpty()) return null;
         return FileIconTheme.getDefault().iconFor(CgPath.parse(path).name(), false, false);
+    }
+
+    /**
+     * The glyph for a viewer tab showing a DECLARATION, or null to fall back to a file icon.
+     *
+     * <p>{@link SymbolIcon} is the union point: the completion popup builds the same widget from the
+     * same {@code completion-kind-*} vocabulary, so a tab and a completion row cannot come to disagree
+     * about what an interface looks like. It also carries the {@code static} and {@code final} marks,
+     * which an icon NAME cannot — they are layers stacked over the glyph rather than a picture.</p>
+     *
+     * <p>Null for a source-backed tab, deliberately: {@code ArrayList.java} is a FILE and takes the same
+     * icon one in the project would.</p>
+     */
+    @Nullable
+    private static UIElement viewerIconElement(DockPanelRef panel) {
+        Resource viewed = viewedResource(panel);
+        if (viewed == null) return null;
+        ResourceContentProvider provider = ResourceRegistry.providerFor(viewed);
+        SymbolInfo symbol = provider == null ? null : provider.symbolOf(viewed);
+        if (symbol == null || symbol.kind() == null) return null;
+        return new SymbolIcon().show(symbol.kind(), symbol.modifiers());
     }
 
     /** The resource a viewer panel shows, or null for every other kind of tab. */

@@ -8,9 +8,7 @@ import com.crystalgui.language.java.classpath.HostClasspath;
 
 import com.crystalgui.language.engine.JavaEngine;
 import com.crystalgui.language.engine.bridge.Analysis;
-import com.crystalgui.render.texture.asset.JavaNodeIcons;
 import com.crystalgui.text.lang.SymbolInfo;
-import com.crystalgui.text.lang.SymbolKind;
 
 import javax.annotation.Nullable;
 
@@ -143,22 +141,21 @@ public final class LibrarySources implements ResourceContentProvider {
      * way that matters: what a class IS does not change within a session.</p>
      */
     @Override
-    public String iconName(Resource resource) {
+    public SymbolInfo symbolOf(Resource resource) {
         if (resource == null) return null;
         String binaryName = resource.path();
         List<String> classpath = HostClasspath.detect();
-        // SOURCE-BACKED TABS KEEP THE FILE ICON. Only a reconstructed `.class` needs the kind glyph.
+        // SOURCE-BACKED TABS KEEP THE FILE ICON. Only a reconstructed `.class` shows what the type IS.
         if (AttachedSources.forClasspath(classpath).textOf(binaryName) != null) return null;
 
-        synchronized (ICONS) {
-            String cached = ICONS.get(binaryName);
-            if (cached != null) return REFUSED.equals(cached) ? null : cached;
+        synchronized (SYMBOLS) {
+            if (SYMBOLS.containsKey(binaryName)) return SYMBOLS.get(binaryName);
         }
-        String icon = JavaNodeIcons.forKind(kindOf(binaryName, classpath));
-        synchronized (ICONS) {
-            ICONS.put(binaryName, icon == null ? REFUSED : icon);
+        SymbolInfo described = describe(binaryName, classpath);
+        synchronized (SYMBOLS) {
+            SYMBOLS.put(binaryName, described);
         }
-        return icon;
+        return described;
     }
 
     /**
@@ -169,20 +166,24 @@ public final class LibrarySources implements ResourceContentProvider {
      * a type, which is precisely how the class-beside-an-interface bug read.</p>
      */
     @Nullable
-    private static SymbolKind kindOf(String binaryName, List<String> classpath) {
+    private static SymbolInfo describe(String binaryName, List<String> classpath) {
         JavaEngine engine = JavaLanguage.engine();
         if (engine == null) return null;
         try (Analysis analysis = engine.analyzer().analyze(
                 "Probe", "public class Probe { }\n", classpath, engine.releaseLevel(), 0L)) {
-            SymbolInfo described = analysis.describe(binaryName);
-            return described == null ? null : described.kind();
+            return analysis.describe(binaryName);
         } catch (RuntimeException unavailable) {
             return null;
         }
     }
 
-    /** Icon name by type, bounded only by how many library tabs a session opens. */
-    private static final Map<String, String> ICONS = new HashMap<>();
+    /**
+     * What each type IS, by name — nulls included, so an unanswerable one is asked once.
+     *
+     * <p>Bounded only by how many library tabs a session opens, which is how many a person can read.
+     * It cannot go stale in a way that matters: what a class IS does not change within a session.</p>
+     */
+    private static final Map<String, SymbolInfo> SYMBOLS = new HashMap<>();
 
     @Override
     public byte[] read(Resource resource) {
