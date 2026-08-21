@@ -289,11 +289,30 @@ credit replenishment is instantaneous and no frame is ever reordered or lost. Wh
 does to a 256 KB window is arithmetic nobody has done, and `DEFAULT_WINDOW_BYTES` still says of itself
 that it "wants measuring against a real server under load".
 
-**A `CodecException` from `accept` aborts the whole pump**, skipping `replenish` and `flush` for that
-tick, and `handleData`'s comment claims the opposite (*"refuse the stream rather than the connection"*).
-It is survivable only because `CgUiConnections.tickSafely` catches two layers up and the next tick
-continues — which is to say the comment is true by accident rather than by construction, and is not true
-at all for the harness or a test calling `pump()` directly. Worth fixing; not fixed here.
+~~**A `CodecException` from `accept` aborts the whole pump.**~~ **Fixed.** It did, skipping `replenish`
+and `flush` for that tick while `handleData`'s comment claimed the opposite (*"refuse the stream rather
+than the connection"*) — true only because `CgUiConnections.tickSafely` catches two layers up, so true
+by accident rather than by construction, and not true at all for the harness or anything pumping
+directly.
+
+Split the way HTTP/2 splits it, which is where the rest of this class comes from: a **stream** error
+(RFC 9113 §5.4.2) resets one stream and the connection carries on; a **connection** error (§5.4.1) means
+the peer is not speaking this protocol. `StreamRefused` is caught per frame and counted; an unknown
+opcode or DATA on stream 0 still propagates.
+
+**And the other half of it was corruption, not waste.** An inbound RESET dropped the reassembly buffer
+and *did not cancel the outbound message*. So the peer refuses a stream, drops its buffer and RESETs;
+the sender ignores that and sends the remainder; the peer opens a **fresh** buffer for the same stream
+id, and the sender's last frame carries FIN — so it reassembles the **tail** and delivers it as a whole
+message. A refused 9 MB transfer arrives as a ~1 MB one that looks complete, with nothing reporting a
+problem anywhere.
+
+> Found by mutation rather than by reading. The first version of that comment said the fault was wasted
+> bytes and a repeated warning — which is what it looks like from the code. Removing the cancel makes
+> three tests fail with `expected:<1> but was:<2>`, and the second message is the tail.
+
+`StreamErrorIsolationTest`, 6 tests. Mutation-checked twice: rethrowing the refusal fails 5, and removing
+the outbound cancel fails 4.
 
 ### 5.10 Platform hygiene · **the class of bug that cost three fixes today**
 
