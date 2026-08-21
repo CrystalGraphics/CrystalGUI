@@ -27,18 +27,6 @@ theme {
      * glance from every other surface here -- all of which are neutral greys -- without being the red
      * that already means "will not compile". IntelliJ tints the same tab the same way. */
     --surface-borrowed: #281F1C;
-    /* WHAT IS NOT YOURS. A library class opened read-only, and anything else the workspace does not own.
-     * A surface rather than a foreground because what it qualifies is the CONTAINER: the point is not
-     * that this text is special, it is that this whole pane cannot be edited. Warm, so it separates at a
-     * glance from every other surface here -- all of which are neutral greys -- without being the red
-     * that already means "will not compile". IntelliJ tints the same tab the same way. */
-    --surface-borrowed: #281F1C;
-    /* WHAT IS NOT YOURS. A library class opened read-only, and anything else the workspace does not own.
-     * A surface rather than a foreground because what it qualifies is the CONTAINER: the point is not
-     * that this text is special, it is that this whole pane cannot be edited. Warm, so it separates at a
-     * glance from every other surface here -- all of which are neutral greys -- without being the red
-     * that already means "will not compile". IntelliJ tints the same tab the same way. */
-    --surface-borrowed: #281F1C;
     --border-base: #393B40;
     --border-strong: #5A5D63;
     --border-field: #393B40;
