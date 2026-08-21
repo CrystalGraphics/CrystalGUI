@@ -402,6 +402,15 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
         return this;
     }
 
+    public float tooltipDelay() {
+        return getValueSave(StylePropertyRegistry.TOOLTIP_DELAY);
+    }
+
+    public GeneralGroup tooltipDelay(float seconds) {
+        set(StylePropertyRegistry.TOOLTIP_DELAY, seconds);
+        return this;
+    }
+
     public CgUiDrawable mask() {
         return getValueSave(StylePropertyRegistry.MASK);
     }

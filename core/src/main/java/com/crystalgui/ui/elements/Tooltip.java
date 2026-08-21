@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements;
 
+import com.crystalgui.core.data.ReadOnlyVec2f;
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.AnchoredPlacement;
@@ -10,6 +11,8 @@ import dev.vfyjxf.taffy.style.TaffyDisplay;
 import org.joml.Vector2f;
 
 import javax.annotation.Nullable;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -78,15 +81,40 @@ public class Tooltip extends UIElement {
 
     private final UIText label;
 
+    /**
+     * What {@link #setText} wrote — what this tooltip says outside every {@linkplain #addRegion region}.
+     *
+     * <p>Held separately from the label because a region overwrites the label and the base text has to
+     * survive that: without it, moving the pointer off a region would have nothing to go back to.</p>
+     */
+    private String baseText;
+
+    /** Regions, in the order added. The <b>deepest</b> one containing the pointer wins. @see #addRegion */
+    @Nullable
+    private List<Region> regions;
+
+    /** Which region is currently speaking, so a frame that changes nothing writes nothing. */
+    @Nullable
+    private Region activeRegion;
+
     @Nullable
     private UIElement anchor;
     private boolean placementTickerRunning;
+
+    /** The anchor a wait is running for, or null when none is. @see #showAfterDelay */
+    @Nullable
+    private UIElement pendingAnchor;
+
+    /** Seconds left on that wait. Only meaningful while {@link #pendingAnchor} is set. */
+    private float pendingDelay;
+    private boolean delayTickerRunning;
 
     public Tooltip() {
         this("");
     }
 
     public Tooltip(String text) {
+        this.baseText = text == null ? "" : text;
         this.label = new UIText(text == null ? "" : text);
         this.label.addClass(LABEL_CLASS);
         // SELF-SIZING, forced rather than detected. The wrap bound in UIText.selfMaxWidthForWrap is only
@@ -139,9 +167,10 @@ public class Tooltip extends UIElement {
      * and its paint/hit-test entry. Being internal, it is skipped by public traversal and by
      * {@code UIDescriptionCodec}, like every other internal child.</p>
      *
-     * <p>Shown on {@code mouseenter}, hidden on {@code mouseleave}. Deliberately no delay: a delay is
-     * a timing value, and timing values belong in the cascade rather than hard-coded here — doing it
-     * properly means a real CSS property, which is separate work.</p>
+     * <p>Shown a beat after {@code mouseenter}, hidden immediately on {@code mouseleave}. The wait is
+     * {@code tooltip-delay} in the cascade rather than a constant here — which is what this paragraph
+     * used to say was "separate work". {@link #showAfterDelay} has the argument for why it exists at
+     * all; the asymmetry with hiding is deliberate and is explained there too.</p>
      */
     public static Tooltip attach(UIElement anchor, String text) {
         Objects.requireNonNull(anchor, "anchor");
@@ -151,7 +180,7 @@ public class Tooltip extends UIElement {
         // Listeners are attached exactly once, here, against a tooltip that is created in the same
         // breath. The earlier UIElement.setTooltip could be called repeatedly — and a
         // set(text)/set(null)/set(text) cycle silently attached a second pair every time.
-        anchor.onMouseEnter.attachListener((el, event) -> tooltip.showFor(anchor), false, false);
+        anchor.onMouseEnter.attachListener((el, event) -> tooltip.showAfterDelay(anchor), false, false);
         anchor.onMouseLeave.attachListener((el, event) -> tooltip.hide(), false, false);
         return tooltip;
     }
@@ -170,13 +199,119 @@ public class Tooltip extends UIElement {
         return label;
     }
 
+    /**
+     * Sets what this tooltip says when the pointer is in none of its {@linkplain #addRegion regions}.
+     *
+     * <p>With no regions — which is every tooltip in the engine but the dock's tabs — that is simply
+     * what it says, and this is the plain setter it has always been.</p>
+     */
     public Tooltip setText(String text) {
-        label.setText(text == null ? "" : text);
+        this.baseText = text == null ? "" : text;
+        if (activeRegion == null) label.setText(baseText);
         return this;
     }
 
+    /** What is <b>displayed</b> — a region's wording while one is active, else {@link #getBaseText}. */
     public String getText() {
         return label.getText();
+    }
+
+    /** What this tooltip says outside every region. @see #setText */
+    public String getBaseText() {
+        return baseText;
+    }
+
+    // ── Regions ──────────────────────────────────────────────────────────────────
+
+    /**
+     * Says {@code text} instead while the pointer is inside {@code region}.
+     *
+     * <p>IntelliJ's editor tab is the shape this exists for: hovering the <b>icon</b> tells you what the
+     * declaration is ("Final class"), and hovering anywhere else on the tab tells you where the file is.
+     * One control, two things worth saying, decided by which part of it you are pointing at.</p>
+     *
+     * <h3>Why a region rather than a second tooltip on the sub-element</h3>
+     *
+     * <p>Two reasons, and the first is fatal on its own. <b>The sub-element is usually unhittable.</b> A
+     * composite's parts are {@code setHitTest(false)} as a rule — click-focus targets the exact element
+     * hit rather than the nearest focusable ancestor, so a hittable tab icon swallows the press that
+     * selects the tab and the drag that starts from it. An unhittable element receives no
+     * {@code mouseenter} at all, so a tooltip attached to it could never fire.</p>
+     *
+     * <p>And second, {@code Enter} does not bubble but <em>is</em> dispatched to every element in the
+     * entered chain — so even where the part is hittable, a tooltip on the part and one on the whole
+     * would both show, stacked over each other. Making the innermost win would mean arbitration between
+     * tooltips; one tooltip that changes its wording needs none.</p>
+     *
+     * <p>Resolved on the placement ticker rather than from a {@code mousemove} listener, for the reason
+     * placement itself is: a region can be reflowed out from under a stationary pointer, and a listener
+     * would only notice the next time the mouse moved.</p>
+     */
+    public Tooltip addRegion(UIElement region, String text) {
+        Objects.requireNonNull(region, "region");
+        if (regions == null) regions = new ArrayList<>(2);
+        regions.add(new Region(region, text == null ? "" : text));
+        return this;
+    }
+
+    /** Drops every region, so a rebuilt anchor does not accumulate them. */
+    public Tooltip clearRegions() {
+        regions = null;
+        activeRegion = null;
+        label.setText(baseText);
+        return this;
+    }
+
+    /** How many regions this tooltip has — the only observable that a caller wired one. */
+    public int regionCount() {
+        return regions == null ? 0 : regions.size();
+    }
+
+    /**
+     * Picks the deepest region under the pointer and puts its wording on the label.
+     *
+     * <p><b>Deepest, not first.</b> Regions nest — an icon inside a header inside a tab — and the answer
+     * a person wants is the most specific thing they are pointing at, which is the same rule hit-testing
+     * and {@code :hover} already follow. Order of registration is not that.</p>
+     *
+     * <p>Geometry only: {@link UIElement#containsScreenPoint} is a rounded-box containment test and does
+     * not consult {@code hitTest}, which is precisely why an unhittable part can still have a region.</p>
+     */
+    private void resolveRegion() {
+        if (regions == null) return;
+        UIWindow window = getAttachedWindow();
+        if (window == null) return;
+        ReadOnlyVec2f pointer = window.getInputHandler().pointerPosition();
+
+        Region deepest = null;
+        int deepestDepth = -1;
+        for (Region region : regions) {
+            UIElement element = region.element;
+            // A region whose element has left the tree cannot contain anything -- and asking would read a
+            // stale transform rather than answering false.
+            if (element.getAttachedWindow() != window) continue;
+            if (!element.containsScreenPoint(pointer.x(), pointer.y())) continue;
+            int depth = element.getRuntimeCache().getDepth();
+            if (depth > deepestDepth) {
+                deepestDepth = depth;
+                deepest = region;
+            }
+        }
+
+        if (deepest == activeRegion) return;
+        activeRegion = deepest;
+        label.setText(deepest == null ? baseText : deepest.text);
+    }
+
+    /** A sub-area of the anchor with wording of its own. @see #addRegion */
+    private static final class Region {
+        private final UIElement element;
+        private final String text;
+
+        private Region(UIElement element, String text) {
+            this.element = element;
+            this.text = text;
+        }
     }
 
     /** A tooltip owns its label; it has no public content slot. */
@@ -198,10 +333,16 @@ public class Tooltip extends UIElement {
      */
     public Tooltip showFor(UIElement anchor) {
         if (anchor == null || anchor.getAttachedWindow() == null) return this;
+        // Whatever was being waited for, this supersedes it -- including the ordinary case where the
+        // ticker itself is the caller.
+        cancelPendingShow();
         this.anchor = anchor;
 
         setHidden(false);
         addToTopLayer();
+        // BEFORE placement, not after: the wording decides the box, and the box decides whether the
+        // tooltip flips above its anchor. Resolving afterwards places the previous frame's text.
+        resolveRegion();
         reposition();
 
         if (!placementTickerRunning) {
@@ -212,8 +353,70 @@ public class Tooltip extends UIElement {
         return this;
     }
 
+    /**
+     * Shows this tooltip once the pointer has rested on {@code anchor} for {@code tooltip-delay}.
+     *
+     * <h3>Why a delay at all</h3>
+     *
+     * <p>A hover is not a request. The pointer crosses a dozen controls on the way to the one it wants,
+     * and a tooltip on each of them is a box flickering over whatever you were reading — in a tab strip,
+     * over the very tabs you are trying to look at. Waiting for the pointer to STOP is what separates
+     * "passed over this" from "asked about this", which is why every desktop toolkit has this wait and
+     * none of them sets it to zero.</p>
+     *
+     * <h3>...and why hiding has none</h3>
+     *
+     * <p>Not an oversight and not symmetry worth having. The delay exists to infer intent from
+     * hesitation, and leaving carries no such ambiguity: the pointer is elsewhere, so the answer is no
+     * longer about anything. A hide delay would leave a box over the control you just moved onto.</p>
+     *
+     * <p>Counted down on a frame ticker rather than against {@code System.nanoTime()}: the frame delta is
+     * the same clock every other timed thing here advances on, it pauses when the window does, and it
+     * sidesteps the arbitrary-origin trap that clock carries.</p>
+     *
+     * <p>A delay of zero — the property's initial value, so anything the user-agent sheet does not reach
+     * — shows immediately, which is exactly what every caller got before this existed.</p>
+     */
+    public Tooltip showAfterDelay(UIElement anchor) {
+        if (anchor == null || anchor.getAttachedWindow() == null) return this;
+
+        float delay = getStyle().getGeneralGroup().tooltipDelay();
+        // `!(delay > 0)` rather than `delay <= 0`, which is FALSE for NaN -- so a NaN would be taken as a
+        // real wait and counted down forever, and the tooltip would simply never appear. The engine has
+        // paid for that exact comparison once already, in TextEditor.lineHeight.
+        if (!(delay > 0f)) return showFor(anchor);
+
+        pendingAnchor = anchor;
+        pendingDelay = delay;
+        if (!delayTickerRunning) {
+            delayTickerRunning = true;
+            UIWindow window = getAttachedWindow();
+            if (window != null) window.registerTicker(new DelayTicker());
+            else delayTickerRunning = false;
+        }
+        return this;
+    }
+
+    /**
+     * Abandons a wait in progress. Idempotent, and safe when nothing is pending.
+     *
+     * <p>Folded into {@link #hide} rather than left to callers: a tooltip told to hide during its own
+     * countdown would otherwise still appear afterwards, over an anchor the pointer left a second ago.</p>
+     */
+    public Tooltip cancelPendingShow() {
+        pendingAnchor = null;
+        pendingDelay = 0f;
+        return this;
+    }
+
+    /** True while the pointer has entered but the wait has not elapsed — the only observable of it. */
+    public boolean isShowPending() {
+        return pendingAnchor != null;
+    }
+
     /** Demotes and detaches from its anchor. The placement ticker drops itself on the next frame. */
     public Tooltip hide() {
+        cancelPendingShow();
         this.anchor = null;
         removeFromTopLayer();
         setHidden(true);
@@ -254,6 +457,32 @@ public class Tooltip extends UIElement {
         AnchoredPlacement.place(this, anchor, side, gap);
     }
 
+    /**
+     * Counts a pending show down and fires it, then drops itself.
+     *
+     * <p>Separate from {@link PlacementTicker} because the two are live at opposite times — one before
+     * the tooltip is shown and one only while it is — so a single ticker would spend every frame of a
+     * visible tooltip asking about a wait that ended, and every frame of a wait re-placing a box that is
+     * not on screen.</p>
+     */
+    private final class DelayTicker implements UIFrameTicker {
+        @Override
+        public boolean tickFrame(float deltaSeconds) {
+            UIElement target = pendingAnchor;
+            if (target == null) {
+                delayTickerRunning = false;
+                return false;
+            }
+            pendingDelay -= deltaSeconds;
+            if (pendingDelay > 0f) return true;
+
+            delayTickerRunning = false;
+            // showFor clears the pending state itself, so this cannot re-enter or fire twice.
+            showFor(target);
+            return false;
+        }
+    }
+
     /** Keeps placement current while shown, then drops itself. Registration is idempotent
      * ({@code HashSet}-backed) but the flag avoids re-registering on every {@code showFor}. */
     private final class PlacementTicker implements UIFrameTicker {
@@ -263,6 +492,7 @@ public class Tooltip extends UIElement {
                 placementTickerRunning = false;
                 return false;
             }
+            resolveRegion();
             reposition();
             return true;
         }
