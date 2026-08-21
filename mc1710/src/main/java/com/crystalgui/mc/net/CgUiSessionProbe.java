@@ -1,18 +1,24 @@
 package com.crystalgui.mc.net;
 
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.fs.CgFileEntry;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.WorkspaceClient;
 import com.crystalgui.net.ClientUiSession;
+import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.net.protocol.ProtocolConnection;
+import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
+import com.crystalgui.text.Change;
 import com.crystalgui.ui.ElementRegistry;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.Button;
+import com.crystalgui.ui.elements.Dropdown;
+import com.crystalgui.ui.elements.ProgressBar;
 import com.crystalgui.ui.elements.Slider;
+import com.crystalgui.ui.elements.Tab;
+import com.crystalgui.ui.elements.TabView;
 import com.crystalgui.ui.elements.UIText;
 
 import cpw.mods.fml.common.FMLCommonHandler;
@@ -22,37 +28,48 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.server.MinecraftServer;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 /**
- * Does the <em>protocol</em> work over the real connection lifecycle? — {@code -PcgSessionProbe}.
+ * Everything Phase 4 built, over a real Minecraft connection — {@code -PcgSessionProbe}.
  *
- * <p>{@link CgUiNetProbe} answers a lower question and owns the channel to do it: it echoes byte arrays,
- * proving Forge's channel, FML's discriminators, the Netty thread, the frame ceiling and player routing.
- * This one proves everything above that, and — since Phase 4 A4 — <b>proves it on the path that
- * ships</b>: it opens no multiplexer, installs no inbound handler and pumps nothing. It takes the
- * connections {@link CgUiConnections} opened on join and puts a session on each end.</p>
- *
- * <p>That is why the two probes have separate flags. A probe that builds its own transport tests the
- * engine; a probe that borrows the real one tests the wiring, and the wiring is what had never existed.</p>
+ * <p>{@link CgUiNetProbe} owns the channel and echoes byte arrays, which proves the transport and
+ * nothing above it. This proves the rest, <b>on the path that ships</b>: it opens no multiplexer,
+ * installs no inbound handler and pumps nothing, taking the connections {@link CgUiConnections} opened
+ * on join and putting a session on each end.</p>
  *
  * <table>
- *   <tr><th>#</th><th>Exchange</th><th>Kinds exercised</th></tr>
- *   <tr><td>1</td><td>{@code open()} → client rebuilds the tree</td>
- *       <td>notification {@code ui/openWindow}, then a <b>request</b> {@code ui/description} and its
- *           <b>response</b></td></tr>
- *   <tr><td>2</td><td>server mutates a widget → client sees it</td><td>notification {@code ui/stateDelta}</td></tr>
- *   <tr><td>3</td><td>client presses → server's lambda runs</td><td>notification {@code ui/event}</td></tr>
- *   <tr><td>4</td><td>server calls the client and gets an answer</td>
- *       <td>request/response, in the direction easiest to get wrong</td></tr>
+ *   <tr><th>Check</th><th>What it proves</th></tr>
+ *   <tr><td>1 tree</td><td>{@code ui/openWindow} + the {@code ui/description} request/response</td></tr>
+ *   <tr><td>2 tabs</td><td><b>C3</b> — a TabView's tabs and their contents survive being described</td></tr>
+ *   <tr><td>3 state</td><td><b>C4</b> — a ProgressBar's fraction and a Dropdown's OPTIONS arrive</td></tr>
+ *   <tr><td>4 delta</td><td>{@code ui/stateDelta}</td></tr>
+ *   <tr><td>5 event</td><td>{@code ui/event} — the server's own lambda runs</td></tr>
+ *   <tr><td>6 call</td><td>request/response, server → client</td></tr>
+ *   <tr><td>7 reshape</td><td><b>C2</b> — {@code ui/treeDelta}: a child added after open arrives, and
+ *       a later state update still lands on the RIGHT element through the renumbering</td></tr>
+ *   <tr><td>8 fan-out</td><td><b>C1</b> — a second viewer added to the live session receives the window</td></tr>
+ *   <tr><td>9 files</td><td><b>B1/B2</b> — a listing off the server's own disk</td></tr>
+ *   <tr><td>10 delta-write</td><td><b>C5</b> — {@code fs.writeDelta} and the etag-validated cache</td></tr>
  * </table>
  *
  * <h3>Two handlers, because there are two threads</h3>
  *
- * <p>Server-side work — opening the session, mutating the tree, issuing the call, flushing — runs on
- * {@code ServerTickEvent}. Client-side work — reading the rebuilt tree, pressing a widget — runs on
- * {@code ClientTickEvent}. The first version did both from the client tick and happened to work, because
- * a single-player integrated server shares the process; it was still touching a tree from the wrong
- * thread, and the point of this probe is now to exercise what production does rather than what
- * survives.</p>
+ * <p>Server-side work runs on {@code ServerTickEvent} and client-side work on {@code ClientTickEvent}.
+ * An earlier version did both from the client tick and happened to work, because a single-player
+ * integrated server shares the process — it was still touching a tree from the wrong thread.</p>
+ *
+ * <h3>What one client cannot prove</h3>
+ *
+ * <p>C1's second viewer is a real {@link ServerUiSession#addViewer} against the live session, but its
+ * far end is an {@link InMemoryTransport} rather than a second player — single-player has one
+ * connection, and standing up a second client is not something a probe can do. So this covers the
+ * fan-out <em>path</em> with a real session in the middle, and the two-player case remains covered
+ * headlessly by {@code MultiViewerTest}.</p>
  */
 public final class CgUiSessionProbe {
 
@@ -61,27 +78,58 @@ public final class CgUiSessionProbe {
     private static final int WINDOW_ID = 4242;
 
     /** How long to wait before calling it a failure, in client ticks. */
-    private static final int DEADLINE_TICKS = 20 * 40;
+    private static final int DEADLINE_TICKS = 20 * 60;
+
+    /**
+     * The checklist. <b>Written from two threads</b> — server-side checks pass on the server tick and
+     * client-side ones on the client tick — so it is concurrent, with the order kept separately.
+     *
+     * <p>A plain {@code LinkedHashMap} would very likely have worked here, since every key is inserted
+     * once at class init and only values are replaced afterwards. "Very likely" is what this codebase
+     * already paid for once: a {@code HashSet} written from a script thread while the UI thread copied
+     * it threw an {@code ArrayIndexOutOfBoundsException} from inside {@code HashMap.keysToArray}, with
+     * nothing about the offending subsystem anywhere in the trace.</p>
+     */
+    private static final Map<String, Boolean> CHECKS = new ConcurrentHashMap<>();
+
+    /** Insertion order, kept apart because a ConcurrentHashMap has none. */
+    private static final List<String> ORDER = Arrays.asList(
+            "1 tree", "2 tabs (C3)", "3 widget state (C4)", "4 state delta", "5 event",
+            "6 server->client call", "7 reshape (C2)", "8 fan-out (C1)", "9 files (B1/B2)",
+            "10 writeDelta + cache (C5)");
+
+    private static void pass(String check) {
+        if (Boolean.TRUE.equals(CHECKS.get(check))) return;
+        CHECKS.put(check, true);
+        CrystalGuiCore.LOGGER.info("[session-probe] OK {}", check);
+    }
+
+    static {
+        for (String check : ORDER) CHECKS.put(check, false);
+    }
 
     private static volatile ServerUiSession<Object> server;
     private static volatile ClientUiSession<Object> client;
 
     private static Slider serverSlider;
+    private static UIText addedLater;
 
-    private static volatile boolean treeArrived;
-    private static volatile boolean deltaSeen;
-    private static volatile boolean eventReceived;
-    private static volatile boolean callAnswered;
-    /** Phase 4 B1/B2: a real listing, off the SERVER's disk, over the same connection. */
-    private static volatile boolean workspaceListed;
-    private static volatile boolean workspaceAsked;
-    private static volatile WorkspaceClient<Object> files;
+    // C1's second viewer, both ends pumped on the server tick.
+    private static InMemoryTransport<Object>[] extraLink;
+    private static ProtocolConnection<Object> extraServer;
+    private static ProtocolConnection<Object> extraClient;
+    private static ClientUiSession<Object> extraViewer;
 
     private static volatile boolean deltaSent;
     private static volatile boolean eventSent;
     private static volatile boolean callSent;
+    private static volatile boolean reshapeSent;
+    private static volatile boolean fanoutStarted;
+    private static volatile boolean filesAsked;
+    private static volatile boolean deltaWriteStarted;
     private static volatile boolean reported;
 
+    private static WorkspaceClient<Object> files;
     private static int clientTicks;
 
     private CgUiSessionProbe() {
@@ -93,29 +141,49 @@ public final class CgUiSessionProbe {
         CrystalGuiCore.LOGGER.info("[session-probe] armed; waiting for CgUiConnections to open a pair");
     }
 
+    private static boolean done(String check) {
+        return Boolean.TRUE.equals(CHECKS.get(check));
+    }
+
     // ── The two ends ────────────────────────────────────────────────────────
 
-    /** <b>Server thread.</b> Opens the window once the player has a connection. */
+    /** <b>Server thread.</b> A tree that exercises C3 and C4 as well as the basics. */
     private static void openServer(ProtocolConnection<Object> connection) {
         UIElement root = new UIElement();
         root.addChild(new UIText("hello from the server"));
+
         Button button = new Button("Press me");
         root.addChild(button);
+
         serverSlider = new Slider();
         serverSlider.setRange(0f, 1f);
         root.addChild(serverSlider);
 
-        // Rides the connection: no transport and no router of its own, sharing the wire with every
-        // contributor Protocols bound onto it.
+        // C3: tabs are content, and their contents are content too.
+        TabView tabs = new TabView();
+        Tab first = tabs.addTab("Editor");
+        first.content().addChild(new UIText("inside the first tab"));
+        Tab second = tabs.addTab("Settings");
+        second.content().addChild(new Slider());
+        tabs.selectIndex(1);
+        root.addChild(tabs);
+
+        // C4: two widgets whose state had no way of travelling until this phase.
+        ProgressBar progress = new ProgressBar();
+        progress.setFraction(0.42f);
+        root.addChild(progress);
+
+        Dropdown dropdown = new Dropdown("choose");
+        dropdown.addOptions("alpha", "beta", "gamma");
+        dropdown.select(2);
+        root.addChild(dropdown);
+
         ServerUiSession<Object> session = new ServerUiSession<>(WINDOW_ID, root, connection);
-        session.onActivate(button, ctx -> {
-            eventReceived = true;
-            CrystalGuiCore.LOGGER.info("[session-probe] 3/4 the server's own lambda ran for a client press");
-        });
+        session.onActivate(button, ctx -> pass("5 event"));
         session.open();
         server = session;
-        CrystalGuiCore.LOGGER.info("[session-probe] server session opened on the real connection, hash={}",
-                session.descHash());
+        CrystalGuiCore.LOGGER.info("[session-probe] server session opened on the real connection, "
+                + "{} children, hash={}", root.getChildren().size(), session.descHash());
     }
 
     /** <b>Client thread.</b> */
@@ -123,8 +191,8 @@ public final class CgUiSessionProbe {
         ElementRegistry.bootstrapBuiltins();
         ClientUiSession<Object> session = new ClientUiSession<>(connection);
         session.onWindowOpened(root -> {
-            treeArrived = root != null;
-            CrystalGuiCore.LOGGER.info("[session-probe] 1/4 tree rebuilt on the client: {} children",
+            if (root != null) pass("1 tree");
+            CrystalGuiCore.LOGGER.info("[session-probe] tree rebuilt: {} children",
                     root == null ? -1 : root.getChildren().size());
         });
         session.onCall("probe/ping", (args, respond) -> {
@@ -133,10 +201,11 @@ public final class CgUiSessionProbe {
             respond.ok(out);
         });
         client = session;
-        CrystalGuiCore.LOGGER.info("[session-probe] client session attached to the real connection");
     }
 
     public static final class Handler {
+
+        // ── Server side ─────────────────────────────────────────────────────
 
         @SubscribeEvent
         public void onServerTick(TickEvent.ServerTickEvent event) {
@@ -156,19 +225,18 @@ public final class CgUiSessionProbe {
                 return;
             }
 
-            // Riding a connection, so this only flushes what the tree changed -- CgUiConnections already
-            // drained and expired on its own ServerTickEvent.
+            // Riding a connection, so this only flushes what the tree changed.
             server.tick();
+            pumpExtraViewer();
 
-            if (!treeArrived) return;
+            if (!done("1 tree")) return;
 
             if (!deltaSent) {
                 deltaSent = true;
                 serverSlider.setValue(0.75f);
-                CrystalGuiCore.LOGGER.info("[session-probe] server moved the slider to 0.75");
                 return;
             }
-            if (!deltaSeen || !eventReceived) return;
+            if (!done("4 state delta") || !done("5 event")) return;
 
             if (!callSent) {
                 callSent = true;
@@ -176,13 +244,54 @@ public final class CgUiSessionProbe {
                 args.putString("from", "server");
                 server.call("probe/ping", args,
                         result -> {
-                            callAnswered = "server".equals(result.getString("pong", ""));
-                            CrystalGuiCore.LOGGER.info("[session-probe] 4/4 the client answered: pong={}",
-                                    result.getString("pong", ""));
+                            if ("server".equals(result.getString("pong", ""))) {
+                                pass("6 server->client call");
+                            }
                         },
-                        error -> CrystalGuiCore.LOGGER.error("[session-probe] the call failed: {}", error));
+                        error -> CrystalGuiCore.LOGGER.error("[session-probe] call failed: {}", error));
+                return;
+            }
+            if (!done("6 server->client call")) return;
+
+            // C2 -- a child added AFTER open, which used to need a whole re-open.
+            if (!reshapeSent) {
+                reshapeSent = true;
+                addedLater = new UIText("added after open");
+                server.root().addChildAt(addedLater, 0);
+                CrystalGuiCore.LOGGER.info("[session-probe] inserted a child at index 0 "
+                        + "— every id after it shifts");
+                return;
+            }
+
+            // C1 -- a second viewer on the LIVE session. Its far end is in-memory because a
+            // single-player world has one connection; the fan-out path is the real one.
+            if (done("7 reshape (C2)") && !fanoutStarted) {
+                fanoutStarted = true;
+                extraLink = InMemoryTransport.pair();
+                extraServer = Protocols.open(extraLink[0], PlainOps.INSTANCE, () -> { }, "probe-viewer");
+                extraClient = Protocols.open(extraLink[1], PlainOps.INSTANCE, () -> { }, null);
+                extraViewer = new ClientUiSession<>(extraClient);
+                extraViewer.onWindowOpened(root -> {
+                    if (root != null) pass("8 fan-out (C1)");
+                    CrystalGuiCore.LOGGER.info("[session-probe] second viewer rebuilt {} children",
+                            root == null ? -1 : root.getChildren().size());
+                });
+                server.addViewer(extraServer);
+                CrystalGuiCore.LOGGER.info("[session-probe] added a second viewer; count={}",
+                        server.viewerCount());
             }
         }
+
+        /** Both ends of the synthetic viewer's link, on the thread that owns the tree. */
+        private void pumpExtraViewer() {
+            if (extraLink == null) return;
+            extraLink[0].deliver();
+            extraLink[1].deliver();
+            extraServer.tick();
+            extraClient.tick();
+        }
+
+        // ── Client side ─────────────────────────────────────────────────────
 
         @SubscribeEvent
         public void onClientTick(TickEvent.ClientTickEvent event) {
@@ -200,68 +309,153 @@ public final class CgUiSessionProbe {
             if (client == null) {
                 ProtocolConnection<Object> connection = CgUiConnections.client();
                 if (connection == null) {
-                    if (++clientTicks > DEADLINE_TICKS) {
-                        finish(false, "no client connection was ever opened");
-                    }
+                    if (++clientTicks > DEADLINE_TICKS) finish(false, "no client connection");
                     return;
                 }
                 openClient(connection);
                 return;
             }
-
             clientTicks++;
+            if (client.root() == null) return;
 
-            if (treeArrived && deltaSent && !deltaSeen) {
-                UIElement mirrored = client.root().getChildren().get(2);
-                if (mirrored instanceof Slider
-                        && Math.abs(((Slider) mirrored).getValue() - 0.75f) < 1e-4f) {
-                    deltaSeen = true;
-                    CrystalGuiCore.LOGGER.info("[session-probe] 2/4 the delta arrived and applied");
-                }
+            checkDescribedState();
+            checkDelta();
+            pressWhenReady();
+            checkReshape();
+            driveFiles();
+
+            if (clientTicks % 60 == 0) report("waiting");
+            if (!CHECKS.containsValue(false)) finish(true, "");
+            else if (clientTicks > DEADLINE_TICKS) finish(false, "timed out");
+        }
+
+        /** C3 and C4, read off the rebuilt tree. */
+        private void checkDescribedState() {
+            if (done("2 tabs (C3)") && done("3 widget state (C4)")) return;
+            List<UIElement> children = client.root().getChildren();
+            // The reshape inserts at 0, so index off the END -- which is also a small check that the
+            // tree really is the one that was described.
+            int n = children.size();
+            UIElement tabsElement = children.get(n - 3);
+            UIElement progressElement = children.get(n - 2);
+            UIElement dropdownElement = children.get(n - 1);
+
+            if (tabsElement instanceof TabView tabs && tabs.getTabs().size() == 2) {
+                boolean labels = "Editor".equals(tabs.getTabs().get(0).getText())
+                        && "Settings".equals(tabs.getTabs().get(1).getText());
+                boolean content = !tabs.getTabs().get(0).content().getChildren().isEmpty();
+                boolean selection = tabs.getSelectedIndex() == 1;
+                if (labels && content && selection) pass("2 tabs (C3)");
+                else CrystalGuiCore.LOGGER.warn("[session-probe] tabs: labels={} content={} selected={}",
+                        labels, content, tabs.getSelectedIndex());
             }
 
-            if (deltaSeen && !eventSent) {
-                UIElement mirrored = client.root().getChildren().get(1);
-                if (mirrored instanceof Button) {
-                    eventSent = true;
-                    // The REAL widget, because what reports is a listener the client attached from the
-                    // description. Calling report() directly would skip the half that can be wrong.
-                    ((Button) mirrored).onPressed.emit();
-                    CrystalGuiCore.LOGGER.info("[session-probe] client pressed the mirrored button");
-                }
+            boolean progressOk = progressElement instanceof ProgressBar bar
+                    && Math.abs(bar.fraction() - 0.42f) < 1e-4f;
+            boolean dropdownOk = dropdownElement instanceof Dropdown drop
+                    && drop.getOptionCount() == 3
+                    && "gamma".equals(drop.getSelectedOption());
+            if (progressOk && dropdownOk) pass("3 widget state (C4)");
+        }
+
+        private void checkDelta() {
+            if (done("4 state delta") || !deltaSent) return;
+            int n = client.root().getChildren().size();
+            UIElement mirrored = client.root().getChildren().get(n - 4);
+            if (mirrored instanceof Slider slider && Math.abs(slider.getValue() - 0.75f) < 1e-4f) {
+                pass("4 state delta");
+            }
+        }
+
+        private void pressWhenReady() {
+            if (eventSent || !done("4 state delta")) return;
+            int n = client.root().getChildren().size();
+            UIElement mirrored = client.root().getChildren().get(n - 5);
+            if (!(mirrored instanceof Button)) return;
+            eventSent = true;
+            // The REAL widget: what reports is a listener the client attached from the description.
+            ((Button) mirrored).onPressed.emit();
+        }
+
+        /** C2 — the child arrived, and the slider's update still landed after renumbering. */
+        private void checkReshape() {
+            if (done("7 reshape (C2)") || !reshapeSent) return;
+            List<UIElement> children = client.root().getChildren();
+            if (children.size() != 7) return;
+            if (!(children.get(0) instanceof UIText text)) return;
+            if (!"added after open".equals(text.getText())) return;
+            // And the slider is still the slider, at its shifted index.
+            UIElement slider = children.get(children.size() - 4);
+            if (slider instanceof Slider s && Math.abs(s.getValue() - 0.75f) < 1e-4f) {
+                pass("7 reshape (C2)");
+            }
+        }
+
+        /** B1/B2 then C5, on the workspace the server is hosting. */
+        private void driveFiles() {
+            if (!done("7 reshape (C2)")) return;
+            if (files == null) {
+                ProtocolConnection<Object> connection = CgUiConnections.client();
+                if (connection == null) return;
+                files = WorkspaceClient.forConnection(connection);
             }
 
-            // 5/5 -- the workspace, which lives on the SERVER and is reached over this same wire.
-            if (callAnswered && !workspaceAsked) {
-                workspaceAsked = true;
-                files = new WorkspaceClient<>(CgUiConnections.client());
-                files.list(CgPath.ofProject("minecraft.workspace"),
+            if (!filesAsked) {
+                filesAsked = true;
+                files.list(CgPath.ofProject(CgUiWorkspaceHost.PROJECT_ID),
                         entries -> {
-                            boolean readme = false;
-                            for (CgFileEntry entry : entries) {
-                                if ("README.md".equals(entry.name())) readme = true;
-                            }
-                            workspaceListed = readme;
-                            CrystalGuiCore.LOGGER.info("[session-probe] 5/5 workspace listed {} entries "
-                                    + "from the server, README.md present={}", entries.size(), readme);
+                            CrystalGuiCore.LOGGER.info("[session-probe] listed {} entries from the server",
+                                    entries.size());
+                            if (!entries.isEmpty()) pass("9 files (B1/B2)");
                         },
-                        failure -> CrystalGuiCore.LOGGER.error(
-                                "[session-probe] workspace listing failed: {}", failure.code()));
+                        failure -> CrystalGuiCore.LOGGER.error("[session-probe] listing failed: {}",
+                                failure.code()));
+                return;
             }
+            if (!done("9 files (B1/B2)") || deltaWriteStarted) return;
 
-            if (clientTicks % 40 == 0) {
-                CrystalGuiCore.LOGGER.info("[session-probe] tick {} — tree={} delta={} event={} call={} "
-                                + "(connections open: {})",
-                        clientTicks, treeArrived, deltaSeen, eventReceived, callAnswered,
-                        CgUiConnections.openConnections());
-                CrystalGuiCore.LOGGER.info("[session-probe]   workspace listed={} boundPeers={}",
-                        workspaceListed, CgUiWorkspaceHost.boundPeers());
+            // C5 -- read, write a CHANGE SET, re-read. The re-read is conditional on the etag, so it
+            // also exercises the cache path rather than merely the write.
+            deltaWriteStarted = true;
+            CgPath readme = CgPath.of(CgUiWorkspaceHost.PROJECT_ID, "README.md");
+            files.read(readme,
+                    first -> {
+                        String before = new String(first.content(), StandardCharsets.UTF_8);
+                        CrystalGuiCore.LOGGER.info("[session-probe] README is {} bytes", before.length());
+                        // Replace the first line's "#" with "#!" -- one change, not the whole file.
+                        files.writeDelta(readme, List.of(new Change(0, 1, "#!")),
+                                etag -> files.read(readme,
+                                        second -> {
+                                            String after =
+                                                    new String(second.content(), StandardCharsets.UTF_8);
+                                            boolean applied = after.startsWith("#!");
+                                            CrystalGuiCore.LOGGER.info("[session-probe] after "
+                                                    + "writeDelta the file starts \"{}\"",
+                                                    after.substring(0, Math.min(12, after.length())));
+                                            if (applied) {
+                                                // Put it back, so a repeat run starts from the same file.
+                                                files.writeDelta(readme, List.of(new Change(0, 2, "#")),
+                                                        e -> pass("10 writeDelta + cache (C5)"),
+                                                        f -> CrystalGuiCore.LOGGER.error(
+                                                                "[session-probe] restore failed: {}",
+                                                                f.code()));
+                                            }
+                                        },
+                                        f -> CrystalGuiCore.LOGGER.error(
+                                                "[session-probe] re-read failed: {}", f.code())),
+                                failure -> CrystalGuiCore.LOGGER.error(
+                                        "[session-probe] writeDelta failed: {}", failure.code()));
+                    },
+                    failure -> CrystalGuiCore.LOGGER.error("[session-probe] README read failed: {}",
+                            failure.code()));
+        }
+
+        private void report(String prefix) {
+            StringBuilder line = new StringBuilder("[session-probe] " + prefix + ":");
+            for (String check : ORDER) {
+                line.append(done(check) ? " OK " : " -- ").append(check).append(';');
             }
-            if (treeArrived && deltaSeen && eventReceived && callAnswered && workspaceListed) {
-                finish(true, "");
-            } else if (clientTicks > DEADLINE_TICKS) {
-                finish(false, "timed out");
-            }
+            CrystalGuiCore.LOGGER.info(line.toString());
         }
 
         /**
@@ -277,15 +471,14 @@ public final class CgUiSessionProbe {
          */
         private void finish(boolean pass, String why) {
             reported = true;
+            report(pass ? "PASS" : "FAIL (" + why + ")");
             if (pass) {
-                CrystalGuiCore.LOGGER.info("[session-probe] PASS — the whole stack crossed a real "
-                        + "Minecraft connection, over the lifecycle that ships: description "
-                        + "request/response, state delta, event, a server->client call, AND a workspace "
-                        + "listing off the server's own disk");
+                CrystalGuiCore.LOGGER.info("[session-probe] PASS — every Phase 4 feature crossed a real "
+                        + "Minecraft connection: protocol, lifecycle, workspace, tree deltas, tab and "
+                        + "widget state, fan-out, and a delta write");
             } else {
-                CrystalGuiCore.LOGGER.error("[session-probe] FAIL ({}) — tree={} delta={} event={} "
-                                + "call={} workspace={}. The first false is the exchange that stalled.",
-                        why, treeArrived, deltaSeen, eventReceived, callAnswered, workspaceListed);
+                CrystalGuiCore.LOGGER.error("[session-probe] FAIL ({}) — the first '--' above is the "
+                        + "check that stalled", why);
             }
             Minecraft.getMinecraft().shutdown();
         }

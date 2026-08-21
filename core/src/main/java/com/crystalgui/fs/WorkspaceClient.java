@@ -89,6 +89,35 @@ public final class WorkspaceClient<T> {
         this(connection::call, connection::onRequest, connection.ops());
     }
 
+    /** One per connection, memoised weakly so a closed connection's entry goes with it. */
+    private static final Map<ProtocolConnection<?>, WorkspaceClient<?>> BY_CONNECTION =
+            java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
+
+    /**
+     * The file client for this connection, creating it once.
+     *
+     * <p><b>Use this rather than the constructor</b> whenever the connection is shared. A
+     * {@code WorkspaceClient} registers {@code fs.changed} to receive change notifications, and
+     * {@link com.crystalgui.net.protocol.MessageRouter} refuses a duplicate registration outright — so a
+     * second one on the same wire throws, and it throws from wherever the second consumer happens to be
+     * constructed. That is the right refusal and the wrong place to discover it: two subsystems wanting
+     * file access on one connection is entirely reasonable, and what is not reasonable is each building
+     * its own notification channel for it.</p>
+     *
+     * <p>Found in game rather than in a test: an editor and a probe each built one over the same player's
+     * connection, and the second killed the client during screen init.</p>
+     */
+    @SuppressWarnings("unchecked")
+    public static <T> WorkspaceClient<T> forConnection(ProtocolConnection<T> connection) {
+        synchronized (BY_CONNECTION) {
+            WorkspaceClient<?> existing = BY_CONNECTION.get(connection);
+            if (existing != null) return (WorkspaceClient<T>) existing;
+            WorkspaceClient<T> created = new WorkspaceClient<>(connection);
+            BY_CONNECTION.put(connection, created);
+            return created;
+        }
+    }
+
     private WorkspaceClient(Caller<T> caller, WorkspaceRpc.Registrar<T> registrar,
                             com.crystalgui.serialization.DynamicOps<T> ops) {
         this.caller = caller;
