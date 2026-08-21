@@ -3,6 +3,7 @@ package com.crystalgui.ui.elements.desktop;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
@@ -62,11 +63,6 @@ import java.util.function.BooleanSupplier;
  *   <li><b>A maximise button.</b> Its behaviour is W6. A control that looks clickable and does nothing
  *       is the lie the disabled-control rule already forbids, so it arrives with the geometry it
  *       operates rather than as greyed furniture.</li>
- *   <li><b>An icon slot.</b> W4, with the taskbar — a frame's icon is drawn in two places or in
- *       neither, and building an empty box now leaves every theme hiding it.</li>
- *   <li><b>A focus policy.</b> W2 brings activation, per-frame focus memory and the focus-ring
- *       carve-out together; a frame that can take focus before any of those rings its whole viewport,
- *       which is exactly the noise {@code :focus-visible} was introduced to remove.</li>
  * </ul>
  *
  * <p><b>One known W1 artefact.</b> {@code UIResizer} keeps a resize inside the containing block, which
@@ -117,6 +113,9 @@ public class WindowFrame extends UIElement implements Disposable {
     /** The minimise affordance. Hides; never destroys, whatever the policy says. */
     public static final String MINIMIZE_CLASS = "__minimize__";
 
+    /** The window's icon slot, hidden until {@link #setIcon} gives it something to draw. */
+    public static final String ICON_CLASS = "__icon__";
+
     /**
      * Emitted when the window comes back, carrying <b>{@code persisted}</b> — whether it was restored
      * from retention rather than shown for the first time.
@@ -140,6 +139,7 @@ public class WindowFrame extends UIElement implements Disposable {
     private final UIElement controls;
     private final UIElement content;
     private final UIText titleLabel;
+    private final UIElement icon;
     private final Button closeButton;
     private final Button minimizeButton;
 
@@ -178,6 +178,10 @@ public class WindowFrame extends UIElement implements Disposable {
     @Nullable
     private String key;
 
+    /** @see #setIcon */
+    @Nullable
+    private String iconName;
+
     /** @see #setDiscardGuard */
     private BooleanSupplier discardGuard = () -> true;
 
@@ -210,8 +214,17 @@ public class WindowFrame extends UIElement implements Disposable {
         closeButton.attachListener(this::requestClose);
         controls.addChild(closeButton);
 
+        // BUILT NOW AND HIDDEN, rather than created when an icon arrives. Creating an element from a
+        // setter means creating it possibly mid-gesture, and the title bar has no `gap-all` for a hidden
+        // child to occupy — the one cost that would have made the lazy version worth it.
+        icon = new UIElement();
+        icon.addClass(ICON_CLASS);
+        icon.setHitTest(false);
+        icon.setDisplayed(false);
+
         titleBar = new UIElement();
         titleBar.addClass(TITLE_BAR_CLASS);
+        titleBar.addChild(icon);
         titleBar.addChild(titleLabel);
         titleBar.addChild(controls);
         addInternalChild(titleBar);
@@ -301,6 +314,38 @@ public class WindowFrame extends UIElement implements Disposable {
 
     public Button minimizeButton() {
         return minimizeButton;
+    }
+
+    /** The icon this window declares, or null. @see #setIcon */
+    @Nullable
+    public String iconName() {
+        return iconName;
+    }
+
+    /**
+     * Declares the window's icon — {@code "namespace:name"}, the way a file type does.
+     *
+     * <p>Drawn in <b>two</b> places, the title bar and the taskbar entry, which is why this is a name on
+     * the window rather than an element a caller builds: an icon set in one place and not the other is
+     * how a window comes to look like two different windows.</p>
+     *
+     * <p>Resolved through {@link CgUiSvg#ofIcon}, never {@code of(path)} — that is what binds the
+     * light/dark variant at draw time. The one time a caller reached past it, every {@code icon()} in
+     * every stylesheet drew the light file forever and a theme swap changed nothing.</p>
+     */
+    public WindowFrame setIcon(@Nullable String namespacedIcon) {
+        this.iconName = namespacedIcon;
+        if (namespacedIcon == null) {
+            icon.setDisplayed(false);
+            return this;
+        }
+        CgUiSvg glyph = CgUiSvg.ofIcon(namespacedIcon);
+        if (glyph == null) return this;
+        icon.setDisplayed(true);
+        StyleGroup.defaultPipeline(icon.getStyle().getGeneralGroup(), g -> g.overlay(glyph));
+        Desktop desktop = owner;
+        if (desktop != null) desktop.registry().changed();
+        return this;
     }
 
     public WindowFrame setTitle(String title) {

@@ -76,6 +76,9 @@ public class ElementStateCoverageTest {
         // comes from whatever opened it, and its geometry is per-window client config (W12) rather than
         // element state -- the same document/view line that keeps scroll position out of a description.
         STATEFUL.put("window", false);
+        // The taskbar is the registry RENDERED -- every entry it draws is derived from windows that are
+        // themselves structure, so it has nothing of its own to carry.
+        STATEFUL.put("taskbar", false);
     }
 
     /**
