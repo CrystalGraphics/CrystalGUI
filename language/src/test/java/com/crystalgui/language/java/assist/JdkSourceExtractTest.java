@@ -97,16 +97,23 @@ public class JdkSourceExtractTest {
     }
 
     /**
-     * <b>A tar.gz in, a flat zip of stripped sources out.</b>
+     * <b>A tar.gz in, a flat zip of WHOLE sources out.</b>
      *
      * <p>The whole producer, over an archive carrying one wanted file, one unwanted module, one test-tree
      * file with a colliding package path, and one non-Java entry. What comes out has to be readable by
      * the <em>ordinary</em> {@link SourceArchives.ZipArchive}, because keeping the fetched form
      * indistinguishable from a real {@code src.zip} is what stops a defect here becoming a defect in a
      * reader that every developer with a JDK exercises daily.</p>
+     *
+     * <p>This asserted the bodies were <em>gone</em> — correct while the only reader was a documentation
+     * popup, which quotes a declaration and its comment and would be storing bodies for nothing. The
+     * library viewer reads the same archive and shows the file, so a stripped extract renders a class as
+     * real signatures over empty methods, which reads as a decompiler that failed rather than as a cache
+     * that was economical. {@code SourceHeaders} still does its job and is still tested; nothing calls it
+     * on this path.</p>
      */
     @Test
-    public void anArchiveBecomesAFlatZipOfStrippedSources() throws Exception {
+    public void anArchiveBecomesAFlatZipOfWholeSources() throws Exception {
         Map<String, String> entries = new LinkedHashMap<>();
         entries.put("jdk-17/src/java.base/share/classes/java/util/List.java", ""
                 + "package java.util;\n"
@@ -131,9 +138,10 @@ public class JdkSourceExtractTest {
         assertNotNull("the flat path a src.zip would have used", list);
         assertTrue("the javadoc is the payload", list.contains("/** An ordered collection. */"));
         assertTrue("the declaration is what gets quoted", list.contains("public interface List<E>"));
-        assertTrue("an abstract method has no body to cut", list.contains("boolean add(E e);"));
-        assertTrue("and a default method's body is gone", list.contains("default void clear() {}"));
-        assertFalse(list.contains("removeAll(this)"));
+        assertTrue("an abstract method is unchanged either way", list.contains("boolean add(E e);"));
+        assertTrue("a default method keeps its body now",
+                list.contains("default void clear() { removeAll(this); }"));
+        assertTrue("the body's contents are what a viewer came for", list.contains("removeAll(this)"));
     }
 
     /**

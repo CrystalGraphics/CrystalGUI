@@ -22,6 +22,59 @@ Per-directory detail lives beside the assets it covers; this is the index.
 | Rhino | `language/build.gradle.kts`, bands 8/11/17 | **MPL-2.0** | The JavaScript engine. See [Engine bands](#engine-bands-ecj-and-rhino) |
 | Minecraft name mappings (MCP `stable_12` for 1.7.10) | **Not in this repository** — fetched at runtime to the user's own config directory | See [Name mappings](#minecraft-name-mappings-fetched-never-redistributed) | `methods.csv` / `fields.csv` / `params.csv`, read from MinecraftForge's FML repository. We do not redistribute them, and that is the whole licensing position |
 | ASM (`asm`, `asm-commons`, `asm-tree`) | `language/build.gradle.kts` | **BSD-3-Clause** | © INRIA, France Télécom. The bytecode reader/writer behind the readable↔runtime mapping boundary. 0.24 MB, no transitive dependencies, real classes at class-file major 49 so it runs on every band |
+| CFR | `language/build.gradle.kts`, bands 8/11/17 | **MIT** | © Lee Benfield. The decompiler behind the library viewer, for a class that ships no source. Version 0.152, ~2 MB, **no transitive dependencies**, and written in Java 6 — so unlike ECJ and Rhino one artifact serves every band. See [The decompiler](#the-decompiler-cfr) |
+
+## The decompiler (CFR)
+
+The library viewer opens a classpath type in a read-only tab. Where the type has attached source —
+`src.zip`, a `-sources.jar`, a bundled `assets/<ns>/sources/` — that is what it shows. Where it has
+none, CFR reconstructs the class from its bytecode.
+
+| | |
+|---|---|
+| Artifact | `org.benf:cfr:0.152` |
+| Licence | **MIT** — © Lee Benfield |
+| Size | ~2 MB, no transitive dependencies |
+| Runs on | Java 6 and up |
+| Decompiles | up to roughly Java 17 features — records, sealed classes, `instanceof` patterns, switch expressions |
+
+**The MIT obligation is the copyright notice travelling with the distribution**, which this file is.
+Nothing here is modified: it is consumed as a published binary through
+`org.benf.cfr.reader.api.CfrDriver`, the stable entry point its author documents as such.
+
+### Why CFR rather than Fernflower or Vineflower
+
+Fernflower is what IntelliJ ships, so its output would match the reference exactly — and recent
+Vineflower needs Java 11, which rules out band 8 outright, while Apache 2.0 would add a NOTICE and a
+statement-of-modifications obligation on top of the licence text. CFR is Java 6, so **one jar serves
+every band**: it is the only artifact in that configuration with no per-band pin, where ECJ and Rhino
+each need a version chosen against the band's class-file ceiling.
+
+### The version is old, and that is a measured trade
+
+0.152 is from **December 2021** and is the last published release; the author resumed work in March 2026
+with nothing published yet. Its ceiling sits above everything this feature will actually be handed:
+
+- **A mod jar cannot be newer than the JVM that loads it** — 1.7.10 is Java 8 bytecode, 1.20.x is 17.
+- **The JDK never reaches the decompiler at all**, because it comes from `src.zip`.
+
+What it does not cover is Java 21's record patterns and anything after, which would only appear if a
+modern library were put on a script's classpath. When that happens the failure is contained: the adapter
+answers null, the viewer says so for that class alone, and the answer is cached so it is not retried on
+every click. The seam is one bridge method (`engine.bridge.Decompiler`), so swapping in Vineflower for
+band 11+ later is a jar change rather than a rewrite.
+
+### What a decompiled view is not
+
+It reconstructs, so **there are no comments** and local names survive only where a `LocalVariableTable`
+does (Gradle passes `-g`; Minecraft and Forge jars carry debug info). Kotlin and Scala come back as
+plausible but ugly Java. The viewer says which of the two forms is on screen rather than leaving a
+reader to conclude that somebody's class was written without a single comment.
+
+**On an obfuscated 1.7.10 host the bytes come from `TypeBytes.readable`**, which is the runtime's own —
+post-transformer, post-mixin, already remapped — so the view shows `getBlock` rather than
+`func_147439_a`, and shows the class as the running game has it. That is a thing a decompiler pointed at
+a jar cannot do.
 
 ## Engine bands: ECJ and Rhino
 
@@ -204,6 +257,7 @@ wrong by someone moving fast:
 | Source | Licence | What is permitted |
 |---|---|---|
 | VS Code / Monaco, CodeMirror 6 | **MIT** | **Port the code.** Attribute in the class javadoc, naming the source file |
+| **IntelliJ Community** | **Apache 2.0** | **Port the code**, with attribution and the statement of modifications § 4(b) asks for. What is ported today is *behaviour rather than source*: `JavaDocs` follows `JavaDocInfoGenerator`’s block-tag section order (deprecated → params → return → throws → since → author/version → the API tags → see-also → unrecognised last) and its inline-tag mapping, each named at the rule it decides. The file-type icons in the table above are the same licence arriving as assets |
 | **Zed** | **GPL-3.0** | **Read for shape only.** Copying it would impose GPL on this repository. `Rope`/`TextSummary` take `SumTree`'s *design*; not a line of its code |
 
 ## Trademarks

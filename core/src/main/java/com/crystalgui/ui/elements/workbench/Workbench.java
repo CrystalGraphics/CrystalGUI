@@ -5,7 +5,12 @@ import com.crystalgui.core.notify.Notifications;
 
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.core.async.JobKey;
+import com.crystalgui.core.async.JobLane;
+import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.fs.CgPath;
+import com.crystalgui.fs.ResourceContentProvider;
+import com.crystalgui.fs.ResourceRegistry;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.FilePatternMap;
 import com.crystalgui.fs.WorkspaceClient;
@@ -15,12 +20,15 @@ import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.diagnostic.DiagnosticSet;
 import com.crystalgui.text.cursor.IndentationProvider;
 import com.crystalgui.text.fold.FoldingRangeProvider;
+import com.crystalgui.text.syntax.DocComments;
 import com.crystalgui.text.syntax.LanguageRegistry;
 import com.crystalgui.text.syntax.SyntaxTokenizer;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.chrome.Breadcrumbs;
 import com.crystalgui.ui.elements.chrome.StatusBarView;
 import com.crystalgui.ui.UIWindow;
+import com.crystalgui.ui.elements.SymbolIcon;
+import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.ui.elements.InputDialog;
 import com.crystalgui.ui.elements.chrome.NotificationBalloons;
 import com.crystalgui.ui.elements.chrome.NotificationsView;
@@ -49,8 +57,11 @@ import com.crystalgui.ui.elements.workbench.decoration.DiagnosticDecorations;
 import com.crystalgui.ui.elements.workbench.document.TextFileDocument;
 
 import java.util.ArrayList;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 import java.util.function.Function;
 
@@ -96,6 +107,28 @@ public class Workbench extends UIElement {
 
     /** A document panel — one instance per file, distinguished by its {@code path} state. */
     public static final String FILE_TYPE = "file";
+
+    /**
+     * A tab showing a resource the workspace does not contain — a library class, a decompiled one.
+     *
+     * <h3>Its own type, and its own state key, on purpose</h3>
+     *
+     * <p>{@link #PATH_STATE} is <b>persisted into the dock layout and parsed back as a {@code CgPath}</b>
+     * on restore. Putting a {@code library://…} string through it would ship a landmine that detonates
+     * on the next session rather than on the click that created it — the delayed failure this codebase
+     * has paid for more than once. So a viewer panel carries {@link #RESOURCE_STATE} instead, and the
+     * whole {@code CgPath} pipeline (read, save, rename, decorate, recent files, close guard) never sees
+     * it.</p>
+     *
+     * <p>A parallel lane rather than generalising that pipeline to {@code Resource}, because a viewer
+     * document genuinely has none of the obligations the pipeline exists to meet: it cannot be saved,
+     * renamed, created or decorated. Generalising is where this ends up when a second non-file document
+     * kind turns up to justify it; until then it would be code written for nobody.</p>
+     */
+    public static final String VIEWER_TYPE = "viewer";
+
+    /** Which resource a {@link #VIEWER_TYPE} panel shows, as {@code Resource#toString}. */
+    public static final String RESOURCE_STATE = "resource";
     public static final String PROJECT_TYPE = "project";
     public static final String PROBLEMS_TYPE = "problems";
     /** The notification history — IntelliJ's own tool window, on the auxiliary rail beside the bell. */
@@ -129,6 +162,23 @@ public class Workbench extends UIElement {
      * ones a page deliberately gives a fixed height.</p>
      */
     public static final String FILE_EDITOR_CLASS = "__file-editor__";
+
+    /**
+     * Marks an editor showing something the workspace does not contain. @see #VIEWER_TYPE
+     *
+     * <p>Beside {@link #FILE_EDITOR_CLASS} rather than instead of it: a viewer is a file editor in every
+     * way a stylesheet cares about, and adding a second class rather than swapping the first is what
+     * lets a theme leave it alone and still have it look right.</p>
+     */
+    public static final String VIEWER_CLASS = "__viewer__";
+
+    /**
+     * The decoration a viewer tab carries. @see #tabDecorationFor
+     *
+     * <p>{@code decoration-} prefixed because {@code DockGroup.applyDecoration} swaps classes under that
+     * prefix — a name outside it would be applied and never removed.</p>
+     */
+    public static final String LIBRARY_DECORATION = "decoration-library";
 
     // `onStatus` is gone. It was one Signal.Value<String>, so every writer overwrote every other and the
     // last one to speak won -- the shader graph's line-owner readout fires on every caret move and erased
@@ -421,6 +471,7 @@ public class Workbench extends UIElement {
         // someone who noticed.
         registry.setTitleProvider(this::tabTitleFor);
         registry.setIconProvider(Workbench::tabIconFor);
+        registry.setIconElementProvider(Workbench::viewerIconElement);
         registry.setDecorationProvider(this::tabDecorationFor);
 
         // Anchors match where defaultLayout() puts them, so closing a panel and reopening it from the
@@ -435,6 +486,11 @@ public class Workbench extends UIElement {
         registry.register(DockPanelDescriptor.singleton(NOTIFICATIONS_TYPE, "Notifications")
                 .icon("crystalgui:toolwindows/notifications").region(DockRegion.AUXILIARY).side(RegionSide.PRIMARY),
                 ref -> notificationsView);
+        // NOT `registerDocumentType`, which is CgPath-keyed from its first line. @see #VIEWER_TYPE
+        registry.register(DockPanelDescriptor.document(VIEWER_TYPE, "Viewer"), ref -> {
+            return viewerFor(Resource.parse(ref.state(RESOURCE_STATE, "")));
+        });
+
         registerDocumentType(FILE_TYPE, "File", path -> {
             TextEditor created = new TextEditor("");
             created.addClass(FILE_EDITOR_CLASS);
@@ -442,7 +498,11 @@ public class Workbench extends UIElement {
             created.setLanguage(entry.language());
             // A FRESH tokenizer per document -- the interface exists for implementations holding a parse
             // tree per file, and sharing one would cross-contaminate them.
-            SyntaxTokenizer tokenizer = entry.newTokenizer();
+            // AND ITS DOC COMMENTS READ. A grammar reports `/** ... */` as ONE comment token, because to
+            // a parser that is what it is -- the tags and the HTML inside are a convention rather than
+            // syntax. `DocComments` is the lexing pass that reads them, composed here rather than inside
+            // `newTokenizer` so the registry keeps answering with what was registered.
+            SyntaxTokenizer tokenizer = DocComments.refining(entry.newTokenizer());
             created.setTokenizer(tokenizer);
             // AND IF IT CAN FOLD, IT FOLDS. A tokenizer holding a parse tree already knows where a block
             // begins and ends, which is strictly better than guessing from indentation -- and asking it
@@ -467,17 +527,7 @@ public class Workbench extends UIElement {
             // note. Same-file jumps never arrive here because the editor already made them; this hears
             // only what genuinely needs the workspace, and routes it through the primitive the Problems
             // panel uses so the two cannot disagree about focus or framing.
-            created.onDefinitionChosen.connect(site -> {
-                if (site.resource() == null || !site.resource().isProject()) return;
-                TextPoint at = site.start();
-                openFile(site.resource().asPath(), () -> {
-                    TextEditor editor = activeEditor();
-                    if (editor == null) return;
-                    editor.revealAt(at);
-                    UIWindow window = getAttachedWindow();
-                    if (window != null) window.getInputHandler().requestFocus(editor);
-                });
-            });
+            routeDefinitionsOf(created);
             // No command installation here: TextEditor registers its own and binds its own chords, so a
             // document created before this workbench is attached is no longer a special case.
             // Here rather than only from WorkbenchSettings.apply: a document opened after the settings
@@ -497,6 +547,10 @@ public class Workbench extends UIElement {
         // Not registered on a Disposable: the signal belongs to the dock, this workbench owns the dock, so
         // the subscription cannot outlive either -- an ownership registration here would be ceremony.
         dock.onDidChangeActivePanel.connect(panel -> {
+            // THE MOMENT THE REBUILD HAS HAPPENED, which is what a close was waiting for. The frame
+            // countdown below is a backstop for the case this signal never comes -- closing a tab that
+            // was not the active one leaves the active panel where it was and announces nothing.
+            focusActiveEditorAfterClose();
             revealActiveFile();
             rebindProblems();
             bindStatusToActiveTab();
@@ -509,6 +563,9 @@ public class Workbench extends UIElement {
         // renderer -- lived until the process did. Disposer could not help, because the thing that knew
         // the tab was gone had no way to say so.
         dock.onDidClosePanel.connect(this::releaseClosedPanel);
+        // AND THE EDITOR THAT TOOK OVER GETS THE FOCUS THE CLOSED ONE HAD. Spent a frame later -- see
+        // focusActiveEditorPending.
+        dock.onDidClosePanel.connect(panel -> focusActiveEditorPending = FOCUS_AFTER_CLOSE_FRAMES);
         // Tab dirty markers. Was a per-frame refreshDirtyMarkers(), which meant encoding every open
         // document -- a whole shader graph serialised sixty times a second -- to notice a marker that
         // moves when somebody types. The equality guard SURVIVES the move: the announcement means
@@ -921,6 +978,251 @@ public class Workbench extends UIElement {
                 .withAction("Retry", () -> openFile(path))));
     }
 
+    // ── The viewer lane ────────────────────────────────────────────────────
+
+    /**
+     * Every viewer on screen, by the resource it shows.
+     *
+     * <p>Keyed by the resource's TEXT rather than by the record, so a restored panel and a fresh open of
+     * the same class find each other: {@code Resource} is rebuilt from the ref's state on restore, and
+     * two equal-valued instances have to name one editor or a split would show two of them.</p>
+     */
+    private final Map<String, TextEditor> viewers = new HashMap<>();
+
+    /** Which viewers have their text — what tells "still reading" from "read and empty" apart. */
+    private final Set<String> viewersLoaded = new HashSet<>();
+
+    /** What is waiting on a viewer's first read. @see #whenViewerLoaded */
+    private final Map<String, List<Runnable>> viewerPending = new HashMap<>();
+
+    /**
+     * Sends this editor's cross-document jumps somewhere — a workspace file, or a viewer.
+     *
+     * <p><b>Every editor the workbench builds needs this, and one of them did not have it.</b> A viewer
+     * was created without it, so Ctrl+B <em>inside</em> a library class emitted into a signal nobody was
+     * listening to — and so did the documentation popup's Jump to Source, which is the same call one
+     * layer up. Both looked like resolution failing, while the hover in the very same file was drawing
+     * the symbol's full documentation: the engine had the answer throughout and nothing was carrying
+     * it.</p>
+     *
+     * <p>Written once and called from both, rather than copied into the viewer, because the two are
+     * expected to stay identical: jumping out of a library class into another library class is the same
+     * gesture as jumping out of your own file, and a reader drilling through the JDK is doing it
+     * repeatedly. Two copies would be two places for the routing rules to drift.</p>
+     */
+    private void routeDefinitionsOf(TextEditor editor) {
+        editor.onDefinitionChosen.connect(site -> {
+            if (site.resource() == null) return;
+            // A RESOURCE THE WORKSPACE DOES NOT HOLD goes to a viewer. This used to return here, so
+            // Ctrl+B into anything on the classpath did nothing -- and it read as the engine having
+            // no answer, when the engine had simply never been asked for one.
+            if (!site.resource().isProject()) {
+                TextPoint into = site.start();
+                // THE VIEWER'S OWN EDITOR, not `activeEditor()`: that resolves through PATH_STATE,
+                // which a viewer panel deliberately does not carry, so it answers null here.
+                openResource(site.resource(), () -> {
+                    TextEditor opened = viewers.get(site.resource().toString());
+                    if (opened == null) return;
+                    opened.revealAt(into);
+                    UIWindow window = getAttachedWindow();
+                    if (window != null) window.getInputHandler().requestFocus(opened);
+                });
+                return;
+            }
+            TextPoint at = site.start();
+            openFile(site.resource().asPath(), () -> {
+                TextEditor opened = activeEditor();
+                if (opened == null) return;
+                opened.revealAt(at);
+                UIWindow window = getAttachedWindow();
+                if (window != null) window.getInputHandler().requestFocus(opened);
+            });
+        });
+    }
+
+    /**
+     * Where this workbench schedules background work — the shared pool unless a caller says otherwise.
+     *
+     * <h3>Injectable because {@code JobScheduler}'s own note says so</h3>
+     *
+     * <p>"Tests construct their own instead, which is what the injecting constructor is for", and "a
+     * same-thread executor makes every test deterministic". Reaching for {@code shared()} inside the
+     * viewer's read ignored both, and it cost three separate rounds of chasing a test that passed alone
+     * and failed in its class: a job submitted by one test completes during the NEXT one's drain, so a
+     * viewer is filled late, or a completion the next test was waiting for is consumed by the previous
+     * one. Nothing about the symptom points at the scheduler — it reads as the feature being flaky.</p>
+     */
+    private JobScheduler jobs = JobScheduler.shared();
+
+    private JobScheduler jobs() {
+        return jobs;
+    }
+
+    /** @see #jobs */
+    public Workbench setJobScheduler(@Nullable JobScheduler scheduler) {
+        this.jobs = scheduler == null ? JobScheduler.shared() : scheduler;
+        return this;
+    }
+
+    /** The panel ref for a resource — a pure function of it, as {@link #refFor} is of a path. */
+    public DockPanelRef refForResource(Resource resource) {
+        String text = resource.toString();
+        return new DockPanelRef(VIEWER_TYPE)
+                .withState(RESOURCE_STATE, text)
+                .withState(DockPanelRef.TITLE, viewerTitleOf(resource));
+    }
+
+    /**
+     * What a viewer tab is called — the simple name, which is what a tab strip has room for.
+     *
+     * <p>{@code library://java.util.ArrayList} becomes {@code ArrayList}. The package is what the
+     * breadcrumb and the tooltip are for; a tab that reads {@code library://java.util.ArrayList} pushes
+     * every other tab off the strip to say what one word already says.</p>
+     */
+    private static String viewerTitleOf(Resource resource) {
+        String path = resource.path();
+        int dot = path.lastIndexOf('.');
+        return dot < 0 || dot == path.length() - 1 ? path : path.substring(dot + 1);
+    }
+
+    /**
+     * Opens {@code resource} in a read-only tab, or focuses the tab it is already in.
+     *
+     * <p>The same two paths {@link #openFile} has and the same reason for the callback: an already-open
+     * viewer activates and returns, a new one waits on a provider that may be reading an archive or
+     * running a decompiler. A caller that wants to reveal a position has to be told when there is
+     * something to reveal it in.</p>
+     *
+     * <p><b>Nothing happens when no provider claims the scheme</b>, which is the ordinary state of a
+     * deployment that ships no engine: the answer to "go to declaration" is then the same as it was
+     * before any of this existed. Silence rather than an error, for the reason the three-tier absence
+     * rule gives everywhere else.</p>
+     */
+    public void openResource(Resource resource, @Nullable Runnable onOpened) {
+        if (resource == null || ResourceRegistry.providerFor(resource) == null) return;
+        DockPanelRef ref = refForResource(resource);
+        // CREATED BEFORE THE TAB, which also starts its read. `openFile` reads before it adds a tab so a
+        // failed read leaves no empty editor behind; here the editor is the thing the dock builds panels
+        // FROM — on a split, a drag, and a layout restore — so it has to exist independently of any one
+        // open, and the ordering that matters instead is that nothing reveals a position until there is
+        // text to reveal it in.
+        viewerFor(resource);
+        for (DockLeaf leaf : dock.layout().leaves()) {
+            if (leaf.indexOf(ref) < 0) continue;
+            leaf.activate(ref);
+            dock.syncGroups();
+            dock.setActiveGroup(dock.groupFor(leaf));
+            whenViewerLoaded(resource, onOpened);
+            return;
+        }
+        open(DockInput.of(ref));
+        whenViewerLoaded(resource, onOpened);
+    }
+
+    /**
+     * Runs {@code then} once the viewer's text has landed — immediately if it already has.
+     *
+     * <p>Without the two cases a reveal races the read it depends on: the first open of a class waits on
+     * an archive, and every later open of the same one is already loaded and would otherwise wait for a
+     * job that is never submitted. The same shape {@code openFile}'s callback has, for the same
+     * reason.</p>
+     */
+    private void whenViewerLoaded(Resource resource, @Nullable Runnable then) {
+        if (then == null) return;
+        String key = resource.toString();
+        if (viewersLoaded.contains(key)) {
+            then.run();
+            return;
+        }
+        viewerPending.computeIfAbsent(key, ignored -> new ArrayList<>()).add(then);
+    }
+
+    /**
+     * Fills the viewer for {@code resource}, then runs {@code then} on the UI thread.
+     *
+     * <p><b>Off the UI thread, though the provider's own contract is synchronous.</b>
+     * {@link ResourceContentProvider} documents itself as callable from a paint path and returns bytes
+     * rather than a promise, which is right for a small generated document and is not what this reaches:
+     * a source archive is IO and a decompiler is hundreds of milliseconds. Scheduling the call rather
+     * than changing the contract keeps both usable — the hop back is {@code JobScheduler}'s
+     * {@code onDone}, which is documented to run during {@code drain()} on the UI thread.</p>
+     */
+    private void readViewer(Resource resource, TextEditor editor) {
+        ResourceContentProvider provider = ResourceRegistry.providerFor(resource);
+        if (provider == null) return;
+        String key = resource.toString();
+        jobs()
+                // KEYED ON THE EDITOR, which is what a JobKey's owner is for — it is compared by
+                // identity, and there is exactly one editor per resource. Two opens of the same class
+                // while the first read is in flight therefore replace rather than race.
+                .job(JobKey.of(editor, "viewer-read"), JobLane.LATENCY,
+                        context -> provider.read(resource))
+                .onDone(bytes -> {
+                    // READ-ONLY IS LIFTED FOR THE FILL AND PUT BACK. `setText` goes through the same
+                    // edit path typing does, so a viewer that is already read-only refuses its own
+                    // content -- and refuses it silently, leaving a blank tab that looks like a failed
+                    // read. The window is one statement long and on the UI thread.
+                    editor.setReadOnly(false);
+                    editor.setText(bytes == null ? "" : new String(bytes, StandardCharsets.UTF_8));
+                    editor.setReadOnly(true);
+                    viewersLoaded.add(key);
+                    List<Runnable> waiting = viewerPending.remove(key);
+                    if (waiting == null) return;
+                    for (Runnable each : waiting) each.run();
+                })
+                .submit();
+    }
+
+    /**
+     * The editor for a resource, created once and kept.
+     *
+     * <p>Created empty and filled by {@link #readViewer}, because the dock builds a panel from its ref
+     * alone — on a split, on a drag, and on a <b>layout restore</b>, where nothing has read anything.
+     * The restore path therefore re-asks the provider rather than reconstructing from a file, which is
+     * the whole reason a viewer tab can survive a restart at all.</p>
+     */
+    private TextEditor viewerFor(Resource resource) {
+        String key = resource.toString();
+        TextEditor existing = viewers.get(key);
+        if (existing != null) return existing;
+
+        TextEditor created = new TextEditor("");
+        created.addClass(FILE_EDITOR_CLASS);
+        created.addClass(VIEWER_CLASS);
+        created.setReadOnly(true);
+        LanguageRegistry.Entry entry = LanguageRegistry.forFileName(viewerFileNameOf(resource));
+        created.setLanguage(entry.language());
+        created.setTokenizer(DocComments.refining(entry.newTokenizer()));
+        // AND SERVICES, HANDED THE RESOURCE -- which is what lets the engine recognise a borrowed
+        // document and configure itself for one: no diagnostics, because its problems are ours and
+        // nobody reading it can act on them, and a compliance chosen by where the text came from,
+        // because a JDK file parsed above Java 8 conflicts with the module that owns its package, and
+        // that single error stops the whole unit resolving.
+        //
+        // Without them a viewer colours from the grammar and answers nothing: no hover, no Ctrl+Click
+        // onward, no telling a field from a parameter -- which is most of why anybody opens a class
+        // they cannot edit.
+        created.setLanguageServices(entry.newServices(created.buffer(), resource));
+        // AND ITS JUMPS GO SOMEWHERE. @see #routeDefinitionsOf
+        routeDefinitionsOf(created);
+        WorkbenchSettings.applyTo(this, created);
+        viewers.put(key, created);
+        readViewer(resource, created);
+        return created;
+    }
+
+    /**
+     * A file name for the registry to key on — {@code ArrayList.java}.
+     *
+     * <p>{@code LanguageRegistry} answers by file name, and a resource has none. Deriving one is honest
+     * here in a way it is not in general: the resource names a Java type, so {@code .java} is a fact
+     * about it rather than a guess. A scheme whose content is not Java will need its own answer, which is
+     * why this is a method rather than a concatenation at the call site.</p>
+     */
+    private static String viewerFileNameOf(Resource resource) {
+        return viewerTitleOf(resource) + ".java";
+    }
+
     /** The file behind the active tab, or null when the active tab is not a file. */
     @Nullable
     public CgPath activeFilePath() {
@@ -949,6 +1251,72 @@ public class Workbench extends UIElement {
      * to a diagnostic's line - have nothing to do with a document that has no lines.</p>
      */
     @Nullable
+    /**
+     * A tab was closed and the editor that took its place has not been focused yet.
+     *
+     * <p>@see #focusActiveEditorAfterClose</p>
+     */
+    private int focusActiveEditorPending;
+
+    /**
+     * Puts the focus the closed tab held onto the editor that replaced it.
+     *
+     * <h3>Why this is needed at all</h3>
+     *
+     * <p>Closing a tab detaches the editor that had focus, and {@code UIInputHandler} correctly forgets a
+     * detached element — so the focus owner becomes <b>null</b> and the keyboard goes nowhere. Every part
+     * is behaving: the dock does not know what a document is, and the input handler is right to drop a
+     * reference to something that left the tree. Nobody was left holding the question "and now who has
+     * it?", which is why Ctrl+W ended with the caret in no editor at all.</p>
+     *
+     * <h3>A frame later, and only when nobody else took it</h3>
+     *
+     * <p>Deferred because {@code requestRebuild} only sets a flag: at the moment the close is announced
+     * the strip has not been rebuilt and the panel that is about to become active has not been retargeted,
+     * so there is nothing yet to focus.</p>
+     *
+     * <p>Gated on the focus owner being <b>null</b>, which is what keeps this from being the auto-focus
+     * coupling that was just taken out of the project tree. Closing a background tab from a menu, or
+     * closing one while the caret is in the terminal, leaves focus exactly where the user put it — this
+     * only fills a vacuum, it never takes.</p>
+     */
+    private void focusActiveEditorAfterClose() {
+        if (focusActiveEditorPending <= 0) return;
+        UIWindow window = getAttachedWindow();
+        if (window == null) return;
+        // SOMEBODY ELSE HAS IT, so there is no vacancy to fill and nothing more to wait for.
+        if (window.getInputHandler().getFocusedElement() != null) {
+            focusActiveEditorPending = 0;
+            return;
+        }
+        // A FEW FRAMES, not one. `requestRebuild` only sets a flag, and the dock rebuilds from its own
+        // tick -- which may run after this one. Spending the request on the first frame therefore asked
+        // `activeEditor()` before the strip had been rebuilt and the pane retargeted, got null, and threw
+        // the request away: Ctrl+W left the focus nowhere, which is exactly what it did before any of this
+        // was written. Counting down instead means the frame ordering between two tickers does not have to
+        // be assumed.
+        focusActiveEditorPending--;
+        TextEditor editor = activeEditor();
+        if (editor == null || editor.getAttachedWindow() == null) return;
+        focusActiveEditorPending = 0;
+        window.getInputHandler().requestFocus(editor);
+    }
+
+    /**
+     * How many frames a close may take to settle before the focus request is dropped.
+     *
+     * <p>Bounded on purpose: this is covering an ordering between two tickers, not waiting for I/O, and
+     * holding the request open indefinitely would mean pouncing on the first vacancy that appeared long
+     * afterwards.</p>
+     *
+     * <p><b>Twelve rather than four, and the difference was a flaky test.</b> Four covered the ordering on
+     * an idle JVM and not on a loaded one: {@code closingTheFocusedTabFocusesTheEditorThatReplacesIt}
+     * passed alone and failed in the full suite, which is the shape of a race rather than of a wrong
+     * answer. The rebuild is what is being waited for and it takes as long as it takes; the bound exists
+     * to stop the request outliving the close, not to express how long a rebuild should need.</p>
+     */
+    private static final int FOCUS_AFTER_CLOSE_FRAMES = 12;
+
     public TextEditor activeEditor() {
         return activeDocument() instanceof TextFileDocument text ? text.editor() : null;
     }
@@ -1325,6 +1693,8 @@ public class Workbench extends UIElement {
      */
     @Nullable
     private String tabTitleFor(DockPanelRef panel) {
+        Resource viewed = viewedResource(panel);
+        if (viewed != null) return viewerDisplayName(viewed);
         String path = panel.state(PATH_STATE, "");
         if (path.isEmpty()) return null;
         String title = panel.state(DockPanelRef.TITLE, CgPath.parse(path).name());
@@ -1344,6 +1714,12 @@ public class Workbench extends UIElement {
      */
     @Nullable
     private String tabDecorationFor(DockPanelRef panel) {
+        // A BORROWED FILE IS TINTED, which is the one decoration a viewer carries and the reason it can
+        // share the file-decoration slot rather than needing a second one: a library class has no VCS
+        // state, no dirty marker and no compile errors of its own to report, so nothing can collide.
+        // IntelliJ tints these tabs for the same reason -- it is the fastest way to say "this is not
+        // yours" without spending a word on it.
+        if (VIEWER_TYPE.equals(panel.typeId())) return LIBRARY_DECORATION;
         String path = panel.state(PATH_STATE, "");
         if (path.isEmpty()) return null;
         // NULL IS THE ORDINARY ANSWER -- an undecorated file is the state nearly every file is in, and
@@ -1372,9 +1748,67 @@ public class Workbench extends UIElement {
      */
     @Nullable
     private static String tabIconFor(DockPanelRef panel) {
+        Resource viewed = viewedResource(panel);
+        if (viewed != null) {
+            // A DECLARATION'S GLYPH IS AN ELEMENT, not a name -- see viewerIconElement, which the dock
+            // asks for first. This is the fallback for a viewer showing a FILE: a `.java` tab takes the
+            // file icon, exactly as one in the project does.
+            String name = viewerDisplayName(viewed);
+            return name == null ? null : FileIconTheme.getDefault().iconFor(name, false, false);
+        }
         String path = panel.state(PATH_STATE, "");
         if (path.isEmpty()) return null;
         return FileIconTheme.getDefault().iconFor(CgPath.parse(path).name(), false, false);
+    }
+
+    /**
+     * The glyph for a viewer tab showing a DECLARATION, or null to fall back to a file icon.
+     *
+     * <p>{@link SymbolIcon} is the union point: the completion popup builds the same widget from the
+     * same {@code completion-kind-*} vocabulary, so a tab and a completion row cannot come to disagree
+     * about what an interface looks like. It also carries the {@code static} and {@code final} marks,
+     * which an icon NAME cannot — they are layers stacked over the glyph rather than a picture.</p>
+     *
+     * <p>Null for a source-backed tab, deliberately: {@code ArrayList.java} is a FILE and takes the same
+     * icon one in the project would.</p>
+     */
+    @Nullable
+    private static UIElement viewerIconElement(DockPanelRef panel) {
+        Resource viewed = viewedResource(panel);
+        if (viewed == null) return null;
+        ResourceContentProvider provider = ResourceRegistry.providerFor(viewed);
+        SymbolInfo symbol = provider == null ? null : provider.symbolOf(viewed);
+        if (symbol == null || symbol.kind() == null) return null;
+        return new SymbolIcon().show(symbol.kind(), symbol.modifiers());
+    }
+
+    /** The resource a viewer panel shows, or null for every other kind of tab. */
+    @Nullable
+    private static Resource viewedResource(DockPanelRef panel) {
+        if (!VIEWER_TYPE.equals(panel.typeId())) return null;
+        String text = panel.state(RESOURCE_STATE, "");
+        return text.isEmpty() ? null : Resource.parse(text);
+    }
+
+    /**
+     * What a viewer tab is called — the provider's answer, or the bare type name.
+     *
+     * <p>Asked of the provider rather than derived here, because the extension depends on what is
+     * SERVING the resource: {@code ArrayList.java} where source was attached and
+     * {@code FlexDirection.class} where the bytes were decompiled. The workbench has no way to know
+     * which, and inventing {@code .java} for both would put a source extension on a tab full of
+     * reconstructed code.</p>
+     *
+     * <p><b>Not written into the ref.</b> {@link DockPanelRef} equality includes its state, and the ref
+     * is how an open tab is FOUND again — so a title that can change between two reads would orphan the
+     * tab it names. The ref keeps the stable simple name; this decorates it for display, which is
+     * exactly the split the title provider exists for.</p>
+     */
+    @Nullable
+    private static String viewerDisplayName(Resource resource) {
+        ResourceContentProvider provider = ResourceRegistry.providerFor(resource);
+        String named = provider == null ? null : provider.displayName(resource);
+        return named != null && !named.isEmpty() ? named : viewerTitleOf(resource);
     }
 
     /**
@@ -1593,12 +2027,14 @@ public class Workbench extends UIElement {
     private DiagnosticSet boundTo;
 
     /**
-     * Whether the tree follows the active tab — VS Code's {@code explorer.autoReveal}, default on.
+     * Whether the tree follows the active tab — {@code explorer.autoReveal}, <b>default off</b>.
      *
-     * <p>Off is a real preference rather than a hypothetical: revealing scrolls the tree, and somebody
-     * navigating the tree while switching tabs loses their place every time.</p>
+     * <p>Which is IntelliJ's posture and not VS Code's; see {@code WorkbenchSettings.AUTO_REVEAL} for why
+     * the default went that way. The field's own default matches the setting's so a workbench built
+     * without a settings store behaves like one built with the shipped defaults — a default stated in two
+     * places that disagree is worse than either.</p>
      */
-    private boolean autoReveal = true;
+    private boolean autoReveal = false;
 
     public Workbench setAutoReveal(boolean enabled) {
         this.autoReveal = enabled;
@@ -1664,6 +2100,7 @@ public class Workbench extends UIElement {
             ticking = false;
             return false;
         }
+        focusActiveEditorAfterClose();
         // A few directories a frame, until the workspace is walked. Go to File searches what this has
         // reached, so warming it in the background is what makes the first Ctrl+P useful rather than
         // empty -- and it warms the tree's own listing cache, so there is no second index to keep in step.

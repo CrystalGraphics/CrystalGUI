@@ -296,7 +296,10 @@ public class JsResolutionTest {
         assertNotNull("the JSDoc type was not read", symbol);
         assertNotNull("the JSDoc type was not read", symbol.type());
         assertEquals("string", symbol.type().displayName());
-        assertEquals("What it says.", symbol.documentation());
+        // MARKUP, not the source. The description is rendered now -- so this asks whether the prose
+        // reached the symbol, which is what the test is about, rather than what shape it arrived in.
+        assertTrue("the description did not reach the symbol: " + symbol.documentation(),
+                symbol.documentation() != null && symbol.documentation().contains("What it says."));
     }
 
     @Test

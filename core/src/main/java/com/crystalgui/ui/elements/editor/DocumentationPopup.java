@@ -5,17 +5,29 @@ import com.crystalgui.text.lang.Signature;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.text.lang.DeclarationSite;
 import com.crystalgui.text.lang.SymbolInfo;
+import com.crystalgui.text.markup.MarkupDocument;
+import com.crystalgui.text.markup.MarkupParser;
 import com.crystalgui.text.lang.SymbolKind;
 import com.crystalgui.text.lang.SymbolModifier;
 import com.crystalgui.text.lang.TypeRef;
+import com.crystalgui.core.signal.Signal;
+import com.crystalgui.text.syntax.Language;
 import com.crystalgui.text.syntax.SyntaxToken;
 import com.crystalgui.ui.AnchoredPlacement;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.input.keymap.KeyChord;
+import com.crystalgui.ui.input.keymap.Keymap;
+import com.crystalgui.ui.elements.Tooltip;
+import com.crystalgui.ui.UIFrameTicker;
 import com.crystalgui.ui.UIWindow;
+import com.crystalgui.ui.elements.MarkupView;
+import com.crystalgui.ui.elements.Scroller;
 import com.crystalgui.ui.elements.Popover;
 import com.crystalgui.text.lang.CodeAction;
+import com.crystalgui.ui.elements.ScrollerView;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.input.FocusPolicy;
+import com.crystalgui.ui.text.SyntaxHighlighting;
 import com.crystalgui.ui.text.TextRange;
 import lombok.Getter;
 
@@ -89,6 +101,27 @@ public final class DocumentationPopup extends Popover {
     public static final String DEFINITION_CLASS = "__doc-definition__";
     public static final String DEFINITION_BOX_CLASS = "__doc-definition-box__";
     public static final String BODY_CLASS = "__doc-body__";
+
+    /**
+     * On the popup while it is {@linkplain #isPinned() pinned}.
+     *
+     * <p>State the widget flips from its own listener, so a class rather than a pseudo-class — the
+     * engine re-evaluates a pseudo-class on its terms and a class on yours, and there is no
+     * {@code :pinned} to add. Nothing in the shipped sheet styles it; it is here so a theme <em>can</em>
+     * say the box is no longer a hover, which is a real thing to want to say.</p>
+     */
+    public static final String PINNED_CLASS = "__pinned__";
+
+    /**
+     * The scrolling region — everything except the quick-fix band at the top.
+     *
+     * <p><b>The declaration scrolls with the prose, and the problem does not.</b> Only the body used to
+     * scroll, which put a scrollbar inside a band rather than on the popup: a long {@code implements}
+     * list pushed the documentation down and there was no way to reach what it pushed off. The quick-fix
+     * band stays out of it because it is the one part you act on rather than read — scrolling an action
+     * out of reach is how a popup comes to have a button nobody can press.</p>
+     */
+    public static final String SCROLL_CLASS = "__doc-scroll__";
 
     /**
      * The rule between the definition and the prose — IntelliJ draws one and it earns its line.
@@ -224,7 +257,24 @@ public final class DocumentationPopup extends Popover {
 
     private final UIElement footerEdit = new UIElement();
 
-    private final UIText body = new UIText("");
+    /**
+     * The prose band — <b>a {@link MarkupView}, not a text element</b>.
+     *
+     * <p>It was a {@code UIText} carrying whatever the engine reported, which worked only for as long as
+     * the engine reported plain text. {@code JavaDocs} now emits the author's own markup, because a doc
+     * comment's {@code <p>}, {@code <pre>} and {@code <li>} are the only structure it has and stripping
+     * them is what made this band a wall. Parsing it here rather than in the engine is deliberate: the
+     * engine's job ends at "what does this symbol say", and the same markup is what a JSDoc comment or a
+     * shader node's description would arrive as.</p>
+     */
+    private final MarkupView body = new MarkupView();
+
+    /** @see #SCROLL_CLASS */
+    private final ScrollerView scroller = new ScrollerView();
+
+    /** What {@link #navigateTo} was asked for, applied on the next frame. */
+    @Nullable
+    private SymbolInfo pendingNavigation;
 
     /**
      * The problem section — message, then the one action worth showing without being asked.
@@ -278,6 +328,17 @@ public final class DocumentationPopup extends Popover {
      */
     @Getter
     private boolean pointerOver;
+
+    /**
+     * -- GETTER --
+     *  Whether a press has <b>pinned</b> this popup — IntelliJ's behaviour, and two things at once.
+     *  <p>A pinned popup stops being a hover: it survives the pointer leaving the word it describes, and
+     *  it stops being re-anchored, because a press also begins a move. The two are one gesture and one
+     *  flag deliberately — a box you can drag but that vanishes when you reach past it, or one that
+     *  stays but snaps back to its anchor, is worse than neither.</p>
+     */
+    @Getter
+    private boolean pinned;
 
     public DocumentationPopup() {
         addClass(POPUP_CLASS);
@@ -341,6 +402,7 @@ public final class DocumentationPopup extends Popover {
         footerRow.addInternalChild(footerText);
         footerRow.addInternalChild(footerEdit);
         body.addClass(BODY_CLASS);
+        body.onLinkActivated.connect(onLinkActivated::emit);
 
         problemMessage.addClass(PROBLEM_MESSAGE_CLASS);
         // NOT forceSelfSizeWidth. It reports the unwrapped run, which is exactly what stops a wrapping
@@ -377,14 +439,45 @@ public final class DocumentationPopup extends Popover {
             event.stopPropagation();
         }, false, true);
 
+        // PRESS TO PIN, AND THE SAME PRESS BEGINS A MOVE. Target AND bubble, because the press lands on
+        // whatever is under it -- a paragraph, the owner row, the empty space beside the definition -- and
+        // this element is never that thing. `(false, false)` subscribes the target phase only, so the
+        // container would hear nothing at all.
+        //
+        // The three links above take their own presses and stop propagation, so they never reach here and
+        // a click on "More actions..." is still a click. The resizer and the scrollbars do NOT stop
+        // propagation, so they are excluded by hand below.
+        onMouseDown.attachListener((element, event) -> {
+            float rawX = event.getPosition().x();
+            float rawY = event.getPosition().y();
+            // A synthesized activation press (Space/Enter on a focused element) carries the cursor's
+            // position, which may be nowhere near this box. Honouring one would teleport it.
+            if (!isOpen() || !containsScreenPoint(rawX, rawY)) return;
+
+            // PINNED BY ANY PRESS ON THE BOX, including one aimed at a handle or a scrollbar. Dragging a
+            // corner to resize and then having the popup evaporate the moment the pointer leaves the word
+            // would make the resize pointless; scrolling it is even more plainly "I am reading this".
+            // Only the MOVE is excluded below -- the pin is about intent, the move is about which gesture.
+            pinned = true;
+            addClass(PINNED_CLASS);
+            if (ownsItsOwnPress(event.getTarget())) return;
+            beginMove(rawX, rawY);
+        }, false, true);
+
         // ABOVE the owner, which is IntelliJ's order and is not arbitrary: the problem is why you looked,
         // the declaration is what you were looking at. A popup that shows one instead of the other
         // regresses hover for every symbol that happens to carry a warning.
         addInternalChild(problemRow);
-        addInternalChild(ownerRow);
-        addInternalChild(definition);
-        addInternalChild(separator);
-        addInternalChild(body);
+        // EVERYTHING ELSE GOES INSIDE THE SCROLLER, in the order it was in. @see #SCROLL_CLASS
+        //
+        // The footer stays outside it and pinned: it is an action bar, and IntelliJ keeps its own at the
+        // bottom of the popup rather than at the bottom of the document.
+        scroller.addClass(SCROLL_CLASS);
+        scroller.addChild(ownerRow);
+        scroller.addChild(definition);
+        scroller.addChild(separator);
+        scroller.addChild(body);
+        addInternalChild(scroller);
         addInternalChild(footerRule);
         addInternalChild(footerRow);
 
@@ -673,6 +766,76 @@ public final class DocumentationPopup extends Popover {
         setProblem(problems, List.of());
     }
 
+    /**
+     * Replaces what this popup is showing, <b>without moving it</b>.
+     *
+     * <p>For following a link. {@link #show} re-anchors, which is right for a hover — a new hover is a
+     * new place — and wrong here: you are reading this box, and you had to move the pointer onto a link
+     * to press it, so re-anchoring walks the box across the screen on every step of a chain of
+     * references. IntelliJ replaces the content in place, and the position is the one thing a reader has
+     * already got used to.</p>
+     *
+     * <p>The dragged size is kept for the same reason — it was chosen to read this with, and the next
+     * page is more of the same reading. {@link #show} deliberately forgets it, because that is a fresh
+     * open.</p>
+     *
+     * <p>The problem band goes, though. An intention belongs to the code under the caret, not to the
+     * class you just navigated to, so carrying it across would offer "Split into declaration and
+     * assignment" on {@code java.lang.StringBuffer}.</p>
+     */
+    public void navigateTo(SymbolInfo symbol) {
+        if (symbol == null) return;
+        // NEXT FRAME, NOT NOW -- and this is the engine's own rule rather than caution: a widget must
+        // never rebuild the elements it is being clicked on. `fill` replaces the whole body, including
+        // the very `UIText` whose press is still being dispatched, and light dismiss runs AFTER that
+        // dispatch: it asks the press target for its innermost popover ancestor, a detached element has
+        // none, and the popup was therefore read as "pressed from outside" and closed on the click that
+        // asked it to navigate.
+        //
+        // The old code survived that by accident. It called `show()`, which bumps `popoverShowSeq`, and
+        // light dismiss spares anything shown during the press -- so re-anchoring was doubling as life
+        // support, and removing it exposed a defect that had always been there. Bumping the counter from
+        // here would work and would be a lie: nothing is being shown. Deferring is the honest fix, and a
+        // frame is invisible to a reader.
+        pendingNavigation = symbol;
+        UIWindow window = getAttachedWindow();
+        if (window == null) return;
+        // ONE SHOT, AND IT DROPS ITSELF BEFORE IT WORKS. Written as a lambda ending in `return false`,
+        // a throw from the body skips that return -- so the ticker stays registered and throws again on
+        // every frame after, out of `tickAnimations`, out of `advanceFrame`, out of `paintFrame`. One
+        // failed navigation would take the whole window with it, permanently, which reads as the popup
+        // having broken rather than as a single answer having been bad. The flag is set first so the
+        // repeat cannot happen whatever the body does.
+        window.registerTicker(new UIFrameTicker() {
+            private boolean spent;
+
+            @Override
+            public boolean tickFrame(float deltaSeconds) {
+                if (spent) return false;
+                spent = true;
+                applyPendingNavigation();
+                return false;
+            }
+        });
+    }
+
+    /** Swaps in the page {@link #navigateTo} asked for, a frame after the press that asked. */
+    private void applyPendingNavigation() {
+        SymbolInfo symbol = pendingNavigation;
+        pendingNavigation = null;
+        // CLOSED IN THE MEANTIME? A press outside, or Escape, between the click and this frame.
+        if (symbol == null || !isOpen()) return;
+        this.shown = symbol;
+        removeClass(PROBLEM_ONLY_CLASS);
+        definition.setDisplayed(true);
+        setProblem(List.of(), List.of());
+        fill(symbol);
+        // THE BOX IS A DIFFERENT SIZE NOW, and it is still anchored: a shorter page would leave it
+        // hanging below its anchor and a taller one would run off the bottom. `reposition` is the only
+        // thing allowed to write left/top on an anchored popup.
+        reposition();
+    }
+
     public void show(UIWindow window, SymbolInfo symbol, float x, float y, float lineHeight) {
         this.shown = symbol;
         // RESTORED, because showProblems changes both and this popup is one reused instance -- a hover in
@@ -713,13 +876,118 @@ public final class DocumentationPopup extends Popover {
         fill(symbol);
     }
 
+    /**
+     * Whether the press belongs to a part that will act on it itself.
+     *
+     * <p>The resize grabber and the scrollbars both start drags of their own and neither stops
+     * propagation, so without this a press on either would begin a move as well: dragging the corner
+     * would resize the box <em>and</em> slide it, and dragging the scrollbar would carry the whole popup
+     * with the thumb. They are excluded here rather than made to stop propagation, because both are
+     * shared widgets and every other consumer is relying on that press continuing to bubble.</p>
+     */
+    private boolean ownsItsOwnPress(@Nullable UIElement target) {
+        for (UIElement at = target; at != null && at != this; at = at.getParent()) {
+            // BY CLASS for the resizer, because `UIResizer` is package-private and cannot be named from
+            // here; by TYPE for the scroller, which is an ordinary public widget.
+            if (at.hasClass(UIElement.RESIZER_CLASS) || at instanceof Scroller) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Starts dragging the box, from a source that <b>does not move with it</b>.
+     *
+     * <p>{@code UIDragController} reports its delta through {@link UIElement#screenToLocal}, so the frame
+     * the delta is measured in is the drag <em>source</em>'s. Naming this popup as its own source would
+     * therefore measure each frame's movement in a frame that has already moved by it, which is the trap
+     * already recorded for a canvas pan: "a pan drag's source is the viewport, never the transformed
+     * plane". The parent is the frame this box is positioned inside and it stays still while the box
+     * travels, so the delta stays a delta.</p>
+     *
+     * <p>The move goes through {@link Popover#moveTo}, which is the one legal way to write
+     * {@code left}/{@code top} here: it hands ownership over from {@code AnchoredPlacement} rather than
+     * competing with it, so there is still exactly one writer. Writing the position directly would be
+     * overwritten by the next {@code reposition()} and the box would appear nailed down.</p>
+     */
+    private void beginMove(float rawX, float rawY) {
+        UIWindow window = getAttachedWindow();
+        UIElement frame = getParent();
+        if (window == null || frame == null) return;
+
+        float startLeft = getWindowX();
+        float startTop = getWindowY();
+        window.getInputHandler().getDragController().startDrag(frame, rawX, rawY,
+                (mouseX, mouseY, startX, startY, deltaX, deltaY) ->
+                        moveTo(startLeft + deltaX, startTop + deltaY));
+    }
+
+    /**
+     * Every re-show clears the pin, and both entry points are overridden because there are two.
+     *
+     * <p>Popover.showAt and showFor already clear their own freely-positioned flag so a box you moved does
+     * not open in that spot forever; the pin is the same fact one layer up and has to travel with it.
+     * Missing one would leave a popup that is drawn at a fresh anchor while still refusing to close on
+     * hover-off -- the two halves of pinning disagreeing about whether it is still pinned.</p>
+     */
+    @Override
+    public Popover showAt(float rootX, float rootY, @Nullable UIElement invoker) {
+        unpin();
+        return super.showAt(rootX, rootY, invoker);
+    }
+
+    /** @see #showAt */
+    @Override
+    public Popover showFor(UIElement anchorElement, @Nullable UIElement invoker) {
+        unpin();
+        return super.showFor(anchorElement, invoker);
+    }
+
+    /**
+     * What a {@code <pre>} sample in the documentation is written in.
+     *
+     * <p>Forwarded to the body rather than derived here, and the popup cannot derive it: a
+     * {@link SymbolInfo} says what a symbol IS, not what language the file describing it is written in.
+     * The editor knows, and it is the editor that opens this.</p>
+     */
+    /**
+     * A {@code {@link}} in the documentation was pressed, carrying its target.
+     *
+     * <p>Forwarded straight from the body. The target is the raw {@code href} the emitter wrote —
+     * {@code java:java.util.List} for a javadoc link — and turning that into a place to go needs
+     * something holding an engine, which this popup is not. The same division the footer pencil already
+     * makes: the popup states what happened, {@code EditorLanguageFeatures} decides what it means.</p>
+     */
+    public final Signal.Value<String> onLinkActivated = new Signal.Value<>();
+
+    public DocumentationPopup setCodeLanguage(@Nullable Language language) {
+        body.setCodeLanguage(language);
+        return this;
+    }
+
+    private void unpin() {
+        pinned = false;
+        removeClass(PINNED_CLASS);
+    }
+
     @Override
     public Popover hide() {
         shown = null;
+        // UNPINNED. This is one reused instance, so a pin left behind would make the NEXT hover -- a
+        // different symbol, at a different anchor -- open already pinned and already detached from its
+        // anchor, which reads as the popup being stuck.
+        unpin();
         return super.hide();
     }
 
     private void fill(SymbolInfo symbol) {
+        // BACK TO THE TOP, because this is a different document. Scroll is view state, and the view is
+        // now showing something else -- following a `@see` from halfway down one comment opened the next
+        // one already scrolled, with its declaration cut off above the fold, which reads as the popup
+        // having rendered wrongly rather than as it having kept a position.
+        //
+        // IMMEDIATE rather than animated: there is nothing on screen yet to animate from, and a smooth
+        // scroll would be a visible slide on every open.
+        scroller.setScrollImmediate(0f, 0f);
         // THE OWNER'S ICON, NOT THE SYMBOL'S. This band names what DECLARES the symbol, so it must be
         // drawn as that -- a method shows the class it is on, a class shows its package. Drawing the
         // symbol's own kind put a method glyph next to the class name, which says the wrong thing
@@ -742,13 +1010,16 @@ public final class DocumentationPopup extends Popover {
         String docs = symbol.documentation();
         // HIDDEN, not empty. An empty band is a gap under the definition that looks like a rendering
         // failure; no band is a popup that is simply shorter.
-        bodyShown = docs != null && !docs.isBlank();
+        // PARSED FIRST, and emptiness is asked of the DOCUMENT rather than the string. A comment that is
+        // all markup and no words -- an empty `<p>`, a stray tag -- is a non-blank string that renders to
+        // nothing, and testing the string would leave the separator drawn above an empty band.
+        body.setDocument(docs == null ? MarkupDocument.EMPTY : MarkupParser.parse(docs));
+        bodyShown = !body.isEmpty();
         // THE RULE FOLLOWS THE BAND IT DIVIDES. Left visible with no body under it, it draws a line
         // across the bottom of the popup that reads as a band which failed to load -- the same reason
         // the body itself hides rather than showing empty.
         separator.setDisplayed(bodyShown);
         body.setDisplayed(bodyShown);
-        body.setText(docs == null ? "" : docs);
         renderFooter(symbol);
     }
 
@@ -880,12 +1151,50 @@ public final class DocumentationPopup extends Popover {
      *
      * @see #FOOTER_CLASS
      */
+    /**
+     * The pencil's tooltip, naming the LIVE chord.
+     *
+     * <p>A 12px glyph with no label is unguessable, and "go to the declaration" is not what a pencil
+     * suggests — IntelliJ tooltips the same control, reading "Jump to Source". Ours says the same and
+     * appends whatever the keymap currently binds.</p>
+     *
+     * <p><b>Not from the constructor.</b> {@code Keymap.acceleratorFor} resolves outward from this
+     * element, so it can only answer once the popup is in a tree whose editor has installed its keymap
+     * — which is never true while the popup is being built. Re-asked as the footer renders, which is
+     * once per hover and is where the row's other contents are decided anyway.</p>
+     *
+     * <p><b>And the Tooltip is RETAINED, never re-attached.</b> {@code Tooltip.attach} adds a listener
+     * pair each time and does not replace what is there, so calling it twice leaves the first tooltip
+     * showing its stale text. {@code SearchReplaceBar} and {@code StatusBarView} both carry this note;
+     * this is the third place it applies.</p>
+     */
+    private void refreshFooterTooltip() {
+        KeyChord chord = Keymap.acceleratorFor(this, EditorCommands.GO_TO_DEFINITION);
+        String text = chord == null ? "Jump to Source" : "Jump to Source  " + chord;
+        if (text.equals(footerTooltipText)) return;
+        footerTooltipText = text;
+        if (footerTooltip == null) footerTooltip = Tooltip.attach(footerEdit, text);
+        else footerTooltip.setText(text);
+    }
+
+    /** What the pencil's tooltip currently says — the only observable of it. */
+    @Nullable
+    private String footerTooltipText;
+
+    /** Retained, because {@code attach} adds rather than replaces. @see #refreshFooterTooltip */
+    @Nullable
+    private Tooltip footerTooltip;
+
     private void renderFooter(SymbolInfo symbol) {
         DeclarationSite site = symbol == null ? null : symbol.declaration();
         Resource resource = site == null ? null : site.resource();
         boolean elsewhere = resource != null;
-        footerRule.setDisplayed(elsewhere);
+        // NO RULE ABOVE THE FOOTER. It reads as a section boundary, and the footer is not a section --
+        // it is a caption on the box, the way a photograph's is. IntelliJ draws none there either. The
+        // row's own padding is what separates it now, which is the same distance without the line.
+        footerRule.setDisplayed(false);
         footerRow.setDisplayed(elsewhere);
+        if (elsewhere) refreshFooterTooltip();
         if (!elsewhere) {
             footerText.setText("");
             return;
@@ -963,35 +1272,12 @@ public final class DocumentationPopup extends Popover {
         definitionText = signature.text();
         layOutSignatureLines(signature.text());
 
-        // REBASED ONTO EACH LINE. The tokens index the whole declaration, and every line after the first
-        // starts somewhere into it -- so a range handed to the wrong element by its absolute offset lands
-        // wherever that many characters is on THAT line, which is a colour on unrelated text rather than
-        // an error.
-        String[] lines = signature.text().split("\n", -1);
-        int[] lineStart = new int[lines.length];
-        for (int i = 1; i < lines.length; i++) {
-            lineStart[i] = lineStart[i - 1] + lines[i - 1].length() + 1;
-        }
-        List<Map<String, List<TextRange>>> perLine = new ArrayList<>();
-        for (int i = 0; i < lines.length; i++) perLine.add(new LinkedHashMap<>());
-
-        for (SyntaxToken token : signature.tokens()) {
-            for (int i = 0; i < lines.length; i++) {
-                int from = lineStart[i];
-                int to = from + lines[i].length();
-                int start = Math.max(token.start(), from);
-                int end = Math.min(token.end(), to);
-                if (end <= start) continue;
-                perLine.get(i).computeIfAbsent(token.name(), any -> new ArrayList<>())
-                        .add(TextRange.of(start - from, end - from));
-            }
-        }
-        for (int i = 0; i < lines.length; i++) {
-            UIText line = definitionLines.get(i);
-            for (Map.Entry<String, List<TextRange>> entry : perLine.get(i).entrySet()) {
-                line.highlights().set(entry.getKey(), entry.getValue());
-            }
-        }
+        // REBASED ONTO EACH LINE by `SyntaxHighlighting`, which is where that loop now lives -- the
+        // tokens index the whole declaration and every line after the first starts somewhere into it, so
+        // a range handed to a line by its absolute offset lands wherever that many characters is on THAT
+        // line: a colour on unrelated text rather than an error. A `<pre>` sample in a rendered doc
+        // comment needs the identical operation, which is what took it out of here.
+        SyntaxHighlighting.colourLines(definitionLines, signature.text(), signature.tokens());
     }
 
     /**

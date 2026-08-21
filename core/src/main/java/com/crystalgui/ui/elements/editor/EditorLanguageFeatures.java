@@ -7,6 +7,7 @@ import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.lang.CodeAction;
 import com.crystalgui.text.lang.CodeActionProvider;
 import com.crystalgui.text.lang.DeclarationSite;
+import com.crystalgui.text.lang.Resolver;
 import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
@@ -300,7 +301,7 @@ final class EditorLanguageFeatures {
 
         List<Diagnostic> problems = editor.diagnosticsAt(offset);
         if (!problems.isEmpty()) {
-            if (docPopup == null) docPopup = new DocumentationPopup();
+            ensureDocPopup();
             docPopup.showProblemsAt(window, problems, anchor[0], anchor[1], anchor[2]);
             fillProblemSection(offset);
         }
@@ -308,7 +309,7 @@ final class EditorLanguageFeatures {
         boolean asked = resolveAt(LANE_DOC, offset, symbol -> {
             UIWindow live = editor.getAttachedWindow();
             if (live == null) return;
-            if (docPopup == null) docPopup = new DocumentationPopup();
+            ensureDocPopup();
             float[] at = editor.anchorInWindow(offset);
             if (at == null) return;
             docPopup.show(live, symbol, at[0], at[1], at[2]);
@@ -398,7 +399,7 @@ final class EditorLanguageFeatures {
     void showProblemPopupAt(Diagnostic problem, UIElement anchor) {
         UIWindow window = editor.getAttachedWindow();
         if (window == null || problem == null || anchor == null) return;
-        if (docPopup == null) docPopup = new DocumentationPopup();
+        ensureDocPopup();
         List<Diagnostic> problems = List.of(problem);
         docPopup.showProblems(window, problems, anchor);
 
@@ -422,6 +423,72 @@ final class EditorLanguageFeatures {
             // left of where it was measured.
             docPopup.reposition();
         });
+    }
+
+    /**
+     * The popup, built on first use and told what language its code samples are in.
+     *
+     * <p>Three call sites created it identically and none of them said that second part, which is the
+     * reason to have one: a doc comment's {@code <pre>} samples are in the language of the file that
+     * carries the comment, so the answer is the editor's own — and setting it here rather than at
+     * construction means it cannot go stale against an editor whose language was set after the popup
+     * first appeared.</p>
+     */
+    private DocumentationPopup ensureDocPopup() {
+        if (docPopup == null) {
+            docPopup = new DocumentationPopup();
+            // ONCE, at construction, because it is the popup's own lifetime and not a per-show fact --
+            // unlike the code language beside it, which follows the editor and is refreshed every time.
+            docPopup.onLinkActivated.connect(this::followDocumentationLink);
+        }
+        docPopup.setCodeLanguage(editor.language());
+        return docPopup;
+    }
+
+    /**
+     * Follows a {@code {@link}} pressed in the documentation — the popup navigates to what it names.
+     *
+     * <p>IntelliJ's behaviour, and the reason a doc link goes here rather than to go-to-definition: a
+     * reference in a comment is usually to something you want to <em>read about</em>, not somewhere you
+     * want the caret. The declaration is still one press away, from the footer pencil, once you are
+     * looking at it.</p>
+     *
+     * <h3>The target is the engine's to interpret</h3>
+     *
+     * <p>{@code java:} is what {@code JavaDocs} writes; the rest is whatever that language calls the
+     * thing. Nothing here parses it beyond stripping the scheme, because a JSDoc emitter will write its
+     * own references and this method should not have to learn each one — {@link Resolver#describe}
+     * is the seam that knows.</p>
+     *
+     * <p>Silence is the ordinary answer for a name nothing on the classpath has, and it is the RIGHT one:
+     * a link that opens an empty popup is worse than one that does nothing, because the empty popup
+     * replaces what you were reading.</p>
+     */
+    private void followDocumentationLink(String target) {
+        if (target == null || editor.languageServices() == null) return;
+        int scheme = target.indexOf(':');
+        String name = scheme < 0 ? target : target.substring(scheme + 1);
+        if (name.isEmpty()) return;
+
+        // NOWHERE NEW. The comment that used to sit here said "where the popup already is, not where
+        // the caret is" and the line under it passed `editor.getCaret()` -- so every link walked the box
+        // back to the caret, which is nowhere near the link that was just pressed. Following a chain of
+        // references marched the popup across the screen a step at a time.
+        //
+        // Navigating in place needs no anchor at all, which also retires a silent early return:
+        // `anchorInWindow` answers null on a non-finite coordinate and took the navigation with it while
+        // the press had plainly landed. That was never observed -- the dead links had a different cause
+        // entirely, in `SnippetAnalysis` -- and it is worth not leaving behind either.
+        DocumentationPopup popup = ensureDocPopup();
+        if (!popup.isOpen()) return;
+        editor.languageServices().resolver().describe(name,
+                answer -> {
+                    if (answer == null || answer.value() == null) return;
+                    // STILL OPEN? `describe` is documented as a callback that may never fire, and by
+                    // the same contract it may fire after the reader has closed the box.
+                    if (!popup.isOpen()) return;
+                    popup.navigateTo(answer.value());
+                });
     }
 
     /** Closes the documentation popup if it is open. */

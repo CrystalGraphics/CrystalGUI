@@ -49,7 +49,11 @@ import org.eclipse.jdt.core.dom.PrefixExpression;
 import org.eclipse.jdt.core.dom.QualifiedName;
 import org.eclipse.jdt.core.dom.QualifiedType;
 import org.eclipse.jdt.core.dom.ReturnStatement;
+import org.eclipse.jdt.core.dom.EnumConstantDeclaration;
+import org.eclipse.jdt.core.dom.EnumDeclaration;
+import org.eclipse.jdt.core.dom.TypeDeclaration;
 import org.eclipse.jdt.core.dom.SimpleName;
+import org.eclipse.jdt.core.dom.TagElement;
 import org.eclipse.jdt.core.dom.SimpleType;
 import org.eclipse.jdt.core.dom.SingleVariableDeclaration;
 import org.eclipse.jdt.core.dom.StructuralPropertyDescriptor;
@@ -62,6 +66,9 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
+import javax.annotation.Nullable;
+
+import java.util.function.Function;
 import java.util.Map;
 import java.util.Set;
 import com.crystalgui.language.engine.bridge.Analysis;
@@ -128,8 +135,14 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
         // THE SAME CLASSPATH, handed on rather than re-derived: a signature quoted out of a source
         // archive has to resolve against what this parse resolved against, or the binding keys the two
         // are matched by would not be the same strings. @see AttachedSources
+        // AND HOW TO ASK ABOUT A NAME THIS UNIT NEVER MENTIONS -- a documentation link's target. The
+        // same classpath and release, so the answer resolves against what this parse resolved against.
+        // A probe built by `describeName` gets no describer of its own, which is what stops a link
+        // inside a probe's own documentation from starting another probe.
+        boolean probe = "$Probe".equals(className);
         return new EcjAnalysis(unit, source, version, releaseLevel,
-                AttachedSources.forClasspath(classpath), keep[0]);
+                AttachedSources.forClasspath(classpath), keep[0],
+                probe ? null : name -> describeName(name, classpath, releaseLevel));
     }
 
     /**
@@ -277,6 +290,118 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
     }
 
     /** One resolved file, held on the engine's side. */
+    /**
+     * What a qualified name refers to — a documentation link's target, resolved.
+     *
+     * <p><b>A probe unit</b>, which is the same trick {@code InteropResolver} uses to describe a Java
+     * type for JavaScript and for the same reason: nothing can hand JDT a name and get a binding, but
+     * everything can hand it a file. {@code class $Probe { <name> $x; }} declares a field of the type in
+     * question, and asking the resulting analysis about the type's own name is a question it can answer.
+     * The unlikely names are IntelliJ's own trick for the same problem.</p>
+     *
+     * <p><b>A member reference answers with the member</b> — {@link #describeMemberOf}, tried first and
+     * falling back to the owning type when it cannot. This used to stop at the type, on the reasoning
+     * that picking one overload needs a probe that CALLS the member and the only thing building that
+     * shape ({@code InteropResolver.describeMember}) is child-side. Both halves were true and the
+     * conclusion was not: a call is not the only construct JDT resolves a member through, and the other
+     * one is the very thing the author typed.</p>
+     *
+     * <p>A reference with no type at all — a bare {@code #member}, meaning "on the class this comment
+     * is in" — is answered by {@code describeInThisUnit}, which has the declaration right there. It is
+     * never reached here.</p>
+     */
+    @Nullable
+    private SymbolInfo describeName(String name, List<String> classpath, int releaseLevel) {
+        if (name == null) return null;
+        String bare = name.trim();
+        int hash = bare.indexOf('#');
+        if (hash == 0) return null;
+        if (hash > 0) {
+            // THE MEMBER FIRST, THE TYPE AS A FALLBACK. Opening `List` for `{@link List#add}` is a useful
+            // answer and the wrong one; opening nothing is worse than either, so a member that will not
+            // resolve — a typo, an overload written with argument types nobody has — still lands on the
+            // type it was qualified by.
+            SymbolInfo member = describeMemberOf(bare, classpath, releaseLevel);
+            if (member != null) return member;
+            bare = bare.substring(0, hash);
+        }
+        if (bare.isEmpty() || !bare.matches("[\\w.$]+")) return null;
+
+        String probe = "class $Probe { " + bare + " $x; }";
+        try (Analysis analysis = analyze("$Probe", probe, classpath, releaseLevel, 0L)) {
+            // AT THE LAST SEGMENT'S FIRST CHARACTER. `resolveAt` wants a position inside the NAME, and a
+            // qualified name's earlier segments resolve to packages -- asking at offset zero of
+            // `java.util.List` describes `java`, which is a real answer to a question nobody asked.
+            int lastDot = bare.lastIndexOf('.');
+            int at = probe.indexOf(bare) + (lastDot < 0 ? 0 : lastDot + 1);
+            // A PROBE THAT DID NOT COMPILE RESOLVED NOTHING, and that is the only reliable way to ask.
+            // JDT RECOVERS an unknown qualified name into a plausible binding rather than failing --
+            // `no.such.Type` comes back as a CLASS named `Type` in a container `no.such`, so neither the
+            // kind nor the shape of the answer distinguishes it from a real one. The probe declares
+            // exactly one thing, so any error in it is about that thing.
+            //
+            // It matters because the alternative is silent: a link to a class nobody has would open a
+            // popup showing its own last segment and nothing else, replacing whatever was being read
+            // with strictly less than was already there.
+            for (Diagnostic problem : analysis.diagnostics()) {
+                if (problem.severity() == DiagnosticSeverity.ERROR) return null;
+            }
+            return analysis.resolveAt(at);
+        } catch (Exception unresolvable) {
+            // A name that does not resolve is the ordinary case for a link into a class nobody has on the
+            // classpath, not an error worth failing a hover over.
+            return null;
+        }
+    }
+
+    /**
+     * The member a {@code Type#member} reference names, or null.
+     *
+     * <h3>The probe is a doc comment, not a call</h3>
+     *
+     * <p>The obvious probe writes the call — {@code class $Probe { List $x; void $m() { $x.add(...); } }}
+     * — and that is what {@code InteropResolver.describeMember} does, because there it is the only thing
+     * available: it starts from a {@code SymbolInfo}, which carries parameter TYPES and no binding, so a
+     * call is how it re-derives one. Here the input is the reference the author wrote, and JDT resolves
+     * that construct directly: a {@code MethodRef}/{@code MemberRef} inside a {@code Javadoc} node has a
+     * real binding, by the same doc-comment support that makes {@code @see} colour by kind.</p>
+     *
+     * <p>So the probe is <b>one line of documentation over an empty class</b>. It needs no argument
+     * values (a call needs one of each declared type, and a type variable does not parse as one), it
+     * disambiguates overloads exactly as javadoc's own rules do when the author wrote the types, and it
+     * costs one parse rather than a parse plus the arithmetic of building a legal call.</p>
+     *
+     * <h3>Verified by the NAME, because nothing else fails</h3>
+     *
+     * <p>An unresolvable reference reports <b>no diagnostic at all</b> — the ~40 javadoc problems are
+     * options of their own and are deliberately off, so the error check the type probe relies on is
+     * blind here. What can be checked is the answer: a reference JDT could not resolve does not come
+     * back as the member, so the member's own simple name is the assertion. Without it a mistyped
+     * {@code #ad} would open something plausible.</p>
+     */
+    @Nullable
+    private SymbolInfo describeMemberOf(String reference, List<String> classpath, int releaseLevel) {
+        int hash = reference.indexOf('#');
+        String type = reference.substring(0, hash);
+        String member = reference.substring(hash + 1);
+        int bracket = member.indexOf('(');
+        String simple = bracket < 0 ? member : member.substring(0, bracket);
+        if (type.isEmpty() || simple.isEmpty()) return null;
+        if (!type.matches("[\\w.$]+") || !simple.matches("[\\w$]+")) return null;
+        // THE ARGUMENT LIST IS PART OF THE REFERENCE and is the only thing that tells two overloads
+        // apart, so it travels verbatim -- but it goes into a compiled file, so it is checked rather
+        // than trusted. Anything outside a Java type list cannot be a legal reference anyway.
+        if (bracket >= 0 && !member.matches("[\\w.$]+\\([\\w.$\\[\\], ]*\\)")) return null;
+
+        String probe = "/** {@link " + reference + "} */\nclass $Probe { }\n";
+        try (Analysis analysis = analyze("$Probe", probe, classpath, releaseLevel, 0L)) {
+            SymbolInfo resolved = analysis.resolveAt(probe.indexOf('#') + 1);
+            return resolved != null && simple.equals(resolved.name()) ? resolved : null;
+        } catch (Exception unresolvable) {
+            return null;
+        }
+    }
+
     private static final class EcjAnalysis implements Analysis {
 
         private final long version;
@@ -308,8 +433,24 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
         /** The classpath the unit's bindings resolve through — released in {@link #close()}, not before. */
         private INameEnvironment environment;
 
+        /**
+         * How to describe a name this unit never mentions — see {@code EcjSourceAnalyzer.describeName}.
+         *
+         * <p>A function rather than a back-reference to the analyzer, because that is the whole of what is
+         * needed and an analysis holding its analyzer is a lifetime question nobody asked. Null on the
+         * paths that build an analysis without one, which answer nothing rather than throwing.</p>
+         */
+        private final Function<String, SymbolInfo> describer;
+
         EcjAnalysis(CompilationUnit unit, String source, long version, int releaseLevel,
                     AttachedSources attached, INameEnvironment environment) {
+            this(unit, source, version, releaseLevel, attached, environment, null);
+        }
+
+        EcjAnalysis(CompilationUnit unit, String source, long version, int releaseLevel,
+                    AttachedSources attached, INameEnvironment environment,
+                    Function<String, SymbolInfo> describer) {
+            this.describer = describer;
             this.environment = environment;
             this.unit = unit;
             this.source = source == null ? "" : source;
@@ -425,9 +566,42 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
             final List<SyntaxToken> tokens = new ArrayList<>();
             CompilationUnit resolved = unit;
             if (resolved == null) return tokens;
-            resolved.accept(new ASTVisitor() {
+            // TRUE MEANS "VISIT DOC TAGS", and it is the whole of what was missing. `new ASTVisitor()`
+            // is `new ASTVisitor(false)`, so `Javadoc.accept0` never offers its tags to the visitor and
+            // every name inside a doc comment was invisible to this pass -- measured, zero tokens over
+            // a comment containing `{@link List}` and `@see List`.
+            //
+            // Nothing else was needed. JDT resolves those names for real, because `EcjOptions` turns
+            // doc-comment support on, so a `@see List` fragment is a `SimpleName` carrying an
+            // `ITypeBinding` exactly as a name in code does -- and `captureFor` already turns a binding
+            // into `type.interface`/`type.class`/`type.enum`. No second resolver, no doc-specific
+            // machinery: the answer was already there and nobody was walking to it.
+            resolved.accept(new ASTVisitor(true) {
                 @Override
                 public boolean visit(SimpleName name) {
+                    // A `@param`'s SUBJECT NAMES A DECLARATION; it does not reference one. `@param n`
+                    // resolves to the parameter binding and so came back `variable.parameter`, which is
+                    // a true statement and the wrong colour: IntelliJ draws it as DOC_COMMENT_TAG_VALUE,
+                    // and it is the lexer's `comment.doc.value` that should win the character. Every
+                    // other tag's argument IS a reference -- `@throws IllegalStateException` and
+                    // `@see java.util.List` are types, and `{@link #other()}` is a member -- so this is
+                    // the one exclusion rather than a list of tags that may resolve.
+                    if (isParamTagSubject(name)) return true;
+                    // AND NOTHING THAT DID NOT REALLY RESOLVE. `setBindingsRecovery` is on -- it is what
+                    // lets the rest of a broken file still resolve -- and for an unknown TYPE it
+                    // synthesises a binding rather than answering null: `{@link no.such.Type}` comes back
+                    // a CLASS named `Type` in a container `no.such`, indistinguishable from a real one.
+                    //
+                    // In CODE that is harmless, because `endVisit` marks the same range `unresolved` and
+                    // the editor's merge takes the later token. In a doc comment it is not: the mark is
+                    // deliberately suppressed there, so the recovered kind would be the only thing said
+                    // about the name -- a broken reference drawn in the same confident colour as the
+                    // working one three lines above it. Left to the lexer's `comment.doc.value` instead,
+                    // which is what an unresolved reference should look like: ordinary.
+                    if (inDocComment(name)) {
+                        IBinding resolvedTo = bindingFor(name);
+                        if (resolvedTo == null || resolvedTo.isRecovered()) return true;
+                    }
                     String capture = captureFor(name);
                     if (capture != null) {
                         // THE `@` IS PART OF THE ANNOTATION, and a SimpleName does not include it: the
@@ -475,7 +649,16 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                         // ONLY WHERE A NAME WAS EXPECTED TO RESOLVE. A label, a package fragment and
                         // the name in a declaration position legitimately have no binding, and
                         // underlining those would mark correct code as broken on every file.
-                        if (isResolvable(name)) tokens.add(new SyntaxToken(start, end, "unresolved"));
+                        // AND NEVER INSIDE A DOC COMMENT. This mark says the name will not compile,
+                        // which is not a thing a comment can do -- javadoc's own reference rules are
+                        // stricter than the language's and JDT declines shapes that are perfectly legal
+                        // to a reader, so a mark here would be red on working prose. The file's standing
+                        // rule decides it: a missed underline is invisible, a false one is a red mark on
+                        // correct code. `deprecated` below is left alone, because that IS a true
+                        // statement about whatever the reference points at.
+                        if (isResolvable(name) && !inDocComment(name)) {
+                            tokens.add(new SyntaxToken(start, end, "unresolved"));
+                        }
                         return;
                     }
                     if (binding.isDeprecated()) {
@@ -499,6 +682,28 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
             if (!(parent instanceof SingleVariableDeclaration)) return false;
             StructuralPropertyDescriptor slot = parent.getLocationInParent();
             return slot != null && "recordComponents".equals(slot.getId());
+        }
+
+        /**
+         * Whether a name is what a {@code @param} tag names.
+         *
+         * <p>Asked of the PARENT rather than by walking for a tag, because that is exactly the shape:
+         * JDT puts a block tag's argument at the head of its own {@code TagElement}'s fragments. An
+         * inline {@code {@link}} inside a {@code @param}'s prose has the nested tag as its parent, so
+         * it is unaffected and still colours as the reference it is.</p>
+         */
+        private static boolean isParamTagSubject(SimpleName name) {
+            ASTNode parent = name.getParent();
+            return parent instanceof TagElement
+                    && TagElement.TAG_PARAM.equals(((TagElement) parent).getTagName());
+        }
+
+        /** Whether a node sits inside a doc comment rather than in code. */
+        private static boolean inDocComment(ASTNode node) {
+            for (ASTNode at = node; at != null; at = at.getParent()) {
+                if (at.getNodeType() == ASTNode.JAVADOC) return true;
+            }
+            return false;
         }
 
         /** Whether a name sits inside a {@code package} or {@code import} path. */
@@ -762,6 +967,108 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
         }
 
         @Override
+        public SymbolInfo describe(String name) {
+            // THIS FILE FIRST. The fallback builds a PROBE -- a separate compilation unit compiled
+            // against the classpath -- and the classpath does not contain the file being edited, so a
+            // reference to anything declared here resolved nowhere. That is most of a person's own
+            // links: `{@link #helper()}`, `@see MyOtherClass`, a bare `#member` meaning "on this class".
+            // In the fixture it was every See Also row that pointed inward, while the ones pointing at
+            // the JDK worked, which reads as the link being broken at random.
+            SymbolInfo here = describeInThisUnit(name);
+            if (here != null) return here;
+            return describer == null ? null : describer.apply(name);
+        }
+
+        /**
+         * A reference to something declared in <b>this</b> file, or null.
+         *
+         * <p>Matched on the simple name, which is what a doc reference gives: a qualified reference is
+         * cut to its last segment and a member reference to the member. That is enough here and would
+         * not be on a classpath — one file declares few enough names that a collision is the author's
+         * own doing, and the alternative is re-deriving a binding key from text.</p>
+         *
+         * <p>A MEMBER is answered as itself rather than as its owning type, which the probe path cannot
+         * do: the declaration is right here, so there is a binding for it without needing a unit that
+         * calls it. That makes {@code @see #parityBlockTags()} land on the method — the partial named in
+         * the plan is about members reached through the CLASSPATH, and this is the other half.</p>
+         */
+        @Nullable
+        private SymbolInfo describeInThisUnit(String reference) {
+            final CompilationUnit resolved = unit;
+            if (resolved == null || reference == null) return null;
+            String bare = reference.trim();
+            int hash = bare.indexOf('#');
+            String member = hash < 0 ? "" : bare.substring(hash + 1);
+            int bracket = member.indexOf('(');
+            if (bracket >= 0) member = member.substring(0, bracket);
+            String type = hash < 0 ? bare : bare.substring(0, hash);
+            int lastDot = type.lastIndexOf('.');
+            if (lastDot >= 0) type = type.substring(lastDot + 1);
+
+            final String wanted = member.isEmpty() ? type : member;
+            if (wanted.isEmpty()) return null;
+            // A QUALIFIER IS A FILTER, NOT A TARGET. `Other#run` may not be answered by this file's own
+            // `run`, so when a type was named and it is not one declared here, leave it to the probe.
+            final String container = member.isEmpty() ? "" : type;
+
+            final SimpleName[] found = new SimpleName[1];
+            resolved.accept(new ASTVisitor() {
+                private boolean take(SimpleName name) {
+                    if (found[0] != null || name == null) return false;
+                    if (!wanted.equals(name.getIdentifier())) return false;
+                    if (!container.isEmpty() && !container.equals(enclosingTypeName(name))) return false;
+                    found[0] = name;
+                    return true;
+                }
+
+                @Override
+                public boolean visit(TypeDeclaration node) {
+                    take(node.getName());
+                    return true;
+                }
+
+                @Override
+                public boolean visit(EnumDeclaration node) {
+                    take(node.getName());
+                    return true;
+                }
+
+                @Override
+                public boolean visit(MethodDeclaration node) {
+                    take(node.getName());
+                    return true;
+                }
+
+                @Override
+                public boolean visit(VariableDeclarationFragment node) {
+                    take(node.getName());
+                    return true;
+                }
+
+                @Override
+                public boolean visit(EnumConstantDeclaration node) {
+                    take(node.getName());
+                    return true;
+                }
+            });
+
+            SimpleName name = found[0];
+            if (name == null) return null;
+            IBinding binding = name.resolveBinding();
+            return binding == null ? null : describe(resolved, name, binding);
+        }
+
+        /** The simple name of the type a node is declared in, or {@code ""}. */
+        private static String enclosingTypeName(ASTNode node) {
+            for (ASTNode at = node.getParent(); at != null; at = at.getParent()) {
+                if (at instanceof AbstractTypeDeclaration) {
+                    return ((AbstractTypeDeclaration) at).getName().getIdentifier();
+                }
+            }
+            return "";
+        }
+
+        @Override
         public SymbolInfo resolveAt(int offset) {
             CompilationUnit resolved = unit;
             if (resolved == null) return null;
@@ -952,16 +1259,34 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
         }
 
         /**
-         * Where a binding is declared, when the declaration is <b>in this file</b>.
+         * Where a binding is declared — <b>this file first, then attached source</b>.
          *
-         * <p>{@code findDeclaringNode} answers only for the unit it is asked, which is exactly the
-         * honest scope here: a member of a compiled class on the classpath has no source attached, and
-         * inventing a location for it would be worse than saying nothing. Cross-file go-to needs the
-         * workspace, and that is M11's problem.</p>
+         * <p>{@code findDeclaringNode} answers only for the unit it is asked, and for a long while that
+         * was the whole of it: a classpath member got null, which {@link DeclarationSite} still
+         * documents as the ordinary case. That was true when nothing could read a classpath type's
+         * source. {@code AttachedSources} can, and has been quoting declarations out of it for the
+         * documentation popup all along — so the second step asks it, and the answer is a
+         * {@code library://} site the workbench opens in a viewer.</p>
+         *
+         * <p><b>Order matters and is not arbitrary.</b> A type declared in the file being edited must
+         * answer as THIS document even when a class of the same name exists on the classpath, or
+         * editing a class called {@code Main} would navigate into somebody else's {@code Main}. The
+         * local unit is definitive about itself; the archive is a fallback.</p>
+         *
+         * <p>Still null when there is no attached source, which is a jar shipping none — a decompiler
+         * answers those, and cannot answer here: it has no positions to give until it has run.</p>
          */
-        private static DeclarationSite declarationOf(CompilationUnit unit, IBinding binding) {
+        private DeclarationSite declarationOf(CompilationUnit unit, IBinding binding) {
             ASTNode declaration = unit.findDeclaringNode(binding);
-            if (declaration == null) return null;
+            if (declaration == null) {
+                if (signatures == null) return null;
+                DeclarationSite attached = signatures.declarationInAttachedSource(binding);
+                // AND THE SOURCELESS CASE, which is what makes the decompiler reachable at all. The
+                // chain is site -> viewer -> provider -> CFR and it begins with a site; a class shipping
+                // no sources jar produced none, so navigation stopped at the first step and every part
+                // of the decompiler sat behind a door nothing opened.
+                return attached != null ? attached : signatures.declarationWithoutSource(binding);
+            }
             ASTNode named = declaration instanceof VariableDeclarationFragment
                     ? ((VariableDeclarationFragment) declaration).getName() : declaration;
             int start = named.getStartPosition();

@@ -122,10 +122,22 @@ final class RhinoProblemPolicy {
             if (isError && start.row() == lastErrorRow) continue;
             if (isError) lastErrorRow = start.row();
 
+            // TRAILING WHITESPACE IS NOT PART OF THE PROBLEM. Rhino reports `identifier is a reserved
+            // word: static` with a length that runs past the keyword and over the space after it, so the
+            // squiggle drew under `static ` -- a mark that looks like it is complaining about the gap,
+            // and visibly ragged next to one on the line above ending at its own last letter.
+            //
+            // Trimmed rather than second-guessed with a token scan: the offset Rhino gives is right and
+            // only the tail is loose, so taking whitespace off the end fixes it without this class
+            // having an opinion about where tokens end.
+            int reported = Math.min(source.length(), from + Math.max(0, problem.getLength()));
+            while (reported > from && Character.isWhitespace(source.charAt(reported - 1))) reported--;
+
             // A ZERO-LENGTH PROBLEM IS REAL AND IS WIDENED BY ONE. "missing ; before statement" points
             // BETWEEN two characters, and a mark with no width cannot be seen -- the same rule the
-            // editor's diagnostic lane already applies, stated here so the range arrives usable.
-            int to = Math.min(source.length(), from + Math.max(1, problem.getLength()));
+            // editor's diagnostic lane already applies, stated here so the range arrives usable. Applied
+            // AFTER the trim, or a problem whose whole reported span is whitespace would collapse.
+            int to = Math.min(source.length(), Math.max(reported, from + 1));
             out.add(new Diagnostic(start, lines.pointAt(to),
                     isError ? DiagnosticSeverity.ERROR : DiagnosticSeverity.WARNING,
                     retitle(problem.getMessage(), source, from), OWNER, null));
@@ -149,6 +161,19 @@ final class RhinoProblemPolicy {
             if (refusal != null) return "'" + keyword + "': " + refusal + engineName;
         }
 
+        // `#` IS A FEATURE, NOT A TYPO. `#weight` is an ES2022 private class field, which Rhino has no
+        // support for -- but it fails in the LEXER rather than the parser, so the message is
+        // "illegal character: #" where every other unsupported construct on the same screen names
+        // itself. An author reads that as having typed something wrong, and goes looking at the
+        // character instead of at the feature.
+        //
+        // Guarded on what follows, because `#` genuinely is a stray character anywhere else: only a
+        // `#` immediately before an identifier is the private-member syntax. A lone one keeps Rhino's
+        // own wording, which is then the accurate answer.
+        if (message.startsWith(ILLEGAL_HASH) && startsPrivateMember(source, offset)) {
+            return "'#': private class members are not supported by" + engineName;
+        }
+
         // `async` NEEDS THE SOURCE, because it does not appear in the message. It lexes as an ordinary
         // identifier, so the parser only complains at the `function` that follows it -- and the author
         // reads "missing ; before statement" pointing at a `function` keyword they wrote correctly.
@@ -156,6 +181,20 @@ final class RhinoProblemPolicy {
             return "'async': " + refusalFor("async") + engineName;
         }
         return message;
+    }
+
+    /** Rhino's wording when its lexer meets a {@code #}, which is the private-member syntax. */
+    private static final String ILLEGAL_HASH = "illegal character: #";
+
+    /** Whether the {@code #} at {@code offset} begins a private member rather than being a stray. */
+    private static boolean startsPrivateMember(String source, int offset) {
+        int at = Math.min(offset, source.length());
+        // THE OFFSET MAY POINT AT THE `#` OR JUST PAST IT, depending on where the lexer stopped, so the
+        // character itself is found rather than assumed.
+        if (at < source.length() && source.charAt(at) == '#') at++;
+        else if (at > 0 && source.charAt(at - 1) == '#') { /* already past it */ }
+        else return false;
+        return at < source.length() && Character.isJavaIdentifierStart(source.charAt(at));
     }
 
     /** Whether the last word before {@code offset}, skipping whitespace, is {@code word}. */

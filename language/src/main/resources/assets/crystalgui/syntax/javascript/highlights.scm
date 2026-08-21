@@ -86,6 +86,15 @@
   (template_string)
 ] @string
 
+; ADDED, not vendored. The upstream javascript query captures the string and stops there, so
+; "tab:\t backslash:\\ unicode:\u00e9" drew as one flat run -- while the IDENTICAL literal in a
+; .java file two tabs away banded every escape, because the java query does have this rule. It reads
+; as the JavaScript editor being the poorer one, and it is one line.
+;
+; Applies to a template string too: the node is the same inside both, which is why the rule is written
+; against the escape rather than against whichever kind of literal contains it.
+(escape_sequence) @string.escape
+
 (regex) @string.special
 (number) @number
 

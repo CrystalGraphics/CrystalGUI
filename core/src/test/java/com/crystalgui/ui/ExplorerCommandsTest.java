@@ -450,12 +450,14 @@ public class ExplorerCommandsTest extends UiTestBase {
 
         assertEquals("the file was created and left unopened", CgPath.parse("mymod.proj:src/Made.java"),
                 workbench.activeFilePath());
-        // And it shows in the tree, which is the other half of "nothing happened": the folder it landed in
-        // is usually collapsed, so a create that opens nothing and reveals nothing is indistinguishable
-        // from one that failed. autoReveal follows the active tab, so opening it should be enough.
-        settle();
-        assertEquals("the new file was opened but never shown in the tree",
-                CgPath.parse("mymod.proj:src/Made.java"), workbench.fileTree().selectedPath());
+        // THE TREE IS NOT ASSERTED HERE ANY MORE, and the reason is a default that changed under it.
+        //
+        // This used to also check that the new file was selected in the tree, on the reasoning that a
+        // create which opens nothing and reveals nothing is indistinguishable from one that failed. That
+        // was true only because `explorer.autoReveal` was on by default and followed the active tab; the
+        // default is off now (IntelliJ's posture -- see WorkbenchSettings.AUTO_REVEAL), so the assertion
+        // was pinning a setting rather than this command's behaviour. What New File guarantees is that the
+        // file exists and is open, which the line above says. The reveal path has its own coverage.
     }
 
     /** The realised row element showing a given name, or null. */

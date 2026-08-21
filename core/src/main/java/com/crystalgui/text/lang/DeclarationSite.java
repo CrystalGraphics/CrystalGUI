@@ -48,6 +48,44 @@ public record DeclarationSite(@Nullable Resource resource, TextPoint start, Text
         return new DeclarationSite(null, start, end);
     }
 
+    /**
+     * A declaration in a type the workspace does not contain — a JDK or library class.
+     *
+     * <h3>It takes a NAME, and builds the {@link Resource} itself, and that is the whole point</h3>
+     *
+     * <p>The only caller is an engine, and an engine is loaded by {@code EngineClassLoader}, which is
+     * <b>child-first over everything except the JDK, the bridge package and
+     * {@code com.crystalgui.text.*}</b>. This class is in that last one, so it is the host's. {@code
+     * Resource} is in {@code com.crystalgui.fs} and is not — so a child-side class that called
+     * {@code Resource.of(...)} itself would resolve {@code Resource} through the band's loader.</p>
+     *
+     * <p>Whether that finds a second copy depends on what is on the band's URLs, and <b>that differs
+     * between development and production</b>: {@code EngineHost} adds its own code source, which in
+     * Gradle is {@code language/build/classes} — no {@code com.crystalgui.fs} in it, so delegation falls
+     * to the parent and one copy exists — and under LaunchWrapper is <b>the whole mod jar</b>, which
+     * contains it. So the band would define its own {@code Resource}, and handing one to this
+     * constructor fails with the confusing shape: {@code Resource cannot be cast to Resource}. Every
+     * test and every harness run would pass; only a shipped jar would break.</p>
+     *
+     * <p>Taking the name as a {@link String} moves the resolution inside a method whose own class is
+     * host-loaded, so {@code Resource} is looked up there and the engine's constant pool never mentions
+     * it. The same shape as {@code TypeBytes} and every other crossing: compose host-side, cross with
+     * JDK types only.</p>
+     *
+     * @param topLevelBinaryName the declaring compilation unit's top-level type — {@code java.util.Map}
+     *                           for {@code Map.Entry}, since a source archive is keyed by unit
+     */
+    public static DeclarationSite inLibrary(String topLevelBinaryName, TextPoint start, TextPoint end) {
+        if (topLevelBinaryName == null || topLevelBinaryName.isEmpty()) return null;
+        return new DeclarationSite(
+                Resource.of(Resource.SCHEME_LIBRARY, topLevelBinaryName), start, end);
+    }
+
+    /** Whether this points into a type the workspace does not contain. @see #inLibrary */
+    public boolean isLibrary() {
+        return resource != null && Resource.SCHEME_LIBRARY.equals(resource.scheme());
+    }
+
     /** Whether this is in the document the question was asked about. */
     public boolean isSameDocument() {
         return resource == null;

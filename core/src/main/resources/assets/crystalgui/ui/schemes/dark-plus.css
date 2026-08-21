@@ -107,6 +107,19 @@ theme {
     --syntax-constant-builtin: #569CD6;
     --syntax-comment: #6A9955;
     --syntax-comment-doc: #6A9955;
+    /* DOC COMMENTS. No `ij-scheme` file to take these from and that is correct: Dark+ is VS Code's
+     * palette, so its own is the right source. VS Code colours a JSDoc tag with `storage.type.class.jsdoc`
+     * (#569CD6) and the name after it with `variable.other.jsdoc` (#9CDCFE), and an HTML tag with the same
+     * #569CD6 — which is the same colour a `<p>` gets in an HTML file, and is the honest answer for
+     * markup embedded in a comment. */
+    --syntax-doc-tag: #569CD6;
+    --syntax-doc-value: #9CDCFE;
+    --syntax-doc-markup: #569CD6;
+    /* The FACE, from the same file's FONT_TYPE (0/1/2/3 = plain/bold/italic/both). VS Code sets no face on a JSDoc tag and this scheme’s comments are upright, so the
+     * separation is entirely colour — which at #569CD6 against #6A9955 is not subtle. */
+    --syntax-doc-tag-style: normal;
+    --syntax-doc-tag-weight: normal;
+    --syntax-doc-value-style: normal;
     --syntax-variable: #9CDCFE;
     --syntax-variable-builtin: #569CD6;
     --syntax-variable-parameter: #9CDCFE;

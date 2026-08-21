@@ -1148,6 +1148,48 @@ public class UIElement implements SettingsScope, DataProvider {
         for (UIElement child : children) child.invalidatePoseCachesRecursively();
     }
 
+    /**
+     * Brings this element's hit-test matrix into line with the pose it is actually being drawn with.
+     *
+     * <p>Package-visible so it can be driven without a GL context: it is reached from
+     * {@code drawSubtree} in production and there is no other way to paint in a test, which would
+     * leave the two defects below unpinned.</p>
+     *
+     * <h3>Two bugs lived here, and together they made one symptom</h3>
+     *
+     * <p>A link in the documentation popup could not be hovered until it had been clicked at roughly
+     * fifteen times, whereupon it began working and stayed working.</p>
+     *
+     * <p><b>Aliasing.</b> {@code CacheCell.set} stores the reference it is given, so handing it the
+     * live pose made this element's cached matrix an <em>alias</em> of the {@code PoseStack}'s. An
+     * element whose transform is the identity does not push, so most elements aliased the SAME
+     * {@code Matrix4f} — which {@code mulPoseMatrix} and the scroll offset then mutate in place. An
+     * already-drawn element's cached matrix therefore changed underneath it as the walk moved on.
+     * Measured on the popup: a run whose world origin should have read y=506 read <b>y=-10628</b>,
+     * the editor's scrolled content leaking in through a shared pose. Mutating the cell's own matrix
+     * in place is both the fix and allocation-free — the calculator returns {@code old}, so
+     * {@code get()} always hands back the instance this cell owns.</p>
+     *
+     * <p><b>The dirty gate.</b> Refreshing only when the cell was dirty put paint's correction out of
+     * reach in exactly the case that needed it: any {@code get()} — a hit test, a widget's own
+     * pointer arithmetic — runs the calculator and marks the cell CLEAN, so a value computed once
+     * from a stale parent chain was never revisited. Nothing invalidates this on scroll or on
+     * relayout, so one bad computation stuck for the life of the element. The pose is the ground
+     * truth: it is what was drawn, and the invariant is that hit-testing and rendering share one
+     * matrix.</p>
+     *
+     * <p>The equality test keeps the common case free — nothing moved, so nothing is written and the
+     * inverse is not invalidated. The identity check ahead of it is deliberate: a cell left aliasing
+     * the pose would otherwise compare equal to itself forever.</p>
+     */
+    void reconcileWorldMatrix(Matrix4f drawn) {
+        Matrix4f tracked = runtimeCache.localToWorld.get();
+        if (tracked != drawn && !tracked.equals(drawn)) {
+            tracked.set(drawn);
+            this.runtimeCache.worldToLocal.invalidate();
+        }
+    }
+
     // ── Resize ───────────────────────────────────────────────────────────────
 
     /** The resize handles, present only while {@code resize} is not {@code none}. Which ones exist
@@ -1190,6 +1232,22 @@ public class UIElement implements SettingsScope, DataProvider {
     private boolean userSizedWidth, userSizedHeight;
 
     /**
+     * The class every resize handle carries.
+     *
+     * <p>Here rather than on {@code UIResizer}, which is package-private: the handles are a feature of
+     * <em>this</em> class ({@code setResize}) and the class name is the only public handle on them. A
+     * widget that must tell a press on its own body from a press on its grabber has no other way to ask,
+     * and the alternative is that widget repeating the string literal.</p>
+     */
+    public static final String RESIZER_CLASS = "__resizer__";
+
+    /** @see #syncUserSizedClasses() */
+    public static final String USER_SIZED_WIDTH_CLASS = "__user-sized-width__";
+
+    /** @see #syncUserSizedClasses() */
+    public static final String USER_SIZED_HEIGHT_CLASS = "__user-sized-height__";
+
+    /**
      * Called by {@link UIResizer} as a drag writes each axis.
      *
      * <p><b>Records only; it does not clear anything.</b> Withdrawing the IMPORTANT declarations on this
@@ -1205,6 +1263,26 @@ public class UIElement implements SettingsScope, DataProvider {
     void markUserSized(boolean width, boolean height) {
         userSizedWidth |= width;
         userSizedHeight |= height;
+        syncUserSizedClasses();
+    }
+
+    /**
+     * The two flags above, as classes a stylesheet can see.
+     *
+     * <p>State a widget flips from its own code belongs on a <b>class</b>, not a pseudo-class — the engine
+     * re-evaluates a pseudo-class on its terms and a class on yours, and this changes exactly twice in an
+     * element's life. There is no {@code :user-sized} to add and there should not be.</p>
+     *
+     * <p>It exists because <b>"the user has taken this axis" changes what the layout inside should do</b>,
+     * and only the sheet can say what. {@code DocumentationPopup} is the case that found it: unresized, its
+     * scroll band caps itself so a long document scrolls inside a sensible box; once the user drags the box
+     * taller the band has to <em>fill</em> instead, or the drag grows the frame and nothing inside it. Both
+     * spellings are correct, and which one applies is not something the widget can write once at
+     * construction.</p>
+     */
+    private void syncUserSizedClasses() {
+        if (userSizedWidth) addClass(USER_SIZED_WIDTH_CLASS); else removeClass(USER_SIZED_WIDTH_CLASS);
+        if (userSizedHeight) addClass(USER_SIZED_HEIGHT_CLASS); else removeClass(USER_SIZED_HEIGHT_CLASS);
     }
 
     /**
@@ -1219,6 +1297,7 @@ public class UIElement implements SettingsScope, DataProvider {
     public void clearUserSizing() {
         userSizedWidth = false;
         userSizedHeight = false;
+        syncUserSizedClasses();
         getStyle().removeCandidates(LayoutProperties.WIDTH, slot -> slot.origin() == StyleOrigin.INLINE);
         getStyle().removeCandidates(LayoutProperties.HEIGHT, slot -> slot.origin() == StyleOrigin.INLINE);
     }
@@ -2231,10 +2310,7 @@ public class UIElement implements SettingsScope, DataProvider {
 
     /** The body of {@link #drawSubtree}, with this element's own transform already on the pose. */
     private void drawSubtreeTransformed(CgUiPaintContext ctx) {
-        if (runtimeCache.localToWorld.isDirty()) {
-            this.runtimeCache.localToWorld.set(ctx.getPoseStack().last().pose());
-            this.runtimeCache.worldToLocal.invalidate();
-        }
+        reconcileWorldMatrix(ctx.getPoseStack().last().pose());
 
         GeneralGroup styleGen = style.getGeneralGroup();
         float opacity = styleGen.opacity();

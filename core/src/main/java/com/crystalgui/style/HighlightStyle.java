@@ -6,6 +6,14 @@ import com.crystalgui.style.property.visual.text.FontStyle;
 import com.crystalgui.style.property.visual.text.FontWeight;
 import com.crystalgui.style.property.visual.text.TextDecorationLine;
 
+import com.crystalgui.style.property.layout.LayoutProperties;
+import com.crystalgui.style.property.visual.border.BorderRadiusProperties;
+import com.crystalgui.style.property.visual.border.LengthPercent;
+
+import dev.vfyjxf.taffy.style.LengthPercentageAuto;
+
+import javax.annotation.Nullable;
+
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -65,7 +73,33 @@ public final class HighlightStyle {
             // exists to prevent, and it is why there is no ALLOWED_IN_EDITOR variant: one rule, applied
             // everywhere, is the only version nobody has to remember.
             StylePropertyRegistry.FONT_WEIGHT,
-            StylePropertyRegistry.FONT_STYLE);
+            StylePropertyRegistry.FONT_STYLE,
+            // border-radius and the two horizontal paddings are the BAND'S OWN GEOMETRY, and they are a
+            // second deliberate divergence for the same reason as the two above: CSS forbids them because
+            // on the web a highlight is a pure overlay over already-laid-out text, so anything box-shaped
+            // would have to be invented from nothing. Here the band is a real rect this engine draws
+            // itself -- `UIText.paintHighlightBands` already walks the shaped runs and fills one -- so
+            // rounding it and inflating it horizontally are things it can simply do.
+            //
+            // NEITHER CAN REFLOW ANYTHING, which is the restriction's actual purpose. The padding inflates
+            // the painted rect and never the text's measurement, so the glyphs do not move and the line
+            // does not re-wrap; it is `outline-offset`'s relationship to a box, not `padding`'s. Vertical
+            // padding is deliberately NOT allowed: a band is as tall as its line box, and inflating that
+            // makes consecutive lines overlap each other's bands.
+            //
+            // The point is inline code. `{@code x}` on a bare recoloured run reads as an arbitrarily
+            // tinted word; on a rounded plate with air either side it reads as code, which is what every
+            // reference renderer draws and what this could not express.
+            BorderRadiusProperties.TOP_LEFT_X,
+            BorderRadiusProperties.TOP_LEFT_Y,
+            BorderRadiusProperties.TOP_RIGHT_X,
+            BorderRadiusProperties.TOP_RIGHT_Y,
+            BorderRadiusProperties.BOTTOM_RIGHT_X,
+            BorderRadiusProperties.BOTTOM_RIGHT_Y,
+            BorderRadiusProperties.BOTTOM_LEFT_X,
+            BorderRadiusProperties.BOTTOM_LEFT_Y,
+            LayoutProperties.PADDING_LEFT,
+            LayoutProperties.PADDING_RIGHT);
 
     /**
      * Allowed by CSS on a highlight pseudo-element, <b>not yet paintable here</b> — a different failure
@@ -137,6 +171,62 @@ public final class HighlightStyle {
      */
     public int decorationColor() {
         return get(StylePropertyRegistry.TEXT_DECORATION_COLOR, 0);
+    }
+
+    /**
+     * The band's corner radii in pixels, in {@code CgUiRoundedRect}'s order — TL, TR, BR, BL, each an
+     * {@code (rx, ry)} pair — or {@code null} when every corner is square.
+     *
+     * <p>Null rather than an array of zeroes so the painter keeps its {@code fillRect} fast path: a
+     * rounded band is a separate material and therefore a separate draw call, which is the right cost for
+     * a few words of inline code and the wrong one for an editor's selection.</p>
+     */
+    @Nullable
+    public float[] cornerRadii(float width, float height) {
+        float tlx = radius(BorderRadiusProperties.TOP_LEFT_X, width);
+        float tly = radius(BorderRadiusProperties.TOP_LEFT_Y, height);
+        float trx = radius(BorderRadiusProperties.TOP_RIGHT_X, width);
+        float trY = radius(BorderRadiusProperties.TOP_RIGHT_Y, height);
+        float brx = radius(BorderRadiusProperties.BOTTOM_RIGHT_X, width);
+        float bry = radius(BorderRadiusProperties.BOTTOM_RIGHT_Y, height);
+        float blx = radius(BorderRadiusProperties.BOTTOM_LEFT_X, width);
+        float bly = radius(BorderRadiusProperties.BOTTOM_LEFT_Y, height);
+        if (tlx <= 0f && tly <= 0f && trx <= 0f && trY <= 0f
+                && brx <= 0f && bry <= 0f && blx <= 0f && bly <= 0f) {
+            return null;
+        }
+        return new float[] {tlx, tly, trx, trY, brx, bry, blx, bly};
+    }
+
+    private float radius(StyleProperty<LengthPercent> corner, float axis) {
+        LengthPercent value = get(corner, null);
+        return value == null ? 0f : Math.max(0f, value.resolve(axis));
+    }
+
+    /** How far the band extends past the run's left edge, in pixels. */
+    public float bandPadLeft(float axis) {
+        return pad(LayoutProperties.PADDING_LEFT, axis);
+    }
+
+    /** How far the band extends past the run's right edge, in pixels. */
+    public float bandPadRight(float axis) {
+        return pad(LayoutProperties.PADDING_RIGHT, axis);
+    }
+
+    /**
+     * {@code auto} reads as zero here.
+     *
+     * <p>It is {@code padding-*}'s initial value and means "the layout decides" — but nothing is laying
+     * this out, so the only honest reading is "no inflation". The enum is compared by name rather than
+     * imported: it is Taffy's, and a band's padding is not a Taffy quantity.</p>
+     */
+    private float pad(StyleProperty<LengthPercentageAuto> property, float axis) {
+        LengthPercentageAuto value = get(property, null);
+        if (value == null) return 0f;
+        String kind = value.getType().name();
+        if ("LENGTH".equals(kind)) return Math.max(0f, value.getValue());
+        if ("PERCENT".equals(kind)) return Math.max(0f, value.getValue() * axis);
+        return 0f;
     }
 
     /**

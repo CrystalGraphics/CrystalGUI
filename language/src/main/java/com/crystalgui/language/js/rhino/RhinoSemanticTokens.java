@@ -115,6 +115,12 @@ final class RhinoSemanticTokens {
         return all;
     }
 
+    /** Whether this access is the thing being called, rather than a value being read. */
+    private static boolean isCallee(PropertyGet access) {
+        AstNode parent = access.getParent();
+        return parent instanceof FunctionCall && ((FunctionCall) parent).getTarget() == access;
+    }
+
     /**
      * The package path and the type name of every {@code import} — {@code module} and {@code type}, the
      * captures the Java engine publishes for the identical line.
@@ -150,6 +156,12 @@ final class RhinoSemanticTokens {
             if (property == null) return true;
             String capture = members.apply(access);
             if (capture != null && !capture.isEmpty()) {
+                // A CALL IS NOT A DECLARATION. `SymbolKind.METHOD` names itself `function.method`,
+                // which is what a scheme draws a method's DECLARATION in -- so `list.add('one')` came
+                // out in the declaration colour beside `String.join(...)` in the call colour, on the
+                // same screen, because the grammar had marked one and this pass had marked the other.
+                // The kind says what the member IS; where it sits says how it is being used.
+                if ("function.method".equals(capture) && isCallee(access)) capture = "function.call";
                 add(tokens, property.getAbsolutePosition(), property.getLength(), capture);
             }
             return true;

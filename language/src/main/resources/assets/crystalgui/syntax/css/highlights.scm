@@ -24,6 +24,13 @@
 
 (attribute_selector (plain_value) @string)
 
+; ADDED, not vendored -- the upstream query stops at the string. An escape inside one is a
+; different thing from the text around it and every reference bands it, which is why the java
+; query has this rule and is why the identical literal read flat in one editor and banded in
+; another. Checked across every shipped grammar rather than only the one that was reported:
+; html and xml genuinely have no such node (they escape with entities), and the rest did.
+(escape_sequence) @string.escape
+
 ((property_name) @variable
  (#match? @variable "^--"))
 ((plain_value) @variable

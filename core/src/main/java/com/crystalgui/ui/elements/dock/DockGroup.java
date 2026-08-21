@@ -269,11 +269,28 @@ public class DockGroup extends UIElement {
 
         for (DockPanelRef panel : wanted) {
             Tab tab = tabs.addTab(area.registry().titleOf(panel));
-            applyIcon(tab, area.registry().iconOf(panel));
+            // AN ELEMENT FIRST, because a name cannot carry a declaration's static and final marks --
+            // those are stacked layers rather than a picture. @see DockPanelRegistry#iconElementOf
+            UIElement glyph = area.registry().iconElementOf(panel);
+            if (glyph != null) applyIconElement(tab, glyph);
+            else applyIcon(tab, area.registry().iconOf(panel));
             // AT BUILD TIME, which is the whole reason the decoration is pulled from a provider rather
             // than pushed onto the tab: the strip is rebuilt on every rearrangement, and anything pushed
             // would have to be pushed again by somebody who noticed.
             applyDecoration(tab, panel);
+            // CLOSABILITY IS THE PANEL TYPE'S, and it is already recorded there -- a console or an editor
+            // may be closed, a region's permanent host may not. Routed to the same `closePanel` the Close
+            // Panel command uses, so the mouse and the keyboard cannot come to mean different things.
+            //
+            // THIS WAS LOST IN A MERGE and nothing noticed for two days. `1f9b5b3` added it directly
+            // above the `contentFor` line; `d397b9d` resolved that hunk in favour of the other side and
+            // took both. `TabCloseAndRevealTest` stayed green throughout because it drives `Tab` on its
+            // own -- the WIDGET never broke, only the wiring to it, which is the half no test reached.
+            // `aDockTabCarriesACloseButton` is that half now.
+            if (area.registry().isClosable(panel)) {
+                tab.setClosable(true);
+                tab.onCloseRequested.connect(() -> area.closePanel(panel));
+            }
             // AND NO CONTENT. See showContent: a tab is a title until it is looked at.
             tabByPanel.put(panel, tab);
             area.installTabDrag(this, panel, tab);
@@ -323,6 +340,19 @@ public class DockGroup extends UIElement {
      * path a name maps to. The dock learns a name and resolves it; it never learns what a {@code .java}
      * is.</p>
      */
+    /**
+     * Puts a caller's own element in the tab's icon slot.
+     *
+     * <p>{@code setOnlyChild} rather than an add: a strip is rebuilt on every rearrangement and a tab is
+     * pooled, so adding would stack a new glyph on the last one every time the panel list moved.</p>
+     */
+    private static void applyIconElement(Tab tab, UIElement glyph) {
+        UIElement slot = tab.getPreIcon();
+        if (slot == null) return;
+        slot.setDisplayed(true);
+        slot.setOnlyChild(glyph);
+    }
+
     private static void applyIcon(Tab tab, @Nullable String iconName) {
         if (iconName == null) return;
         CgUiSvg glyph = CgUiSvg.ofIcon(iconName);

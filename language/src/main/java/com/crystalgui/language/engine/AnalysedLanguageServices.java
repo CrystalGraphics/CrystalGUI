@@ -303,10 +303,32 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
      * that are only meaningful against the document the analysis saw.</p>
      */
     private Versioned<List<Diagnostic>> compose(Analysis analysis) {
+        // A DOCUMENT NOBODY CAN FIX REPORTS NOTHING. @see #reportsDiagnostics
+        if (!reportsDiagnostics()) return Versioned.of(analysis.version(), List.of());
         List<Diagnostic> merged = new ArrayList<>(analysis.diagnostics());
         if (!analysis.optionalProblemsAnalysed()) merged.addAll(recalled(retainedLane));
         merged.addAll(recalled(runtimeLane));
         return Versioned.of(analysis.version(), merged);
+    }
+
+    /**
+     * Whether this document's problems are worth telling anyone about. True for everything a person is
+     * editing, which is why it is not a constructor parameter.
+     *
+     * <h3>The one kind that answers false</h3>
+     *
+     * <p>A library document — a JDK class, a decompiled one — is <b>read-only and not the author's</b>.
+     * Its problems are ours: we approximate its classpath, we parse it at a compliance chosen for us,
+     * and a decompiled body is a reconstruction that need not compile at all. Reporting them fills the
+     * Problems panel with rows nobody can act on and marks somebody else's correct code as broken, which
+     * reads as the analyser being wrong rather than as the document being borrowed.</p>
+     *
+     * <p><b>Resolution, hover and colouring stay on</b>, which is the whole point of analysing such a
+     * document: what is suppressed is the <em>reporting</em>, not the analysis. IntelliJ draws the same
+     * line — a decompiled file navigates and highlights and is never inspected.</p>
+     */
+    protected boolean reportsDiagnostics() {
+        return true;
     }
 
     // ── What the runtime says ───────────────────────────────────────────────────────────────────
@@ -622,6 +644,16 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
                 return;
             }
             answer.accept(Versioned.of(analysis.version(), analysis.resolveAt(offset)));
+        }
+
+        @Override
+        public void describe(String name, Consumer<Versioned<SymbolInfo>> answer) {
+            Analysis analysis = current;
+            if (analysis == null || name == null || name.isEmpty()) {
+                answer.accept(Versioned.<SymbolInfo>none(buffer.version()));
+                return;
+            }
+            answer.accept(Versioned.of(analysis.version(), analysis.describe(name)));
         }
 
         @Override

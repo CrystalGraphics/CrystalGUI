@@ -27,7 +27,8 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
  */
 final class UIResizer extends UIElement {
 
-    static final String RESIZER_CLASS = "__resizer__";
+    /** @see UIElement#RESIZER_CLASS — the definition, since the handles are that class's feature. */
+    static final String RESIZER_CLASS = UIElement.RESIZER_CLASS;
 
     /**
      * Which edges a handle moves.

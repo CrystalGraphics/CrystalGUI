@@ -497,7 +497,7 @@ public class ConfigKitTest extends UiTestBase {
         var overlay = mark.getStyle().getGeneralGroup().overlay();
         assertTrue("the on/off distinction must be the vector checkmark, not a colour swap",
                 overlay instanceof com.crystalgui.render.texture.CgUiShape
-                        && ((com.crystalgui.render.texture.CgUiShape) overlay).getKind()
+                        && ((com.crystalgui.render.texture.CgUiShape) overlay).kind()
                         == com.crystalgui.render.texture.CgUiShape.Kind.CHECKMARK);
 
         // A mask panel's checkboxes are NOT `.__config-control__.__boolean__ checkbox` — MaskControl
@@ -513,7 +513,7 @@ public class ConfigKitTest extends UiTestBase {
         var maskOverlay = maskMark.getStyle().getGeneralGroup().overlay();
         assertTrue("a mask row's on/off distinction must also be the vector checkmark",
                 maskOverlay instanceof com.crystalgui.render.texture.CgUiShape
-                        && ((com.crystalgui.render.texture.CgUiShape) maskOverlay).getKind()
+                        && ((com.crystalgui.render.texture.CgUiShape) maskOverlay).kind()
                         == com.crystalgui.render.texture.CgUiShape.Kind.CHECKMARK);
     }
 
