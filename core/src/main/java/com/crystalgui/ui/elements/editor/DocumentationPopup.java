@@ -15,6 +15,9 @@ import com.crystalgui.text.syntax.Language;
 import com.crystalgui.text.syntax.SyntaxToken;
 import com.crystalgui.ui.AnchoredPlacement;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.input.keymap.KeyChord;
+import com.crystalgui.ui.input.keymap.Keymap;
+import com.crystalgui.ui.elements.Tooltip;
 import com.crystalgui.ui.UIFrameTicker;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.MarkupView;
@@ -1148,12 +1151,50 @@ public final class DocumentationPopup extends Popover {
      *
      * @see #FOOTER_CLASS
      */
+    /**
+     * The pencil's tooltip, naming the LIVE chord.
+     *
+     * <p>A 12px glyph with no label is unguessable, and "go to the declaration" is not what a pencil
+     * suggests — IntelliJ tooltips the same control, reading "Jump to Source". Ours says the same and
+     * appends whatever the keymap currently binds.</p>
+     *
+     * <p><b>Not from the constructor.</b> {@code Keymap.acceleratorFor} resolves outward from this
+     * element, so it can only answer once the popup is in a tree whose editor has installed its keymap
+     * — which is never true while the popup is being built. Re-asked as the footer renders, which is
+     * once per hover and is where the row's other contents are decided anyway.</p>
+     *
+     * <p><b>And the Tooltip is RETAINED, never re-attached.</b> {@code Tooltip.attach} adds a listener
+     * pair each time and does not replace what is there, so calling it twice leaves the first tooltip
+     * showing its stale text. {@code SearchReplaceBar} and {@code StatusBarView} both carry this note;
+     * this is the third place it applies.</p>
+     */
+    private void refreshFooterTooltip() {
+        KeyChord chord = Keymap.acceleratorFor(this, EditorCommands.GO_TO_DEFINITION);
+        String text = chord == null ? "Jump to Source" : "Jump to Source  " + chord;
+        if (text.equals(footerTooltipText)) return;
+        footerTooltipText = text;
+        if (footerTooltip == null) footerTooltip = Tooltip.attach(footerEdit, text);
+        else footerTooltip.setText(text);
+    }
+
+    /** What the pencil's tooltip currently says — the only observable of it. */
+    @Nullable
+    private String footerTooltipText;
+
+    /** Retained, because {@code attach} adds rather than replaces. @see #refreshFooterTooltip */
+    @Nullable
+    private Tooltip footerTooltip;
+
     private void renderFooter(SymbolInfo symbol) {
         DeclarationSite site = symbol == null ? null : symbol.declaration();
         Resource resource = site == null ? null : site.resource();
         boolean elsewhere = resource != null;
-        footerRule.setDisplayed(elsewhere);
+        // NO RULE ABOVE THE FOOTER. It reads as a section boundary, and the footer is not a section --
+        // it is a caption on the box, the way a photograph's is. IntelliJ draws none there either. The
+        // row's own padding is what separates it now, which is the same distance without the line.
+        footerRule.setDisplayed(false);
         footerRow.setDisplayed(elsewhere);
+        if (elsewhere) refreshFooterTooltip();
         if (!elsewhere) {
             footerText.setText("");
             return;
