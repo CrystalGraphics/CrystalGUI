@@ -376,8 +376,11 @@ tasks.named<JavaExec>(runTask) {
         systemProperty("crystalgui.startup.trace", "true")
     }
 
-    // -PcgNetProbe sends real frames client->server->client over the Forge channel and logs the round
-    // trip. The headless tests cover everything above CgNetworkChannel and nothing below it.
+    // -PcgNetProbe runs BOTH in-game network probes, in order. CgUiNetProbe echoes raw frames
+    // client->server->client over the Forge channel; CgUiSessionProbe then runs a real
+    // Server/ClientUiSession pair over the same wire and checks the description handshake, a state
+    // delta, an event and a server->client call. The headless tests cover everything above
+    // CgNetworkChannel and nothing below it, so neither layer is proven without this.
     if (providers.gradleProperty("cgNetProbe").isPresent) {
         systemProperty("crystalgui.net.probe", "true")
     }

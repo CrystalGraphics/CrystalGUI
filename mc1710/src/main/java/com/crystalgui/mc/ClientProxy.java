@@ -4,6 +4,7 @@ import com.crystalgui.lifecycle.CgUiLifecycle;
 import com.crystalgui.mc.client.CgUiAutoTest;
 import com.crystalgui.mc.client.CgUiInput;
 import com.crystalgui.mc.net.CgUiNetProbe;
+import com.crystalgui.mc.net.CgUiSessionProbe;
 
 /**
  * The client half: register the key binding and the input pump.
@@ -25,5 +26,7 @@ public class ClientProxy extends CommonProxy {
         CgUiAutoTest.register();
         // Off unless -Dcrystalgui.net.probe=true. @see CgUiNetProbe
         CgUiNetProbe.register();
+        // The layer above it: the same flag, a later start, its own multiplexers. @see CgUiSessionProbe
+        CgUiSessionProbe.register();
     }
 }

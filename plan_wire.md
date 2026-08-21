@@ -211,18 +211,31 @@ credits are consumed by the sender and replenished by the drain.
 
 ---
 
-## 6. Open questions, for decision before building
+## 6. Open questions — answered by the build
 
-1. **Initial window sizes and fragment size.** Needs measuring against a real server under load, not
-   picking. HTTP/2's 65,535 is a starting reference, not an answer.
-2. **One channel or several?** MC channel names are capped at 20 characters and one channel is
-   conventional. A second channel is a coarse priority lane — worth considering only if measurement shows
-   stream priority inside one channel is not enough.
-3. **Login-phase negotiation.** `UIPacketCodec.PROTOCOL_VERSION` exists (`1`) but nothing negotiates it.
-   The loaders each offer a login/handshake phase; deciding whether version agreement happens there or in
-   the first play-phase exchange affects what a mismatched client sees.
-4. **Does a dedicated server ever need to *push* a large payload unprompted**, or is everything
-   request-response? Affects whether the server needs its own credit accounting per client.
+Kept with their answers rather than deleted, because three of the four were decided by *choosing* and
+one was decided by *measuring*, and which is which is the useful part.
+
+1. **Initial window and fragment size.** `DEFAULT_WINDOW_BYTES = 256 KB`; a fragment is
+   `maxFrameBytes − headerSize(Integer.MAX_VALUE)`, reserving the **worst-case** varint header so no
+   frame can exceed the ceiling whatever stream id it lands on. **Chosen, not measured** — the question
+   asked for measurement against a real server under load and that has not happened. 256 KB is four
+   times HTTP/2's 65,535 because a description is a single burst rather than a stream, and the credit
+   window is what stops it reaching an unbounded queue shared with the whole game. Revisit with numbers,
+   not with taste.
+2. **One channel.** `"crystalgui"`, registered by the adapter. No second lane: stream round-robin inside
+   one connection already prevents head-of-line blocking between messages, which was the only thing a
+   second channel would have bought. `aSmallMessageIsNotBlockedBehindALargeOne` is the property.
+3. **Version agreement rides the first play-phase exchange, not login.** `EnvelopeCodec.VERSION` travels
+   in the `ui/openWindow` payload and the client refuses a window whose protocol it does not speak,
+   logging both numbers. Login-phase negotiation was not taken because it differs per loader — it is one
+   of the few things `CgNetworkChannel` would have had to grow a method for, and the whole design of that
+   seam is that it does not learn what a message means. The cost is that a mismatch is discovered per
+   window rather than per connection, which for a UI is the same moment.
+4. **Yes, the server pushes unprompted** — `ui/openWindow` and every `ui/stateDelta` are server-initiated
+   with nothing asking for them. So the server needs its own credit accounting per client, and has it:
+   `FrameMultiplexer` is symmetric, one instance per peer, each with its own window. The `initiator` flag
+   splits the stream-id space (odd/even, as HTTP/2 does) and changes nothing else.
 
 ---
 
