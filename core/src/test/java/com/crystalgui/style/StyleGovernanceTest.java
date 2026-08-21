@@ -122,6 +122,11 @@ public class StyleGovernanceTest {
     private static final Set<String> SYSTEM_VOCABULARY = Set.of(
             "surface-base", "surface-panel", "surface-raised", "surface-recessed",
             "surface-editor", "surface-overlay",
+            // A SEVENTH SURFACE, for what the workspace does not own -- a library class opened
+            // read-only. Appended for the same reason `success-icon` was: the set was incomplete rather
+            // than closed. Every other surface here is a DEPTH, and this one is a PROVENANCE, which is
+            // why it could not be derived from one -- "borrowed" is not a distance from the reader.
+            "surface-borrowed",
             "border-base", "border-strong", "border-field", "divider",
             "fg", "fg-secondary", "fg-hint", "fg-disabled", "fg-on-accent",
             "accent", "accent-hover", "accent-soft",

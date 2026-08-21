@@ -170,6 +170,14 @@ public class Workbench extends UIElement {
      */
     public static final String VIEWER_CLASS = "__viewer__";
 
+    /**
+     * The decoration a viewer tab carries. @see #tabDecorationFor
+     *
+     * <p>{@code decoration-} prefixed because {@code DockGroup.applyDecoration} swaps classes under that
+     * prefix — a name outside it would be applied and never removed.</p>
+     */
+    public static final String LIBRARY_DECORATION = "decoration-library";
+
     // `onStatus` is gone. It was one Signal.Value<String>, so every writer overwrote every other and the
     // last one to speak won -- the shader graph's line-owner readout fires on every caret move and erased
     // "created folder" milliseconds after it appeared, with neither writer able to tell. It also gave a
@@ -1637,6 +1645,8 @@ public class Workbench extends UIElement {
      */
     @Nullable
     private String tabTitleFor(DockPanelRef panel) {
+        Resource viewed = viewedResource(panel);
+        if (viewed != null) return viewerDisplayName(viewed);
         String path = panel.state(PATH_STATE, "");
         if (path.isEmpty()) return null;
         String title = panel.state(DockPanelRef.TITLE, CgPath.parse(path).name());
@@ -1656,6 +1666,12 @@ public class Workbench extends UIElement {
      */
     @Nullable
     private String tabDecorationFor(DockPanelRef panel) {
+        // A BORROWED FILE IS TINTED, which is the one decoration a viewer carries and the reason it can
+        // share the file-decoration slot rather than needing a second one: a library class has no VCS
+        // state, no dirty marker and no compile errors of its own to report, so nothing can collide.
+        // IntelliJ tints these tabs for the same reason -- it is the fastest way to say "this is not
+        // yours" without spending a word on it.
+        if (VIEWER_TYPE.equals(panel.typeId())) return LIBRARY_DECORATION;
         String path = panel.state(PATH_STATE, "");
         if (path.isEmpty()) return null;
         // NULL IS THE ORDINARY ANSWER -- an undecorated file is the state nearly every file is in, and
@@ -1684,9 +1700,45 @@ public class Workbench extends UIElement {
      */
     @Nullable
     private static String tabIconFor(DockPanelRef panel) {
+        Resource viewed = viewedResource(panel);
+        if (viewed != null) {
+            // THROUGH THE SAME NAME THE TAB SHOWS, which is what keeps the two honest: a tab reading
+            // `.class` cannot carry a source icon, because both come from one string.
+            String name = viewerDisplayName(viewed);
+            return name == null ? null : FileIconTheme.getDefault().iconFor(name, false, false);
+        }
         String path = panel.state(PATH_STATE, "");
         if (path.isEmpty()) return null;
         return FileIconTheme.getDefault().iconFor(CgPath.parse(path).name(), false, false);
+    }
+
+    /** The resource a viewer panel shows, or null for every other kind of tab. */
+    @Nullable
+    private static Resource viewedResource(DockPanelRef panel) {
+        if (!VIEWER_TYPE.equals(panel.typeId())) return null;
+        String text = panel.state(RESOURCE_STATE, "");
+        return text.isEmpty() ? null : Resource.parse(text);
+    }
+
+    /**
+     * What a viewer tab is called — the provider's answer, or the bare type name.
+     *
+     * <p>Asked of the provider rather than derived here, because the extension depends on what is
+     * SERVING the resource: {@code ArrayList.java} where source was attached and
+     * {@code FlexDirection.class} where the bytes were decompiled. The workbench has no way to know
+     * which, and inventing {@code .java} for both would put a source extension on a tab full of
+     * reconstructed code.</p>
+     *
+     * <p><b>Not written into the ref.</b> {@link DockPanelRef} equality includes its state, and the ref
+     * is how an open tab is FOUND again — so a title that can change between two reads would orphan the
+     * tab it names. The ref keeps the stable simple name; this decorates it for display, which is
+     * exactly the split the title provider exists for.</p>
+     */
+    @Nullable
+    private static String viewerDisplayName(Resource resource) {
+        ResourceContentProvider provider = ResourceRegistry.providerFor(resource);
+        String named = provider == null ? null : provider.displayName(resource);
+        return named != null && !named.isEmpty() ? named : viewerTitleOf(resource);
     }
 
     /**

@@ -570,6 +570,11 @@ theme {
     --tab-disabled-fg: var(--fg-disabled);
     --tab-fg: var(--fg-secondary);
     --tab-hover-bg: var(--hover-bg);
+    /* A BORROWED FILE'S TAB. Derived from the warning hue rather than from a surface, because what it
+     * says is a caution and not a depth: this is not yours and nothing you type here is kept. Deliberately
+     * far enough from --tab-active-bg to read at a glance beside one, and far enough from --error that it
+     * is never mistaken for a file that will not compile. */
+    --tab-library-bg: var(--surface-borrowed);
     --tab-pane-bg: #00000000;
     --tab-strip-bg: #00000000;
 
