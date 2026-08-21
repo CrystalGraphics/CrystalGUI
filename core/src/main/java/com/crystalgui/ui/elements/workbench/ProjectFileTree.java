@@ -263,7 +263,21 @@ public class ProjectFileTree extends UIElement implements UndoScope {
     public void loadProjects() {
         if (projectsRequested) return;
         projectsRequested = true;
-        source.loadProjects(tree::refresh);
+        source.loadProjects(tree::refresh, () -> {
+            // RELEASED, so the caller's per-frame retry is a retry rather than a name for one.
+            //
+            // The latch used to be set on the ATTEMPT and never cleared, and Workbench.tick's comment
+            // said out loud what that costs -- "one early call poisons it permanently" -- while its own
+            // ticker made exactly that early call, on the first frame the workbench attaches, guarded
+            // only by whether there is a window. CgUiScreen asks properly, gated on isConnected(), and
+            // by then the latch was already spent.
+            //
+            // Reported from a client: F6 the instant a world finished loading gave an empty Project
+            // panel with New File and New Folder greyed -- because there was no project root to create
+            // INTO, not because anything was refused. Waiting a few seconds before opening the editor
+            // worked, which is why it survived this long.
+            projectsRequested = false;
+        });
     }
 
     /**

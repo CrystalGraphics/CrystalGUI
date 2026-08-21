@@ -13,6 +13,10 @@ import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.Ui;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
+import com.crystalgui.mc.net.CgUiConnections;
+import com.crystalgui.net.protocol.ProtocolConnection;
+
+import javax.annotation.Nullable;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
@@ -88,8 +92,22 @@ public final class CgUiScreen extends GuiScreen {
     /** Run and Stop for the active file, or null where no engine band opened. @see #initGui */
     private static ScriptWorkbench scripting;
 
-    /** Whether the project list has been asked for. @see Mc1710Workspace#isConnected */
-    private static boolean projectsAsked;
+    /**
+     * The connection the project list was last asked on, or {@code null} for never.
+     *
+     * <p>Was a {@code boolean}, and the editor is <b>static and outlives every screen</b> —
+     * {@code disposeAll} says so itself: <i>"frees the editor at game shutdown, not called on close"</i>.
+     * So a one-shot flag meant the project list was asked for <b>at most once per game session</b>,
+     * however many worlds were joined afterwards. Leave a world, join another, press F6: an empty Project
+     * panel, no root, New File and New Folder greyed because there is nowhere to create INTO — and
+     * nothing in the log, because the ask never happened rather than failing.</p>
+     *
+     * <p>Keyed on the connection because that is what actually changes. Re-opening the editor on the same
+     * wire must not re-ask (the tree already has its roots and a second listing would be pure churn), and
+     * a new wire must.</p>
+     */
+    @Nullable
+    private static ProtocolConnection<Object> projectsAskedOn;
 
     private long lastFrameNanos = System.nanoTime();
 
@@ -240,8 +258,9 @@ public final class CgUiScreen extends GuiScreen {
 
         // ONE NETWORK TICK, before anything reads the workspace.
         workspace.pump(delta);
-        if (!projectsAsked && workspace.isConnected()) {
-            projectsAsked = true;
+        ProtocolConnection<Object> live = CgUiConnections.client();
+        if (live != null && live != projectsAskedOn) {
+            projectsAskedOn = live;
             editor.workbench().fileTree().loadProjects();
             // AFTER loadProjects, never before: the restore parks the folders it wants expanded and
             // retries until the listings that reveal them arrive, so asking first parks everything.
@@ -398,15 +417,36 @@ public final class CgUiScreen extends GuiScreen {
     }
 
     /**
-     * Pauses single-player.
+     * <b>Does not pause single-player</b>, and it cannot — the workspace lives on the server.
      *
-     * <p>The conservative answer and what every editor-like GUI in 1.7.10 does. Returning {@code false}
-     * invites a class of "the world ticked while a modal was open" questions that Phase 1 has no reason
-     * to answer.</p>
+     * <p>This returned {@code true} and the reasoning was sound when it was written: <i>"the conservative
+     * answer and what every editor-like GUI in 1.7.10 does. Returning false invites a class of 'the world
+     * ticked while a modal was open' questions that <b>Phase 1</b> has no reason to answer."</i></p>
+     *
+     * <p><b>Phase 4 moved the files to the server, and that turned a conservative default into a
+     * deadlock.</b> Pausing stops {@code MinecraftServer.tick}, so {@code TickEvent.ServerTickEvent}
+     * stops, so {@code CgUiConnections} never ticks the server's {@link ProtocolConnection}, so its
+     * mailbox is never drained. The editor then asks the integrated server for the project list and the
+     * integrated server is not listening — because the editor being open is what stopped it. Ten seconds
+     * later the call times out.</p>
+     *
+     * <p>The symptom is an <b>empty Project panel</b> with New File and New Folder greyed — greyed
+     * because there is no project root to create into, not because anything was refused — and, before
+     * the listing was traced, nothing in the log at all. It was reported as "the workspace is empty".</p>
+     *
+     * <p>It stayed hidden because every verification of the server workspace so far used a <b>dedicated</b>
+     * server, which no client GUI can pause: the two-process test in {@code plan_phase5.md},
+     * {@code CgUiRemoteWorkspaceProbe} and {@code CgUiWireProbe} all close the screen or never open one.
+     * The one configuration nobody had exercised is the commonest one a player uses.</p>
+     *
+     * <p>So the question Phase 1 declined to answer is now answered by the architecture rather than by
+     * taste: an editor that talks to the server over a wire cannot also stop the server. The world
+     * ticking while the editor is open is the price, and it is what every multiplayer session already
+     * does.</p>
      */
     @Override
     public boolean doesGuiPauseGame() {
-        return true;
+        return false;
     }
 
     /** Frees the editor at game shutdown. Not called on close — see the {@code editor} field. */
@@ -415,6 +455,6 @@ public final class CgUiScreen extends GuiScreen {
         editor = null;
         uiWindow = null;
         workspace = null;
-        projectsAsked = false;
+        projectsAskedOn = null;
     }
 }
