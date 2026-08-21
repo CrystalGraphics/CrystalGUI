@@ -3,6 +3,11 @@ package com.crystalgui.fs;
 import com.crystalgui.net.protocol.Call;
 import com.crystalgui.serialization.StateMap;
 
+import com.crystalgui.text.Change;
+import com.crystalgui.text.ChangeSet;
+import com.crystalgui.text.Rope;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -96,6 +101,17 @@ public final class WorkspaceRpc<T> {
                 throw CgFileSystemException.tooLarge(target, entry.size(), WorkspaceService.MAX_FILE_BYTES);
             }
 
+            // CONDITIONAL. If the client already holds this revision, say so and send nothing --
+            // and note this is checked against the STAT, so it costs no read at all.
+            String known = args.has(WorkspaceProtocol.IF_NONE_MATCH)
+                    ? args.getString(WorkspaceProtocol.IF_NONE_MATCH, null) : null;
+            if (known != null && known.equals(entry.etag())) {
+                respond.ok(new StateMap<T>(args.ops())
+                        .putBool(WorkspaceProtocol.UNCHANGED, true)
+                        .putString(WorkspaceProtocol.ETAG, entry.etag()));
+                return;
+            }
+
             WorkspaceService.FileContent content = service.read(actor, target);
             if (content.content().length <= INLINE_MAX_BYTES) {
                 respond.ok(new StateMap<T>(args.ops())
@@ -112,6 +128,43 @@ public final class WorkspaceRpc<T> {
                     .putString(WorkspaceProtocol.TRANSFER, id)
                     .putInt(WorkspaceProtocol.SIZE, content.content().length)
                     .putString(WorkspaceProtocol.ETAG, content.etag()));
+        }));
+
+        registry.register(WorkspaceProtocol.WRITE_DELTA, (args, respond) -> guard(respond, () -> {
+            CgPath target = path(args);
+            // An ABSENT etag means unconditional, exactly as fs.write reads it -- but a delta with no
+            // base revision is nonsense rather than a shortcut, so this one insists on having it.
+            String expected = args.has(WorkspaceProtocol.ETAG)
+                    ? args.getString(WorkspaceProtocol.ETAG, null) : null;
+            if (expected == null) {
+                throw new CgFileSystemException(CgFileError.INVALID_PATH,
+                        "fs.writeDelta needs the etag its changes are against: " + target);
+            }
+
+            // Read, apply, write. service.write's own re-stat is still what guarantees the file did not
+            // move; this read exists to have something to apply the changes TO, and a race between the
+            // two is caught there rather than duplicated here.
+            WorkspaceService.FileContent base = service.read(actor, target);
+            if (!expected.equals(base.etag())) {
+                throw new WorkspaceConflictException(target, expected, base.etag());
+            }
+
+            Rope document = Rope.of(new String(base.content(), StandardCharsets.UTF_8));
+            List<Change> changes = new ArrayList<>();
+            for (StateMap<T> change : args.getList(WorkspaceProtocol.CHANGES, e -> e)) {
+                changes.add(new Change(
+                        change.getInt(WorkspaceProtocol.FROM, 0),
+                        change.getInt(WorkspaceProtocol.TO, 0),
+                        change.getString(WorkspaceProtocol.INSERT, "")));
+            }
+            Rope updated = ChangeSet.of(document.length(), changes).apply(document);
+
+            String etag = service.write(actor, target,
+                    updated.toString().getBytes(StandardCharsets.UTF_8), expected);
+            // This side already knows -- see WRITE. Otherwise the next poll reports the client's own
+            // change back to it as if somebody else had made it.
+            watcher.noteWritten(target, etag);
+            respond.ok(new StateMap<T>(args.ops()).putString(WorkspaceProtocol.ETAG, etag));
         }));
 
         registry.register(WorkspaceProtocol.READ_CHUNK, (args, respond) -> guard(respond, () -> {
