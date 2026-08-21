@@ -1384,6 +1384,19 @@ From `docs/CGUI_SERVER_AND_SERIALIZATION.md` §8 unless noted:
 
 ---
 
+### What comes after — [`plan_phase5.md`](plan_phase5.md)
+
+**Phase 4 is complete and verified on a dedicated server** (2026-08-21): two processes, one socket, and
+the file a client created present in `run/server/crystalgui/workspace` and absent from `run/client`. The
+editor browses, edits and runs scripts off the server's disk.
+
+Getting there needed three CrystalGraphics fixes, because **it had never been able to load on a
+dedicated server at all** — see Phase 5 §5.9, which is the shape rather than the three instances.
+
+Phase 5 is the gap between "the workspace is served" and "a person can use it without losing work". Its
+first item is the only one that loses work: a disconnect discards every unsaved buffer, silently, and
+cannot be prompted.
+
 ### Explicitly not Phase 4
 
 - **mc1201, and the three per-loader filesystems.** All mc1201 work waits until mc1710 is finished —
