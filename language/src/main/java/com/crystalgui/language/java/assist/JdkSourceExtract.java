@@ -200,9 +200,22 @@ public final class JdkSourceExtract {
         }
     }
 
-    /** Where this JVM's extract lives under a cache root. */
+    /**
+     * Where this JVM's extract lives under a cache root.
+     *
+     * <h3>The name carries the FORM, and it has to</h3>
+     *
+     * <p>An extract fetched before {@link #build} stopped stripping is a valid zip of valid Java that
+     * every reader accepts — and every method in it is empty. Nothing in its bytes distinguishes it
+     * from a full one, so a session finding the old file would adopt it, serve headers to a viewer, and
+     * present as a decompiler producing empty bodies with no way to tell it to try again.</p>
+     *
+     * <p>So the form is in the file name. An old {@code jdk-N-sources.zip} is simply never looked for
+     * again: it is stale cache, it costs disk until somebody clears it, and it can no longer be mistaken
+     * for the thing it is not.</p>
+     */
     public static Path extractFile(Path cacheRoot, int feature) {
-        return cacheRoot.resolve("jdk-sources").resolve("jdk-" + feature + "-sources.zip");
+        return cacheRoot.resolve("jdk-sources").resolve("jdk-" + feature + "-sources-full.zip");
     }
 
     /**
@@ -300,7 +313,24 @@ public final class JdkSourceExtract {
     // ── The transform half, which is what the tests drive ───────────────────────────────────────
 
     /**
-     * Copies every wanted source out of {@code archive} into {@code out}, stripped.
+     * Copies every wanted source out of {@code archive} into {@code out}, <b>whole</b>.
+     *
+     * <h3>It used to strip method bodies, and the viewer is why it stopped</h3>
+     *
+     * <p>{@link SourceHeaders} cut every body to {@code {}} so the cache was single-digit megabytes
+     * rather than about forty-three, which was exactly right while the only reader was a documentation
+     * popup: a popup quotes a declaration and its comment, and a body it never shows is bytes on disk
+     * for nothing.</p>
+     *
+     * <p>The library viewer reads the same archive and shows the file, so a stripped extract renders
+     * {@code ArrayList} as real signatures and real javadoc over <b>empty methods</b> — which does not
+     * read as a cache optimisation, it reads as a decompiler that failed. Full text is a superset of the
+     * headers, so the popup is unaffected and both readers are served by one copy.</p>
+     *
+     * <p><b>The package filter stays.</b> The size accepted here is for bodies of {@code java.base}'s
+     * public API, not for pulling in Swing and the XML stack — those are most of {@code src.zip}'s
+     * 185 MB and a script author reaches for neither. {@link SourceHeaders} stays in the tree too: it is
+     * tested directly, and a memory-constrained host may want it back.</p>
      *
      * <p>Package-private and taking the two streams so a test can drive it over an archive it built
      * itself — the network is the one part of this that cannot be exercised offline, and it is also the
@@ -318,10 +348,8 @@ public final class JdkSourceExtract {
             // twice in a JDK tree -- once under `share` and again under an OS-specific directory.
             if (path == null || !written.add(path)) continue;
 
-            String source = new String(archive.read(), StandardCharsets.UTF_8);
-            byte[] stripped = SourceHeaders.strip(source).getBytes(StandardCharsets.UTF_8);
             out.putNextEntry(new ZipEntry(path));
-            out.write(stripped);
+            out.write(archive.read());
             out.closeEntry();
             count++;
             if ((count & 0x7F) == 0) progress.detail(path);
