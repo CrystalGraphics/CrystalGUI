@@ -1,5 +1,6 @@
 package com.crystalgui.mc;
 
+import com.crystalgui.mc.net.CgUiConnections;
 import com.crystalgui.mc.net.Mc1710NetworkChannel;
 
 /**
@@ -40,5 +41,8 @@ public class CommonProxy {
      */
     public void init() {
         Mc1710NetworkChannel.register();
+        // Phase 4 A4. Must follow the channel: it takes the channel's inbound handler, and a handler
+        // installed onto an unavailable channel is silently discarded.
+        CgUiConnections.register();
     }
 }
