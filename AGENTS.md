@@ -1597,6 +1597,7 @@ three-phase event types are in `ui/event/` — there is no `core/event/` package
 | `docs/CGUI_THEMING.md` | **current** | Themes, editor colour schemes, the token vocabulary and the anti-rot rules. Its token table is **generated and machine-checked** (`StyleGovernanceTest.theDocumentedTokenTableIsCurrent`) — regenerate from the failing test's output, never hand-edit |
 | `plan_styling.md` (repo root) | **live** | The styling overhaul plan: audit, reference research, token architecture, governance, the step-by-step migration and its recorded revisions |
 | `plan.md` (repo root) | **live** | The architecture review this layer is being rebuilt from: audit, VS Code/IntelliJ research, the six-step port, and what each step deliberately does not do |
+| `plan_phase5.md` (repo root) | **live** | Networking, the workspace and UI over the wire, after Phase 4 shipped and was verified on a real dedicated server. The whole 15-method server surface, what decides a command's side (nothing — the client has no filesystem to misuse), and the nine items between "served over a socket" and "usable without losing work" |
 
 These four are the only docs under `docs/` — the first three audited against the code on
 2026-07-29, `CGUI_THEMING.md` added 2026-08-10 with its token table machine-checked against the
