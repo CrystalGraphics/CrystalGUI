@@ -393,6 +393,19 @@ tasks.named<JavaExec>(runTask) {
         systemProperty("crystalgui.session.probe", "true")
     }
 
+    // -PcgJoin=host[:port] makes the client connect straight to a server instead of the main menu.
+    // 1.7.10's own Main parses --server/--port, and Minecraft.startGame goes to GuiConnecting when
+    // serverName is set -- so this needs no code of ours, only the arguments.
+    //
+    // With -PcgRemoteProbe it is the whole point: the integrated server shares a JVM and a filesystem,
+    // so "the workspace lives on the server" is untestable in single player. Two processes is the test.
+    providers.gradleProperty("cgJoin").orNull?.let { target ->
+        val host = target.substringBefore(':')
+        val port = target.substringAfter(':', "25565")
+        args("--server", host, "--port", port)
+        systemProperty("crystalgui.remote.probe", "true")
+    }
+
     if (providers.gradleProperty("cgAutoTest").isPresent) {
         systemProperty("crystalgui.autotest", "true")
         systemProperty("crystalgui.autotest.out",

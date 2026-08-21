@@ -4,6 +4,7 @@ import com.crystalgui.lifecycle.CgUiLifecycle;
 import com.crystalgui.mc.client.CgUiAutoTest;
 import com.crystalgui.mc.client.CgUiInput;
 import com.crystalgui.mc.net.CgUiNetProbe;
+import com.crystalgui.mc.net.CgUiRemoteWorkspaceProbe;
 import com.crystalgui.mc.net.CgUiSessionProbe;
 
 /**
@@ -28,5 +29,7 @@ public class ClientProxy extends CommonProxy {
         CgUiNetProbe.register();
         // The layer above it: the same flag, a later start, its own multiplexers. @see CgUiSessionProbe
         CgUiSessionProbe.register();
+        // The DEDICATED-server version: -PcgRemoteProbe, against runServer over a socket.
+        CgUiRemoteWorkspaceProbe.register();
     }
 }
