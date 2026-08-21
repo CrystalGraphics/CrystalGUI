@@ -1303,7 +1303,7 @@ Worth stating, because the protocol is much further along than the absence of ne
 
 | | State |
 |---|---|
-| The protocol | **Real.** `net/` ships `UIPacket`, `UIPacketCodec`, `ServerUiSession`, `ClientUiSession`, `RpcRegistry`, `NetworkIds`, `SheetRef`, `UiEventKinds`, with `serialization/` under it |
+| The protocol | **Real.** `net/protocol/` ships the four-kind `Envelope`, `EnvelopeCodec`, `MessageRouter` and the `UiMethods` vocabulary; `net/wire/` the multiplexed byte transport; `net/` the two sessions, `NetworkIds`, `SheetRef`, `UiEventKinds`, with `serialization/` under it. *(Was `UIPacket`/`UIPacketCodec`/`RpcRegistry` — deleted in the Phase 4 rewrite.)* |
 | The workspace over it | **Real, and running in-game.** `Mc1710Workspace` drives `WorkspaceService` over a genuine session pair; every listing, read and write crosses a packet |
 | `UITransport` implementations | **One: `InMemoryTransport`.** There is no Minecraft transport anywhere |
 | mc1710 networking | **None.** No channel, no packet handler, no `SimpleNetworkWrapper` |

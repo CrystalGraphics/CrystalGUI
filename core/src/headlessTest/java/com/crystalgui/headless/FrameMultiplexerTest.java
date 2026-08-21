@@ -32,6 +32,30 @@ public class FrameMultiplexerTest {
     /** ~32 KB is the real client→server ceiling on every Minecraft version we target. */
     private static final int MC_CLIENT_FRAME = 32_766;
 
+    /**
+     * Every per-frame ceiling any supported platform actually imposes, plus two that no platform does.
+     *
+     * <p><b>This list is the whole cross-version surface.</b> Nothing else about a Minecraft version
+     * reaches {@code core}: a channel name is a string the adapter owns, a player is an opaque handle,
+     * and the payload is a {@code byte[]} either way. The single number a platform contributes is its
+     * frame ceiling — so "does the engine work on 1.7.10, on 1.20.x, and on a version nobody has written
+     * an adapter for" is exactly the question of whether it is correct for an arbitrary value here.</p>
+     *
+     * <p>The two synthetic entries are the ones that catch an assumption. 128 is far below anything real
+     * and makes the header a visible fraction of every frame — a fragmenter that reserved a
+     * <em>typical</em> header rather than the worst-case one passes at 32 KB and overflows here. 4 MB is
+     * above every real ceiling and makes most messages single-frame, which is where a reassembler that
+     * only works via the fragment path fails.</p>
+     */
+    private static final int[] EVERY_PLATFORM_CEILING = {
+            128,            // synthetic: smaller than any platform, header-dominated
+            32_766,         // 1.7.10 client -> server (vanilla signed short, minus Forge's discriminator)
+            32_767,         // 1.20.x client -> server (vanilla signed short)
+            1_048_576,      // 1.20.x server -> client
+            2_097_050,      // 1.7.10 server -> client (Forge widens it with readVarShort)
+            4_194_304,      // synthetic: above every platform, most messages single-frame
+    };
+
     /** A pair of connections, each sending into the other's inbox. */
     private static final class Pair {
         final FrameMultiplexer a;
@@ -124,6 +148,95 @@ public class FrameMultiplexerTest {
      * completes after the large one, opening a big file freezes every RPC and UI event behind it — which
      * reads as the editor hanging, not as a transport decision.</p>
      */
+    /**
+     * The engine is correct at every ceiling a platform imposes, and at two that none does.
+     *
+     * <p>Runs the same exchange at each: a message far below the ceiling, one straddling it, and one
+     * several fragments long, all in flight together. Asserts the bytes arrive intact <em>and</em> that
+     * nothing was emitted larger than the platform said it would carry — the second is the half that
+     * cannot be checked in game without a crash, because an oversized payload throws from inside the
+     * loader with the connection already committed.</p>
+     */
+    @Test
+    public void everyPlatformCeilingCarriesTheSameMessagesIntact() {
+        for (int ceiling : EVERY_PLATFORM_CEILING) {
+            List<Integer> emitted = new ArrayList<>();
+            FrameMultiplexer[] slot = new FrameMultiplexer[2];
+            List<byte[]> arrived = new ArrayList<>();
+            slot[0] = new FrameMultiplexer(ceiling, true, frame -> {
+                emitted.add(frame.length);
+                slot[1].onFrameReceived(frame);
+            });
+            slot[1] = new FrameMultiplexer(ceiling, false, frame -> {
+                emitted.add(frame.length);
+                slot[0].onFrameReceived(frame);
+            });
+            slot[1].setMessageHandler(arrived::add);
+            slot[0].setMessageHandler(frame -> { });
+
+            // Below the ceiling, straddling it, and several fragments past it -- all three in flight at
+            // once, so their SUM must stay inside MAX_REASSEMBLY_BYTES. That bound is connection-wide
+            // rather than per-stream (it exists to cap total memory held in partial inbound messages, and
+            // a per-stream cap would be trivially defeated by opening more streams), and it does not rise
+            // with the platform ceiling -- so at a 4 MB ceiling the straddling message alone is half the
+            // budget. Sized off the constant rather than a literal, so it stays true if the bound moves.
+            byte[] small = bytes(Math.max(1, ceiling / 8), 1);
+            byte[] straddling = bytes(ceiling + 1, 2);
+            byte[] large = bytes(Math.min(ceiling * 3, FrameMultiplexer.MAX_REASSEMBLY_BYTES / 4), 3);
+            slot[0].send(small);
+            slot[0].send(straddling);
+            slot[0].send(large);
+
+            for (int i = 0; i < 20_000 && arrived.size() < 3; i++) {
+                slot[0].pump();
+                slot[1].pump();
+            }
+
+            String at = " at ceiling " + ceiling;
+            assertEquals("all three messages must arrive" + at, 3, arrived.size());
+            // Matched by content, NOT by arrival index: the multiplexer round-robins across streams on
+            // purpose, so a small message overtakes a large one already in flight -- which is the whole
+            // point of aSmallMessageIsNotBlockedBehindALargeOne. Ordering is guaranteed WITHIN a stream
+            // and deliberately not ACROSS them, and an index-based assertion here passes at four of the
+            // six ceilings and fails at the two where the fragment counts happen to interleave.
+            assertArrived("small" + at, small, arrived);
+            assertArrived("straddling" + at, straddling, arrived);
+            assertArrived("large" + at, large, arrived);
+            for (int size : emitted) {
+                assertTrue("a frame of " + size + " exceeds what the platform reported" + at,
+                        size <= ceiling);
+            }
+        }
+    }
+
+    /** Asserts one message arrived intact, wherever in the batch it landed. */
+    private static void assertArrived(String what, byte[] expected, List<byte[]> arrived) {
+        for (byte[] candidate : arrived) {
+            if (candidate.length == expected.length) {
+                assertArrayEquals(what + " intact", expected, candidate);
+                return;
+            }
+        }
+        fail(what + " never arrived (" + expected.length + " bytes)");
+    }
+
+    /**
+     * A ceiling too small to hold a header is refused at construction, not at the first send.
+     *
+     * <p>The failure it prevents is the one that costs a connection: a fragmenter told it may use a
+     * negative number of payload bytes emits nothing, forever, with no error. Refusing the ceiling names
+     * the adapter that reported it while there is still a stack trace pointing at the registration.</p>
+     */
+    @Test
+    public void aCeilingTooSmallForAHeaderIsRefused() {
+        try {
+            new FrameMultiplexer(8, true, frame -> { });
+            fail("a ceiling of 8 bytes cannot carry a header and must be refused");
+        } catch (IllegalArgumentException expected) {
+            // the point
+        }
+    }
+
     @Test
     public void aSmallMessageIsNotBlockedBehindALargeOne() {
         Pair pair = new Pair(4096);
