@@ -59,6 +59,21 @@ public final class ClientUiSession<T> {
     private long callTimeoutMillis = 10_000L;
 
     private int windowId = -1;
+
+    /**
+     * Where handlers are registered, or {@code null} when they go straight on the router.
+     *
+     * <p>Non-null only in the BOUND shape — a session created by {@link ClientUiSessions} for a window
+     * id it has already been told. The two other shapes (owning a transport, or riding a connection as
+     * the only window on it) register directly and behave exactly as they did before 5.7, which is why
+     * {@code ui/openWindow} is still theirs to listen for.</p>
+     */
+    @Nullable
+    private UiWindowMux<T> mux;
+
+    /** Told when this session lets go of its window, so {@link ClientUiSessions} can drop it. */
+    @Nullable
+    Runnable onReleased;
     private int expectedElementCount = -1;
     @Nullable
     private UIElement root;
@@ -90,17 +105,37 @@ public final class ClientUiSession<T> {
      * router and its mailbox. This one owns none of them — {@link ProtocolConnection#tick()} drains and
      * expires, and {@link #tick()} here only flushes what the tree changed.</p>
      *
-     * <p><b>One UI session per connection.</b> A second would register {@code ui/description} twice and
-     * {@link MessageRouter} refuses a duplicate outright, which is the right failure: two windows on one
-     * wire need the router to dispatch on the window id as well as the method, and that is the same
-     * change multi-viewer fan-out needs. Until then, one window per peer is enforced rather than
-     * assumed.</p>
+     * <p><b>The only window on this connection.</b> Registrations go straight on the router, exactly as
+     * they did before 5.7 — so a second of these still throws on a duplicate {@code ui/openWindow}, and
+     * that is still the right failure. For more than one window use {@link ClientUiSessions}, which owns
+     * the bootstrap message and hands each window a session bound to its id.</p>
+     *
+     * <p>Kept rather than folded into the host because it is genuinely the common case and costs a
+     * lookup less: a client with one window has nothing to demultiplex.</p>
      */
     public ClientUiSession(ProtocolConnection<T> connection) {
         this.ops = connection.ops();
         this.ownsConnection = false;
         this.router = connection.router();
         registerUiMethods();
+    }
+
+    /**
+     * Rides a connection <b>as one of several windows</b>, bound to an id somebody already knows.
+     *
+     * <p>Built by {@link ClientUiSessions}, which owns {@code ui/openWindow} for the connection and is
+     * therefore the only thing that can know the id before the window exists. That asymmetry with the
+     * server is not incidental: a {@code ServerUiSession} is <em>given</em> its id at construction, while
+     * a client learns one from the wire — so on this side the bootstrap message cannot itself be
+     * window-scoped, and something has to own it.</p>
+     */
+    ClientUiSession(ProtocolConnection<T> connection, int windowId) {
+        this.ops = connection.ops();
+        this.ownsConnection = false;
+        this.router = connection.router();
+        this.mux = UiWindowMux.of(connection);
+        this.windowId = windowId;
+        registerWindowMethods();
     }
 
     /** Fired once the tree exists — where a host would hand it to a {@code UIWindow} and render it. */
@@ -165,8 +200,19 @@ public final class ClientUiSession<T> {
 
     /** The UI half of the vocabulary. RPC methods register themselves through {@link #onCall}. */
     private void registerUiMethods() {
-        router.onNotify(UiMethods.OPEN_WINDOW, payload -> {
-            StateMap<T> in = read(payload);
+        router.onNotify(UiMethods.OPEN_WINDOW, payload -> acceptOpenWindow(read(payload)));
+        registerWindowMethods();
+    }
+
+    /**
+     * Takes an {@code ui/openWindow} body, whoever read it off the wire.
+     *
+     * <p>Package-private so {@link ClientUiSessions} can hand one over: that class owns the notification
+     * for the whole connection, because the bootstrap message is the one thing in the vocabulary that
+     * cannot be routed by a window id — it is what <em>announces</em> the id.</p>
+     */
+    void acceptOpenWindow(StateMap<T> in) {
+        {
             int protocol = in.getInt("protocol", -1);
             int id = in.getInt(UiMethods.WINDOW, -1);
             if (protocol != EnvelopeCodec.VERSION) {
@@ -202,8 +248,11 @@ public final class ClientUiSession<T> {
                         buildFrom(encoded);
                     },
                     error -> CrystalGuiCore.LOGGER.warn("Description for window {} refused: {}", id, error));
-        });
+        }
+    }
 
+    /** Everything that is scoped to one window. Registered through the mux when there is one. */
+    private void registerWindowMethods() {
         /*
          * C2. Replaces an anchor's described children, then RE-DERIVES every id.
          *
@@ -217,7 +266,7 @@ public final class ClientUiSession<T> {
          * versions, which no description can reveal -- and it is refused rather than misapplied,
          * because every id past the divergence would be off by one.
          */
-        router.onNotify(UiMethods.TREE_DELTA, payload -> {
+        bindNotify(UiMethods.TREE_DELTA, payload -> {
             StateMap<T> in = read(payload);
             if (in.getInt(UiMethods.WINDOW, windowId) != windowId || root == null) return;
 
@@ -249,13 +298,13 @@ public final class ClientUiSession<T> {
                         + "this client derived {} — the two sides are building different structure, so "
                         + "every id past the divergence would be wrong", expected, assigned);
                 root = null;
-                windowId = -1;
+                release();
                 return;
             }
             expectedElementCount = assigned;
         });
 
-        router.onNotify(UiMethods.STATE_DELTA, payload -> {
+        bindNotify(UiMethods.STATE_DELTA, payload -> {
             StateMap<T> in = read(payload);
             if (in.getInt(UiMethods.WINDOW, windowId) != windowId || root == null) return;
             for (StateMap<T> entry : in.getList("entries", e -> e)) {
@@ -277,14 +326,34 @@ public final class ClientUiSession<T> {
             }
         });
 
-        router.onNotify(UiMethods.CLOSE_WINDOW, payload -> {
+        bindNotify(UiMethods.CLOSE_WINDOW, payload -> {
             StateMap<T> in = read(payload);
             if (in.getInt(UiMethods.WINDOW, windowId) != windowId) return;
             String reason = in.getString("reason", "");
             root = null;
-            windowId = -1;
+            release();
             if (onWindowClosed != null) onWindowClosed.accept(reason);
         });
+    }
+
+    /**
+     * Registers a notification where this session's registrations go.
+     *
+     * <p>The {@code != windowId} check inside each handler is kept even in mux mode, where it can no
+     * longer fail. It is not the routing — it never was — it is the guard against applying a message
+     * that was in flight when the window closed, and a check that costs an int comparison is not worth
+     * making conditional on which shape built the session.</p>
+     */
+    private void bindNotify(String method, MessageRouter.NotificationHandler<T> handler) {
+        if (mux != null) mux.onNotify(windowId, method, handler);
+        else router.onNotify(method, handler);
+    }
+
+    /** Lets go of the window id, and of the mux slots held under it. */
+    private void release() {
+        if (mux != null && windowId >= 0) mux.release(windowId);
+        windowId = -1;
+        if (onReleased != null) onReleased.run();
     }
 
     private StateMap<T> read(@Nullable T payload) {
@@ -375,11 +444,18 @@ public final class ClientUiSession<T> {
         router.notify(UiMethods.EVENT, out.encode());
     }
 
-    /** Registers a client-side RPC method the server may call. */
+    /**
+     * Registers a client-side RPC method the server may call.
+     *
+     * <p>Window-scoped when this session is one of several, so two windows of the same application may
+     * each offer the same method name. A method that belongs to the <em>connection</em> rather than to a
+     * window — a workspace, a script runtime — registers on {@link ProtocolConnection} directly and is
+     * shared by every window, which is what it wants.</p>
+     */
     public ClientUiSession<T> onCall(String method, Call.Handler<T> handler) {
         // Same handler type, so nothing that calls this moves; underneath, an RPC is now an ordinary
         // REQUEST and its correlation is the router's rather than a second id space of its own.
-        router.onRequest(method, (payload, respond) ->
+        MessageRouter.RequestHandler<T> bound = (payload, respond) ->
                 handler.invoke(read(payload), new Call.Responder<T>() {
                     @Override
                     public void ok(@Nullable StateMap<T> value) {
@@ -390,14 +466,25 @@ public final class ClientUiSession<T> {
                     public void fail(String error) {
                         respond.fail(error);
                     }
-                }));
+                });
+        if (mux != null) mux.onRequest(windowId, method, bound);
+        else router.onRequest(method, bound);
         return this;
     }
 
-    /** Calls a server-side method. */
+    /**
+     * Calls a server-side method.
+     *
+     * <p>Stamped with this session's window on the way out, so the far side's {@link UiWindowMux} can
+     * route it. The key is additive and a handler that does not read it is unaffected — which matters,
+     * because a connection-scoped method registered straight on {@link ProtocolConnection} will receive
+     * one of these unchanged and correctly ignore it.</p>
+     */
     public void call(String method, @Nullable StateMap<T> args,
                      @Nullable Consumer<StateMap<T>> onResult, @Nullable Consumer<String> onError) {
-        router.request(method, args == null ? null : args.encode(),
+        StateMap<T> stamped = args == null ? new StateMap<>(ops) : args;
+        stamped.putInt(UiMethods.WINDOW, windowId);
+        router.request(method, stamped.encode(),
                 value -> {
                     if (onResult != null) onResult.accept(read(value));
                 },

@@ -149,12 +149,77 @@ it. Deferred from Phase 4 C5 for exactly this reason — *"broadcasting it wants
 exist"* — and 5.5 is plausibly that consumer, since knowing somebody else has the file open is what makes
 a conflict comprehensible rather than mysterious.
 
-### 5.7 Two windows on one connection
+### 5.7 Two windows on one connection · **done 2026-08-21**
 
-`ServerUiSession` enforces one UI session per connection by construction: a second registers
-`ui/description` twice and `MessageRouter` refuses a duplicate. That is the right failure and a real
-limit. Lifting it means the router dispatching on **window id as well as method**, which is the same
-change C1 originally implied and was deliberately left out of it.
+~~`ServerUiSession` enforces one UI session per connection by construction.~~ It did, and the failure was
+the right one: `MessageRouter` keys handlers by method name and **refuses** a duplicate rather than
+replacing it, because silently keeping the last registration means whichever subsystem initialised second
+wins, which is unfindable. Lifted by dispatching on **window id as well as method** — `UiWindowMux`.
+
+**Newly urgent rather than speculative.** A retained window registry (`plan_windowing.md` W2) makes
+several live windows the normal case, and that is exactly when two UI sessions land on one wire.
+
+#### What it is
+
+`UiWindowMux` keys `(method, window)` and installs **one** handler per method name on the router, the
+first time any window asks for it. Every message in the UI vocabulary already carried
+`UiMethods.WINDOW`, and every session already re-checked it on the way in — so the id was being
+*verified* by a handler that could only ever be one. This turns that check into the lookup it wanted to
+be. The per-handler checks stay: they were the guard against a message still in flight when a window
+closed, which is a different question from routing.
+
+**Above the router, not inside it.** `MessageRouter` is the vocabulary every subsystem shares —
+`WorkspaceRpc` and a future `script/*` bind to it and have no window to be keyed by — so teaching it one
+payload's shape would put a UI concern in the layer under everything. Same split `FrameMultiplexer`
+already makes a layer down: the generic thing carries ids, the thing that knows what an id *means* sits
+on top.
+
+#### The asymmetry that decided the client design
+
+A `ServerUiSession` is **given** its window id, so it registers window-scoped handlers immediately and
+needs nothing above it. A client **learns** an id from the wire, and the message carrying it —
+`ui/openWindow` — is therefore the one thing in the vocabulary that *cannot* be window-scoped: it is what
+announces the window. So the client gets a host, `ClientUiSessions`, which owns that message for the
+connection and hands each announcement to the right session.
+
+The tempting alternative — let each unbound session take whichever open arrives first — is not a design:
+with two windows opening, which gets which is decided by registration order, and the symptom is two
+windows rendering each other's trees. There is no id to check yet, so nothing downstream could detect it.
+
+**The single-window shape is untouched.** `new ClientUiSession(connection)` still owns `ui/openWindow` and
+registers straight on the router — no mux, no lookup — which is what every existing caller and the 1.7.10
+client take. A plain session and the host are mutually exclusive on one connection, and the refusal comes
+from the router's own duplicate check so there is one statement of the rule.
+
+#### Two things that were nearly left out, and both are silent
+
+- **`release` on close and on `removeViewer`.** Without it a closed window keeps its `(method, window)`
+  pairs claimed, so reopening in that id throws *"window 1 already serves 'ui/description'"* — for a
+  window nobody is watching, on a connection that has been up for hours. On a client that reopens the
+  same editor that is **every second open**, and on a reconnect it is every re-add of the same viewer.
+- **Session-scoped RPC is window-scoped too.** `onCall` collided exactly as `ui/description` did, and
+  worse: an application naming `app/save` on its second window threw from inside the router about a
+  method it had every right to name twice. The counterpart is that outgoing calls are **stamped** with
+  the window on both sides. A method belonging to the *connection* rather than a window — a workspace, a
+  script runtime — still registers on `ProtocolConnection` directly and is shared by every window, which
+  is what it wants; the extra key is additive and such a handler correctly ignores it.
+
+#### No fallback to "the only window"
+
+A message with no window id gets a **refused request** or a **dropped notification with one warning**,
+never delivery to the single open window. That fallback is correct with one window and silently wrong
+with two — it fails exactly when the feature starts being used. And a request is *answered* rather than
+dropped, or the caller waits out its deadline and reports a timeout: a slow peer and a closed window are
+different problems and must not look alike.
+
+#### Verified
+
+`TwoWindowsOnOneConnectionTest`, 10 tests, and the whole headless suite (1165) green. **The tests were
+mutation-checked**: making the mux ignore the window and deliver to whichever handler registered first —
+i.e. a router that merely stopped complaining — fails **7 of the 10**. The three that survive are the ones
+that should (the single-window regression, the mutual-exclusion refusal, and viewer re-add). Opening two
+windows is the easy half and would pass against the broken version; what the suite actually pins is that
+a delta, an event and an RPC each reach **exactly one** window, and that a closed window gives its id back.
 
 ### 5.8 Server-contributed commands · `command/*`
 
