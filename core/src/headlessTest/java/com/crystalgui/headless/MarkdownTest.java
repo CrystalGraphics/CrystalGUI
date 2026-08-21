@@ -242,4 +242,20 @@ public class MarkdownTest {
         assertEquals("", Markdown.toHtml(null));
         assertTrue(MarkupParser.parse(Markdown.toHtml("   \n\n  \n")).blocks().isEmpty());
     }
+
+    /**
+     * <b>A markdown image is its alt text, and is read before the link it looks like.</b>
+     *
+     * <p>The syntax is a link with a {@code !} in front, so a link handler reaching it first turns
+     * {@code ![alt](src)} into a stray exclamation mark followed by a followable link to a picture
+     * nothing can open — which is worse than the image being absent, because the reader is offered
+     * something that cannot work.</p>
+     */
+    @Test
+    public void anImageIsItsAltText() {
+        String html = Markdown.toHtml("see ![the diagram](x.png) here");
+        assertTrue(html, html.contains("the diagram"));
+        assertFalse("the image was read as a link: " + html, html.contains("<a "));
+        assertFalse("the marker leaked to the reader: " + html, html.contains("!["));
+    }
 }

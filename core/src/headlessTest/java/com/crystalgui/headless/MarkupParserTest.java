@@ -480,4 +480,96 @@ public class MarkupParserTest {
         assertEquals("a59", last.children().get(0).text());
         assertEquals("c59", last.children().get(2).text());
     }
+
+    // ── Entities, images and spanning cells ──────────────────────────────────────
+
+    /**
+     * <b>The named entities are HTML 4.01's, not a handful.</b>
+     *
+     * <p>The set used to be twelve, chosen as what javadoc must escape plus a few — true of javadoc's
+     * own OUTPUT and not of what an author writes. An accented letter in a name and an arrow in a
+     * sentence both reached the reader as their own source text, and an entity shown raw does not read as
+     * an unsupported entity; it reads as the renderer having broken the line.</p>
+     */
+    @Test
+    public void namedEntitiesCoverTheHtml4Set() {
+        assertEquals("Caf\u00e9 \u2192 na\u00efve \u2014 \u03b1 \u00b1 \u00bd",
+                MarkupParser.parse("<p>Caf&eacute; &rarr; na&iuml;ve &mdash; &alpha; &plusmn; &frac12;</p>")
+                        .blocks().get(0).text());
+    }
+
+    /** And an unknown one is the author's own text, not a hole. */
+    @Test
+    public void anUnknownEntityIsLeftAsWritten() {
+        assertEquals("&fjlig; here",
+                MarkupParser.parse("<p>&fjlig; here</p>").blocks().get(0).text());
+    }
+
+    /**
+     * <b>An image contributes its {@code alt} text.</b>
+     *
+     * <p>Nothing can be drawn: a doc comment's {@code src} is relative to the page javadoc would have
+     * generated, so it names a file that exists beside that HTML and nowhere in a jar. {@code alt} is
+     * not a consolation prize — it is what the attribute is for and what every text-mode reader shows.</p>
+     */
+    @Test
+    public void anImageContributesItsAltText() {
+        assertEquals("See the warning sign here.",
+                MarkupParser.parse("<p>See the <img src=\"doc-files/w.png\" alt=\"warning sign\"> here.</p>")
+                        .blocks().get(0).text());
+    }
+
+    /**
+     * And one with no {@code alt} contributes nothing, which is what no {@code alt} MEANS.
+     *
+     * <p>{@code alt=""} is how HTML spells "decorative, skip me". A placeholder would put a box of
+     * apology in the middle of a sentence.</p>
+     */
+    @Test
+    public void aDecorativeImageContributesNothing() {
+        assertEquals("Before after.",
+                MarkupParser.parse("<p>Before <img src=\"x.png\"> after.</p>")
+                        .blocks().get(0).text());
+    }
+
+    /**
+     * <b>A spanning cell reports how far it reaches.</b>
+     *
+     * <p>Which is what decides the COLUMN every following cell lands in — a table with one span cannot
+     * be aligned by counting cells from the left, and the failure is a table whose rules and text
+     * disagree rather than one missing a feature.</p>
+     */
+    @Test
+    public void aCellReportsItsSpans() {
+        MarkupBlock table = MarkupParser.parse(""
+                + "<table>"
+                + "<tr><th colspan=\"2\">Both</th></tr>"
+                + "<tr><td rowspan=\"3\">Tall</td><td>Plain</td></tr>"
+                + "</table>").blocks().get(0);
+
+        MarkupBlock header = table.children().get(0).children().get(0);
+        assertEquals(2, header.colspan());
+        assertEquals(1, header.rowspan());
+
+        MarkupBlock tall = table.children().get(1).children().get(0);
+        assertEquals(3, tall.rowspan());
+        assertEquals("an ordinary cell must stay at one",
+                1, table.children().get(1).children().get(1).colspan());
+    }
+
+    /**
+     * A malformed span is one, not an error and not zero.
+     *
+     * <p>{@code colspan="0"} is legal HTML meaning "to the end of the group", and a renderer treating it
+     * as zero collapses the cell out of its own table. A typo is the same shape of problem with the same
+     * right answer: markup degrades here, it does not throw.</p>
+     */
+    @Test
+    public void aMalformedSpanIsOne() {
+        MarkupBlock table = MarkupParser.parse(
+                "<table><tr><td colspan=\"0\">a</td><td colspan=\"lots\">b</td></tr></table>")
+                .blocks().get(0);
+        assertEquals(1, table.children().get(0).children().get(0).colspan());
+        assertEquals(1, table.children().get(0).children().get(1).colspan());
+    }
 }

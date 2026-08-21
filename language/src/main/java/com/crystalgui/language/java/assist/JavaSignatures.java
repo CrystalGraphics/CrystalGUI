@@ -719,17 +719,36 @@ public final class JavaSignatures {
      * tooling and IntelliJ both honour it; until now it rendered as nothing, so a comment reading
      * "{@code {@inheritDoc} Additionally, …}" lost its first half silently.</p>
      *
-     * <p><b>The inherited text is stripped of its own markers rather than resolved recursively.</b> A
-     * supertype's comment may contain the tag too, and each hop would need its own walk from a different
-     * binding — which terminates, since {@code MAX_DOC_HOPS} bounds it, but produces a comment
-     * assembled from three levels of a hierarchy for a hover. One level is what a reader asked for.</p>
+     * <p><b>Resolved through the whole chain, one hop at a time.</b> A supertype's comment may contain
+     * the tag too, and this used to strip those markers rather than follow them — on the reasoning that
+     * a hover should not be a comment assembled from three levels of a hierarchy. But that is not what
+     * the alternative produced: the argument assumes each level ADDS prose, and the level that most
+     * often carries the marker is the one that is <em>only</em> the marker, written to say "the same as
+     * above" through an intermediate class. Stripping it there yields nothing at all, so a two-hop chain
+     * — the ordinary shape of an abstract class between an interface and its implementation — rendered
+     * empty. Following it costs one more walk from a binding already in hand, and the assembled hover
+     * the old note feared is bounded by {@link #MAX_DOC_HOPS} either way.</p>
      */
     @Nullable
     private String spliceInheritedDoc(String own, @Nullable IBinding binding) {
-        if (!own.contains(JavaDocs.INHERIT_DOC)) return own;
-        String inherited = binding instanceof IMethodBinding
-                ? inheritedDocOf((IMethodBinding) binding) : null;
-        String text = inherited == null ? "" : inherited.replace(JavaDocs.INHERIT_DOC, "");
+        return spliceInheritedDoc(own, binding, 0);
+    }
+
+    @Nullable
+    private String spliceInheritedDoc(@Nullable String own, @Nullable IBinding binding, int hop) {
+        if (own == null || !own.contains(JavaDocs.INHERIT_DOC)) return own;
+        String text = "";
+        if (hop < MAX_DOC_HOPS && binding instanceof IMethodBinding) {
+            IMethodBinding above = documentedSuperOf((IMethodBinding) binding);
+            // FROM THE BINDING WHOSE TEXT WAS TAKEN, not from the original: the next hop's supertypes are
+            // the ones above THAT declaration, and asking the original again would re-answer with the
+            // same level forever. Strictly upward, so the recursion cannot cycle.
+            String inherited = above == null ? null : spliceInheritedDoc(docTextOf(above), above, hop + 1);
+            if (inherited != null) text = inherited;
+        }
+        // AT THE BOUND, OR WITH NOTHING ABOVE IT, the marker is dropped rather than shown. It is an
+        // instruction to a doc tool, and a reader who sees it has been shown the machinery.
+        text = text.replace(JavaDocs.INHERIT_DOC, "");
         String spliced = own.replace(JavaDocs.INHERIT_DOC, text).trim();
         // A COMMENT THAT WAS ONLY THE TAG, with nothing above it to inherit, is not an empty comment --
         // it is a comment with nothing to say, and the popup hides a blank body rather than drawing a
@@ -740,8 +759,21 @@ public final class JavaSignatures {
     /** How far up a hierarchy to look for an inherited comment. Deeper than any real API, cheaper than a search. */
     private static final int MAX_DOC_HOPS = 6;
 
+    /**
+     * The nearest overridden method that has a comment, resolved through <em>its</em> own inheritance.
+     *
+     * <p>Split from the walk below so the recursion has a binding to continue from — the text alone
+     * cannot say which declaration it came from, and the next hop's supertypes are that declaration's.</p>
+     */
     @Nullable
     private String inheritedDocOf(IMethodBinding method) {
+        IMethodBinding above = documentedSuperOf(method);
+        return above == null ? null : spliceInheritedDoc(docTextOf(above), above, 1);
+    }
+
+    /** The nearest overridden method carrying a comment of its own — superclass first, then interfaces. */
+    @Nullable
+    private IMethodBinding documentedSuperOf(IMethodBinding method) {
         ITypeBinding declaring = method.getDeclaringClass();
         if (declaring == null) return null;
         List<ITypeBinding> queue = new ArrayList<>();
@@ -751,8 +783,7 @@ public final class JavaSignatures {
             if (candidate == null) continue;
             for (IMethodBinding above : candidate.getDeclaredMethods()) {
                 if (!method.overrides(above) && !above.isSubsignature(method)) continue;
-                String inherited = docTextOf(above);
-                if (inherited != null) return inherited;
+                if (docTextOf(above) != null) return above;
             }
             addSupertypes(candidate, queue);
         }

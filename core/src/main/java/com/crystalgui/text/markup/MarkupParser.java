@@ -1,8 +1,10 @@
 package com.crystalgui.text.markup;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * Parses the HTML subset documentation is written in into a {@link MarkupDocument}.
@@ -80,25 +82,49 @@ public final class MarkupParser {
         COMMENT
     }
 
-    /** A start tag, an end tag, or a run of text. */
-    private record Token(boolean text, String name, String value, boolean end, boolean selfClosing) {
+    /**
+     * A start tag, an end tag, or a run of text.
+     *
+     * <p>{@code value} is the text for a text token and the {@code href} for a tag, which is what every
+     * consumer of a link reads. {@code attributes} carries the rest of the small set below — kept apart
+     * rather than folded in because {@code href} is on the hot path and the map is usually empty.</p>
+     */
+    private record Token(boolean text, String name, String value, boolean end, boolean selfClosing,
+                         Map<String, String> attributes) {
 
         static Token text(String value) {
-            return new Token(true, "", value, false, false);
+            return new Token(true, "", value, false, false, Map.of());
         }
 
-        static Token tag(String name, boolean end, boolean selfClosing, String href) {
-            return new Token(false, name, href, end, selfClosing);
+        static Token tag(String name, boolean end, boolean selfClosing, Map<String, String> attributes) {
+            return new Token(false, name, attributes.get("href"), end, selfClosing,
+                    attributes.isEmpty() ? Map.of() : Map.copyOf(attributes));
         }
+
+        String attribute(String key) {
+            return attributes.get(key);
+        }
+    }
+
+    /**
+     * The attributes this layer acts on. Everything else is read and dropped.
+     *
+     * <p>Read rather than skipped, because a {@code >} inside a quoted value ends the tag early
+     * otherwise — that is the class of bug an ad-hoc scanner ships with. Kept to a named set rather
+     * than stored wholesale so a document cannot make this hold arbitrary strings.</p>
+     */
+    private static boolean wanted(CharSequence attribute) {
+        return "href".contentEquals(attribute) || "alt".contentEquals(attribute)
+                || "src".contentEquals(attribute) || "colspan".contentEquals(attribute)
+                || "rowspan".contentEquals(attribute);
     }
 
     /**
      * Runs the state machine.
      *
-     * <p>Attributes are read and all but {@code href} discarded: it is the only one anything downstream
-     * can act on. They still have to be <em>parsed</em> rather than skipped to the next {@code >}, or a
-     * {@code >} inside a quoted value ends the tag early — which is exactly the class of bug an ad-hoc
-     * scanner ships with.</p>
+     * <p>Attributes are read and all but {@link #wanted} ones discarded. They still have to be
+     * <em>parsed</em> rather than skipped to the next {@code >}, or a {@code >} inside a quoted value
+     * ends the tag early — which is exactly the class of bug an ad-hoc scanner ships with.</p>
      */
     private static List<Token> tokenize(String html) {
         List<Token> tokens = new ArrayList<>();
@@ -106,7 +132,7 @@ public final class MarkupParser {
         StringBuilder name = new StringBuilder();
         StringBuilder attribute = new StringBuilder();
         StringBuilder value = new StringBuilder();
-        String href = null;
+        Map<String, String> attributes = new HashMap<>(4);
         boolean end = false;
         State state = State.DATA;
 
@@ -137,7 +163,7 @@ public final class MarkupParser {
                         name.setLength(0);
                         name.append(Character.toLowerCase(c));
                         end = false;
-                        href = null;
+                        attributes.clear();
                         state = State.TAG_NAME;
                     } else {
                         // Not a tag at all. The spec emits the `<` as character data, which is what makes
@@ -153,7 +179,7 @@ public final class MarkupParser {
                         name.setLength(0);
                         name.append(Character.toLowerCase(c));
                         end = true;
-                        href = null;
+                        attributes.clear();
                         state = State.TAG_NAME;
                     } else {
                         text.append("</").append(c);
@@ -163,7 +189,7 @@ public final class MarkupParser {
 
                 case TAG_NAME:
                     if (c == '>') {
-                        tokens.add(Token.tag(name.toString(), end, false, href));
+                        tokens.add(Token.tag(name.toString(), end, false, attributes));
                         state = State.DATA;
                     } else if (c == '/') {
                         state = State.SELF_CLOSING_START_TAG;
@@ -177,7 +203,7 @@ public final class MarkupParser {
                 case BEFORE_ATTRIBUTE_NAME:
                     if (isSpace(c)) break;
                     if (c == '>') {
-                        tokens.add(Token.tag(name.toString(), end, false, href));
+                        tokens.add(Token.tag(name.toString(), end, false, attributes));
                         state = State.DATA;
                     } else if (c == '/') {
                         state = State.SELF_CLOSING_START_TAG;
@@ -192,7 +218,7 @@ public final class MarkupParser {
                     if (c == '=') {
                         state = State.BEFORE_ATTRIBUTE_VALUE;
                     } else if (c == '>') {
-                        tokens.add(Token.tag(name.toString(), end, false, href));
+                        tokens.add(Token.tag(name.toString(), end, false, attributes));
                         state = State.DATA;
                     } else if (isSpace(c)) {
                         state = State.AFTER_ATTRIBUTE_NAME;
@@ -208,7 +234,7 @@ public final class MarkupParser {
                     if (c == '=') {
                         state = State.BEFORE_ATTRIBUTE_VALUE;
                     } else if (c == '>') {
-                        tokens.add(Token.tag(name.toString(), end, false, href));
+                        tokens.add(Token.tag(name.toString(), end, false, attributes));
                         state = State.DATA;
                     } else if (c == '/') {
                         state = State.SELF_CLOSING_START_TAG;
@@ -227,7 +253,7 @@ public final class MarkupParser {
                     } else if (c == '\'') {
                         state = State.ATTRIBUTE_VALUE_SINGLE_QUOTED;
                     } else if (c == '>') {
-                        tokens.add(Token.tag(name.toString(), end, false, href));
+                        tokens.add(Token.tag(name.toString(), end, false, attributes));
                         state = State.DATA;
                     } else {
                         value.append(c);
@@ -239,7 +265,7 @@ public final class MarkupParser {
                 case ATTRIBUTE_VALUE_SINGLE_QUOTED: {
                     char quote = state == State.ATTRIBUTE_VALUE_DOUBLE_QUOTED ? '"' : '\'';
                     if (c == quote) {
-                        if ("href".contentEquals(attribute)) href = value.toString();
+                        if (wanted(attribute)) attributes.put(attribute.toString(), value.toString());
                         state = State.AFTER_ATTRIBUTE_VALUE_QUOTED;
                     } else if (c == '&') {
                         int consumed = appendEntity(html, at, value);
@@ -253,11 +279,11 @@ public final class MarkupParser {
 
                 case ATTRIBUTE_VALUE_UNQUOTED:
                     if (isSpace(c)) {
-                        if ("href".contentEquals(attribute)) href = value.toString();
+                        if (wanted(attribute)) attributes.put(attribute.toString(), value.toString());
                         state = State.BEFORE_ATTRIBUTE_NAME;
                     } else if (c == '>') {
-                        if ("href".contentEquals(attribute)) href = value.toString();
-                        tokens.add(Token.tag(name.toString(), end, false, href));
+                        if (wanted(attribute)) attributes.put(attribute.toString(), value.toString());
+                        tokens.add(Token.tag(name.toString(), end, false, attributes));
                         state = State.DATA;
                     } else {
                         value.append(c);
@@ -270,7 +296,7 @@ public final class MarkupParser {
                     } else if (c == '/') {
                         state = State.SELF_CLOSING_START_TAG;
                     } else if (c == '>') {
-                        tokens.add(Token.tag(name.toString(), end, false, href));
+                        tokens.add(Token.tag(name.toString(), end, false, attributes));
                         state = State.DATA;
                     } else {
                         attribute.setLength(0);
@@ -281,7 +307,7 @@ public final class MarkupParser {
 
                 case SELF_CLOSING_START_TAG:
                     if (c == '>') {
-                        tokens.add(Token.tag(name.toString(), end, true, href));
+                        tokens.add(Token.tag(name.toString(), end, true, attributes));
                         state = State.DATA;
                     } else {
                         state = State.BEFORE_ATTRIBUTE_NAME;
@@ -353,12 +379,23 @@ public final class MarkupParser {
     }
 
     /**
-     * The named references that actually appear in documentation.
+     * The named references, which are <b>HTML 4.01's</b> and deliberately not HTML5's 2,231.
      *
-     * <p>The full HTML5 table is 2,231 entries and ships as a generated file in every browser. Nothing
-     * here needs {@code &fjlig;}: javadoc escapes the four XML ones because it must, {@code &nbsp;} for
-     * layout, and the quotes occasionally. An unrecognised name is left as written, which reads as the
-     * author's own text rather than as a hole.</p>
+     * <p>Where the line is drawn matters more than how many fall on each side of it. HTML5's table is a
+     * generated file in every browser, and most of what it adds over HTML 4 is mathematical
+     * ({@code &fjlig;}, {@code &nvrtrie;}) — notation for a typesetting system rather than for prose
+     * about code. HTML 4's set is the one every authoring convention was written against, it is closed
+     * and will not grow, and it covers what documentation actually contains: an accented letter in a
+     * name, Greek in a formula, an arrow in a description of flow, and the typographic marks.</p>
+     *
+     * <p><b>It used to be twelve</b>, picked as "what javadoc must escape, plus a few" — which is true
+     * of javadoc's own OUTPUT and not of what an author writes. {@code &eacute;} in a name and
+     * {@code &rarr;} in a sentence both reached the reader as their own source text, and an entity shown
+     * raw does not read as an unsupported entity; it reads as the renderer having broken the line.</p>
+     *
+     * <p>The four XML ones stay written out because they are most of the traffic — javadoc escapes them
+     * because it must, so they turn up in comments containing no other entity at all. An unrecognised
+     * name is still left as written, which reads as the author's own text rather than as a hole.</p>
      */
     private static String named(String body) {
         switch (body) {
@@ -366,16 +403,55 @@ public final class MarkupParser {
             case "gt": return ">";
             case "amp": return "&";
             case "quot": return "\"";
-            case "apos": return "'";
-            case "nbsp": return " ";
-            case "hellip": return "…";
-            case "mdash": return "—";
-            case "ndash": return "–";
-            case "copy": return "©";
-            case "reg": return "®";
-            case "trade": return "™";
-            default: return null;
+            default: return NAMED.get(body);
         }
+    }
+
+    /**
+     * {@code name:hex} pairs, parsed once — the table as DATA rather than as 248 switch cases.
+     *
+     * <p>A case per entity is the obvious spelling and is a page and a half of code whose every line is
+     * a chance to mistype a codepoint. This is the same information in a form that can be checked
+     * against a generated list, and the map costs one small allocation per process.</p>
+     */
+    private static final Map<String, String> NAMED = namedTable(""
+            + "AElig:c6 Aacute:c1 Acirc:c2 Agrave:c0 Alpha:391 Aring:c5 Atilde:c3 Auml:c4 Beta:392 Ccedil:c7 "
+            + "Chi:3a7 Dagger:2021 Delta:394 ETH:d0 Eacute:c9 Ecirc:ca Egrave:c8 Epsilon:395 Eta:397 Euml:cb "
+            + "Gamma:393 Iacute:cd Icirc:ce Igrave:cc Iota:399 Iuml:cf Kappa:39a Lambda:39b Mu:39c Ntilde:d1 "
+            + "Nu:39d OElig:152 Oacute:d3 Ocirc:d4 Ograve:d2 Omega:3a9 Omicron:39f Oslash:d8 Otilde:d5 Ouml:d6 "
+            + "Phi:3a6 Pi:3a0 Prime:2033 Psi:3a8 Rho:3a1 Scaron:160 Sigma:3a3 THORN:de Tau:3a4 Theta:398 "
+            + "Uacute:da Ucirc:db Ugrave:d9 Upsilon:3a5 Uuml:dc Xi:39e Yacute:dd Yuml:178 Zeta:396 aacute:e1 "
+            + "acirc:e2 acute:b4 aelig:e6 agrave:e0 alefsym:2135 alpha:3b1 and:2227 ang:2220 aring:e5 "
+            + "asymp:2248 atilde:e3 auml:e4 bdquo:201e beta:3b2 brvbar:a6 bull:2022 cap:2229 ccedil:e7 "
+            + "cedil:b8 cent:a2 chi:3c7 circ:2c6 clubs:2663 cong:2245 copy:a9 crarr:21b5 cup:222a curren:a4 "
+            + "dArr:21d3 dagger:2020 darr:2193 deg:b0 delta:3b4 diams:2666 divide:f7 eacute:e9 ecirc:ea "
+            + "egrave:e8 empty:2205 emsp:2003 ensp:2002 epsilon:3b5 equiv:2261 eta:3b7 eth:f0 euml:eb "
+            + "euro:20ac exist:2203 fnof:192 forall:2200 frac12:bd frac14:bc frac34:be frasl:2044 gamma:3b3 "
+            + "ge:2265 hArr:21d4 harr:2194 hearts:2665 hellip:2026 iacute:ed icirc:ee iexcl:a1 igrave:ec "
+            + "image:2111 infin:221e int:222b iota:3b9 iquest:bf isin:2208 iuml:ef kappa:3ba lArr:21d0 "
+            + "lambda:3bb lang:2329 laquo:ab larr:2190 lceil:2308 ldquo:201c le:2264 lfloor:230a lowast:2217 "
+            + "loz:25ca lrm:200e lsaquo:2039 lsquo:2018 macr:af mdash:2014 micro:b5 middot:b7 minus:2212 "
+            + "mu:3bc nabla:2207 nbsp:a0 ndash:2013 ne:2260 ni:220b not:ac notin:2209 nsub:2284 ntilde:f1 "
+            + "nu:3bd oacute:f3 ocirc:f4 oelig:153 ograve:f2 oline:203e omega:3c9 omicron:3bf oplus:2295 "
+            + "or:2228 ordf:aa ordm:ba oslash:f8 otilde:f5 otimes:2297 ouml:f6 para:b6 part:2202 permil:2030 "
+            + "perp:22a5 phi:3c6 pi:3c0 piv:3d6 plusmn:b1 pound:a3 prime:2032 prod:220f prop:221d psi:3c8 "
+            + "rArr:21d2 radic:221a rang:232a raquo:bb rarr:2192 rceil:2309 rdquo:201d real:211c reg:ae "
+            + "rfloor:230b rho:3c1 rlm:200f rsaquo:203a rsquo:2019 sbquo:201a scaron:161 sdot:22c5 sect:a7 "
+            + "shy:ad sigma:3c3 sigmaf:3c2 sim:223c spades:2660 sub:2282 sube:2286 sum:2211 sup:2283 sup1:b9 "
+            + "sup2:b2 sup3:b3 supe:2287 szlig:df tau:3c4 there4:2234 theta:3b8 thetasym:3d1 thinsp:2009 "
+            + "thorn:fe tilde:2dc times:d7 trade:2122 uArr:21d1 uacute:fa uarr:2191 ucirc:fb ugrave:f9 uml:a8 "
+            + "upsih:3d2 upsilon:3c5 uuml:fc weierp:2118 xi:3be yacute:fd yen:a5 yuml:ff zeta:3b6 zwj:200d "
+            + "zwnj:200c");
+
+    private static Map<String, String> namedTable(String pairs) {
+        Map<String, String> table = new HashMap<>(512);
+        for (String pair : pairs.split(" ")) {
+            int colon = pair.indexOf(':');
+            if (colon <= 0) continue;
+            table.put(pair.substring(0, colon),
+                    new String(Character.toChars(Integer.parseInt(pair.substring(colon + 1), 16))));
+        }
+        return table;
     }
 
     // ── The tree ────────────────────────────────────────────────────────────────────────────────
@@ -452,6 +528,10 @@ public final class MarkupParser {
             /** {@code 1} marks the row being built as a header cell. @see MarkupBlock.Kind#CELL */
             int rowLevel;
 
+            /** How many columns and rows the cell being built covers. One unless it said otherwise. */
+            int rowColspan = 1;
+            int rowRowspan = 1;
+
             OpenList(MarkupBlock.Kind kind, boolean ordered) {
                 this.kind = kind;
                 this.ordered = ordered;
@@ -475,7 +555,7 @@ public final class MarkupParser {
                     continue;
                 }
                 if (token.end()) closeTag(token.name());
-                else openTag(token.name(), token.value());
+                else openTag(token.name(), token.value(), token);
             }
             // A list left open by a missing `</ul>` still has to reach the document -- and its LAST item
             // has to be closed first, or the item everything after the final `<li>` went into is dropped
@@ -492,7 +572,7 @@ public final class MarkupParser {
             return blocks.isEmpty() ? MarkupDocument.EMPTY : new MarkupDocument(blocks);
         }
 
-        private void openTag(String tag, String href) {
+        private void openTag(String tag, String href, Token token) {
             switch (tag) {
                 case "p":
                     closeBlock();
@@ -543,7 +623,30 @@ public final class MarkupParser {
                     closeOpenRow();
                     setRowKind(MarkupBlock.Kind.CELL);
                     setRowLevel("th".equals(tag) ? 1 : 0);
+                    setRowSpans(countOf(token.attribute("colspan")),
+                            countOf(token.attribute("rowspan")));
                     break;
+                /*
+                 * AN IMAGE IS ITS ALT TEXT, which is the whole of what can be honoured here.
+                 *
+                 * Nothing can be drawn: a doc comment's `src` is relative to the generated page, so
+                 * `doc-files/x.png` names a file that exists beside the HTML javadoc would have written
+                 * and nowhere in a jar. There is no path to resolve and no loader to resolve it with.
+                 *
+                 * `alt` is not a consolation prize -- it is what the attribute is FOR, it is what every
+                 * text-mode reader shows, and an author who wrote one wrote it to be read. An image
+                 * without one is decorative by definition (HTML says so: `alt=""` is how you spell
+                 * "skip me"), so it contributes nothing rather than a placeholder, which would put a
+                 * box of apology in the middle of a sentence.
+                 */
+                case "img": {
+                    String alt = token.attribute("alt");
+                    if (alt != null && !alt.isEmpty()) {
+                        if (inCode) verbatim.append(alt);
+                        else run.append(alt);
+                    }
+                    break;
+                }
                 case "li":
                     closeOpenRow();
                     setRowKind(MarkupBlock.Kind.ITEM);
@@ -703,6 +806,30 @@ public final class MarkupParser {
             if (list != null) list.rowLevel = level;
         }
 
+        /** How far the cell being built reaches. @see MarkupBlock#colspan */
+        private void setRowSpans(int colspan, int rowspan) {
+            OpenList list = openList();
+            if (list == null) return;
+            list.rowColspan = colspan;
+            list.rowRowspan = rowspan;
+        }
+
+        /**
+         * An attribute read as a count, or 1.
+         *
+         * <p>Anything unparseable is 1 rather than an error: a malformed {@code colspan} is a typo in
+         * somebody's comment, and a cell that keeps its place is a better answer than a table that
+         * collapses. The same reasoning as everywhere else here -- markup degrades, it does not throw.</p>
+         */
+        private static int countOf(String value) {
+            if (value == null) return 1;
+            try {
+                return Math.max(1, Integer.parseInt(value.trim()));
+            } catch (NumberFormatException notANumber) {
+                return 1;
+            }
+        }
+
         private void closeBlock() {
             endRun();
             if (pending.isEmpty()) {
@@ -730,11 +857,15 @@ public final class MarkupParser {
             closeBlock();
             OpenList list = openList();
             if (list == null || list.rowBlocks.isEmpty()) return;
-            list.items.add(MarkupBlock.of(list.rowKind, new ArrayList<>(list.rowBlocks),
-                    list.rowLevel));
+            list.items.add(list.rowKind == MarkupBlock.Kind.CELL
+                    ? MarkupBlock.cell(new ArrayList<>(list.rowBlocks), list.rowLevel,
+                            list.rowColspan, list.rowRowspan)
+                    : MarkupBlock.of(list.rowKind, new ArrayList<>(list.rowBlocks), list.rowLevel));
             list.rowBlocks.clear();
             list.rowKind = MarkupBlock.Kind.ITEM;
             list.rowLevel = 0;
+            list.rowColspan = 1;
+            list.rowRowspan = 1;
         }
 
         /**

@@ -336,4 +336,28 @@ public class JsDocBodyTest {
         assertTrue("a package segment answered with the imported type",
                 segment == null || !"ArrayList".equals(segment.name()));
     }
+
+    /**
+     * <b>A tag nobody taught us keeps its own word and still takes the column's shape.</b>
+     *
+     * <p>JSDoc's tag set is open and plugins add to it, so an unknown tag is the ordinary case rather
+     * than an error. Returning the bare word put a lowercase, colon-less label in a column of
+     * {@code Since:} and {@code Throws:}, which reads as a rendering fault rather than as a tag we do
+     * not know. The word is the author's; the capital and the colon belong to the column.</p>
+     */
+    @Test
+    public void anUnknownTagKeepsItsNameAndTakesTheShape() {
+        String docs = docAt(""
+                + "/**\n"
+                + " * Emits when done.\n"
+                + " *\n"
+                + " * @fires Session#complete\n"
+                + " */\n"
+                + "function finish() { }\n"
+                + "finish();\n", "finish();");
+        assertNotNull(docs);
+        assertTrue("the author's own tag name was lost: " + docs, docs.contains("Fires:"));
+        assertFalse("a bare lowercase heading was drawn beside the capitalised ones: " + docs,
+                docs.contains("<dt>fires</dt>"));
+    }
 }

@@ -246,7 +246,15 @@ is collapsible. That is the whole reason `collapse()` cannot survive as a final 
   not work in this engine and the rows were already being measured. What actually cost something was the
   grid itself, because a one-sided `border-width-*` either draws all four edges or none, so the rules are
   stroked with `ctx.curve()` from a `TableGrid` overlay. `colspan`/`rowspan` are still out.
-- Images. A popup that reads from disk to render a hover is not worth it.
+- ~~Images. A popup that reads from disk to render a hover is not worth it.~~ **Still true, and an
+  image is now its `alt` text** rather than nothing. The exclusion was about DRAWING and remains right —
+  a doc comment's `src` is relative to the page javadoc would have generated, so it names a file that
+  exists nowhere in a jar and there is no path to resolve. But `alt` is not a consolation prize: it is
+  what the attribute is for, it is what every text-mode reader shows, and an author who wrote one wrote
+  it to be read. An image *without* one contributes nothing, because that is what no `alt` means —
+  `alt=""` is how HTML spells "decorative, skip me", and a placeholder would put a box of apology in the
+  middle of a sentence. Markdown's `![alt](src)` is read the same way, and **before** the link it looks
+  like, or the `!` is left stranded beside a followable link to a picture nothing can open.
 - Arbitrary HTML. Anything unrecognised degrades to its text, which is what stripping already does and
   is the right failure.
 
@@ -445,8 +453,11 @@ Thirteen of thirteen audit rows are shipped, and so is everything §6 named. Jav
 (§6.1) was the last of it and went in with the Markdown converter; doc-tag reference colouring (§6.2)
 shipped before it. Both are kept below as the record of what they turned out to be.
 
-**What is genuinely left is §6.3's two partials**, both of which are decisions rather than omissions,
-plus the three exclusions in §3.7 — of which the table one no longer holds, see below.
+**§6.3's two partials are closed** — a member reference answers with the member, and `{@inheritDoc}`
+follows the whole chain. Of §3.7's three exclusions, two no longer hold as written: a real table shipped,
+and an image contributes its `alt` text. What is still refused is drawing an image, arbitrary HTML beyond
+the documented subset, and a `rowspan` that visually merges downward — each for a reason stated where it
+is refused rather than as a general limit.
 
 ### 6.1 JavaScript gets the renderer and none of the emitter — **shipped**
 
@@ -540,18 +551,35 @@ language's and JDT declines shapes a reader would accept, so the mark would draw
 The same name in *code* is still marked, which makes it a scope rather than a weakening. `deprecated` is
 left alone — that is a true statement about whatever the reference points at.
 
-### 6.3 Two known partials, neither blocking
+### 6.3 The two known partials — **both closed**
 
-**A member reference resolves to its owning type.** `{@link List#add}` opens `List`'s documentation,
-which is related and is not what was asked. A member needs a probe that CALLS it so overload resolution
-picks one — `InteropResolver.describeMember` builds exactly that shape and is child-side, so it
-cannot be reached from the Java engine and has to be written again there. A bare `#member`, meaning "on
-the class this comment is in", answers nothing: resolving it needs the asker's enclosing declaration,
-which nothing passes.
+**A member reference answers with the member.** This read: *"a member needs a probe that CALLS it so
+overload resolution picks one — `InteropResolver.describeMember` builds exactly that shape and is
+child-side, so it cannot be reached from the Java engine and has to be written again there."* Every
+clause of that is true and the conclusion did not follow. A call is not the only construct JDT resolves
+a member through, and the other one is **the reference the author already typed**: a `MethodRef` inside
+a `Javadoc` node carries a real binding, by the same doc-comment support that makes `@see` colour by
+kind. So the probe is one line of documentation over an empty class —
+`/** {@link java.util.List#add} */ class $Probe {}` — which needs no argument values (a call needs one
+of each declared type, and a type variable does not parse as one) and disambiguates overloads by
+javadoc's own rules when the author wrote the types.
 
-**`{@inheritDoc}` splices one level.** A supertype's comment may contain the tag too, and resolving that
-recursively would assemble a hover out of three levels of a hierarchy. One level is what a reader asked
-for; the marker is stripped from the inherited text rather than resolved again.
+> **Verified by the NAME, because nothing else fails.** An unresolvable javadoc reference reports no
+> diagnostic at all — the ~40 javadoc problems are options of their own and are deliberately off — so
+> the error check the type probe relies on is blind here. A mistyped `#ad` would otherwise open something
+> plausible. It falls back to the owning type when the member will not resolve, since opening `List` is a
+> useful answer where opening nothing is not.
+
+A bare `#member` was already answered by `describeInThisUnit`, which has the declaration in hand.
+
+**`{@inheritDoc}` follows the whole chain.** The old bound — one level, markers stripped out of the
+inherited text — was argued as "a hover should not be assembled from three levels of a hierarchy", and
+that assumes each level ADDS prose. The level that most often carries the tag adds none: an abstract
+class between an interface and its implementation, whose comment is written to mean "the same as above".
+Stripping there yields the empty string, so a two-hop chain rendered the bottom method's own prose and
+silently lost the sentence it had explicitly asked for — while every two-level fixture, which is every
+fixture written before it, passed. Each hop recurses from the binding whose text was **taken**, never
+from the original, and `MAX_DOC_HOPS` bounds it exactly as before.
 
 ### 6.4 Closed since the audit
 

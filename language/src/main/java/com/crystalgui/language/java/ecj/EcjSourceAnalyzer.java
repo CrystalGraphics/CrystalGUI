@@ -299,16 +299,16 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
      * question, and asking the resulting analysis about the type's own name is a question it can answer.
      * The unlikely names are IntelliJ's own trick for the same problem.</p>
      *
-     * <p><b>A member reference resolves to its owning type today.</b> {@code List#add} answers with
-     * {@code List}, which is related and is not what was asked; a member needs a probe that CALLS it, so
-     * that overload resolution picks one — {@code InteropResolver.describeMember} builds exactly that
-     * and is child-side, so it cannot be reached from here. Stated rather than silently rounded off: a
-     * link to a member opening its type's documentation is a useful answer and a partial one, and the
-     * increment that finishes it is a second probe shape rather than new machinery.</p>
+     * <p><b>A member reference answers with the member</b> — {@link #describeMemberOf}, tried first and
+     * falling back to the owning type when it cannot. This used to stop at the type, on the reasoning
+     * that picking one overload needs a probe that CALLS the member and the only thing building that
+     * shape ({@code InteropResolver.describeMember}) is child-side. Both halves were true and the
+     * conclusion was not: a call is not the only construct JDT resolves a member through, and the other
+     * one is the very thing the author typed.</p>
      *
      * <p>A reference with no type at all — a bare {@code #member}, meaning "on the class this comment
-     * is in" — answers nothing. Resolving it needs the enclosing declaration, which is the asker's
-     * context rather than the name's, and no caller passes it yet.</p>
+     * is in" — is answered by {@code describeInThisUnit}, which has the declaration right there. It is
+     * never reached here.</p>
      */
     @Nullable
     private SymbolInfo describeName(String name, List<String> classpath, int releaseLevel) {
@@ -316,7 +316,15 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
         String bare = name.trim();
         int hash = bare.indexOf('#');
         if (hash == 0) return null;
-        if (hash > 0) bare = bare.substring(0, hash);
+        if (hash > 0) {
+            // THE MEMBER FIRST, THE TYPE AS A FALLBACK. Opening `List` for `{@link List#add}` is a useful
+            // answer and the wrong one; opening nothing is worse than either, so a member that will not
+            // resolve — a typo, an overload written with argument types nobody has — still lands on the
+            // type it was qualified by.
+            SymbolInfo member = describeMemberOf(bare, classpath, releaseLevel);
+            if (member != null) return member;
+            bare = bare.substring(0, hash);
+        }
         if (bare.isEmpty() || !bare.matches("[\\w.$]+")) return null;
 
         String probe = "class $Probe { " + bare + " $x; }";
@@ -342,6 +350,54 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
         } catch (Exception unresolvable) {
             // A name that does not resolve is the ordinary case for a link into a class nobody has on the
             // classpath, not an error worth failing a hover over.
+            return null;
+        }
+    }
+
+    /**
+     * The member a {@code Type#member} reference names, or null.
+     *
+     * <h3>The probe is a doc comment, not a call</h3>
+     *
+     * <p>The obvious probe writes the call — {@code class $Probe { List $x; void $m() { $x.add(...); } }}
+     * — and that is what {@code InteropResolver.describeMember} does, because there it is the only thing
+     * available: it starts from a {@code SymbolInfo}, which carries parameter TYPES and no binding, so a
+     * call is how it re-derives one. Here the input is the reference the author wrote, and JDT resolves
+     * that construct directly: a {@code MethodRef}/{@code MemberRef} inside a {@code Javadoc} node has a
+     * real binding, by the same doc-comment support that makes {@code @see} colour by kind.</p>
+     *
+     * <p>So the probe is <b>one line of documentation over an empty class</b>. It needs no argument
+     * values (a call needs one of each declared type, and a type variable does not parse as one), it
+     * disambiguates overloads exactly as javadoc's own rules do when the author wrote the types, and it
+     * costs one parse rather than a parse plus the arithmetic of building a legal call.</p>
+     *
+     * <h3>Verified by the NAME, because nothing else fails</h3>
+     *
+     * <p>An unresolvable reference reports <b>no diagnostic at all</b> — the ~40 javadoc problems are
+     * options of their own and are deliberately off, so the error check the type probe relies on is
+     * blind here. What can be checked is the answer: a reference JDT could not resolve does not come
+     * back as the member, so the member's own simple name is the assertion. Without it a mistyped
+     * {@code #ad} would open something plausible.</p>
+     */
+    @Nullable
+    private SymbolInfo describeMemberOf(String reference, List<String> classpath, int releaseLevel) {
+        int hash = reference.indexOf('#');
+        String type = reference.substring(0, hash);
+        String member = reference.substring(hash + 1);
+        int bracket = member.indexOf('(');
+        String simple = bracket < 0 ? member : member.substring(0, bracket);
+        if (type.isEmpty() || simple.isEmpty()) return null;
+        if (!type.matches("[\\w.$]+") || !simple.matches("[\\w$]+")) return null;
+        // THE ARGUMENT LIST IS PART OF THE REFERENCE and is the only thing that tells two overloads
+        // apart, so it travels verbatim -- but it goes into a compiled file, so it is checked rather
+        // than trusted. Anything outside a Java type list cannot be a legal reference anyway.
+        if (bracket >= 0 && !member.matches("[\\w.$]+\\([\\w.$\\[\\], ]*\\)")) return null;
+
+        String probe = "/** {@link " + reference + "} */\nclass $Probe { }\n";
+        try (Analysis analysis = analyze("$Probe", probe, classpath, releaseLevel, 0L)) {
+            SymbolInfo resolved = analysis.resolveAt(probe.indexOf('#') + 1);
+            return resolved != null && simple.equals(resolved.name()) ? resolved : null;
+        } catch (Exception unresolvable) {
             return null;
         }
     }

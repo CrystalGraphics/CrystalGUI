@@ -207,6 +207,12 @@ final class JsDocs {
      * are the same section to a reader and a popup that calls one "Returns:" and the other "Return
      * value:" is telling them the two are different. An unrecognised tag keeps its own name — inventing
      * a heading for somebody else's convention would be guessing.</p>
+     *
+     * <p><b>It keeps the name and still takes the SHAPE.</b> JSDoc's tag set is open and plugins add to
+     * it, so an unknown tag is the ordinary case rather than an error, and returning the bare word put a
+     * lowercase, colon-less label in a column of {@code Since:} and {@code Throws:} — which reads as a
+     * rendering fault rather than as a tag nobody taught us. The word is the author's; the capital and
+     * the colon belong to the column it is drawn in.</p>
      */
     private static String headingFor(String tag) {
         switch (tag) {
@@ -236,8 +242,14 @@ final class JsDocs {
             case "todo":         return "To do:";
             case "license":      return "Licence:";
             case "copyright":    return "Copyright:";
-            default:             return tag;
+            default:             return capitalised(tag) + ":";
         }
+    }
+
+    /** The author's own word, with the leading capital every other heading in the column has. */
+    private static String capitalised(String tag) {
+        if (tag.isEmpty()) return tag;
+        return Character.toUpperCase(tag.charAt(0)) + tag.substring(1);
     }
 
     /** Which section a tag sorts into — {@code JavaDocs}' order, extended with JavaScript's own. */
