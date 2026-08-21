@@ -7,10 +7,15 @@ import com.crystalgui.language.java.assist.AttachedSources;
 import com.crystalgui.language.java.classpath.HostClasspath;
 
 import com.crystalgui.language.engine.JavaEngine;
+import com.crystalgui.language.engine.bridge.Analysis;
+import com.crystalgui.render.texture.asset.JavaNodeIcons;
+import com.crystalgui.text.lang.SymbolInfo;
+import com.crystalgui.text.lang.SymbolKind;
 
 import javax.annotation.Nullable;
 
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -114,6 +119,70 @@ public final class LibrarySources implements ResourceContentProvider {
                 AttachedSources.forClasspath(HostClasspath.detect()).textOf(binaryName) != null;
         return simple + (hasSource ? ".java" : ".class");
     }
+
+    /**
+     * The icon for what this type IS — an interface glyph for an interface, an enum's for an enum.
+     *
+     * <h3>The extension cannot answer this</h3>
+     *
+     * <p>{@code FlexDirection.class} is an enum and {@code Runnable.class} is an interface, and the file
+     * name is the same shape both times. Deriving the icon from it draws a class glyph on every one, and
+     * that is the exact mistake this codebase has already paid for once — a hand-built symbol reported
+     * {@code java.util.List} as a class, so the documentation popup drew a class glyph beside an
+     * interface while a {@code .java} file in the same session drew the right one.</p>
+     *
+     * <p>So the kind is <b>asked of the engine</b>, which is the only thing that knows. A source-backed
+     * tab keeps its file icon instead: a {@code .java} tab is a Java FILE, and takes the same glyph one
+     * in the project would.</p>
+     *
+     * <h3>Cached, because a tab strip asks repeatedly</h3>
+     *
+     * <p>{@code tabIconFor} is a presentation provider — the dock re-reads it every time a strip is
+     * rebuilt, which is every split, drag and reorder. Answering with a probe compile each time would
+     * put one behind every rearrangement, so the answer is kept per type name. It cannot go stale in a
+     * way that matters: what a class IS does not change within a session.</p>
+     */
+    @Override
+    public String iconName(Resource resource) {
+        if (resource == null) return null;
+        String binaryName = resource.path();
+        List<String> classpath = HostClasspath.detect();
+        // SOURCE-BACKED TABS KEEP THE FILE ICON. Only a reconstructed `.class` needs the kind glyph.
+        if (AttachedSources.forClasspath(classpath).textOf(binaryName) != null) return null;
+
+        synchronized (ICONS) {
+            String cached = ICONS.get(binaryName);
+            if (cached != null) return REFUSED.equals(cached) ? null : cached;
+        }
+        String icon = JavaNodeIcons.forKind(kindOf(binaryName, classpath));
+        synchronized (ICONS) {
+            ICONS.put(binaryName, icon == null ? REFUSED : icon);
+        }
+        return icon;
+    }
+
+    /**
+     * What the engine says a type is, or null.
+     *
+     * <p>Through {@code Analysis.describe}, which is the same door {@code Resolver.describe} and the
+     * documentation link both use — so the tab's glyph and the popup's owner band cannot disagree about
+     * a type, which is precisely how the class-beside-an-interface bug read.</p>
+     */
+    @Nullable
+    private static SymbolKind kindOf(String binaryName, List<String> classpath) {
+        JavaEngine engine = JavaLanguage.engine();
+        if (engine == null) return null;
+        try (Analysis analysis = engine.analyzer().analyze(
+                "Probe", "public class Probe { }\n", classpath, engine.releaseLevel(), 0L)) {
+            SymbolInfo described = analysis.describe(binaryName);
+            return described == null ? null : described.kind();
+        } catch (RuntimeException unavailable) {
+            return null;
+        }
+    }
+
+    /** Icon name by type, bounded only by how many library tabs a session opens. */
+    private static final Map<String, String> ICONS = new HashMap<>();
 
     @Override
     public byte[] read(Resource resource) {

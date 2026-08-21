@@ -46,4 +46,24 @@ public interface ResourceContentProvider {
     default String displayName(Resource resource) {
         return null;
     }
+
+    /**
+     * The icon this resource should be shown with, as a name {@code CgUiSvg.ofIcon} resolves — or null
+     * to let the caller derive one from {@link #displayName}.
+     *
+     * <h3>Why the provider, again</h3>
+     *
+     * <p>Because a file name cannot answer it. {@code FlexDirection.class} is an ENUM and
+     * {@code Runnable.class} is an INTERFACE, and the extension is the same both times — so deriving the
+     * icon from the name draws a class glyph on every one of them. That is not a cosmetic slip: this
+     * codebase has already paid for it once, when a hand-built symbol reported {@code java.util.List} as
+     * a class and the documentation popup drew a class glyph beside an interface, in the same session
+     * where a {@code .java} file drew the right one.</p>
+     *
+     * <p>Only whatever serves the resource knows what it holds. For a library class that means asking the
+     * engine what the type IS, which is a question with an exact answer.</p>
+     */
+    default String iconName(Resource resource) {
+        return null;
+    }
 }
