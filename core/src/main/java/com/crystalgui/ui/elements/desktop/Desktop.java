@@ -1,12 +1,17 @@
 package com.crystalgui.ui.elements.desktop;
 
+import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.UIWindow;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
+import javax.annotation.Nullable;
+
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -92,6 +97,13 @@ public class Desktop extends UIElement {
         windows.addClass(WINDOW_LAYER_CLASS);
         addInternalChild(windows);
         syncPresence();
+
+        // A PRESS ON BARE DESKTOP DEACTIVATES. Target-only on both elements, so a press inside a window
+        // never reaches it -- and both are needed rather than one: the window layer covers the desktop
+        // entirely, so bare background is nearly always the LAYER's hit, while the desktop itself is
+        // what remains once the taskbar (W4) shortens the layer.
+        onMouseDown.attachListener((element, event) -> deactivate(), false, false);
+        windows.onMouseDown.attachListener((element, event) -> deactivate(), false, false);
     }
 
     /**
@@ -121,6 +133,144 @@ public class Desktop extends UIElement {
         return !windows.frames.isEmpty();
     }
 
+    // ── Stacking and activation ─────────────────────────────────────────────
+
+    /**
+     * The offset the pinned band (W14) sits at, and therefore the ceiling the normal band renormalises
+     * below. Always-on-top is <b>one addition</b> in this scheme — which is what "the band model absorbs
+     * it without redesign" meant when always-on-top was refused for having no consumer.
+     */
+    static final int PINNED_BAND = 1 << 20;
+
+    /** Hands out stacking order. Monotonic, so a raise is O(1) and never touches another window. */
+    private int raiseCounter;
+
+    @Nullable
+    private WindowFrame activeWindow;
+
+    /** The window the keyboard is talking to, or null when the desktop itself has the press. */
+    @Nullable
+    public WindowFrame activeWindow() {
+        return activeWindow;
+    }
+
+    /**
+     * Brings a window to the front — <b>by assigning a {@code z-index}, never by moving it in the child
+     * list.</b>
+     *
+     * <p>This is the rule the whole design rests on, and the obvious implementation is the trap. Moving
+     * a frame to the end of the layer's children runs {@code removeChild}/{@code addChild}, which is
+     * {@code unregisterElement}/{@code registerElement} over the <b>entire frame subtree</b>: session
+     * state captured and re-applied, modal, popover and close-watcher stacks popped, every Taffy node
+     * destroyed and rebuilt. Per click. And a widget must never rebuild the elements it is being clicked
+     * on — the invariant that froze the table header — which is precisely what a raise is.</p>
+     *
+     * <p>{@code sortedChildren} then does the rest with no new machinery: it orders by z descending and
+     * painting walks it reversed, so paint order and hit-testing cannot disagree about which window is
+     * on top. That agreement is the invariant this must not re-implement.</p>
+     */
+    public void raise(WindowFrame frame) {
+        if (frame == null || frame.desktop() != this) return;
+        if (raiseCounter >= PINNED_BAND - 1) renormaliseStack();
+        frame.setStackOrder(++raiseCounter);
+    }
+
+    /**
+     * Re-spreads the stack over 1..n in its current order, so the counter cannot climb into the pinned
+     * band above it.
+     *
+     * <p>Unreachable by hand — nobody raises a window a million times — which is exactly why it is
+     * written to be called directly by a test rather than only by the counter. A renormalisation that
+     * has never run is a renormalisation that reorders the desktop the first time it does. Public for
+     * that reason and for the same one the constructor is, rather than because an application has any
+     * business calling it.</p>
+     */
+    public void renormaliseStack() {
+        List<WindowFrame> byDepth = new ArrayList<>(windows.frames);
+        byDepth.sort(Comparator.comparingInt(WindowFrame::stackOrder));
+        raiseCounter = 0;
+        for (WindowFrame frame : byDepth) frame.setStackOrder(++raiseCounter);
+    }
+
+    /**
+     * Makes a window the active one: raised, marked, and given its focus back.
+     *
+     * <p>Idempotent, because it is called from two directions that legitimately overlap — a press in the
+     * capture phase of a frame, and the focus owner moving into one (Tab, a command, W10's switcher).
+     * Neither is sufficient alone: a right-click moves no focus at all ({@code emitMouseDown} keeps the
+     * focus owner for a non-primary button), and Tab moves focus without any press.</p>
+     */
+    public void activate(WindowFrame frame) {
+        activate(frame, false);
+    }
+
+    /** @param programmatic see {@link WindowFrame#restoreFocus} — it decides whether focus rings. */
+    public void activate(WindowFrame frame, boolean programmatic) {
+        if (frame == null || frame.desktop() != this) return;
+        raise(frame);
+        if (activeWindow != frame) {
+            if (activeWindow != null) activeWindow.setActive(false);
+            activeWindow = frame;
+            frame.setActive(true);
+        }
+        frame.restoreFocus(programmatic);
+    }
+
+    /**
+     * No window is active — the state a press on bare desktop leaves behind.
+     *
+     * <p>A legal state, not a degenerate one: {@code emitMouseDown} blurs before it dispatches and
+     * nothing on the desktop takes the focus it gave up, so "clicking the background deselects" is
+     * already what the input layer does. This is the chrome catching up with it.</p>
+     */
+    public void deactivate() {
+        if (activeWindow == null) return;
+        activeWindow.setActive(false);
+        activeWindow = null;
+    }
+
+    /** Activates whatever is now in front, or nothing if the desktop is empty. */
+    private void activateTopmost() {
+        WindowFrame front = null;
+        for (WindowFrame frame : windows.frames) {
+            if (front == null || frame.stackOrder() >= front.stackOrder()) front = frame;
+        }
+        if (front != null) activate(front, true);
+    }
+
+    /**
+     * Activation follows the focus owner, wherever it came from.
+     *
+     * <p>The press half is handled by each frame's own capture listener; this is the half that covers
+     * everything else — Tab crossing from one window into another, a command focusing a control, the
+     * switcher (W10). Both funnel into the same idempotent {@link #activate}.</p>
+     *
+     * <p>Subscribed only while attached, {@code StatusBarView}'s pattern: the signal lives on the input
+     * handler, which outlives any desktop that has left the tree.</p>
+     */
+    @Override
+    protected void onWindowChanged(@Nullable UIWindow previous, @Nullable UIWindow current) {
+        super.onWindowChanged(previous, current);
+        subscriptions.disconnectAll();
+        if (current == null) return;
+        subscriptions.add(current.getInputHandler().onDidChangeFocus.connect(this::focusMoved));
+    }
+
+    private final ConnectionGroup subscriptions = new ConnectionGroup();
+
+    private void focusMoved(@Nullable UIElement focused) {
+        for (UIElement walk = focused; walk != null; walk = walk.getParent()) {
+            if (walk instanceof WindowFrame && ((WindowFrame) walk).desktop() == this) {
+                activate((WindowFrame) walk);
+                return;
+            }
+        }
+        // NOT a deactivate. Focus leaving every window is the ordinary middle of a click -- emitMouseDown
+        // blurs, announces null, and only then focuses what was pressed -- so treating it as "the desktop
+        // was clicked" would drop the active window on every press and take it back a moment later. The
+        // press on bare desktop is what deactivates, and it says so itself.
+    }
+
     /** A desktop owns its chrome; windows go through {@link #addWindow}. */
     @Override
     public boolean acceptsPublicChildren() {
@@ -133,9 +283,19 @@ public class Desktop extends UIElement {
      * <p>Placement is <b>deferred to the frame's first layout</b> rather than computed here: the offset
      * needs the caption's measured height and the work area's measured box, and at this point neither
      * exists. {@code WindowFrame.onLayoutChanged} calls back into {@link #placeByCascade} once they do.</p>
+     *
+     * <p>The new window is raised and activated, which is right for every opener there is today — every
+     * one of them is a user gesture. <b>W12 is where that stops being true</b>: a server may open a
+     * window mid-keystroke, and every OS converged on the same answer for that case (Windows'
+     * foreground lock plus {@code FlashWindowEx}, X11's urgency hint, macOS's bouncing icon) — appear,
+     * but take no focus and ask for attention instead.</p>
      */
     public <T extends WindowFrame> T addWindow(T frame) {
         windows.addChild(frame);
+        // PROGRAMMATIC, so focus rings: nobody pointed at this window, so a keyboard user needs to be
+        // told where focus went. The ring lands on whatever inside it takes focus -- never on the frame,
+        // which ua/core.css exempts along with every other pane-sized widget.
+        activate(frame, true);
         return frame;
     }
 
@@ -241,6 +401,13 @@ public class Desktop extends UIElement {
                 // been used goes on covering the application's own root forever, so closing the last
                 // window would leave a UI that paints correctly and answers no clicks.
                 syncPresence();
+                // AND THE ACTIVE WINDOW CANNOT BE ONE THAT LEFT. Windows activates the next one down
+                // when you close the front one; leaving the field pointing at a detached frame would
+                // instead leave a desktop whose keyboard target is not in the tree.
+                if (activeWindow == child) {
+                    activeWindow = null;
+                    activateTopmost();
+                }
             }
             return removed;
         }

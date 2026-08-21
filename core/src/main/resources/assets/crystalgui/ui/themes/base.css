@@ -624,8 +624,18 @@ theme {
     --window-bg: var(--surface-panel);
     --window-fg: var(--fg);
     --window-border: var(--border-strong);
+    /* THE INACTIVE CAPTION IS THE BASE, and the active one is the exception -- most windows are
+     * inactive most of the time, and every window manager marks the one you are talking to rather
+     * than the several you are not. The pair has to differ in BOTH channels: a caption that only
+     * changed colour would say nothing to anyone reading it as text, and one that only changed fill
+     * would say nothing at a glance across a stack of them. */
     --window-title-bg: var(--surface-raised);
-    --window-title-fg: var(--fg);
+    --window-title-fg: var(--fg-secondary);
+    --window-title-active-bg: var(--accent-soft);
+    --window-title-active-fg: var(--fg);
+    /* And the edge, which is what separates the front window from the one behind it where the two
+     * overlap and neither caption is in view. */
+    --window-active-border: var(--accent);
     /* The control glyphs are secondary until hovered — a title bar's buttons are not what you are
      * looking at. */
     --window-control-fg: var(--fg-secondary);
