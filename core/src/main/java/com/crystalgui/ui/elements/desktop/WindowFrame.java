@@ -6,7 +6,10 @@ import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.UIText;
+import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.input.UIDragController;
+import com.crystalgui.ui.input.UIInputHandler;
+import com.crystalgui.ui.tree.UITreeTraversal;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
@@ -101,6 +104,16 @@ public class WindowFrame extends UIElement {
      */
     public static final String CONTENT_CLASS = "__content__";
 
+    /**
+     * On the active window — the one the keyboard is talking to.
+     *
+     * <p>A <b>class</b>, not a pseudo-class, because this is state the compositor flips from its own
+     * listeners: the engine re-evaluates a pseudo-class on its terms and a class on yours, and there is
+     * no {@code :active-window} to add. {@code :checked}, {@code :disabled} and {@code :hover} have each
+     * cost a round by being tried this way round first.</p>
+     */
+    public static final String ACTIVE_CLASS = "__active__";
+
     /** Emitted after the frame closes, however it was closed. */
     public final Signal.Action onClosed = new Signal.Action();
 
@@ -120,6 +133,13 @@ public class WindowFrame extends UIElement {
     /** Origin at the moment a move began. Accumulating from here rather than from the live box keeps a
      * drag from compounding its own deltas — the same reason {@code UIResizer} snapshots its size. */
     private float dragStartLeft, dragStartTop;
+
+    /** Where focus was when this window last had it. @see #restoreFocus */
+    @Nullable
+    private UIElement lastFocused;
+
+    /** This window's place in the stack, as last assigned. @see Desktop#raise */
+    private int stackOrder;
 
     public WindowFrame(String title) {
         // Out of flow and positioned: a window is placed by left/top against the desktop's window layer,
@@ -159,6 +179,50 @@ public class WindowFrame extends UIElement {
         // would start a window drag as well as closing the window.
         titleBar.onMouseDown.attachListener((element, event) ->
                 beginMove(event.getPosition().x(), event.getPosition().y()), false, false);
+
+        installActivation();
+        // CLICK_NOT_TABBABLE is the web's tabindex="-1", and both halves are wanted. A frame must be able
+        // to HOLD focus -- it is where focus lands when a window's content has nowhere to put it, and
+        // (from W13) where its commands resolve from. It must not be a TAB STOP: Tab moves between the
+        // controls inside a window, and a tablist-of-ten's worth of extra stops is exactly what the
+        // roving-tabindex pattern exists to avoid.
+        //
+        // It also earns click-to-focus for free. emitMouseDown walks up to the nearest ancestor that
+        // focusesOnClick(), so a press on a window's title bar or bare background -- neither of which is
+        // focusable -- lands focus on the frame rather than nowhere.
+        setFocusPolicy(FocusPolicy.CLICK_NOT_TABBABLE);
+    }
+
+    /**
+     * Raise-and-activate on a press, in the <b>capture</b> phase.
+     *
+     * <p>Capture on the frame, not the target phase and not a listener on whatever was clicked: a widget
+     * that stops propagation in its own handler would otherwise pre-empt this, and
+     * {@code stopPropagation()} is {@code stopImmediatePropagation} <em>within a phase</em> — so even a
+     * listener on the same element attached later can be starved. {@code TextEditor}'s unconditional
+     * {@code stopPropagation()} on mouse-down is the recorded case, and it cost two rounds of looking at
+     * coordinates before anyone looked at the phase. Capture runs before any of it.</p>
+     *
+     * <p>Attached here rather than by {@code Desktop.addWindow} because listeners are additive — the
+     * {@code Tooltip.attach} trap — so a frame that left a desktop and came back would raise twice per
+     * press. The desktop is found at event time instead, which is two hops up the tree.</p>
+     */
+    private void installActivation() {
+        onMouseDown.attachListener((element, event) -> {
+            Desktop desktop = desktop();
+            if (desktop != null) desktop.activate(this);
+        }, true, false);
+
+        // FOCUS MEMORY. Win32 records the focus owner per window and restores it on WM_ACTIVATE; without
+        // it, coming back to a window puts the caret wherever the delegate happens to be rather than
+        // where the user left it.
+        //
+        // Bubbled, so it sees focus landing anywhere inside the frame, and it deliberately does NOT
+        // record the frame ITSELF: a press on the title bar focuses the frame (the ancestor walk above),
+        // so recording that would let dragging a window forget the field you were typing in.
+        onFocus.attachListener((element, event) -> {
+            if (event.getTarget() != null && event.getTarget() != this) lastFocused = event.getTarget();
+        }, false, true);
     }
 
     /** A window owns its chrome; put content in {@link #content()}. */
@@ -195,6 +259,77 @@ public class WindowFrame extends UIElement {
 
     public String getTitle() {
         return titleLabel.getText();
+    }
+
+    // ── Activation ──────────────────────────────────────────────────────────
+
+    /** Whether this is the window the keyboard is talking to. */
+    public boolean isActive() {
+        return hasClass(ACTIVE_CLASS);
+    }
+
+    /** Driven by {@link Desktop#activate}, which is the only thing that may decide this. */
+    void setActive(boolean active) {
+        if (active) addClass(ACTIVE_CLASS);
+        else removeClass(ACTIVE_CLASS);
+    }
+
+    /** Where this window's stacking order currently sits. @see Desktop#raise */
+    int stackOrder() {
+        return stackOrder;
+    }
+
+    /**
+     * Assigns this window's place in the stack.
+     *
+     * <p><b>IMPORTANT origin</b>, so a stylesheet cannot fight activation: a theme that gave
+     * {@code window} a {@code z-index} would otherwise pin every window at the same depth and the
+     * compositor would silently stop stacking. Everything else about a window's appearance stays in the
+     * sheet; this one number is the engine's.</p>
+     */
+    void setStackOrder(int order) {
+        this.stackOrder = order;
+        StyleGroup.importantPipeline(getStyle().getGeneralGroup(), g -> g.zIndex(order));
+    }
+
+    /**
+     * Puts focus back where this window left it — <b>restoring, never stealing</b>.
+     *
+     * <p>The {@code ListView.restoreFocusIfRealised} rule, and the first line is the whole of it: if
+     * focus is already somewhere inside this window, it was never lost and moving it would be theft.
+     * That is what makes this safe to call on every activation, including the one a click causes —
+     * {@code emitMouseDown} has already focused whatever was pressed by the time this runs, so a click
+     * on a control inside an inactive window activates the window <em>and</em> keeps the control.</p>
+     *
+     * <p>Falls back the way the dialog focusing steps do: the remembered element if it is still here and
+     * still focusable, else the first focusable in the content, else the frame itself — which is legal
+     * precisely because a frame is {@code CLICK_NOT_TABBABLE} rather than {@code NONE}.</p>
+     *
+     * @param programmatic whether this activation came from somewhere other than the pointer — a
+     *                     command, the switcher, a taskbar entry. Programmatic focus <b>rings</b> and
+     *                     pointer focus does not, and that distinction is exactly what
+     *                     {@code :focus-visible} exists for; handing a click the ringing one outlines a
+     *                     window on every press.
+     */
+    void restoreFocus(boolean programmatic) {
+        UIWindow window = getAttachedWindow();
+        if (window == null) return;
+        UIInputHandler input = window.getInputHandler();
+        if (contains(input.getFocusedElement())) return;
+
+        UIElement wanted = contains(lastFocused) && lastFocused.focusable() ? lastFocused : null;
+        if (wanted == null) wanted = UITreeTraversal.firstFocusableIn(content);
+        if (wanted == null) wanted = this;
+        if (programmatic) input.requestFocus(wanted);
+        else input.requestPointerFocus(wanted);
+    }
+
+    /** Whether {@code element} is this frame or inside it. */
+    private boolean contains(@Nullable UIElement element) {
+        for (UIElement walk = element; walk != null; walk = walk.getParent()) {
+            if (walk == this) return true;
+        }
+        return false;
     }
 
     // ── Closing ─────────────────────────────────────────────────────────────

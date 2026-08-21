@@ -109,8 +109,16 @@
  * The rule above is untouched for real controls — a slider you tabbed to still rings, and a text
  * FIELD rings whether you tabbed or clicked. This is a carve-out for containers, listed by tag
  * rather than inferred, because "is this pane-sized" is a judgement about what the widget is FOR
- * and not something the engine can measure. */
+ * and not something the engine can measure.
+ *
+ * `window` is the largest of them and joins for a second reason as well as its size: a frame is
+ * focusable so that focus has somewhere to land when a window's content has nowhere to put it, and
+ * activation focuses it PROGRAMMATICALLY (which rings by definition) on every open. Without this a
+ * window would outline its whole self the moment it was opened. Which window is active is said by
+ * its title bar — `window.__active__` in ua/desktop.css — exactly as IntelliJ and VS Code mark the
+ * active editor through its tab rather than by drawing a rectangle round the pane. */
 texteditor:focus-visible,
+window:focus-visible,
 graphview:focus-visible,
 canvasview:focus-visible,
 scrollerview:focus-visible,

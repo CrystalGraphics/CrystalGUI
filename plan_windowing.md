@@ -789,7 +789,7 @@ snap; hover thumbnails stay deferred.
 | # | Step | Unblocks | Notes |
 |---|---|---|---|
 | **W1** ✅ | `WindowFrame` + `Desktop`: chrome, `resize: both`, title-bar drag with clamping, tags + `ua/desktop.css`; harness scene `cgui-desktop` with two floating windows | everything visual | **Shipped 2026-08-22.** No lifecycle yet — geometry and chrome only. `Dialog` and `CanvasOverlayMove` are the quarries; the scene joins `SceneRegistry` **and** the AGENTS.md scene table in the same commit — those lists go stale silently |
-| **W2** | Stacking + activation: z-assignment raise, `__active__`, per-frame focus memory, empty-desktop blur | W3's "active frame" routing | The raise-is-not-a-reparent rule is load-bearing here |
+| **W2** ✅ | Stacking + activation: z-assignment raise, `__active__`, per-frame focus memory, empty-desktop blur | W3's "active frame" routing | **Shipped 2026-08-22.** The raise-is-not-a-reparent rule is load-bearing here. Two activation paths, both needed: a capture-phase press on the frame (a right-click moves no focus at all) and the focus owner moving into one (Tab, a command, W10's switcher) |
 | **W3** | Lifecycle + registry: states, hide-as-detach, `persisted` show, destroy → `Disposer`, eviction, the ticker/input-forget contracts | W4, W5 | The freeze tests land here |
 | **W4** | `Taskbar` over the registry: entries, active highlight, activate/minimise clicks, context menu | W3 being safe to ship | **W3 and W4 ship together or not at all** — minimise with no way back is worse than destroy |
 | **W5** | Window-scoped modality: per-scope stacks, the frame overlay slot, `overlayHost`/`Dialog.showModal` retargeting, Escape per-frame | server windows, editor dialogs behaving | The four-points warning applies; one test per point |
@@ -838,7 +838,7 @@ artifact:
 | After | The scene demonstrates |
 |---|---|
 | W1 ✅ | two floating windows: title-bar drag, eight-handle resize, clamping — plus a live geometry readout (the only way to watch the clamp arithmetic *while* dragging) and **F2** to open a cascaded window |
-| W2 | overlap + click-to-raise, `__active__` chrome, focus memory across activation |
+| W2 ✅ | overlap + click-to-raise (with the click still landing), `__active__` chrome, focus memory across activation — two buttons per window, because with one the focus delegate *is* the remembered control and the test passes by coincidence |
 | W3 | minimise/close via the chrome against the real lifecycle — including an on-screen ticker counter that provably **stops** while its window is hidden |
 | W4 | the taskbar: entries, active highlight, restore/minimise clicks, the context menu |
 | W5 | a modal in window A with window B and the taskbar still live; the backdrop dimming exactly one frame |

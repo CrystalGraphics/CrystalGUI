@@ -95,7 +95,28 @@ window > .__title-bar__ {
     padding-left: 6px;
     padding-right: 3px;
     background: var(--window-title-bg, #2B2B2B);
-    color: var(--window-title-fg, #DFE1E5);
+    color: var(--window-title-fg, #9DA0A8);
+}
+
+/* ── The active window ──────────────────────────────────────────────────────────────────────────
+ * THE BASE RULES ABOVE ARE THE INACTIVE LOOK, because most windows are inactive most of the time
+ * and the exception is what should carry the declaration. Every window manager says the same thing
+ * the same way: the caption of the window you are talking to is the one that is coloured, and the
+ * others go quiet.
+ *
+ * This is a CLASS the compositor flips, never a pseudo-class -- see WindowFrame.ACTIVE_CLASS. And it
+ * is why `window` is in ua/core.css's focus-ring carve-out: a rectangle round the whole pane would
+ * say the same thing again, louder and in the wrong place. */
+window.__active__ > .__title-bar__ {
+    background: var(--window-title-active-bg, #2E436E);
+    color: var(--window-title-active-fg, #DFE1E5);
+}
+
+/* The edge brightens too, which is what separates the front window from the one directly behind it
+ * when the two overlap and both captions are off-screen above the work area. `outline-color` alone,
+ * so the width stays whatever the base rule (or a theme) said. */
+window.__active__ {
+    outline-color: var(--window-active-border, #3574F0);
 }
 
 /* An ellipsized title — the web's canonical truncation recipe, and every part of it is load-bearing.
