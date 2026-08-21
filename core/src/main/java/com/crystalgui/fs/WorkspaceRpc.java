@@ -1,6 +1,6 @@
 package com.crystalgui.fs;
 
-import com.crystalgui.net.RpcRegistry;
+import com.crystalgui.net.protocol.Call;
 import com.crystalgui.serialization.StateMap;
 
 import java.util.List;
@@ -52,13 +52,13 @@ public final class WorkspaceRpc<T> {
     /**
      * Somewhere handlers can be registered.
      *
-     * <p>Both {@code RpcRegistry::register} and {@code ServerUiSession::onCall} satisfy this, so binding
+     * <p>Both {@code MessageRouter::onRequest} and {@code ServerUiSession::onCall} satisfy this, so binding
      * the workspace does not depend on which of them a host happens to hold — and a test can install onto
      * a bare registry without standing up a session.</p>
      */
     @FunctionalInterface
     public interface Registrar<T> {
-        void register(String method, RpcRegistry.Handler<T> handler);
+        void register(String method, Call.Handler<T> handler);
     }
 
     /** Registers every method. */
@@ -233,7 +233,7 @@ public final class WorkspaceRpc<T> {
      * message can easily contain a server-side absolute path, and {@code respond.fail} sends its argument
      * to the client.</p>
      */
-    private static <T> void guard(RpcRegistry.Responder<T> respond, Runnable body) {
+    private static <T> void guard(Call.Responder<T> respond, Runnable body) {
         try {
             body.run();
         } catch (WorkspaceConflictException e) {

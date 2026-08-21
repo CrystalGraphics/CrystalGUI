@@ -1,6 +1,7 @@
 package com.crystalgui.net;
 
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.net.protocol.Call;
 import com.crystalgui.net.protocol.Envelope;
 import com.crystalgui.net.protocol.EnvelopeCodec;
 import com.crystalgui.net.protocol.MessageRouter;
@@ -58,7 +59,6 @@ public final class ServerUiSession<T> implements UITreeObserver {
     private final Set<UIElement> dirtyState = new LinkedHashSet<>();
     private final Set<UIElement> dirtyIdentity = new LinkedHashSet<>();
 
-    private final RpcRegistry<T> rpc;
     /** Element -> kind -> lambda. Lives here, never on the element: that is what keeps behaviour on
      * the side that owns it while the client holds only a description. */
     private final Map<UIElement, Map<String, Consumer<UiEventContext<T>>>> handlers = new LinkedHashMap<>();
@@ -75,7 +75,7 @@ public final class ServerUiSession<T> implements UITreeObserver {
     private final MessageRouter<T> router;
 
     /**
-     * How long a call waits, matching the 10s {@code RpcRegistry} defaulted to.
+     * How long a call waits before its error handler is told.
      *
      * <p>Kept as a field rather than folded into the router because it is a policy of <em>this</em>
      * session, not of the routing machinery: a UI call and a file transfer want different patience, and
@@ -91,7 +91,6 @@ public final class ServerUiSession<T> implements UITreeObserver {
         this.root = root;
         this.transport = transport;
         this.ops = ops;
-        this.rpc = new RpcRegistry<>(ops);
         this.router = new MessageRouter<>(envelope -> transport.send(EnvelopeCodec.encode(ops, envelope)));
         transport.setReceiver(packet -> {
             synchronized (mailbox) {
@@ -171,12 +170,12 @@ public final class ServerUiSession<T> implements UITreeObserver {
     }
 
     /** Registers a server-side RPC method the client may call. */
-    public ServerUiSession<T> onCall(String method, RpcRegistry.Handler<T> handler) {
+    public ServerUiSession<T> onCall(String method, Call.Handler<T> handler) {
         // The handler type is unchanged, so nothing that calls this moves. What changed is underneath:
         // an RPC is now an ordinary REQUEST, so its correlation, timeout and "answer exactly once" are
-        // the router's for every method rather than a second id space RpcRegistry kept for this one.
+        // the router's for every method rather than a second id space kept for this one.
         router.onRequest(method, (payload, respond) ->
-                handler.invoke(read(payload), new RpcRegistry.Responder<T>() {
+                handler.invoke(read(payload), new Call.Responder<T>() {
                     @Override
                     public void ok(@Nullable StateMap<T> value) {
                         respond.ok(value == null ? null : value.encode());
@@ -225,7 +224,7 @@ public final class ServerUiSession<T> implements UITreeObserver {
         return on(element, UiEventKinds.ACTIVATE, handler);
     }
 
-    /** What a handler is given. Carries no coordinates — see {@link UIPacket.UiEvent}. */
+    /** What a handler is given. Carries no coordinates — see {@link UiMethods#EVENT}. */
     public record UiEventContext<T>(ServerUiSession<T> session, UIElement element, StateMap<T> payload) {
     }
 
