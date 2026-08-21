@@ -58,24 +58,3 @@
 .__project-row__ .__badge__ {
     font-size: 11px;
 }
-
-/* Borrowed files ----------------------------------------------------------------------------------- */
-
-/* A LIBRARY VIEWER'S TAB, and the one decoration here that is a FILL rather than a colour.
- *
- * Every other rule in this sheet tints the NAME, because that is how a file says something about
- * itself -- modified, ignored, running -- and the file is still yours either way. A viewer tab is
- * saying something different in kind: this is not your file, you cannot edit it, and nothing you do
- * here will be saved. IntelliJ answers that with a tinted tab body rather than a coloured label, and
- * it is the right instrument: a fill reads as a property of the CONTAINER, which is exactly what is
- * being said.
- *
- * BOTH PROPERTIES, because they are separate: `background` is the drawable and `background-color` is
- * the fill, so a rule setting only the colour is painted over by whatever drawable already won.
- *
- * It reaches the tab through the same `decoration-` slot a file's VCS state uses, and cannot collide
- * with one -- a library class has no VCS state, no dirty marker and no compile errors of its own. */
-.decoration-library {
-    background: none;
-    background-color: var(--tab-library-bg, #281F1C);
-}
