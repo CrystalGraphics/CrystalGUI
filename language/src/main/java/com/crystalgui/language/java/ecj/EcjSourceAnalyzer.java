@@ -1279,7 +1279,13 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
         private DeclarationSite declarationOf(CompilationUnit unit, IBinding binding) {
             ASTNode declaration = unit.findDeclaringNode(binding);
             if (declaration == null) {
-                return signatures == null ? null : signatures.declarationInAttachedSource(binding);
+                if (signatures == null) return null;
+                DeclarationSite attached = signatures.declarationInAttachedSource(binding);
+                // AND THE SOURCELESS CASE, which is what makes the decompiler reachable at all. The
+                // chain is site -> viewer -> provider -> CFR and it begins with a site; a class shipping
+                // no sources jar produced none, so navigation stopped at the first step and every part
+                // of the decompiler sat behind a door nothing opened.
+                return attached != null ? attached : signatures.declarationWithoutSource(binding);
             }
             ASTNode named = declaration instanceof VariableDeclarationFragment
                     ? ((VariableDeclarationFragment) declaration).getName() : declaration;

@@ -930,6 +930,39 @@ public final class JavaSignatures {
     }
 
     /**
+     * Where a binding is declared when <b>nothing has its source</b> — the type, and no position.
+     *
+     * <h3>Why a site with no position is still worth producing</h3>
+     *
+     * <p>Without this the decompiler is unreachable. The chain runs
+     * site → viewer → provider → CFR, and it starts with a site: a class shipping no
+     * {@code -sources.jar} produced none, so navigation stopped at the first step and the decompiler
+     * sat behind a door nothing opened. Every part of it worked; nothing asked.</p>
+     *
+     * <p><b>The position is (0,0) because none exists yet.</b> A decompiled file has no coordinates
+     * until it has been decompiled, and decompiling here — inside a resolve, on the analysis thread,
+     * to answer a question that may not be acted on — would put hundreds of milliseconds behind every
+     * hover. So the site names the TYPE and the reader lands at the top of it, which is where a
+     * class-level jump wants to be anyway. Locating a member inside reconstructed output is a separate
+     * step and honestly a separate problem: the member's name survives decompilation but its line
+     * number does not.</p>
+     *
+     * <h3>Only for a binding that really resolved</h3>
+     *
+     * <p>{@code setBindingsRecovery} is on, so JDT answers a plausible binding for a name nothing
+     * declares — {@code no.such.Type} comes back as a class in a package that does not exist. Producing
+     * a site for one would open a viewer on a type nobody has, which is a worse answer than the nothing
+     * it replaced. {@link IBinding#isRecovered} is the published way to tell them apart.</p>
+     */
+    @Nullable
+    public DeclarationSite declarationWithoutSource(@Nullable IBinding binding) {
+        if (binding == null || binding.isRecovered()) return null;
+        String topLevel = topLevelSourceName(binding);
+        if (topLevel == null) return null;
+        return DeclarationSite.inLibrary(topLevel, new TextPoint(0, 0), new TextPoint(0, 0));
+    }
+
+    /**
      * The name's own range within {@code unit}, as rows and columns.
      *
      * <p><b>The NAME, not the declaration.</b> A method declaration node spans its javadoc, its

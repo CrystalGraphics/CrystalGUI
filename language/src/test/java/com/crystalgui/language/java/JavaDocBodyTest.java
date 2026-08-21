@@ -1092,4 +1092,71 @@ public class JavaDocBodyTest {
         }
         return reported.get().size();
     }
+
+    /**
+     * <b>A class shipping no source still says where it is declared.</b>
+     *
+     * <p>Without this the decompiler is unreachable. The chain runs site → viewer → provider → CFR
+     * and it begins with a site — so a class with no {@code -sources.jar} produced none, navigation
+     * stopped at the first step, and every part of the decompiler sat behind a door nothing opened. It
+     * was invisible because it looks exactly like the engine failing to resolve the name.</p>
+     *
+     * <p><b>Driven against JUnit</b>, which is on this JVM's own classpath and ships no sources jar
+     * beside it — the shape a mod on a script's classpath has. Taffy was the obvious fixture and is
+     * the wrong one: it is <em>not</em> on the analysis classpath here, so the name comes back as a
+     * RECOVERED binding, which the sibling test below is about and which this one would then be
+     * silently testing instead.</p>
+     */
+    @Test
+    public void aClassWithNoSourceStillReportsItsType() {
+        // THE GATE ASKS THE ARCHIVE, never the answer -- the same rule `assumeSourceFor` states from the
+        // other side. If a sources jar ever appears beside JUnit, this stops exercising the sourceless
+        // path and says so by skipping, rather than passing through the path it was not written for.
+        Assume.assumeTrue("junit has attached source on this host, so this exercises the wrong path",
+                AttachedSources.forClasspath(HostClasspath.detect()).textOf("org.junit.Assert") == null);
+
+        String source = ""
+                + "public class Script {\n"
+                + "    org.junit.Assert probe;\n"
+                + "}\n";
+        SourceAnalyzer.Analysis analysis = engine.analyzer().analyze(
+                "Script", source, HostClasspath.detect(), engine.releaseLevel(), 1L);
+        try {
+            SymbolInfo symbol = analysis.resolveAt(source.indexOf("Assert probe"));
+            assertNotNull("the type did not resolve at all", symbol);
+            DeclarationSite site = symbol.declaration();
+            assertNotNull("a classpath type with no attached source located nothing, so nothing can "
+                    + "open it and the decompiler is unreachable", site);
+            assertTrue(site.isLibrary());
+            assertEquals("library://org.junit.Assert", site.resource().toString());
+            // NO POSITION, because none exists until something decompiles it. The reader lands at the
+            // top of the type, which is where a class-level jump wants to be anyway.
+            assertEquals(0, site.start().row());
+        } finally {
+            analysis.close();
+        }
+    }
+
+    /**
+     * <b>And a name nothing declares still locates nothing.</b>
+     *
+     * <p>The guard that keeps the rule above from becoming "any name at all opens a viewer".
+     * {@code setBindingsRecovery} is on, so JDT answers a plausible binding for a type that does not
+     * exist — {@code no.such.Type} comes back as a class in a package nobody has. Opening a viewer on
+     * one is a worse answer than the nothing it replaced, and {@code IBinding.isRecovered} is what
+     * tells the two apart.</p>
+     */
+    @Test
+    public void aRecoveredBindingLocatesNothing() {
+        String source = "public class Script {\n    no.such.Type field;\n}\n";
+        SourceAnalyzer.Analysis analysis = engine.analyzer().analyze(
+                "Script", source, HostClasspath.detect(), engine.releaseLevel(), 1L);
+        try {
+            SymbolInfo symbol = analysis.resolveAt(source.indexOf("Type field"));
+            assertTrue("a type nobody declares was given somewhere to open",
+                    symbol == null || symbol.declaration() == null);
+        } finally {
+            analysis.close();
+        }
+    }
 }
