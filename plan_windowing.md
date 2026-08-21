@@ -1,51 +1,105 @@
-# Windowing — lifetime, retention, and getting back to a hidden window
+# CrystalOS — a window compositor for CrystalGUI
 
-**Scoped 2026-08-21.** Split out of `plan_phase5.md` §5.1–5.2 once it became clear this is not a
-networking item that happens to touch the UI — it is a missing layer of the engine that the remote
-workspace merely made impossible to ignore.
+**Rewritten 2026-08-21**, superseding the same-day single-window plan after a direction decision:
+*"we should be able to have MULTIPLE visible windows all resizable, exactly like an application desktop
+manager"* — *"basically a window compositor with multiple different windows stacking exactly like how an
+OS would do it."* The old plan's scope fence — *"one visible window at a time, a set of retained ones,
+and a way to switch"* — is the thing that was wrong, and everything downstream of it is rewritten here.
+What survives is carried forward explicitly rather than assumed: the lifecycle research, the state
+model, the taskbar content tables and the icon traps were all still correct.
 
-> **The one-sentence version.** `UIWindow` has no lifecycle: it is constructed by a loader and nulled by
-> a loader, so Escape destroys the editor, its undo history, every open buffer and every cached analysis.
-> Every other windowing system separates **hide** from **close** and **close** from **destroy**, and this
-> plan adopts that separation, adds the registry that owns the retained set, and builds the strip that
-> makes a hidden window findable again.
-
----
-
-## Why this is not a Phase 5 item
-
-Phase 5 is *the remote workspace, made usable*. This started there — a disconnect discards unsaved work —
-and outgrew it on three counts:
-
-1. **It is engine, not networking.** The lifecycle, the registry and the strip all belong in `core/`, and
-   none of them mention a wire.
-2. **Every window benefits, not just the editor.** The shader graph, a settings window, anything a
-   consumer builds. A per-consumer solution would be reimplemented per consumer, which is exactly what a
-   framework exists to prevent.
-3. **It changes what a loader is for.** Today `CgUiScreen` *owns* the window. After this it *attaches* to
-   one. That is a boundary change, and boundary changes deserve their own document.
-
-What stays in Phase 5 is the part that is genuinely about the wire: reconnect-on-restore (§5.1 here) and
-persisting the retained set across a crash (`plan_phase5.md` §5.3).
+> **The one-sentence version.** CrystalOS is a stacking window manager inside a CrystalGUI screen:
+> multiple simultaneously visible, draggable, resizable, minimisable windows over the game world, with a
+> taskbar, a switcher, and a lifecycle in which hide, close and destroy are three different verbs — built
+> almost entirely out of element-layer machinery the engine already ships.
 
 ---
 
-## The problem, in the code
+## Scope — an "OS" in exactly one sense
 
-`CgUiScreen.initGui` constructs the workspace, the editor and the `UIWindow`; `onGuiClosed` nulls all
-three. `AGENTS.md` already states that *"`UIWindow` deliberately implements no platform Screen/widget
-interface — loader modules own that"* — and the **lifetime leaked to the loader anyway**.
-Escape-destroys-everything is a `GuiScreen` accident, not a decision anyone made.
+A **basic stacking window manager with a taskbar**. That means: window chrome (title bar, icon, the
+three buttons), drag to move, resize on all eight edges, raise-on-click stacking, an active window,
+minimise to a taskbar, maximise/restore, a keybind switcher, retained lifecycles, and the dock ↔
+window bridge — tool windows that float out of the dock and dock back, editor tabs that tear out into
+windows of their own. Plus a **pinned tier**: always-on-top windows that stay over the running game as
+a display-only HUD.
 
-The instinct is already present, one layer too low: `initGui` opens with `if (uiWindow != null) return;`,
-so a window survives a resize. That is retention, scoped to one screen instance instead of to the engine.
-
-**Nothing above `UIWindow` exists.** There is no window manager, no registry, no notion of "the set of
-windows this application has". That is the gap.
+It does **not** mean: tiling, virtual desktops, multi-monitor, a start menu (the command palette
+exists), a file manager (the explorer exists), processes, or drawing outside a `GuiScreen`. The scope
+fence section at the end is normative — anything not listed as built or deferred is out.
 
 ---
 
-## Prior art — read 2026-08-21
+## The architecture: a window is an element; `UIWindow` is the desktop
+
+This is the load-bearing decision, and the codebase had already taken it before anyone asked.
+
+### The evidence
+
+1. **The network layer models a window as `(int windowId, UIElement root)`.**
+   `ServerUiSession(int windowId, UIElement root, …)` and `ClientUiSession.root()`/`windowId()` — a
+   "window" over the wire is an element subtree with an id, not a `UIWindow`. *"Every packet carries a
+   window id"* is a documented invariant. The compositor gives that id the visual home it never had.
+2. **`UIWindow` is documented as the *runtime engine*, not a window.** It owns the Taffy tree, the style
+   engine, the input handler and the screen dimensions — it is the display surface. Its own `modalStack`
+   javadoc says *"the spec hangs it off the `Document` — which is what this class is."* One document,
+   one desktop.
+3. **Everything a frame needs already exists at the element layer** — see the reuse table below, each
+   row verified against the code on 2026-08-21, not assumed.
+
+### Design A vs Design B
+
+| | **A: N `UIWindow`s + a new compositor layer** | **B: windows as element subtrees under one `UIWindow`** |
+|---|---|---|
+| Taffy trees, style engines, input handlers | N of each, plus a router across them | one of each, unchanged |
+| Hit-testing across overlapping windows | a new layer that must agree with N paint orders | `sortedChildren` already guarantees paint and hit-test agree |
+| `CgUiPaintContext.beginFrame`/`endFrame` | N times per frame, or a new aggregation pass | once, unchanged |
+| Focus/tab/hover across windows | a new cross-window focus model | already per-element |
+| The network's `(windowId, root)` | needs an adapter per window | is already the model |
+| What must be built | an input router, a paint scheduler, a z-order layer | one widget, one host element, one registry |
+
+**B, without reservation.** A is what an actual OS must do because its windows belong to different
+processes; ours share a heap and a tree, and pretending otherwise buys N copies of everything and a
+routing layer whose only job is to reassemble what B never took apart.
+
+### What already exists (verified)
+
+| Compositor need | Already shipped, and where |
+|---|---|
+| Title bar that drags its window | `Dialog` — `__title-bar__` drag writes `left`/`top` at **INLINE** origin via `UIDragController` |
+| A close button, a backdrop, modal vs modeless | `Dialog` — `__close__`, `__backdrop__`, `show()`/`showModal()`, close watcher only when modal |
+| Resize on all eight edges/corners | `UIResizer.Handle` — all eight, driven by `resize:` in CSS; INLINE-origin writes (spec: a user resize is "without `!important`"), clamped against the element's own `min-*`/`max-*` **and** its containing block |
+| Clamped floating-panel movement, re-clamp on container resize | `CanvasOverlayMove` — extracted when the Blackboard became its second consumer; the window title bar is the third |
+| A torn-off dock that floats, splits and tabs | `FloatingDock` — written, currently **unconsumed**: hosts a whole `DockLayout` (ImGui's rule), non-modal and non-light-dismissable by recorded decision |
+| Tool-window placement stored beside the layout | `ToolWindowManager` / `ToolWindowState` / `ToolWindowLayout` — IntelliJ's `ToolWindowManager` / `WindowInfoImpl` / `DesktopLayout`, ported; content built once per type and cached across hides |
+| Panel and tab drags with banded drop targets | `RegionDropOverlay` + `RegionDropZones` (whole-workbench bands), `DockDropZones` (VS Code's editor drop geometry), `DockDragPayload` |
+| Free positioning against the screen | out-of-flow (`position: absolute`) children; `TopLayer` proves the reparent-to-root pattern |
+| Stacking where paint and hit-test agree | `sortedChildren` — z-descending, equal-z later-inserted-first, paint walks it reversed; a documented invariant |
+| Clipping window content to its bounds | `overflow` + `ScissorStack` |
+| Focus, tab order, hover chains, pointer capture, drag | `UIInputHandler` — all per-element already |
+| Escape as a cascade | drag → popover → modal → leftover; `CgUiScreen.keyTyped` is already deliberately empty so the cascade sees Escape first |
+| View state that survives detach/reattach | `SessionState` — captured in `unregisterElement`, applied in `registerElement`, once per id |
+| Teardown on destroy | `Disposer` — exists to *"release on CLOSE rather than on exit"* |
+| An icon pipeline | `CgUiSvg`, `icon()` in CSS, `FileIconTheme` |
+| Per-entry menus, badges, progress | `ContextMenu` + `MenuBuilder`, `FileDecoration`, `ProgressBar` |
+
+### What is genuinely new
+
+1. **`WindowFrame`** — the widget: chrome around a content slot, the state machine, a close policy.
+2. **`Desktop`** — the compositor host element: the window layer, the taskbar, placement, clamping.
+3. **`WindowRegistry`** — the retained set, MRU order, eviction. The model the taskbar and switcher render.
+4. **Window-scoped modality** — today a modal freezes the whole document; it must freeze its window.
+5. **Activation** — the notion of *the active window*, raise-on-click, per-window focus memory.
+6. **The presentation bridge** — one content instance moving between docked, floating and windowed
+   with the mode remembered (see Views); the workbench's tool-window model already reserved the field.
+7. **The HUD surface** — a paint-only entry (layout + draw, no input frames) and a loader overlay
+   hook, so a pinned window can render over the running game (see Pinned windows).
+
+---
+
+## Prior art
+
+### Lifecycle (carried forward from the previous plan — read 2026-08-21)
 
 | System | Hide (retained) | Close (a *request*) | Destroy |
 |---|---|---|---|
@@ -54,186 +108,679 @@ windows this application has". That is the gap.
 | Cocoa | `orderOut:` | `windowShouldClose:` **can veto** | `close` + `releasedWhenClosed` |
 | Web | `visibilitychange` → hidden, then **frozen** | `beforeunload` | terminated / **discarded** |
 | Android | `onStop` | back press | `onDestroy` |
+| Swing | `setVisible(false)` | `windowClosing` | `dispose()` |
 
-### Four findings, all load-bearing
+The four findings stand: **close is universally a request** (and CrystalGUI already has the primitive —
+`requestClose()` and the close-watcher cascade); **when something else owns the lifetime, close stops
+destroying** (Cocoa: `releasedWhenClosed` *"is ignored for windows owned by window controllers"*; Swing:
+`setDefaultCloseOperation(HIDE_ON_CLOSE)`); **a hidden thing must stop working** (Page Lifecycle
+*frozen*); **retention never replaces persistence** (`wasDiscarded`, `onSaveInstanceState`).
 
-**1. Close is universally a request, not an action.** `WM_CLOSE`, `WM_DELETE_WINDOW`,
-`windowShouldClose:`, `beforeunload` — every one asks and lets the application decide. CrystalGUI
-already has the primitive: `UIElement.requestClose()` and the close-watcher cascade, in which a live drag
-eats Escape before a popover and a popover before a modal. **The window level does not need a new
-mechanism; it needs to answer the one that exists.** That is also why "Escape hides" is safe — everything
-that genuinely should be destroyed consumes Escape first.
+### The compositor (new)
 
-**2. When something else owns the lifetime, close stops destroying.** Cocoa is explicit that
-`releasedWhenClosed` *"is ignored for windows owned by window controllers."* A retained registry owning
-the instance is not a policy being invented here; it is AppKit's, and X11's `WithdrawnState` and
-Android's back-vs-`onDestroy` say the same thing differently.
-
-**3. A hidden thing must stop working.** The Page Lifecycle API does not merely mark a page hidden — it
-**freezes** it, and *"normally HIDDEN pages will be frozen to conserve resources."*
-`requestAnimationFrame` stops firing. This is not an optimisation added later; it is part of the state.
-
-**4. Retention is best-effort, so retention never replaces persistence.** bfcache evicts, Android
-destroys, and the Page Lifecycle API ships a `wasDiscarded` flag precisely so a page can tell it was
-dropped and needs a full reload. Every system that retains also persists.
+- **Swing MDI is the closest precedent in existence** — an in-process window manager on the JVM:
+  `JDesktopPane` (the desktop), `JInternalFrame` (title bar, the three buttons, resizable, draggable,
+  iconifiable, maximisable), `DesktopManager` (the policy object), `JInternalFrame.JDesktopIcon` (the
+  minimised representation), `setDefaultCloseOperation` (the close policy enum). The *names* below
+  deliberately rhyme with it. What we do **not** take from it: its per-L&F `DesktopManager` indirection
+  (we have one look), and its selection model quirks.
+- **Win32 stacking**: raise-on-activate; **owned windows always stay above their owner and travel with
+  it** — the fact that decides where modals may promote to (see Modality below). New windows **cascade**
+  (`CW_USEDEFAULT` offsets each successive window by the caption height). A drag keeps the caption
+  reachable. Dragging a maximised window restores it first, cursor kept proportionally inside the title
+  bar.
+- **Alt+Tab orders by MRU, not by z** — the two agree under raise-on-click *except* for minimised
+  windows, which leave the z-order but keep their MRU slot. That is why the registry keeps an MRU list
+  rather than deriving order from the tree.
+- **X11/EWMH**: `WM_TRANSIENT_FOR` is the owner relationship; stacking is maintained per-layer
+  (desktop < normal < dock < above), which is the band model — ours has four bands: desktop content,
+  windows, pinned, the global top layer.
+- **macOS**: window levels (`NSWindow.Level`) are the same band model; a sheet is window-modal, not
+  app-global — the precedent for window-scoped modality.
 
 ---
 
-## The model
+## The pieces
 
-### States
+Package: **`com.crystalgui.ui.elements.desktop`**. Tags registered in `ElementRegistry` (`desktop`,
+`window`, `taskbar`) — a widget's cascade identity is its **tag**, per the recorded invariant, so CSS
+cannot style them until they are registered. Geometry in a new UA-sheet part (`ua/desktop.css`,
+appended to `DEFAULT_SHEET_PARTS`); colours as `var(--token, #fallback)` like every other part.
+
+| Piece | Kind | Responsibility |
+|---|---|---|
+| `WindowFrame` (tag `window`) | widget, `acceptsPublicChildren() == false` | chrome (`__title-bar__`, `__title__`, `__icon__`, `__controls__` with `__minimize__`/`__maximize__`/`__close__`, `__content__` slot — **never targeted by a descendant selector**, per the thrice-paid rule), the state machine, `WindowPolicy`, per-frame focus memory, its own overlay slot (see Modality), and a **role** — top-level or owned — deciding its control set: minimise/maximise/close for a top-level frame, Dock/Hide for a floating tool window (see Views) |
+| `Desktop` (tag `desktop`) | element, the compositor host | owns the **window layer** (an internal child; frames are *public* children of it, exactly the `windowOverlayLayer` pattern — the layer internal, its occupants public, so frames can still remove themselves), the `Taskbar`, placement (cascade), clamp-on-resize, click-on-empty-desktop = blur |
+| `WindowRegistry` | model, no GL | the retained set (`open` → joins, `destroy` → leaves), MRU order, eviction policy, lookup by key |
+| `Taskbar` (tag `taskbar`) | widget inside `Desktop` | the registry, rendered — one entry per live window |
+| `WindowSwitcher` | overlay | MRU-ordered cycling on a keybind |
+| `WindowPolicy` | enum on the frame | `HIDE_ON_CLOSE` (application windows) / `DESTROY_ON_CLOSE` (transients) — Swing's `setDefaultCloseOperation`, minus `DO_NOTHING` until someone needs it |
+
+A `WindowFrame` declares a **title**, an **icon**, and a **policy**; content goes in via `content()`.
+It is **client chrome**: the server ships a window's *content* tree (`UIDescriptionCodec` never needs
+the `window` tag); the client wraps it in a frame. Registering the tags anyway costs nothing and keeps
+decode honest if that ever changes.
+
+**`WindowFrame` extends `UIElement`, never `Dialog`.** Dialog's bundle is modality, a close watcher
+and a backdrop — exactly what a frame must not inherit, and `FloatingDock`'s javadoc already paid for
+that lesson once (its whole "what it must NOT inherit" section exists because borrowing `Dialog`
+hands those over for free). The title-bar drag and the INLINE geometry writes are a *pattern* to
+port, not a base class to take; `Dialog` itself becomes a consumer of the frame-scoped overlay slot.
+
+### Tags, classes and the sheet
+
+Three new tags — `desktop`, `window`, `taskbar` — join `ElementRegistry.bootstrapBuiltins()`
+(eighteen today; unknown tags still throw on decode). Chrome parts are internal children with the
+usual double-underscore classes; **state** is flipped by the widgets and therefore lives on classes,
+never pseudo-classes — the rule that has now cost three rounds:
+
+| Where | Classes |
+|---|---|
+| Frame chrome | `__title-bar__` `__title__` `__icon__` `__controls__` `__minimize__` `__maximize__` `__close__` `__content__`, plus the per-frame overlay slot |
+| Frame state | `__active__` `__maximized__` `__fullscreen__` `__pinned__` `__hud__` |
+| Taskbar | one entry element per window; `__attention__` on a flashing entry |
+
+Geometry — frame minimums included — lives in `ua/desktop.css`; colours are `var(--token, #fallback)`
+with tokens added to the theme tables, and `CGUI_THEMING.md`'s token table is **generated**, so it
+regenerates from the failing governance test rather than by hand. AGENTS.md's internal-class
+inventory and widget/scene tables go stale silently (their own warnings say so); W1 extends them in
+the same commit.
+
+### The command set
+
+Every window operation is a `Command` first and chrome second — the buttons, the system menu, the
+taskbar context menu and the keymap are four renderers of the same ids, which is what keeps them
+from drifting. Registered in `CommandRegistry.global()`: they are facts about the application, and
+what varies per window is focus, which `DataContext`'s walk already answers.
+
+| Id | Does | Reference chord |
+|---|---|---|
+| `window.close` | `requestClose()` → policy | decided at W13 — `Ctrl+W` is conventional and plausibly claimed by tab close |
+| `window.minimize` | hide to the taskbar | — |
+| `window.maximize` | toggle maximise / restore | — |
+| `window.fullscreen` | toggle fullscreen | `F11` |
+| `window.pin` | toggle pin, promoting to top-level if needed | — |
+| `window.move` / `window.size` | keyboard modes: arrows nudge, Enter commits, Escape cancels | via the system menu |
+| `window.systemMenu` | the system menu on the active frame | `Alt+Space` |
+| `toolwindow.hide` | hide the active tool window | `Shift+Escape` (IntelliJ's) |
+| `desktop.showDesktop` | toggle minimise-all | — |
+| `desktop.switchWindow` | the MRU switcher | decided at W10 — `Ctrl+Tab` is conventional and claimed by recent-files |
+| `desktop.taskManager` | open the task manager | — |
+
+Enablement follows the standing rules — the registry carries `enabled`, both menu renderers dim
+rather than hide, `enabledWhen` resolves from focus — so a restore command on an unmaximised window
+greys rather than vanishes.
+
+---
+
+## The window state machine
+
+Carried from the previous plan, with one implementation decision made concrete.
 
 ```
         show()                    hide()
   ┌──────────────┐          ┌──────────────┐
-  │   VISIBLE    │ ───────► │    HIDDEN    │   retained; ticking stopped
+  │   VISIBLE    │ ───────► │    HIDDEN    │   retained; DETACHED from the tree
   └──────────────┘ ◄─────── └──────────────┘
          │  requestClose()          │
          │  (cascade filters)       │  evicted, or the world went away
          ▼                          ▼
   ┌───────────────────────────────────────┐
-  │              DESTROYED                │   Disposer runs; registry drops it
+  │              DESTROYED               │   Disposer runs; registry drops it
   └───────────────────────────────────────┘
 ```
 
-`requestClose()` at window level means **"dismiss me"**, and the window's **policy** decides whether that
-hides or destroys — hide for an application window, destroy for a transient one. A global "Escape always
-hides" rule would be wrong; the policy belongs on the window.
+### Hide is **detach**, and the freeze falls out of it
 
-### The registry
+A hidden frame's subtree is removed from the window layer (the element instance retained by the
+registry). Detachment is what the engine already treats as "not participating": selectors do not match
+detached elements (`invalidateStyleMatch` early-returns), there is no layout, no paint, no hit-test.
+The alternative — `display: none` in place — keeps the subtree matching selectors and keeps every
+ticker firing, which is precisely the *"hidden editor that keeps compiling"* failure.
 
-One owner of the retained set, in `core/`, keyed so a window can be found without holding a reference to
-it. It is the **model** for everything in the next section — the strip and the switcher are views of it,
-never a second list.
+Detach also buys correctness for free at the seams that already exist:
 
-**A window joins on open and leaves only on destroy.** That is Windows' rule and it is the right one: the
-strip shows what is *live*, visible or hidden, with the focused one highlighted — not a bin of minimised
-things. It also needs no separate bookkeeping, because `hide()` and `destroy()` are already different
-verbs.
+- `unregisterElement` already **captures `SessionState`** per element on the way out, pops the element
+  from the **top layer, the modal stack, the popover stack and the close watchers** — so a frame hidden
+  with a dialog open cannot leave the desktop inert (the documented unrecoverable state).
+- `registerElement` is **idempotent** and re-applies nothing spent — re-showing rebuilds Taffy nodes and
+  relayouts, which is correct, not wasteful: the world may have resized while the frame was away.
 
-### The rules that fall out
+What detach does **not** do by itself, each named because each fails silently:
 
-- **A hidden window stops ticking.** `UIFrameTicker`s, smooth scrolls, transitions — and, most
-  importantly, the language services, which analyse on a debounce. A hidden editor that keeps compiling
-  is worse than one that was destroyed.
-- **Connections drop on hide and re-establish on show.** Browsers went through exactly this: an open
-  WebSocket used to make a page **ineligible for bfcache**, and the resolution was not to refuse
-  retention but to *"close or pause open connections, timers, and observers in your `pagehide`/`freeze`
-  handling, and re-establish them in your `pageshow`/`resume` handling when `event.persisted` is true."*
+- **Tickers.** `registerTicker` has no unregister by design; a ticker captured on an element inside a
+  hidden frame keeps firing if it keeps returning `true`. The rule: **a ticker whose element is detached
+  must return `false`** — most already do by construction (caret blink stops on blur, and hide blurs),
+  but the contract goes in `UIFrameTicker`'s javadoc and a test pins the frame case.
+- **Input state.** Hover, pointer capture, press targets, a live drag anchored inside the frame. The
+  `UIInputHandler` must forget a detached element — the invariant table already demands this and records
+  the two-trees hover-diff crash that motivated it. Hide runs the same forgetting.
+- **Connections.** Dropped on hide, re-established on show, exactly bfcache's resolution (*"close or
+  pause open connections … re-establish them in your `pageshow`/`resume` handling when
+  `event.persisted` is true"*). `show()` carries a `persisted` flag so a restored window revalidates
+  rather than assuming its world is unchanged — **"the user pressed Escape" and "the world went away"
+  stay different signals.** This is what makes retention safe against the stale-`WorkspaceClient`
+  defect (captured at construction in five named places; `plan_phase5.md` records them).
+- **Bounded retention.** A retained editor holds every open document's `Rope`, undo stacks, ECJ
+  analyses and tree-sitter trees. Eviction is LRU over the registry's MRU list with a small cap
+  (default: eight hidden windows), and eviction = `destroy()` = `Disposer` — with one exemption:
+  **a frame whose content is dirty is never auto-evicted**, because silently discarding unsaved work
+  is the failure this whole plan exists to prevent. The dirty question goes through the close-guard
+  seam the dock already has (`setCloseGuard`), so content answers it once for close and eviction
+  both. Persistence (`plan_phase5.md` §5.3) is what makes eviction
+  survivable, and stays a separate item because retention is always best-effort.
 
-  > **This is what makes retention safe here.** Retaining the editor resurrects a defect
-  > `plan_phase5.md` records as unreachable — the stale `WorkspaceClient`, captured at construction in
-  > five places (`CrystalEditor:159`, `Workbench:141`, `ProjectFileTree:187`, `WorkspaceTreeSource:109`,
-  > `WorkspaceFileService:81`) with nothing rebinding it. So `show()` must carry the equivalent of
-  > `persisted`, and the window revalidates rather than assuming its world is unchanged. **"The user
-  > pressed Escape" and "the world went away" stay different signals.**
+### Close is a request, routed through the policy
 
-- **Input state does not survive hide.** Hover, pointer capture, press targets, a live drag. The pointer
-  moved while the window was not looking. `AGENTS.md` already records what happens when input state
-  outlives its tree — a stale hover made the diff walk two trees and run off the end — and show/hide is
-  the same boundary.
-- **Retention is bounded.** A retained editor holds every open document's `Rope`, its undo stacks, ECJ
-  analyses and tree-sitter trees. The registry needs an eviction policy, and `destroy()` drives
-  `Disposer`, which already exists to *"release on CLOSE rather than on exit"*.
+`requestClose()` on a frame means *"dismiss me"*. The cascade has already filtered — a live drag, a
+popover, a modal all consume Escape first, and those genuinely should close — so what reaches the frame
+is policy: `HIDE_ON_CLOSE` minimises, `DESTROY_ON_CLOSE` destroys. The close *button* and Escape go
+through the same method; there is exactly one dismissal path.
 
 ---
 
-## Getting back to a hidden window
+## Stacking and activation
 
-### The one fact that shapes it
+### Raise is a z-index assignment, **never** a reparent
 
-`uiWindow.paintFrame()` is called from **exactly one place**: `CgUiScreen.drawScreen`. CrystalGUI has
-never rendered outside a `GuiScreen`, so an always-visible in-game strip is a new platform capability —
-a render-overlay hook, a window with no screen, input while the game runs.
+The obvious raise — move the frame to the end of the window layer's child list — is a trap this
+codebase is uniquely equipped to spring: `removeChild`/`addChild` runs `unregisterElement` /
+`registerElement` over the **whole frame subtree**, which captures session state, pops modal/popover/
+close-watcher stacks, destroys and rebuilds every Taffy node, and re-applies spent session ids — per
+click. A widget must never rebuild the elements it is being clicked on (the invariant that froze the
+table header), and a raise happens *on* a click.
 
-And the cost is not what rules it out. **In-game the cursor is captured for look control**, so a strip
-cannot be clicked without freeing it, and freeing it means opening a screen — which is the thing the
-strip was supposed to save. Any always-on clickable HUD degenerates into "hold a modifier to free the
-mouse", which is a worse keybind.
+So: the window layer's manager assigns each raised frame the next value of a monotonic counter as its
+`z-index` (IMPORTANT origin — a stylesheet must not fight activation). `sortedChildren` then keeps
+paint and hit-test agreeing with zero new machinery, which is the invariant that must never be
+re-implemented. Pinned frames take the same counter **plus a band offset** (say `1 << 20`) — that offset is the
+entire implementation of the always-on-top band. The counter renormalises per band when it grows
+silly, preserving order; nobody clicks 2³¹ times.
 
-> Even systems that own the whole screen hide their taskbar: the macOS Dock auto-hides by default, the
-> iPadOS Dock is a gesture. Windows' is permanent **because Windows owns everything**. Here we are a
-> guest on somebody else's screen, competing with the hotbar, chat, potion effects and every other mod.
+The **global top layer stays above every frame** — it paints after the whole main tree by construction.
+See Modality for what may still promote into it.
 
-### So: a strip on a keybind
+### Activation
 
-**Settled 2026-08-21.** One surface, summoned. It is itself a screen, so the cursor is free and the game
-pauses exactly as it already does, and it costs nothing when unused — Alt+Tab, Recents, `tmux` `prefix w`.
-When the shell is already open the same strip can live in its chrome beside the window controls, because
-there the screen and the cursor already exist; that is a placement, not a second feature.
+- **Click-to-focus, and the click is delivered** (Windows' model, not macOS click-through): a
+  mouse-down anywhere in a frame raises it and makes it active *and* the press reaches its target. The
+  raise listens in the **CAPTURE phase on the frame** — the recorded scar (`TextEditor`'s unconditional
+  `stopPropagation()` starving later same-element listeners) says the same element is not early enough,
+  and capture on the frame ancestor is the documented answer.
+- **The active window is where focus lives.** Keyboard input already goes to the focused element;
+  activation restores focus to the frame's **remembered focus** — each frame records its last focused
+  element, exactly Win32's `WM_ACTIVATE` convention. Restoration follows the `ListView` rule: restore,
+  never steal — if the element is gone, delegate to the frame's first focusable.
+- **Active chrome is a class** (`__active__` on the frame), not a pseudo-class — the "state a widget
+  flips from its own listener belongs on a CLASS" rule has now cost a round three times.
+- **Clicking the empty desktop blurs** — `emitMouseDown` already blurs before dispatch and nothing
+  takes the focus; no active window is a legal state.
+- **A window opened by anything other than a user gesture takes no focus.** The networked case
+  forces this: a server can open a window mid-keystroke, and focus-stealing would land the next
+  words in it — half a sentence into a villager shop. Every OS converged on the same answer
+  (Windows' `SetForegroundWindow` foreground-lock plus `FlashWindowEx`, X11's urgency hint, macOS's
+  bouncing dock icon): a background-opened window appears in view but inactive and **requests
+  attention** — its taskbar entry flashes (a class + a transition) until it is activated. Windows
+  the user's own click or command opened focus exactly as before. And a background-opened window joins the MRU at the **back**: the
+  switcher's first offer must stay the user's last window, or the flash becomes a steal with one
+  keystroke of delay.
 
-### What to take from a real taskbar
+### MRU
+
+The registry keeps most-recently-*activated* order, updated on activation only. The switcher reads MRU;
+the taskbar reads open order (stable positions — a taskbar whose entries jump on every activation is
+the "never in the same place twice" menu bug wearing a bar).
+
+### The system menu
+
+Alt+Space, right-click on the title bar and right-click on the taskbar entry all open the same menu:
+Restore / Move / Size / Minimise / Maximise / Fullscreen / Pin / Close — built by `MenuBuilder`,
+which stays the one place commands become rows, so the title-bar menu and the taskbar context menu
+cannot drift apart. **Move and Size are keyboard modes** (arrows nudge, Enter commits, Escape
+cancels — the Win32 behaviour), which makes every window operation reachable without a pointer. The
+commands must exist for the keymap anyway, so the menu is rows over work already done.
+
+---
+
+## Geometry
+
+- **Move**: the title bar drags the frame — `Dialog` already does exactly this (drag → `left`/`top` at
+  INLINE origin). Clamping and re-clamp-on-desktop-resize come from `CanvasOverlayMove`, whose javadoc
+  documents the three mistakes to not re-make (`getX()` is not `left`'s space; `resizeOriginLeft()`
+  answers 0 for an `auto` inset; clamping only during the drag lets a container resize strand the
+  panel). The clamp rule is Windows': **the title bar must stay reachable** — a frame may hang off the
+  sides and bottom, never off the top, and some minimum sliver stays on-screen.
+- **Alt-drag** (W13): hold the window-move modifier and drag anywhere inside a frame to move it —
+  the Linux WM staple, same drag path and clamp as the title bar, and the answer for a window whose
+  title bar is tiny. The chord is keymap-resolved, never a hardcoded Alt: Alt is already contested
+  territory (text fields refuse Alt chords, the menu bar claims Alt+letter mnemonics), and both of
+  those rules were paid for.
+- **Resize**: `resize: both` on the frame; `UIResizer` provides all eight handles, INLINE-origin writes,
+  clamping against the frame's CSS `min-width`/`min-height` (definite lengths — already how
+  `clampToStyleRange` works) and against the containing block. Minimum sizes live in `ua/desktop.css`,
+  not Java, per the no-pixels-in-widgets rule.
+- **Maximise / restore** — now meaningful, so it ships (the old plan deferred it *because* nothing could
+  be less than full-screen; that reason is gone):
+  - Maximise records the current INLINE rect as the **restore rect**, fills the work area, sets
+    `__maximized__` (chrome swaps the glyph; the resize handles stop applying — `resize: none` via the
+    class), and clears the frame's inset/size at the same origin it wrote them.
+  - Restore puts the rect back. Double-click on the title bar toggles (Windows). Dragging a maximised
+    title bar restores first, cursor kept proportionally inside the bar (Windows' restore-drag).
+  - **Fullscreen** (F11, W13) is maximise's sibling: the same remembered rect, and the taskbar
+    hides too — one more class on the frame.
+- **Placement**: a new frame with no remembered geometry cascades from the last placement by the
+  title-bar height (Win32), wrapping back to the origin when it walks off the work area. A frame with
+  remembered geometry (see Persistence) gets it, clamped.
+- **Screen resize**: `Desktop` re-clamps every visible frame and re-fills maximised ones —
+  `CanvasOverlayMove.reclampIfPlaced` is the shape.
+- **The work area**: the taskbar is *laid out* as a bottom bar, never overlaid — so the window
+  layer's box **is** the work area. Maximise fills it with no bar special-case, drags clamp at it,
+  and fullscreen's hiding of the bar re-flows the layer to full height. Windows' own model:
+  maximise respects the taskbar, fullscreen covers it.
+- **Per-window zoom** (W15): a frame-level `UITransform` scale — layout-free by design, so it is
+  magnification rather than re-layout; hit-testing and glyph rasterisation already follow the pose.
+  The accessibility answer for one window without touching the global `uiScale`.
+- **Snapping**: drag-to-edge halves and drag-to-top maximise ship in W13 — after W1 the band
+  arithmetic is the same family as `DockDropZones`. Keyboard snap (the Win+arrows analogue) stays
+  deferred.
+
+---
+
+## Modality, popovers and the top layer with many windows
+
+Today all four stacks are global to the `UIWindow`, and for frames that is wrong in one specific,
+user-visible way: **a modal in window A freezes window B and the taskbar.** `isModalBlocked` answers
+against "the document's active modal dialog", `getHoveredElement` skips the main tree wholesale while
+any modal is open. On a desktop, modality is per-application: a sheet blocks its window (macOS), an
+owned dialog blocks its owner (Win32). Our "application" is the frame.
+
+### The changes
+
+1. **Modality scopes to the frame.** The modal stacks become per-scope, where an element's scope is its
+   nearest `WindowFrame` ancestor, falling back to the desktop (so a modal opened by desktop chrome can
+   still block everything — the current behaviour remains expressible). `isModalBlocked(element)` asks
+   the element's own scope. Enforcement is at **four points, deliberately not one** — hit-testing, Tab
+   scoping, `requestFocus`, and the top-layer hit-test skip — and the invariant table's warning applies
+   verbatim: a "simplify to one predicate" refactor that misses one still looks green. Each point gets
+   its own test, as the current four have.
+2. **A modal promotes into its *frame*, not the global top layer.** Win32's rule decides it: owned
+   windows stay above their owner *and travel with it* — if A's modal sat in the global top layer, it
+   would float above B after B is raised. So `WindowFrame` carries its own overlay slot (an internal,
+   absolutely-positioned, zero-sized layer — the `windowOverlayLayer` pattern, per frame), and
+   `Dialog.showModal`/`overlayHost` resolve to the nearest frame's slot. The `__backdrop__` then sizes
+   against the frame and dims exactly the window it blocks. The slot is the general
+   **owned-window** surface, not a modal-only one — a floating tool window is its second consumer (see Views), owned and above its
+   owner *without* disabling it: Win32's owner/owned pair, with the disabled owner as the modal
+   special case. An owned window paints *inside its owner's subtree*, so the whole group raises,
+   lowers and hides as one with no bookkeeping — Win32's group behaviour for free. The slot carries
+   a high `z-index` within the frame (above `__content__`), and the frame element itself keeps
+   `overflow` visible — only `__content__` clips — so a dialog or float may legally overhang its
+   owner's edge.
+3. **The global top layer keeps the pointer-transients**: menus, tooltips, the drag ghost, toasts.
+   These belong to the pointer or the active frame; a click into another window is a mouse-down, and
+   light dismiss already closes them on it, so the "floats above the wrong window" case cannot outlive
+   one click. The light-dismiss algorithm itself needs no scoping.
+4. **Escape routes through the active frame's cascade**: the active frame's close watchers first
+   (dropdown before modal, as today), then the frame's own policy, then — with no active frame — the
+   screen closes. The close-watcher stack becomes per-scope alongside the modal stack; a live drag
+   still eats Escape before everything, globally, because a drag is the innermost live interaction.
+5. **Being blocked is shown, never silent.** A click on a window blocked by its own modal pulses
+   the modal (a transition on a class) and dings — Windows' exact behaviour, and the first real
+   consumer of `CgPlatform.sound()`, a platform SPI wired on every loader that nothing uses today.
+   Without it, window-scoped modality's failure mode reads as "this window ignores my clicks",
+   indistinguishable from a bug.
+
+### What deliberately does not change
+
+- `TopLayer`'s mechanics (insertion order, reparent-to-root, the four positional divergences).
+- `pushModal`-on-`unregisterElement` cleanup — detach-hides ride on it.
+- Popovers, close watchers and light dismiss semantics within one scope — every documented behaviour
+  (invoker carve-out, dismiss-after-dispatch, the show-seq exemption) is scope-local already.
+
+---
+
+## Views: docked, floating, windowed — the dock ↔ window bridge
+
+The compositor's windows and the workbench's dock are two levels, and the engine keeps them apart —
+but IntelliJ's most-used window gesture is precisely a *conversion* between them: drag a tool-window
+button off the stripe and the panel becomes a floating window over the IDE, with a **Dock** button to
+re-embed it and a **Hide** button that dismisses it — and the stripe button then reopens it *in the
+same mode at the same position*. Editor tabs go further: dragged out of the tab strip, they become a
+top-level window with its own taskbar entry. This section makes that conversion a general engine
+capability rather than a workbench trick.
+
+### One content, three presentations
+
+| | **DOCKED** | **FLOATING** | **WINDOWED** |
+|---|---|---|---|
+| Lives in | its `DockRegion` / the dock tree | an **owned** `WindowFrame` over its owner | a top-level `WindowFrame`, peer of the workbench |
+| Chrome | the pane/strip header | **Dock** + **Hide** (+ the panel's own menu) | minimise / maximise / close |
+| Z | the owner's content | above its owner, travels and hides with it | the normal window band |
+| Taskbar | — | **no entry** | its own entry |
+| Summoned by | its stripe button | its stripe button | the taskbar and the switcher |
+| IntelliJ name | Dock | Float | Window |
+
+**The instance is the same element in all three.** `ToolWindowManager` already builds content once per
+type and caches it across every hide precisely so toggling never rebuilds; a presentation change is a
+*reparent* of that instance, so scroll, expansion, caret and undo all survive because they were never
+touched. The reparent runs `unregisterElement`/`registerElement` over the subtree — the cost the raise
+rule forbids per click is fine at gesture speed, and it is the price a hide already pays.
+
+**Every window has exactly one summon surface.** A top-level frame is in the `WindowRegistry` and on
+the taskbar; a floating tool window is in neither — its way back is its stripe button, and its hidden
+state lives in `ToolWindowState`. A hidden float owned by two lists comes back twice or not at all, so
+registry membership follows presentation and changes with it. (One *owner*, not necessarily one
+control: a WINDOWED tool window's stripe button stays lit and keeps toggling it — by delegating to
+the registry entry, never by keeping a second copy of the state.)
+
+### The model already reserved the seat
+
+`ToolWindowState` is the port of IntelliJ's `WindowInfoImpl`, and its javadoc has said since it was
+written: *"`type` (docked/floating/windowed) and `autoHide` are still absent: floating tool windows do
+not exist here. Named so their absence reads as a decision."* This is the feature that fills the seat:
+`type` plus a floating rect join the record, `ToolWindowLayout` persists them beside everything else,
+and reopen-where-it-was falls out of the architecture's founding rule — *placement is stored beside
+the layout, never derived from it* — with no new mechanism. Hide flips `visible`; the mode and the
+rect stay; the stripe button reopens whatever the record says.
+
+### `FloatingDock` is the quarry, re-founded
+
+`FloatingDock` exists, is currently **unconsumed**, and is a top-layer `Dialog` under a rationale its
+own javadoc states — *"Minecraft has one window, so none of that is available"* — which CrystalOS
+retires. Under the compositor a top-layer float is exactly the bug the modality section names: it
+would paint above *other* windows even when its owner is behind. So it re-founds on an **owned
+`WindowFrame`** in its owner's overlay slot, keeping its three load-bearing decisions verbatim:
+
+- **Neither modal nor light-dismissable** — the class note's whole reason for being written down: a
+  floating panel that vanishes when you click the graph behind it is a bug shipped looking like a
+  feature.
+- **It hosts a whole `DockLayout`, never a single panel** — ImGui's rule, so a float can be split and
+  tabbed exactly like the dock it left, and tear-out/re-dock stay the same two operations the drop
+  code already performs.
+- **`closeIfEmpty` is called by the drag's owner, never a tick** — an empty float is a legitimate
+  state *during* a drag.
+
+### The gestures
+
+- **Stripe button dragged off the rail** → the panel floats at the drop point. The machinery is the
+  existing region drag: `RegionDropOverlay` already bands the whole workbench for dragging between
+  regions, and a drop outside every band — which today changes nothing, rejection being the drag
+  default — becomes the FLOAT answer from `RegionDropZones`. A new answer, not a new gesture.
+- **Dock** → back to the remembered `region`/`side` — a lookup, because placement was stored. The
+  four-tier restoration heuristic this architecture already deleted stays deleted.
+- **Hide** (and Shift+Escape, IntelliJ's binding, read from the keymap) → `visible = false`, frame
+  detached, mode and rect kept.
+- **Editor tab dragged past every editor drop zone** → a **WINDOWED** frame at the drop point,
+  hosting its own small dock area — tab strip included, ImGui's rule again — with a taskbar entry and
+  the full top-level chrome. Dragging its tab back into the main dock is the return path, and
+  `closeIfEmpty` retires the frame. Closing the torn-out frame closes its tab *views*, never the
+  documents — the document/view split already guarantees a document still open in another frame is
+  untouched.
+
+### The editor case is where Design B pays
+
+A document open in the main workbench and in a torn-out window is **one document** — the invariant
+*"`LanguageServices` belongs to the DOCUMENT, not to the editor or the widget"* already covers two
+split panes, and two frames under one `UIWindow` are the same case wearing chrome: one analysis, one
+`DiagnosticSet`, one undo stack (per document, deliberately never per window), and an edit in either
+view lands in both. Under Design A this would have been genuinely hard — N `UIWindow`s would have
+turned the split-pane rule into a cross-window synchronisation problem.
+
+### Engine vs workbench — where the seam sits
+
+The **engine** owns what is general: frame roles (top-level vs owned) and their control sets, the
+owned-window slot, the reparent contract, the one-summon-surface rule. The **workbench** owns what is
+policy: which presentations each panel offers, the stripe, `ToolWindowState`, and what its drop zones
+mean. A consumer that is not the workbench — the shader graph, a mod's own UI — gets float-capable
+panels through the same seam without inheriting the stripe.
+
+---
+
+## The taskbar
+
+### The persistent-strip conclusion, revised — and why the old one was still right
+
+The previous plan ruled out a persistent taskbar on the cursor argument: in-game the cursor is captured
+for look control, so an always-on HUD strip cannot be clicked, and that argument **stands — for the
+HUD**. What it never considered is a desktop, because the old model had no desktop: inside the
+compositor screen the cursor is free, the game is paused, and a persistent bar along the bottom is
+exactly what every precedent ships. So:
+
+- **On the desktop: a persistent `Taskbar`**, docked bottom, part of `Desktop`'s chrome. Never a
+  window itself — not in the registry, not minimisable, not modal-blockable.
+- **From the game: the keybind** summons the desktop screen (the existing `openEditor` binding's
+  successor). There is no HUD strip, same reasoning as before.
+
+### The model
+
+**A window joins the taskbar on open and leaves only on destroy** — Windows' rule — and **top-level
+frames only**: a floating tool window's summon surface is its stripe button, never the bar (see
+Views). The strip shows what is *live*, visible or hidden, the active one highlighted; a minimised
+window's entry is how it comes back. Entry click: activate (raising and restoring as needed); click on the active entry minimises
+(Windows). The taskbar renders `WindowRegistry` — it is the registry, rendered, never a second list.
+
+**Show desktop** — minimise everything, restore everything — is one command over the same registry
+(W13), and earns its keybind exactly when floats and torn-out editors multiply. It is a toggle with
+a memory: it restores exactly the set it minimised, and forgets that memory the moment any window is
+activated in between — Windows' Win+D.
+
+### What to take (carried forward)
 
 | Take | Why it fits | Reuses |
 |---|---|---|
 | Icon + label per entry | The minimum that identifies an entry | `CgUiSvg`, `icon()` in CSS |
-| **Focused highlight** | Otherwise the strip cannot say where you are | a **class**, per "state a widget flips itself belongs on a class, not a pseudo-class" |
-| **Grouping by window type** | Two editors are two entries | — |
+| **Active highlight** | Otherwise the bar cannot say where you are | a **class** |
 | **Badges** — unsaved dot, error count | The tab strip already draws `*`; the Problems panel already counts | `FileDecoration`'s badge/colour split |
-| **Per-entry context menu** — close, recent | Right-click is where "close" lives on every taskbar | `ContextMenu` + `MenuBuilder`, already the ONE place commands become rows |
+| **Per-entry context menu** — restore, minimise, maximise, close | Right-click is where "close" lives on every taskbar | `ContextMenu` + `MenuBuilder` — already the ONE place commands become rows |
 | **Overflow** when full | — | — |
 | **Progress on an entry** | A chunked transfer or a band download has a real duration | `ProgressBar`, `JobScheduler` |
+| **Attention flash** on an entry | A background-opened window must be able to say so without stealing focus (see Activation) | a class + a transition, cleared on activation |
 
-### What NOT to take, and why
+### What NOT to take (carried forward)
 
 | Leave | Reason |
 |---|---|
-| **A search box** | The command palette already *is* this. Two search surfaces means two matchers that disagree — exactly what `TreeSearch.Model` taking a `String` cost once, silently dropping Match Case, Words and Regex |
-| **A clock** | Minecraft has its own time, and `StatusBarView` owns that role |
-| **A system tray** | `StatusBarView` already occupies it |
-| **Pinning / launching** | These are not apps a user launches; they are windows a command opens. "Pinned" would have to mean *retained even when destroyed*, a third lifecycle state nobody asked for |
-| **Auto-hide** | Solves a problem we do not have — the strip is summoned, and when docked it lives in a screen the user chose to open |
+| **A search box** | The command palette already is this; two search surfaces means two matchers that disagree — the recorded `TreeSearch.Model` failure |
+| **A clock / system tray** | Minecraft has time; `StatusBarView` owns that role inside windows |
+| **Pinning / launching** | These are windows a command opens, not apps a user launches; "pinned" would mean *retained even when destroyed* — a third lifecycle state nobody asked for |
+| **Auto-hide** | The bar lives in a screen the user chose to open |
 
-### Icons — what a window must declare
+### Icons (carried forward — both traps recorded)
 
-A strip entry needs an icon, so **a window declares one** the way a file type does. The machinery exists:
-`ui/icons/*.svg` (Feather, stroked `currentColor` chrome marks) for window icons, `FileIconTheme` for
-anything file-shaped, and `CgUiSvg` to draw them with no atlas and one instanced draw call.
+A frame declares an icon the way a file type does. Resolve light/dark **through `CgUiSvg.ofIcon`**
+(`TextureValue.parseIcon` once didn't, and every stylesheet `icon()` drew the light file forever);
+16px matching the filetype set; a badge is a **full-size layer**, never a glyph scaled into a corner
+box (the JetBrains `staticMark` lesson).
 
-Two recorded traps apply directly:
+### Discoverability — the day-one trap
 
-- **Resolve the light/dark variant through `CgUiSvg.ofIcon`.** `TextureValue.parseIcon` once called
-  `of(toResourcePath(...))` instead, so every `icon()` in every stylesheet drew the light file forever
-  and a theme swap changed nothing — invisible while the shipped icons were `currentColor` marks.
-- **16px, matching the filetype set**, and a badge is a **full-size layer**, not a glyph in a corner box.
-  JetBrains draws `staticMark`/`finalMark` on their own 16×16 canvases with the glyph already placed, so
-  they compose by stacking; scaled into a corner they draw a third too large and read as bad artwork.
-
-### The window controls
-
-Minecraft has no OS chrome, so CrystalGUI draws its own — as VS Code does with
-`window.titleBarStyle: custom` and IntelliJ does by merging the controls into the main toolbar row,
-right-aligned above the right activity stripe. **That placement is the reference.**
-
-| Button | Meaning | Confidence |
-|---|---|---|
-| **Minimise** | `hide()` — retained, frozen | Unambiguous |
-| **Close** | `requestClose()` → policy | Unambiguous |
-| **Maximise / restore** | needs a decision | Deferred — see below |
-
-**Maximise does not map**, and guessing is how a button ends up meaning three things. There is no OS
-window to maximise; it is only meaningful once a window can be *less* than full-screen. The machinery for
-that exists (`UIResizer`, out-of-flow positioning, the graph's floating panels), so the coherent reading
-is *remember the rect, fill the screen, restore on toggle* — **ship minimise and close first, and add
-maximise when there is a floating window to restore to.**
+**Minimise with no discoverable way back is worse than no minimise.** The taskbar answers it on the
+desktop; from the game, the first hide fires a `Notification` — *"Editor minimised · press ⟨key⟩ to
+return"* — with the accelerator **read from the keymap** (`Keymap.acceleratorFor`), never spelled as a
+literal, per the recorded tooltip rule.
 
 ---
 
-## Order of work, and what each step unblocks
+## The switcher
 
-| # | Step | Unblocks | Why not earlier |
+A keybind cycles the registry in **MRU order** (not z — minimised windows have no z), showing icon +
+title per entry, activating on release or Enter. It is an overlay on the desktop screen; pressed
+in-game, the binding opens the desktop first. Ships after the taskbar — it is a convenience view of the
+same model, not the safety net (the taskbar is).
+
+Two binding systems meet here: the in-game summon is a Minecraft `KeyBinding` (as the existing
+`openEditor` key in `CgUiInput` is), while in-desktop cycling is the engine `Keymap`. The first-hide
+notification reads whichever applies — never a spelled literal.
+
+---
+
+## The loader seam
+
+Where this landed since the last plan was written: `CgUiScreen` already retains — `editor`, `uiWindow`
+and `workspace` are **static fields "kept across opens"**, `onGuiClosed` only saves the session, and
+`disposeAll()` runs at game shutdown. Retention exists; it is owned by the wrong layer, holds exactly
+one window, and the freeze is an accident of the paint loop (everything is driven from `drawScreen`, so
+a closed screen ticks nothing — including `JobScheduler.drain()`, which parks background results).
+
+The move:
+
+1. **`core/` owns a retained `Desktop`** (with its `UIWindow`, registry, taskbar). The loader's statics
+   shrink to a reference to it.
+2. **`CgUiScreen` becomes a viewport**: `initGui` attaches (creating on first use), `drawScreen` pumps
+   input and paints, closing the screen **hides the desktop** — all window states retained exactly as
+   they were, input state cleared (the same
+   boundary as a frame hide) — pinned frames excepted, which keep painting over the game (see
+   Pinned windows below). `disposeAll()` at shutdown is
+   unchanged.
+3. **The editor becomes the first `WindowFrame`** — `CrystalEditor` in a frame with
+   `HIDE_ON_CLOSE`, opened **maximised by default**. This is the migration's masterstroke *and* its
+   biggest test surface: on day one nothing visibly changes (a maximised frame is the current
+   full-screen editor), and un-maximising is what reveals the desktop. The editor's `width: 100%;
+   height: 100%` host rule moves onto the desktop root; the frame sizes the editor.
+4. **Escape, end to end**: cascade inside the active frame → frame policy (the editor minimises) → no
+   active frame → the screen closes, desktop hidden, everything retained. Every step is the existing
+   `requestClose` machinery; the vanilla `keyTyped` close stays disabled as it already is.
+
+`doesGuiPauseGame` stays `true`; the paused world behind the desktop **is the wallpaper**.
+
+---
+
+## Pinned windows — always-on-top, and the HUD over the running game
+
+**Adopted 2026-08-21.** The use case is live debugging: pin the Run console or a graph preview, close
+the desktop, and keep watching it stream while playing. Discord's and Steam's in-game overlays are the
+exact precedent — a window pinned over a running game, display-only, arranged from the overlay UI
+rather than in-game.
+
+One toggle, two effects:
+
+1. **Above the normal band on the desktop** — Win32's `WS_EX_TOPMOST`, EWMH's `_NET_WM_STATE_ABOVE`.
+   In the compositor this is a second z-band: pinned frames sort above unpinned ones and below the
+   global top layer. The band model absorbs it without redesign — exactly as predicted when
+   always-on-top was refused for having no consumer; it has one now.
+2. **It survives the desktop closing.** Closing the screen hides every window *except* pinned ones,
+   which keep rendering over the running game.
+
+**Pin implies top-level.** An owned float hides with its owner by definition, and a pinned window
+must survive the whole desktop hiding — the two contracts collide. So pinning a FLOATING tool window
+first promotes it to WINDOWED (IntelliJ's Window mode), and unpinning returns it to the mode it came
+from. The Run-console use case is exactly this path: float it off the stripe, pin it, close the
+desktop, play.
+
+### Display-only is the rule that makes it sound
+
+In-game the cursor is grabbed and the keyboard is the game's, so a HUD window can receive no input —
+the refusal of a *clickable* HUD stands in full. What changed is recognising that display-only needs
+no cursor. Three consequences, each load-bearing:
+
+- **A `__hud__` class restyles the frame while it is on the HUD**: the controls hide — a control that
+  cannot be clicked but looks clickable is the lie the disabled-control rule already forbids — and a
+  theme may add translucency. Pinning, unpinning, placing and sizing all happen from the desktop.
+- **The HUD paints through a paint-only entry** — layout and draw, no input-handler frames. The hover
+  pipeline must never run against a grabbed cursor's stale position; `updateWithoutPainting` already
+  proves the frame loop decomposes this way, and the HUD entry is its mirror (paint without input). It still runs the full
+  `advanceFrame` — styles, transitions, layout and the `JobScheduler` drain, which is precisely what
+  keeps a pinned Run console's async output flowing — and it seeds the same raw-pixel `init` and
+  `rootTransform`, so a pinned window is pixel-identical on and off the desktop.
+- **Visible stays live.** The freeze contract keys on *hidden*, not on *the screen being closed*: a
+  pinned window keeps its tickers, transitions and connections, because watching live data is the
+  entire use case. Everything unpinned freezes exactly as before. The state model stays honest —
+  VISIBLE ticks, HIDDEN does not, and pinning just means visible on a second surface.
+
+### The platform capability
+
+This is the one genuinely new loader seam in the plan. The documented fact stands — `paintFrame` has
+only ever been called from `CgUiScreen.drawScreen` — and the HUD adds a second caller: a
+render-overlay hook that paints pinned frames after the game's own HUD. The hook pattern already
+exists in the family (CrystalGraphics' mc1201 loaders register `HudRenderCallback` on Fabric and the
+render-stage events on Forge/NeoForge for their own passes; 1.7.10 has `RenderGameOverlayEvent`), and
+the GL-state discipline `CgUiScreen` documents applies verbatim — `CgGlState.invalidateAllIfPresent()`
+on entry, hand Minecraft back its fixed-function state on exit. Only pinned subtrees paint, so the
+per-game-frame cost scales with what the player pinned, never with the desktop.
+
+Pause semantics are untouched: `doesGuiPauseGame` matters only while the screen is open, and a pinned
+window over the *running* game exists precisely when it is not. A world exit hides pinned windows like
+everything else — "the world went away" is already a lifecycle signal.
+
+---
+
+## Networking — server windows land as frames
+
+This is where the compositor pays for itself beyond the editor:
+
+- A `ClientUiSession`'s root (`windowId` attached) is wrapped in a `WindowFrame` and opened on the
+  desktop. **Two server UIs open at once are two windows** — the situation `UIWindow.commands`' javadoc
+  has predicted since it was written (*"a server-driven UI can have two windows whose `edit.save`
+  legitimately mean different things"*).
+- The wire protocol needs nothing new: window identity already crosses (*"every packet carries a window
+  id"*), and `OpenWindow` carrying a content hash means re-opening is one small packet.
+- Command resolution: `CommandRegistry.global()` + the desktop `UIWindow`'s registry already layer;
+  whether a frame carries a third layer is an open question (below) — `DataContext`'s focus walk
+  already disambiguates the common cases.
+- Server-side close semantics (does hiding a server window notify the server? does the server destroy
+  its session?) belong to `plan_phase5.md` — the seam here is only that hide and close are now
+  different messages *because* they are different verbs. Until Phase 5 decides, server frames default to
+  `DESTROY_ON_CLOSE` — a server UI is dialog-shaped (closing a chest does not retain it), and
+  `OpenWindow`'s content hash already makes reopening one small packet.
+
+---
+
+## Persistence
+
+- **Window geometry** — rect, maximised flag, and the restore rect — persists per window key in
+  `LocalConfigStorage` (client-side, private, beside the session record; never in the workspace, for
+  the recorded resource-pack reason). Applied at open, clamped against the current screen.
+  W12 also restores the **window set** itself — which windows were open, their modes (maximised,
+  pinned, presentation) and MRU order — so a relaunch reopens the desktop as it was left (macOS resume, a browser's session restore); §5.3's content persistence is what makes that
+  restoration mean something for dirty work.
+- **View state inside frames** — already `SessionState`, captured/applied at the register seam; hide
+  and destroy both pass through it with no new code.
+- **Dirty content across crash/quit** — `plan_phase5.md` §5.3, unchanged and still mandatory, because
+  retention is best-effort and eviction is real.
+
+---
+
+## Deliberately not building
+
+| Not building | Why |
+|---|---|
+| Tiling, virtual desktops, multi-monitor | Not the scope; recorded so "basic" stays basic |
+| A *clickable* HUD over the running game | The cursor-capture argument stands for anything needing a pointer — the taskbar never renders in-game. Pinned windows do, **display-only** (see Pinned windows) |
+| Window open/close/minimise animations | Transitions exist if wanted; not structural |
+| Occlusion culling / per-window FBO caching | Painter's-order overdraw is acceptable at this window count; `CgUiPaintContext`'s layer machinery is the future answer if it ever isn't |
+| Keyboard snap (the Win+arrows analogue) | Drag-to-edge snap ships in W13; the keyboard half waits for demand |
+| Live thumbnails on hover | Deferred — a preview of a frozen window means keeping its last frame, which fights the freeze contract |
+| Focus-follows-mouse | Click-to-focus only; the other model surprises everyone but its twelve fans |
+| IntelliJ's auto-hide / sliding tool windows | `ToolWindowState` already names `autoHide` a deliberate absence; this plan keeps it one |
+| Clipboard history | Declined 2026-08-21 — an editor nicety, not a compositor feature |
+
+---
+
+## Order of work
+
+**Second pass, 2026-08-21 — the good-to-have sweep, decided.** Adopted: attention/no-steal, the
+system menu, show desktop, modal-blocked feedback, drag-to-edge snap, fullscreen, Alt-drag,
+pin/HUD (always-on-top over the running game), session restore of the window set, the task
+manager, and per-window zoom — homes in W12–W15 below. Declined: clipboard history and keyboard
+snap; hover thumbnails stay deferred.
+
+| # | Step | Unblocks | Notes |
 |---|---|---|---|
-| **W1** | The lifecycle in `core/`: states, `hide`/`show`/`destroy`, the frozen contract | everything | — |
-| **W2** | The registry: one owner of the retained set, keyed, with an eviction bound | W3, W4 | Needs W1's states to hold |
-| **W3** | Rewire `CgUiScreen` to **attach/detach** instead of construct/null; Escape begins to hide | the actual behaviour | Shipping this before W4 makes a black hole |
-| **W4** | The strip, summoned by a keybind, over the registry | W3 being safe | — |
-| **W5** | Window controls (minimise, close) in the chrome, and a per-window icon | — | Needs a window to declare an icon, which is W1 |
-| **W6** | Reconnect-on-restore: `show()` carries `persisted`, the workspace client rebinds | remote use | Only matters once windows outlive a disconnect, which is W3 |
-| **W7** | Maximise, once a floating window exists | — | Its meaning is undecided until then |
-| **W8** | Nice-to-haves: hover thumbnails, drag to reorder, middle-click close | — | — |
-
-> **W3 and W4 ship together or not at all.** Escape that hides, with no way back, is strictly worse than
-> Escape that destroys — at least destruction is honest about what it did.
+| **W1** | `WindowFrame` + `Desktop`: chrome, `resize: both`, title-bar drag with clamping, tags + `ua/desktop.css`; harness scene `cgui-desktop` with two floating windows | everything visual | No lifecycle yet — geometry and chrome only. `Dialog` and `CanvasOverlayMove` are the quarries; the scene joins `SceneRegistry` **and** the AGENTS.md scene table in the same commit — those lists go stale silently |
+| **W2** | Stacking + activation: z-assignment raise, `__active__`, per-frame focus memory, empty-desktop blur | W3's "active frame" routing | The raise-is-not-a-reparent rule is load-bearing here |
+| **W3** | Lifecycle + registry: states, hide-as-detach, `persisted` show, destroy → `Disposer`, eviction, the ticker/input-forget contracts | W4, W5 | The freeze tests land here |
+| **W4** | `Taskbar` over the registry: entries, active highlight, activate/minimise clicks, context menu | W3 being safe to ship | **W3 and W4 ship together or not at all** — minimise with no way back is worse than destroy |
+| **W5** | Window-scoped modality: per-scope stacks, the frame overlay slot, `overlayHost`/`Dialog.showModal` retargeting, Escape per-frame | server windows, editor dialogs behaving | The four-points warning applies; one test per point |
+| **W6** | Maximise/restore: restore rect, double-click, restore-drag, `__maximized__` | W7's editor-maximised default | Unblocked by W1, no longer deferred |
+| **W7** | The loader seam: engine-owned desktop, `CgUiScreen` as viewport, the editor as a maximised `HIDE_ON_CLOSE` frame, Escape end-to-end | the actual product | The no-visible-change migration; in-game verification here |
+| **W8** | Tool-window **FLOATING**: `FloatingDock` re-founded on an owned `WindowFrame`; `ToolWindowState.type` + floating rect; stripe drag-out; Dock/Hide chrome; the stripe toggle honours the remembered mode | the IntelliJ gesture set | Needs W5's owned-window slot |
+| **W9** | Editor tear-out → **WINDOWED** frames: a drop past the editor zones opens a frame hosting its own dock area, taskbar entry and all; dragging the tab back re-docks | multi-window editing | After W7, so the torn-out window has a workbench frame to sit beside |
+| **W10** | The switcher (MRU keybind) + the first-hide notification with `Keymap.acceleratorFor` | discoverability | — |
+| **W11** | Reconnect-on-restore: `persisted` reaches the workspace client, rebind on show | remote use | Only matters once windows outlive a disconnect |
+| **W12** | Server windows as frames — **opened without focus, flashing their taskbar entry** (the no-steal rule); geometry persistence **and session restore of the window set**; remaining nice-to-haves (badges, progress entries, middle-click close) | — | Ordered by demand |
+| **W13** | Shell conveniences: the system menu (Alt+Space, title-bar and taskbar right-click, keyboard Move/Size), show desktop, modal-blocked pulse + the first `CgPlatform.sound()` sounds, Alt-drag, fullscreen, drag-to-edge snap | keyboard-only window management | All small, all sharing the command/keymap surface — one batch |
+| **W14** | Pin: the always-on-top band, the toggle, and the HUD — the overlay render hook, the paint-only entry, `__hud__` display-only presentation, visible-stays-live | live debugging over the running game | The one new platform capability; after W7, so there is a loader seam to extend |
+| **W15** | The task manager panel; per-window zoom | observability, accessibility | Both standalone |
 
 ---
 
@@ -241,52 +788,130 @@ maximise when there is a floating window to restore to.**
 
 | Piece | Test |
 |---|---|
-| State transitions, illegal transitions | headless — the state machine has no UI |
-| **A hidden window stops ticking** | headless: register a `UIFrameTicker`, hide, advance frames, assert it never fires. This is the one most likely to regress invisibly |
-| `show()` resets input state | headless: hover an element, hide, show, assert no hover and no capture |
-| Registry eviction and `Disposer` running on destroy | headless |
-| Reconnect-on-restore | headless over `InMemoryTransport`, **and** in game against `runServer` — the dedicated-server path is where it actually matters |
-| The strip and controls | a harness scene, per the repo rule that anything visual is tested there rather than through Minecraft |
-| The whole gesture | in game: open the editor, edit without saving, minimise, do something in the world, restore, and assert the undo history and the dirty buffer survived |
+| State machine, illegal transitions | headless — no UI involved |
+| **A hidden frame stops ticking** | headless: ticker on an element in a frame, hide, advance, assert silent — the regression most likely to be invisible |
+| Hide clears input state | headless: hover/capture inside a frame, hide, assert forgotten |
+| Raise/z-order and hit-test agreement | headless: two overlapping frames, click the lower — **through the real mouse path, never `sendInputEvent`**, which skips focus resolution and `emitMouseDown` and has now shipped two bugs behind sixteen green tests |
+| Frame-scoped modality, all four points | one headless test per enforcement point, mirroring the existing four |
+| Registry eviction runs `Disposer` | headless |
+| Activation restores remembered focus | headless; the restore-never-steal rule from `ListView` applies |
+| Geometry: clamp, cascade, maximise/restore rect | headless — geometry is style writes, all observable |
+| Chrome, taskbar, switcher visuals | `cgui-desktop` harness scene — anything visual is harness, never Minecraft |
+| Reconnect-on-restore | headless over `InMemoryTransport` **and** in-game against `runServer` |
+| The whole gesture | in game: open editor, edit unsaved, un-maximise, open a second window, minimise both, restore from taskbar, assert undo history and dirty buffer survive |
+| Presentation round-trip | headless: dock → float → dock keeps the **same content instance** and its view state (a scroll offset, an expanded folder) — and registry membership follows the mode |
+| One document across two frames | headless: the same file in the workbench and a torn-out frame — one `LanguageServices`, one undo stack, an edit in either lands in both |
+| No focus stealing | headless: with focus held in one frame, open another from a non-gesture source — focus unmoved, the new entry carries the attention class |
+| The HUD path synthesizes no input | headless: paint a pinned frame through the paint-only entry — no hover, no enter/leave, no capture disturbed |
+| Pin, end to end | in game: pin the Run console, close the desktop, run a script — output streams over the world with the cursor grabbed, and nothing is clickable |
+| Cross-window drag-and-drop stays free | headless, after W9: drag a file from the explorer onto a torn-out editor's dock — one `UIDragController`, zero new code; pins the Design B payoff |
+
+### `cgui-desktop` grows with the plan — the hands-on contract
+
+**Decided 2026-08-22.** Every W with something visible lands its demonstration in the `cgui-desktop`
+scene **in the same commit**, so each step can be driven by hand the day it exists — the harness boots
+in seconds and is the recorded way to test anything visual. The scene is a living testbed, not a W1
+artifact:
+
+| After | The scene demonstrates |
+|---|---|
+| W1 | two floating windows: title-bar drag, eight-handle resize, clamping |
+| W2 | overlap + click-to-raise, `__active__` chrome, focus memory across activation |
+| W3 | minimise/close via the chrome against the real lifecycle — including an on-screen ticker counter that provably **stops** while its window is hidden |
+| W4 | the taskbar: entries, active highlight, restore/minimise clicks, the context menu |
+| W5 | a modal in window A with window B and the taskbar still live; the backdrop dimming exactly one frame |
+| W6 | maximise/restore, double-click, restore-drag |
+| W8–W9 | a window hosting a small dock: stripe float-out, Dock/Hide, tab tear-out into a new frame (`cgui-dock` keeps owning dock-*internal* behaviour) |
+| W10 | the switcher on its chord, MRU order visible |
+| W13 | the system menu (Alt+Space), keyboard Move/Size, show desktop, snap bands, Alt-drag, fullscreen, the modal-blocked pulse |
+| W14 | a **simulated game mode**: one key flips the scene to input-off, painting only pinned frames through the paint-only entry with `__hud__` styling live — the closest a GL harness can get to Minecraft without being it |
+| W15 | the task manager listing the scene's own windows; per-window zoom |
+
+W7, W11 and W12 are the in-game/wire items. Their visual halves are still reachable here — once W12
+lands, the scene can open a "server window" over `InMemoryTransport` — and the real thing is verified
+in game per the rows above.
+
+Standing scars that shape these tests: `TransitionEngine` ignores the delta (assert inputs, not
+mid-flight values); a closed `Dialog` measures 0 (show first); dotted-capture pairs for any
+token-precedence assertion; test worktrees need the provisioning ritual.
 
 ---
 
 ## Risks
 
-- **A window that keeps working while hidden.** The failure is invisible by definition — nothing is on
-  screen to look wrong — and it shows up as frame time or a compile storm nobody can attribute. Mitigated
-  by the ticker test above, which is why that test is called out rather than left implied.
-- **Unbounded retention.** Every retained editor holds ropes, undo stacks and analyses. Without an
-  eviction policy this is a slow leak that only appears in a long session.
-- **Escape becoming ambiguous.** The cascade already resolves this and must keep doing so; the window is
-  the *last* consumer, never an earlier one.
-- **The disconnect interaction.** Recorded twice now, in two documents, because it was struck as
-  unreachable and this plan makes it reachable again.
-- **Scope creep into a full window manager.** Floating, tiling, snapping, multi-monitor. None of that is
-  wanted. The line: **one visible window at a time, a set of retained ones, and a way to switch.**
+- **The raise reparent trap.** Anyone "simplifying" z-assignment into a child-list move re-runs
+  register/unregister over the clicked subtree. Named here and in the eventual `Desktop` javadoc; the
+  hit-test-agreement test fails loudly on the session-state side effects.
+- **A frame that keeps working while hidden.** Invisible by definition; the ticker test is the guard,
+  and the ticker contract is the fix, not per-widget whack-a-mole. W15's task manager is the
+  observability half — a panel over the registry showing each window's state, ticker count and
+  retained size, so the invisible failure has somewhere to be seen.
+- **The four-point modality refactor.** Miss one and everything looks green — the invariant table says
+  so from last time. Four tests, one per point, before any refactor of the predicate.
+- **Unbounded retention.** Slow leak, long sessions only. Eviction cap from day one, even if generous.
+- **The disconnect interaction.** Recorded three times now; W11 exists because retention makes the
+  struck-through stale-client defect reachable again.
+- **Scope creep — in the new direction.** The old fence ("not a window manager") was wrong; the new
+  fence is the Deliberately-not-building table, and it is normative. A compositor invites polish
+  infinitely; W-items only.
+- **`getAttachedWindow()` across hide.** Detached elements answer null; any code that caches the
+  window across frames must re-ask. Mostly already true (detach exists today); hide makes it routine.
+- **A hidden float with two owners.** Registry membership must follow presentation exactly — a
+  float that is also in the `WindowRegistry` comes back from both the stripe and the taskbar, or
+  from neither. The one-summon-surface rule is normative; the round-trip test asserts membership.
+- **The HUD surface is real platform work.** A second paint entry over the running game, GL state
+  shared with Minecraft's own HUD pass (the `invalidateAllIfPresent` discipline applies verbatim),
+  per-game-frame cost, and a freeze contract that now keys on *hidden* rather than *screen closed*.
+  It ships last among the core items (W14) for exactly that reason, and the paint-only entry gets
+  its own no-input test.
 
 ---
 
 ## Exit criteria
 
-1. Escape on the editor **hides** it; the editor, its undo history and its dirty buffers are intact on
-   restore.
-2. A hidden window fires no tickers, runs no transitions and performs no analysis.
-3. The strip lists every live window, shows which is focused, and restores one on activation.
-4. Closing a window destroys it, runs `Disposer`, and removes it from the strip.
-5. `CgUiScreen` constructs no `UIWindow` — it attaches to one and detaches on close.
-6. A disconnect and rejoin leaves a retained window usable, its workspace client rebound.
-7. The keybind that summons the strip is discoverable without reading the source.
+1. Two windows visible at once, both draggable, both resizable on all eight edges, overlapping, with
+   the click landing in the visually-top one — and raise-on-click reordering them.
+2. Escape on the editor **minimises** it to the taskbar; the editor, its undo history and its dirty
+   buffers are intact on restore. Closing the screen and reopening retains everything.
+3. A hidden frame fires no tickers, runs no transitions, performs no analysis, and holds no input state.
+4. A modal dialog in one window blocks only that window: the other window and the taskbar stay live.
+5. Maximise fills the desktop and restore returns the exact prior rect; double-click and restore-drag
+   both work.
+6. The taskbar lists every live window with icon and title, marks the active one, restores a minimised
+   one on click, and its context menu closes one — running `Disposer`.
+7. `CgUiScreen` constructs no `UIWindow` and holds no editor static — it attaches to the engine-owned
+   desktop and detaches on close.
+8. A disconnect and rejoin leaves retained windows usable, their workspace clients rebound.
+9. The switcher keybind is discoverable without reading the source (the first-hide notification).
+10. A server-opened UI arrives as a window on the desktop beside the editor.
+11. A tool window drags off the stripe into a floating window with Dock and Hide; Dock returns it
+    to its remembered region, and Hide + a stripe press reopens it floating at the same rect.
+12. An editor tab tears out into a taskbar-listed window sharing the document: an edit in one view
+    is visible in the other, and one undo stack serves both.
+13. A window opened by the server while the user types elsewhere takes no focus, and its taskbar
+    entry flashes until activated.
+14. A pinned window keeps rendering and updating over the running game with the cursor grabbed —
+    display-only — and unpins back into the normal band from the desktop.
+15. Alt+Space opens the system menu on the active window, and Move/Size drive it from the keyboard.
 
 ---
 
-## Deliberately not in this plan
+## Open questions
 
-- **Persisting the retained set across a crash or a quit** — `plan_phase5.md` §5.3. Retention is
-  in-memory; that is persistence, and the two are complementary rather than alternatives.
-- **A HUD strip drawn over the running game.** Ruled out above on the cursor argument, not on cost.
-- **Floating, tiling, snapping, multi-monitor.** Not a window manager.
-- **Maximise**, until something can be less than full-screen (W7).
+Named so they read as decisions pending, not gaps nobody saw.
+
+1. **A per-frame `CommandRegistry` layer** (global < desktop < frame). Not needed yet: commands are
+   facts about the application, enablement resolves from focus through `DataContext`, and the
+   two-windows-two-`edit.save`s scenario the registry's own javadoc predicts is really an enablement
+   question the focus walk already answers. Revisit at W12 if two server UIs genuinely register
+   clashing ids.
+2. **Default chords for `window.close` and `desktop.switchWindow`.** `Ctrl+W` and `Ctrl+Tab` are the
+   OS-conventional picks and both are plausibly claimed (tab close; recent files). Resolved at
+   W10/W13 against the live keymap — never hardcoded in this document.
+3. **An interactive HUD.** Discord's overlay has a clickable mode behind a cursor-freeing chord;
+   ours is display-only by decision. Recorded so the display-only rule reads as chosen rather than
+   overlooked — revisiting it means a platform capability for input while the game is ungrabbed,
+   which is a new plan, not a W-item.
 
 ---
 
@@ -296,8 +921,23 @@ maximise when there is a floating window to restore to.**
   [WICG spec](https://wicg.github.io/page-lifecycle/) — the six states, `freeze`/`resume`, `wasDiscarded`
 - [Back/forward cache](https://web.dev/articles/bfcache) — eligibility, `pageshow` + `event.persisted`
 - [Disconnect WebSockets on BFCache entry](https://groups.google.com/a/chromium.org/g/blink-dev/c/52nlr8z3Png)
-  — the move from *"an open connection blocks retention"* to *"close on entry, reconnect on restore"*
+  — from *"an open connection blocks retention"* to *"close on entry, reconnect on restore"*
 - [Opening and Closing Windows](https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/WinPanel/Tasks/OpeningClosingWindows.html)
-  — `orderOut:` vs `close`, and `releasedWhenClosed` being **ignored under a window controller**
+  — `orderOut:` vs `close`, `releasedWhenClosed` ignored under a window controller
 - [Using Window Notifications and Delegate Methods](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/WinPanel/Tasks/UsingWindowNotDel.html)
   — `windowShouldClose:` as a veto
+- Swing MDI: `JDesktopPane`, `JInternalFrame`, `DesktopManager`, `WindowConstants`
+  (`setDefaultCloseOperation`) — the JVM's in-process window manager, and the naming precedent
+- Win32: `WM_CLOSE`/`DestroyWindow`, owner/owned z-order ("an owned window is always above its owner"),
+  `CW_USEDEFAULT` cascade, Alt+Tab's MRU ordering, restore-drag of a maximised window
+- X11 ICCCM/EWMH: `WM_DELETE_WINDOW`, `WM_TRANSIENT_FOR`, layered stacking order
+- LDLib2 `WindowDragHelper.ResizeHandle` — the eight-handle precedent `UIResizer` already cites
+- IntelliJ tool windows — view modes (Dock/Undock/Float/Window), `WindowInfoImpl.type`,
+  Shift+Escape hide, the float's Dock/Hide chrome — the behaviour W8 ports
+- VS Code `auxiliaryEditorPart.ts` (floating editor windows) — shape only; `FloatingDock`'s
+  javadoc already cites it as the thing deliberately not done at the OS level
+- Discord and Steam in-game overlays — the pinned, display-only HUD precedent: arranged from the
+  overlay UI, watched in-game
+- Win32 `WS_EX_TOPMOST` / EWMH `_NET_WM_STATE_ABOVE` (the pin band); `SetForegroundWindow`'s
+  foreground-lock rules + `FlashWindowEx`, X11's urgency hint, macOS `requestUserAttention`
+  (no-steal + attention requests)
