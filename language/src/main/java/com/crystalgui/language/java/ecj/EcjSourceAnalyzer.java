@@ -1259,16 +1259,28 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
         }
 
         /**
-         * Where a binding is declared, when the declaration is <b>in this file</b>.
+         * Where a binding is declared — <b>this file first, then attached source</b>.
          *
-         * <p>{@code findDeclaringNode} answers only for the unit it is asked, which is exactly the
-         * honest scope here: a member of a compiled class on the classpath has no source attached, and
-         * inventing a location for it would be worse than saying nothing. Cross-file go-to needs the
-         * workspace, and that is M11's problem.</p>
+         * <p>{@code findDeclaringNode} answers only for the unit it is asked, and for a long while that
+         * was the whole of it: a classpath member got null, which {@link DeclarationSite} still
+         * documents as the ordinary case. That was true when nothing could read a classpath type's
+         * source. {@code AttachedSources} can, and has been quoting declarations out of it for the
+         * documentation popup all along — so the second step asks it, and the answer is a
+         * {@code library://} site the workbench opens in a viewer.</p>
+         *
+         * <p><b>Order matters and is not arbitrary.</b> A type declared in the file being edited must
+         * answer as THIS document even when a class of the same name exists on the classpath, or
+         * editing a class called {@code Main} would navigate into somebody else's {@code Main}. The
+         * local unit is definitive about itself; the archive is a fallback.</p>
+         *
+         * <p>Still null when there is no attached source, which is a jar shipping none — a decompiler
+         * answers those, and cannot answer here: it has no positions to give until it has run.</p>
          */
-        private static DeclarationSite declarationOf(CompilationUnit unit, IBinding binding) {
+        private DeclarationSite declarationOf(CompilationUnit unit, IBinding binding) {
             ASTNode declaration = unit.findDeclaringNode(binding);
-            if (declaration == null) return null;
+            if (declaration == null) {
+                return signatures == null ? null : signatures.declarationInAttachedSource(binding);
+            }
             ASTNode named = declaration instanceof VariableDeclarationFragment
                     ? ((VariableDeclarationFragment) declaration).getName() : declaration;
             int start = named.getStartPosition();

@@ -4,9 +4,13 @@ import com.crystalgui.language.engine.EngineHost;
 import com.crystalgui.language.engine.EngineSource;
 import com.crystalgui.language.engine.JavaEngine;
 import com.crystalgui.language.engine.bridge.SourceAnalyzer;
+import com.crystalgui.language.java.assist.AttachedSources;
 import com.crystalgui.language.java.classpath.HostClasspath;
+import com.crystalgui.text.lang.DeclarationSite;
 import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.text.markup.MarkupParser;
+
+import javax.annotation.Nullable;
 
 import org.junit.AfterClass;
 import org.junit.Assume;
@@ -814,6 +818,146 @@ public class JavaDocBodyTest {
             assertEquals("the reference that DOES resolve must still be coloured", "type", realCapture);
             assertNull("a recovered binding was coloured as a real type: " + missingCapture,
                     missingCapture);
+        } finally {
+            analysis.close();
+        }
+    }
+
+    // ── V1: where a classpath symbol is declared ────────────────────────────────────
+
+    /**
+     * <b>A classpath type reports where it is declared, in a {@code library://} resource.</b>
+     *
+     * <p>{@code findDeclaringNode} only ever answers for the unit it is asked, so this was null for
+     * everything on the classpath — which is what made Ctrl+B into {@code ArrayList} do nothing at all.
+     * The source was readable the whole time; nothing was asking where in it.</p>
+     */
+    @Test
+    public void aClasspathTypeIsDeclaredInALibraryResource() {
+        assumeSourceFor("java.util.ArrayList");
+        DeclarationSite site = siteAt(
+                "public class Script {\n    java.util.ArrayList<String> names;\n}\n", "ArrayList<String>");
+        assertNotNull("the archive has ArrayList's source and nothing located the declaration", site);
+
+        assertFalse("a classpath type must not claim to be in this document", site.isSameDocument());
+        assertTrue("the site is not a library site: " + site.resource(), site.isLibrary());
+        assertEquals("library://java.util.ArrayList", site.resource().toString());
+    }
+
+    /**
+     * <b>A MEMBER reports its own position, not its type's.</b>
+     *
+     * <p>The distinction the whole feature turns on: opening {@code ArrayList.java} at line 1 when the
+     * user asked about {@code add} is technically a jump to the right file and is not the answer.</p>
+     */
+    @Test
+    public void aClasspathMemberIsDeclaredAtItsOwnName() {
+        assumeSourceFor("java.util.ArrayList");
+        DeclarationSite type = siteAt(
+                "public class Script {\n    java.util.ArrayList<String> names;\n}\n", "ArrayList<String>");
+        assertNotNull("the type located nothing", type);
+        DeclarationSite member = siteAt(""
+                + "public class Script {\n"
+                + "    void run(java.util.ArrayList<String> names) { names.isEmpty(); }\n"
+                + "}\n", "isEmpty()");
+        assertNotNull("a member of a classpath type located nothing", member);
+        assertTrue(member.isLibrary());
+        assertEquals("library://java.util.ArrayList", member.resource().toString());
+        assertTrue("the member answered with its type's own line",
+                member.start().row() > type.start().row());
+    }
+
+    /**
+     * <b>A NESTED type is declared in its top-level file.</b>
+     *
+     * <p>{@code Map.Entry} has no file of its own — a source archive is keyed by compilation unit — so
+     * the resource names {@code java.util.Map} and the range points inside it. Getting this wrong asks
+     * the archive for {@code Map$Entry.java}, which exists nowhere, and the feature silently does
+     * nothing for every nested type in the JDK.</p>
+     */
+    @Test
+    public void aNestedTypeIsDeclaredInItsTopLevelFile() {
+        assumeSourceFor("java.util.Map");
+        DeclarationSite site = siteAt(
+                "public class Script {\n    java.util.Map.Entry<String, String> row;\n}\n", "Entry<String");
+        assertNotNull("the archive has Map's source and the nested type located nothing", site);
+        assertTrue(site.isLibrary());
+        assertEquals("a nested type must resolve to the file that declares it",
+                "library://java.util.Map", site.resource().toString());
+    }
+
+    /**
+     * <b>A type declared HERE wins over a classpath type of the same name.</b>
+     *
+     * <p>The local unit is definitive about itself and the archive is a fallback — in that order, or
+     * editing a class called {@code List} navigates into {@code java.util.List} instead of into the
+     * declaration three lines above the caret.</p>
+     */
+    @Test
+    public void aLocalDeclarationOutranksTheClasspath() {
+        DeclarationSite site = siteAt(""
+                + "public class Script {\n"
+                + "    static class ArrayList { }\n"
+                + "    ArrayList mine;\n"
+                + "}\n", "ArrayList mine");
+        assertNotNull(site);
+        assertTrue("the classpath answered for a type declared in this very file",
+                site.isSameDocument());
+    }
+
+    /**
+     * <b>The position is legal against the text the archive serves.</b>
+     *
+     * <p>The rule every diagnostic in this stack follows, applied to navigation: a row and column mean
+     * something only against the document they were computed from. Asserted by slicing that text at the
+     * reported range and reading the identifier back — an assertion no off-by-one can pass, where
+     * comparing row numbers against a remembered constant passes against a file that has since moved
+     * on.</p>
+     */
+    @Test
+    public void theRangeLandsOnTheIdentifierInTheServedText() {
+        DeclarationSite site = siteAt(""
+                + "public class Script {\n"
+                + "    void run(java.util.ArrayList<String> names) { names.isEmpty(); }\n"
+                + "}\n", "isEmpty()");
+        assertNotNull("the archive has ArrayList's source and nothing located the declaration", site);
+
+        String served = AttachedSources.forClasspath(HostClasspath.detect())
+                .textOf(site.resource().path());
+        assertNotNull("the archive served nothing for the resource the site names", served);
+
+        String[] lines = served.split("\n", -1);
+        assertTrue("the site names a row past the end of the served text",
+                site.start().row() < lines.length);
+        String line = lines[site.start().row()];
+        assertTrue("the site names a column past the end of its row",
+                site.start().column() <= line.length());
+        assertTrue("the range does not land on the identifier: <"
+                        + line.substring(Math.min(site.start().column(), line.length())) + ">",
+                line.startsWith("isEmpty", site.start().column()));
+    }
+
+    /**
+     * Skips when this host genuinely has no source for {@code topLevelName}.
+     *
+     * <p><b>The gate asks the ARCHIVE, never the answer.</b> Assuming on the site itself skips when the
+     * host has no sources and skips when the feature is broken, and those are opposite outcomes wearing
+     * one face — a regression would report as a green run with a quiet skip. Asking whether the text
+     * exists is a question the feature cannot influence, so what follows it is an assertion.</p>
+     */
+    private static void assumeSourceFor(String topLevelName) {
+        Assume.assumeNotNull("no attached source for " + topLevelName + " on this host",
+                AttachedSources.forClasspath(HostClasspath.detect()).textOf(topLevelName));
+    }
+
+    /** Where the engine says the symbol at {@code needle} is declared. */
+    @Nullable
+    private static DeclarationSite siteAt(String source, String needle) {
+        SourceAnalyzer.Analysis analysis = engine.analyzer().analyze(
+                "Script", source, HostClasspath.detect(), engine.releaseLevel(), 1L);
+        try {
+            SymbolInfo symbol = analysis.resolveAt(source.indexOf(needle));
+            return symbol == null ? null : symbol.declaration();
         } finally {
             analysis.close();
         }

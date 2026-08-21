@@ -1,10 +1,14 @@
 package com.crystalgui.language.java.assist;
 
+import com.crystalgui.text.TextPoint;
+import com.crystalgui.text.lang.DeclarationSite;
 import com.crystalgui.text.lang.Signature;
 import com.crystalgui.text.lang.SymbolKind;
 
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTVisitor;
+import org.eclipse.jdt.core.dom.AbstractTypeDeclaration;
+import org.eclipse.jdt.core.dom.EnumConstantDeclaration;
 import org.eclipse.jdt.core.dom.BodyDeclaration;
 import org.eclipse.jdt.core.dom.BooleanLiteral;
 import org.eclipse.jdt.core.dom.ChildListPropertyDescriptor;
@@ -881,6 +885,89 @@ public final class JavaSignatures {
         if (binding instanceof IMethodBinding) return ((IMethodBinding) binding).getDeclaringClass();
         if (binding instanceof IVariableBinding) return ((IVariableBinding) binding).getDeclaringClass();
         return null;
+    }
+
+    /**
+     * Where a binding is declared, when the declaration is in <b>attached source</b> rather than here.
+     *
+     * <h3>The other half of a question the analyser could only half answer</h3>
+     *
+     * <p>{@code EcjSourceAnalyzer.declarationOf} asks {@code unit.findDeclaringNode(binding)}, which by
+     * construction only ever finds a declaration in the unit being edited. For everything on the
+     * classpath it answers null — which {@code DeclarationSite} documents as "the ordinary case, a
+     * member of a compiled class with no source attached, which is most of the JDK". That was true when
+     * nothing could read a classpath type's source. {@link AttachedSources} can, and has been quoting
+     * declarations out of it for the documentation popup this whole time.</p>
+     *
+     * <p>So this is the same two-step lookup {@link #quoted} and {@code documentationOf} already do,
+     * asked for a third thing: not the text of the declaration and not its comment, but <b>where it
+     * is</b>. Written beside them rather than folded in, for the reason stated there — one walk, three
+     * extractions, wanted in different places and only sometimes together.</p>
+     *
+     * <h3>Rows against the attached text, not against ours</h3>
+     *
+     * <p>The positions are computed from the attached unit, so they are only legal against <em>that</em>
+     * text — the same rule every diagnostic in this stack follows. Whatever serves the viewer has to
+     * read through this same {@link AttachedSources}, or the caret lands on the wrong line in a file the
+     * reader cannot edit to correct it.</p>
+     *
+     * <p>Null when there is no attached source, which stays the ordinary answer for a jar that ships
+     * none. A decompiler answers those, and answers them somewhere else: it has no positions to give
+     * until it has run, so it cannot contribute here.</p>
+     */
+    @Nullable
+    public DeclarationSite declarationInAttachedSource(@Nullable IBinding binding) {
+        if (binding == null || attached == null) return null;
+        String topLevel = topLevelSourceName(binding);
+        if (topLevel == null) return null;
+        AttachedSources.Attached source = attached.unitFor(topLevel);
+        if (source == null || source.unit() == null) return null;
+        String key = declarationKeyOf(binding);
+        if (key == null) return null;
+        ASTNode declaration = source.unit().findDeclaringNode(key);
+        if (declaration == null) return null;
+        return siteOf(source.unit(), declaration, topLevel);
+    }
+
+    /**
+     * The name's own range within {@code unit}, as rows and columns.
+     *
+     * <p><b>The NAME, not the declaration.</b> A method declaration node spans its javadoc, its
+     * modifiers, its body and all — opening a viewer on that range would select a screenful and put the
+     * caret on the comment above what was asked for. Every navigation target in this stack is the
+     * identifier, which is what {@code declarationOf} already slices for a fragment.</p>
+     */
+    @Nullable
+    private static DeclarationSite siteOf(CompilationUnit unit, ASTNode declaration, String topLevel) {
+        ASTNode named = nameNodeOf(declaration);
+        int start = named.getStartPosition();
+        int line = unit.getLineNumber(start);
+        // -1 IS JDT'S "NO LINE INFORMATION", and it is reachable here in a way it is not for our own
+        // unit: an attached source is parsed with recovery, from an archive whose text we did not
+        // produce. A site built from it would be row -2 after the zero-basing below.
+        if (line < 1) return null;
+        int endLine = unit.getLineNumber(start + named.getLength());
+        return DeclarationSite.inLibrary(topLevel,
+                new TextPoint(line - 1, unit.getColumnNumber(start)),
+                new TextPoint(Math.max(line, endLine) - 1,
+                        unit.getColumnNumber(start + named.getLength())));
+    }
+
+    /** The identifier a declaration node introduces, or the node itself when it has no separate name. */
+    private static ASTNode nameNodeOf(ASTNode declaration) {
+        if (declaration instanceof VariableDeclarationFragment) {
+            return ((VariableDeclarationFragment) declaration).getName();
+        }
+        if (declaration instanceof MethodDeclaration) {
+            return ((MethodDeclaration) declaration).getName();
+        }
+        if (declaration instanceof AbstractTypeDeclaration) {
+            return ((AbstractTypeDeclaration) declaration).getName();
+        }
+        if (declaration instanceof EnumConstantDeclaration) {
+            return ((EnumConstantDeclaration) declaration).getName();
+        }
+        return declaration;
     }
 
     /** The key of the DECLARATION a binding came from, which is the only key a source file contains. */

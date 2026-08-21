@@ -47,6 +47,17 @@ public final class Resource {
     /** Files in a workspace project. The only scheme whose text form is not {@code scheme://path}. */
     public static final String SCHEME_PROJECT = "project";
 
+    /**
+     * A type the workspace does not contain — a JDK class, a library class, a class from another mod.
+     *
+     * <p>The path is the <b>top-level binary name</b> and nothing else: {@code library://java.util.Map}
+     * is where {@code Map.Entry} is declared too, because a source archive is keyed by compilation unit
+     * and a nested type has no file of its own. Deliberately carrying no classpath, no jar and no
+     * provenance — what serves the text is a question for whoever registered the scheme, asked afresh
+     * each time, so a resource stays a name rather than a snapshot of where the name resolved once.</p>
+     */
+    public static final String SCHEME_LIBRARY = "library";
+
     private static final String MARKER = "://";
 
     private final String scheme;

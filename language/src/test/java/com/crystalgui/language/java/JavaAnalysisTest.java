@@ -6,6 +6,7 @@ import com.crystalgui.language.engine.JavaEngine;
 import com.crystalgui.language.engine.bridge.SourceAnalyzer;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
+import com.crystalgui.text.lang.DeclarationSite;
 import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.text.lang.SymbolKind;
 import com.crystalgui.text.lang.SymbolModifier;
@@ -666,20 +667,61 @@ public class JavaAnalysisTest {
         }
     }
 
+    /**
+     * <b>A member of a compiled class is located in the source attached to it.</b>
+     *
+     * <p>This asserted the opposite for as long as nothing could read a classpath type's source —
+     * "the ordinary case, not a failure: a class on the classpath has no source attached, and inventing
+     * a location for it would be worse than saying nothing". The first half stopped being true when
+     * {@code AttachedSources} landed: it has been quoting these very declarations for the documentation
+     * popup, so the location was never invented, it was simply never asked for. The second half is still
+     * the rule and is what the sibling below pins.</p>
+     */
     @Test
-    public void aMemberOfACompiledClassResolvesWithNoDeclarationSite() {
-        // The ordinary case, not a failure: a class on the classpath has no source attached, and
-        // inventing a location for it would be worse than saying nothing.
-        SourceAnalyzer.Analysis analysis = analyze(
-                "public class Script { int n() { return \"abc\".length(); } }\n");
+    public void aMemberOfACompiledClassIsLocatedInItsAttachedSource() {
+        String source = "public class Script { int n() { return \"abc\".length(); } }\n";
+        SourceAnalyzer.Analysis analysis = analyze(source);
         try {
-            SymbolInfo symbol = analysis.resolveAt(
-                    "public class Script { int n() { return \"abc\".".length() + 2);
+            SymbolInfo symbol = analysis.resolveAt(source.indexOf(".length()") + 2);
             assertNotNull(symbol);
             assertEquals(SymbolKind.METHOD, symbol.kind());
             assertEquals("length", symbol.name());
             assertEquals("java.lang.String", symbol.container());
-            assertNull(symbol.declaration());
+
+            DeclarationSite site = symbol.declaration();
+            // NULL IS STILL LEGAL, and is what a host with no attached sources answers -- so this asserts
+            // the SHAPE of a non-null answer rather than demanding one. `JavaDocBodyTest` is where the
+            // presence is asserted, because it can gate on the archive having the file.
+            if (site == null) return;
+            assertFalse("a classpath member must not claim to be in the document being edited",
+                    site.isSameDocument());
+            assertTrue("a located classpath member must be a library site", site.isLibrary());
+            assertEquals("library://java.lang.String", site.resource().toString());
+        } finally {
+            analysis.close();
+        }
+    }
+
+    /**
+     * <b>And a type with no source anywhere is still located nowhere.</b>
+     *
+     * <p>The surviving half of the rule above: no source means no position, and inventing one is worse
+     * than saying nothing. A decompiler answers such a type and cannot answer <em>here</em>, because it
+     * has no positions to give until it has run.</p>
+     */
+    @Test
+    public void aTypeWithNoAttachedSourceIsLocatedNowhere() {
+        String source = "public class Script { Object o = new java.util.zip.CRC32(); }\n";
+        SourceAnalyzer.Analysis analysis = analyze(source);
+        try {
+            SymbolInfo symbol = analysis.resolveAt(source.indexOf("CRC32"));
+            assertNotNull(symbol);
+            // `java.util.zip` is outside the ten packages JdkSourceExtract keeps and outside anything
+            // bundled, so on a host with no full src.zip there is genuinely no source for it. Where
+            // there IS one, this correctly locates it -- so the assertion is on the shape either way.
+            DeclarationSite site = symbol.declaration();
+            assertTrue("a classpath type located itself in the document being edited",
+                    site == null || !site.isSameDocument());
         } finally {
             analysis.close();
         }
