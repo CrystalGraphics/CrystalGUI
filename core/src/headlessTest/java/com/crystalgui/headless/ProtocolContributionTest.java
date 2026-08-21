@@ -1,10 +1,14 @@
 package com.crystalgui.headless;
 
+import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.InMemoryTransport;
+import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
+import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.elements.Button;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -109,6 +113,58 @@ public class ProtocolContributionTest {
 
         assertEquals("contents of src/Main.java", body.get());
         assertEquals(Integer.valueOf(42), doubled.get());
+    }
+
+    /**
+     * A UI window and a non-UI subsystem on ONE wire — the whole point, end to end.
+     *
+     * <p>The sessions no longer build a router; they take the connection's. So a workspace request and a
+     * window's description handshake interleave on the same connection, correlate independently, and
+     * neither knows the other exists. That is what "general enough for everything, not just UI" means
+     * concretely, and before this the sessions and {@link Protocols} were parallel rather than composed.</p>
+     */
+    @Test
+    public void aUiSessionAndANonUiSubsystemShareOneWire() {
+        Protocols.contribute("workspace", new Protocols.Contributor() {
+            @Override
+            public <T> void bind(ProtocolConnection<T> connection) {
+                connection.onRequest("workspace/read", (args, respond) -> {
+                    StateMap<T> out = new StateMap<>(connection.ops());
+                    out.putString("body", "contents of " + args.getString("path", "?"));
+                    respond.ok(out);
+                });
+            }
+        });
+        connect();
+
+        UIElement root = new UIElement();
+        root.addChild(new Button("Press me"));
+        ServerUiSession<Object> server = new ServerUiSession<>(1, root, a);
+        ClientUiSession<Object> client = new ClientUiSession<>(b);
+
+        AtomicReference<UIElement> arrived = new AtomicReference<>();
+        client.onWindowOpened(arrived::set);
+
+        AtomicReference<String> body = new AtomicReference<>();
+        StateMap<Object> read = new StateMap<>(PlainOps.INSTANCE);
+        read.putString("path", "src/Main.java");
+        b.call("workspace/read", read, result -> body.set(result.getString("body", "")), null);
+
+        server.open();
+        // Only the CONNECTIONS are ticked for dispatch -- a session riding one does not drain. The
+        // server session is still ticked so it flushes what its tree changed.
+        for (int i = 0; i < 8; i++) {
+            pair[0].deliver();
+            pair[1].deliver();
+            a.tick();
+            b.tick();
+            server.tick();
+        }
+
+        assertEquals("the workspace answered on the shared wire",
+                "contents of src/Main.java", body.get());
+        assertEquals("and the window arrived on the same one",
+                1, arrived.get() == null ? -1 : arrived.get().getChildren().size());
     }
 
     /**

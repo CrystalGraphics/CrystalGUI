@@ -81,7 +81,10 @@ public final class Protocols {
      * Says a subsystem speaks part of the protocol. Called by its own {@code register()}, once.
      *
      * @param name        what is contributing, for diagnostics — {@code "workspace"}, {@code "script"}
-     * @param contributor invoked for every connection opened after <em>and before</em> this call
+     * @param contributor invoked for every connection opened <b>after</b> this call — binding happens
+     *                    in {@link #open}, so a connection that already exists does not get it. That is
+     *                    why contribution belongs at mod init, before any peer can have arrived, and why
+     *                    this is not a hot-swap mechanism
      * @throws IllegalStateException if {@code name} is already registered, which is a wiring mistake
      *                               rather than something to resolve silently
      */

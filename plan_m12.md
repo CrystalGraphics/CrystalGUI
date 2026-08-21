@@ -1314,18 +1314,25 @@ lifecycle**, plus a server that has never had to do anything.
 
 ---
 
-### Stage A — establish the connection
+### Stage A — establish the connection ✅ **COMPLETE (2026-08-21)**
 
-Nothing else in Phase 4 can be validated until this exists.
+Nothing else in Phase 4 can be validated until this exists — and now it does. All six items landed, and
+the two in-game probes prove the transport and the protocol separately: `-PcgNetProbe` echoes raw frames,
+`-PcgSessionProbe` runs a real session pair over the connection lifecycle that ships.
+
+> **Two things worth carrying into Stage B.** `Protocols.contributors()` reports `[]` in a running client
+> — the mechanism is live and nothing contributes to it yet, which is exactly B1's job. And the frame
+> ceiling is the *only* version-varying quantity that reaches `core`, so a 1.20.x adapter is the four
+> `CgNetworkChannel` methods and a downgrade step, not a re-implementation.
 
 | # | Item | From |
 |---|---|---|
-| **A1** | **Measure 1.7.10's custom-payload size limit** and freeze framing on it | P6.1.10 §Minecraft — *"its custom-payload size limit must be checked before chunk sizing freezes"*; also [`plan_prephase4.md`](plan_prephase4.md) item 2 |
-| **A2** | **A Minecraft `UITransport`** — a channel plus the codec bridge, sized by A1 | The gap named above; `UITransport` has exactly one implementation today |
-| **A3** | **Server-side registration.** `CommonProxy` stops being empty | M12 §26.14 *"carried forward"* — *"`CommonProxy` is empty, so nothing registers server-side … when that lands both the registration site and that one method move"* |
-| **A4** | **Session lifecycle** — join opens, leave/disconnect/kick closes, server shutdown drains | New. Nothing models it: today both halves are constructed together and die together |
-| **A5** | **`ScriptService1710.cacheRoot()` moves** — it is the one client-shaped member, reading `Minecraft.getMinecraft().mcDataDir` | M12 §26.14 *"carried forward"* |
-| **A6** | **Two-session RPC soak** — real traffic over time, desync visible on screen | `CrystalGUI_TODO.md` P3.1, `TODO`. Written for `InMemoryTransport` and *"touches no Minecraft"*, so it can land before A2 and then be re-pointed at the real transport — which makes it Stage A's validation rather than a separate errand |
+| **A1** ✅ | **Measure 1.7.10's custom-payload size limit** and freeze framing on it — 32,766, read from `S3FPacketCustomPayload`/`C17PacketCustomPayload` and asked for through `maxFrameBytes()` rather than hardcoded | P6.1.10 §Minecraft — *"its custom-payload size limit must be checked before chunk sizing freezes"*; also [`plan_prephase4.md`](plan_prephase4.md) item 2 |
+| **A2** ✅ | **A Minecraft `UITransport`** — `WireTransport` over `FrameMultiplexer` over `Mc1710NetworkChannel`, sized by A1 | The gap named above; `UITransport` has exactly one implementation today |
+| **A3** ✅ | **Server-side registration.** `CommonProxy.init()` registers the channel and the connection lifecycle | M12 §26.14 *"carried forward"* — *"`CommonProxy` is empty, so nothing registers server-side … when that lands both the registration site and that one method move"* |
+| **A4** ✅ | **Session lifecycle** — `CgUiConnections`: join opens, leave/disconnect/kick closes, `FMLServerStoppingEvent` drains. Sessions now *ride* a `ProtocolConnection` instead of building a router, so a window shares one wire with every other subsystem | New. Nothing models it: today both halves are constructed together and die together |
+| **A5** ✅ | **`ScriptService1710.cacheRoot()` moves** — takes the config directory from `FMLPreInitializationEvent` instead of reading `Minecraft.getMinecraft()`. Not a side branch: Forge already computes the right answer for both sides. No `net.minecraft.client` reference survives in the class | M12 §26.14 *"carried forward"* |
+| **A6** ✅ | **Two-session RPC soak** — `SessionSoakTest`: 250 rounds of interleaved deltas, events and calls in both directions, asserting the two trees still agree, every call was answered, nothing is left pending and coalescing holds. Headless and deterministic, so a desync is found in seconds rather than by watching a client | `CrystalGUI_TODO.md` P3.1, `TODO`. Written for `InMemoryTransport` and *"touches no Minecraft"*, so it can land before A2 and then be re-pointed at the real transport — which makes it Stage A's validation rather than a separate errand |
 
 > **A6 is worth doing early rather than last.** It was deferred as validation that *"nothing downstream
 > is waiting on"*, which was true when the transport was in-process. It stops being true here: it is the

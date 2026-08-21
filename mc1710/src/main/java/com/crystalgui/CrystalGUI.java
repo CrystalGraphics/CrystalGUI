@@ -16,6 +16,11 @@ import org.apache.logging.log4j.Logger;
 
 import cpw.mods.fml.common.Mod;
 import cpw.mods.fml.common.SidedProxy;
+import cpw.mods.fml.common.event.FMLServerStoppingEvent;
+
+import com.crystalgui.mc.net.CgUiConnections;
+
+import java.io.File;
 import cpw.mods.fml.common.event.FMLInitializationEvent;
 import cpw.mods.fml.common.event.FMLPostInitializationEvent;
 import cpw.mods.fml.common.event.FMLPreInitializationEvent;
@@ -62,9 +67,21 @@ public class CrystalGUI {
         serverSide = "com.crystalgui.mc.CommonProxy")
     public static CommonProxy proxy;
 
+    /**
+     * {@code .minecraft/config} on a client, {@code <serverdir>/config} on a dedicated server.
+     *
+     * <p>Only {@code FMLPreInitializationEvent} carries it, so it is captured there and handed to
+     * whatever needs a place for derived state. @see ScriptService1710#cacheRoot()</p>
+     */
+    private File configDirectory;
+
     @Mod.EventHandler
     public void preInit(FMLPreInitializationEvent event) {
         LOGGER.info("{}: preInit", NAME);
+        // Captured here because this is the only event that carries it, and it is the side-agnostic
+        // answer to "where does derived state go" -- .minecraft/config on a client, <serverdir>/config
+        // on a dedicated server. @see ScriptService1710#cacheRoot()
+        this.configDirectory = event.getModConfigurationDirectory();
         proxy.preInit();
     }
 
@@ -80,13 +97,28 @@ public class CrystalGUI {
         LOGGER.info("{}: postInit", NAME);
     }
 
+    /**
+     * Phase 4 A4 — every connection is closed before the server goes away.
+     *
+     * <p>A mod-lifecycle event rather than something {@code CgUiConnections} subscribes itself, because
+     * it arrives on a different bus. Without it a stop leaves every pending call unanswered and every
+     * {@code onError} unrun; on a reload-in-place that reads as the next session inheriting ghosts.</p>
+     */
+    @Mod.EventHandler
+    public void serverStopping(FMLServerStoppingEvent event) {
+        CgUiConnections.closeAll("server stopping");
+    }
+
     private void scriptInit() {
-        CgPlatform.provide(ScriptServices.SERVICE, new ScriptService1710());
+        CgPlatform.provide(ScriptServices.SERVICE, new ScriptService1710(configDirectory));
         LanguageStack.registerAll();
 
-        // CLIENT-side only because of ONE member: `cacheRoot()` reads `Minecraft.getMinecraft().mcDataDir`.
-        // The other four are installation-level, so when server-side scripting lands this moves to
-        // CommonProxy and that one method grows a side-aware answer.
+        // The service itself is now SIDE-AGNOSTIC (Phase 4 A5): cacheRoot() takes the config
+        // directory Forge hands over at preInit instead of reading Minecraft.getMinecraft(), so a
+        // dedicated server can hold one. The four other members were always installation-level facts.
+        //
+        // What is still client-shaped is BELOW, not above: the mappings fetch is submitted as a job
+        // so it reports into a status bar. A server wanting mappings would acquire them without one.
 
         // MAPPINGS ACQUIRED INSIDE A JOB, so the fetch reports into the status bar instead of being a
         // silent stall on first launch. Threading is the caller's decision, and this caller has a UI.

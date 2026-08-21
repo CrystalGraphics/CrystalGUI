@@ -5,6 +5,7 @@ import com.crystalgui.net.protocol.Call;
 import com.crystalgui.net.protocol.Envelope;
 import com.crystalgui.net.protocol.EnvelopeCodec;
 import com.crystalgui.net.protocol.MessageRouter;
+import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.serialization.StateMap;
@@ -39,7 +40,6 @@ import java.util.function.Consumer;
  */
 public final class ClientUiSession<T> {
 
-    private final UITransport<T> transport;
     private final DynamicOps<T> ops;
 
     /** hash → encoded description. Encoded, not decoded: a decoded tree is live elements, and a live
@@ -51,6 +51,9 @@ public final class ClientUiSession<T> {
 
     /** Everything inbound goes through here; nothing is dispatched by type. @see #registerUiMethods */
     private final MessageRouter<T> router;
+
+    /** False when a {@link ProtocolConnection} drains and expires for us. @see #tick() */
+    private final boolean ownsConnection;
 
     /** How long a call waits before its error handler is told. @see ServerUiSession */
     private long callTimeoutMillis = 10_000L;
@@ -67,9 +70,10 @@ public final class ClientUiSession<T> {
     @Nullable
     private Consumer<String> onWindowClosed;
 
+    /** Owns its own transport, router and mailbox — the shape every test and the in-memory pair use. */
     public ClientUiSession(UITransport<T> transport, DynamicOps<T> ops) {
-        this.transport = transport;
         this.ops = ops;
+        this.ownsConnection = true;
         this.router = new MessageRouter<>(envelope -> transport.send(EnvelopeCodec.encode(ops, envelope)));
         registerUiMethods();
         transport.setReceiver(packet -> {
@@ -77,6 +81,26 @@ public final class ClientUiSession<T> {
                 mailbox.add(packet);
             }
         });
+    }
+
+    /**
+     * Rides a connection somebody else owns, so this window shares one wire with every other subsystem.
+     *
+     * <p>The other constructor is still correct and is what a test uses: it owns its transport, its
+     * router and its mailbox. This one owns none of them — {@link ProtocolConnection#tick()} drains and
+     * expires, and {@link #tick()} here only flushes what the tree changed.</p>
+     *
+     * <p><b>One UI session per connection.</b> A second would register {@code ui/description} twice and
+     * {@link MessageRouter} refuses a duplicate outright, which is the right failure: two windows on one
+     * wire need the router to dispatch on the window id as well as the method, and that is the same
+     * change multi-viewer fan-out needs. Until then, one window per peer is enforced rather than
+     * assumed.</p>
+     */
+    public ClientUiSession(ProtocolConnection<T> connection) {
+        this.ops = connection.ops();
+        this.ownsConnection = false;
+        this.router = connection.router();
+        registerUiMethods();
     }
 
     /** Fired once the tree exists — where a host would hand it to a {@code UIWindow} and render it. */
@@ -118,6 +142,8 @@ public final class ClientUiSession<T> {
     /** Processes everything that arrived. Called on the thread that owns the tree — never from the
      * transport's own thread, since elements are single-threaded by contract. */
     public void tick() {
+        // Riding a connection means somebody else drains and expires; there is nothing left to do here.
+        if (!ownsConnection) return;
         List<T> batch;
         synchronized (mailbox) {
             if (mailbox.isEmpty()) return;

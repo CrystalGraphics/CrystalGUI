@@ -1,12 +1,9 @@
 package com.crystalgui.mc.net;
 
-import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.ServerUiSession;
-import com.crystalgui.net.wire.CgNetworkChannel;
-import com.crystalgui.net.wire.FrameMultiplexer;
-import com.crystalgui.net.wire.WireTransport;
+import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.ElementRegistry;
@@ -22,66 +19,63 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.server.MinecraftServer;
 
-import java.util.HashMap;
-import java.util.Map;
-
 /**
- * Does the <em>protocol</em> work over a real Minecraft connection? — {@code -Dcrystalgui.net.probe=true}.
+ * Does the <em>protocol</em> work over the real connection lifecycle? — {@code -PcgSessionProbe}.
  *
- * <p>{@link CgUiNetProbe} answers a different question and stops one layer short. It echoes byte arrays,
- * which proves the transport: Forge's channel, FML's discriminators, the Netty thread, the 32,766-byte
- * ceiling, fragmentation and player routing. It proves <b>nothing</b> about the four-kind envelope, the
- * router's correlation, or the description handshake — those had run only against two
- * {@code FrameMultiplexer}s handing arrays to each other in a headless test, which is the same shape as
- * the transport tests that were green while the real channel silently dropped everything.</p>
+ * <p>{@link CgUiNetProbe} answers a lower question and owns the channel to do it: it echoes byte arrays,
+ * proving Forge's channel, FML's discriminators, the Netty thread, the frame ceiling and player routing.
+ * This one proves everything above that, and — since Phase 4 A4 — <b>proves it on the path that
+ * ships</b>: it opens no multiplexer, installs no inbound handler and pumps nothing. It takes the
+ * connections {@link CgUiConnections} opened on join and puts a session on each end.</p>
  *
- * <p>So this runs the actual thing: a {@link ServerUiSession} and a {@link ClientUiSession} over
- * {@link WireTransport}s on the real wire, and checks the four exchanges that between them touch every
- * message kind the engine has.</p>
+ * <p>That is why the two probes have separate flags. A probe that builds its own transport tests the
+ * engine; a probe that borrows the real one tests the wiring, and the wiring is what had never existed.</p>
  *
  * <table>
  *   <tr><th>#</th><th>Exchange</th><th>Kinds exercised</th></tr>
  *   <tr><td>1</td><td>{@code open()} → client rebuilds the tree</td>
  *       <td>notification {@code ui/openWindow}, then a <b>request</b> {@code ui/description} and its
- *           <b>response</b> — the one round trip whose correlation used to be implicit</td></tr>
- *   <tr><td>2</td><td>server mutates a widget → client sees it</td>
- *       <td>notification {@code ui/stateDelta}</td></tr>
- *   <tr><td>3</td><td>client reports an event → server's lambda runs</td>
- *       <td>notification {@code ui/event}, the whole point of the milestone</td></tr>
+ *           <b>response</b></td></tr>
+ *   <tr><td>2</td><td>server mutates a widget → client sees it</td><td>notification {@code ui/stateDelta}</td></tr>
+ *   <tr><td>3</td><td>client presses → server's lambda runs</td><td>notification {@code ui/event}</td></tr>
  *   <tr><td>4</td><td>server calls the client and gets an answer</td>
- *       <td>request/response through {@code onCall}, in the direction that is easiest to get wrong</td></tr>
+ *       <td>request/response, in the direction easiest to get wrong</td></tr>
  * </table>
  *
- * <p>It runs after {@link CgUiNetProbe} has finished, on its own multiplexer pair, so a failure is
- * attributable: transport green and this red means the protocol, and both red means the wire.</p>
+ * <h3>Two handlers, because there are two threads</h3>
+ *
+ * <p>Server-side work — opening the session, mutating the tree, issuing the call, flushing — runs on
+ * {@code ServerTickEvent}. Client-side work — reading the rebuilt tree, pressing a widget — runs on
+ * {@code ClientTickEvent}. The first version did both from the client tick and happened to work, because
+ * a single-player integrated server shares the process; it was still touching a tree from the wrong
+ * thread, and the point of this probe is now to exercise what production does rather than what
+ * survives.</p>
  */
 public final class CgUiSessionProbe {
 
-    private static final boolean ENABLED = Boolean.getBoolean("crystalgui.net.probe");
+    private static final boolean ENABLED = Boolean.getBoolean("crystalgui.session.probe");
 
-    /** Distinct from the transport probe's, so neither ever sees the other's frames. */
     private static final int WINDOW_ID = 4242;
 
-    private static ServerUiSession<Object> server;
-    private static ClientUiSession<Object> client;
-    private static WireTransport clientTransport;
-    private static final Map<Object, WireTransport> serverByPlayer = new HashMap<>();
+    /** How long to wait before calling it a failure, in client ticks. */
+    private static final int DEADLINE_TICKS = 20 * 40;
 
-    private static Button serverButton;
+    private static volatile ServerUiSession<Object> server;
+    private static volatile ClientUiSession<Object> client;
+
     private static Slider serverSlider;
-    private static UIText serverLabel;
 
-    private static boolean treeArrived;
-    private static boolean deltaSeen;
-    private static boolean eventReceived;
-    private static boolean callAnswered;
+    private static volatile boolean treeArrived;
+    private static volatile boolean deltaSeen;
+    private static volatile boolean eventReceived;
+    private static volatile boolean callAnswered;
 
-    private static int ticks;
-    private static boolean started;
-    private static boolean reported;
-    private static boolean deltaSent;
-    private static boolean eventSent;
-    private static boolean callSent;
+    private static volatile boolean deltaSent;
+    private static volatile boolean eventSent;
+    private static volatile boolean callSent;
+    private static volatile boolean reported;
+
+    private static int clientTicks;
 
     private CgUiSessionProbe() {
     }
@@ -89,176 +83,86 @@ public final class CgUiSessionProbe {
     public static void register() {
         if (!ENABLED) return;
         FMLCommonHandler.instance().bus().register(new Handler());
-        CrystalGuiCore.LOGGER.info("[session-probe] armed; waits for the transport probe to finish");
+        CrystalGuiCore.LOGGER.info("[session-probe] armed; waiting for CgUiConnections to open a pair");
     }
 
-    private static void start() {
-        CgNetworkChannel channel = CgPlatform.get(CgNetworkChannel.SERVICE);
-        if (!channel.isAvailable()) {
-            CrystalGuiCore.LOGGER.error("[session-probe] FAIL — no channel in the platform slot");
-            reported = true;
-            return;
-        }
-        // Unknown tags THROW on decode, so a client that never bootstrapped rebuilds nothing and says
-        // exactly why -- which is the behaviour we want, and worth not tripping over here.
-        ElementRegistry.bootstrapBuiltins();
+    // ── The two ends ────────────────────────────────────────────────────────
 
-        FrameMultiplexer clientFrames =
-                new FrameMultiplexer(channel.maxFrameBytes(), true, channel::sendToServer);
-        clientTransport = new WireTransport(clientFrames);
+    /** <b>Server thread.</b> Opens the window once the player has a connection. */
+    private static void openServer(ProtocolConnection<Object> connection) {
+        UIElement root = new UIElement();
+        root.addChild(new UIText("hello from the server"));
+        Button button = new Button("Press me");
+        root.addChild(button);
+        serverSlider = new Slider();
+        serverSlider.setRange(0f, 1f);
+        root.addChild(serverSlider);
 
-        // ROUTING ONLY. The server session is NOT created here, and that is the fix for a deadlock
-        // the transport probe could not have: there, the client speaks first, so a lazy
-        // computeIfAbsent(sender) always fires. A SESSION is the other way round -- the server opens the
-        // window and the client answers -- so a server half created on first inbound frame waits for a
-        // client that is waiting for it. Every gate reported healthy and nothing moved.
-        channel.setInboundHandler((sender, frame) -> {
-            if (sender == null) {
-                clientFrames.onFrameReceived(frame);
-                return;
-            }
-            WireTransport transport = serverByPlayer.get(sender);
-            if (transport != null) transport.frames().onFrameReceived(frame);
+        // Rides the connection: no transport and no router of its own, sharing the wire with every
+        // contributor Protocols bound onto it.
+        ServerUiSession<Object> session = new ServerUiSession<>(WINDOW_ID, root, connection);
+        session.onActivate(button, ctx -> {
+            eventReceived = true;
+            CrystalGuiCore.LOGGER.info("[session-probe] 3/4 the server's own lambda ran for a client press");
         });
+        session.open();
+        server = session;
+        CrystalGuiCore.LOGGER.info("[session-probe] server session opened on the real connection, hash={}",
+                session.descHash());
+    }
 
-        client = new ClientUiSession<>(clientTransport, PlainOps.INSTANCE);
-        client.onWindowOpened(root -> {
+    /** <b>Client thread.</b> */
+    private static void openClient(ProtocolConnection<Object> connection) {
+        ElementRegistry.bootstrapBuiltins();
+        ClientUiSession<Object> session = new ClientUiSession<>(connection);
+        session.onWindowOpened(root -> {
             treeArrived = root != null;
             CrystalGuiCore.LOGGER.info("[session-probe] 1/4 tree rebuilt on the client: {} children",
                     root == null ? -1 : root.getChildren().size());
         });
-        // Exchange 4, the client end: the server asks, this answers.
-        client.onCall("probe/ping", (args, respond) -> {
+        session.onCall("probe/ping", (args, respond) -> {
             StateMap<Object> out = new StateMap<>(PlainOps.INSTANCE);
             out.putString("pong", args.getString("from", "?"));
             respond.ok(out);
         });
-
-        CrystalGuiCore.LOGGER.info("[session-probe] started; waiting for a player to reach the server");
-    }
-
-    /**
-     * Opens the server half as soon as the integrated server has a player, which is what makes the
-     * server speak first.
-     *
-     * @return true once it is open, so the caller can stop asking
-     */
-    private static boolean tryOpenServer(CgNetworkChannel channel) {
-        MinecraftServer mc = MinecraftServer.getServer();
-        if (mc == null || mc.getConfigurationManager() == null
-                || mc.getConfigurationManager().playerEntityList.isEmpty()) {
-            return false;
-        }
-        EntityPlayerMP player = (EntityPlayerMP) mc.getConfigurationManager().playerEntityList.get(0);
-        FrameMultiplexer serverFrames = new FrameMultiplexer(
-                channel.maxFrameBytes(), false, frame -> channel.sendToPlayer(player, frame));
-        WireTransport transport = new WireTransport(serverFrames);
-        serverByPlayer.put(player, transport);
-        openServerSession(transport);
-        return true;
-    }
-
-    /** Built on the SERVER side, with no window, no Taffy tree and no fonts — that absence is the point. */
-    private static void openServerSession(WireTransport transport) {
-        UIElement root = new UIElement();
-        serverLabel = new UIText("hello from the server");
-        serverButton = new Button("Press me");
-        serverSlider = new Slider();
-        serverSlider.setRange(0f, 1f);
-        root.addChild(serverLabel);
-        root.addChild(serverButton);
-        root.addChild(serverSlider);
-
-        server = new ServerUiSession<>(WINDOW_ID, root, transport, PlainOps.INSTANCE);
-        // Exchange 3: the lambda stays here and only its RESULT travels.
-        server.onActivate(serverButton, ctx -> {
-            eventReceived = true;
-            CrystalGuiCore.LOGGER.info("[session-probe] 3/4 the server's own lambda ran for a client press");
-        });
-        server.open();
-        CrystalGuiCore.LOGGER.info("[session-probe] server session opened, descHash={}", server.descHash());
+        client = session;
+        CrystalGuiCore.LOGGER.info("[session-probe] client session attached to the real connection");
     }
 
     public static final class Handler {
 
         @SubscribeEvent
-        public void onClientTick(TickEvent.ClientTickEvent event) {
+        public void onServerTick(TickEvent.ServerTickEvent event) {
             if (!ENABLED || event.phase != TickEvent.Phase.END || reported) return;
 
-            Minecraft mc = Minecraft.getMinecraft();
-            if (mc.theWorld == null || mc.thePlayer == null) return;
-            // Same trap CgUiNetProbe documents: an open screen pauses the integrated server, and a paused
-            // server never drains its inbound queue.
-            if (mc.currentScreen != null) {
-                mc.displayGuiScreen(null);
-                return;
-            }
-            // Let the transport probe have the channel to itself first; its handler is replaced by ours.
-            if (++ticks < 320) return;
-
-            if (!started) {
-                started = true;
-                start();
-                return;
-            }
-            if (clientTransport == null) return;
-            if (server == null && !tryOpenServer(CgPlatform.get(CgNetworkChannel.SERVICE))) {
-                if (ticks % 40 == 0) {
-                    CrystalGuiCore.LOGGER.info("[session-probe] no server player yet");
+            if (server == null) {
+                MinecraftServer mc = MinecraftServer.getServer();
+                if (mc == null || mc.getConfigurationManager() == null
+                        || mc.getConfigurationManager().playerEntityList.isEmpty()) {
+                    return;
                 }
+                EntityPlayerMP player =
+                        (EntityPlayerMP) mc.getConfigurationManager().playerEntityList.get(0);
+                ProtocolConnection<Object> connection = CgUiConnections.forPlayer(player);
+                if (connection == null) return;
+                openServer(connection);
                 return;
             }
 
-            clientTransport.pump();
-            for (WireTransport transport : serverByPlayer.values()) transport.pump();
-            if (server != null) server.tick();
-            client.tick();
+            // Riding a connection, so this only flushes what the tree changed -- CgUiConnections already
+            // drained and expired on its own ServerTickEvent.
+            server.tick();
 
-            step();
+            if (!treeArrived) return;
 
-            if (ticks % 40 == 0) {
-                CrystalGuiCore.LOGGER.info("[session-probe] tick {} — tree={} delta={} event={} call={}",
-                        ticks, treeArrived, deltaSeen, eventReceived, callAnswered);
-            }
-            if (treeArrived && deltaSeen && eventReceived && callAnswered) finish(true);
-            else if (ticks > 320 + 400) finish(false);
-        }
-
-        /** One exchange per readiness gate, so a stall names the exchange it stalled on. */
-        private void step() {
-            if (!treeArrived || server == null) return;
-
-            // 2/4 -- a server-side mutation must reach the client as a state delta.
             if (!deltaSent) {
                 deltaSent = true;
                 serverSlider.setValue(0.75f);
                 CrystalGuiCore.LOGGER.info("[session-probe] server moved the slider to 0.75");
                 return;
             }
-            if (!deltaSeen) {
-                UIElement mirrored = client.root() == null ? null : client.root().getChildren().get(2);
-                if (mirrored instanceof Slider && Math.abs(((Slider) mirrored).getValue() - 0.75f) < 1e-4f) {
-                    deltaSeen = true;
-                    CrystalGuiCore.LOGGER.info("[session-probe] 2/4 the delta arrived and applied");
-                }
-                return;
-            }
+            if (!deltaSeen || !eventReceived) return;
 
-            // 3/4 -- the client presses the REAL widget, which is the only way an event is raised.
-            // ClientUiSession.report is private on purpose: what reports is a listener the client
-            // attached because the DESCRIPTION said this element reports 'activate'. Calling it directly
-            // would skip the half of the path that can actually be wrong.
-            if (!eventSent) {
-                UIElement mirrored = client.root().getChildren().get(1);
-                if (!(mirrored instanceof Button)) return;
-                eventSent = true;
-                ((Button) mirrored).onPressed.emit();
-                CrystalGuiCore.LOGGER.info("[session-probe] client pressed the mirrored button");
-                return;
-            }
-            if (!eventReceived) return;
-
-            // 4/4 -- a request in the server->client direction, answered by the client's handler.
             if (!callSent) {
                 callSent = true;
                 StateMap<Object> args = new StateMap<>(PlainOps.INSTANCE);
@@ -273,33 +177,89 @@ public final class CgUiSessionProbe {
             }
         }
 
+        @SubscribeEvent
+        public void onClientTick(TickEvent.ClientTickEvent event) {
+            if (!ENABLED || event.phase != TickEvent.Phase.END || reported) return;
+
+            Minecraft mc = Minecraft.getMinecraft();
+            if (mc.theWorld == null || mc.thePlayer == null) return;
+            // An open screen pauses the integrated server, and a paused server never drains its inbound
+            // queue. @see CgUiNetProbe, which cost eleven runs to learn it.
+            if (mc.currentScreen != null) {
+                mc.displayGuiScreen(null);
+                return;
+            }
+
+            if (client == null) {
+                ProtocolConnection<Object> connection = CgUiConnections.client();
+                if (connection == null) {
+                    if (++clientTicks > DEADLINE_TICKS) {
+                        finish(false, "no client connection was ever opened");
+                    }
+                    return;
+                }
+                openClient(connection);
+                return;
+            }
+
+            clientTicks++;
+
+            if (treeArrived && deltaSent && !deltaSeen) {
+                UIElement mirrored = client.root().getChildren().get(2);
+                if (mirrored instanceof Slider
+                        && Math.abs(((Slider) mirrored).getValue() - 0.75f) < 1e-4f) {
+                    deltaSeen = true;
+                    CrystalGuiCore.LOGGER.info("[session-probe] 2/4 the delta arrived and applied");
+                }
+            }
+
+            if (deltaSeen && !eventSent) {
+                UIElement mirrored = client.root().getChildren().get(1);
+                if (mirrored instanceof Button) {
+                    eventSent = true;
+                    // The REAL widget, because what reports is a listener the client attached from the
+                    // description. Calling report() directly would skip the half that can be wrong.
+                    ((Button) mirrored).onPressed.emit();
+                    CrystalGuiCore.LOGGER.info("[session-probe] client pressed the mirrored button");
+                }
+            }
+
+            if (clientTicks % 40 == 0) {
+                CrystalGuiCore.LOGGER.info("[session-probe] tick {} — tree={} delta={} event={} call={} "
+                                + "(connections open: {})",
+                        clientTicks, treeArrived, deltaSeen, eventReceived, callAnswered,
+                        CgUiConnections.openConnections());
+            }
+            if (treeArrived && deltaSeen && eventReceived && callAnswered) {
+                finish(true, "");
+            } else if (clientTicks > DEADLINE_TICKS) {
+                finish(false, "timed out");
+            }
+        }
+
         /**
-         * Reports, then <b>quits the game</b>.
+         * Reports, then quits.
          *
-         * <p>Not tidiness. A client left running holds file handles on the vanilla jars, and the next
-         * build then fails with {@code Could not evaluate onlyIf predicate for task
-         * ':mc1710:mergeVanillaSidedJars'} — which names a Gradle task and says nothing about a stray
-         * process, so it reads as a broken build rather than a live one. Costing two rebuilds to learn
-         * that is two more than it should.</p>
+         * <p>A client left running holds file handles on the vanilla jars, and the next build then fails
+         * with {@code Could not evaluate onlyIf predicate for task ':mc1710:mergeVanillaSidedJars'} —
+         * which names a Gradle task and says nothing about a live process.</p>
          *
-         * <p><b>Expect one exception after the verdict.</b> Quitting from inside a client tick leaves the
-         * integrated server mid-tick, and it dies with {@code IllegalStateException: Display not
-         * created}. It is written AFTER the PASS/FAIL line, on the Server thread, and means nothing —
-         * but an unexplained exception in a probe log is exactly the thing that costs somebody an hour,
-         * so it is named here rather than left to be rediscovered.</p>
+         * <p><b>Expect one exception after the verdict.</b> Quitting from inside a tick leaves the
+         * integrated server mid-tick and it dies with {@code IllegalStateException: Display not created}.
+         * It is written after the PASS/FAIL line and means nothing.</p>
          */
-        private void finish(boolean pass) {
+        private void finish(boolean pass, String why) {
             reported = true;
-            Minecraft.getMinecraft().shutdown();
             if (pass) {
                 CrystalGuiCore.LOGGER.info("[session-probe] PASS — the whole protocol crossed a real "
-                        + "Minecraft connection: description request/response, state delta, event, "
-                        + "and a server->client call");
+                        + "Minecraft connection, over the connection lifecycle that ships: description "
+                        + "request/response, state delta, event, and a server->client call");
             } else {
-                CrystalGuiCore.LOGGER.error("[session-probe] FAIL — tree={} delta={} event={} call={}. "
+                CrystalGuiCore.LOGGER.error("[session-probe] FAIL ({}) — tree={} delta={} event={} call={}. "
                                 + "The first false is the exchange that stalled.",
-                        treeArrived, deltaSeen, eventReceived, callAnswered);
+                        why, treeArrived, deltaSeen, eventReceived, callAnswered);
             }
+            Minecraft.getMinecraft().shutdown();
         }
     }
 }

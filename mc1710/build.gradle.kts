@@ -385,6 +385,14 @@ tasks.named<JavaExec>(runTask) {
         systemProperty("crystalgui.net.probe", "true")
     }
 
+    // -PcgSessionProbe runs a real Server/ClientUiSession pair over the connections CgUiConnections
+    // opens on player join -- the path that ships. SEPARATE from -PcgNetProbe on purpose: a channel
+    // takes one inbound handler, so the raw transport probe owns it and the lifecycle stands down while
+    // that flag is set. One tests the engine, the other tests the wiring.
+    if (providers.gradleProperty("cgSessionProbe").isPresent) {
+        systemProperty("crystalgui.session.probe", "true")
+    }
+
     if (providers.gradleProperty("cgAutoTest").isPresent) {
         systemProperty("crystalgui.autotest", "true")
         systemProperty("crystalgui.autotest.out",

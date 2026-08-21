@@ -5,6 +5,7 @@ import com.crystalgui.net.protocol.Call;
 import com.crystalgui.net.protocol.Envelope;
 import com.crystalgui.net.protocol.EnvelopeCodec;
 import com.crystalgui.net.protocol.MessageRouter;
+import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.serialization.ContentHash;
 import com.crystalgui.serialization.DynamicOps;
@@ -47,7 +48,6 @@ public final class ServerUiSession<T> implements UITreeObserver {
 
     private final int windowId;
     private final UIElement root;
-    private final UITransport<T> transport;
     private final DynamicOps<T> ops;
 
     private final List<SheetRef> sheets = new ArrayList<>();
@@ -86,17 +86,43 @@ public final class ServerUiSession<T> implements UITreeObserver {
     private int elementCount;
     private boolean open = false;
 
+    /** False when a {@link ProtocolConnection} drains and expires for us. @see #tick() */
+    private final boolean ownsConnection;
+
+    /** Owns its own transport, router and mailbox — the shape every test and the in-memory pair use. */
     public ServerUiSession(int windowId, UIElement root, UITransport<T> transport, DynamicOps<T> ops) {
         this.windowId = windowId;
         this.root = root;
-        this.transport = transport;
         this.ops = ops;
+        this.ownsConnection = true;
         this.router = new MessageRouter<>(envelope -> transport.send(EnvelopeCodec.encode(ops, envelope)));
         transport.setReceiver(packet -> {
             synchronized (mailbox) {
                 mailbox.add(packet);
             }
         });
+        registerUiMethods();
+    }
+
+    /**
+     * Rides a connection somebody else owns, so this window shares one wire with every other subsystem.
+     *
+     * <p>The other constructor is still correct and is what a test uses: it owns its transport, its
+     * router and its mailbox. This one owns none of them — {@link ProtocolConnection#tick()} drains and
+     * expires, and {@link #tick()} here only flushes what the tree changed.</p>
+     *
+     * <p><b>One UI session per connection.</b> A second would register {@code ui/description} twice and
+     * {@link MessageRouter} refuses a duplicate outright, which is the right failure: two windows on one
+     * wire need the router to dispatch on the window id as well as the method, and that is the same
+     * change multi-viewer fan-out needs. Until then, one window per peer is enforced rather than
+     * assumed.</p>
+     */
+    public ServerUiSession(int windowId, UIElement root, ProtocolConnection<T> connection) {
+        this.windowId = windowId;
+        this.root = root;
+        this.ops = connection.ops();
+        this.ownsConnection = false;
+        this.router = connection.router();
         registerUiMethods();
     }
 
@@ -164,8 +190,13 @@ public final class ServerUiSession<T> implements UITreeObserver {
      */
     public void tick() {
         if (!open) return;
-        drainMailbox();
-        router.tickTimeouts(System.currentTimeMillis());
+        // Riding a connection means somebody else already drained and expired this frame. Doing it again
+        // would be harmless on the mailbox (it is empty) and wrong on the timeouts, which would then be
+        // swept once per session on a shared wire rather than once per connection.
+        if (ownsConnection) {
+            drainMailbox();
+            router.tickTimeouts(System.currentTimeMillis());
+        }
         flush();
     }
 
