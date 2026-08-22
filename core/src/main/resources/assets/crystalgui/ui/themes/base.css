@@ -706,4 +706,35 @@ theme {
     /* Behind the picture, so a window that does not fill the box letterboxes against something darker
      * than the panel rather than merging into it. */
     --preview-thumbnail-bg: var(--surface-base);
+
+    /* -- The window switcher (Mod+Tab) -----------------------------------------------------------
+     * The same floating-surface vocabulary the hover preview takes, because they are the same KIND of
+     * thing: a transient panel over the whole desktop showing pictures of windows. Deriving both from
+     * the system tokens rather than the switcher from the preview is the standing rule -- a component
+     * token never chains off another component's, or restyling one widget silently moves the other.
+     *
+     * The picture's backdrop is shared outright (--preview-thumbnail-bg) and that IS deliberate: it is
+     * not the preview's token being borrowed, it is the one token for "what a window thumbnail
+     * letterboxes against", which both draw. */
+    --switcher-bg: var(--surface-raised);
+    --switcher-border: var(--border-base);
+    --switcher-fg: var(--fg);
+
+    /* TRANSPARENT, not absent: a tile's border must exist unselected so that selecting one changes its
+     * COLOUR and never its width. A border that appears on selection re-lays the grid out by two pixels
+     * per tile, so every tile after the selected one shifts as the selection moves. */
+    --switcher-entry-border: #00000000;
+
+    /* The selection is a RING and there is deliberately no fill token beside it. A darker fill has to
+     * compete with whatever the thumbnail happens to be showing; a bright outline never does, which is
+     * why Windows marks the selected tile with one. The colour is a THEME decision rather than a
+     * derivation -- pure white is right on a dark desktop and wrong on a light one -- so crystal-dark
+     * names it and this is only the shape. */
+    --switcher-selected-ring: var(--fg);
+
+    /* The tile's close, taking the same SYSTEM pair the window close and the hover preview's both do.
+     * Derived from --error rather than from either of theirs: a component token never chains off another
+     * component's, or restyling one widget silently moves the others. */
+    --switcher-close-hover-bg: var(--error);
+    --switcher-close-hover-fg: var(--fg-on-accent);
 }

@@ -1,9 +1,13 @@
 package com.crystalgui.ui.elements.desktop;
 
+import com.crystalgui.core.notify.Notification;
+import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
+import com.crystalgui.ui.input.keymap.KeyChord;
+import com.crystalgui.ui.input.keymap.Keymap;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
@@ -108,6 +112,17 @@ public class Desktop extends UIElement {
         taskbar = new Taskbar();
         addInternalChild(taskbar);
 
+        // PARKED HERE so it has a tree to be promoted OUT of -- the same idiom DragGhost and the taskbar's
+        // hover preview both need, and for the same reason: an element must be somewhere before the top
+        // layer can take it. It is display:none until a gesture opens it, so it costs a layout skip.
+        switcher = new WindowSwitcher(this);
+        addInternalChild(switcher);
+
+        // THE WIDGET THAT OWNS THE COMMANDS REGISTERS THEM, as DockArea does for DockCommands. Registering
+        // from anywhere else is how a command ends up existing only once something unrelated has been
+        // constructed -- registered but unreachable, or bound but pointing at nothing.
+        DesktopCommands.register();
+
         // DRIVEN BY THE REGISTRY, not by the layer. The layer never sees a window destroyed while it was
         // already hidden, and it sees a hide as a removal -- so hanging presence off it both missed the
         // moment the surface should be given back and gave it back while windows were still retained.
@@ -179,6 +194,7 @@ public class Desktop extends UIElement {
 
     /** The strip along the bottom. @see Taskbar */
     private final Taskbar taskbar;
+    private final WindowSwitcher switcher;
 
     @Nullable
     private WindowFrame activeWindow;
@@ -425,6 +441,52 @@ public class Desktop extends UIElement {
         return taskbar;
     }
 
+    /** The MRU switcher. @see WindowSwitcher */
+    public WindowSwitcher switcher() {
+        return switcher;
+    }
+
+    /** @see #announceTheSwitcherOnce */
+    private static boolean switcherAnnounced;
+
+    /**
+     * Tells the user how to switch windows, the first time one is put away.
+     *
+     * <p><b>A keybinding nobody can discover is a keybinding that does not exist.</b> The taskbar is the
+     * safety net and is visible; the switcher is the fast path and is invisible until you already know
+     * about it, so the moment a window first disappears is the one moment the offer is both relevant and
+     * unmissable. Windows makes the same offer with its "your window is here" taskbar bubble.</p>
+     *
+     * <p><b>The chord is read from the keymap, never spelled.</b> A literal is a promise the widget cannot
+     * keep the moment anything rebinds the command, and it fails silently — the notification goes on
+     * confidently naming a key that does nothing. {@code Keymap.acceleratorFor} is what every menu item
+     * and tooltip in the engine already uses, and it falls back to the command's declared default, so this
+     * is correct before anybody has installed a keymap at all. If the command is genuinely unbound there
+     * is nothing to advertise and nothing is said.</p>
+     *
+     * <p>Once per process, and separately suppressible for good: the static flag stops it repeating in a
+     * session, and {@code neverShowAgain} is the user's own switch, which {@code Notifications} persists
+     * by id. Two mechanisms because they answer different questions — "have I said this yet" and "does
+     * this person want to be told".</p>
+     */
+    private void announceTheSwitcherOnce() {
+        if (switcherAnnounced) return;
+        // NOT WORTH SAYING WITH ONE WINDOW. Advertising a switcher on a desktop that has nothing to switch
+        // between teaches a chord that will appear broken the first time it is pressed.
+        if (registry.size() < 2) return;
+        KeyChord chord = Keymap.acceleratorFor(this, DesktopCommands.SWITCH_WINDOW);
+        if (chord == null) return;
+        switcherAnnounced = true;
+        Notifications.show(Notification.info("Window minimised")
+                .withDetail("Press " + chord + " to switch between windows")
+                .withNeverShowAgain("desktop.switcherHint"));
+    }
+
+    /** Lets a test drive the first-hide announcement more than once. */
+    public static void resetSwitcherAnnouncementForTesting() {
+        switcherAnnounced = false;
+    }
+
     /** The window layer — the work area's box, and the containing block every frame is placed in. */
     public UIElement windowLayer() {
         return windows;
@@ -560,6 +622,7 @@ public class Desktop extends UIElement {
                 // case that genuinely has nowhere to leave the keyboard, and it hands over from
                 // WindowFrame.dispose() where that distinction can still be seen.
                 if (activeWindow == child) deactivate();
+                announceTheSwitcherOnce();
                 registry.changed();
                 // LAST, and after the activation above rather than before it: eviction can destroy a
                 // window, and destroying one re-enters this method. Doing it while the active window is

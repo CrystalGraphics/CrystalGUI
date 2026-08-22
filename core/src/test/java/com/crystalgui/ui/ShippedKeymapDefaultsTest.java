@@ -1,6 +1,7 @@
 package com.crystalgui.ui;
 
 import com.crystalgui.ui.input.keymap.Keymap;
+import com.crystalgui.ui.elements.desktop.DesktopCommands;
 import com.crystalgui.ui.elements.dock.DockCommands;
 import com.crystalgui.ui.elements.editor.EditorCommands;
 import com.crystalgui.ui.elements.graph.GraphCommands;
@@ -62,6 +63,8 @@ public class ShippedKeymapDefaultsTest {
         CommandRegistry.global().resetForTesting();
         UndoCommands.register();
         DockCommands.register();
+        DesktopCommands.resetForTesting();
+        DesktopCommands.register();
         GraphCommands.register();
         EditorCommands.register();
         CrystalEditorCommands.register();

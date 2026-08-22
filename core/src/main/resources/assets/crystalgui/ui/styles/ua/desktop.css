@@ -712,3 +712,149 @@ window.__dock-window__ .__strip__ {
     align-self: center;
     background-color: var(--preview-thumbnail-bg, #1E1F22);
 }
+
+
+/* == W10: the MRU switcher ========================================================================
+ *
+ * A centred grid of tiles, Windows' Alt+Tab. The OVERLAY fills the root and centres the panel with
+ * flexbox rather than arithmetic, which is the whole reason it is full-size -- and it IS hittable, since
+ * hover selects, a press activates and each tile carries a close button.
+ *
+ * A full-size element that eats input is the failure this codebase has met most often, and what keeps
+ * this one safe is `display: none` for every frame it is not drawn (WindowSwitcher.setPanelShown) --
+ * which includes the whole of the 150ms delay, and therefore the whole of a fast tap. There is no window
+ * in which an invisible switcher can swallow a click.
+ *
+ * ABSOLUTE, because it is promoted to the top layer and a promoted element's containing block is the
+ * root -- so 100%/100% here means the screen. */
+.__window-switcher__ {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    justify-content: center;
+    align-items: center;
+    z-index: 200;
+}
+
+/* The tile grid. WRAPS, because a desktop with a dozen windows would otherwise run a single row off both
+ * edges of the screen -- max-width is what gives the wrap something to break against, since a flex line
+ * only breaks when the container has a definite cross-size to break within. */
+.__window-switcher__ > .__switcher-panel__ {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+    gap-all: 6px;
+    max-width: 80%;
+    padding-all: 10px;
+    background-color: var(--switcher-bg, #2B2B2B);
+    border-width: 1px;
+    border-color: var(--switcher-border, #3D3D3D);
+    border-radius: var(--radius-panel, 4px);
+}
+
+/* One window. A COLUMN -- icon and title above, picture below, which is Windows' arrangement and not the
+ * taskbar preview's only by accident: the preview is anchored to a strip along the bottom and reads
+ * upward, while a tile in a grid reads top-down like a file. */
+.__switcher-entry__ {
+    flex-direction: column;
+    flex-shrink: 0;
+    padding-all: 4px;
+    border-width: 1px;
+    /* TRANSPARENT RATHER THAN ABSENT, so selecting a tile changes the border's COLOUR and never its
+     * width. A border that appears on selection re-lays the whole grid out by two pixels per tile, and
+     * every tile after the selected one shifts as you cycle. */
+    border-color: var(--switcher-entry-border, #00000000);
+    border-radius: var(--radius-panel, 4px);
+}
+
+ /* A RING, NOT A FILL. Windows marks the selected thumbnail with a pure-white border and leaves the
+ * tile's own background alone -- which is the readable choice over a grid of dark pictures, because a
+ * darker fill has to compete with whatever the thumbnail itself happens to be showing while a bright
+ * outline never does. The border is already there at every tile's transparent width, so this changes a
+ * colour and re-lays nothing out. */
+.__switcher-entry__.__selected__ {
+    border-color: var(--switcher-selected-ring, #FFFFFF);
+}
+
+/* The close button, Windows' -- hidden until the tile is the one being pointed at or the one selected.
+ *
+ * BOTH, and the second is what makes it reachable from the keyboard: shown on hover alone it would not
+ * exist for anyone cycling with the chord, and a control that appears only under a pointer is a control
+ * half the gesture cannot use. */
+.__switcher-entry__ .__switcher-close__ {
+    display: none;
+    width: 18px;
+    height: 13px;
+    min-width: 0px;
+    min-height: 0px;
+    padding-left: 0px;
+    padding-right: 0px;
+    padding-top: 0px;
+    padding-bottom: 0px;
+    flex-shrink: 0;
+    border-radius: 0px;
+    background: none;
+    background-color: transparent;
+    overlay: icon("crystalgui:x");
+    overlay-fit: contain;
+    overlay-origin: content-box;
+    color: var(--switcher-fg, #DFE1E5);
+}
+
+.__switcher-entry__:hover .__switcher-close__ {
+    display: flex;
+}
+
+.__switcher-entry__.__selected__ .__switcher-close__ {
+    display: flex;
+}
+
+/* WINDOWS' CLOSE RED, and both halves are needed: `background` and `background-color` are separate
+ * properties, so a rule that sets only the colour is painted over by whatever drawable won. */
+.__switcher-entry__ .__switcher-close__:hover {
+    background: none;
+    background-color: var(--switcher-close-hover-bg, #C42B1C);
+    color: var(--switcher-close-hover-fg, #FFFFFF);
+}
+
+/* The header row. The title is the part that gives -- `width: 0; flex-grow: 1` is the fill idiom
+ * sideways, and it works here because the thumbnail below has a definite width for the row to divide. */
+.__switcher-entry__ > .__switcher-header__ {
+    flex-direction: row;
+    align-items: center;
+    gap-all: 4px;
+    padding-bottom: 4px;
+    flex-shrink: 0;
+}
+
+.__switcher-entry__ .__icon__ {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+}
+
+/* ELIDED, and the font-size is on the TEXT and not the header: `font-size` does not effectively inherit
+ * here, because default.css opens with a universal rule, so a declaration on a wrapper computes on the
+ * wrapper while the label inside it stays at 10. */
+.__switcher-title__ {
+    width: 0;
+    flex-grow: 1;
+    font-size: 10;
+    color: var(--switcher-fg, #DFE1E5);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* THE MAXIMUM, not a size -- Windows' MaxThumbSizePx, one number bounding both axes. WindowThumbnail
+ * measures this square once and then writes the window's own shape scaled to fit inside it, so both of a
+ * tile's dimensions vary from window to window and nothing is ever letterboxed. Bigger than the taskbar
+ * preview's, because a switcher is what a whole desktop is read from. */
+.__switcher-entry__ > .__thumbnail__ {
+    width: 150px;
+    height: 150px;
+    align-self: center;
+    background-color: var(--preview-thumbnail-bg, #1E1F22);
+}

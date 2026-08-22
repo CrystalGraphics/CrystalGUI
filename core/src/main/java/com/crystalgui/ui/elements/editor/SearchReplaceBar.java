@@ -463,6 +463,14 @@ public class SearchReplaceBar extends UIElement {
     private void bindTab(UIElement element) {
         element.onKeyDown.attachListener((el, event) -> {
             if (event.getKeyCode() != CgKeyCodes.KEY_TAB) return;
+            // THE RING IS Tab AND Shift+Tab, so a Ctrl-held Tab belongs to somebody else -- the desktop's
+            // window switcher, today. The keymap resolves only on an UNCONSUMED event, so stopping
+            // propagation here would deny the chord to every binding above with nothing to report it.
+            if (CgModifiers.hasCtrl(event.getModifiers())
+                    || CgModifiers.hasSuper(event.getModifiers())
+                    || CgModifiers.hasAlt(event.getModifiers())) {
+                return;
+            }
             if (moveTab(CgModifiers.hasShift(event.getModifiers()) ? -1 : 1)) event.stopPropagation();
         }, false, true);
     }
