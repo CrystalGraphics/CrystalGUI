@@ -563,11 +563,24 @@ public class WindowFrame extends UIElement implements Disposable {
     @Override
     public void dispose() {
         if (state == WindowState.DESTROYED) return;
+        // READ BEFORE hide() clears it, and this is the whole of the hide/destroy distinction. Hiding
+        // hands activation to nobody -- putting a window away is not asking for another one, and
+        // activation drags the keyboard with it. Destroying is different: the window it was in is gone,
+        // so leaving nothing active would leave the keyboard nowhere until the user clicked. Windows
+        // hands over in both cases; ours only does here, because ours moves focus.
+        //
+        // Also false for a window that was already hidden -- eviction destroys those, and evicting
+        // something the user put away must not reach in and change what they are looking at.
+        boolean wasActive = owner != null && owner.activeWindow() == this;
+
         hide();
         state = WindowState.DESTROYED;
         Desktop desktop = owner;
         owner = null;
-        if (desktop != null) desktop.registry().destroyed(this);
+        if (desktop != null) {
+            desktop.registry().destroyed(this);
+            if (wasActive) desktop.activateTopmost();
+        }
         onDestroyed.emit();
     }
 

@@ -255,9 +255,15 @@ public class DesktopTaskbarTest extends UiTestBase {
 
         second.hide();
         settle();
-        assertSame("the window behind takes over", first, desktop.activeWindow());
+        assertNull("minimising hands activation to nobody", desktop.activeWindow());
+        assertFalse("so the entry of the window put away goes quiet",
+                entry(second).hasClass(Taskbar.ACTIVE_CLASS));
+        assertFalse("...and the one behind is not promoted into the highlight",
+                entry(first).hasClass(Taskbar.ACTIVE_CLASS));
+
+        desktop.activate(first);
+        settle();
         assertTrue(entry(first).hasClass(Taskbar.ACTIVE_CLASS));
-        assertFalse("a hidden window is not the active one", entry(second).hasClass(Taskbar.ACTIVE_CLASS));
 
         first.hide();
         settle();
