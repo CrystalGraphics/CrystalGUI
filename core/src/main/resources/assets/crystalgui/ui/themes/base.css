@@ -634,7 +634,11 @@ theme {
      * does: the active caption merges with the application below it (see the pair after this one) and
      * an inactive one steps away from it, flatter and with quieter text. Marking activity by making a
      * window darker is the same signal read the other way round. */
-    --window-title-bg: var(--surface-raised);
+    /* THE SAME AS ACTIVE, on purpose -- a caption does not change colour when the window loses focus.
+     * Which window is active is said by the title's FOREGROUND, dimmed to --fg-secondary below, which is
+     * how macOS and IntelliJ's New UI both say it. Two different bar colours read as two different KINDS
+     * of window when they sit side by side, which is what it looked like. */
+    --window-title-bg: var(--surface-base);
     --window-title-fg: var(--fg-secondary);
     /* THE ACTIVE CAPTION IS THE APPLICATION'S OWN SURFACE, which is the half of client-side
      * decorations that is not about where the chrome goes. Once a window hosts an application's menu

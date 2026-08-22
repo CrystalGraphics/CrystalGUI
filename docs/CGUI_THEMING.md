@@ -652,7 +652,7 @@ editor scheme's.
 | `--window-fg` | `var(--fg)` | base.css |
 | `--window-title-active-bg` | `var(--surface-base)` | base.css |
 | `--window-title-active-fg` | `var(--fg)` | base.css |
-| `--window-title-bg` | `var(--surface-raised)` | base.css |
+| `--window-title-bg` | `var(--surface-base)` | base.css |
 | `--window-title-fg` | `var(--fg-secondary)` | base.css |
 | `--workbench-bg` | `var(--surface-base)` | base.css |
 

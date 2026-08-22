@@ -221,7 +221,7 @@ window > .__title-bar__ {
      * line to a pixel inboard of it. That is the smaller error of the two, and it is the direction
      * that has something to show for it. */
     padding-right: 1px;
-    background: var(--window-title-bg, #2B2B2B);
+    background: var(--window-title-bg, #26282B);
     color: var(--window-title-fg, #9DA0A8);
 }
 
