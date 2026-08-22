@@ -13,6 +13,8 @@ import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.Ui;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
+import com.crystalgui.ui.elements.desktop.WindowFrame;
+import com.crystalgui.ui.elements.desktop.WindowPolicy;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
@@ -70,8 +72,16 @@ public final class CgUiScreen extends GuiScreen {
      * demo scaffolding — the {@code padding-all} beside it is, and is left out here because a
      * full-screen editor wants no margin.</p>
      */
+    /** @see #HOST_STYLES */
+    private static final String EDITOR_CLASS = "crystalgui-editor";
+
     private static final String HOST_STYLES =
-            "." + ROOT_CLASS + " { width: 100%; height: 100%; }";
+            "." + ROOT_CLASS + " { width: 100%; height: 100%; }"
+            // AND THE EDITOR FILLS ITS WINDOW. It used to BE the root and carry the rule above; since
+            // W7 it is content inside a WindowFrame, so what it has to fill is the frame's content slot.
+            // Same rule, one level down, and for the same reason: without it the editor sizes to content
+            // and every percentage inside resolves against zero.
+            + "." + EDITOR_CLASS + " { width: 100%; height: 100%; }";
 
     /**
      * Kept across opens.
@@ -84,6 +94,8 @@ public final class CgUiScreen extends GuiScreen {
     private static CrystalEditor editor;
     private static UIWindow uiWindow;
     private static Mc1710Workspace workspace;
+    /** The window the editor lives in. @see #initGui */
+    private static WindowFrame editorWindow;
 
     /** Run and Stop for the active file, or null where no engine band opened. @see #initGui */
     private static ScriptWorkbench scripting;
@@ -147,7 +159,11 @@ public final class CgUiScreen extends GuiScreen {
         // than as a missing flag.
         Keyboard.enableRepeatEvents(true);
 
-        if (uiWindow != null) return;
+        if (uiWindow != null) {
+            // Reopening: the desktop comes back exactly as it was left. Everything below built it once.
+            uiWindow.resumeDesktop();
+            return;
+        }
 
         trace("begin");
         File dataDir = mc.mcDataDir;
@@ -169,7 +185,7 @@ public final class CgUiScreen extends GuiScreen {
         // a project a resource pack could ship. Same reason the trash lives outside.
         editor.useConfig(new LocalConfigStorage(new File(dataDir, "config/crystalgui").toPath()));
 
-        editor.addClass(ROOT_CLASS);
+        editor.addClass(EDITOR_CLASS);
 
         // RUN AND STOP, for the file in front. Installed here rather than by CrystalEditor because it
         // belongs to the LANGUAGE module: the editor is the shell, and a shell that hard-wired a Run
@@ -187,11 +203,33 @@ public final class CgUiScreen extends GuiScreen {
         if (scripting != null) editor.workbench().revealPanel(RunPanels.RUN_TYPE);
 
         trace("scripting install");
-        uiWindow = new UIWindow(Ui.of(editor));
+        // A BARE ROOT, and the editor becomes a WINDOW on the desktop the UIWindow already owns.
+        //
+        // Nothing visibly changes on day one, which is the point of doing it this way: a maximised frame
+        // is the full-screen editor that was here before, and un-maximising is what reveals the desktop
+        // underneath. The compositor is not a mode anybody switches into.
+        UIElement root = new UIElement();
+        root.addClass(ROOT_CLASS);
+        uiWindow = new UIWindow(Ui.of(root));
         // NOT INSTALLED FOR YOU. Without this the window matches no selector at all and the editor
         // renders as an unstyled column of boxes.
         uiWindow.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
         uiWindow.getStyleEngine().addStylesheet(StyleSheet.parse(HOST_STYLES));
+
+        // HIDE_ON_CLOSE, because a workbench is not a dialog: closing it keeps every document, the dock
+        // arrangement and the undo history, and its taskbar entry is how it comes back. That is the same
+        // promise the static fields above already made, now made by the lifecycle instead of by keeping
+        // a reference nobody could see.
+        //
+        // Escape then falls out end to end with nothing here to arrange it: the cascade inside the
+        // window runs first (a dropdown, then a modal), the window is its own last close watcher so its
+        // policy minimises it, and only an Escape that nothing wanted reaches handleKeyboardInput below
+        // and closes the screen.
+        editorWindow = uiWindow.openWindow(new WindowFrame("Crystal Editor"));
+        editorWindow.setPolicy(WindowPolicy.HIDE_ON_CLOSE).setKey("editor:main");
+        editorWindow.setIcon("crystalgui:code");
+        editorWindow.content().addChild(editor);
+        editorWindow.maximize();
         trace("UIWindow + stylesheets");
     }
 
@@ -390,6 +428,11 @@ public final class CgUiScreen extends GuiScreen {
     @Override
     public void onGuiClosed() {
         Keyboard.enableRepeatEvents(false);
+        // THE COMPOSITOR GOES OFF SCREEN, and every window is retained exactly as it is -- which of them
+        // were open, where they were, which was in front. Detaching is also what drops the input state:
+        // the hover, the press target and any live drag would otherwise still describe a screen that is
+        // no longer up. Pinned windows are the exception W14 adds here.
+        if (uiWindow != null) uiWindow.suspendDesktop();
         if (editor != null && uiWindow != null) {
             editor.saveSession(Mc1710Workspace.PROJECT_ID,
                     (int) uiWindow.getScreenWidth(), (int) uiWindow.getScreenHeight());
@@ -413,6 +456,7 @@ public final class CgUiScreen extends GuiScreen {
     public static void disposeAll() {
         if (editor != null) Disposer.dispose(editor);
         editor = null;
+        editorWindow = null;
         uiWindow = null;
         workspace = null;
         projectsAsked = false;

@@ -61,8 +61,10 @@ cross-agent tool use permitted is asking the orchestrator a clarifying question,
 ./gradlew :core:check             # both test tasks
 ```
 
-There is **no in-game Minecraft integration reachable from this build.** The two things you can
-compile and run end-to-end today are `core/` and the harness. Do not claim otherwise.
+`mc1710/` **is** in this build and compiles (`./gradlew :mc1710:compileJava`) — it holds the real
+1.7.10 host, `CgUiScreen`. What it does not give you is a *verified* one: running a client is a thing
+only a person at a machine can do, so "it compiles" and "it works in game" stay separate claims.
+`core/` and the harness are what you can compile **and run** end to end.
 
 ## Render testing — the GL debug harness
 
@@ -92,7 +94,7 @@ seconds, needs no Minecraft context, and gives you a real GL surface.
 | `cgui-nineslice` | `CgUiNineSliceScene` | `CgUiSprite` 9-slice |
 | `cgui-ore-theme` | `CgUiOreThemeScene` | `ore.css` + sprite registry end-to-end |
 | `cgui-visual-layers` | `CgUiVisualLayersScene` | FBO layer opacity + masking |
-| `cgui-desktop` | `CgUiDesktopScene` | **CrystalOS** — stacking windows, drag, resize, clamp, cascade. *Grows with `plan_windowing.md`: every W with something visible adds its demonstration here in the same commit* |
+| `cgui-desktop` | `CgUiDesktopScene` | **CrystalOS** — stacking windows, drag, resize, clamp, cascade, taskbar, per-window modality, maximise, and **the editor running as a window**. *Grows with `plan_windowing.md`: every W with something visible adds its demonstration here in the same commit* |
 
 Harness scenes live in `gl-debug-harness/src/main/java/.../harness/scene/ui/`; register new ones in
 `SceneRegistry`. Harness authoring rules are in `gl-debug-harness/AGENTS.md` — never call raw GL.
@@ -130,7 +132,7 @@ Harness scenes live in `gl-debug-harness/src/main/java/.../harness/scene/ui/`; r
 > **The two `java`/`js` axes differ on purpose.** In `.java` the loader question is mechanical — a class that imports `org.eclipse.jdt` is child-side, and that is thirty-six of its fifty — so directories spend themselves on the axis that is *not* readable off the file. In `.js` it is the loader question that cannot be read: six classes import neither Rhino nor anything of ours and are child-side only because every one of their callers is. *(Was `syntax-treesitter/` until M4.)* |
 | `gl-debug-harness/` | ✅ | Git submodule (branch `crystalgui`). 16 CrystalGUI scenes. The only way to run the UI. |
 | `CrystalGraphics/` | ✅ (composite) | The rendering backend. Consumed, never reimplemented. |
-| `mc1710/` | ❌ commented out | Bare `@Mod` stub. No CrystalGUI integration at all. Scaffolding. |
+| `mc1710/` | ✅ | **In `settings.gradle.kts` and compiling** (`./gradlew :mc1710:compileJava`), whatever older notes here said. Holds the real 1.7.10 host: `CgUiScreen` (the viewport the desktop attaches to), `CgUiInput`, `Mc1710Workspace`. Still **not verified in a client from this session** — a green compile is not a run. |
 | `mc1201/` | ❌ commented out | Has *real* code (`CgPlatformService1201`, per-loader entrypoints, event bridges, mixins) but does not compile from this build. |
 
 `core/build.gradle.kts` runs an **import guard** as a `doLast` on `compileJava`: any source line
