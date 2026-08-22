@@ -451,6 +451,23 @@ public final class WorkspaceClient<T> {
                 });
     }
 
+    /**
+     * The bytes last read from the server for this path, or {@code null} if it was never read.
+     *
+     * <p><b>This is the merge base.</b> It is what both sides descend from: the editor's buffer is this
+     * plus whatever has been typed, and the server's current copy is this plus whatever somebody else did.
+     * A three-way merge needs exactly that and nothing else, which is why a conflict here never has to fall
+     * back to a two-way comparison.</p>
+     *
+     * <p>Deliberately not a copy of the array. The caller is a merge, which reads it and never writes, and
+     * copying every file on every conflict to guard against a caller that does not exist is a cost paid for
+     * nothing. @see com.crystalgui.text.diff.ThreeWayMerge</p>
+     */
+    @Nullable
+    public byte[] baseContent(CgPath path) {
+        return cachedContent.get(path);
+    }
+
     /** The half both paths share: remember the etag, start watching, hand the document over. */
     private void finishRead(CgPath path, byte[] content, String etag, Consumer<Document> onResult) {
         etags.put(path, etag);

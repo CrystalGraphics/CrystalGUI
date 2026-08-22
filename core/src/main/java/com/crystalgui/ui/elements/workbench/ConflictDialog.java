@@ -76,6 +76,23 @@ public final class ConflictDialog {
      */
     public static void ask(@Nullable UIElement from, CgPath path, @Nullable String otherEditor,
                            Runnable onKeepMine, Runnable onTakeTheirs) {
+        ask(from, path, otherEditor, onKeepMine, onTakeTheirs, null);
+    }
+
+    /**
+     * As above, plus the third answer: <b>merge them</b>.
+     *
+     * <p>The other two are both destructive and the choice between them is made blind — a person is asked
+     * which version survives without being shown what either one says. Most of the time neither answer is
+     * the one they want, because the two sets of edits are in different parts of the file and both should
+     * live. That is what {@code onMerge} opens.</p>
+     *
+     * @param onMerge opens a merge over the two versions, or {@code null} where there is no base to merge
+     *                against — a file that was never read has no common ancestor, so the option is omitted
+     *                rather than offered and then refused
+     */
+    public static void ask(@Nullable UIElement from, CgPath path, @Nullable String otherEditor,
+                           Runnable onKeepMine, Runnable onTakeTheirs, @Nullable Runnable onMerge) {
         UIWindow window = from == null ? null : from.getAttachedWindow();
         if (window == null) {
             // NOTHING SILENT. Without a window there is nowhere to ask, and defaulting to either
@@ -103,6 +120,11 @@ public final class ConflictDialog {
 
         // READING ORDER PUTS THE DESTRUCTIVE PAIR FIRST AND THE WAY OUT LAST, which is the usual
         // arrangement; what makes it safe is that focus and Escape both land on Cancel regardless.
+        // MERGE FIRST: it is the only non-destructive answer and usually the right one, so it reads before
+        // the pair that throws work away. Focus still lands on Cancel below -- that is what makes the
+        // destructive pair safe, and it is unchanged by adding a safe option above them.
+        Button mergeThem = onMerge == null ? null
+                : choice(actions, "Merge…", "Combine both sets of edits, deciding only where they clash");
         Button keepMine = choice(actions, "Keep mine", "Overwrite the server's copy");
         Button takeTheirs = choice(actions, "Take theirs", "Discard your unsaved edits");
         Button cancel = choice(actions, "Cancel", "Leave the file modified and unsaved");
@@ -116,6 +138,12 @@ public final class ConflictDialog {
             onTakeTheirs.run();
         });
         cancel.onPressed.connect(dialog::close);
+        if (mergeThem != null) {
+            mergeThem.onPressed.connect(() -> {
+                dialog.close();
+                onMerge.run();
+            });
+        }
 
         // THROUGH addOverlay, which resolves the host through UIWindow.overlayHost -- the one seam that
         // knows where an overlay belongs. Adding to the root directly works today and is exactly what
