@@ -34,10 +34,23 @@ final class GutterEdgePart extends EditorViewPart {
         pool.beginPass();
         UIElement edge = pool.next();
         edge.setScrollExempt(true);
-        // ON the gutter's right edge, which is what a border is. Floating it in the middle of the code
-        // margin read as a third thing -- a stray rule with a gap either side -- rather than as the gutter
-        // ending. The whole margin then sits between it and the first glyph, which is the gap it is for.
-        final float left = editor.textOriginX() - editor.codeLeftPad();
+        // ON THE EDGE THAT FACES THE CODE, which is what a border is. Floating it in the middle of the
+        // code margin read as a third thing -- a stray rule with a gap either side -- rather than as the
+        // gutter ending. The whole margin then sits between it and the first glyph, which is the gap it
+        // is for.
+        //
+        // Mirrored, the edge facing the code is the gutter's LEFT one. Leaving this as
+        // `textOriginX - codeLeftPad` put it at the editor's far left instead -- a rule down the outside
+        // of the pane with nothing on either side of it, while the gutter it belongs to had no border at
+        // all and read as floating text.
+        // ONE PIXEL CLEAR OF THE GUTTER, not on its boundary. Unmirrored the edge lands just PAST the
+        // gutter's box, so nothing covers it; mirrored, `gutterLeft()` is the first pixel the gutter
+        // itself paints -- and the gutter has an opaque background at z-index 6, so the rule was drawn
+        // every frame and painted over every frame. Invisible for a reason that has nothing to do with
+        // where it was told to go.
+        final float left = editor.isGutterOnRight()
+                ? Math.max(0f, editor.gutterLeft() - 1f)
+                : editor.textOriginX() - editor.codeLeftPad();
         final float height = editor.viewportHeight();
         StyleGroup.defaultPipeline(edge.getStyle().getLayoutGroup(),
                 l -> l.positionType(TaffyPosition.ABSOLUTE)
