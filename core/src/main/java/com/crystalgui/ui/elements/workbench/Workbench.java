@@ -25,6 +25,7 @@ import com.crystalgui.text.syntax.LanguageRegistry;
 import com.crystalgui.text.syntax.SyntaxTokenizer;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.chrome.Breadcrumbs;
+import com.crystalgui.ui.elements.chrome.QuickPick;
 import com.crystalgui.ui.elements.chrome.StatusBarView;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.SymbolIcon;
@@ -472,6 +473,8 @@ public class Workbench extends UIElement {
         registry.setTitleProvider(this::tabTitleFor);
         registry.setIconProvider(Workbench::tabIconFor);
         registry.setIconElementProvider(Workbench::viewerIconElement);
+        registry.setTooltipProvider(Workbench::tabTooltipFor);
+        registry.setIconTooltipProvider(Workbench::tabIconTooltipFor);
         registry.setDecorationProvider(this::tabDecorationFor);
 
         // Anchors match where defaultLayout() puts them, so closing a panel and reopening it from the
@@ -989,6 +992,35 @@ public class Workbench extends UIElement {
      */
     private final Map<String, TextEditor> viewers = new HashMap<>();
 
+    /**
+     * The one Go to File picker, kept between invocations.
+     *
+     * <h3>Why it is held here rather than by {@code GoToFile}</h3>
+     *
+     * <p>Because it has to be held <em>somewhere</em> for its query to survive a close, and the two
+     * alternatives are worse. A static on {@code GoToFile} is shared by every window in the process, so
+     * two workbenches would fight over one popup and one of them would find it parented elsewhere — the
+     * same class of bug {@code JobScheduler.shared()} caused in this session's tests. Rebuilding it per
+     * open is what it did before and is what makes retention impossible.</p>
+     *
+     * <p>It stays attached and {@code display: none} while closed, like any closed popover, so there is
+     * nothing to dispose and nothing to reattach.</p>
+     */
+    @Nullable
+    private QuickPick quickOpen;
+
+    /** @see #quickOpen */
+    @Nullable
+    public QuickPick quickOpen() {
+        return quickOpen;
+    }
+
+    /** @see #quickOpen */
+    public Workbench setQuickOpen(@Nullable QuickPick picker) {
+        this.quickOpen = picker;
+        return this;
+    }
+
     /** Which viewers have their text — what tells "still reading" from "read and empty" apart. */
     private final Set<String> viewersLoaded = new HashSet<>();
 
@@ -1017,26 +1049,10 @@ public class Workbench extends UIElement {
             // Ctrl+B into anything on the classpath did nothing -- and it read as the engine having
             // no answer, when the engine had simply never been asked for one.
             if (!site.resource().isProject()) {
-                TextPoint into = site.start();
-                // THE VIEWER'S OWN EDITOR, not `activeEditor()`: that resolves through PATH_STATE,
-                // which a viewer panel deliberately does not carry, so it answers null here.
-                openResource(site.resource(), () -> {
-                    TextEditor opened = viewers.get(site.resource().toString());
-                    if (opened == null) return;
-                    opened.revealAt(into);
-                    UIWindow window = getAttachedWindow();
-                    if (window != null) window.getInputHandler().requestFocus(opened);
-                });
+                openResourceAt(site.resource(), site.start());
                 return;
             }
-            TextPoint at = site.start();
-            openFile(site.resource().asPath(), () -> {
-                TextEditor opened = activeEditor();
-                if (opened == null) return;
-                opened.revealAt(at);
-                UIWindow window = getAttachedWindow();
-                if (window != null) window.getInputHandler().requestFocus(opened);
-            });
+            openFileAt(site.resource().asPath(), site.start());
         });
     }
 
@@ -1117,6 +1133,48 @@ public class Workbench extends UIElement {
         }
         open(DockInput.of(ref));
         whenViewerLoaded(resource, onOpened);
+    }
+
+    /**
+     * Opens a non-workspace resource and puts the caret at {@code at}, focusing it.
+     *
+     * <h3>One definition, two callers, and a third coming</h3>
+     *
+     * <p>Ctrl+B into a library class and Go to Class are the same act with different ways of naming the
+     * target — one has a {@code DeclarationSite}, the other has a name and a line somebody typed. The
+     * routing between them was written inline for the first caller; extracting it when the second arrived
+     * is the rule {@code routeDefinitionsOf} already states about its own two halves ("two copies would be
+     * two places for the routing rules to drift").</p>
+     *
+     * <p><b>The viewer's own editor, never {@code activeEditor()}.</b> That resolves through
+     * {@code PATH_STATE}, which a viewer panel deliberately does not carry, so it answers null here — and
+     * a null there is silent: the tab opens at the top of the file and the reveal simply does not happen,
+     * which reads as the declaration having been at line 1.</p>
+     *
+     * @param at where to put the caret, or null to open at the top — which is what a name with no
+     *           location means, and is not an error
+     */
+    public void openFileAt(CgPath path, @Nullable TextPoint at) {
+        if (path == null) return;
+        openFile(path, () -> {
+            TextEditor opened = activeEditor();
+            if (opened == null) return;
+            if (at != null) opened.revealAt(at);
+            UIWindow window = getAttachedWindow();
+            if (window != null) window.getInputHandler().requestFocus(opened);
+        });
+    }
+
+    /** @see #openFileAt — the same act for a resource the workspace does not hold. */
+    public void openResourceAt(Resource resource, @Nullable TextPoint at) {
+        if (resource == null) return;
+        openResource(resource, () -> {
+            TextEditor opened = viewers.get(resource.toString());
+            if (opened == null) return;
+            if (at != null) opened.revealAt(at);
+            UIWindow window = getAttachedWindow();
+            if (window != null) window.getInputHandler().requestFocus(opened);
+        });
     }
 
     /**
@@ -1345,6 +1403,7 @@ public class Workbench extends UIElement {
      */
     private void bindStatusToActiveTab() {
         statusBar.breadcrumbs().setCrumbs(trailFor(activeFilePath()));
+        refreshPresence();
 
         FileDocument active = activeDocument();
         if (active == activeStatusDocument) return;
@@ -1398,22 +1457,65 @@ public class Workbench extends UIElement {
             return false;
         }
         byte[] written = document.encode();
-        client.save(target, written,
-                etag -> {
-                    // THE BYTES THAT WERE WRITTEN become the new baseline, not the document's current
-                    // state: a document edited again while the write was in flight is still modified
-                    // afterwards, and recording what it looks like NOW would call it clean.
-                    open.markSaved(target, written);
-                    refreshTabTitles();
-                },
-                failure -> Notifications.show(failure.isConflict()
-                        // THE PROSE ALREADY NAMED THE FIX -- "reopen to take theirs" -- which is exactly
-                        // the case for making it a button instead of an instruction.
-                        ? Notification.error("Conflict")
-                                .withDetail(target.name() + " changed on disk")
-                                .withAction("Reopen to take theirs", () -> openFile(target))
-                        : saveFailed(target, failure).withAction("Retry", this::saveActiveFile)));
+        client.save(target, written, etag -> saved(target, written),
+                failure -> {
+                    if (failure.isConflict()) {
+                        askWhichVersionSurvives(target, written);
+                        return;
+                    }
+                    Notifications.show(saveFailed(target, failure)
+                            .withAction("Retry", this::saveActiveFile));
+                });
         return true;
+    }
+
+    /**
+     * THE BYTES THAT WERE WRITTEN become the new baseline, not the document's current state: a document
+     * edited again while the write was in flight is still modified afterwards, and recording what it
+     * looks like NOW would call it clean.
+     */
+    private void saved(CgPath target, byte[] written) {
+        open.markSaved(target, written);
+        refreshTabTitles();
+    }
+
+    /**
+     * Phase 5.5 — a conflict is a question, not a notification.
+     *
+     * <p>This was a balloon whose single action was <i>"Reopen to take theirs"</i>, and the comment beside
+     * it already said the prose had named the fix and that it should be a button. It understated the
+     * problem twice. A balloon <b>fades</b>, so a user who was not looking takes the default — and the
+     * default was "your save silently did not happen". And that one button <b>discards unsaved work in a
+     * click</b>, while the opposite resolution, keep mine, was not offered at all.</p>
+     *
+     * <p>Both resolutions destroy something, which is exactly the case that earns a modal.
+     * @see ConflictDialog</p>
+     */
+    /**
+     * Phase 5.6 — who else has this file open, phrased for a human.
+     *
+     * <p>{@code null} rather than an empty string when nobody is known, because the dialog omits the
+     * whole line rather than drawing "nobody has it open" — which would be a claim, and the client cannot
+     * make it: an empty presence list means <em>nothing has been said</em>, not that the file is
+     * unoccupied. @see WorkspaceClient#whoElseHasOpen</p>
+     */
+    @Nullable
+    private String othersEditing(CgPath target) {
+        List<String> others = client.whoElseHasOpen(target);
+        if (others.isEmpty()) return null;
+        if (others.size() == 1) return others.get(0);
+        if (others.size() == 2) return others.get(0) + " and " + others.get(1);
+        return others.get(0) + " and " + (others.size() - 1) + " others";
+    }
+
+    private void askWhichVersionSurvives(CgPath target, byte[] written) {
+        ConflictDialog.ask(this, target, othersEditing(target),
+                () -> client.overwrite(target, written, etag -> saved(target, written),
+                        // A SECOND failure is not another conflict -- overwrite carries no etag, so it
+                        // cannot be refused as stale. Anything arriving here is a real error and belongs
+                        // on the ordinary path rather than reopening the question.
+                        again -> Notifications.show(saveFailed(target, again))),
+                () -> openFile(target));
     }
 
     /**
@@ -1780,6 +1882,47 @@ public class Workbench extends UIElement {
         SymbolInfo symbol = provider == null ? null : provider.symbolOf(viewed);
         if (symbol == null || symbol.kind() == null) return null;
         return new SymbolIcon().show(symbol.kind(), symbol.modifiers());
+    }
+
+    /**
+     * What a tab says on hover — where the thing it shows actually is.
+     *
+     * <p>The label is a bare name, and a name stops identifying anything the moment two of them collide:
+     * two {@code Main.java} in one workspace, or {@code java.util.List} beside {@code java.awt.List}. The
+     * second pair is the reason a viewer answers with its <b>fully-qualified</b> name rather than a file
+     * path — there often is no file, the tab is a decompilation, and the qualified name is the only thing
+     * that names it uniquely.</p>
+     *
+     * <p>Null for a panel that is not about a location at all — a console, the Problems view — which the
+     * registry reads as "no tooltip", not as an empty one.</p>
+     */
+    @Nullable
+    private static String tabTooltipFor(DockPanelRef panel) {
+        Resource viewed = viewedResource(panel);
+        if (viewed != null) return viewed.path();
+        String path = panel.state(PATH_STATE, "");
+        return path.isEmpty() ? null : path;
+    }
+
+    /**
+     * What a tab's ICON says on hover — what the declaration behind it <em>is</em>.
+     *
+     * <p>The one fact a library tab shows nowhere else. Nothing in {@code ArrayList.class} distinguishes a
+     * class from an interface, an enum or an annotation, and the glyph is where that answer already
+     * lives — so the icon is the part of the tab that has something of its own to say, and this is it in
+     * words. {@link SymbolIcon#describe} is the single source of both, so the picture and the sentence
+     * cannot drift apart.</p>
+     *
+     * <p>Null for a SOURCE-backed tab, matching {@link #viewerIconElement}: that tab carries a Java
+     * <em>file</em> icon, whose meaning the {@code .java} in the label has already given.</p>
+     */
+    @Nullable
+    private static String tabIconTooltipFor(DockPanelRef panel) {
+        Resource viewed = viewedResource(panel);
+        if (viewed == null) return null;
+        ResourceContentProvider provider = ResourceRegistry.providerFor(viewed);
+        SymbolInfo symbol = provider == null ? null : provider.symbolOf(viewed);
+        return symbol == null ? null : SymbolIcon.describe(symbol.kind(), symbol.modifiers());
     }
 
     /** The resource a viewer panel shows, or null for every other kind of tab. */
@@ -2199,6 +2342,40 @@ public class Workbench extends UIElement {
             problemCountEntry.update(entry);
         }
     }
+
+    /**
+     * Phase 5.6 — says who else has the active file open.
+     *
+     * <p>The data has existed since Phase 4 and nothing showed it: {@code fs.watch} is sent for every
+     * file a client reads, so the server has always known. What was missing was a view <em>across</em>
+     * peers — a watcher belongs to one connection — and anywhere to put the answer.</p>
+     *
+     * <p><b>Removed rather than emptied when nobody is there.</b> A permanent "1 person" slot that
+     * usually reads zero is a thing the eye learns to skip, which is the one failure a presence
+     * indicator cannot afford. Same shape as the problem count above, and for the same reason.</p>
+     */
+    private void refreshPresence() {
+        String others = othersEditing(activeFilePath());
+        if (others == null) {
+            if (presenceEntry != null) presenceEntry.dispose();
+            presenceEntry = null;
+            return;
+        }
+        StatusBarEntry entry = new StatusBarEntry("Editing",
+                others, others + " also has this file open", null, StatusBarEntry.Kind.STANDARD);
+        if (presenceEntry == null) {
+            presenceEntry = StatusBar.addEntry(entry, "workbench.presence",
+                    StatusBarAlignment.RIGHT, PRESENCE_PRIORITY);
+        } else {
+            presenceEntry.update(entry);
+        }
+    }
+
+    /** Right of the problem count and left of anything a document contributes. */
+    private static final int PRESENCE_PRIORITY = 50;
+
+    @Nullable
+    private StatusBarEntryAccessor presenceEntry;
 
     /**
      * Keeps the panel pointed at this workspace's index.

@@ -5,6 +5,7 @@ import com.crystalgui.mc.client.CgUiAutoTest;
 import com.crystalgui.mc.client.CgUiInput;
 import com.crystalgui.mc.net.CgUiNetProbe;
 import com.crystalgui.mc.net.CgUiRemoteWorkspaceProbe;
+import com.crystalgui.mc.net.CgUiWireProbe;
 import com.crystalgui.mc.net.CgUiSessionProbe;
 
 /**
@@ -31,5 +32,6 @@ public class ClientProxy extends CommonProxy {
         CgUiSessionProbe.register();
         // The DEDICATED-server version: -PcgRemoteProbe, against runServer over a socket.
         CgUiRemoteWorkspaceProbe.register();
+        CgUiWireProbe.register();
     }
 }

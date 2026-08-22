@@ -84,11 +84,25 @@ public final class ServerUiSession<T> implements UITreeObserver {
         final MessageRouter<T> router;
         @Nullable
         final Object peer;
+
+        /**
+         * Where this viewer's handlers are registered, or {@code null} when they go straight on the
+         * router.
+         *
+         * <p>Null is the OWNED-TRANSPORT shape, and it is not a degraded case: that router was built by
+         * this session and serves nothing else, so there is no second window to be confused with and a
+         * demultiplexer would only add a lookup. A viewer riding a {@link ProtocolConnection} shares its
+         * router with every other subsystem and every other window, which is what the mux is for.</p>
+         */
+        @Nullable
+        final UiWindowMux<T> mux;
+
         boolean opened;
 
-        Viewer(MessageRouter<T> router, @Nullable Object peer) {
+        Viewer(MessageRouter<T> router, @Nullable Object peer, @Nullable UiWindowMux<T> mux) {
             this.router = router;
             this.peer = peer;
+            this.mux = mux;
         }
     }
 
@@ -142,7 +156,8 @@ public final class ServerUiSession<T> implements UITreeObserver {
                 mailbox.add(packet);
             }
         });
-        addViewer(new MessageRouter<>(envelope -> transport.send(EnvelopeCodec.encode(ops, envelope))), null);
+        addViewer(new MessageRouter<>(envelope -> transport.send(EnvelopeCodec.encode(ops, envelope))),
+                null, null);
     }
 
     /**
@@ -152,18 +167,19 @@ public final class ServerUiSession<T> implements UITreeObserver {
      * router and its mailbox. This one owns none of them — {@link ProtocolConnection#tick()} drains and
      * expires, and {@link #tick()} here only flushes what the tree changed.</p>
      *
-     * <p><b>One UI session per connection.</b> A second would register {@code ui/description} twice and
-     * {@link MessageRouter} refuses a duplicate outright, which is the right failure: two windows on one
-     * wire need the router to dispatch on the window id as well as the method, and that is the same
-     * change multi-viewer fan-out needs. Until then, one window per peer is enforced rather than
-     * assumed.</p>
+     * <p><b>As many windows per connection as you like</b>, since 5.7. This used to say the opposite,
+     * and the reason is worth keeping: a second session registered {@code ui/description} twice and
+     * {@link MessageRouter} refused the duplicate outright — correctly, since it keys by method name
+     * alone. Registration now goes through {@link UiWindowMux}, which keys by {@code (method, window)}.
+     * The per-handler {@code mine(…)} checks below are kept: they were the guard against a message
+     * still in flight when a window closed, and that is a different question from routing.</p>
      */
     public ServerUiSession(int windowId, UIElement root, ProtocolConnection<T> connection) {
         this.windowId = windowId;
         this.root = root;
         this.ops = connection.ops();
         this.ownsConnection = false;
-        addViewer(connection.router(), connection.peer());
+        addViewer(connection.router(), connection.peer(), UiWindowMux.of(connection));
     }
 
     // ── C1: fan-out ─────────────────────────────────────────────────────────
@@ -174,13 +190,12 @@ public final class ServerUiSession<T> implements UITreeObserver {
      * <p>That second half is what makes late joining work at all: a player who opens a shared window
      * after it was created must not wait for the next mutation to discover it exists.</p>
      *
-     * <p><b>One session per connection still holds.</b> Two <em>windows</em> on one wire would register
-     * {@code ui/description} twice and the router refuses a duplicate — that is a different problem, and
-     * the fix for it is dispatching on the window id as well as the method. This adds viewers to one
-     * window, which needs no such thing.</p>
+     * <p><b>Viewers and windows are different axes, and both now work.</b> This adds a second <em>client
+     * watching one window</em>; {@link UiWindowMux} is what allows a second <em>window on one client</em>.
+     * They compose — the mux is per connection and this session registers into each viewer's own.</p>
      */
     public ServerUiSession<T> addViewer(ProtocolConnection<T> connection) {
-        Viewer<T> viewer = addViewer(connection.router(), connection.peer());
+        Viewer<T> viewer = addViewer(connection.router(), connection.peer(), UiWindowMux.of(connection));
         if (open) sendOpenTo(viewer);
         return this;
     }
@@ -193,7 +208,15 @@ public final class ServerUiSession<T> implements UITreeObserver {
      */
     public boolean removeViewer(ProtocolConnection<T> connection) {
         MessageRouter<T> router = connection.router();
-        return viewers.removeIf(viewer -> viewer.router == router);
+        // Released as well as dropped. A viewer removed without this leaves its (method, window) pairs
+        // claimed on that connection's mux, so re-adding the same viewer -- a reconnect, a re-open --
+        // throws "window N already serves 'ui/description'" for a window nobody is watching.
+        boolean removed = viewers.removeIf(viewer -> {
+            if (viewer.router != router) return false;
+            if (viewer.mux != null) viewer.mux.release(windowId);
+            return true;
+        });
+        return removed;
     }
 
     /** How many clients are watching. */
@@ -201,11 +224,24 @@ public final class ServerUiSession<T> implements UITreeObserver {
         return viewers.size();
     }
 
-    private Viewer<T> addViewer(MessageRouter<T> router, @Nullable Object peer) {
-        Viewer<T> viewer = new Viewer<>(router, peer);
+    private Viewer<T> addViewer(MessageRouter<T> router, @Nullable Object peer,
+                                @Nullable UiWindowMux<T> mux) {
+        Viewer<T> viewer = new Viewer<>(router, peer, mux);
         viewers.add(viewer);
         registerUiMethods(viewer);
         return viewer;
+    }
+
+    /** Registers a request handler where this viewer's registrations go. @see Viewer#mux */
+    private void bindRequest(Viewer<T> viewer, String method, MessageRouter.RequestHandler<T> handler) {
+        if (viewer.mux != null) viewer.mux.onRequest(windowId, method, handler);
+        else viewer.router.onRequest(method, handler);
+    }
+
+    /** Registers a notification handler where this viewer's registrations go. @see Viewer#mux */
+    private void bindNotify(Viewer<T> viewer, String method, MessageRouter.NotificationHandler<T> handler) {
+        if (viewer.mux != null) viewer.mux.onNotify(windowId, method, handler);
+        else viewer.router.onNotify(method, handler);
     }
 
     public int windowId() {
@@ -362,7 +398,13 @@ public final class ServerUiSession<T> implements UITreeObserver {
 
     private void request(Viewer<T> viewer, String method, @Nullable StateMap<T> args,
                          @Nullable Consumer<StateMap<T>> onResult, @Nullable Consumer<String> onError) {
-        viewer.router.request(method, args == null ? null : args.encode(),
+        // STAMPED, so the far side's mux can route it. Without this every session-scoped call arrives
+        // with no window and is refused -- and it would be refused only once a SECOND window existed,
+        // which is the shape of bug that ships. The key is additive and a handler that does not read it
+        // is unaffected.
+        StateMap<T> stamped = args == null ? new StateMap<>(ops) : args;
+        stamped.putInt(UiMethods.WINDOW, windowId);
+        viewer.router.request(method, stamped.encode(),
                 value -> {
                     if (onResult != null) onResult.accept(read(value));
                 },
@@ -492,6 +534,15 @@ public final class ServerUiSession<T> implements UITreeObserver {
         return false;
     }
 
+    /**
+     * Closes the window and stops answering for it.
+     *
+     * <p><b>The release is after the notification, not before.</b> {@code ui/closeWindow} is itself a
+     * window-scoped message on the way out, and letting go of the slot first would be the same
+     * dismiss-before-dispatch mistake light dismiss already pays for elsewhere — here it would only
+     * matter to a peer echoing something back, which is exactly the kind of "only under load, only
+     * sometimes" fault that is unfindable later.</p>
+     */
     public void close(String reason) {
         if (!open) return;
         open = false;
@@ -499,6 +550,13 @@ public final class ServerUiSession<T> implements UITreeObserver {
         StateMap<T> out = new StateMap<>(ops);
         out.putString("reason", reason == null ? "" : reason);
         notifyClient(UiMethods.CLOSE_WINDOW, out);
+
+        // Hands the (method, window) pairs back, so the id may be reused and a message still in flight
+        // for this window is refused rather than applied to whatever takes its place. That second half
+        // is what the per-handler mine(...) check was for when one handler was all there could be.
+        for (Viewer<T> viewer : viewers) {
+            if (viewer.mux != null) viewer.mux.release(windowId);
+        }
     }
 
     public boolean isOpen() {
@@ -532,7 +590,7 @@ public final class ServerUiSession<T> implements UITreeObserver {
         for (Map.Entry<String, Call.Handler<T>> entry : serverMethods.entrySet()) {
             registerCall(viewer, entry.getKey(), entry.getValue());
         }
-        viewer.router.onRequest(UiMethods.DESCRIPTION, (payload, respond) -> {
+        bindRequest(viewer, UiMethods.DESCRIPTION, (payload, respond) -> {
             StateMap<T> in = read(payload);
             if (!mine(in)) {
                 respond.fail("wrong window");
@@ -553,7 +611,7 @@ public final class ServerUiSession<T> implements UITreeObserver {
             respond.ok(out.encode());
         });
 
-        viewer.router.onNotify(UiMethods.EVENT, payload -> {
+        bindNotify(viewer, UiMethods.EVENT, payload -> {
             StateMap<T> in = read(payload);
             if (!mine(in)) return;
             int nid = in.getInt("nid", -1);
@@ -606,7 +664,11 @@ public final class ServerUiSession<T> implements UITreeObserver {
     }
 
     private void registerCall(Viewer<T> viewer, String method, Call.Handler<T> handler) {
-        viewer.router.onRequest(method, (payload, respond) ->
+        // WINDOW-SCOPED like the rest, so two windows of the same application may each offer `app/save`.
+        // The counterpart is that #request stamps the window on the way out; a server-held method whose
+        // caller is NOT this session -- a workspace, a script runtime -- belongs on ProtocolConnection
+        // directly, where it is connection-scoped and shared by every window, which is what it wants.
+        bindRequest(viewer, method, (payload, respond) ->
                 handler.invoke(read(payload), new Call.Responder<T>() {
                     @Override
                     public void ok(@Nullable StateMap<T> value) {

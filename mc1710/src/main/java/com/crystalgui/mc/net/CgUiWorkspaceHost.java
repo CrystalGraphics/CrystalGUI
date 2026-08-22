@@ -222,6 +222,13 @@ public final class CgUiWorkspaceHost {
 
     /** Forgets a peer. Called when its connection closes, or the maps grow for the life of the server. */
     public static void forget(Object peer) {
+        // PRESENCE FIRST, and it is the half that is visible to other players. A client that logs out
+        // cleanly sends fs.unwatch for each open file; a client that crashes, times out, or loses its
+        // connection sends nothing at all -- so without this it is shown as still holding those files,
+        // to everybody else, for the rest of the server's life. @see WorkspacePresence#left
+        WorkspaceService live = service;
+        if (live != null) live.presence().left(actorFor(peer));
+
         BY_PEER.remove(peer);
         CONNECTIONS.remove(peer);
     }

@@ -155,6 +155,13 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
      * too early is thrown away with no error at all.</p>
      */
     public void loadProjects(Runnable onLoaded) {
+        // SEEDED HERE, and for the same reason the comment above gives. What this actor may do is a
+        // question about the projects, so the first moment it can be asked is the first moment they can
+        // be -- and asking it here rather than at construction means it inherits that timing for free
+        // instead of needing its own rule. The server pushes every change afterwards, so this is a seed
+        // and never a poll: calling it per menu open would be the round trip the cache exists to avoid.
+        // @see WorkspaceClient#mayWrite
+        client.refreshCapabilities();
         client.projects(infos -> {
             roots.clear();
             for (ProjectInfo info : infos) {
