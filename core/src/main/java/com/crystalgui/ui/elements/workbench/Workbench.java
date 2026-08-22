@@ -27,6 +27,8 @@ import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.chrome.Breadcrumbs;
 import com.crystalgui.ui.elements.chrome.QuickPick;
 import com.crystalgui.ui.elements.chrome.StatusBarView;
+import com.crystalgui.ui.elements.workbench.decoration.FileDecoration;
+import com.crystalgui.ui.elements.workbench.decoration.FileDecorationProvider;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.SymbolIcon;
 import com.crystalgui.text.lang.SymbolInfo;
@@ -464,7 +466,9 @@ public class Workbench extends UIElement {
         client.onFileChanged(change -> {
             fileTree.source().invalidate(change.path().parent());
             fileTree.treeView().refresh();
+            applyExternalChange(change);
         });
+        fileTree.getDecorations().addProvider(externalChanges);
 
         // How a tab presents itself. Both are PULLED by the strip when it builds a tab rather than pushed
         // in afterwards, which is what makes a rebuilt strip correct on the frame it is rebuilt -- a dock
@@ -1476,6 +1480,11 @@ public class Workbench extends UIElement {
      */
     private void saved(CgPath target, byte[] written) {
         open.markSaved(target, written);
+        // THE DISAGREEMENT IS OVER, whichever way it was resolved -- a successful write means this
+        // buffer is now what the server holds. Leaving the mark would show a conflict badge on a file
+        // that has none, which teaches people to ignore the badge.
+        externallyChanged.remove(target);
+        externallyDeleted.remove(target);
         refreshTabTitles();
     }
 
@@ -1491,6 +1500,116 @@ public class Workbench extends UIElement {
      * <p>Both resolutions destroy something, which is exactly the case that earns a modal.
      * @see ConflictDialog</p>
      */
+    /**
+     * Phase 6.3 — what to do when a file changes on the server underneath an open editor.
+     *
+     * <p>The notification has crossed the wire since Phase 4 and reached <b>only the file tree</b>: an
+     * open editor was never told. So a clean buffer showed stale content for ever, a deleted file left a
+     * perfectly normal-looking tab, and a change under a dirty buffer was discovered at save time or not
+     * at all.</p>
+     *
+     * <table>
+     *   <tr><th>State</th><th>What happens</th></tr>
+     *   <tr><td>Clean, changed</td><td><b>Reloaded silently.</b> The overwhelmingly common case — a
+     *       git checkout, an external save — and prompting for it is what makes a watcher feel naggy
+     *       rather than helpful. VS Code does the same, and there is nothing to lose: the buffer and the
+     *       file agreed a moment ago</td></tr>
+     *   <tr><td>Dirty, changed</td><td>Marked and <b>left alone</b>. Reloading would destroy unsaved
+     *       work without asking; the decision belongs at save time, where {@code ConflictDialog} already
+     *       makes it with all three answers on the table</td></tr>
+     *   <tr><td>Deleted</td><td>Marked, buffer kept. Closing the tab throws away text the user may well
+     *       want to write back — which is the whole reason the buffer is worth more than the file</td></tr>
+     *   <tr><td>Not open</td><td>Nothing. The tree refresh above is the entire correct response</td></tr>
+     * </table>
+     */
+    private void applyExternalChange(WorkspaceClient.FileChanged change) {
+        CgPath path = change.path();
+        if (open.get(path) == null) return;
+
+        if (change.isDeleted()) {
+            externallyDeleted.add(path);
+            externallyChanged.remove(path);
+            refreshTabTitles();
+            return;
+        }
+
+        externallyDeleted.remove(path);
+        if (open.isDirty(path)) {
+            // MARKED, NOT RELOADED. @see ConflictDialog, which is where this is actually resolved.
+            externallyChanged.add(path);
+            refreshTabTitles();
+            return;
+        }
+
+        // CLEAN: take the new bytes without asking. forget() first, or the conditional read answers
+        // UNCHANGED out of the etag this client is holding -- which is precisely the etag that just
+        // stopped being true.
+        client.forget(path);
+        client.read(path,
+                reloaded -> {
+                    adoptInto(path, reloaded.content());
+                    open.markSaved(path, reloaded.content());
+                    externallyChanged.remove(path);
+                    refreshTabTitles();
+                },
+                failure -> {
+                    // Could not take it after all. Marked rather than silently left stale, because a
+                    // buffer that disagrees with the server and says nothing is the state this whole
+                    // item exists to remove.
+                    externallyChanged.add(path);
+                    refreshTabTitles();
+                });
+    }
+
+    /**
+     * The badge an externally-changed or deleted file carries — Phase 6.3.
+     *
+     * <p>Through {@code FileDecorations} rather than a second marking mechanism, so it reaches the tab
+     * <b>and</b> the file tree from one place, merges with the other providers by weight, and bubbles to
+     * the containing folder like everything else. A decoration written straight onto the tab would have
+     * needed a second one for the tree, and the two would have disagreed.</p>
+     *
+     * <p><b>It bubbles</b>, so a folder says one of its files moved without the user opening it. The
+     * recorded rule applies: the colour climbs and the badge does not — a folder wearing a
+     * {@code ✕} would be claiming the folder itself was deleted.</p>
+     */
+    private final FileDecorationProvider externalChanges = new FileDecorationProvider() {
+        @Override
+        public String label() {
+            return "Changed on the server";
+        }
+
+        @Override
+        @Nullable
+        public FileDecoration decorationFor(CgPath path) {
+            if (externallyDeleted.contains(path)) {
+                return FileDecoration.of(90, "decoration-deleted", "✕", "Deleted on the server")
+                        .withStrikethrough(true).withBubble(true);
+            }
+            if (externallyChanged.contains(path)) {
+                return FileDecoration.of(80, "decoration-conflict", "!",
+                        "Changed on the server since you opened it").withBubble(true);
+            }
+            return null;
+        }
+
+        @Override
+        public java.util.Collection<CgPath> decorated() {
+            if (externallyChanged.isEmpty() && externallyDeleted.isEmpty()) return java.util.List.of();
+            java.util.List<CgPath> all =
+                    new java.util.ArrayList<>(externallyChanged.size() + externallyDeleted.size());
+            all.addAll(externallyChanged);
+            all.addAll(externallyDeleted);
+            return all;
+        }
+    };
+
+    /** Files that moved on the server under a DIRTY buffer, so the tab can say so. @see #applyExternalChange */
+    private final java.util.Set<CgPath> externallyChanged = new java.util.LinkedHashSet<>();
+
+    /** Files deleted on the server while still open here. @see #applyExternalChange */
+    private final java.util.Set<CgPath> externallyDeleted = new java.util.LinkedHashSet<>();
+
     /**
      * Phase 5.6 — who else has this file open, phrased for a human.
      *
@@ -1510,12 +1629,33 @@ public class Workbench extends UIElement {
 
     private void askWhichVersionSurvives(CgPath target, byte[] written) {
         ConflictDialog.ask(this, target, othersEditing(target),
-                () -> client.overwrite(target, written, etag -> saved(target, written),
-                        // A SECOND failure is not another conflict -- overwrite carries no etag, so it
-                        // cannot be refused as stale. Anything arriving here is a real error and belongs
-                        // on the ordinary path rather than reopening the question.
-                        again -> Notifications.show(saveFailed(target, again))),
+                () -> overwrite(target, written),
                 () -> openFile(target));
+    }
+
+    /**
+     * <b>Keep mine</b> — writes the active file over whatever the server holds.
+     *
+     * <p>Named rather than left inline inside the conflict handler, because it is one of the three
+     * answers {@code ConflictDialog} offers and the only one with no other way to reach it. A branch that
+     * exists only inside a modal's callback cannot be tested without driving the modal, which is how a
+     * resolution path ends up being the one nobody checks.</p>
+     */
+    public boolean overwriteActiveFile() {
+        CgPath target = activeFilePath();
+        if (target == null) return false;
+        FileDocument document = open.get(target);
+        if (document == null || !open.isSaveable(target)) return false;
+        overwrite(target, document.encode());
+        return true;
+    }
+
+    private void overwrite(CgPath target, byte[] written) {
+        client.overwrite(target, written, etag -> saved(target, written),
+                // A SECOND failure is not another conflict -- overwrite carries no etag, so it cannot be
+                // refused as stale. Anything arriving here is a real error and belongs on the ordinary
+                // path rather than reopening the question.
+                again -> Notifications.show(saveFailed(target, again)));
     }
 
     /**
