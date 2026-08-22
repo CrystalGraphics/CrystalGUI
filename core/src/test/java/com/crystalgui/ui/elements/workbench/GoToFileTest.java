@@ -8,6 +8,7 @@ import com.crystalgui.text.lang.TypeSearch;
 import com.crystalgui.text.lang.TypeSearchRegistry;
 import com.crystalgui.ui.elements.chrome.QuickPickEntry;
 import com.crystalgui.ui.elements.chrome.QuickPickItem;
+import com.crystalgui.ui.elements.chrome.QuickPickSource;
 import com.crystalgui.ui.text.TextRange;
 import org.junit.After;
 import org.junit.Test;
@@ -73,8 +74,16 @@ public class GoToFileTest {
         return out;
     }
 
+    /** Everything the picker would show, drained through the real sink. */
     private static List<QuickPickEntry> rows(String query, List<CgPath> files) {
-        return GoToFile.rowsFor(SearchQuery.of(query), files);
+        return batch(query, files).entries();
+    }
+
+    private static QuickPickSource.Batch batch(String query, List<CgPath> files) {
+        // THE REAL DRAIN, not a hand-rolled collector: the cap and the truncation flag live in it, so a
+        // test that collected into its own list would assert about a shape the widget never sees.
+        return QuickPickSource.drain((q, sink) -> GoToFile.fetchInto(q, files, sink),
+                SearchQuery.of(query), 1000);
     }
 
     private static List<String> labelsOf(List<QuickPickEntry> rows) {
@@ -256,7 +265,9 @@ public class GoToFileTest {
         provideTypes(type("java.util", "ArrayList", SymbolKind.CLASS));
 
         assertTrue(rows("", files("proj:src/Main.java")).isEmpty());
-        assertTrue(GoToFile.rowsFor(null, files("proj:src/Main.java")).isEmpty());
+        assertTrue(QuickPickSource.drain(
+                (q, sink) -> GoToFile.fetchInto(q, files("proj:src/Main.java"), sink), null, 1000)
+                .entries().isEmpty());
     }
 
     /**
@@ -275,5 +286,58 @@ public class GoToFileTest {
     @Test
     public void aFileThatDoesNotMatchIsNotListed() {
         assertTrue(rows("zzzz", files("proj:src/Main.java")).isEmpty());
+    }
+
+    // ── Caps ──────────────────────────────────────────────────────────────────────
+
+    private static List<CgPath> manyFiles(int count) {
+        List<CgPath> out = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) out.add(CgPath.parse("proj:src/Match" + i + ".java"));
+        return out;
+    }
+
+    /**
+     * <b>A flood of file matches does not starve the classpath half.</b>
+     *
+     * <p>The reason the cap is per group rather than one shared bound. Every project file outranks every
+     * classpath type by construction, so a single cap is spent entirely on files before a type is ever
+     * offered — and a query matching a few hundred filenames would list no classes at all. That reads as
+     * the classpath half having broken, not as a cap doing its job.</p>
+     */
+    @Test
+    public void aFloodOfFilesDoesNotStarveTheClasspath() {
+        provideTypes(type("java.util", "Matcher", SymbolKind.CLASS));
+
+        // DRAINED AT A LIMIT THE FILES ALONE WOULD FILL. At the generous limit the other tests use,
+        // four hundred files and one type all fit and nothing is starved -- so the first version of this
+        // passed with the per-group cap removed entirely, proving nothing. The number has to be one the
+        // file half could swallow whole.
+        List<QuickPickEntry> drained = QuickPickSource.drain(
+                (q, sink) -> GoToFile.fetchInto(q, manyFiles(400), sink),
+                SearchQuery.of("Match"), 60).entries();
+
+        List<String> labels = new ArrayList<>();
+        for (QuickPickEntry row : drained) labels.add(row.item().label());
+        assertTrue("the type was pushed off the end by files: " + labels.size() + " rows",
+                labels.contains("Matcher"));
+    }
+
+    /**
+     * <b>Cutting a group is reported, so the list can say it is not everything.</b>
+     *
+     * <p>A list that silently stops is the worst answer a search can give — a file that exists but fell
+     * past the cap looks exactly like one that does not. The picker turns this into the header's
+     * "100+ matches"; here it is asserted at the seam, because the flag is what the header reads.</p>
+     */
+    @Test
+    public void cuttingAGroupIsReported() {
+        assertTrue("400 files were cut to a capped group and nothing said so",
+                batch("Match", manyFiles(400)).truncated());
+    }
+
+    /** <b>...and a list that fits reports nothing.</b> The half that fails noisily if it regresses. */
+    @Test
+    public void aListThatFitsIsNotReportedAsCut() {
+        assertFalse(batch("Match", manyFiles(3)).truncated());
     }
 }

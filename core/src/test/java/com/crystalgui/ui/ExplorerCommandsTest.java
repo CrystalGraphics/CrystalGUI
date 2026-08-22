@@ -1,6 +1,7 @@
 package com.crystalgui.ui;
 
 import com.crystalgui.ui.elements.chrome.QuickPickEntry;
+import com.crystalgui.ui.elements.chrome.QuickPickSource;
 
 import com.crystalgui.core.search.SearchQuery;
 
@@ -1100,9 +1101,10 @@ public class ExplorerCommandsTest extends UiTestBase {
         for (int i = 0; i < 40; i++) settle();
 
         QuickPickItem main = null;
-        for (QuickPickEntry entry
-                : GoToFile.rowsFor(SearchQuery.of("Main.java"),
-                        workbench.fileTree().source().knownFiles())) {
+        List<CgPath> known = workbench.fileTree().source().knownFiles();
+        for (QuickPickEntry entry : QuickPickSource.drain(
+                (q, sink) -> GoToFile.fetchInto(q, known, sink),
+                SearchQuery.of("Main.java"), 1000).entries()) {
             if ("Main.java".equals(entry.item().label())) main = entry.item();
         }
         assertNotNull("Main.java was never indexed", main);

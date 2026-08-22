@@ -7,6 +7,7 @@ import com.crystalgui.ui.elements.chrome.QuickPickSource;
 import com.crystalgui.ui.text.TextRange;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
@@ -26,8 +27,20 @@ public class QuickPickSourceTest {
         return QuickPickSource.of(List.of(items));
     }
 
+    /** The best row a source pushes for {@code query}. */
+    private static QuickPickEntry firstOf(QuickPickSource source, SearchQuery query) {
+        return QuickPickSource.drain(source, query, 1000).entries().get(0);
+    }
+
     private static List<String> idsFor(QuickPickSource source, String query) {
-        return source.query(SearchQuery.of(query)).stream().map(e -> e.item().id()).toList();
+        List<String> ids = new ArrayList<>();
+        // DRAINED THROUGH THE REAL SINK, so this exercises the contract a source actually implements
+        // rather than a convenience shape that only tests use.
+        for (QuickPickEntry entry
+                : QuickPickSource.drain(source, SearchQuery.of(query), 1000).entries()) {
+            ids.add(entry.item().id());
+        }
+        return ids;
     }
 
     // ── Empty query ─────────────────────────────────────────────────────────────────────────────
@@ -52,7 +65,7 @@ public class QuickPickSourceTest {
     @Test
     public void anEmptyQueryHighlightsNothing() {
         QuickPickSource source = sourceOf(new QuickPickItem("a", "Apply", "File", null));
-        QuickPickEntry entry = source.query(SearchQuery.EMPTY).get(0);
+        QuickPickEntry entry = firstOf(source, SearchQuery.EMPTY);
         assertTrue(entry.labelRanges().isEmpty());
         assertTrue(entry.categoryRanges().isEmpty());
     }
@@ -108,7 +121,7 @@ public class QuickPickSourceTest {
     public void labelRangesAreRelativeToTheLabelAlone() {
         QuickPickSource source = sourceOf(new QuickPickItem("s", "Split Right", "Dock", null));
 
-        QuickPickEntry entry = source.query(SearchQuery.of("split")).get(0);
+        QuickPickEntry entry = firstOf(source, SearchQuery.of("split"));
         assertEquals(List.of(TextRange.of(0, 5)), entry.labelRanges());
         assertTrue("a label hit must not also light up the category", entry.categoryRanges().isEmpty());
     }
@@ -123,7 +136,7 @@ public class QuickPickSourceTest {
     public void aCategoryOnlyHitHighlightsTheCategoryAndNotTheLabel() {
         QuickPickSource source = sourceOf(new QuickPickItem("s", "Split Right", "Dock", null));
 
-        QuickPickEntry entry = source.query(SearchQuery.of("dock")).get(0);
+        QuickPickEntry entry = firstOf(source, SearchQuery.of("dock"));
         assertFalse(entry.categoryRanges().isEmpty());
         assertTrue(entry.labelRanges().isEmpty());
     }
@@ -138,5 +151,80 @@ public class QuickPickSourceTest {
     public void displayTextOmitsTheSeparatorWhenThereIsNoCategory() {
         assertEquals("Apply", QuickPickItem.of("a", "Apply").displayText());
         assertEquals("File: Apply", QuickPickItem.of("a", "Apply", "File").displayText());
+    }
+
+    // ── Streaming, and saying when there was more ───────────────────────────────────────
+
+    /** A source that pushes {@code count} rows and stops when told to. */
+    private static QuickPickSource pushing(int count) {
+        return (query, sink) -> {
+            for (int i = 0; i < count; i++) {
+                if (!sink.accept(QuickPickEntry.plain(QuickPickItem.of("id" + i, "Row " + i)))) return;
+            }
+        };
+    }
+
+    /**
+     * <b>A source is stopped by the sink, not by being asked for a number.</b>
+     *
+     * <p>The whole reason the contract pushes. A source over sixty thousand entries must be able to give
+     * up as soon as the consumer has enough — which it cannot do if its job is to return a finished list.
+     * Asserted by counting what the source was <em>able</em> to push, not what came back.</p>
+     */
+    @Test
+    public void aSourceStopsAsSoonAsTheSinkHasEnough() {
+        int[] pushed = { 0 };
+        QuickPickSource counting = (query, sink) -> {
+            for (int i = 0; i < 500; i++) {
+                pushed[0]++;
+                if (!sink.accept(QuickPickEntry.plain(QuickPickItem.of("id" + i, "Row " + i)))) return;
+            }
+        };
+
+        QuickPickSource.Batch batch = QuickPickSource.drain(counting, SearchQuery.EMPTY, 5);
+
+        assertEquals(5, batch.entries().size());
+        assertTrue("the source was left running past the cap: " + pushed[0] + " pushed", pushed[0] <= 6);
+    }
+
+    /**
+     * <b>Hitting the cap is reported, whether or not the source noticed.</b>
+     *
+     * <p>The single most important thing on the sink, and the easiest to leave out. A list that silently
+     * stops is indistinguishable from a complete one, so a row past the cap looks exactly like a row that
+     * does not exist — wrong, and wrong in the direction that stops the user looking. The source here says
+     * nothing about truncation; the sink works it out from the cap having bitten.</p>
+     */
+    @Test
+    public void reachingTheCapIsReportedWithoutTheSourceSayingSo() {
+        assertTrue("the cap bit and nothing said so",
+                QuickPickSource.drain(pushing(20), SearchQuery.EMPTY, 5).truncated());
+    }
+
+    /** <b>...and a list that fits is not reported as cut.</b> The other half, and the noisier failure. */
+    @Test
+    public void aListThatFitsIsNotReportedAsTruncated() {
+        QuickPickSource.Batch batch = QuickPickSource.drain(pushing(3), SearchQuery.EMPTY, 5);
+        assertEquals(3, batch.entries().size());
+        assertFalse("a complete list claimed to be truncated", batch.truncated());
+    }
+
+    /**
+     * <b>A source may report truncation of its own.</b>
+     *
+     * <p>The case the cap cannot see: an index that narrowed before it answered knows it left rows behind
+     * even when everything it pushed fits comfortably. {@code TypeSearch.Results.truncated} is exactly
+     * that, and it has to survive the journey to the header.</p>
+     */
+    @Test
+    public void aSourceCanReportTruncationTheCapCannotSee() {
+        QuickPickSource narrowed = (query, sink) -> {
+            sink.accept(QuickPickEntry.plain(QuickPickItem.of("a", "Alpha")));
+            sink.markTruncated();
+        };
+
+        QuickPickSource.Batch batch = QuickPickSource.drain(narrowed, SearchQuery.EMPTY, 100);
+        assertEquals(1, batch.entries().size());
+        assertTrue("the source said there was more and it was lost", batch.truncated());
     }
 }
