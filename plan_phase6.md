@@ -186,7 +186,7 @@ Today a slow open is indistinguishable from a hung one, and a failed one has now
 
 ---
 
-## 6.6 A differ · **the substrate, not a feature**
+## 6.6 A differ · **done 2026-08-22**
 
 There is no diff algorithm in the repo. This is the dependency under 6.7 *and* 6.8, which is the argument
 for building it once, properly, rather than inside the viewer.
@@ -195,8 +195,25 @@ for building it once, properly, rather than inside the viewer.
 intact, is faster than patience and comparable to Myers, and reads better than either. Myers optimises for
 the fewest changed lines, which is the wrong objective for something a person reads.
 
-Output as a `ChangeSet` over the existing `Change` type, so it composes with `writeDelta`, with
-`UndoStack`, and with the editor's own edit path rather than being a second representation.
+`LineDiff` answers in **line ranges**, which is what a viewer needs; `TextDiff` converts to a `ChangeSet`
+over the existing `Change` type, so it composes with `writeDelta`, `UndoStack` and the editor's own edit
+path rather than being a second representation. One representation, not two — the alternative is how a
+delta read and the diff on screen come to disagree about what changed.
+
+**The round trip is the correctness net**: applying the change set must reproduce the new text exactly.
+It is the only assertion a subtly-wrong diff cannot pass, and it is run over 200 seeded random edits as
+well as the written cases.
+
+> **A trailing newline is not a line**, so a line diff cannot see it change — `"a\nb\n"` and `"a\nb"`
+> split to the same two lines. That is the granularity being honest rather than a bug, and the offset seam
+> is the only place with enough information to fix it. **Found by the round trip, not by reading**: the
+> hunk count was right, so nothing that counted hunks would ever have noticed.
+
+> **The rarity scoring is not pinned by any test here, and that was checked rather than assumed.**
+> Replacing it with "take the first common run" leaves every test green, because prefix/suffix trimming
+> resolves any fixture small enough to write out before `findAnchor` is consulted. It earns its place on
+> large messy input, which is where a fixture stops being readable as a test. Recorded rather than left
+> as an implied claim.
 
 ---
 
@@ -211,6 +228,31 @@ already holds the last-read bytes in `cachedContent`.
 
 > **Build it against a `ChangeSet`**, so the source of the two sides is the caller's business. A viewer
 > that knew about conflicts specifically would have to be rewritten for its second user.
+
+### The shape, from IntelliJ's diff editor
+
+Supplied as a reference screenshot 2026-08-22 and taken as the target. Reading it off rather than
+inventing one, in the order the eye meets it:
+
+| Element | What it is | What it needs here |
+|---|---|---|
+| **Two synchronised panes** | Left is the older revision, right is *Current version*, each with its own line-number gutter | Two `TextEditor`s. Scroll is **aligned, not merely synced** — see below |
+| **Connecting ribbons** | Filled, slanted shapes across the centre gutter joining a left block to its right counterpart | `ctx.curve()` / `ctx.triangle()` already draw filled vector shapes for `CgUiSvg`; this is the same path |
+| **Apply chevrons** (`»`) | Per change, in the gutter, pushing one side to the other | A viewer is a **reader**, so these are out until there is somewhere to write |
+| **Line bands** | Whole-line background on changed and inserted lines | Existing decoration/band painting |
+| **Word-level marks inside a line** | The changed *fragment* is darker than the line band — `WindowFrame` against `Tooltip` on line 5 | A **second, finer diff within the line**. 6.6 answers lines; this is a follow-on |
+| **Collapsed unchanged regions** | Zigzag separators with a breadcrumb of the enclosing scope: `ToolWindowFrame > WINDOWED_CLASS` | `FoldingModel` folds; the breadcrumb is the enclosing symbol, which the language services can name |
+| **Toolbar** | Viewer mode, whitespace handling, highlight granularity, `3 differences` | Ordinary chrome |
+| **Change marks in the scrollbar track** | Where the differences are in the whole file | New: `ScrollerView` has no track markers today |
+
+**Alignment is the part that is not obvious.** IntelliJ does *not* insert blank gaps to line the two sides
+up — the panes run at their own line positions and the **ribbons** carry the eye across the offset. That
+is why the connectors slant. A viewer that instead padded one side with blanks would be easier to build
+and would misreport line numbers, which are on screen.
+
+**Order within 6.7:** two panes with bands and aligned scrolling first, then ribbons, then the collapsed
+regions, then intra-line marks. Each is legible on its own; the intra-line pass is the only one needing
+more from 6.6.
 
 ---
 
