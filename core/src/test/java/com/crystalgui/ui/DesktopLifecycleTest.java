@@ -462,4 +462,63 @@ public class DesktopLifecycleTest extends UiTestBase {
 
         assertEquals(WindowState.HIDDEN, frame.state());
     }
+
+    /**
+     * <b>A minimise deactivates on the press, not when the animation lands.</b>
+     *
+     * <p>Hiding is DETACHING, so a minimise cannot detach until its animation has finished drawing — and
+     * deactivation used to ride along with the detach, which made the whole state change 400ms late. The
+     * caption stayed lit, the taskbar went on highlighting the window, and anything rendering "the active
+     * window" described one that was visibly flying into the bar. Every window manager treats the gesture
+     * as having happened the moment it is asked for and animates a window that has logically gone.</p>
+     *
+     * <p><b>Only reachable with animations ON.</b> Disabled, the continuation runs synchronously and the
+     * two orderings are indistinguishable — which is why the assertion on the window still being VISIBLE
+     * is not a spare: it is what proves the animation was still in flight when the state was read.</p>
+     */
+    @Test
+    public void minimisingDeactivatesOnThePressRatherThanWhenItLands() {
+        build();
+        Desktop.setAnimationsEnabled(true);
+        try {
+            WindowFrame frame = open("One");
+            assertSame("the fixture never made it active", frame, desktop.activeWindow());
+
+            frame.minimizeButton().onPressed.emit();
+            advance();
+
+            assertEquals("the minimise already landed, so this says nothing about WHEN it deactivated",
+                    WindowState.VISIBLE, frame.state());
+            assertNull("still the active window while it is flying into the taskbar",
+                    desktop.activeWindow());
+        } finally {
+            Desktop.setAnimationsEnabled(false);
+        }
+    }
+
+    /**
+     * <b>...and minimising a BACKGROUND window leaves the foreground one active.</b>
+     *
+     * <p>The other half of moving the deactivation earlier. {@code hide()} only ever deactivated the
+     * window that was actually active, so doing it on the press has to carry the same guard — without it,
+     * putting away a window nobody was using would blank the caption of the one being worked in.</p>
+     */
+    @Test
+    public void minimisingABackgroundWindowDoesNotDeactivateTheForegroundOne() {
+        build();
+        Desktop.setAnimationsEnabled(true);
+        try {
+            WindowFrame background = open("Background");
+            WindowFrame front = open("Front");
+            assertSame(front, desktop.activeWindow());
+
+            background.minimizeButton().onPressed.emit();
+            advance();
+
+            assertSame("minimising a background window stole the foreground window's activation",
+                    front, desktop.activeWindow());
+        } finally {
+            Desktop.setAnimationsEnabled(false);
+        }
+    }
 }
