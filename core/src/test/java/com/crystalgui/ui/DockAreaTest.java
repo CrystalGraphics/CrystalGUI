@@ -1,8 +1,10 @@
 package com.crystalgui.ui;
 
 import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.testsupport.UiTestBase;
+import com.crystalgui.ui.elements.InsertionMarker;
 import com.crystalgui.ui.elements.SplitView;
 import com.crystalgui.ui.elements.Tab;
 import com.crystalgui.ui.elements.dock.DockArea;
@@ -14,12 +16,14 @@ import com.crystalgui.ui.elements.dock.DockPanelDescriptor;
 import com.crystalgui.ui.elements.dock.DockPanelRef;
 import com.crystalgui.ui.elements.dock.DockPanelRegistry;
 import dev.vfyjxf.taffy.style.FlexDirection;
+import dev.vfyjxf.taffy.style.TaffyDisplay;
 import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
@@ -727,5 +731,91 @@ public class DockAreaTest extends UiTestBase {
             if (tab.isChecked()) selected.add(tab);
         }
         for (UIElement child : element.getChildren()) collectTabs(child, all, selected);
+    }
+
+    // ── The dragged tab leaves the strip (W9) ───────────────────────────────────────────────────
+
+    /** The insertion gap in a group's tab rail, whether or not it is currently showing. */
+    private UIElement gapIn(DockGroup group) {
+        for (UIElement child : group.tabView().rail().getChildren()) {
+            if (child.hasClass(InsertionMarker.MARKER_CLASS)) return child;
+        }
+        return null;
+    }
+
+    /**
+     * Whether an element is out of the layout.
+     *
+     * <p>Asked this way round because {@code getComputed} answers <b>null</b> for a property nothing has
+     * written — the initial value is not a candidate — so a tab that has never been touched reports
+     * neither {@code FLEX} nor {@code NONE}. Only "is it hidden" is a question every state can answer.</p>
+     */
+    private boolean isHidden(UIElement element) {
+        assertNotNull(element);
+        return element.getStyle().getComputed(LayoutProperties.DISPLAY) == TaffyDisplay.NONE;
+    }
+
+    /**
+     * <b>The tab being carried leaves the strip, and a gap the same size stands in its place.</b>
+     *
+     * <p>Both halves matter and only one of them is cosmetic. Leaving the tab in the strip shows the
+     * same file twice — once where it is and once where it is going — and, worse, a hidden tab left in
+     * the list has no box, so every midpoint test after it answers against a cell that is not there.
+     * The gap in the cell it just left is what keeps the arithmetic honest: without it the strip
+     * collapses by one tab, so a pointer that has not moved is suddenly in its neighbour's cell.</p>
+     */
+    @Test
+    public void aDraggedTabLeavesTheStripAndAGapStandsInForIt() {
+        DockGroup group = setUpOneGroupOfTwo();
+        Tab tab = tabOf(alpha);
+        assertFalse(isHidden(tab));
+        assertTrue("the gap rests closed", isHidden(gapIn(group)));
+
+        int[] from = centre(tab);
+        mouseTo(from[0], from[1]);
+        frame();
+        press(from[0], from[1]);
+        mouseTo(from[0] + 30, from[1]);
+        frame();
+
+        assertTrue("out of the strip for the duration", isHidden(tab));
+        UIElement gap = gapIn(group);
+        assertNotNull("the gap is a sibling of the tabs, in the rail", gap);
+        assertFalse("and it is open", isHidden(gap));
+
+        release(from[0] + 30, from[1]);
+        frame();
+        frame();
+
+        // ASKED OF THE LIVE TAB, never of the one captured above: a drop rebuilds the strip, so the
+        // element that was hidden may already have left the tree -- which is exactly the case
+        // InsertionMarker.restore refuses to write to.
+        assertFalse("back in the strip", isHidden(tabOf(alpha)));
+        assertTrue("and the gap has closed", isHidden(gapIn(group)));
+    }
+
+    /**
+     * <b>A click is not a drag, so the tab never moves.</b>
+     *
+     * <p>The withdrawal happens on the drag's first TICK rather than on the press, and this is the
+     * difference: a payload drag fires nothing until the pointer passes its activation threshold.
+     * Hiding on the press instead makes a tab vanish the instant you touch it and reappear when you let
+     * go — a flicker on every single click in the strip.</p>
+     */
+    @Test
+    public void pressingATabWithoutMovingNeverTakesItOutOfTheStrip() {
+        setUpOneGroupOfTwo();
+        Tab tab = tabOf(alpha);
+
+        int[] on = centre(tab);
+        mouseTo(on[0], on[1]);
+        frame();
+        press(on[0], on[1]);
+        frame();
+        assertFalse("still there mid-press", isHidden(tab));
+
+        release(on[0], on[1]);
+        frame();
+        assertFalse(isHidden(tabOf(alpha)));
     }
 }

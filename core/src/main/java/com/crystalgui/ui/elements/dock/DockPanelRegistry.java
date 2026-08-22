@@ -141,6 +141,39 @@ public final class DockPanelRegistry<C> {
     @Nullable
     private Function<DockPanelRef, String> titleProvider;
 
+    /**
+     * Names a panel's own WINDOW, when one is torn out around it — W9.
+     *
+     * <h3>A different question from the tab label</h3>
+     *
+     * <p>A tab says as little as it can get away with, because it sits beside a dozen others and the
+     * strip is read by shape: {@code JarFile.java}. A window's caption is read on its own, from across a
+     * desktop, and is the only place a document can say WHICH {@code JarFile.java} it is. Every editor
+     * makes the same split — IntelliJ's tab says the file name and its frame says
+     * {@code Project [path] - file}.</p>
+     *
+     * <p>Here rather than in {@code DockArea} because the answer needs a workspace: a project's display
+     * name and a file's path within it are things {@code Workbench} knows and the dock deliberately does
+     * not. Falls back to {@link #titleOf}, so a dock with no workspace behind it still names its
+     * windows.</p>
+     */
+    public DockPanelRegistry<C> setWindowTitleProvider(@Nullable Function<DockPanelRef, String> provider) {
+        this.windowTitleProvider = provider;
+        return this;
+    }
+
+    @Nullable
+    private Function<DockPanelRef, String> windowTitleProvider;
+
+    /** The caption for a window torn out around {@code panel}. @see #setWindowTitleProvider */
+    public String windowTitleOf(DockPanelRef panel) {
+        if (windowTitleProvider != null) {
+            String named = windowTitleProvider.apply(panel);
+            if (named != null && !named.isEmpty()) return named;
+        }
+        return titleOf(panel);
+    }
+
     public DockPanelRegistry<C> setTitleProvider(@Nullable Function<DockPanelRef, String> provider) {
         this.titleProvider = provider;
         return this;

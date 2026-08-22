@@ -2147,3 +2147,79 @@ navigatorview treeview .__row__.__selected__ {
 .__panel-header__ .__hide__ tooltip {
     tooltip-delay: 2;
 }
+
+
+/* ── THE EDITOR TAB STRIP'S SCROLLBAR ───────────────────────────────────────────────────────────
+ *
+ * THE RAIL HAS TO GIVE THE BAR ITS ROOM. `flex-shrink` defaults to 0 in this engine -- the divergence
+ * from CSS most likely to bite -- so the rail, which has `flex-grow: 1`, took the strip's whole 22px
+ * and would not give any of it back when the bar appeared. Measured: rail y=0 h=22, bar y=22 h=3,
+ * panes y=22. The bar was not hidden and was not too small; it was laid out entirely BELOW the strip,
+ * and the editor was drawn over it.
+ *
+ * With the rail able to shrink, the strip's 22 divides as it should: the bar takes 3 (it does not
+ * shrink), the rail takes 19, and the tabs move up by exactly the bar's height. When there is nothing
+ * to scroll TabView sets the bar to `display: none` and the rail has all 22 back -- so the header
+ * keeps one height, and the row shares it only when there is something to share it with.
+ *
+ * This is the whole fix. Four earlier attempts tried to make room for the OTHER bar -- the
+ * ScrollerView's `__h-scroller__`, which is absolutely positioned and so can never push anything --
+ * by padding the strip, raising its min-height, or gating either on a class the sheet cannot read.
+ * Each one either rode the tabs up, made the header taller than every other panel header, or stopped
+ * the bar appearing at all. None of them was near the actual fault.
+ *
+ * Keyed on `dockgroup`, so it reaches the main editor's strips and a torn-out window's alike; a
+ * DockWindow builds the same DockGroups. */
+dockgroup > tabview > .__strip__ > .__rail__ {
+    flex-shrink: 1;
+    min-height: 0;
+}
+
+dockgroup > tabview > .__strip__ > .__strip-bar__ {
+    height: 3px;
+}
+
+/* ── A TAB'S DRAG GHOST ─────────────────────────────────────────────────────────────────────────
+ *
+ * The default ghost is a 20px chip with its label in a separate box to the right, which is right for
+ * the thing it was written for: a rail button IS a 20px icon, and its name appears nowhere else, so
+ * the label has to be produced beside it. A tab is a pill with its icon and label inline and its name
+ * already visible -- so the same ghost over a tab strip reads as a different kind of object entirely,
+ * about twice the size of the thing it is standing in for.
+ *
+ * So it takes the tab's own shape: one box, row direction, the icon at a tab's 12px, and the label
+ * back IN FLOW beside it rather than out of flow in a box of its own. Coloured as a selected tab,
+ * because that is what the thing under the cursor is about to become wherever it lands. */
+.__drag-ghost__.__tab-ghost__ {
+    width: auto;
+    height: auto;
+    flex-direction: row;
+    align-items: center;
+    gap-all: 4px;
+    padding-left: 4px;
+    padding-right: 4px;
+    padding-top: 1px;
+    padding-bottom: 1px;
+    border-radius: var(--radius-control, 3px);
+    border-width: 1px;
+    border-color: var(--tab-active-border, #4A4A4A);
+    background-color: var(--tab-active-bg, #3A3A3A);
+}
+
+.__drag-ghost__.__tab-ghost__ .__pre-icon__ {
+    width: 12px;
+    height: 12px;
+}
+
+/* BACK IN FLOW. The base rule takes the label out of it and anchors it at `left: 100%`, which is what
+ * puts it in its own box beside the chip; a tab wears its name inside itself. */
+.__drag-ghost__.__tab-ghost__ .__label__ {
+    position: relative;
+    left: 0;
+    margin-left: 0;
+    padding-left: 0;
+    padding-right: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    background-color: #00000000;
+}

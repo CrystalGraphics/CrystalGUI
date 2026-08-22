@@ -333,6 +333,7 @@ public class Tooltip extends UIElement {
      */
     public Tooltip showFor(UIElement anchor) {
         if (anchor == null || anchor.getAttachedWindow() == null) return this;
+        if (dragIsLive(anchor)) return hide();
         // Whatever was being waited for, this supersedes it -- including the ordinary case where the
         // ticker itself is the caller.
         cancelPendingShow();
@@ -379,6 +380,7 @@ public class Tooltip extends UIElement {
      */
     public Tooltip showAfterDelay(UIElement anchor) {
         if (anchor == null || anchor.getAttachedWindow() == null) return this;
+        if (dragIsLive(anchor)) return hide();
 
         float delay = getStyle().getGeneralGroup().tooltipDelay();
         // `!(delay > 0)` rather than `delay <= 0`, which is FALSE for NaN -- so a NaN would be taken as a
@@ -412,6 +414,33 @@ public class Tooltip extends UIElement {
     /** True while the pointer has entered but the wait has not elapsed — the only observable of it. */
     public boolean isShowPending() {
         return pendingAnchor != null;
+    }
+
+    /**
+     * Whether a drag is running in {@code anchor}'s window — in which case no tooltip may show.
+     *
+     * <h3>Not an edge case: a drag pins the pointer to what it picked up</h3>
+     *
+     * <p>{@code startDrag} takes pointer capture, and the spec treats everything during capture as
+     * inside the capturing element's boundary — that is what stops {@code :hover} flickering across
+     * every element a drag crosses. The cost is that the source stays hovered for the whole gesture, so
+     * its delay elapses <em>in mid-air</em> and the tip appears next to the thing you are carrying,
+     * over the strip you are aiming at. A tab drag showed the dragged file's full path across the tabs
+     * it was being dropped between.</p>
+     *
+     * <p>Every toolkit suppresses this, and the reason is not the overlap: a tooltip answers "what is
+     * this", and while you are holding the thing the question is already answered. Asked here rather
+     * than left to each widget — the stripe rail hid its own on mouse-down and no other consumer knew
+     * it had to, which is the shape of rule that gets rediscovered once per widget.</p>
+     *
+     * <p>Checked at all three moments a tip can reach the screen: both entry points, and every frame of
+     * {@link PlacementTicker} — a drag can begin while one is already up, which neither entry point
+     * would ever be called again for.</p>
+     */
+    private static boolean dragIsLive(UIElement anchor) {
+        if (anchor == null) return false;
+        UIWindow window = anchor.getAttachedWindow();
+        return window != null && window.getInputHandler().getDragController().isDragging();
     }
 
     /** Demotes and detaches from its anchor. The placement ticker drops itself on the next frame. */
@@ -489,6 +518,13 @@ public class Tooltip extends UIElement {
         @Override
         public boolean tickFrame(float deltaSeconds) {
             if (!isShown()) {
+                placementTickerRunning = false;
+                return false;
+            }
+            // A DRAG CAN START UNDER A TIP THAT IS ALREADY UP, which neither show path would be called
+            // again for. @see #dragIsLive
+            if (dragIsLive(anchor)) {
+                hide();
                 placementTickerRunning = false;
                 return false;
             }

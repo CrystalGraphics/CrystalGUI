@@ -6,6 +6,8 @@ import com.crystalgui.ui.UIElement;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
+import javax.annotation.Nullable;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -13,14 +15,44 @@ import java.util.List;
  * The placeholder showing where a dragged thing would land in a list — tabs, stripe buttons, rows.
  *
  * <pre>
- * private final InsertionMarker insertion = new InsertionMarker(InsertionMarker.Axis.HORIZONTAL);
- * // once:
- * insertion.parkIn(this);
- * // while a drag is over it:
- * int index = insertion.showFor(items, screenX, screenY);
- * // when it ends:
+ * private final InsertionMarker insertion =
+ *         new InsertionMarker(InsertionMarker.Axis.HORIZONTAL).mode(InsertionMarker.Mode.IN_FLOW);
+ * // once, in the container the items are laid out in:
+ * insertion.parkIn(rail);
+ * // on the drag's first TICK -- hides the item and opens the gap where it stood:
+ * insertion.withdraw(host, items, dragged);
+ * // while the pointer is over the list:
+ * int index = insertion.showFor(host, items, screenX, screenY);
+ * // when the pointer leaves it -- the item stays hidden:
  * insertion.hide();
+ * // when the gesture ends, however it ended:
+ * insertion.restore();
  * </pre>
+ *
+ * <h3>Withdrawal is part of the gesture, not the caller's business</h3>
+ *
+ * <p>{@link #withdraw} and {@link #restore} live here because the three rules they carry are invisible
+ * from a call site and every one of them is silent when broken — the same reason the two geometry rules
+ * below are. The stripe rail wrote them first and the editor's tab strip needed all three verbatim,
+ * which is the second consumer that makes something worth having once.</p>
+ *
+ * <ol>
+ *   <li><b>The thing being carried leaves the list it is being inserted into.</b> Otherwise the list
+ *       momentarily shows it twice — once where it is and once where it is going — and, worse, a hidden
+ *       item left in the list has no box, so every midpoint test after it answers against a cell that is
+ *       not there and the index stops moving as you drag past it.</li>
+ *   <li><b>The gap opens in the cell it just left, immediately.</b> Not cosmetic: hiding the item
+ *       collapses the list by one cell, so a pointer that has not moved is suddenly sitting in its
+ *       neighbour's cell. The symptom is an item that shuffles one place along when you press and
+ *       release without dragging at all, and a drag of exactly one place that appears to do nothing
+ *       because the two cancel.</li>
+ *   <li><b>Hidden, never detached.</b> {@code UIInputHandler.forgetElement} cancels a drag whose source
+ *       leaves the tree, so removing the item would end the gesture on its first frame.</li>
+ * </ol>
+ *
+ * <p>The gap is then sized from the withdrawn item itself rather than from its neighbour — see
+ * {@link #withdraw}. That is what makes this usable for a list whose items differ in size, which a tab
+ * strip is and a stripe of identical icon buttons is not.</p>
  *
  * <h3>Why this is a widget and not thirty lines per consumer</h3>
  *
@@ -99,9 +131,31 @@ public class InsertionMarker extends UIElement {
     private Mode mode = Mode.OVERLAY;
     private int index = -1;
 
+    /**
+     * The container an {@link Mode#IN_FLOW} gap inserts itself into — where {@link #parkIn} put it.
+     *
+     * <p>Kept apart from the {@code host} every other method takes, which is the COORDINATE frame. They
+     * are the same element for the stripe rail and are not for a tab strip, where the geometry is asked
+     * of the group and the gap has to become a sibling of the tabs two levels below it.</p>
+     */
+    @Nullable
+    private UIElement flowParent;
+
+    /** The item hidden for the duration of a drag. @see #withdraw */
+    @Nullable
+    private UIElement withdrawn;
+
+    /** Its size when it was withdrawn — along the axis, and across it. @see #withdraw */
+    private float withdrawnExtent;
+    private float withdrawnThickness;
+
     /** @see Mode */
     public InsertionMarker mode(Mode value) {
         this.mode = value == null ? Mode.OVERLAY : value;
+        // RE-HIDDEN IN THE MODE JUST CHOSEN. The constructor's hide() necessarily ran before the mode
+        // was, so an IN_FLOW marker began life absolutely positioned at 0x0 -- out of flow, invisible,
+        // and not the resting state its own hide() describes. Harmless and worth not having.
+        hide();
         return this;
     }
 
@@ -113,11 +167,83 @@ public class InsertionMarker extends UIElement {
         hide();
     }
 
-    /** Puts the marker in {@code host}'s tree, once. Idempotent. */
+    /**
+     * Puts the marker in {@code host}'s tree, once. Idempotent.
+     *
+     * <p>For {@link Mode#IN_FLOW} this is the container the gap opens <em>inside</em>, so it has to be
+     * the items' own parent — the gap is a sibling of the things it makes room between.</p>
+     */
     public InsertionMarker parkIn(UIElement host) {
-        if (host == null || getParent() == host) return this;
+        if (host == null) return this;
+        this.flowParent = host;
+        if (getParent() == host) return this;
         host.addInternalChild(this);
         return this;
+    }
+
+    /**
+     * Takes {@code source} out of the list for the duration of a drag, and opens the gap where it stood.
+     *
+     * <p>Idempotent, so it can be called from every tick of a drag — which is where it belongs. <b>The
+     * first drag TICK, never the mouse-down</b>: a payload drag fires nothing until the pointer has
+     * passed its activation threshold, so a press that never really moved stays an ordinary click.
+     * Hiding on the press makes the item vanish the instant you touch it and come back if you let go.</p>
+     *
+     * <p><b>The gap is the size of the thing being carried</b>, measured here, before it is hidden. The
+     * alternative — taking it from whichever neighbour the gap sits beside — is what this class did when
+     * a stripe of identical 20px buttons was its only consumer, and it is invisible there. In a tab strip
+     * the items are all different widths, so a gap borrowed from a neighbour states the space the tab
+     * will take and is wrong by the difference between two filenames.</p>
+     */
+    public InsertionMarker withdraw(UIElement host, List<? extends UIElement> items, UIElement source) {
+        if (source == null || source == withdrawn) return this;
+        restore();
+        withdrawn = source;
+        withdrawnExtent = extent(source);
+        withdrawnThickness = thickness(source);
+        // DISPLAY NONE, NOT A DETACH -- see the class note. A zero-size box would not do either: an
+        // in-flow child of zero size still occupies a flex slot and still takes the container's gap.
+        StyleGroup.importantPipeline(source.getStyle().getLayoutGroup(),
+                l -> l.display(TaffyDisplay.NONE));
+        int wasAt = items == null ? -1 : items.indexOf(source);
+        if (wasAt >= 0) showAt(host, items, wasAt);
+        return this;
+    }
+
+    /**
+     * Puts the withdrawn item back and closes the gap. Idempotent, and safe when nothing was withdrawn.
+     *
+     * <p>Call it from every ending a drag has — dropped, cancelled, released over nothing. Deliberately
+     * <b>not</b> what {@link #hide} does: the pointer leaving the list closes the gap while the gesture
+     * is still running, and the item has to stay hidden for as long as it is being carried.</p>
+     *
+     * <p>Restores {@code display: flex}, which is where every consumer of this class starts from — a
+     * list you can reorder is a flex row or column by construction. Withdrawing the candidate instead
+     * would be the tidier repair and cannot be done here: removing a layout candidate re-resolves the
+     * property through {@code TaffyBridge}, and by the time some of these endings run the node is gone.</p>
+     *
+     * <p>Skipped for an item that has left the tree, which a drop routinely does — its list is rebuilt
+     * around the panel's new home. Writing a layout property to a detached element reaches
+     * {@code TaffyBridge} with no node behind it, and there is nothing to put back either: the element
+     * being restored is one nobody can see.</p>
+     */
+    public InsertionMarker restore() {
+        UIElement source = withdrawn;
+        withdrawn = null;
+        withdrawnExtent = 0f;
+        withdrawnThickness = 0f;
+        hide();
+        if (source != null && source.getAttachedWindow() != null) {
+            StyleGroup.importantPipeline(source.getStyle().getLayoutGroup(),
+                    l -> l.display(TaffyDisplay.FLEX));
+        }
+        return this;
+    }
+
+    /** The item currently taken out of the list, or {@code null}. @see #withdraw */
+    @Nullable
+    public UIElement withdrawn() {
+        return withdrawn;
     }
 
     /** The index the marker is currently showing, or {@code -1} when hidden. */
@@ -159,6 +285,10 @@ public class InsertionMarker extends UIElement {
      */
     private List<? extends UIElement> ordered(List<? extends UIElement> items) {
         List<UIElement> sorted = new ArrayList<>(items);
+        // WITHOUT THE ONE BEING CARRIED, for every caller at once. It is hidden for the duration of the
+        // drag so it has no box, and a zero-extent entry makes every midpoint test after it answer
+        // against a cell that is not there. It is also simply not part of the list being inserted into.
+        if (withdrawn != null) sorted.remove(withdrawn);
         sorted.sort((a, b) -> Float.compare(start(a), start(b)));
         return sorted;
     }
@@ -171,6 +301,12 @@ public class InsertionMarker extends UIElement {
     private float extent(UIElement item) {
         var cache = item.getRuntimeCache();
         return axis == Axis.HORIZONTAL ? cache.getWidth() : cache.getHeight();
+    }
+
+    /** The item's size ACROSS the axis — a tab's height, a stripe button's width. */
+    private float thickness(UIElement item) {
+        var cache = item.getRuntimeCache();
+        return axis == Axis.HORIZONTAL ? cache.getHeight() : cache.getWidth();
     }
 
     /**
@@ -197,8 +333,20 @@ public class InsertionMarker extends UIElement {
             return;
         }
         index = wanted;
-        boolean append = index >= items.size();
-        var edge = items.get(append ? items.size() - 1 : index).getRuntimeCache();
+
+        // PLACED AGAINST A VISIBLE NEIGHBOUR. `items` still contains the withdrawn one -- callers pass
+        // their real list and this class does the removing -- and it has no box to measure or sit beside.
+        List<? extends UIElement> visible = ordered(items);
+        if (visible.isEmpty()) {
+            hide();
+            return;
+        }
+        int before = 0;
+        for (UIElement item : visible) {
+            if (items.indexOf(item) < index) before++;
+        }
+        boolean append = before >= visible.size();
+        var edge = visible.get(append ? visible.size() - 1 : before).getRuntimeCache();
 
         // THE SIZE OF THE ITEM IT WOULD SIT BESIDE, not a hairline. A caret says only where; a slot says
         // WHAT -- and at the moment you are carrying something, "a thing this size goes here" is the
@@ -209,10 +357,15 @@ public class InsertionMarker extends UIElement {
         // should not need to: in every list worth reordering the items are uniform, and where they are not
         // it is the space at the boundary that is being described.
         float across = axis == Axis.HORIZONTAL ? edge.getY() : edge.getX();
-        float thickness = axis == Axis.HORIZONTAL ? edge.getHeight() : edge.getWidth();
-        float extent = axis == Axis.HORIZONTAL ? edge.getWidth() : edge.getHeight();
+        float neighbourExtent = axis == Axis.HORIZONTAL ? edge.getWidth() : edge.getHeight();
+        float thickness = withdrawn != null
+                ? withdrawnThickness : (axis == Axis.HORIZONTAL ? edge.getHeight() : edge.getWidth());
+        float extent = withdrawn != null ? withdrawnExtent : neighbourExtent;
         float along = axis == Axis.HORIZONTAL ? edge.getX() : edge.getY();
-        if (append) along += extent;
+        // THE NEIGHBOUR'S width to step PAST it, the carried item's to SIZE the slot. The two are the
+        // same number only in a list of identical items, which is what hid the difference while a stripe
+        // of 20px buttons was the only consumer.
+        if (append) along += neighbourExtent;
 
         // IN THE CELL, not straddling the seam between two of them.
         //
@@ -252,21 +405,32 @@ public class InsertionMarker extends UIElement {
      * would fill it.</p>
      */
     private void showInFlow(UIElement host, List<? extends UIElement> items, int at) {
-        var edge = items.get(Math.min(at, items.size() - 1)).getRuntimeCache();
-        float thickness = axis == Axis.HORIZONTAL ? edge.getHeight() : edge.getWidth();
-        float extent = axis == Axis.HORIZONTAL ? edge.getWidth() : edge.getHeight();
+        float thickness = withdrawnThickness;
+        float extent = withdrawnExtent;
+        if (withdrawn == null) {
+            // NOTHING IS BEING CARRIED THROUGH THIS MARKER -- a tab dragged in from another window, say,
+            // whose own strip did the withdrawing. The neighbour is then the only estimate available.
+            var edge = items.get(Math.min(at, items.size() - 1)).getRuntimeCache();
+            thickness = axis == Axis.HORIZONTAL ? edge.getHeight() : edge.getWidth();
+            extent = axis == Axis.HORIZONTAL ? edge.getWidth() : edge.getHeight();
+        }
         float width = axis == Axis.HORIZONTAL ? extent : thickness;
         float height = axis == Axis.HORIZONTAL ? thickness : extent;
 
-        if (at != index || getParent() != host) {
+        // THE PARKED CONTAINER, not the coordinate host -- see flowParent. A tab strip asks the group
+        // about geometry and needs the gap to become a sibling of the tabs, two levels down from it.
+        UIElement slot = flowParent != null ? flowParent : host;
+        if (at != index || getParent() != slot) {
             // REMOVED FIRST, then the target index is read. Sibling indices shift when this leaves the
             // list, so computing the destination while still in it puts the gap one place off -- and only
             // when moving downwards, which is the half that looks like a rounding error.
-            host.removeInternalChild(this);
+            slot.removeInternalChild(this);
+            // ASKED OF THE ITEM ITSELF rather than counted, so a hidden one still answers: the withdrawn
+            // item keeps its DOM slot, which is exactly where the gap that replaces it belongs.
             int dom = at >= items.size()
                     ? items.get(items.size() - 1).getSiblingIndex() + 1
                     : items.get(at).getSiblingIndex();
-            host.insertInternalChildAt(this, Math.max(0, dom));
+            slot.insertInternalChildAt(this, Math.max(0, dom));
         }
         index = at;
         StyleGroup.importantPipeline(getStyle().getLayoutGroup(), l -> l

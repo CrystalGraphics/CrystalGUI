@@ -5,11 +5,13 @@ import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIFrameTicker;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.SplitView;
+import com.crystalgui.ui.elements.DragGhost;
 import com.crystalgui.ui.elements.Tab;
 import com.crystalgui.ui.event.DragEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.input.UIDragController;
+import com.crystalgui.ui.tree.UITreeTraversal;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -385,7 +387,52 @@ public class DockArea extends UIElement implements UIFrameTicker {
             rebuildPending = false;
             rebuild();
         }
+        applyPendingFocus();
         return true;
+    }
+
+    /**
+     * A panel to bring to the front and put focus in, once the tree it landed in has been built.
+     *
+     * <p>Set by a drop and applied a frame later, because a drop ends in {@link #requestRebuild()} and a
+     * rebuild is deliberately never inline. At the moment the drop handler runs, a panel that landed in
+     * a NEW leaf has no group, no tab and no content to focus — {@code groupFor} would answer null and
+     * the whole thing would silently do nothing for precisely the drops that create a pane.</p>
+     */
+    @Nullable
+    private DockPanelRef pendingFocus;
+
+    /**
+     * Brings the dropped panel to the front and puts the keyboard in it.
+     *
+     * <h3>Two separate things were wrong, and they look like one</h3>
+     *
+     * <p>A drop moved the panel and told nobody. The receiving dock's {@code activeGroup} was never set,
+     * so {@link #activePanel()} — and through it {@code activeFilePath()}, the Problems panel, the
+     * breadcrumbs and {@code Ctrl+S} — kept answering about whatever was there before; dragging an editor
+     * back into the main window left the Problems panel reading <em>"No file is open"</em> with the file
+     * plainly on screen. And nothing focused it, so the tab arrived selected but cold: the editor drew
+     * its unfocused decoration tint and would not take a keystroke.</p>
+     *
+     * <p>The cross-window case is the one that makes it unmissable rather than merely untidy, because
+     * there focus does not merely stay put — the window the tab came from destroys itself once it is
+     * empty, and destroying a window takes the focus owner out of the tree with it.</p>
+     *
+     * <p>Pointer focus, so it does not ring: a drop is a mouse gesture, and {@code :focus-visible} exists
+     * to keep rings off those.</p>
+     */
+    private void applyPendingFocus() {
+        DockPanelRef panel = pendingFocus;
+        if (panel == null) return;
+        pendingFocus = null;
+        if (!activatePanel(panel)) return;
+        UIWindow window = getAttachedWindow();
+        if (window == null) return;
+        DockLeaf leaf = layout.leafContaining(panel);
+        DockGroup group = leaf == null ? null : groupFor(leaf);
+        Tab tab = group == null ? null : group.tabFor(panel);
+        UIElement inside = tab == null ? null : UITreeTraversal.firstFocusableIn(tab.content());
+        if (inside != null) window.getInputHandler().requestPointerFocus(inside);
     }
 
     /**
@@ -581,6 +628,13 @@ public class DockArea extends UIElement implements UIFrameTicker {
     public DockLeaf performDrop(DockDragPayload payload, @Nullable DockLeaf target,
                                 DockDropZone zone, boolean outerEdge, int tabIndex) {
         captureDividerPositions();
+        // WHAT YOU DROPPED IS WHAT YOU ARE NOW WORKING ON -- applied a frame later. @see #pendingFocus
+        //
+        // HERE rather than in the Drop listener that usually calls this, because a drop is a drop
+        // whatever drove it: a drag, a "move tab to the next group" command, a menu. Putting it on the
+        // listener leaves every other route dropping a panel nobody is working on -- and leaves the only
+        // testable seam unable to see it, since a fixture cannot easily stage a cross-window drag.
+        pendingFocus = payload.panel();
         // A reorder inside one strip is a MOVE, not a detach-and-reinsert. Going through detach would
         // remove the panel, find the leaf empty, and collapse the pane the user is dragging within --
         // which for a single-tab group deletes the thing being reordered.
@@ -598,7 +652,11 @@ public class DockArea extends UIElement implements UIFrameTicker {
         }
 
         DockNode moved = detach(payload);
-        if (moved == null) return null;
+        if (moved == null) {
+            // A refused drop must not move the active panel either.
+            pendingFocus = null;
+            return null;
+        }
 
         DockLeaf landed;
         if (outerEdge) {
@@ -732,8 +790,27 @@ public class DockArea extends UIElement implements UIFrameTicker {
         tab.events.getGroup(MouseEvent.Down.class).attachListener((el, event) -> {
             UIWindow window = getAttachedWindow();
             if (window == null) return;
+            parkGhost();
             setActiveGroup(group);
+            // A PRESS SELECTS THE TAB -- on the press, not on the click.
+            //
+            // A drag never completes a click: the pointer moves, so no Up lands on the tab it went down
+            // on, and the selection that a click would have made never happens. So dragging a tab that
+            // was not already selected left the strip showing TWO lit tabs -- the one that is selected
+            // and the one being carried, which click-focus has just outlined -- and dropped it as a
+            // background tab. IntelliJ and VS Code both select on press for exactly this reason.
+            //
+            // Safe during dispatch, which is the thing to check before touching a tree mid-press:
+            // DockGroup.sync rebuilds its strip only when the panel LIST changes, and this changes the
+            // selection. The elements this press is being dispatched through are not recreated.
+            activatePanel(panel);
             addClass(DRAGGING_CLASS);
+            dragMoved = false;
+            // THE SAME GHOST A RAIL BUTTON GETS, for the same reason: a drag with pointer capture pins
+            // :hover to its source, so without one the only thing under the cursor is the tab strip the
+            // tab has notionally left. DragGhost rather than a hand-built element -- three of its rules
+            // are invisible in setGhost's signature and each is silent when broken.
+            dragGhost.follow(window, registry.iconOf(panel), registry.titleOf(panel));
             window.getInputHandler().getDragController().startDrag(tab,
                     event.getPosition().x(), event.getPosition().y(),
                     DockDragPayload.ofPanel(this, group.leaf(), panel),
@@ -741,19 +818,68 @@ public class DockArea extends UIElement implements UIFrameTicker {
                         @Override
                         public void onDragUpdate(float mx, float my, float sx, float sy,
                                                  float dx, float dy) {
-                            // Nothing per-frame: the preview is driven by DragEvent.Over on the AREA,
-                            // which is dispatched against what is geometrically under the pointer.
-                            // This listener is anchored on the tab, which pointer capture pins to the
-                            // source for the whole gesture — it can never tell where the drop would go.
+                            // THE ONE THING THIS CAN TELL: that the gesture became a drag at all. A
+                            // payload drag fires nothing until the pointer passes the activation
+                            // threshold, so this running even once is what separates a drag from a
+                            // click -- and onDragEnd cannot tell them apart on its own.
+                            dragMoved = true;
+                            // AND THE SAME TICK IS WHERE THE TAB LEAVES THE STRIP. Idempotent, so the
+                            // per-frame call costs one reference comparison. Here rather than on the
+                            // press for the reason InsertionMarker.withdraw gives: hiding on the press
+                            // makes a tab vanish the instant you touch it and come back if you let go.
+                            group.beginTabDrag(tab);
+                            // Nothing else per-frame: the preview is driven by DragEvent.Over on the
+                            // AREA, which is dispatched against what is geometrically under the
+                            // pointer. This listener is anchored on the tab, which pointer capture
+                            // pins to the source for the whole gesture -- it can never tell where the
+                            // drop would go.
                         }
 
                         @Override
                         public void onDragEnd(float mx, float my) {
+                            boolean accepted = window.getInputHandler()
+                                    .getDragController().isDropAccepted();
+                            group.endTabDrag();
                             endDragVisuals();
+                            // ── THE TEAR-OUT (W9) ───────────────────────────────────────────────
+                            // A release no dock accepted opens a window of its own around what was
+                            // being dragged. Here on the drag SOURCE rather than as a drop, for the
+                            // reason W8's tool-window tear-out is: a release over the desktop is
+                            // dispatched to Desktop, which is engine-side and knows nothing about
+                            // docks, so a drop-based version would only work over a dock.
+                            //
+                            // Gated on the gesture having BEEN a drag. onDragEnd fires on every
+                            // release, including one that never passed the activation threshold, so
+                            // without this an ordinary CLICK on a tab would tear it out -- which is
+                            // exactly what shipped in W8 before the same gate was added there.
+                            //
+                            // AND ONLY WHEN THE POINTER IS OUTSIDE EVERY DOCK. "Not accepted" is not
+                            // the same question: a dock declines a drop it would make no change with
+                            // -- dropping a lone panel back on its own group, a reorder that moves
+                            // nothing -- and treating that as a tear-out sent the panel into a window
+                            // for a gesture whose whole meaning is "put it back". Two DockAreaTest
+                            // cases named exactly that and caught it.
+                            if (accepted || !dragMoved) return;
+                            // ASKED GEOMETRICALLY, of the pointer, at the moment of release. "Was the
+                            // drop accepted" is a different question and answers it wrongly: a dock
+                            // DECLINES a drop that would change nothing -- a lone panel dropped back on
+                            // its own group, a reorder that moves nothing -- so gating on acceptance
+                            // alone read "put it back" as "tear it out", which two DockAreaTest cases
+                            // are named after.
+                            //
+                            // And tracking it through this area's own Over/Leave pair, which was the
+                            // first repair, does not work either: the drag machinery starts tracking a
+                            // drop target only once the drag ACTIVATES, so a pointer that has already
+                            // left by then produces neither event here and the flag keeps whatever it
+                            // was seeded with. A box test has no such ordering to get wrong.
+                            var pointer = window.getInputHandler().pointerPosition();
+                            if (containsScreenPoint(pointer.x(), pointer.y())) return;
+                            tearOutToWindow(payloadOf(group, panel), mx, my);
                         }
 
                         @Override
                         public void onDragCancel() {
+                            group.endTabDrag();
                             endDragVisuals();
                         }
                     });
@@ -763,6 +889,70 @@ public class DockArea extends UIElement implements UIFrameTicker {
     private void endDragVisuals() {
         removeClass(DRAGGING_CLASS);
         clearPreview();
+    }
+
+    /**
+     * The thing that follows the pointer while a tab is being dragged.
+     *
+     * <p>Parked in this area and re-registered per drag, which {@code DragGhost} handles — a ghost that
+     * outlives its drag reappears on unrelated screens, which has happened here before.</p>
+     */
+    private final DragGhost dragGhost = new DragGhost();
+
+    /** Whether the live tab drag ever passed the activation threshold. @see #installTabDrag */
+    private boolean dragMoved;
+
+    /** The payload a tab drag carries, so the tear-out can rebuild it after the drag has ended. */
+    private DockDragPayload payloadOf(DockGroup group, DockPanelRef panel) {
+        return DockDragPayload.ofPanel(this, group.leaf(), panel);
+    }
+
+    /**
+     * Opens a window around the panel that was dragged out — W9.
+     *
+     * <p>The panel is <b>detached from this area first</b>, through the same {@link #detach} a drop
+     * uses, so the source collapses exactly as it would have if the panel had landed in another dock.
+     * Anything else leaves the tab in two places at once.</p>
+     *
+     * <p>Positioned at the pointer, in the DESKTOP's local space. A drag callback's coordinates are
+     * already local to its source — the tab — which is a box a few dozen pixels wide somewhere in a tab
+     * strip, so using them directly puts the window at the top-left corner of the screen. The pointer
+     * position is raw surface pixels and has to be converted once, against the root.</p>
+     */
+    private void tearOutToWindow(DockDragPayload payload, float mx, float my) {
+        UIWindow window = getAttachedWindow();
+        if (window == null) return;
+        DockNode moved = detach(payload);
+        if (moved == null) return;
+
+        DockLayout torn = moved instanceof DockLeaf
+                ? DockLayout.of((DockLeaf) moved)
+                : DockLayout.of((DockBranch) moved, DockOrientation.HORIZONTAL);
+        String title = payload.panel() != null ? registry.windowTitleOf(payload.panel()) : "";
+        DockWindow frame = new DockWindow(registry, torn, title);
+
+        var pointer = window.getInputHandler().pointerPosition();
+        var local = window.ui.rootElement.screenToLocal(pointer.x(), pointer.y());
+        frame.moveTo(local.x, local.y);
+        window.openWindow(frame);
+        requestRebuild();
+    }
+
+    /**
+     * On the ghost while it is standing in for a TAB, rather than for a rail button.
+     *
+     * <p>{@code DragGhost}'s default shape is a 20px chip with its label in a box beside it, which is
+     * right for what it was written for: a rail button is a 20px icon and its name is not otherwise on
+     * screen. A tab is a pill with the icon and the label inline, and the same ghost over a tab strip
+     * reads as a different kind of object being dragged. One class, and the sheet says the rest.</p>
+     */
+    public static final String TAB_GHOST_CLASS = "__tab-ghost__";
+
+    /** @see #dragGhost */
+    private void parkGhost() {
+        if (dragGhost.getParent() != null) return;
+        dragGhost.addClass(TAB_GHOST_CLASS);
+        dragGhost.anchoredBy(DragGhost.Anchor.GRAB).parkIn(this);
     }
 
     private void registerDropHandling() {
@@ -814,9 +1004,19 @@ public class DockArea extends UIElement implements UIFrameTicker {
         // tab reordering impossible in exactly the group people reorder tabs in most. An explicit aim at
         // a strip is unambiguous; an edge band is ambient.
         if (group != null && !payload.isWholeGroup() && group.isOverStrip(pointerX, pointerY)) {
-            int index = group.insertionIndexAt(pointerX);
-            if (isNoOpReorder(payload, group, index)) return false;
-            setPreview(group, DockDropZone.MERGE, false, index);
+            // NO NO-OP GUARD ANY MORE, and its removal is the other half of the tab leaving the strip.
+            //
+            // It used to refuse a drop that would land the tab back where it started -- both boundaries
+            // of its own cell -- on the grounds that "offering a caret for either is a promise the drop
+            // cannot keep". True of a CARET, which says "it will move to here". It is false of a GAP: the
+            // gap is where the tab already is, so what it promises is that the tab stays put, which is
+            // exactly what the drop then does.
+            //
+            // Keeping it was actively wrong once the gap opened in the cell the tab left, because a
+            // refusal clears the preview: the gap slammed shut the moment the pointer rested over the
+            // tab's own home and reopened as soon as it moved a pixel. A no-op drop is now accepted and
+            // performs `move(from, from)`, which DockLeaf.move already returns false for.
+            setPreview(group, DockDropZone.MERGE, false, group.insertionIndexAt(pointerX));
             return true;
         }
 
@@ -851,19 +1051,6 @@ public class DockArea extends UIElement implements UIFrameTicker {
                 true, payload.isGroupDrag());
         setPreview(group, zone, false, -1);
         return true;
-    }
-
-    /**
-     * Whether dropping here would put the panel back exactly where it already is.
-     *
-     * <p>Both boundaries of a tab count as "no move": dragging a tab onto its own left edge and onto its
-     * own right edge are the same non-gesture, and offering a caret for either is a promise the drop
-     * cannot keep.</p>
-     */
-    private boolean isNoOpReorder(DockDragPayload payload, DockGroup group, int index) {
-        if (group.leaf() != payload.sourceLeaf()) return false;
-        int from = group.leaf().indexOf(payload.panel());
-        return from >= 0 && (index == from || index == from + 1);
     }
 
     @Nullable

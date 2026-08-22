@@ -34,7 +34,9 @@ import com.crystalgui.ui.elements.InputDialog;
 import com.crystalgui.ui.elements.chrome.NotificationBalloons;
 import com.crystalgui.ui.elements.chrome.NotificationsView;
 import com.crystalgui.ui.elements.chrome.ProblemsPanel;
+import com.crystalgui.ui.elements.desktop.WindowFrame;
 import com.crystalgui.ui.elements.dock.DockArea;
+import com.crystalgui.ui.elements.dock.DockWindow;
 import com.crystalgui.ui.elements.dock.DockBranch;
 import com.crystalgui.ui.elements.dock.DockNode;
 import com.crystalgui.ui.elements.dock.DockOrientation;
@@ -471,6 +473,7 @@ public class Workbench extends UIElement {
         // rearrangement recreates every tab element, and anything pushed would have to be pushed again by
         // someone who noticed.
         registry.setTitleProvider(this::tabTitleFor);
+        registry.setWindowTitleProvider(this::windowTitleFor);
         registry.setIconProvider(Workbench::tabIconFor);
         registry.setIconElementProvider(Workbench::viewerIconElement);
         registry.setTooltipProvider(Workbench::tabTooltipFor);
@@ -813,6 +816,10 @@ public class Workbench extends UIElement {
      * @return the leaf it landed in, so a caller can act on it without searching for it again
      */
     public DockLeaf open(DockInput input, DockPlacement placement, DockOpenOptions options) {
+        // THE DOCK THE USER IS WORKING IN, which is not always this workbench's own -- see activeDock().
+        // Shadowed deliberately: every line below means "the dock this open is going into", and one
+        // resolution at the top is what stops half a method reading the field and half the answer.
+        DockArea dock = activeDock();
         DockPanelRef ref = input.ref();
 
         // ALREADY OPEN wins over placement, always. Re-opening a file that is on screen means "show me
@@ -828,7 +835,7 @@ public class Workbench extends UIElement {
 
         DockLeaf target = DockPlacement.resolve(placement, dock);
         boolean splitting = placement instanceof DockPlacement.Side;
-        if (target == null) target = centralLeaf();
+        if (target == null) target = centralLeaf(dock);
 
         if (!splitting) {
             // The selection is captured and PUT BACK when the caller asked not to activate. DockLeaf.add
@@ -1640,10 +1647,42 @@ public class Workbench extends UIElement {
     }
 
     private DockLeaf centralLeaf() {
-        for (DockLeaf leaf : dock.layout().leaves()) {
+        return centralLeaf(dock);
+    }
+
+    /** The central leaf of {@code in} — which is not always this workbench's own dock. @see #activeDock */
+    private static DockLeaf centralLeaf(DockArea in) {
+        for (DockLeaf leaf : in.layout().leaves()) {
             if (leaf.isCentral()) return leaf;
         }
-        return dock.layout().leaves().get(0);
+        return in.layout().leaves().get(0);
+    }
+
+    /**
+     * The dock a newly opened document goes into — <b>the one the user is working in</b> (W9).
+     *
+     * <h3>Asked of the compositor, not tracked here</h3>
+     *
+     * <p>Once an editor tab can be torn out into a window of its own, "open this file" has more than one
+     * possible destination, and both references answer it the same way: the last editor group you were
+     * in gets the next file. Opening into this workbench's own dock regardless would mean a torn-out
+     * window could never be worked in — every file you opened from it would appear behind it, in the
+     * window you had just deliberately left.</p>
+     *
+     * <p>The answer is the <b>active window</b>, which the desktop already tracks and already updates on
+     * exactly the gestures that should move it: a press in a frame, focus arriving, the switcher. A
+     * second notion of "active dock" maintained here would be a copy of that, kept in step by hand, and
+     * would disagree with the title bar the first time one of them missed an event.</p>
+     *
+     * <p>Falls back to this workbench's own dock whenever the active window is not a torn-out one, which
+     * covers the ordinary case, the no-desktop case, and the editor's own frame.</p>
+     */
+    public DockArea activeDock() {
+        UIWindow window = getAttachedWindow();
+        if (window == null) return dock;
+        WindowFrame active = window.desktop().activeWindow();
+        if (active instanceof DockWindow torn && torn.area() != null) return torn.area();
+        return dock;
     }
 
     /**
@@ -1896,6 +1935,67 @@ public class Workbench extends UIElement {
      * <p>Null for a panel that is not about a location at all — a console, the Problems view — which the
      * registry reads as "no tooltip", not as an empty one.</p>
      */
+    /**
+     * A torn-out window's caption: {@code Project - name.ext [where]} — W9.
+     *
+     * <h3>Three parts, in the order they are useful</h3>
+     *
+     * <p>A tab can be terse because it sits in a strip of siblings and is read by shape; a caption is
+     * read alone, from across a desktop, and is the only thing that can say which of three files called
+     * {@code build.gradle.kts} this one is. So it names the workspace, then the file, then where the
+     * file is — the file in the middle because that is what the eye is looking for, with the context on
+     * either side of it.</p>
+     *
+     * <p><b>Both kinds of document take the same shape</b>, which is the point of doing it here rather
+     * than twice. A workspace file's "where" is its directory within the project; a borrowed class's is
+     * its package, and its project is the workspace you are in rather than one of its own — a library
+     * class belongs to a jar, not to the project, and the caption is still telling you where YOU are.
+     * With more than one project open that stops being unambiguous, so it says nothing instead of
+     * guessing (see {@code WorkspaceTreeSource.soleProjectName}).</p>
+     *
+     * <p>Null for anything that is not a document at all — a torn-out tool window has a name and no
+     * location — and the registry falls back to the tab label for those.</p>
+     */
+    @Nullable
+    private String windowTitleFor(DockPanelRef panel) {
+        WorkspaceTreeSource source = fileTree != null ? fileTree.source() : null;
+
+        Resource viewed = viewedResource(panel);
+        if (viewed != null) {
+            // A qualified name is its own path: everything up to the last dot is the package, and the
+            // display name is already the file-shaped form of the last segment ("JarFile.java"), so
+            // neither half has to be reassembled from the other.
+            String qualified = viewed.path();
+            int lastDot = qualified.lastIndexOf('.');
+            String pkg = lastDot > 0 ? qualified.substring(0, lastDot) : "";
+            return caption(source == null ? null : source.soleProjectName(),
+                    viewerDisplayName(viewed), pkg);
+        }
+
+        String raw = panel.state(PATH_STATE, "");
+        if (raw.isEmpty()) return null;
+        CgPath path = CgPath.parse(raw);
+        if (path == null) return null;
+        String within = path.path();
+        int lastSlash = within.lastIndexOf('/');
+        String directory = lastSlash > 0 ? within.substring(0, lastSlash) : "";
+        return caption(source == null ? null : source.displayNameOf(path), path.name(), directory);
+    }
+
+    /**
+     * {@code Project - name [where]}, with either context omitted when there is none.
+     *
+     * <p>Omitted rather than left empty: a caption reading {@code " - name []"} says the same thing as
+     * {@code "name"} and looks like a bug in the formatter, which is worse than saying less.</p>
+     */
+    private static String caption(@Nullable String project, String name, @Nullable String where) {
+        StringBuilder out = new StringBuilder();
+        if (project != null && !project.isEmpty()) out.append(project).append(" - ");
+        out.append(name);
+        if (where != null && !where.isEmpty()) out.append(" [").append(where).append(']');
+        return out.toString();
+    }
+
     @Nullable
     private static String tabTooltipFor(DockPanelRef panel) {
         Resource viewed = viewedResource(panel);

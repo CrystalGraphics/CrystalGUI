@@ -178,6 +178,19 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
         });
     }
 
+    /**
+     * The one project's display name, or null when there is not exactly one.
+     *
+     * <p>For naming something that has no project of its own — a library class opened read-only, which
+     * belongs to a jar rather than to the workspace. A window's caption still wants to say where you
+     * are, and with a single project open that is unambiguous. With several it is not, so it says
+     * nothing rather than guessing which one you meant.</p>
+     */
+    @Nullable
+    public String soleProjectName() {
+        return projectNames.size() == 1 ? projectNames.values().iterator().next() : null;
+    }
+
     public String displayNameOf(CgPath projectRoot) {
         return projectNames.getOrDefault(projectRoot.project(), projectRoot.project());
     }
