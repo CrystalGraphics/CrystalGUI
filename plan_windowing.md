@@ -548,6 +548,25 @@ split panes, and two frames under one `UIWindow` are the same case wearing chrom
 view lands in both. Under Design A this would have been genuinely hard — N `UIWindow`s would have
 turned the split-pane rule into a cross-window synchronisation problem.
 
+### Client-side decorations — decided at W7, 2026-08-22
+
+Reported from the harness the moment the editor became a window: **it had two headers**, the window's
+caption and its own menu row, stacked. That is the problem every desktop toolkit solved the same way,
+and CrystalOS takes the same answer — the application's chrome goes **in** the caption:
+
+- GTK's `GtkHeaderBar`, the canonical name for it: the app owns the title bar, the WM contributes buttons.
+- VS Code's `window.titleBarStyle: custom` with `menuBarVisibility: compact` — the menu is a hamburger
+  inside the caption.
+- IntelliJ's New UI, where the main menu, the project widget and the run configurations share that row.
+- WinUI's `ExtendsContentIntoTitleBar` + `SetTitleBar(element)`, the same arrangement as an API.
+
+The seam is `WindowChrome`: content that has caption chrome offers **one element**, and
+`WindowFrame.setContent` moves it into the caption and puts it back when the window lets go. Moved, not
+copied and not hidden behind a flag — which is the same rule this section already states for the
+dock↔window bridge one level down. The drag region needs no declaration: the caption's move gesture is
+target-only, so anything hit-testable the application puts there keeps its presses and the space left
+over still drags the window.
+
 ### Engine vs workbench — where the seam sits
 
 The **engine** owns what is general: frame roles (top-level vs owned) and their control sets, the
