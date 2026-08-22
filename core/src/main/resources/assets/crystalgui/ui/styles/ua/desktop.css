@@ -190,8 +190,12 @@ window {
  * `flex-shrink: 0` because the default is already 0 and stating it is free insurance: the title bar
  * is the one part of a window that must survive the window being resized to its minimum, since it
  * is what the next drag has to grab. */
+/* `min-height`, NOT `height` — the caption has to be able to GROW. Once it hosts an application's own
+ * chrome (a menu bar is 22px) a fixed 18 would clip it, and hard-coding 22 here would make every
+ * window carry the height of a bar most of them do not have. Growing to the tallest thing in it is
+ * the one rule that is right in both cases. */
 window > .__title-bar__ {
-    height: 18px;
+    min-height: 18px;
     width: 100%;
     flex-direction: row;
     align-items: center;
@@ -221,6 +225,33 @@ window.__active__ > .__title-bar__ {
  * carves pane-sized widgets out of `:focus-visible` to avoid, arriving through a different property.
  * The rule that the carve-out states is the rule here: the active window is marked where you are
  * already looking, the way IntelliJ and VS Code mark the active editor through its tab. */
+
+/* ── Client-side decorations ────────────────────────────────────────────────────────────────────
+ * Where content's own chrome goes when it has some — an application's menu bar, hosted IN the caption
+ * instead of in a second header below it. GTK's HeaderBar, VS Code's custom title bar, IntelliJ's New
+ * UI and WinUI's ExtendsContentIntoTitleBar are all this arrangement. See WindowChrome.
+ *
+ * The slot itself is bare: it exists to be a stable hook and to be hidden while empty, and whatever it
+ * hosts brings its own layout. */
+window > .__title-bar__ > .__caption-chrome__ {
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+/* AND THE ADOPTED BAR STOPS LOOKING LIKE A BAR. Its own fill and its 24px indent are for sitting at
+ * the top of a workbench with a rail beside it; in a caption they draw a second stripe inside the
+ * first and push the menu away from the icon. Both are dropped here rather than changed at the source,
+ * because the bar is unchanged when it is NOT in a caption — which is the whole point of moving one
+ * element rather than configuring two.
+ *
+ * `background: none` before `background-color`, because the two are different properties and dropping
+ * a fill takes both. */
+window > .__title-bar__ .__menu-bar__ {
+    background: none;
+    background-color: transparent;
+    padding-left: 2px;
+}
 
 /* An ellipsized title — the web's canonical truncation recipe, and every part of it is load-bearing.
  * `dialog .__title-bar__ .__label__` carries the full account of why each line is needed; the short

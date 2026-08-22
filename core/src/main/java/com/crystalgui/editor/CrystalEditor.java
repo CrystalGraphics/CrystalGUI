@@ -22,6 +22,7 @@ import com.crystalgui.ui.elements.workbench.WorkbenchSettings;
 import com.crystalgui.ui.elements.inspector.Inspector;
 import com.crystalgui.ui.elements.inspector.InspectorRegistry;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.elements.desktop.WindowChrome;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.chrome.ChromeCommands;
 import com.crystalgui.ui.elements.dock.DockCommands;
@@ -73,7 +74,7 @@ import com.crystalgui.core.command.CommandRegistry;
  * palette with its accelerator, and can be greyed when it does not apply — none of which a
  * {@code switch} on a scan code can offer. See {@link CrystalEditorCommands}.</p>
  */
-public class CrystalEditor extends UIElement implements Disposable {
+public class CrystalEditor extends UIElement implements Disposable, WindowChrome {
 
     /**
      * The inspector tool window.
@@ -232,6 +233,24 @@ public class CrystalEditor extends UIElement implements Disposable {
     @Override
     public boolean acceptsPublicChildren() {
         return false;
+    }
+
+    /**
+     * The main menu bar — offered to whatever window this editor is put in.
+     *
+     * <p>Client-side decorations: an editor inside a {@code WindowFrame} would otherwise have two
+     * headers stacked on each other, the window's caption and its own menu row, one of them nearly
+     * empty. The bar is <b>moved</b> into the caption rather than duplicated or hidden, so there is
+     * still exactly one of it — see {@link WindowChrome}, which also names the four toolkits that
+     * arrive at this arrangement.</p>
+     *
+     * <p>An editor that is nobody's window content is untouched: nothing asks, and the bar stays where
+     * the workbench put it.</p>
+     */
+    @Override
+    @Nullable
+    public UIElement captionChrome() {
+        return workbench().menuBar();
     }
 
     public Workbench workbench() {

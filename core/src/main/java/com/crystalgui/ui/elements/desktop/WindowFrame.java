@@ -115,6 +115,14 @@ public class WindowFrame extends UIElement implements Disposable {
     public static final String MAXIMIZE_CLASS = "__maximize__";
 
     /**
+     * Where content's own caption chrome is hosted — a menu bar, a toolbar, whatever the application
+     * would otherwise have drawn in a second header of its own.
+     *
+     * @see WindowChrome
+     */
+    public static final String CAPTION_CHROME_CLASS = "__caption-chrome__";
+
+    /**
      * On a window filling the work area.
      *
      * <p>Carries more than a look: the sheet turns the resize handles off through it
@@ -153,6 +161,7 @@ public class WindowFrame extends UIElement implements Disposable {
     private final UIElement titleBar;
     private final UIElement controls;
     private final UIElement content;
+    private final UIElement captionChrome;
     private final UIElement overlays;
     private final UIText titleLabel;
     private final UIElement icon;
@@ -205,6 +214,14 @@ public class WindowFrame extends UIElement implements Disposable {
     /** What is currently SHOWING on the owned surface. @see #releaseOwned */
     private final Set<UIElement> live = new LinkedHashSet<>();
 
+    /** @see #adoptChrome */
+    @Nullable
+    private UIElement adoptedChrome;
+    @Nullable
+    private UIElement chromeOrigin;
+    private int chromeOriginIndex = -1;
+    private boolean chromeWasInternal;
+
     private boolean maximized;
     /** Where to put the window back — the MEASURED rect at the moment it was maximised. */
     private float restoreLeft, restoreTop, restoreWidth, restoreHeight;
@@ -251,9 +268,18 @@ public class WindowFrame extends UIElement implements Disposable {
         icon.setHitTest(false);
         icon.setDisplayed(false);
 
+        // AFTER the icon and BEFORE the title, which is where IntelliJ's New UI and VS Code's custom
+        // title bar both put an application's menu: hard against the left, with the title taking
+        // whatever is left. Hidden until something is adopted, and the caption has no `gap-all`, so an
+        // empty slot occupies nothing.
+        captionChrome = new UIElement();
+        captionChrome.addClass(CAPTION_CHROME_CLASS);
+        captionChrome.setDisplayed(false);
+
         titleBar = new UIElement();
         titleBar.addClass(TITLE_BAR_CLASS);
         titleBar.addChild(icon);
+        titleBar.addChild(captionChrome);
         titleBar.addChild(titleLabel);
         titleBar.addChild(controls);
         addInternalChild(titleBar);
@@ -331,6 +357,75 @@ public class WindowFrame extends UIElement implements Disposable {
     /** Where a window's content goes. The named accessor a composite owes its callers. */
     public UIElement content() {
         return content;
+    }
+
+    /**
+     * Puts {@code content} in the window and <b>adopts any chrome it offers for the caption</b> —
+     * client-side decorations, the answer to an application with a top bar of its own ending up with
+     * two headers stacked on each other.
+     *
+     * <p>The one entry point that wires both, so a caller cannot get half of it. Adding through
+     * {@link #content()} directly still works and simply does not adopt anything.</p>
+     *
+     * <p>Only the element handed in is asked, never its subtree. A search would be a walk over a whole
+     * workbench for an answer almost always sitting on the first object, and "which of the nested
+     * providers won" is not a question a caller should have to reason about — anything else can call
+     * {@link #adoptChrome} itself.</p>
+     */
+    public WindowFrame setContent(UIElement newContent) {
+        if (newContent == null) return this;
+        content.addChild(newContent);
+        if (newContent instanceof WindowChrome) adoptChrome((WindowChrome) newContent);
+        return this;
+    }
+
+    /**
+     * Moves a provider's chrome into this window's caption.
+     *
+     * <p><b>Moved, not copied</b> — see {@link WindowChrome}. Where it came from is remembered, so
+     * {@link #releaseChrome()} can put it back exactly there, including its internal-child status: a
+     * workbench's menu bar is an internal child of the workbench, and returning it as a public one
+     * would leave it publicly removable by anything that walked the tree.</p>
+     */
+    public void adoptChrome(WindowChrome provider) {
+        if (provider == null) return;
+        UIElement chrome = provider.captionChrome();
+        if (chrome == null || chrome == adoptedChrome) return;
+        releaseChrome();
+
+        chromeOrigin = chrome.getParent();
+        chromeOriginIndex = chromeOrigin == null ? -1 : chromeOrigin.getChildren().indexOf(chrome);
+        chromeWasInternal = chrome.isInternalUI();
+
+        adoptedChrome = chrome;
+        // addChild REPARENTS: addChildAtInternal detaches from the previous parent first, and falls back
+        // to removeInternalChild when removeChild refuses -- which it does for an internal child. That
+        // fallback is the only reason a workbench's own menu bar can move here at all.
+        captionChrome.addChild(chrome);
+        captionChrome.setDisplayed(true);
+    }
+
+    /** Puts adopted chrome back where it came from. Safe to call when there is none. */
+    public void releaseChrome() {
+        if (adoptedChrome == null) return;
+        UIElement chrome = adoptedChrome;
+        adoptedChrome = null;
+        captionChrome.setDisplayed(false);
+
+        if (chromeOrigin == null) {
+            captionChrome.removeChild(chrome);
+            return;
+        }
+        int index = Math.max(0, Math.min(chromeOriginIndex, chromeOrigin.getChildren().size()));
+        if (chromeWasInternal) chromeOrigin.insertInternalChildAt(chrome, index);
+        else chromeOrigin.addChildAt(chrome, index);
+        chromeOrigin = null;
+    }
+
+    /** What this window is currently hosting in its caption, or null. */
+    @Nullable
+    public UIElement adoptedChrome() {
+        return adoptedChrome;
     }
 
     /** The drag handle. Exposed so a caller may add chrome of its own beside the title. */
@@ -683,6 +778,9 @@ public class WindowFrame extends UIElement implements Disposable {
     @Override
     public void dispose() {
         if (state == WindowState.DESTROYED) return;
+        // BEFORE anything else: adopted chrome belongs to the content, so it goes home rather than being
+        // destroyed with the window that borrowed it.
+        releaseChrome();
         // READ BEFORE hide() clears it, and this is the whole of the hide/destroy distinction. Hiding
         // hands activation to nobody -- putting a window away is not asking for another one, and
         // activation drags the keyboard with it. Destroying is different: the window it was in is gone,
