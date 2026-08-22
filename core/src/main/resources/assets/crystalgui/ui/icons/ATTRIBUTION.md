@@ -94,10 +94,11 @@ The severity three are drawn to Feather's own geometry and stroke conventions ra
 byte, which changes nothing about the obligation: the notice travels with the distribution either way, and
 guessing at where the line falls is a worse bet than naming the source.
 
-**`window-minimize.svg` is ours**, on the same footing as `stop.svg` and `toolwindows/run.svg`: drawn to
-Feather's geometry and stroke conventions because the set has no window-control marks to take. A single
-centred rule, which is what every window manager since Windows 95 has drawn for minimise — `x.svg` beside
-it, which Feather does have, serves as the close mark. Maximise and restore join it at W6.
+**The three `window-*.svg` marks are ours**, on the same footing as `stop.svg` and `toolwindows/run.svg`:
+drawn to Feather's geometry and stroke conventions because the set has no window-control marks to take.
+`window-minimize` is a single centred rule, `window-maximize` an outlined square, `window-restore` two
+offset squares — what every window manager since Windows 95 has drawn for the three. `x.svg` beside them,
+which Feather does have, serves as the close mark.
 
 > Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
 > associated documentation files (the "Software"), to deal in the Software without restriction, including
