@@ -421,7 +421,13 @@ editor scheme's.
 | `--pill-name-fg` | `var(--fg)` | base.css |
 | `--pill-type-fg` | `var(--fg-secondary)` | base.css |
 | `--pressed-bg` | `#35373B` | crystal-dark.css |
+| `--preview-bg` | `var(--surface-raised)` | base.css |
+| `--preview-border` | `var(--border-base)` | base.css |
+| `--preview-close-hover-bg` | `var(--error)` | base.css |
+| `--preview-close-hover-fg` | `var(--fg-on-accent)` | base.css |
+| `--preview-fg` | `var(--fg)` | base.css |
 | `--preview-surface-bg` | `var(--surface-editor)` | base.css |
+| `--preview-thumbnail-bg` | `var(--surface-base)` | base.css |
 | `--problems-bg` | `#00000000` | base.css |
 | `--problems-count-fg` | `var(--fg-hint)` | base.css |
 | `--problems-empty-fg` | `var(--fg)` | base.css |

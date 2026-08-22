@@ -2,6 +2,7 @@ package com.crystalgui.ui.elements.desktop;
 
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.dispose.Disposer;
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.style.StyleGroup;
@@ -208,6 +209,41 @@ public class WindowFrame extends UIElement implements Disposable {
 
     /** The open/close/minimise/maximise transitions. @see WindowAnimator */
     private final WindowAnimator animator = new WindowAnimator(this);
+
+    /** This window's last frame, for previewing it once it is minimised. @see WindowSnapshot */
+    private final WindowSnapshot snapshot = new WindowSnapshot();
+
+    /** Set by a minimise, cleared by the paint that acts on it. @see #paintOverlay */
+    private boolean snapshotPending;
+
+    /** Photograph this window on its next paint. @see WindowSnapshot */
+    void requestSnapshot() {
+        snapshotPending = true;
+    }
+
+    /** The last photograph of this window, valid only after a minimise. @see WindowSnapshot */
+    WindowSnapshot snapshot() {
+        return snapshot;
+    }
+
+    /**
+     * Takes the pending photograph, once its subtree has finished drawing for real.
+     *
+     * <p>The flag is cleared BEFORE the capture and that is not tidiness: capturing re-enters this very
+     * subtree's {@code drawSubtree}, so a flag still set when the nested draw reaches here would recurse
+     * without end.</p>
+     *
+     * <p>The scale comes off the live pose rather than from {@code uiScale} directly, because the pose is
+     * what the subtree is actually about to be drawn with — {@code uiScale} times whatever any ancestor
+     * has scaled. A snapshot allocated against the wrong one is blurry or four times too large.</p>
+     */
+    @Override
+    protected void paintOverlay(CgUiPaintContext ctx) {
+        super.paintOverlay(ctx);
+        if (!snapshotPending) return;
+        snapshotPending = false;
+        snapshot.capture(ctx, this, ctx.getPoseStack().last().pose().m00());
+    }
     private final UIElement captionChrome;
     private final UIElement overlays;
     private final UIText titleLabel;
@@ -984,6 +1020,9 @@ public class WindowFrame extends UIElement implements Disposable {
         // BEFORE anything else: adopted chrome belongs to the content, so it goes home rather than being
         // destroyed with the window that borrowed it.
         releaseChrome();
+        // OWNED, so nothing else frees it: createOwned bypasses CgFrameBufferRegistry by design, the
+        // same arrangement CgUiPaintContext's layer pool has and the same obligation.
+        snapshot.dispose();
         // READ BEFORE hide() clears it, and this is the whole of the hide/destroy distinction. Hiding
         // hands activation to nobody -- putting a window away is not asking for another one, and
         // activation drags the keyboard with it. Destroying is different: the window it was in is gone,

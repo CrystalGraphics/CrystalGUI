@@ -250,6 +250,11 @@ final class WindowAnimator {
             then.run();
             return;
         }
+        // PHOTOGRAPHED BEFORE IT GOES. The flight ends by detaching the window, and a detached window
+        // has nothing left to draw -- so a taskbar preview of a minimised one has to be a picture taken
+        // while it was still whole. Requested here, taken on the next paint, which is still frame one of
+        // the animation and therefore still an untransformed, fully opaque window.
+        frame.requestSnapshot();
         UITransform into = towardTaskbar();
         if (into == null) {
             playClose(then);
@@ -355,7 +360,7 @@ final class WindowAnimator {
         if (window == null) return false;
 
         cancelCurrent();
-        WindowGeometryAnimation animation = new WindowGeometryAnimation(frame,
+        WindowGeometryAnimation animation = new WindowGeometryAnimation(frame, this::frameIsLive,
                 fromLeft, fromTop, fromWidth, fromHeight, toLeft, toTop, toWidth, toHeight,
                 SIZE_NANOS, MOVING, () -> {
                     current = null;
@@ -383,13 +388,19 @@ final class WindowAnimator {
             if (then != null) then.run();
             return;
         }
-        WindowAnimation animation = new WindowAnimation(frame, from, to, fromOpacity, toOpacity,
+        WindowAnimation animation = new WindowAnimation(frame, this::frameIsLive,
+                from, to, fromOpacity, toOpacity,
                 originX, originY, durationNanos, easing, () -> {
                     current = null;
                     if (then != null) then.run();
                 });
         current = animation;
         window.registerTicker(animation);
+    }
+
+    /** A window stops being worth writing to once it is destroyed. @see WindowAnimation */
+    private boolean frameIsLive() {
+        return frame.state() != WindowState.DESTROYED;
     }
 
     /** Ends whatever was running, so two drivers never write the same thing on alternate frames. */
