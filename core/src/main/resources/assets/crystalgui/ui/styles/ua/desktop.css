@@ -266,7 +266,7 @@ window > .__title-bar__ > .__caption-chrome__ {
  *
  * `background: none` before `background-color`, because the two are different properties and dropping
  * a fill takes both. */
-window > .__title-bar__ .__menu-bar__ {
+.__menu-bar__.__caption-adopted__ {
     background: none;
     background-color: transparent;
     padding-left: 2px;
@@ -438,4 +438,117 @@ window > .__content__ {
     height: 0;
     flex-grow: 1;
     overflow: hidden;
+}
+
+/* ── A tool window in a frame ─────────────────────────────────────────────────────
+ * W8. A floating or windowed tool window is the same WindowFrame every other window is -- see
+ * ToolWindowFrame for why the thing it replaced was not, and what that cost. Everything below is the
+ * difference between a window holding a document and a window holding a panel.
+ *
+ * SMALLER THAN A DOCUMENT WINDOW's minimum, because a tool window legitimately is: the Inspector
+ * docked is a 200px column, and a float that could not be made as narrow as its docked form would be
+ * a worse version of the thing it was torn out of. */
+window.__tool-window__ {
+    min-width: 140px;
+    min-height: 80px;
+    background: var(--panel-bg, #26282B);
+}
+
+/* ONE SURFACE, ACTIVE OR NOT. A document window's caption steps a shade away from its content because
+ * the caption is furniture and the content is the document -- two different things, and the ladder
+ * between them is what says which window you are talking to. A tool window is not that: its caption
+ * IS its panel header, adopted from the panel itself, so a caption in a different grey draws a stripe
+ * across the top of the very thing it belongs to. That is the second band client-side decorations
+ * exist to remove, arriving through colour instead of through layout.
+ *
+ * Both states, because the base rule paints the INACTIVE look and a tool window that is merely not
+ * focused should not suddenly grow a header in a different colour. Activity is still said -- by the
+ * text, by the taskbar entry, and by which window is on top. */
+window.__tool-window__ > .__title-bar__,
+window.__tool-window__.__active__ > .__title-bar__ {
+    background: var(--panel-bg, #26282B);
+}
+
+/* THE CONTAINER'S HEADER IS IN THE CAPTION, adopted through WindowChrome exactly as the editor's menu
+ * bar is -- so the panel has one header rather than a caption with its own header underneath it. The
+ * header brings its own fill and its own indent, both of which are for sitting at the top of a panel;
+ * in a caption they draw a second stripe inside the first. Dropped here rather than at the source,
+ * because the docked presentation is unchanged and that is the whole point of moving one element. */
+.__header__.__caption-adopted__ {
+    background: none;
+    background-color: transparent;
+    padding-left: 0px;
+}
+
+/* THE FRAME'S OWN LABEL IS THE DRAG REGION, and that is why neither it nor the chrome slot may take
+ * the caption's free space.
+ *
+ * The caption is `[icon][caption-chrome][title][controls]` and the move gesture is TARGET-ONLY, so a
+ * press drags the window only when it lands on the title bar ITSELF. Exactly one thing in there falls
+ * through to it: `titleLabel`, which is `setHitTest(false)`. Everything else -- the icon, the adopted
+ * header, the buttons -- is a real target and keeps its own presses, which is what lets an application
+ * put a menu bar up here at all.
+ *
+ * So growing the chrome slot broke two things at once and neither looked like the other. The label was
+ * squeezed to nothing, leaving no fall-through anywhere in the caption, and the window could not be
+ * dragged AT ALL. And because the chrome comes BEFORE the label, a zero-width label was pushed hard
+ * against the controls -- where its text, which does not clip, drew the window's title straight over
+ * the maximise and close glyphs. One rule, reported as a jumbled header and a dead title bar.
+ *
+ * The label keeps the base rule's `flex-grow: 1; flex-basis: 0` and is simply EMPTIED, in Java, by
+ * ToolWindowFrame -- so the space between the adopted header and the window controls is a real,
+ * pointer-transparent box, which is precisely what a drag region is. */
+window.__tool-window__ > .__title-bar__ > .__caption-chrome__ {
+    flex-grow: 0;
+    flex-shrink: 0;
+}
+
+/* Dock: put it back in the region it never stopped belonging to. Sized and coloured exactly as the
+ * window controls beside it -- it sits in the same strip, and any difference reads as one of them
+ * being broken rather than as a different kind of button. */
+window.__tool-window__ .__title-bar__ .__dock__ {
+    width: var(--activity-bar-w, 20px);
+    align-self: stretch;
+    min-height: 0px;
+    min-width: 0px;
+    padding-left: 4px;
+    padding-right: 4px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    flex-shrink: 0;
+    border-radius: 0px;
+    background: none;
+    background-color: transparent;
+    overlay: icon("crystalgui:window-dock");
+    overlay-origin: content-box;
+    overlay-fit: contain;
+    color: var(--window-control-fg, #9DA0A8);
+}
+
+window.__tool-window__ .__title-bar__ .__dock__:hover {
+    color: var(--window-control-hover-fg, #DFE1E5);
+    background: none;
+    background-color: var(--window-control-hover-bg, #35373B);
+}
+
+/* ── DOCK AND HIDE, AND NOTHING ELSE ────────────────────────────────────────────────────────────
+ * IntelliJ's floating tool window offers exactly two affordances, and it is right about both.
+ *
+ * NO CLOSE. A document window's ✕ is meaningful because a document can be finished with; a tool
+ * window cannot. It is one of a fixed set that exists for the life of the workbench, its stripe
+ * button is a permanent way back, and every route out of the frame -- the ✕, minimise, Escape, the
+ * taskbar -- ends in the same hidePanel. So a ✕ beside a Hide button is two marks for one verb, and
+ * the more destructive-looking of the two is the one that is least true: nothing is being closed.
+ *
+ * NO MAXIMISE. A tool window's whole job is to sit BESIDE the work. One filling the desktop is not
+ * something anybody reaches for, and on an owned float it could not even be un-maximised from a
+ * taskbar it has no entry in.
+ *
+ * WHICH LEAVES MINIMISE AS HIDE, and no new widget is needed for it: its glyph is a single centred
+ * rule, which is the mark every window manager and IntelliJ alike draw for hide, and it already
+ * routes through the frame's own hide -> onHidden -> hidePanel. The difference between "minimise"
+ * and "hide" here is only that a tool window has somewhere better than a taskbar to come back from. */
+window.__tool-window__ .__title-bar__ .__close__,
+window.__tool-window__ .__title-bar__ .__maximize__ {
+    display: none;
 }

@@ -134,9 +134,12 @@ public class RegionDropOverlay extends UIElement {
             RegionDropZones.Target resolved = resolve(host, event.getPosition());
             show(host, resolved);
             onDidChangeAim.emit(new Aim(resolved, event.getPosition().x(), event.getPosition().y()));
-            // Rejection is the DEFAULT, and the centre genuinely rejects -- a tool window has no meaning
-            // in the editor area, so no preventDefault there and the drop is refused. That is the same
-            // "no" the missing highlight and the missing label are saying.
+            // Rejection is the DEFAULT, and the centre rejects: a stripe drag released there is a
+            // TEAR-OUT, and the tear-out is not this overlay's to perform. Accepting here was tried and
+            // is wrong for a reason worth keeping -- it covers only the part of the screen this overlay
+            // happens to cover, so releasing over the desktop, or over another window, still did nothing.
+            // The drag SOURCE is the one thing present at every ending, so that is where it lives now.
+            // See StripeView's onDragEnd.
             if (resolved != null) event.preventDefault();
             // BUBBLE = TRUE, and this is the whole reason one listener can cover the workbench.
             //
@@ -154,6 +157,9 @@ public class RegionDropOverlay extends UIElement {
             int index = resolved == null ? -1
                     : workbench.stripe(StripeRail.of(resolved.region(), resolved.side())).insertionIndex();
             hide();
+            // A drop this overlay never accepted cannot arrive here at all -- so `resolved` is non-null
+            // in practice, and the guard is kept because a Drop is dispatched by the controller and this
+            // is not the place to reason about that. The tear-out is the drag source's; see StripeView.
             if (resolved == null) return;
             // THE SLOT THE HIGHLIGHT PROMISED, re-read from the field rather than recomputed from the drop
             // position. They are the same point in every ordinary case and differ in the one that matters:

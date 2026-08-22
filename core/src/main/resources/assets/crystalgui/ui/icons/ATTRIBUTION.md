@@ -4,7 +4,7 @@ Two sets ship here, under two licences. Both are **verbatim** — no file has be
 re-exported. That is worth stating plainly because Apache 2.0 requires modifications to be declared, and
 "we changed nothing" is the cheapest possible way to satisfy it.
 
-## `filetypes/` and `toolwindows/` — IntelliJ Platform icons
+## `filetypes/`, `toolwindows/` and `general/` — IntelliJ Platform icons
 
 **Copyright © 2000–2023 JetBrains s.r.o. and contributors — Apache License 2.0.**
 
@@ -25,6 +25,12 @@ below covers everything in that directory.
 licence, same "unmodified" statement, and reached through the same `FileIconTheme.withVariant` suffix
 convention as the file types; it is a separate directory only because a tool-window mark is not a file type
 and `default.json` should not have to say so.
+
+`general/action/` holds the same set's action marks — the `pin` family (`pin`, `pinHovered`,
+`pinSelected`, each with a `_dark` companion), which W14's always-on-top affordance draws. Same copyright,
+same licence, same "unmodified" statement, and the same `_dark` suffix convention. A separate directory
+because JetBrains' own index groups them that way and keeping their paths makes the next pull a copy
+rather than a decision.
 
 **`toolwindows/run.svg` is not one of them.** It is ours, drawn to Feather's geometry and stroke
 conventions the same way the severity three below are, because the set above had no run mark to take and

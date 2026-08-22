@@ -3,6 +3,8 @@ package com.crystalgui.ui.elements.workbench;
 import com.crystalgui.ui.elements.dock.DockRegion;
 import com.crystalgui.ui.elements.dock.RegionSide;
 
+import javax.annotation.Nullable;
+
 import java.util.Objects;
 
 /**
@@ -39,8 +41,20 @@ import java.util.Objects;
  * <p>{@link #side()} is IntelliJ's {@code isSplit}. §23.5 named it as deliberately not ported; plan.md §24.5
  * reverses that, and the reversal is the honest part — the reason given was that stacking two tool windows
  * on one wall belongs to a tool-window host rather than to a dock tree, which stopped being an argument the
- * moment we started building a tool-window host. {@code type} (docked/floating/windowed) and {@code autoHide}
- * are still absent: floating tool windows do not exist here. Named so their absence reads as a decision.</p>
+ * moment we started building a tool-window host.</p>
+ *
+ * <h3>{@code type} — the same reversal, one step later</h3>
+ *
+ * <p>This class said {@code type} was <i>"still absent: floating tool windows do not exist here"</i>, and
+ * that was true of a build with no windows in it. CrystalOS gives the workbench real in-process windows, so
+ * {@link #type()} is a field now and {@link ToolWindowType} carries the argument for its three constants.
+ * {@code autoHide} is still absent, and still deliberately: it is a property of a REGION's behaviour rather
+ * than of a tool window's presentation, and no region slides yet.</p>
+ *
+ * <p>{@link #floatingBounds()} rides with it, because a mode nobody can remember the geometry of is a mode
+ * that reopens in the wrong place every time — IntelliJ persists {@code floatingBounds} in
+ * {@code WindowInfoImpl} for exactly this, and it is the one piece of a float's state that the frame cannot
+ * be asked for after it has gone.</p>
  *
  * <p>Immutable, with withers — so a placement can be captured and handed around without any chance of a
  * caller mutating the record that another is about to persist.</p>
@@ -50,7 +64,7 @@ public final class ToolWindowState {
     /** What a tool window nobody has ever opened is worth: enough to place it, nothing remembered. */
     public static ToolWindowState initial(String typeId, DockRegion region, int order) {
         return new ToolWindowState(typeId, false, region, RegionSide.PRIMARY, DEFAULT_WEIGHT,
-                DEFAULT_SIDE_WEIGHT, order, true, true);
+                DEFAULT_SIDE_WEIGHT, order, true, true, ToolWindowType.DOCKED, null);
     }
 
     /** The share of its axis a tool window takes when nothing has ever sized it. */
@@ -61,6 +75,9 @@ public final class ToolWindowState {
 
     private final String typeId;
     private final boolean visible;
+    private final ToolWindowType type;
+    @Nullable
+    private final Bounds floatingBounds;
     private final DockRegion region;
     private final RegionSide side;
     private final float weight;
@@ -70,9 +87,12 @@ public final class ToolWindowState {
     private final boolean showStripeButton;
 
     private ToolWindowState(String typeId, boolean visible, DockRegion region, RegionSide side, float weight,
-                            float sideWeight, int order, boolean active, boolean showStripeButton) {
+                            float sideWeight, int order, boolean active, boolean showStripeButton,
+                            ToolWindowType type, @Nullable Bounds floatingBounds) {
         this.typeId = Objects.requireNonNull(typeId, "typeId");
         this.visible = visible;
+        this.type = Objects.requireNonNull(type, "type");
+        this.floatingBounds = floatingBounds;
         this.region = Objects.requireNonNull(region, "region");
         this.side = Objects.requireNonNull(side, "side");
         this.weight = weight;
@@ -142,37 +162,82 @@ public final class ToolWindowState {
         return showStripeButton;
     }
 
+    /** Docked, floating or windowed — see {@link ToolWindowType}. */
+    public ToolWindowType type() {
+        return type;
+    }
+
+    /**
+     * Where its frame was last seen, or {@code null} if it has never been out of its region.
+     *
+     * <p><b>The only part of a float that cannot be re-derived.</b> A docked tool window's geometry is
+     * its region's, and the region is still there after a hide; a float's geometry belongs to a frame
+     * that stops existing. So this is captured on the way out rather than read on the way back in — the
+     * same reason {@link ToolWindowManager#hidePanel} reads both region shares <em>before</em> it
+     * clears the host.</p>
+     */
+    @Nullable
+    public Bounds floatingBounds() {
+        return floatingBounds;
+    }
+
     public ToolWindowState withVisible(boolean nowVisible) {
-        return new ToolWindowState(typeId, nowVisible, region, side, weight, sideWeight, order, active, showStripeButton);
+        return new ToolWindowState(typeId, nowVisible, region, side, weight, sideWeight, order, active, showStripeButton, type, floatingBounds);
     }
 
     public ToolWindowState withRegion(DockRegion nowRegion) {
-        return new ToolWindowState(typeId, visible, nowRegion, side, weight, sideWeight, order, active, showStripeButton);
+        return new ToolWindowState(typeId, visible, nowRegion, side, weight, sideWeight, order, active, showStripeButton, type, floatingBounds);
     }
 
     public ToolWindowState withSide(RegionSide nowSide) {
-        return new ToolWindowState(typeId, visible, region, nowSide, weight, sideWeight, order, active, showStripeButton);
+        return new ToolWindowState(typeId, visible, region, nowSide, weight, sideWeight, order, active, showStripeButton, type, floatingBounds);
     }
 
     public ToolWindowState withSideWeight(float nowSideWeight) {
         return new ToolWindowState(typeId, visible, region, side, weight, nowSideWeight, order, active,
-                showStripeButton);
+                showStripeButton, type, floatingBounds);
     }
 
     public ToolWindowState withWeight(float nowWeight) {
-        return new ToolWindowState(typeId, visible, region, side, nowWeight, sideWeight, order, active, showStripeButton);
+        return new ToolWindowState(typeId, visible, region, side, nowWeight, sideWeight, order, active,
+                showStripeButton, type, floatingBounds);
     }
 
     public ToolWindowState withOrder(int nowOrder) {
-        return new ToolWindowState(typeId, visible, region, side, weight, sideWeight, nowOrder, active, showStripeButton);
+        return new ToolWindowState(typeId, visible, region, side, weight, sideWeight, nowOrder, active,
+                showStripeButton, type, floatingBounds);
     }
 
     public ToolWindowState withActive(boolean nowActive) {
-        return new ToolWindowState(typeId, visible, region, side, weight, sideWeight, order, nowActive, showStripeButton);
+        return new ToolWindowState(typeId, visible, region, side, weight, sideWeight, order, nowActive,
+                showStripeButton, type, floatingBounds);
     }
 
     public ToolWindowState withShowStripeButton(boolean shown) {
-        return new ToolWindowState(typeId, visible, region, side, weight, sideWeight, order, active, shown);
+        return new ToolWindowState(typeId, visible, region, side, weight, sideWeight, order, active, shown,
+                type, floatingBounds);
+    }
+
+    public ToolWindowState withType(ToolWindowType nowType) {
+        return new ToolWindowState(typeId, visible, region, side, weight, sideWeight, order, active,
+                showStripeButton, nowType, floatingBounds);
+    }
+
+    public ToolWindowState withFloatingBounds(@Nullable Bounds nowBounds) {
+        return new ToolWindowState(typeId, visible, region, side, weight, sideWeight, order, active,
+                showStripeButton, type, nowBounds);
+    }
+
+    /**
+     * A frame's remembered geometry, in logical pixels relative to whatever contains it.
+     *
+     * <p>Four floats rather than a reference to the frame, because the frame is the thing that goes
+     * away. Relative to the CONTAINER and not the screen: a {@link ToolWindowType#FLOATING} frame is
+     * owned by the workbench's window and clamped inside it, so absolute coordinates would put it
+     * somewhere else the moment its owner moved — which is exactly the drift that makes a remembered
+     * position worse than no memory at all.</p>
+     */
+    public record Bounds(float left, float top, float width, float height) {
     }
 
     @Override
@@ -183,18 +248,19 @@ public final class ToolWindowState {
                 && Float.compare(sideWeight, other.sideWeight) == 0
                 && order == other.order
                 && active == other.active && showStripeButton == other.showStripeButton
-                && typeId.equals(other.typeId) && region == other.region && side == other.side;
+                && typeId.equals(other.typeId) && region == other.region && side == other.side
+                && type == other.type && Objects.equals(floatingBounds, other.floatingBounds);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(typeId, visible, region, side, weight, sideWeight, order, active,
-                showStripeButton);
+                showStripeButton, type, floatingBounds);
     }
 
     @Override
     public String toString() {
         return "ToolWindowState[" + typeId + (visible ? " visible" : " hidden") + " " + region + "/" + side
-                + " w=" + weight + "]";
+                + " " + type + " w=" + weight + "]";
     }
 }

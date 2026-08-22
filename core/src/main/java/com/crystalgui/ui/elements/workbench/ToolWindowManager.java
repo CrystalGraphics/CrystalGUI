@@ -8,6 +8,7 @@ import com.crystalgui.ui.elements.dock.DockPanelRef;
 import com.crystalgui.ui.elements.dock.DockPanelRegistry;
 import com.crystalgui.ui.elements.dock.DockRegion;
 import com.crystalgui.ui.elements.dock.RegionSide;
+import com.crystalgui.ui.elements.desktop.WindowFrame;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -74,13 +75,37 @@ public final class ToolWindowManager {
         return toolWindows;
     }
 
-    /** Whether this tool window is currently showing in its region. */
+    /** Every tool window currently in a frame rather than a region, by type id. */
+    private final Map<String, ToolWindowFrame> frames = new LinkedHashMap<>();
+
+    /**
+     * Docked, floating or windowed — its remembered mode, or docked.
+     *
+     * <p>The mode is a property of the tool window and not of any frame, which is what lets a stripe
+     * button reopen a float <em>as a float</em> after it has been closed and its frame destroyed.</p>
+     */
+    public ToolWindowType typeOf(String typeId) {
+        ToolWindowState state = toolWindows.get(typeId);
+        return state != null ? state.type() : ToolWindowType.DOCKED;
+    }
+
+    /** Whether this tool window is currently showing — in its region, or in its frame. */
     public boolean isPanelOpen(String typeId) {
-        RegionHost host = regions.host(regionOf(typeId));
-        // ITS OWN HALF, not the region's first occupant. Asking the region flatly made a split region
-        // report its neighbour: open Problems bottom-left and Services bottom-right, and whichever the
-        // host happened to answer with was "the" open panel while the other was reported shut.
-        return host != null && typeId.equals(host.showing(sideOf(typeId)));
+        if (typeOf(typeId).isWindowed()) return frames.containsKey(typeId);
+        // BY IDENTITY, ACROSS BOTH HALVES -- "is this type on screen anywhere in its region".
+        //
+        // Not `host.showing(sideOf(typeId))`, which asks the stored record which half to look in and
+        // therefore answers "closed" whenever the record and the host disagree. It still answers per
+        // TYPE rather than per region, which is what the original note here is about: asking the region
+        // flatly made a split region report its neighbour, so opening Problems bottom-left and Services
+        // bottom-right had whichever the host answered with count as "the" open panel while the other
+        // was reported shut. Both properties hold at once by matching the id in either half.
+        //
+        // The divergence is not hypothetical: a placement read back from a session can name the other
+        // half, and every caller downstream believed the panel was already closed. hidePanel was then
+        // never reached, the region kept recording an occupant that setContent had reparented into a
+        // frame, and its width stayed behind as a blank column.
+        return showingSideOf(regions.host(regionOf(typeId)), typeId) != null;
     }
 
     /**
@@ -106,10 +131,20 @@ public final class ToolWindowManager {
      * @return false, always — it is closed after this
      */
     public boolean hidePanel(String typeId) {
+        if (typeOf(typeId).isWindowed()) return hideFrame(typeId);
         DockRegion region = regionOf(typeId);
-        RegionSide side = sideOf(typeId);
         RegionHost host = regions.host(region);
-        if (host == null || !typeId.equals(host.showing(side))) return false;
+        // THE HALF THE HOST ACTUALLY HOLDS IT IN, not the half the record names -- and the two can
+        // disagree. The record is written by this class; the host is written by this class AND by a
+        // session restore, so a placement read back from disk naming the other half left the guard
+        // below refusing to clear anything. Nothing failed loudly: the panel then went into its frame
+        // (setContent reparents it out from under the host), and the region was left recording an
+        // occupant it no longer contained -- so `isEmpty()` stayed false, `sync()` kept the region in
+        // the split, and its whole width stayed behind as a blank column. "Sometimes undocking leaves
+        // the previous dock space empty", which is precisely what a stale record looks like from
+        // outside. Asking the host makes the host the truth about where things are, which it already is.
+        RegionSide side = showingSideOf(host, typeId);
+        if (host == null || side == null) return false;
         // BOTH SHARES ARE READ BEFORE the clear, because a region with nothing in it is about to leave the
         // frame's split and a half that just emptied takes its divider with it -- neither share stays
         // readable. Same shape as the old hidePanel, which captured placement before a close for the same
@@ -133,6 +168,8 @@ public final class ToolWindowManager {
      * @return true, always — it is open after this
      */
     public boolean showPanel(String typeId) {
+        ToolWindowType type = typeOf(typeId);
+        if (type.isWindowed()) return showInFrame(typeId, type);
         DockRegion region = regionOf(typeId);
         RegionHost host = regions.host(region);
         if (host == null) return false;
@@ -210,6 +247,21 @@ public final class ToolWindowManager {
         // Stable, so the ones with no order yet keep registration order behind the ones that have.
         found.sort((a, b) -> Integer.compare(orderOf(a), orderOf(b)));
         return found;
+    }
+
+    /**
+     * Which half of {@code host} is actually showing {@code typeId}, or null if neither is.
+     *
+     * <p>Distinct from {@link #sideOf}, which answers from the stored placement — that is the right
+     * answer for "where should this go", and the wrong one for "where is it now".</p>
+     */
+    @Nullable
+    private RegionSide showingSideOf(@Nullable RegionHost host, String typeId) {
+        if (host == null) return null;
+        for (RegionSide candidate : RegionSide.values()) {
+            if (typeId.equals(host.showing(candidate))) return candidate;
+        }
+        return null;
     }
 
     /** Which half of that region — see {@link RegionSide}. */
@@ -340,5 +392,184 @@ public final class ToolWindowManager {
     @Nullable
     public ViewContainer containerOf(String typeId) {
         return containers.get(typeId);
+    }
+
+    /** Its frame while it is floating or windowed, or null. For tests and diagnostics. */
+    @Nullable
+    public ToolWindowFrame frameOf(String typeId) {
+        return frames.get(typeId);
+    }
+
+    // ── Presentation ────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Changes how a tool window is presented — the whole of Dock / Float / Window.
+     *
+     * <p><b>Hidden first, and only then repointed</b>, which is the discipline {@link #moveTo} already
+     * had to learn one field over. {@link #hidePanel} branches on the <em>current</em> mode to decide
+     * whether it is clearing a region or destroying a frame; writing the new mode first sends it to
+     * dismantle a presentation the tool window is not in yet, so the one it <em>is</em> in is left on
+     * screen while the model says it has gone.</p>
+     *
+     * <p>Reopened afterwards only if it was open. Changing the mode of a closed tool window is a
+     * legitimate thing to do — it is how "next time, float it" is said — and must not pop it open.</p>
+     */
+    public void setType(String typeId, ToolWindowType type) {
+        if (typeId == null || type == null) return;
+        if (typeOf(typeId) == type) return;
+
+        boolean wasOpen = isPanelOpen(typeId);
+        if (wasOpen) hidePanel(typeId);
+        toolWindows.put(placementOf(typeId).withType(type));
+        if (wasOpen) showPanel(typeId);
+        onDidChangePlacement.emit(typeId);
+    }
+
+    /**
+     * Floats a tool window at {@code (left, top)} — what dragging a stripe button off its rail does.
+     *
+     * <p>The position is written <b>before</b> the mode, because {@link #setType} is what opens the
+     * frame and a frame reads its geometry from the record as it is built. Writing it afterwards would
+     * open the float at its last remembered position and then move it, which is one visible frame of
+     * the window in the wrong place — the sort of flicker that reads as a layout bug.</p>
+     *
+     * <h3>{@link ToolWindowType#WINDOWED}, not {@code FLOATING}</h3>
+     *
+     * <p>IntelliJ's tear-out produces its Float mode, which stays above the IDE frame. On a desktop
+     * that already has windows, that is the more confining of the two answers and it does not match
+     * what the gesture looks like it is doing: an owned window is clamped inside its owner, so a panel
+     * dragged out onto the desktop springs back into the editor. Top-level is what "I pulled this out"
+     * means here — free of the editor's bounds, with a stacking slot and a taskbar entry of its own.
+     * The owned mode stays reachable through the overload, and the Dock button returns either.</p>
+     */
+    public void floatPanel(String typeId, float left, float top) {
+        floatPanel(typeId, left, top, ToolWindowType.WINDOWED);
+    }
+
+    /** @see #floatPanel(String, float, float) */
+    public void floatPanel(String typeId, float left, float top, ToolWindowType mode) {
+        if (typeId == null || mode == null || !mode.isWindowed()) return;
+        ToolWindowState.Bounds remembered = placementOf(typeId).floatingBounds();
+        boolean usable = remembered != null && remembered.width() > 0f && remembered.height() > 0f;
+        float width = usable ? remembered.width() : ToolWindowFrame.DEFAULT_WIDTH;
+        float height = usable ? remembered.height() : ToolWindowFrame.DEFAULT_HEIGHT;
+        toolWindows.put(placementOf(typeId)
+                .withFloatingBounds(new ToolWindowState.Bounds(left, top, width, height)));
+        setType(typeId, mode);
+        if (!isPanelOpen(typeId)) showPanel(typeId);
+    }
+
+    /** Puts a floating or windowed tool window back in the region it never stopped belonging to. */
+    public void dockPanel(String typeId) {
+        setType(typeId, ToolWindowType.DOCKED);
+    }
+
+    /**
+     * Opens a tool window's frame.
+     *
+     * <p><b>Built fresh every time, and destroyed on every hide.</b> A frame is chrome around a content
+     * slot — cheap — while the {@link ViewContainer} it hosts is the expensive, stateful thing, and that
+     * is cached across every presentation change. Keeping a hidden frame around instead would mean
+     * tracking which parent it is currently in across mode switches, and the two attachment paths
+     * ({@code attachOwned} versus {@code openWindow}) are exactly the pair that must not be confused.
+     * The one thing a frame knows that the container does not is its geometry, and that is precisely
+     * what {@link ToolWindowState#floatingBounds()} exists to carry.</p>
+     */
+    private boolean showInFrame(String typeId, ToolWindowType type) {
+        ViewContainer container = containers.computeIfAbsent(typeId, this::buildContainer);
+        if (container == null) return false;
+        UIElement anchor = regions.root();
+        UIWindow window = anchor.getAttachedWindow();
+        if (window == null) return false;
+
+        ToolWindowFrame frame = frames.get(typeId);
+        if (frame == null) {
+            DockPanelDescriptor descriptor = registry.descriptor(typeId);
+            frame = new ToolWindowFrame(typeId, descriptor != null ? descriptor.title() : typeId, container);
+            frame.onDockRequested.connect(() -> dockPanel(typeId));
+            // ITS OWN ✕ AND ITS OWN MINIMISE both come through here, and both mean hide -- the frame's
+            // policy is HIDE_ON_CLOSE. Routed back through hidePanel rather than left to the frame, or
+            // the record would still say visible and a session restore would reopen something the user
+            // had just put away.
+            frame.onHidden.connect(() -> hidePanel(typeId));
+            frames.put(typeId, frame);
+        }
+        frame.setMode(type);
+        // The frame's caption has a close button, so the container's own would be a second one beside it.
+        container.setHideButtonVisible(false);
+
+        // A ZERO RECT IS REFUSED, not honoured, and it is the same test the codec makes on the way in:
+        // a 0x0 frame at the origin is a legal encoding and an unusable window, so it cannot be told
+        // from "never floated" by looking at it. Restoring one puts a window on screen with nothing to
+        // see and nothing to grab.
+        ToolWindowState.Bounds bounds = placementOf(typeId).floatingBounds();
+        if (bounds != null && bounds.width() > 0f && bounds.height() > 0f) {
+            frame.moveTo(bounds.left(), bounds.top());
+            frame.resizeTo(bounds.width(), bounds.height());
+        } else {
+            frame.resizeTo(ToolWindowFrame.DEFAULT_WIDTH, ToolWindowFrame.DEFAULT_HEIGHT);
+        }
+
+        if (type == ToolWindowType.FLOATING) {
+            // OWNED BY THE WORKBENCH'S OWN WINDOW, which is what makes a float travel with the thing it
+            // was torn out of -- and NON-BLOCKING, or the owner's whole surface goes under a transparent
+            // slot and the panel reads as a modal dialog. Falls back to a top-level window when the
+            // workbench is not in a frame at all: a bare UIWindow with no desktop window open is a
+            // legitimate host, and refusing there would make the gesture work in the application and
+            // not in a test.
+            UIElement scope = UIWindow.modalScopeOf(anchor);
+            if (scope instanceof WindowFrame owner) owner.attachOwned(frame, false);
+            else window.openWindow(frame);
+        } else {
+            window.openWindow(frame);
+            // TOP-LEVEL, BUT OWNED. The frame keeps everything a window has -- it can be dragged
+            // anywhere on the desktop and has its own taskbar entry -- and gains the one thing a tool
+            // window needs from the editor it came out of: it stays above it. Without this, clicking the
+            // editor buries the panel that was torn out of it, which is the behaviour no desktop has.
+            if (UIWindow.modalScopeOf(anchor) instanceof WindowFrame owner) frame.setOwnerWindow(owner);
+        }
+
+        toolWindows.put(placementOf(typeId).withVisible(true));
+        window.getInputHandler().requestPointerFocus(container);
+        return true;
+    }
+
+    /**
+     * Closes a tool window's frame, remembering where it was.
+     *
+     * <p>The geometry is read <b>before</b> the destroy, for the reason {@link #hidePanel} reads both
+     * region shares before clearing a host: a destroyed frame has been detached, and a detached element
+     * measures nothing.</p>
+     *
+     * <p><b>And the owner is told</b>, which is the half that fails silently. A frame attached with
+     * {@code attachOwned} is in its owner's live set, and that set is what sizes the owned surface —
+     * destroying the frame without releasing it leaves a full-size transparent slot over the owner's
+     * content, swallowing every click on the window the float came out of. Nothing about that symptom
+     * points at a tool window.</p>
+     *
+     * <p><b>The removal is the first statement, and that is what makes this re-entrant-safe.</b> The
+     * frame's own ✕ and its minimise both reach here through {@code onHidden}, and {@code destroy()}
+     * below emits {@code onHidden} on its way out — so this method calls itself, every time, on the very
+     * path that a user close takes. Taking the frame out of the map before destroying it means the
+     * second entry finds nothing and returns immediately. Doing it in the obvious order instead would
+     * re-read the bounds of a frame that is mid-destroy and release the owner twice.</p>
+     */
+    private boolean hideFrame(String typeId) {
+        ToolWindowFrame frame = frames.remove(typeId);
+        if (frame == null) return false;
+
+        toolWindows.put(placementOf(typeId).withFloatingBounds(frame.bounds()).withVisible(false));
+
+        // NOT RELEASED FROM ITS OWNER HERE, and the attempt is worth recording: reading the owner off
+        // the tree (`frame.getParent().getParent()`) finds nothing, because this method is reached
+        // through the frame's own onHidden and by then the detach has already happened. WindowFrame.hide
+        // captures the owner before detaching and releases it there, which is the only place that can.
+
+        // The container is going back to a region eventually, so it gets its own close button back.
+        ViewContainer container = containers.get(typeId);
+        if (container != null) container.setHideButtonVisible(true);
+
+        frame.destroy();
+        return false;
     }
 }

@@ -47,6 +47,11 @@ public final class ToolWindowLayout {
     private static final String KEY_ORDER = "order";
     private static final String KEY_ACTIVE = "active";
     private static final String KEY_STRIPE = "stripe";
+    private static final String KEY_TYPE = "type";
+    private static final String KEY_FLOAT_X = "fx";
+    private static final String KEY_FLOAT_Y = "fy";
+    private static final String KEY_FLOAT_W = "fw";
+    private static final String KEY_FLOAT_H = "fh";
 
     /** Insertion-ordered, so an encode is byte-stable for an unchanged layout. */
     private final Map<String, ToolWindowState> states = new LinkedHashMap<>();
@@ -118,6 +123,22 @@ public final class ToolWindowLayout {
             entry.putInt(KEY_ORDER, state.order());
             entry.putBool(KEY_ACTIVE, state.active());
             entry.putBool(KEY_STRIPE, state.showStripeButton());
+            // THE MODE, and the geometry that only means anything in it. A float's frame is destroyed on
+            // every hide, so nothing but this record can say that the Inspector was floating -- without
+            // it a restored session brings every tool window back docked, silently, and the user's
+            // arrangement is gone with no error to attribute it to.
+            entry.putString(KEY_TYPE, state.type().name());
+            ToolWindowState.Bounds bounds = state.floatingBounds();
+            // WRITTEN ONLY WHEN THERE IS ONE. An absent optional is omitted rather than written as
+            // zeroes, which is the same rule UIDescriptionCodec follows and for a sharper reason here:
+            // a 0x0 rect at the origin is a legal value, so a reader cannot tell it from "never
+            // floated" -- and a float restored at 0x0 is a window that cannot be seen or grabbed.
+            if (bounds != null) {
+                entry.putFloat(KEY_FLOAT_X, bounds.left());
+                entry.putFloat(KEY_FLOAT_Y, bounds.top());
+                entry.putFloat(KEY_FLOAT_W, bounds.width());
+                entry.putFloat(KEY_FLOAT_H, bounds.height());
+            }
             // The path, the strip-mates and the neighbour are GONE, with the four-tier restoration
             // heuristic that consumed them. All three described a position in the dock tree, which a tool
             // window no longer occupies: it belongs to a REGION, and a region is not destroyed by hiding
@@ -158,7 +179,17 @@ public final class ToolWindowLayout {
                 .withWeight(entry.getFloat(KEY_WEIGHT, ToolWindowState.DEFAULT_WEIGHT))
                 .withSideWeight(entry.getFloat(KEY_SIDE_WEIGHT, ToolWindowState.DEFAULT_SIDE_WEIGHT))
                 .withActive(entry.getBool(KEY_ACTIVE, true))
-                .withShowStripeButton(entry.getBool(KEY_STRIPE, true));
+                .withShowStripeButton(entry.getBool(KEY_STRIPE, true))
+                .withType(ToolWindowType.ofName(entry.getString(KEY_TYPE, "")));
+        // A width of zero is what an entry with no rect reads as, and it is also the one value that
+        // cannot be a real float -- so it is the "never floated" test as well as the malformed-record
+        // one. Restoring a 0x0 frame would put a window on screen with nothing to grab.
+        float width = entry.getFloat(KEY_FLOAT_W, 0f);
+        float height = entry.getFloat(KEY_FLOAT_H, 0f);
+        if (width > 0f && height > 0f) {
+            state = state.withFloatingBounds(new ToolWindowState.Bounds(
+                    entry.getFloat(KEY_FLOAT_X, 0f), entry.getFloat(KEY_FLOAT_Y, 0f), width, height));
+        }
         // A record written earlier still carries anchor/path/grouped/relative keys. They are simply not
         // read: an unknown key is ignored by StateMap, and the version bump is what says the omission is
         // deliberate rather than a reader that fell behind.

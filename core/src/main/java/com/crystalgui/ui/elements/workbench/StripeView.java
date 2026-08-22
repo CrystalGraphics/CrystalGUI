@@ -9,7 +9,9 @@ import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.AnchoredPlacement;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.core.data.ReadOnlyVec2f;
 import com.crystalgui.ui.UIWindow;
+import org.joml.Vector2f;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.DragGhost;
 import com.crystalgui.ui.elements.InsertionMarker;
@@ -276,9 +278,43 @@ public class StripeView extends UIElement {
      * replaced asking the drag controller which element the live ghost happened to be — a question with a
      * correct answer and no owner.</p>
      */
+    /** What the ghost says anywhere a region would not take the drop. Beside RegionDropZones' labels. */
+    private static final String FLOAT_LABEL = "Float";
+
+    /**
+     * Floats {@code typeId} at the pointer, which is where the drag was let go.
+     *
+     * <p><b>The position is converted into the owning window's local space</b>, because that is what a
+     * floated frame's {@code left}/{@code top} mean — it is parented into that window's overlay slot,
+     * whose origin is the window's own. Two ways to get this wrong and both place the frame neatly
+     * somewhere else: the pointer position is <em>raw surface pixels</em>, so using it directly is out
+     * by {@code uiScale}; and a drag callback's own coordinates are local to the drag SOURCE, which is
+     * the rail button — a box about 20px wide somewhere down the side of the workbench.</p>
+     *
+     * <p>With no owning frame — a bare {@code UIWindow} with nothing open on its desktop — the float
+     * becomes top-level and its insets are the desktop's, so the root is the right space. A legitimate
+     * host rather than a fallback: refusing there would make the gesture work in the application and
+     * not in a test.</p>
+     */
+    private void tearOut(String typeId) {
+        UIWindow window = getAttachedWindow();
+        if (window == null) return;
+        ReadOnlyVec2f pointer = window.getInputHandler().pointerPosition();
+        UIElement space = UIWindow.modalScopeOf(this);
+        if (space == null) space = window.ui.rootElement;
+        Vector2f local = space.screenToLocal(pointer.x(), pointer.y());
+        workbench.toolWindowManager().floatPanel(typeId, local.x(), local.y());
+    }
+
     private void onAim(RegionDropOverlay.Aim aim) {
         if (dragging != null) {
-            dragGhost.text(aim.slot() == null ? null : RegionDropZones.labelFor(aim.slot()));
+            // NO SLOT MEANS FLOAT, everywhere. It used to mean "say nothing", which made the gesture
+            // read as a drag that only works at the edges -- and it was, because nothing performed a
+            // tear-out. Now that releasing anywhere outside a region band floats the tool window, the
+            // label is true wherever the ghost is: over the editor, over another window, over the
+            // desktop. A ghost that goes blank the moment you leave the workbench would say the
+            // opposite of what the release is about to do.
+            dragGhost.text(aim.slot() != null ? RegionDropZones.labelFor(aim.slot()) : FLOAT_LABEL);
             dragGhost.flipped(isRightOfCentre(aim.screenX()));
         }
         if (aim.slot() == null) {
@@ -717,8 +753,37 @@ public class StripeView extends UIElement {
                         // neither Drop nor a Leave over the workbench.
                         @Override
                         public void onDragEnd(float mouseX, float mouseY) {
+                            // READ BEFORE endDrag(), which clears it. `dragging` is set by beginDrag on
+                            // the first drag TICK, so it is the only thing here that knows whether the
+                            // gesture ever became a drag at all -- see below.
+                            boolean wasDragged = dragging != null;
                             endDrag();
                             workbench.dropOverlay().clear();
+                            // ── THE TEAR-OUT ────────────────────────────────────────────────────
+                            // A release that no region accepted floats the tool window where it was
+                            // dropped -- IntelliJ's gesture, and W8's whole reason for existing.
+                            //
+                            // HERE, on the drag SOURCE, and not on a drop target. It was written as a
+                            // drop first, on the workbench's own overlay, which covered exactly the
+                            // area that overlay covers: releasing over the editor worked and releasing
+                            // over the DESKTOP did nothing at all, because out there the drop is
+                            // dispatched to the desktop -- engine-side, and rightly ignorant of what a
+                            // tool window is. The source is the one participant present at every
+                            // ending, so it is the only place a rule about "anywhere else" can live.
+                            //
+                            // GATED ON THE GESTURE HAVING BEEN A DRAG. onDragEnd fires on every button
+                            // RELEASE, including one that never passed the activation threshold -- so
+                            // without this an ordinary CLICK on a rail button tore its panel out into a
+                            // window. Every button, every time, which is what it was reported as: "any
+                            // activity button opens them as a window not docked". The click still ran
+                            // its command as well, so the panel opened AND was torn out in one press.
+                            //
+                            // Also gated on the drop having been REFUSED, or a successful dock into a
+                            // region would float it straight back out. onDragCancel deliberately does
+                            // neither: Escape means abandon, not tear out.
+                            if (!wasDragged) return;
+                            if (window.getInputHandler().getDragController().isDropAccepted()) return;
+                            tearOut(typeId);
                         }
 
                         @Override

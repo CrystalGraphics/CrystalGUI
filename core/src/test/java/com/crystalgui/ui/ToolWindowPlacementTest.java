@@ -11,6 +11,7 @@ import com.crystalgui.ui.elements.dock.DockRegion;
 import com.crystalgui.ui.elements.dock.RegionSide;
 import com.crystalgui.ui.elements.workbench.ToolWindowLayout;
 import com.crystalgui.ui.elements.workbench.ToolWindowState;
+import com.crystalgui.ui.elements.workbench.ToolWindowType;
 
 import com.google.gson.JsonElement;
 import org.junit.Test;
@@ -214,6 +215,71 @@ public class ToolWindowPlacementTest {
         assertEquals(DockRegion.PANEL, read.region());
         assertEquals(RegionSide.SECONDARY, read.side());
         assertTrue(read.visible());
+    }
+
+    /**
+     * <b>The mode and the frame's geometry round-trip — W8.</b>
+     *
+     * <p>A record that dropped either would decode perfectly and be wrong in a way with no error to
+     * attribute it to. Losing the mode brings every tool window back <em>docked</em>, so an arrangement
+     * the user built out of floats is silently flattened on the next launch. Losing the rect brings the
+     * float back at its default size in the default corner, which reads as the window manager forgetting
+     * rather than the record being incomplete.</p>
+     */
+    @Test
+    public void theModeAndItsFramesGeometrySurviveTheRecord() {
+        StateMap<JsonElement> out = new StateMap<>(JsonOps.INSTANCE);
+        ToolWindowLayout source = new ToolWindowLayout();
+        source.put(ToolWindowState.initial("inspector", DockRegion.AUXILIARY, 0)
+                .withType(ToolWindowType.FLOATING)
+                .withFloatingBounds(new ToolWindowState.Bounds(40f, 55f, 300f, 220f)));
+        source.encodeInto(out, "toolWindows");
+
+        ToolWindowState read = ToolWindowLayout.decodeFrom(
+                new StateMap<>(JsonOps.INSTANCE, out.encode()), "toolWindows").get("inspector");
+        assertNotNull(read);
+        assertEquals(ToolWindowType.FLOATING, read.type());
+        assertNotNull("the rect went missing", read.floatingBounds());
+        assertEquals(40f, read.floatingBounds().left(), 1e-6f);
+        assertEquals(55f, read.floatingBounds().top(), 1e-6f);
+        assertEquals(300f, read.floatingBounds().width(), 1e-6f);
+        assertEquals(220f, read.floatingBounds().height(), 1e-6f);
+        assertEquals("and the region it still belongs to came with it",
+                DockRegion.AUXILIARY, read.region());
+    }
+
+    /**
+     * <b>A tool window that has never floated carries no rect, and must not gain one.</b>
+     *
+     * <p>An absent optional is omitted rather than written as zeroes — {@code UIDescriptionCodec}'s rule,
+     * and sharper here: a 0×0 frame at the origin is a legal encoding, so a reader cannot tell it from
+     * "never floated". Restoring one would put a window on screen with nothing to see and nothing to
+     * grab.</p>
+     */
+    @Test
+    public void aToolWindowThatNeverFloatedCarriesNoRect() {
+        StateMap<JsonElement> out = new StateMap<>(JsonOps.INSTANCE);
+        ToolWindowLayout source = new ToolWindowLayout();
+        source.put(ToolWindowState.initial("project", DockRegion.SIDEBAR, 0));
+        source.encodeInto(out, "toolWindows");
+
+        ToolWindowState read = ToolWindowLayout.decodeFrom(
+                new StateMap<>(JsonOps.INSTANCE, out.encode()), "toolWindows").get("project");
+        assertNotNull(read);
+        assertEquals(ToolWindowType.DOCKED, read.type());
+        assertNull(read.floatingBounds());
+    }
+
+    /**
+     * A mode this build does not have falls back to docked, for the reason every other enum on this
+     * record does: a session is untrusted input written by a possibly-newer build, and losing the mode
+     * must not cost the region, the order and whether it was open.
+     */
+    @Test
+    public void anUnknownModeFallsBackToDocked() {
+        assertEquals(ToolWindowType.DOCKED, ToolWindowType.ofName("SLIDING"));
+        assertEquals(ToolWindowType.DOCKED, ToolWindowType.ofName(""));
+        assertEquals(ToolWindowType.FLOATING, ToolWindowType.ofName("FLOATING"));
     }
 
     /**
