@@ -348,13 +348,26 @@ public class WindowFrame extends UIElement implements Disposable {
         addInternalChild(overlays);
         syncOverlaySlot();
 
-        // TARGET-ONLY (false, false), which is Dialog's spelling and not CanvasOverlayMove's. The two
-        // booleans are ADDITIVE -- the target phase is always subscribed -- so (false, true) would also
-        // fire for anything that BUBBLES here, and the close button is inside this bar: a press on it
-        // would start a window drag as well as closing the window.
-        titleBar.onMouseDown.attachListener((element, event) ->
-                beginMove(event.getPosition().x(), event.getPosition().y(), event.getDetail()),
-                false, false);
+        // TARGET AND BUBBLE, with the controls filtered out by hand -- see captionPressIsAControl.
+        //
+        // It was target-only, which is Dialog's spelling, and the reason was sound: the two booleans are
+        // ADDITIVE, so subscribing the bubble phase also hears every press on the close button, and a
+        // press there would start a window drag as well as closing the window.
+        //
+        // What that misses is that target-only can only ever hear presses on the BAR ITSELF, which works
+        // exactly as long as everything in the caption is unhittable. The frame's own title label is, so
+        // it held -- until a window ADOPTED somebody else's header into its caption (WindowChrome), and a
+        // panel's title is an ordinary hittable UIText. So a floating Notifications window could not be
+        // dragged by the word "Notifications", only by the gap beside it, which reads as the window
+        // being stuck rather than as the label being in the way.
+        //
+        // The frame cannot fix that by reaching into the adopted chrome and unhitting parts of it: it
+        // does not own that subtree, and setHitTest applies to a whole subtree, so it would take the
+        // header's own buttons out with the label.
+        titleBar.onMouseDown.attachListener((element, event) -> {
+            if (captionPressIsAControl(event.getTarget())) return;
+            beginMove(event.getPosition().x(), event.getPosition().y(), event.getDetail());
+        }, false, true);
 
         installActivation();
         // CLICK_NOT_TABBABLE is the web's tabindex="-1", and both halves are wanted. A frame must be able
@@ -1199,6 +1212,24 @@ public class WindowFrame extends UIElement implements Disposable {
     /** The caption's measured height — the cascade step, and the sliver the clamp keeps on screen. */
     float captionHeight() {
         return titleBar.getRuntimeCache().getHeight();
+    }
+
+    /**
+     * Whether a press in the caption belongs to something in it rather than to the caption.
+     *
+     * <p><b>Focusability is the test</b>, and it is not a proxy — it is the question. A control is a
+     * thing you can put the keyboard on: every button in the caption is focusable, and nothing that is
+     * merely being displayed there is. A window's title, an icon, an adopted panel header's label are
+     * all {@code FocusPolicy.NONE}, so they read as caption, which is what they look like.</p>
+     *
+     * <p>Walked up to the bar and no further, so the FRAME's own focusability — it is
+     * {@code CLICK_NOT_TABBABLE}, deliberately — cannot answer yes for every press in it.</p>
+     */
+    private boolean captionPressIsAControl(@Nullable UIElement target) {
+        for (UIElement walk = target; walk != null && walk != titleBar; walk = walk.getParent()) {
+            if (walk.focusable()) return true;
+        }
+        return false;
     }
 
     private void beginMove(float pointerX, float pointerY, int detail) {
