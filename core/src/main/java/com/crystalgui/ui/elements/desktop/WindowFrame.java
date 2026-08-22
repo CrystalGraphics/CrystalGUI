@@ -1255,6 +1255,21 @@ public class WindowFrame extends UIElement implements Disposable {
      */
     public void minimize() {
         if (state != WindowState.VISIBLE) return;
+        // DEACTIVATED ON THE PRESS, not when the animation lands. Every window manager treats a minimise
+        // as having happened the moment it is asked for and animates a window that has logically already
+        // gone; deferring the state with the detach made the whole of it 400ms late, so the caption
+        // stayed lit, the taskbar went on highlighting it, and anything rendering "the active window"
+        // described a window that was visibly flying into the bar.
+        //
+        // Safe to move earlier precisely BECAUSE minimising hands over to nobody -- see Desktop.
+        // deactivate, and hide()'s own call, which this makes a no-op rather than replacing. The close
+        // path is deliberately NOT changed to match: dispose() reads whether the window was active to
+        // hand the keyboard to the next one, so deactivating early there would leave nothing active
+        // after a close.
+        //
+        // Guarded on being the active window, or minimising a background one would deactivate the
+        // foreground.
+        if (owner != null && owner.activeWindow() == this) owner.deactivate();
         animator.playMinimize(this::hide);
     }
 
