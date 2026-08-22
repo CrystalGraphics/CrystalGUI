@@ -201,7 +201,9 @@ window > .__title-bar__ {
     align-items: center;
     flex-shrink: 0;
     padding-left: 6px;
-    padding-right: 3px;
+    /* ZERO, and it is load-bearing: it is what puts the close button's centre on the activity rail's
+     * centre line. See the controls below. */
+    padding-right: 0px;
     background: var(--window-title-bg, #2B2B2B);
     color: var(--window-title-fg, #9DA0A8);
 }
@@ -216,7 +218,7 @@ window > .__title-bar__ {
  * is why `window` is in ua/core.css's focus-ring carve-out: a rectangle round the whole pane would
  * say the same thing again, louder and in the wrong place. */
 window.__active__ > .__title-bar__ {
-    background: var(--window-title-active-bg, #35373B);
+    background: var(--window-title-active-bg, #26282B);
     color: var(--window-title-active-fg, #DFE1E5);
 }
 
@@ -279,66 +281,57 @@ window > .__title-bar__ > .__title__ {
     text-overflow: ellipsis;
 }
 
-/* The button strip. `gap-all` is safe here for the reason it usually is not — it applies between
- * EVERY pair of children, so it is only ever right where every child is a peer, and these are:
- * minimise, maximise and close as they arrive (W3, W6). */
+/* ── The window controls ────────────────────────────────────────────────────────────────────────
+ * FULL-HEIGHT BLOCKS, EDGE TO EDGE, and every number below is derived rather than chosen.
+ *
+ * THE WIDTH IS THE ACTIVITY RAIL'S. `--activity-bar-w` is the workbench's own rail, 20px, whose
+ * buttons it centres — and the caption's right padding is ZERO, so the close button's centre line
+ * lands exactly where the rail's does. The X therefore sits directly above the rail buttons under
+ * it rather than nearly above them, and it stays that way if the rail is ever re-sized, because
+ * both read one variable. (The parts share a variable scope and this one is declared in
+ * ua/workbench.css, which comes earlier in the manifest.)
+ *
+ * NO GAP AND NO RADIUS. A caption button's hover fill is a full-height block in Windows, in IntelliJ
+ * and in VS Code, and the reason is that the caption is the edge of the window: a rounded pill
+ * floating in the middle of the bar gives the pointer a smaller target than the space it appears to
+ * occupy, and leaves a dead strip above and below it that looks like part of the button and is not.
+ * Adjacent blocks also make the strip read as one control group. */
 window .__controls__ {
     flex-direction: row;
-    align-items: center;
+    align-self: stretch;
+    align-items: stretch;
     flex-shrink: 0;
-    gap-all: 2px;
+    gap-all: 0px;
 }
 
-/* A GLYPH, not a labelled button — the same five-line escape from the base `button` rule that the
- * find bar's controls make, and for the same reasons, each of which cost a round:
- *   min-height   — `button { min-height: 14px }` is a DIFFERENT PROPERTY from `height`, so a base
- *                  rule's minimum silently beats any height written at higher specificity here.
- *   padding-all  — the base rule's padding is what makes a button a box round a word.
- *   background   — `background` and `background-color` are separate properties: dropping the
- *                  drawable takes `background: none`, and the fill is then `background-color`.
- *   overlay      — the mark itself, drawn through CgUiSvg as currentColor, so `color` below tints it.
+/* THE GLYPH IS SMALL INSIDE A BIG BUTTON, which is what the padding is for -- `overlay-fit: contain`
+ * scales the artwork to whatever box it is given, so a 20px button would otherwise draw a 20px mark.
+ * `overlay-origin: content-box` moves that box inside the padding, shrinking the DRAWING without
+ * shrinking the thing you have to hit. Same idiom, same reason, as `runpanel .__run-action__`.
  *
- * Three class components (specificity 21) rather than the shorter `window .__close__`, which would
- * tie with the config kit's `.__config-control__ button` at 11 — a tie that has already been paid
- * for once, on `dialog`'s close button, where the later rule silently won a size fight. */
-window .__title-bar__ .__minimize__ {
-    width: 14px;
-    height: 12px;
+ * `min-height`/`min-width` are cleared because `button` carries `min-height: 14px` in the base sheet,
+ * and a minimum is a DIFFERENT PROPERTY from a height: it wins at any specificity without appearing
+ * to compete, which is how three rounds of shrinking a height once changed nothing at all. */
+window .__title-bar__ .__minimize__,
+window .__title-bar__ .__maximize__,
+window .__title-bar__ .__close__ {
+    width: var(--activity-bar-w, 20px);
+    height: 100%;
     min-height: 0px;
-    padding-all: 0px;
+    min-width: 0px;
+    padding-all: 4px;
     flex-shrink: 0;
-    border-radius: 2px;
+    border-radius: 0px;
     background: none;
     background-color: transparent;
-    overlay: icon("crystalgui:window-minimize");
+    overlay-origin: content-box;
     overlay-fit: contain;
     color: var(--window-control-fg, #9DA0A8);
 }
 
-/* THE GLYPH BRIGHTENS AND NOTHING ELSE — no hover fill, where close takes a red one. Two reasons, and
- * the second is the one that decided it. Minimise loses nothing (the window is retained and its entry
- * is how it comes back), so dressing it as destructive would misstate what pressing it does. And a
- * fill would have to be a lighter grey than `--surface-raised`, which the system vocabulary has no
- * name for: `--hover-bg` is designed to sit on a panel, and on a raised caption it lands within three
- * points of the bar itself — painted, and effectively absent. `problemspanel .__view-options__` makes
- * the same choice for the same reason. */
-window .__title-bar__ .__minimize__:hover {
-    color: var(--window-control-hover-fg, #DFE1E5);
-}
-
-window .__title-bar__ .__maximize__ {
-    width: 14px;
-    height: 12px;
-    min-height: 0px;
-    padding-all: 0px;
-    flex-shrink: 0;
-    border-radius: 2px;
-    background: none;
-    background-color: transparent;
-    overlay: icon("crystalgui:window-maximize");
-    overlay-fit: contain;
-    color: var(--window-control-fg, #9DA0A8);
-}
+window .__title-bar__ .__minimize__ { overlay: icon("crystalgui:window-minimize"); }
+window .__title-bar__ .__maximize__ { overlay: icon("crystalgui:window-maximize"); }
+window .__title-bar__ .__close__    { overlay: icon("crystalgui:x"); }
 
 /* THE GLYPH SAYS WHAT THE BUTTON WILL DO, not what the window is — so on a maximised window it turns
  * into "restore". Every window manager swaps it; a control whose mark never changes leaves the user
@@ -347,8 +340,24 @@ window.__maximized__ .__title-bar__ .__maximize__ {
     overlay: icon("crystalgui:window-restore");
 }
 
+/* A NEUTRAL fill for the two that lose nothing, and a red one for the one that does. Both fill the
+ * whole button, which is the half that was missing: minimise and maximise had no hover state at all
+ * and close had a small rounded one, so two of the three gave no feedback and the third looked like a
+ * different kind of control. */
+window .__title-bar__ .__minimize__:hover,
 window .__title-bar__ .__maximize__:hover {
     color: var(--window-control-hover-fg, #DFE1E5);
+    background: none;
+    background-color: var(--window-control-hover-bg, #35373B);
+}
+
+/* Red on hover, which is Windows' and VS Code's convention for the one control that is destructive.
+ * The fill carries it — the glyph goes white on top rather than red, or a hovered close button reads
+ * as an error state rather than as a target. */
+window .__title-bar__ .__close__:hover {
+    color: var(--window-close-hover-fg, #FFFFFF);
+    background: none;
+    background-color: var(--window-close-hover-bg, #F14C4C);
 }
 
 /* A MAXIMISED WINDOW IS NOT RESIZABLE, on any desktop — and saying so here rather than in Java is what
@@ -357,29 +366,6 @@ window .__title-bar__ .__maximize__:hover {
  * so it wins without an !important the user-agent sheet is not allowed to write anyway. */
 window.__maximized__ {
     resize: none;
-}
-
-window .__title-bar__ .__close__ {
-    width: 14px;
-    height: 12px;
-    min-height: 0px;
-    padding-all: 0px;
-    flex-shrink: 0;
-    border-radius: 2px;
-    background: none;
-    background-color: transparent;
-    overlay: icon("crystalgui:x");
-    overlay-fit: contain;
-    color: var(--window-control-fg, #9DA0A8);
-}
-
-/* Red on hover, which is Windows' and VS Code's convention for the one control that is destructive.
- * The fill is what carries it — the glyph goes white on top rather than red, or a hovered close
- * button reads as an error state rather than a target. */
-window .__title-bar__ .__close__:hover {
-    color: var(--window-close-hover-fg, #FFFFFF);
-    background: none;
-    background-color: var(--window-close-hover-bg, #F14C4C);
 }
 
 /* ── The owned surface ──────────────────────────────────────────────────────────────────────────
@@ -393,8 +379,9 @@ window .__title-bar__ .__close__:hover {
  * nothing in it swallows every click on the window's own content — the same rule, and the same
  * reason, as the desktop's own presence. See WindowFrame.releaseOwned.
  *
- * The frame keeps `overflow: visible` and only `__content__` clips, so an owned window may legally
- * overhang its owner's edge — which a dialog wider than a narrow window has to. */
+ * The z-index is not decoration: the slot happens to be a later sibling than the content and would
+ * paint above it anyway, so getting this wrong fails NOTHING today and fails the first time anything
+ * reorders the frame's parts. */
 window > .__overlays__ {
     z-index: 10;
 }
