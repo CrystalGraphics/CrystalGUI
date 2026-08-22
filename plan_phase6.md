@@ -217,7 +217,65 @@ well as the written cases.
 
 ---
 
-## 6.7 The diff viewer · **and the third button**
+## 6.7 The MERGER · **engine + first view done 2026-08-22**
+
+> **Scope changed mid-flight, on the user's call: "maybe I actually want a full diff merger not just a
+> viewer".** It is the right call and it changes the centre of gravity. A viewer answers *what differs*; a
+> merger answers *what do I end up with*, and only the second one resolves the conflict it was opened from.
+>
+> **The consequence is three-way, not two.** A two-way diff can only ask "which of these two", once per
+> difference, and over a file where both sides have moved on that is dozens of questions with mechanical
+> answers. With a common ancestor a region only one side touched resolves itself, and so does a region both
+> sides changed identically — what is left is the handful they changed *differently*. That reduction is the
+> whole value, and it is why the apply-chevrons this section previously ruled out ("a viewer is a reader")
+> are now the point rather than out of scope.
+>
+> **And the base was already on the client**: `WorkspaceClient.cachedContent` is the bytes last read from the
+> server, which is exactly the ancestor of both the editor's buffer and the server's current copy. No
+> protocol, no extra read — one accessor (`baseContent`).
+
+### Shipped
+
+| Piece | Where | Notes |
+|---|---|---|
+| The merge itself | `text/diff/ThreeWayMerge` | Regions, four `Kind`s, five `Resolution`s, `merged()` answerable at any time |
+| Three-pane view | `ui/elements/workbench/MergeView` | mine │ result │ theirs, conflict navigation, scroll-synced |
+| The third button | `ConflictDialog` → `Workbench.openMerge` | "Merge…" reads before the destructive pair; omitted with no base |
+| Geometry | `ua/workbench.css` | 900×520, both fill idioms, no `border-width-*` |
+
+**The unit is a REGION, not a hunk.** The two sides have no hunks in common, only a base — so every hunk
+from either side touching the same span of base lines is grouped and classified once. Two small edits of
+mine against one spanning edit of theirs is *one* conflict. Getting this wrong is not a miscount: overlapping
+regions each claim the same base lines, so the assembled output contains text twice or drops it. Pinned by a
+non-overlap invariant over 300 random three-way cases, and **verified by mutation** — narrowing the grouping
+test from `<=` to `<` kills 8 of the 16 tests.
+
+**`Kind` is a fact; `Resolution` is a decision, and they are separate fields.** Folded together, a UI could
+never mark a resolved conflict differently from an auto-merge, and re-analysis would silently discard every
+choice already made.
+
+**A conflict pre-pointed at mine is not a conflict somebody resolved to mine.** They produce identical text,
+so nothing about the output distinguishes them — hence the `settled` flag. Without it the merge reports
+itself finished before anybody has read it and Save is live on arrival.
+
+**The hand-edit latch.** Resolution buttons rewrite the result pane wholesale, so typing into it and then
+pressing one would lose the typing silently — the worst failure available to a merge tool. The first hand
+edit latches: the controls disable and say why, and `mergedText()` reads the *pane*, not the merge, so the
+save includes it. Both halves are needed and both are mutation-verified. Mapping a hand edit back onto its
+region is what IntelliJ does; `Region.acceptCustom` is the seam for it and the engine already carries it.
+
+**Line granularity, deliberately.** Two people editing different words of one line is a conflict here. A
+word-level merge would resolve it silently, which is how a tool produces a line neither author wrote. Git
+draws it in the same place.
+
+### Still to do
+
+Bands, ribbons, collapsed regions and intra-line marks — the reading affordances below. The merger is
+usable without them and unreadable-at-scale with them missing, so they are next rather than optional. The
+one genuinely new engine piece is a **whole-line background band**, which needs an `EditorViewPart`:
+`TextEditor` has exactly one decoration lane (`diagnostic`) and nothing generic behind it.
+
+## 6.7 (reference) The diff viewer · **and the third button**
 
 A reader, not a merger: two panes, aligned, with the changed ranges marked. Its first use is the third
 choice on `ConflictDialog` — **look at it** beside *keep mine* and *take theirs* — which is the choice a
