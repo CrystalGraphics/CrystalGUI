@@ -60,13 +60,6 @@ import java.util.function.BooleanSupplier;
  * {@code advanceFrame}, <em>before</em> {@code calculateLayout}, so a frame that has not laid out yet
  * measures zero and reading it back writes that zero straight into the position.</p>
  *
- * <h3>What is deliberately not here yet</h3>
- * <ul>
- *   <li><b>A maximise button.</b> Its behaviour is W6. A control that looks clickable and does nothing
- *       is the lie the disabled-control rule already forbids, so it arrives with the geometry it
- *       operates rather than as greyed furniture.</li>
- * </ul>
- *
  * <p><b>One known W1 artefact.</b> {@code UIResizer} keeps a resize inside the containing block, which
  * this class's move-clamp deliberately does not. So dragging the <em>trailing</em> edge of a window that
  * is currently hanging off that edge pulls it back to the desktop's boundary instead of growing it. The
@@ -118,6 +111,18 @@ public class WindowFrame extends UIElement implements Disposable {
     /** The window's icon slot, hidden until {@link #setIcon} gives it something to draw. */
     public static final String ICON_CLASS = "__icon__";
 
+    /** The maximise affordance. Its glyph swaps to "restore" while {@link #MAXIMIZED_CLASS} is on. */
+    public static final String MAXIMIZE_CLASS = "__maximize__";
+
+    /**
+     * On a window filling the work area.
+     *
+     * <p>Carries more than a look: the sheet turns the resize handles off through it
+     * ({@code resize: none}), which is the right layer for that — a maximised window is not resizable
+     * on any desktop, and saying so in CSS keeps it out of Java where the handles are not built.</p>
+     */
+    public static final String MAXIMIZED_CLASS = "__maximized__";
+
     /**
      * Where this window's <b>owned</b> windows live — its modal dialogs, and from W8 its floating tool
      * windows. The same class the window-level layer uses, because it is the same role one level down.
@@ -153,6 +158,7 @@ public class WindowFrame extends UIElement implements Disposable {
     private final UIElement icon;
     private final Button closeButton;
     private final Button minimizeButton;
+    private final Button maximizeButton;
 
     /** What was asked for, never clamped. @see WindowFrame */
     private float wantedLeft, wantedTop;
@@ -199,6 +205,10 @@ public class WindowFrame extends UIElement implements Disposable {
     /** What is currently SHOWING on the owned surface. @see #releaseOwned */
     private final Set<UIElement> live = new LinkedHashSet<>();
 
+    private boolean maximized;
+    /** Where to put the window back — the MEASURED rect at the moment it was maximised. */
+    private float restoreLeft, restoreTop, restoreWidth, restoreHeight;
+
     public WindowFrame(String title) {
         // Out of flow and positioned: a window is placed by left/top against the desktop's window layer,
         // not laid out among its siblings. This also earns the four LEADING resize handles --
@@ -222,6 +232,11 @@ public class WindowFrame extends UIElement implements Disposable {
         minimizeButton.addClass(MINIMIZE_CLASS);
         minimizeButton.attachListener(this::hide);
         controls.addChild(minimizeButton);
+
+        maximizeButton = new Button("");
+        maximizeButton.addClass(MAXIMIZE_CLASS);
+        maximizeButton.attachListener(this::toggleMaximized);
+        controls.addChild(maximizeButton);
 
         closeButton = new Button("");
         closeButton.addClass(CLOSE_CLASS);
@@ -257,7 +272,8 @@ public class WindowFrame extends UIElement implements Disposable {
         // fire for anything that BUBBLES here, and the close button is inside this bar: a press on it
         // would start a window drag as well as closing the window.
         titleBar.onMouseDown.attachListener((element, event) ->
-                beginMove(event.getPosition().x(), event.getPosition().y()), false, false);
+                beginMove(event.getPosition().x(), event.getPosition().y(), event.getDetail()),
+                false, false);
 
         installActivation();
         // CLICK_NOT_TABBABLE is the web's tabindex="-1", and both halves are wanted. A frame must be able
@@ -333,6 +349,10 @@ public class WindowFrame extends UIElement implements Disposable {
 
     public Button minimizeButton() {
         return minimizeButton;
+    }
+
+    public Button maximizeButton() {
+        return maximizeButton;
     }
 
     /** The icon this window declares, or null. @see #setIcon */
@@ -713,6 +733,61 @@ public class WindowFrame extends UIElement implements Disposable {
         onHidden.emit();
     }
 
+    // ── Maximise ────────────────────────────────────────────────────────────
+
+    public boolean isMaximized() {
+        return maximized;
+    }
+
+    /** Double-click on the caption, the maximise button, and (from W13) the command all land here. */
+    public void toggleMaximized() {
+        if (maximized) restore();
+        else maximize();
+    }
+
+    /**
+     * Fills the work area, remembering the rect to come back to.
+     *
+     * <p><b>The work area needs no special case.</b> A frame is placed against the window layer, and the
+     * layer's box <em>is</em> the work area — the taskbar is laid out rather than overlaid — so
+     * maximising is {@code left: 0; top: 0; width: 100%; height: 100%} and nothing anywhere has to
+     * subtract a bar. It also means a maximised window follows the work area for free when the strip
+     * hides (W13's fullscreen) or the desktop resizes.</p>
+     *
+     * <p>The restore rect is the <b>measured</b> box, not the declared one. A window may never have been
+     * given an explicit size — its width would then be {@code auto} — and "put it back how it looked" is
+     * the promise being made, which is a measurement. Windows keeps the same thing, and calls it the
+     * window's restored rect.</p>
+     *
+     * <p>Written at <b>INLINE</b>, the origin the user's own drags and resizes write at, so maximising
+     * replaces them rather than layering over them — and an author's {@code !important} still wins,
+     * which is the rule {@code UIResizer} already states for the size it writes.</p>
+     */
+    public void maximize() {
+        if (maximized) return;
+        restoreLeft = placedLeft;
+        restoreTop = placedTop;
+        restoreWidth = getRuntimeCache().getWidth();
+        restoreHeight = getRuntimeCache().getHeight();
+        maximized = true;
+        addClass(MAXIMIZED_CLASS);
+        StyleGroup.inlinePipeline(getStyle().getLayoutGroup(),
+                l -> l.left(0).top(0).widthPercent(100f).heightPercent(100f));
+    }
+
+    /** Puts the window back exactly where it was. */
+    public void restore() {
+        if (!maximized) return;
+        maximized = false;
+        removeClass(MAXIMIZED_CLASS);
+        StyleGroup.inlinePipeline(getStyle().getLayoutGroup(),
+                l -> l.width(restoreWidth).height(restoreHeight));
+        // AFTER clearing the flag, because applyPosition deliberately does nothing while maximised --
+        // a maximised window has no position to clamp, and letting the clamp write one would fight the
+        // 100% rect every layout pass.
+        applyPosition(restoreLeft, restoreTop);
+    }
+
     // ── Geometry ────────────────────────────────────────────────────────────
 
     /**
@@ -832,12 +907,20 @@ public class WindowFrame extends UIElement implements Disposable {
         return titleBar.getRuntimeCache().getHeight();
     }
 
-    private void beginMove(float pointerX, float pointerY) {
+    private void beginMove(float pointerX, float pointerY, int detail) {
         UIWindow window = getAttachedWindow();
         if (window == null) return;
         // A synthesized activation press (Space/Enter on a focused element) carries the cursor's position,
         // which may be nowhere near the bar. Honouring one teleports the window.
         if (!titleBar.containsScreenPoint(pointerX, pointerY)) return;
+
+        // DOUBLE-CLICK TOGGLES, and starts no drag. Windows' gesture. Returning here matters: the second
+        // press would otherwise begin a move as well, so the smallest tremor after a double-click would
+        // drag the window it had just restored.
+        if (detail >= 2) {
+            toggleMaximized();
+            return;
+        }
 
         // FROM WHERE THE WINDOW IS, not from what was last asked for. A window currently held at the
         // edge by the clamp has a wanted position further out; starting a drag from that would spend the
@@ -851,14 +934,74 @@ public class WindowFrame extends UIElement implements Disposable {
         drag.startDrag(titleBar, pointerX, pointerY,
                 (mouseX, mouseY, startX, startY, deltaX, deltaY) -> {
                     placed = true;
+                    // A MAXIMISED WINDOW RESTORES ON THE FIRST MOVEMENT, never on the press.
+                    //
+                    // Windows' restore-drag, and the ordering is what makes it work rather than a
+                    // detail: restoring on the press means the FIRST press of a double-click restores
+                    // and the second re-maximises, so double-clicking a maximised caption appears to do
+                    // nothing at all. Click-and-hold on a maximised title bar does nothing there too --
+                    // it is the movement that tears the window loose.
+                    if (maximized) {
+                        if (deltaX == 0f && deltaY == 0f) return;
+                        restoreUnderPointer(mouseX, mouseY);
+                        // Re-baselined so the delta already spent is not applied a second time: from
+                        // here the drag continues from wherever the restore put the window.
+                        dragStartLeft = placedLeft - deltaX;
+                        dragStartTop = placedTop - deltaY;
+                        return;
+                    }
                     applyPosition(dragStartLeft + deltaX, dragStartTop + deltaY);
                 });
+    }
+
+    /**
+     * Restores a maximised window <b>around the pointer</b>, so a drag that begins on its caption
+     * carries on from where the hand already is.
+     *
+     * <p>The pointer keeps its fraction across the caption: grab a maximised window three-quarters of
+     * the way along its title bar and the restored window appears with the cursor three-quarters along
+     * <em>its</em> title bar. Keeping the left edge instead — the obvious alternative — makes a window
+     * grabbed on its right-hand side leap out from under the cursor, which is why no window manager
+     * does it that way. The vertical offset inside the caption is simply preserved, since the caption's
+     * height does not change.</p>
+     *
+     * <p>Measured before restoring and applied after, using the <em>recorded</em> restore width rather
+     * than a fresh measurement: layout has not run yet at this point, so the box still reports the
+     * maximised size.</p>
+     */
+    private void restoreUnderPointer(float pointerX, float pointerY) {
+        // ALREADY IN LAYOUT UNITS. UIDragController.tick runs screenToLocal against the drag SOURCE
+        // before it calls the listener -- that conversion is most of why the callback exists -- so a
+        // second one here halves the coordinate and the window comes back at about half the distance
+        // across the caption. The pointer position in a mouse-DOWN listener is the other way round:
+        // that one is raw, which is why the guard above uses containsScreenPoint.
+        float barWidth = titleBar.getRuntimeCache().getWidth();
+        float alongCaption = pointerX - titleBar.getRuntimeCache().getX();
+        float fraction = barWidth > 0f
+                ? Math.max(0f, Math.min(1f, alongCaption / barWidth))
+                : 0.5f;
+
+        UIElement area = resizeContainingBlock();
+        float areaX = area == null ? 0f : area.getRuntimeCache().getX();
+        float areaY = area == null ? 0f : area.getRuntimeCache().getY();
+        // The caption stays where it is vertically -- its height does not change, so preserving the
+        // frame's own top keeps the pointer at the same place down the bar.
+        float top = getRuntimeCache().getY() - areaY;
+
+        restore();
+
+        float width = restoreWidth > 0f ? restoreWidth : getRuntimeCache().getWidth();
+        applyPosition(pointerX - areaX - fraction * width, top);
     }
 
     /** Records the intent, then writes it clamped. */
     private void applyPosition(float left, float top) {
         wantedLeft = left;
         wantedTop = top;
+        // A MAXIMISED WINDOW HAS NO POSITION. The intent above is still recorded -- it is what restore
+        // comes back to -- but writing it would fight the 100% rect on every layout pass, and this runs
+        // from the layout callback and from the work-area re-clamp.
+        if (maximized) return;
 
         float clampedLeft = left;
         float clampedTop = top;

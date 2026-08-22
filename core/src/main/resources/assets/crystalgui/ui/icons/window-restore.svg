@@ -1,0 +1,5 @@
+<!-- Drawn for CrystalGUI to Feather's geometry and stroke conventions, not copied from any icon set.
+     Maximise's counterpart: two offset squares, the mark every window manager uses for "put it back".
+     The rear square is drawn as an L rather than a full rectangle so the two do not cross-hatch where
+     they overlap -- at 12px on screen a full second rectangle reads as a smudge rather than as depth. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 8 L9 5 L19 5 L19 15 L16 15"/><rect x="5" y="9" width="10" height="10" rx="1"/></svg>

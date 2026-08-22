@@ -295,6 +295,39 @@ window .__title-bar__ .__minimize__:hover {
     color: var(--window-control-hover-fg, #DFE1E5);
 }
 
+window .__title-bar__ .__maximize__ {
+    width: 14px;
+    height: 12px;
+    min-height: 0px;
+    padding-all: 0px;
+    flex-shrink: 0;
+    border-radius: 2px;
+    background: none;
+    background-color: transparent;
+    overlay: icon("crystalgui:window-maximize");
+    overlay-fit: contain;
+    color: var(--window-control-fg, #9DA0A8);
+}
+
+/* THE GLYPH SAYS WHAT THE BUTTON WILL DO, not what the window is — so on a maximised window it turns
+ * into "restore". Every window manager swaps it; a control whose mark never changes leaves the user
+ * guessing which of two states a press will produce. */
+window.__maximized__ .__title-bar__ .__maximize__ {
+    overlay: icon("crystalgui:window-restore");
+}
+
+window .__title-bar__ .__maximize__:hover {
+    color: var(--window-control-hover-fg, #DFE1E5);
+}
+
+/* A MAXIMISED WINDOW IS NOT RESIZABLE, on any desktop — and saying so here rather than in Java is what
+ * makes it true: `resize` is a cascade-driven property, so UIResizer drops all eight handles the
+ * moment this rule applies and rebuilds them when it stops. Specificity 11 against the base rule's 1,
+ * so it wins without an !important the user-agent sheet is not allowed to write anyway. */
+window.__maximized__ {
+    resize: none;
+}
+
 window .__title-bar__ .__close__ {
     width: 14px;
     height: 12px;
