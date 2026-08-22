@@ -206,11 +206,21 @@ window > .__title-bar__ {
     align-items: center;
     flex-shrink: 0;
     padding-left: 6px;
-    /* THE SAME 2px THE CONTROLS PUT BETWEEN THEMSELVES, so the gap to the right of the close button
-     * is the gap between every other pair and the strip is evenly spaced on all four sides rather
-     * than jammed against the frame. It is load-bearing twice over: with a 16px button it is also
-     * what puts the close button's centre on the activity rail's centre line. See the controls. */
-    padding-right: 2px;
+    /* ONE PIXEL, AND IT IS THE BORDER'S WIDTH -- not a gap, a clearance.
+     *
+     * `window`'s `outline` is painted INSET, over the frame's own last pixel. At zero padding the
+     * close block therefore runs underneath it: the block is 20px like its neighbours and renders 19,
+     * so its hover fill is visibly narrower than the other two and the X sits half a pixel right of
+     * the visible middle while minimise and maximise sit dead centre in theirs. Every measurement
+     * says the strip is even -- the three boxes are the same width, the glyph centres are 20px apart,
+     * and the X's centre is exactly the activity rail's -- and it does not LOOK even, because a
+     * pixel of one box is being painted over.
+     *
+     * Stopping the strip where the border begins is what makes the three fills equal on screen rather
+     * than equal in the layout. It costs the one pixel: the X's centre moves from the rail's centre
+     * line to a pixel inboard of it. That is the smaller error of the two, and it is the direction
+     * that has something to show for it. */
+    padding-right: 1px;
     background: var(--window-title-bg, #2B2B2B);
     color: var(--window-title-fg, #9DA0A8);
 }
@@ -289,40 +299,36 @@ window > .__title-bar__ > .__title__ {
 }
 
 /* ── The window controls ────────────────────────────────────────────────────────────────────────
- * THREE EQUAL SQUARES WITH ONE GAP AROUND THEM, and every number below is derived from two facts
- * rather than chosen: the gap is 2px, and the close button's centre must land on the activity
- * rail's.
+ * THREE SEAMLESS FULL-HEIGHT BLOCKS, which is what IntelliJ and Windows both draw: the fills touch
+ * each other and touch the caption's top and bottom, so hovering one paints a rectangle flush
+ * against its neighbours rather than a tile with a moat around it. Measured off the reference:
+ * 47px wide against a caption the block fills completely, and zero between them.
  *
- * They were full-height blocks flush to the frame's edge for exactly one round -- which is what
- * Windows and VS Code draw, and is wrong for a window this small. At 21px of caption a full-height
- * block is nearly square already, so the "block" reads as a box jammed into the corner rather than
- * as a control group: there is no space between the three and none at all between the last one and
- * the border it touches. The reference those blocks come from has a 32px caption and 45px buttons,
- * where the same shape reads as generous.
+ * STRETCH, NEVER A FIXED HEIGHT AND `align-items: center`. That pairing shipped for a round and was
+ * subtly wrong in exactly the case that matters. A caption's height is NOT fixed -- it grows for
+ * adopted chrome -- and a 16px button centred inside a controls box that had settled at 20px sat
+ * 2px from the top of a 22px caption and 4px from the bottom. It reads as "the buttons are too high"
+ * and it is really "the thing they were centred in was not the thing they looked centred in".
+ * Stretching removes the question: a block that IS the caption's height cannot be off-centre in it.
  *
- * THE GEOMETRY, in the order it has to be derived:
+ * THE CLOSE BLOCK IS THE ACTIVITY RAIL'S COLUMN, and that is the whole horizontal derivation. Both
+ * are `--activity-bar-w` wide and both are flush to the frame's right edge, so the red hover fill and
+ * the rail button beneath it are the same 20px column -- same left edge, same right edge, same centre
+ * line -- rather than two things that nearly line up. The X is directly above the rail's glyphs and
+ * stays there if the rail is ever re-sized, because both read the one variable. (`--activity-bar-w`
+ * is declared in ua/workbench.css, which comes earlier in the manifest, so the scope is shared.)
  *
- *   - The rail is `--activity-bar-w` (20px) and sits flush to the content's right edge, so its
- *     centre line is 10px in from that edge.
- *   - The gap is 2px, and the caption's right padding is the same 2px -- so the last button's right
- *     edge is 2px in from the frame's edge, exactly as its neighbours are 2px from each other.
- *   - The close button is therefore 16px wide: 2 + 16/2 = 10, the rail's centre line. The X sits
- *     directly above the rail buttons under it and stays there if the rail is ever re-sized,
- *     because both numbers read the one variable. (`--activity-bar-w` is declared in
- *     ua/workbench.css, which comes earlier in the manifest, so the scope is shared.)
- *
- * A 16px square is also the size every toolbar button in this application already is, so the strip
- * matches the rail below it in more than its centre line.
- *
- * VERTICALLY CENTRED, NOT STRETCHED. `align-items: center` against a caption whose height is not
- * fixed -- it grows for adopted chrome (a menu bar is 22px), and a stretched button would then be a
- * tall slab beside a short glyph. Centring is the one rule that is right at every caption height. */
+ * WHICH IS WHY THE CAPTION'S RIGHT PADDING IS ONE PIXEL AND NOT FOUR. A gap there moves the close
+ * button's centre inboard by exactly that gap, and any extra width moves it by half again -- so a
+ * 24px block with 4px of padding put the X 16px in against the rail's 10, a visible 6px of
+ * disagreement between two things sitting one above the other. The single pixel that remains is the
+ * frame border's own width, and it buys something the alignment cannot: see the caption rule. */
 window .__controls__ {
     flex-direction: row;
     align-self: stretch;
-    align-items: center;
+    align-items: stretch;
     flex-shrink: 0;
-    gap-all: 2px;
+    gap-all: 0px;
 }
 
 /* THE GLYPH IS SMALL INSIDE A BIG BUTTON, which is what the padding is for -- `overlay-fit: contain`
@@ -340,11 +346,20 @@ window .__controls__ {
 window .__title-bar__ .__minimize__,
 window .__title-bar__ .__maximize__,
 window .__title-bar__ .__close__ {
-    width: 16px;
-    height: 16px;
+    width: var(--activity-bar-w, 20px);
+    align-self: stretch;
     min-height: 0px;
     min-width: 0px;
-    padding-all: 2px;
+    /* SPLIT, not `padding-all`, and the split is what keeps the glyph one size. The horizontal pair
+     * sets the artwork: 20 - 4 - 4 = a 12px content box, and `contain` leaves a 12px mark. The
+     * vertical pair must then never be the binding constraint, or `contain` starts measuring the
+     * glyph against the CAPTION's height -- which is not fixed, so the same mark would come out
+     * smaller in a window hosting a menu bar than in one that is not. At 2px the content box is at
+     * least 16px tall for every caption this sheet can produce, so the width always wins. */
+    padding-left: 4px;
+    padding-right: 4px;
+    padding-top: 2px;
+    padding-bottom: 2px;
     flex-shrink: 0;
     border-radius: 0px;
     background: none;
