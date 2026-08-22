@@ -321,8 +321,41 @@ public final class UIWindow {
      * is where that rule is stated in full.</p>
      */
     public Desktop desktop() {
-        if (desktop.getParent() == null) ui.rootElement.addInternalChild(desktop);
+        if (!desktopSuspended && desktop.getParent() == null) ui.rootElement.addInternalChild(desktop);
         return desktop;
+    }
+
+    /** @see #suspendDesktop() */
+    private boolean desktopSuspended;
+
+    /**
+     * Takes the whole compositor off the screen, <b>retaining every window exactly as it is</b>.
+     *
+     * <p>What a host calls when its screen closes. The desktop element leaves the tree, which is the
+     * same mechanism a hidden window uses one level down and buys the same things: nothing matches a
+     * selector, nothing lays out, nothing paints, a ticker whose element is detached returns false, and
+     * {@code onRemoved} recurses telling the input handler to forget every element in the subtree — so
+     * the hover, the press target and any live drag are dropped rather than left describing a screen
+     * that is no longer up.</p>
+     *
+     * <p><b>The windows themselves are untouched.</b> Their states stay VISIBLE, their positions and
+     * their z-order stay exactly as they were, and {@link #resumeDesktop()} puts the desktop back with
+     * everything where it was left. Hiding each window instead would lose which of them were on screen —
+     * the thing a resume has to know.</p>
+     */
+    public void suspendDesktop() {
+        desktopSuspended = true;
+        if (desktop.getParent() != null) ui.rootElement.removeInternalChild(desktop);
+    }
+
+    /** Puts the compositor back. @see #suspendDesktop() */
+    public void resumeDesktop() {
+        desktopSuspended = false;
+        desktop();
+    }
+
+    public boolean isDesktopSuspended() {
+        return desktopSuspended;
     }
 
     /**

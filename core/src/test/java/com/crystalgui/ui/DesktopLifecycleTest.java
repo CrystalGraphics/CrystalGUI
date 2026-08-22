@@ -395,6 +395,44 @@ public class DesktopLifecycleTest extends UiTestBase {
         assertSame("the window in front is untouched", front, desktop.activeWindow());
     }
 
+    /**
+     * <b>Suspending the desktop retains every window exactly as it is</b> — what a host does when its
+     * screen closes.
+     *
+     * <p>The whole compositor leaves the tree, which is the freeze one level up: nothing lays out or
+     * paints and the input handler forgets everything inside it. What must NOT happen is the windows
+     * changing state — a resume has to know which of them were on screen, and hiding each one loses
+     * exactly that.</p>
+     */
+    @Test
+    public void suspendingTheDesktopRetainsEveryWindowAndResumingPutsThemBack() {
+        build();
+        WindowFrame visible = open("Visible");
+        WindowFrame minimised = open("Minimised");
+        minimised.hide();
+        visible.moveTo(70, 50);
+        settle();
+        input.requestFocus((Button) visible.content().getChildren().get(0));
+
+        window.suspendDesktop();
+        settle();
+
+        assertTrue(window.isDesktopSuspended());
+        assertNull("the compositor is out of the tree", desktop.getAttachedWindow());
+        assertNull("...so it holds no input state", input.getFocusedElement());
+        assertEquals("and the windows are untouched", WindowState.VISIBLE, visible.state());
+        assertEquals(WindowState.HIDDEN, minimised.state());
+        assertEquals("both still registered", 2, desktop.windows().size());
+
+        window.resumeDesktop();
+        settle();
+
+        assertFalse(window.isDesktopSuspended());
+        assertNotNull(desktop.getAttachedWindow());
+        assertEquals("back on screen where it was", 70f, visible.left(), 0.51f);
+        assertEquals(WindowState.HIDDEN, minimised.state());
+    }
+
     /** Activating a hidden window brings it back — which is what a taskbar entry (W4) and the switcher
      * (W10) both mean by "activate". */
     @Test
