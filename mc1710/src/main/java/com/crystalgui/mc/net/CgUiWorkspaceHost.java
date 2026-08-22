@@ -9,6 +9,8 @@ import com.crystalgui.fs.WorkspaceOperation;
 import com.crystalgui.fs.WorkspacePermission;
 import com.crystalgui.fs.WorkspaceProject;
 import com.crystalgui.fs.WorkspaceRpc;
+import com.crystalgui.fs.CgFileEvent;
+import com.crystalgui.fs.NioFileEventSource;
 import com.crystalgui.fs.WorkspaceService;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
@@ -129,6 +131,12 @@ public final class CgUiWorkspaceHost {
                 new WorkspaceProject(PROJECT_ID, "Workspace", root)));
         service = new WorkspaceService(registry, new LocalFileSystem(registry), new OperatorsMayWrite());
         CrystalGuiCore.LOGGER.info("[cgui-fs] serving {}", root);
+
+        // Phase 6.2. ONE source for the project, not one per player: every watch costs an OS handle and
+        // Linux caps them per USER, so N players sharing a workspace must not mean N watchers on one
+        // directory. Never throws -- a workspace that cannot be watched still works, half a second
+        // behind, and refusing to serve it would be a far worse answer.
+        service.attachEvents(NioFileEventSource.open(PROJECT_ID, root, Collections.<String>emptyList()));
         return service;
     }
 
@@ -196,6 +204,17 @@ public final class CgUiWorkspaceHost {
         @SubscribeEvent
         public void onServerTick(TickEvent.ServerTickEvent event) {
             if (event.phase != TickEvent.Phase.END) return;
+
+            // EVERY TICK, and that is the point of 6.2: an external save reaches the client on the next
+            // tick rather than at the next half-second reconcile. Drained ONCE here and handed to every
+            // peer, because draining is destructive and a second caller would steal the first's events.
+            // Costs one non-blocking WatchService.poll() when nothing has happened.
+            WorkspaceService live = service;
+            if (live != null) {
+                List<CgFileEvent> events = live.drainFileEvents();
+                if (!events.isEmpty()) fanOut(events);
+            }
+
             untilPoll -= 1f / 20f;
             if (untilPoll > 0f) return;
             untilPoll = POLL_SECONDS;
@@ -217,6 +236,29 @@ public final class CgUiWorkspaceHost {
                 }
             }
             for (Object key : gone) BY_PEER.remove(key);
+        }
+    }
+
+    /**
+     * Hands one drained batch to every peer — Phase 6.2.
+     *
+     * <p>Each watcher keeps only the paths its own client has open, so an event about a file nobody here
+     * has open costs a map lookup and is dropped: an event is real and still none of that peer's
+     * business, and telling it would leak which files exist to somebody who never asked.</p>
+     */
+    private static void fanOut(List<CgFileEvent> events) {
+        for (Map.Entry<Object, WorkspaceRpc<Object>> entry : BY_PEER.entrySet()) {
+            ProtocolConnection<Object> connection = CONNECTIONS.get(entry.getKey());
+            if (connection == null) continue;
+            try {
+                entry.getValue().notifyFileEvents(events,
+                        (method, args) -> connection.call(method, args, null, null),
+                        PlainOps.INSTANCE);
+            } catch (RuntimeException failed) {
+                // One player's dispatch must not stop every other player hearing about the change.
+                CrystalGuiCore.LOGGER.error("[cgui-fs] file-event dispatch failed: {}",
+                        failed.getMessage());
+            }
         }
     }
 

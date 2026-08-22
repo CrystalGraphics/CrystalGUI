@@ -308,9 +308,28 @@ public final class WorkspaceRpc<T> {
      *
      * @return how many notifications were sent
      */
+    /**
+     * Tells this peer about a batch of filesystem events — Phase 6.2.
+     *
+     * <p>Separate from {@link #pollAndNotify} and called far more often: the point of an OS watcher is
+     * that an external save reaches the client on the next <b>tick</b> rather than at the next half-second
+     * reconcile. The batch is drained once by {@code WorkspaceService} and handed to every peer, since
+     * draining is destructive.</p>
+     */
+    public int notifyFileEvents(List<CgFileEvent> events, Notifier<T> notifier,
+                                com.crystalgui.serialization.DynamicOps<T> ops) {
+        return send(watcher.pollEvents(actor, events), notifier, ops);
+    }
+
     public int pollAndNotify(Notifier<T> notifier, com.crystalgui.serialization.DynamicOps<T> ops) {
         pollPresence(notifier, ops);
         List<WorkspaceWatcher.Change> changes = watcher.poll(actor);
+        return send(changes, notifier, ops);
+    }
+
+    /** One shape for a change on the wire, whether a poll or an event found it. */
+    private int send(List<WorkspaceWatcher.Change> changes, Notifier<T> notifier,
+                     com.crystalgui.serialization.DynamicOps<T> ops) {
         for (WorkspaceWatcher.Change change : changes) {
             StateMap<T> args = new StateMap<T>(ops)
                     .putString(WorkspaceProtocol.PATH, change.path().toString())
