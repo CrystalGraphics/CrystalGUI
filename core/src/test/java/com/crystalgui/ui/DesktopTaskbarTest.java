@@ -239,6 +239,49 @@ public class DesktopTaskbarTest extends UiTestBase {
     }
 
     /**
+     * <b>Nothing is highlighted when nothing is active.</b>
+     *
+     * <p>Two ways to get there and both must hold: minimising the last window, and pressing bare
+     * desktop. The highlight is a claim about where the keyboard is going, so a stale one is a lie —
+     * and a lie that persists, because the strip only re-renders when the registry says something
+     * changed, and "the active window went away" is precisely the kind of change that used not to
+     * announce itself.</p>
+     */
+    @Test
+    public void noEntryIsHighlightedOnceNoWindowIsActive() {
+        build();
+        WindowFrame first = open("One");
+        WindowFrame second = open("Two");
+
+        second.hide();
+        settle();
+        assertSame("the window behind takes over", first, desktop.activeWindow());
+        assertTrue(entry(first).hasClass(Taskbar.ACTIVE_CLASS));
+        assertFalse("a hidden window is not the active one", entry(second).hasClass(Taskbar.ACTIVE_CLASS));
+
+        first.hide();
+        settle();
+        assertNull("nothing left to be active", desktop.activeWindow());
+        assertFalse("so nothing is highlighted", entry(first).hasClass(Taskbar.ACTIVE_CLASS));
+        assertFalse(entry(second).hasClass(Taskbar.ACTIVE_CLASS));
+    }
+
+    /** The other route to no-active-window: a press on bare desktop. Same claim, same requirement that
+     * the strip hears about it. */
+    @Test
+    public void pressingBareDesktopClearsTheHighlight() {
+        build();
+        WindowFrame frame = open("One");
+        assertTrue(entry(frame).hasClass(Taskbar.ACTIVE_CLASS));
+
+        desktop.deactivate();
+        settle();
+
+        assertNull(desktop.activeWindow());
+        assertFalse(entry(frame).hasClass(Taskbar.ACTIVE_CLASS));
+    }
+
+    /**
      * <b>Minimising every window must leave the strip on screen.</b>
      *
      * <p>The one state where the taskbar is the <em>only</em> thing there is, so losing it there loses

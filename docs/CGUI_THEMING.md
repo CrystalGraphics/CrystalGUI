@@ -620,7 +620,7 @@ editor scheme's.
 | `--tab-strip-bg` | `#00000000` | base.css |
 | `--taskbar-bg` | `var(--surface-overlay)` | base.css |
 | `--taskbar-border` | `var(--border-base)` | base.css |
-| `--taskbar-entry-active-bg` | `var(--accent-soft)` | base.css |
+| `--taskbar-entry-active-bg` | `var(--pressed-bg)` | base.css |
 | `--taskbar-entry-active-fg` | `var(--fg)` | base.css |
 | `--taskbar-entry-fg` | `var(--fg-secondary)` | base.css |
 | `--taskbar-entry-hidden-fg` | `var(--fg-disabled)` | base.css |
@@ -649,7 +649,7 @@ editor scheme's.
 | `--window-control-fg` | `var(--fg-secondary)` | base.css |
 | `--window-control-hover-fg` | `var(--fg)` | base.css |
 | `--window-fg` | `var(--fg)` | base.css |
-| `--window-title-active-bg` | `var(--accent-soft)` | base.css |
+| `--window-title-active-bg` | `var(--pressed-bg)` | base.css |
 | `--window-title-active-fg` | `var(--fg)` | base.css |
 | `--window-title-bg` | `var(--surface-raised)` | base.css |
 | `--window-title-fg` | `var(--fg-secondary)` | base.css |

@@ -123,13 +123,20 @@ taskbar .__entry__:hover {
     background-color: var(--taskbar-entry-hover-bg, #2E3033);
 }
 
-/* THE ACTIVE ENTRY, in the same accent as the active caption — one colour means one thing across the
+/* THE ACTIVE ENTRY, in the same grey as the active caption — one colour means one thing across the
  * whole compositor, so the bar and the window agree about which is yours without anyone having to
- * look twice. */
+ * learn a second signal.
+ *
+ * A LADDER, NOT A HUE: island, hover, active, each a step lighter. That is how a Windows taskbar
+ * says which button is engaged, and it is why it never needs an accent to do it — an accent fill
+ * reads as a selection, and every window you are looking at is one you selected.
+ *
+ * Declared after the hover rule and tying with it on specificity, so an active entry stays looking
+ * active while the pointer is over it. */
 taskbar .__entry__.__active__ {
     color: var(--taskbar-entry-active-fg, #DFE1E5);
     background: none;
-    background-color: var(--taskbar-entry-active-bg, #2E436E);
+    background-color: var(--taskbar-entry-active-bg, #35373B);
 }
 
 /* A minimised window's entry is DIMMED, not hidden — hiding it is the failure the strip exists to
@@ -205,7 +212,7 @@ window > .__title-bar__ {
  * is why `window` is in ua/core.css's focus-ring carve-out: a rectangle round the whole pane would
  * say the same thing again, louder and in the wrong place. */
 window.__active__ > .__title-bar__ {
-    background: var(--window-title-active-bg, #2E436E);
+    background: var(--window-title-active-bg, #35373B);
     color: var(--window-title-active-fg, #DFE1E5);
 }
 

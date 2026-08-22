@@ -631,24 +631,30 @@ theme {
      * would say nothing at a glance across a stack of them. */
     --window-title-bg: var(--surface-raised);
     --window-title-fg: var(--fg-secondary);
-    --window-title-active-bg: var(--accent-soft);
+    /* A LIGHTER GREY, not the accent. Painting the active caption in the accent colour reads as a
+     * selection or a focus ring rather than as chrome — the accent means "this is the thing you
+     * picked", and every window you look at is one you picked. Windows' own captions step a shade
+     * lighter and brighten their text, which is what these two do. */
+    --window-title-active-bg: var(--pressed-bg);
     --window-title-active-fg: var(--fg);
 
     /* The taskbar. The island is an OVERLAY surface rather than a panel one: it floats over the
      * desktop the way a menu floats over a panel, and it has to be separable from whatever the
      * wallpaper happens to be behind it — in game that is a paused world, which is any colour at all.
      *
-     * The active entry takes the same accent as the active caption, on purpose: one colour means one
-     * thing across the whole compositor, so the bar and the window agree about which is yours. A
-     * minimised window's entry is dimmed to the disabled foreground — present and quiet, because
-     * hiding it is the failure the strip exists to prevent. */
+     * The active entry takes the SAME grey as the active caption, on purpose: one colour means one
+     * thing across the whole compositor, so the bar and the window agree about which is yours without
+     * anyone having to learn a second signal. A ladder rather than a hue — island, then hover, then
+     * active, each a step lighter — which is how a Windows taskbar reads and why it never needs an
+     * accent to say which button is engaged. A minimised window's entry is dimmed to the disabled
+     * foreground: present and quiet, because hiding it is the failure the strip exists to prevent. */
     --taskbar-bg: var(--surface-overlay);
     --taskbar-border: var(--border-base);
     --taskbar-entry-fg: var(--fg-secondary);
     --taskbar-entry-hover-fg: var(--fg);
     --taskbar-entry-hover-bg: var(--hover-bg);
     --taskbar-entry-active-fg: var(--fg);
-    --taskbar-entry-active-bg: var(--accent-soft);
+    --taskbar-entry-active-bg: var(--pressed-bg);
     --taskbar-entry-hidden-fg: var(--fg-disabled);
     /* The control glyphs are secondary until hovered — a title bar's buttons are not what you are
      * looking at. Minimise takes a neutral hover fill where close takes a red one: it is the one
