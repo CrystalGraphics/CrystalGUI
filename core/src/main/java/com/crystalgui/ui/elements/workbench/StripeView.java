@@ -28,7 +28,6 @@ import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.input.UIDragController;
 import com.crystalgui.ui.input.UIInputHandler;
 
-import dev.vfyjxf.taffy.style.TaffyDisplay;
 
 import javax.annotation.Nullable;
 
@@ -597,6 +596,11 @@ public class StripeView extends UIElement {
         // so it has no box to measure, and a zero-extent item in the list would make every midpoint test
         // after it answer against a cell that is not there. It is also simply not part of the list you are
         // inserting into.
+        //
+        // InsertionMarker now drops the withdrawn item itself, so this looks redundant and is not: doing
+        // it HERE is what keeps the index this method returns in the without-the-dragged-one space the
+        // rail's callers read it in. Leaving it to the marker would answer in the full-list space instead,
+        // shifting every index past the dragged button by one.
         List<ItemButton> targets = slotButtons(region, side);
         targets.removeIf(button -> button.typeId.equals(dragging));
         return insertion.showFor(this, targets, screenX, screenY);
@@ -607,53 +611,27 @@ public class StripeView extends UIElement {
     }
 
     /**
-     * Takes the button out of the rail for the duration of a drag.
+     * Takes the button out of the rail for the duration of a drag, and opens the gap where it was.
      *
-     * <p>What IntelliJ does, and it is the other half of the slot reading correctly: the placeholder shows
-     * the space the button would occupy, so leaving the button <em>also</em> sitting there means the rail
-     * momentarily shows the same tool window twice — once where it is and once where it is going. Hiding it
-     * frees exactly one cell, which is the cell the slot is drawn in.</p>
-     *
-     * <p>{@code display: none} rather than detaching it. Detaching the drag source is the one thing that
-     * cannot be done here: {@code UIInputHandler.forgetElement} cancels a drag whose source leaves the
-     * tree, so removing the button would end the gesture on its first frame.</p>
+     * <p>Both halves — and the three rules underneath them — moved to {@link InsertionMarker#withdraw}
+     * when the editor's tab strip turned out to need every one of them verbatim. This is the second
+     * consumer that made it worth having once, exactly as the marker's geometry was.</p>
      */
     private void beginDrag(ItemButton button) {
         if (button.typeId.equals(dragging)) return;
         ToolWindowManager toolWindows = workbench.toolWindowManager();
-        List<ItemButton> group =
-                slotButtons(toolWindows.regionOf(button.typeId), toolWindows.sideOf(button.typeId));
-        int wasAt = group.indexOf(button);
         dragging = button.typeId;
         suppressActivation = true;
-        StyleGroup.importantPipeline(button.getStyle().getLayoutGroup(),
-                l -> l.display(TaffyDisplay.NONE));
-
-        // THE GAP OPENS IN THE CELL THE BUTTON JUST LEFT, immediately, before any drop has been resolved.
-        //
-        // Not cosmetic -- it is what keeps the arithmetic honest. Hiding the button collapses the group by
-        // one cell, so a pointer that has not moved is suddenly sitting in its NEIGHBOUR's cell, and the
-        // midpoint rule answers with the neighbour's index. The symptom is a button that shuffles one place
-        // down when you press and release without dragging at all, and a drag of exactly one place that
-        // appears to do nothing because the two cancel.
-        //
-        // Putting the gap where the button was restores the group to the length it had, so at rest the
-        // geometry is identical to the pre-drag layout and the index comes back unchanged.
-        if (wasAt >= 0) {
-            List<ItemButton> remaining = new ArrayList<>(group);
-            remaining.remove(button);
-            insertion.showAt(this, remaining, wasAt);
-        }
+        insertion.withdraw(this,
+                slotButtons(toolWindows.regionOf(button.typeId), toolWindows.sideOf(button.typeId)),
+                button);
     }
 
     /** Puts it back. Idempotent, and safe for a button this rail no longer owns. */
     private void endDrag() {
         if (dragging == null) return;
-        ItemButton button = buttons.get(dragging);
         dragging = null;
-        if (button == null) return;
-        StyleGroup.importantPipeline(button.getStyle().getLayoutGroup(),
-                l -> l.display(TaffyDisplay.FLEX));
+        insertion.restore();
     }
 
     /** The index the marker is currently showing, or {@code -1}. */

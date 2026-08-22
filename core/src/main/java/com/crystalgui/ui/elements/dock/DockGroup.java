@@ -76,7 +76,16 @@ public class DockGroup extends UIElement {
     private final DockLeaf leaf;
     private final TabView tabs = new TabView();
     private final UIElement overlay = new UIElement();
-    private final InsertionMarker insertion = new InsertionMarker(InsertionMarker.Axis.HORIZONTAL);
+    /**
+     * The gap a drag opens where the tab would land.
+     *
+     * <p>{@link InsertionMarker.Mode#IN_FLOW}, so the strip rearranges under the pointer and you are
+     * looking at the arrangement you are about to get rather than at a caret promising one. Both
+     * references do it this way for the lists you reorder by hand, and it is what the stripe rail beside
+     * this already does.</p>
+     */
+    private final InsertionMarker insertion =
+            new InsertionMarker(InsertionMarker.Axis.HORIZONTAL).mode(InsertionMarker.Mode.IN_FLOW);
 
     /** Panel → its built content. Survives every rebuild of the tree above. */
     private final Map<DockPanelRef, UIElement> content = new LinkedHashMap<>();
@@ -99,7 +108,10 @@ public class DockGroup extends UIElement {
         addInternalChild(overlay);
 
 
-        insertion.parkIn(this);
+        // PARKED IN THE RAIL, not in the group: an in-flow gap is a SIBLING of the things it makes room
+        // between, and the tabs live two levels down in the strip's scrolling rail. The group stays the
+        // coordinate frame every query is asked in -- see InsertionMarker.flowParent.
+        insertion.parkIn(tabs.rail());
 
         // A group is the unit commands resolve against, so it has to be able to hold focus. A container
         // that never sets a policy takes none, and every command that asks "which group is active" goes
@@ -661,7 +673,12 @@ public class DockGroup extends UIElement {
      */
     private boolean stripBandContains(float screenX, float screenY) {
         if (tabs.getTabs().isEmpty()) return false;
-        var strip = tabs.getTabs().get(0).getRuntimeCache();
+        // THE STRIP'S OWN BOX, never the first tab's. The first tab is hidden for the whole of a drag
+        // that started on it -- see beginTabDrag -- so it reports a zero box, and a band derived from one
+        // matches nothing: dragging the only tab in a group fell straight through the strip and offered
+        // to SPLIT the pane instead of reordering. It is also the more honest band, since it includes the
+        // scrollbar row the strip reserves under the tabs.
+        var strip = tabs.strip().getRuntimeCache();
         var local = screenToLocal(screenX, screenY);
         var self = getRuntimeCache();
         float y = local.y();
@@ -690,6 +707,22 @@ public class DockGroup extends UIElement {
 
     void hideInsertionMarker() {
         insertion.hide();
+    }
+
+    /**
+     * Takes the dragged tab out of the strip and opens the gap where it stood. Idempotent.
+     *
+     * <p>Called from the drag's first TICK rather than from the press — see
+     * {@link InsertionMarker#withdraw}, which carries the whole argument and the two rules that go
+     * with it.</p>
+     */
+    void beginTabDrag(Tab tab) {
+        insertion.withdraw(this, tabs.getTabs(), tab);
+    }
+
+    /** Puts it back and closes the gap. Idempotent, and safe when this group started no drag. */
+    void endTabDrag() {
+        insertion.restore();
     }
 
     // ── Drop preview ────────────────────────────────────────────────────────────────────────────

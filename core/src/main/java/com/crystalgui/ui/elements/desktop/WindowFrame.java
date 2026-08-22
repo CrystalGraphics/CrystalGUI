@@ -759,10 +759,39 @@ public class WindowFrame extends UIElement implements Disposable {
         if (contains(input.getFocusedElement())) return;
 
         UIElement wanted = contains(lastFocused) && lastFocused.focusable() ? lastFocused : null;
-        if (wanted == null) wanted = UITreeTraversal.firstFocusableIn(content);
+        if (wanted == null) wanted = focusDelegate();
         if (wanted == null) wanted = this;
         if (programmatic) input.requestFocus(wanted);
         else input.requestPointerFocus(wanted);
+    }
+
+    /**
+     * Where focus lands when this window is activated and it remembers nothing — overridable.
+     *
+     * <h3>Why "the first focusable" is not always the answer</h3>
+     *
+     * <p>{@link UITreeTraversal#firstFocusableIn} walks depth-first and takes the first hit, which is
+     * right for a dialog: its content is a box of controls and the first one is the one to start on.
+     * It is wrong the moment the content ROOT is itself focusable — and several are, for a reason that
+     * has nothing to do with focus. {@code DockArea}, {@code GraphView} and {@code ListView} take a
+     * {@code FocusPolicy} so that COMMANDS resolve against them; a container that never sets one takes
+     * no focus and its whole command set goes silently inert. The side effect is that such a container
+     * intercepts every delegation aimed past it: the walk stops on the container, and everything it
+     * holds — the editor you actually meant — is never reached.</p>
+     *
+     * <p>The symptom is precise and does not look like a focus bug. A torn-out editor window opened,
+     * took focus off the window you tore it from, and then would not accept a keystroke: keyboard
+     * events dispatch root→target→root, so a descendant of the target is never on the path. What it
+     * DID show was a blue rectangle just inside its own border, tracing the caption's underside —
+     * which is the pane-sized focus ring {@code ua/core.css} already carves several tags out of, and
+     * the exact wording that note uses about {@code viewcontainer} having been reported the same way.</p>
+     *
+     * <p>So a window whose content knows better says so. {@code DockWindow} answers with the editor in
+     * its active tab; anything that does not override this keeps the walk, which is still the right
+     * default for content that is a plain box of controls.</p>
+     */
+    protected UIElement focusDelegate() {
+        return UITreeTraversal.firstFocusableIn(content);
     }
 
     /** Whether {@code element} is this frame or inside it. */

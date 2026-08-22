@@ -124,10 +124,19 @@
  * keyboard). So without this every Project, Problems and Inspector rang its own outline on open. Flush
  * against a region's edge that is easy to miss; in a WINDOW it is a blue rectangle just inside the
  * frame's own border tracing the caption's underside, which is where it was finally reported. Which
- * panel has the focus is already said by its rail button's `__panel-focused__` mark. */
+ * panel has the focus is already said by its rail button's `__panel-focused__` mark.
+ *
+ * `dockarea` and `dockgroup` are the same shape of thing a third time, and they were reported in the
+ * same words as viewcontainer: a blue line under a torn-out window's caption. Both are focusable only
+ * so that dock COMMANDS have something to resolve against, both are pane-sized by definition, and a
+ * window activation focuses programmatically, which rings. The real repair is that focus should never
+ * have stopped on them -- see WindowFrame.focusDelegate -- and this stays regardless, because an empty
+ * dock with nothing focusable inside it still legitimately ends up holding focus itself. */
 texteditor:focus-visible,
 window:focus-visible,
 viewcontainer:focus-visible,
+dockarea:focus-visible,
+dockgroup:focus-visible,
 graphview:focus-visible,
 canvasview:focus-visible,
 scrollerview:focus-visible,

@@ -570,3 +570,16 @@ window.__tool-window__ .__title-bar__ .__maximize__ {
 window .__title-bar__ .__controls__ tooltip {
     tooltip-delay: 2;
 }
+
+/* ── A torn-out editor's window (W9) ────────────────────────────────────────────────────────────
+ * The dock inside it is the same widget the workbench uses, so it needs no styling of its own. What
+ * it does need is the INSET the workbench gives it for free.
+ *
+ * In the main window the editor area sits beside a sidebar and below a menu bar, so its tab strip is
+ * nowhere near a window edge. Torn out, the dock IS the window: the first tab lands hard against the
+ * frame's border, and a tab whose left edge is the window's edge reads as clipped rather than as
+ * flush. IntelliJ indents its detached editor's strip for the same reason -- there is nothing to the
+ * left of it, so the gap has to be drawn rather than inherited from a neighbour. */
+window.__dock-window__ .__strip__ {
+    padding-left: 4px;
+}
