@@ -65,12 +65,10 @@ public class QuickPickResizeTest extends UiTestBase {
     /** A source that always answers {@link #ROWS} rows, whatever is typed. */
     private static final class Rows implements QuickPickSource {
         @Override
-        public List<QuickPickEntry> query(com.crystalgui.core.search.SearchQuery query) {
-            List<QuickPickEntry> rows = new ArrayList<>(ROWS);
+        public void fetch(com.crystalgui.core.search.SearchQuery query, ResultSink sink) {
             for (int i = 0; i < ROWS; i++) {
-                rows.add(QuickPickEntry.plain(QuickPickItem.of("id" + i, "Row " + i)));
+                if (!sink.accept(QuickPickEntry.plain(QuickPickItem.of("id" + i, "Row " + i)))) return;
             }
-            return rows;
         }
     }
 

@@ -541,6 +541,19 @@ quickpick .__qp-header__ {
     padding: 0px 4px 0px 8px;
 }
 
+quickpick .__qp-header-spacer__ {
+    flex-grow: 1;
+}
+
+/* Dimmer than the title, and the same grey every other piece of provenance here uses -- it is a note
+ * about the list rather than a warning about it. */
+quickpick .__qp-truncated__ {
+    font-size: 10px;
+    color: var(--palette-category-fg, #9D9D9D);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
 quickpick .__qp-title__ {
     font-size: 10px;
     font-weight: bold;
