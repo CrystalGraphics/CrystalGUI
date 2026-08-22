@@ -271,6 +271,12 @@ public class Desktop extends UIElement {
         if (activeWindow == null) return;
         activeWindow.setActive(false);
         activeWindow = null;
+        // AND SAY SO. Everything that renders the registry renders the active window as part of it, and
+        // this is the one mutation that used to happen in silence -- so the taskbar went on highlighting
+        // the last window to have been active after it was minimised or the desktop was clicked. A
+        // highlight is a claim about where the keyboard is going; a stale one is a lie that persists,
+        // because nothing else was going to re-render the strip.
+        registry.changed();
     }
 
     /** Activates whatever is now in front, or nothing if the desktop is empty. */
@@ -478,14 +484,19 @@ public class Desktop extends UIElement {
                 // still claims to be visible.
                 WindowFrame frame = (WindowFrame) child;
                 frame.markHidden();
-                registry.changed();
                 // AND THE ACTIVE WINDOW CANNOT BE ONE THAT LEFT. Windows activates the next one down
                 // when you close the front one; leaving the field pointing at a detached frame would
                 // instead leave a desktop whose keyboard target is not in the tree.
+                //
+                // Through deactivate() rather than by clearing the field, because that is what announces
+                // it -- and BEFORE the announcement below, so anything rendering the registry only ever
+                // sees a settled state. Announcing first showed the strip a window that was already
+                // hidden and still marked active, and nothing came along afterwards to correct it.
                 if (activeWindow == child) {
-                    activeWindow = null;
+                    deactivate();
                     activateTopmost();
                 }
+                registry.changed();
                 // LAST, and after the activation above rather than before it: eviction can destroy a
                 // window, and destroying one re-enters this method. Doing it while the active window is
                 // still the frame that just left would have activateTopmost() choosing between windows
