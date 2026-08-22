@@ -111,7 +111,6 @@ crystal-dark.css is a migration-era pin awaiting the Islands pass; dark-plus.css
 editor scheme's.
 
 <!-- TOKENS:BEGIN -->
-
 | Token | Value | Defined in |
 |---|---|---|
 | `--accent` | `#3574F0` | crystal-dark.css |
@@ -545,6 +544,13 @@ editor scheme's.
 | `--switch-checked-bg` | `var(--success)` | base.css |
 | `--switch-disabled-knob` | `var(--fg-disabled)` | base.css |
 | `--switch-knob` | `var(--fg)` | base.css |
+| `--switcher-bg` | `var(--surface-raised)` | base.css |
+| `--switcher-border` | `var(--border-base)` | base.css |
+| `--switcher-close-hover-bg` | `var(--error)` | base.css |
+| `--switcher-close-hover-fg` | `var(--fg-on-accent)` | base.css |
+| `--switcher-entry-border` | `#00000000` | base.css |
+| `--switcher-fg` | `var(--fg)` | base.css |
+| `--switcher-selected-ring` | `var(--fg)` | base.css |
 | `--syntax-attribute` | `#9CDCFE` | dark-plus.css |
 | `--syntax-boolean` | `#569CD6` | dark-plus.css |
 | `--syntax-bracket` | `#4EC9A0` | dark-plus.css |
@@ -661,5 +667,4 @@ editor scheme's.
 | `--window-title-bg` | `var(--surface-base)` | base.css |
 | `--window-title-fg` | `var(--fg-secondary)` | base.css |
 | `--workbench-bg` | `var(--surface-base)` | base.css |
-
 <!-- TOKENS:END -->

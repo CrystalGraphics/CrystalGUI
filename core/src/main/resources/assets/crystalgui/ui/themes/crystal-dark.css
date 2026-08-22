@@ -142,5 +142,10 @@ theme {
     --scrollbar-tail-hover: #8C8C8C33;
 
     --activitybar-item-hover-bg: #46484b;
+
+    /* PURE WHITE, and brighter than --fg (#DFE1E5) on purpose: this is a selection ring over a grid of
+     * arbitrary window pictures, so it has to read against a screenshot of anything at all rather than
+     * merely against a panel. Windows' switcher uses the same. */
+    --switcher-selected-ring: #FFFFFF;
     --activitybar-item-checked-bg: #46484b;
 }

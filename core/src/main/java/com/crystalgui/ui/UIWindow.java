@@ -325,6 +325,21 @@ public final class UIWindow {
         return desktop;
     }
 
+    /**
+     * The desktop <b>only if one is already on screen</b> — never the call that puts it there.
+     *
+     * <p>{@link #desktop()} attaches the compositor on first use, which is right for opening a window and
+     * wrong for every question <em>about</em> windows. A command's {@code enabledWhen} runs whenever a
+     * menu is drawn or the palette is filtered, so routing one through the building accessor would grow a
+     * desktop on an application that has never opened a window — and a desktop that is present but empty
+     * is precisely the thing {@code Desktop}'s zero-size rule exists to keep harmless. Same reasoning as
+     * {@code activeFrame()}, which has needed the non-building read since Escape first consulted it.</p>
+     */
+    @Nullable
+    public Desktop desktopIfPresent() {
+        return desktop.getParent() == null ? null : desktop;
+    }
+
     /** @see #suspendDesktop() */
     private boolean desktopSuspended;
 
@@ -1128,6 +1143,25 @@ public final class UIWindow {
     @Nullable
     private UIElement activeFrame() {
         return desktop.getParent() == null ? null : desktop.activeWindow();
+    }
+
+    /**
+     * Offers a key press to a live window switch before anything else sees it.
+     *
+     * <p><b>Ahead of the close-watcher cascade, on the rung a live drag occupies</b>, and that is
+     * structural rather than a preference. The watcher cascade asks the <em>active frame's</em> stack
+     * first and a frame registers as its own last watcher, so with any window active a desktop-scoped
+     * watcher is never reached: Escape would minimise the window behind the switcher instead of
+     * dismissing it. The arrows could not go through dispatch at all — they reach the focused element,
+     * and a focused editor moves its caret with them. GNOME holds a modal grab for the whole gesture for
+     * exactly these reasons.</p>
+     *
+     * @return whether the switcher consumed the key
+     */
+    public boolean routeKeyToWindowSwitcher(int key) {
+        // NEVER desktop(), which builds one on first use: a key press in an application that has never
+        // opened a window must not be what attaches a compositor to it.
+        return desktop.getParent() != null && desktop.switcher().handleKey(key);
     }
 
     // ── Light dismiss (the popover stack) ───────────────────────────────────

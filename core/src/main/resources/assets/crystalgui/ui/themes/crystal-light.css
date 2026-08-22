@@ -145,4 +145,11 @@ theme {
 
     --activitybar-item-hover-bg: #D5D5DB;
     --activitybar-item-checked-bg: #DCDCE2;
+
+    /* The switcher's selection ring, and the INVERSE of the dark theme's rather than a lighter version
+     * of it. It sits over a grid of arbitrary window pictures, so what it has to beat is a screenshot of
+     * anything at all -- and on a light desktop most of those screenshots are pale, which is exactly
+     * where dark-theme white disappears. Near-black is the readable answer, and it is the reason this is
+     * a theme decision rather than a derivation from the system vocabulary. */
+    --switcher-selected-ring: #1E1F22;
 }

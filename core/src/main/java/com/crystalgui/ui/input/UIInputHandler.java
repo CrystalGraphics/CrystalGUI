@@ -390,6 +390,18 @@ public final class UIInputHandler implements CgSystemInput.Keyboard, CgSystemInp
             return true;
         }
 
+        // Then a live window switch, on the same rung and for the same reason: it is held open by a
+        // modifier that is still down, so while it is up its own keys can mean nothing else. Escape
+        // cannot be a close watcher -- that cascade asks the ACTIVE FRAME's stack first and a frame is
+        // its own last watcher, so Escape would minimise the window behind the switcher rather than
+        // dismiss it -- and the ARROWS cannot go through dispatch at all, because they reach the focused
+        // element and a focused editor moves its caret with them. GNOME holds a modal grab for the whole
+        // gesture. Tab is deliberately left alone here so repeating the chord keeps resolving through the
+        // keymap and the gesture stays rebindable.
+        if (event.pressed() && window.routeKeyToWindowSwitcher(event.key())) {
+            return true;
+        }
+
         // Then the close watcher. Deliberately AFTER the drag branch: a drag inside a menu must eat Escape
         // before the menu does, because it is the innermost live interaction — the ordering hazard flagged
         // when Dialog was researched.

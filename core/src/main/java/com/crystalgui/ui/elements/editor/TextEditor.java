@@ -1195,6 +1195,13 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // Ctrl+Home/End genuinely ARE native movement and stay here.
         if (alt) return false;
         if (ctrl && key == CgKeyCodes.KEY_RETURN) return false;
+        // AND Ctrl+TAB, which is never native editing. A tab character is inserted by a BARE Tab and
+        // Shift+Tab outdents; Ctrl+Tab has no meaning in a document at all, so eating it could only ever
+        // deny it to somebody else -- and it did. It is the desktop's window switcher, so with an editor
+        // focused the chord silently indented the current line instead, which reads as the switcher being
+        // broken rather than as the editor being greedy. Exactly the shape TextField's Alt bug had: the
+        // key was consumed AND acted on, and the keymap only ever sees what is left over.
+        if (ctrl && key == CgKeyCodes.KEY_TAB) return false;
 
         switch (key) {
             case CgKeyCodes.KEY_LEFT:
