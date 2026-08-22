@@ -30,6 +30,17 @@ public record TransitionSpec(String propertyNameOrAll, long durationNanos, long 
      */
     public static List<TransitionSpec> parse(String raw) {
         List<TransitionSpec> specs = new ArrayList<>();
+        // `none` IS THE WHOLE VALUE, and it is what makes an entry animation possible at all.
+        //
+        // CSS's `transition-property: none`. Every animation that enters from somewhere has to SNAP to
+        // where it comes from and then ease to rest — and without a suppression, applying the start
+        // state is itself a change, so the engine eases TOWARDS it and the thing animates backwards.
+        // The web's recipe is exactly this: a class that carries `transition: none` plus the start
+        // values, removed a frame later so the resting rule and its transition take over.
+        //
+        // An empty list rather than a flag, because that is already the shape everything downstream
+        // reads: `tryStart` looks for a spec naming the property and declines when there is none.
+        if ("none".equalsIgnoreCase(raw.trim())) return specs;
         for (String entry : CssParsingUtil.splitTopLevelCommas(raw)) {
             String trimmed = entry.trim();
             if (trimmed.isEmpty()) continue;

@@ -97,6 +97,34 @@ public final class TransitionEngine {
         return fallbackAll;
     }
 
+    /**
+     * Whether anything on {@code element} is still animating — the DOM's {@code transitionend}, asked
+     * rather than announced.
+     *
+     * <h3>Why a poll and not a callback</h3>
+     *
+     * <p>Every caller of this is already running a per-frame ticker for the thing it is waiting to do,
+     * so a callback would add a subscription, a removal and a lifetime to get an answer a field read
+     * gives. It also cannot go stale: a listener registered against a transition that is retargeted
+     * mid-flight — which this engine explicitly supports — has to be re-registered or it fires for an
+     * animation nobody is waiting on any more.</p>
+     *
+     * <p><b>What it is for:</b> an animation that something must OUTLIVE. A window may only detach or
+     * destroy once its closing animation has finished playing, and the frame cannot simply wait the
+     * duration, because durations live in the stylesheet and this codebase does not put timings in
+     * Java. Asking the engine is the only way to honour both.</p>
+     *
+     * <p>False for an element with nothing running, which is also the honest answer when the property
+     * was never transitionable, when the sheet declared no {@code transition} for it, and when the
+     * transition has just finished. A caller waiting on one therefore acts on the next frame rather
+     * than hanging — the correct failure direction, since the alternative is a window that never
+     * closes because a theme removed an animation.</p>
+     */
+    public boolean isAnimating(UIElement element) {
+        var byProperty = active.get(element);
+        return byProperty != null && !byProperty.isEmpty();
+    }
+
     /** Advances every active transition. Called once per frame. */
     public void tick(float deltaSeconds) {
         if (active.isEmpty()) return;

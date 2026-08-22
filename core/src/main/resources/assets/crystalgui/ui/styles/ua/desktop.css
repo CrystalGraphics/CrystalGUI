@@ -583,3 +583,23 @@ window .__title-bar__ .__controls__ tooltip {
 window.__dock-window__ .__strip__ {
     padding-left: 4px;
 }
+
+/* ── WINDOW ANIMATIONS ARE NOT HERE, AND THAT IS DELIBERATE ─────────────────────────────────────
+ *
+ * Open, close, minimise and maximise are driven imperatively by WindowAnimator, which writes transform
+ * and opacity at ANIMATION origin on a per-frame ticker. There is no `transition` declared on `window`
+ * anywhere, and there must not be.
+ *
+ * They were CSS transitions first and it did not work, for a reason worth leaving behind: a compositor
+ * animation changes several properties that have to move TOGETHER, and the cascade resolves them
+ * independently. `transition` is itself a property resolved in the same pass as the ones it governs, so
+ * lifting a suppression and changing a value in one frame could resolve the value first, see
+ * `transition: none`, and apply it instantly -- every time, since resolution order is stable, which read
+ * as the feature never having been wired up. An INLINE cleanup value outranked the stylesheet class that
+ * was supposed to start the NEXT animation. And `transform-origin`, which is not interpolable and must be
+ * pinned for an animation's whole life, was being reset by the very write that was being transitioned --
+ * so a maximise eased about the centre when it had been computed about the corner.
+ *
+ * Declaring a `transition` on `window` again would reintroduce all of it: the animator's writes are on
+ * ANIMATION origin precisely so the cascade's diff ignores them, and a live transition spec would start
+ * competing for the same properties. The theme-facing control is Desktop.setAnimationsEnabled. */

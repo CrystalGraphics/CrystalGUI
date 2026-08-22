@@ -205,6 +205,9 @@ public class WindowFrame extends UIElement implements Disposable {
     private final UIElement titleBar;
     private final UIElement controls;
     private final UIElement content;
+
+    /** The open/close/minimise/maximise transitions. @see WindowAnimator */
+    private final WindowAnimator animator = new WindowAnimator(this);
     private final UIElement captionChrome;
     private final UIElement overlays;
     private final UIText titleLabel;
@@ -296,7 +299,10 @@ public class WindowFrame extends UIElement implements Disposable {
         // draws it, and so the destructive control is the one furthest from the rest.
         minimizeButton = new Button("");
         minimizeButton.addClass(MINIMIZE_CLASS);
-        minimizeButton.attachListener(this::hide);
+        // THROUGH THE ANIMATION, which then hides. Not hide() itself: hiding is DETACHING, and a
+        // detached subtree paints nothing, so a window that hid on the press would animate to an empty
+        // screen. @see WindowAnimator
+        minimizeButton.attachListener(this::minimize);
         Tooltip.attach(minimizeButton, MINIMIZE_TOOLTIP);
         controls.addChild(minimizeButton);
 
@@ -880,11 +886,14 @@ public class WindowFrame extends UIElement implements Disposable {
     public boolean requestClose() {
         if (state == WindowState.DESTROYED) return false;
         if (policy == WindowPolicy.HIDE_ON_CLOSE) {
-            hide();
+            animator.playClose(this::hide);
             return true;
         }
+        // THE VETO IS ASKED FIRST, and that ordering is the whole of it. A window that faded out and
+        // then stayed because a guard said no is worse than no animation at all -- it says the close
+        // happened. Both remaining outcomes are certain by the time anything is played.
         if (!canDiscard()) return true;
-        destroy();
+        animator.playClose(this::destroy);
         return true;
     }
 
@@ -943,6 +952,10 @@ public class WindowFrame extends UIElement implements Disposable {
         if (owner == null) return;
         state = WindowState.VISIBLE;
         owner.reattach(this);
+        // AFTER the reattach, because an animation writes styles and invalidateStyleMatch early-returns
+        // on a detached element -- the classes would be set and never matched.
+        if (persisted) animator.playRestore();
+        else animator.playOpen();
         onShown.emit(persisted);
     }
 
@@ -1060,6 +1073,19 @@ public class WindowFrame extends UIElement implements Disposable {
         maximized = true;
         addClass(MAXIMIZED_CLASS);
         maximizeTooltip.setText(RESTORE_TOOLTIP);
+        UIElement area = resizeContainingBlock();
+        var box = area == null ? null : area.getRuntimeCache();
+        if (box != null && animateGeometry(restoreLeft, restoreTop, restoreWidth, restoreHeight,
+                0f, 0f, box.getWidth(), box.getHeight(), this::applyMaximizedRect)) {
+            // The animation writes px rects on the way and finishes by applying the rule below, which is
+            // what makes a maximised window follow the work area afterwards.
+            return;
+        }
+        applyMaximizedRect();
+    }
+
+    /** The rect a maximised window actually rests at — a rule, so it tracks the work area. */
+    private void applyMaximizedRect() {
         StyleGroup.inlinePipeline(getStyle().getLayoutGroup(),
                 l -> l.left(0).top(0).widthPercent(100f).heightPercent(100f));
     }
@@ -1070,11 +1096,26 @@ public class WindowFrame extends UIElement implements Disposable {
         maximized = false;
         removeClass(MAXIMIZED_CLASS);
         maximizeTooltip.setText(MAXIMIZE_TOOLTIP);
+        // MEASURED, not read from the fields: while maximised those still hold the PRE-maximise
+        // position, because applyPosition declines to clamp a maximised window at all.
+        UIElement area = resizeContainingBlock();
+        var box = area == null ? null : area.getRuntimeCache();
+        var self = getRuntimeCache();
+        if (box != null && animateGeometry(self.getX() - box.getX(), self.getY() - box.getY(),
+                self.getWidth(), self.getHeight(),
+                restoreLeft, restoreTop, restoreWidth, restoreHeight, this::applyRestoredRect)) {
+            return;
+        }
+        applyRestoredRect();
+    }
+
+    /** Where a restored window rests. @see #restore */
+    private void applyRestoredRect() {
         StyleGroup.inlinePipeline(getStyle().getLayoutGroup(),
                 l -> l.width(restoreWidth).height(restoreHeight));
-        // AFTER clearing the flag, because applyPosition deliberately does nothing while maximised --
-        // a maximised window has no position to clamp, and letting the clamp write one would fight the
-        // 100% rect every layout pass.
+        // AFTER the flag is clear and after any animation, because applyPosition deliberately does
+        // nothing while maximised OR mid-resize -- letting the clamp write a position during either
+        // would fight the rect being animated on every layout pass.
         applyPosition(restoreLeft, restoreTop);
     }
 
@@ -1092,6 +1133,33 @@ public class WindowFrame extends UIElement implements Disposable {
         applyPosition(left, top);
         return this;
     }
+
+    /**
+     * Plays the window travelling between two rects, and settles on the second when it lands.
+     *
+     * <p>Guards {@link #applyPosition} for the animation's duration. The clamp runs from a layout
+     * callback and writes {@code left}/{@code top} at the same origin the animation does, so without
+     * this the two fight every pass — and it only ever mattered here, because a maximised window is
+     * already exempt and a restore clears that flag before it animates.</p>
+     *
+     * @return whether it animated. {@code false} means the caller applies the final rect itself, which
+     *         is what keeps the animations-off path synchronous for every existing caller.
+     */
+    private boolean animateGeometry(float fromLeft, float fromTop, float fromWidth, float fromHeight,
+                                    float toLeft, float toTop, float toWidth, float toHeight,
+                                    Runnable settle) {
+        geometryAnimating = true;
+        boolean started = animator.playResize(fromLeft, fromTop, fromWidth, fromHeight,
+                toLeft, toTop, toWidth, toHeight, () -> {
+                    geometryAnimating = false;
+                    settle.run();
+                });
+        if (!started) geometryAnimating = false;
+        return started;
+    }
+
+    /** True while a maximise or restore-down is playing. @see #animateGeometry */
+    private boolean geometryAnimating;
 
     /**
      * Where the window was last <b>asked</b> to be, which is not always where it is.
@@ -1120,6 +1188,62 @@ public class WindowFrame extends UIElement implements Disposable {
     public WindowFrame resizeTo(float width, float height) {
         StyleGroup.inlinePipeline(getStyle().getLayoutGroup(), l -> l.width(width).height(height));
         return this;
+    }
+
+    /**
+     * Whether an open/close/minimise/maximise animation is playing on this window right now.
+     *
+     * <p>The observable the animations otherwise have none of. They are driven on a per-frame ticker
+     * writing at ANIMATION origin, so nothing about the element says "a timeline is running" — and the
+     * one thing a caller may genuinely need to know is whether a teardown it asked for has happened yet
+     * or is still waiting for the window to finish leaving.</p>
+     */
+    public boolean isAnimating() {
+        return animator.isPlaying();
+    }
+
+    /**
+     * Puts the window away — the GESTURE, animation included.
+     *
+     * <p><b>The one definition of minimising</b>, and it needed to be: the caption's button played the
+     * flight into the taskbar and then hid, while the taskbar's own toggle — clicking the entry of the
+     * window you are already in, which is Windows' third click case — called {@link #hide} straight out
+     * and so did the same thing with no animation at all. Same gesture, two call sites, one of them
+     * silently plainer than the other.</p>
+     *
+     * <p>{@link #hide} stays what it is: the synchronous state change, for a session restoring, an
+     * eviction, or a caller that simply wants the window gone. An OS animates what the USER did.</p>
+     */
+    public void minimize() {
+        if (state != WindowState.VISIBLE) return;
+        animator.playMinimize(this::hide);
+    }
+
+    /** The minimise flight, without the hide — so a test can ask where it is going. @see WindowAnimator */
+    void playMinimizeAnimation(Runnable then) {
+        animator.playMinimize(then);
+    }
+
+    /** Where the running animation is headed, or null if none is. @see WindowAnimator#currentTarget */
+    @Nullable
+    com.crystalgui.ui.UITransform animationTarget() {
+        return animator.currentTarget();
+    }
+
+    /** Where the running animation started, or null if none is. @see WindowAnimator#currentStart */
+    @Nullable
+    com.crystalgui.ui.UITransform animationStart() {
+        return animator.currentStart();
+    }
+
+    /** The close flight, without the teardown — so a test can inspect its endpoints. */
+    void playCloseAnimation(Runnable then) {
+        animator.playClose(then);
+    }
+
+    /** The entry animation, for the one path that attaches a window without going through {@link #show}. */
+    void playOpenAnimation() {
+        animator.playOpen();
     }
 
     /** Whether this frame has been given a position — by a caller, a drag, or the desktop's cascade. */
@@ -1323,10 +1447,10 @@ public class WindowFrame extends UIElement implements Disposable {
     private void applyPosition(float left, float top) {
         wantedLeft = left;
         wantedTop = top;
-        // A MAXIMISED WINDOW HAS NO POSITION. The intent above is still recorded -- it is what restore
-        // comes back to -- but writing it would fight the 100% rect on every layout pass, and this runs
-        // from the layout callback and from the work-area re-clamp.
-        if (maximized) return;
+        // A MAXIMISED WINDOW HAS NO POSITION, and neither does one mid-resize. The intent above is
+        // still recorded -- it is what restore comes back to -- but writing it would fight the 100% rect
+        // on every layout pass, and this runs from the layout callback and from the work-area re-clamp.
+        if (maximized || geometryAnimating) return;
 
         float clampedLeft = left;
         float clampedTop = top;
