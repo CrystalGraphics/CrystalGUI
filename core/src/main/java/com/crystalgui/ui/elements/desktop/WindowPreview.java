@@ -109,16 +109,84 @@ public class WindowPreview extends UIElement {
      *
      * <p>Collapsing rather than showing an empty box, because an empty box reads as a window that
      * renders nothing rather than as a window that is not there to render.</p>
+     *
+     * @return whether the panel's geometry changed, so a caller that is about to place it knows the
+     *         measurement it is holding is out of date
      */
-    public void syncThumbnail() {
+    public boolean syncThumbnail() {
+        // BEFORE the display decision, so a box about to be shown is already the right shape: it is
+        // measured on the next frame and the panel is PLACED from that measurement.
+        boolean changed = thumbnail.syncSize() | matchHeaderToThumbnail();
         boolean has = thumbnail.hasPicture();
-        if (has == thumbnailShown) return;
+        if (has == thumbnailShown) return changed;
         thumbnailShown = has;
         StyleGroup.importantPipeline(thumbnail.getStyle().getLayoutGroup(),
                 l -> l.display(has ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
+        return true;
     }
 
     private boolean thumbnailShown = true;
+
+    /** The picture's measured box — what the panel is built around. @see WindowThumbnail#syncSize */
+    /** Where the picture is GOING for the window it is currently pointed at, without going there. */
+    @Nullable
+    float[] fittedThumbnailSize() {
+        return thumbnail.fittedSize();
+    }
+
+    /** The picture itself, for something that wants to animate its box. @see WindowThumbnail#applySize */
+    UIElement thumbnailElement() {
+        return thumbnail;
+    }
+
+    /** @see WindowThumbnail#setSizingSuppressed */
+    void setThumbnailSizingSuppressed(boolean suppressed) {
+        thumbnail.setSizingSuppressed(suppressed);
+    }
+
+    /** @see WindowThumbnail#applySize */
+    void applyThumbnailSize(float width, float height) {
+        thumbnail.applySize(width, height);
+    }
+
+    UIElement.RuntimeCache thumbnailBox() {
+        return thumbnail.getRuntimeCache();
+    }
+
+    /** The width last written to the header, so an unchanged one writes nothing. */
+    private float headerWidth = Float.NaN;
+
+    /**
+     * Makes the header exactly as wide as the picture, so it can never be what sizes the panel.
+     *
+     * <h4>The gap around the picture has to be the panel's PADDING and nothing else</h4>
+     *
+     * <p>A panel sizes to its widest child. Left to itself the header is that child — its title is a
+     * word of arbitrary length — so the gap either side of the picture became a function of the WINDOW'S
+     * NAME: generous around "Crystal Editor", almost none around "Geometry", with the picture centred in
+     * whatever was left over. The caption above a preview is not allowed to decide the size of the frame
+     * the preview is in.</p>
+     *
+     * <p>Two CSS attempts at this failed and are worth not repeating. {@code width: 100%} still leaves a
+     * flex item contributing its own content to its parent's intrinsic width; so does
+     * {@code width: 0; min-width: 100%}, which is the idiom for exactly this and which Taffy does not
+     * honour the way a browser would. A DEFINITE width is counted and nothing else is, so the header is
+     * given one.</p>
+     *
+     * <p>Measured rather than computed, which is the whole reason this is reliable: the thumbnail's own
+     * width is subject to the sheet's {@code min-width} and {@code max-width}, so the number it asked for
+     * and the number it got are not always the same, and it is the one it GOT that the panel is built
+     * from.</p>
+     *
+     * @return whether the width changed, so the caller knows a measurement it holds is stale
+     */
+    private boolean matchHeaderToThumbnail() {
+        float width = thumbnail.getRuntimeCache().getWidth();
+        if (width <= 0f || Math.abs(width - headerWidth) < 0.5f) return false;
+        headerWidth = width;
+        StyleGroup.importantPipeline(header.getStyle().getLayoutGroup(), l -> l.width(width));
+        return true;
+    }
 
     /** Points the preview at a window. Cheap enough to call while it is moving between entries. */
     public WindowPreview setFrame(@Nullable WindowFrame frame) {

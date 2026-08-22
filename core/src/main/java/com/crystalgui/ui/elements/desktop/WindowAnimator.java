@@ -362,7 +362,7 @@ final class WindowAnimator {
         cancelCurrent();
         WindowGeometryAnimation animation = new WindowGeometryAnimation(frame, this::frameIsLive,
                 fromLeft, fromTop, fromWidth, fromHeight, toLeft, toTop, toWidth, toHeight,
-                SIZE_NANOS, MOVING, () -> {
+                true, true, SIZE_NANOS, MOVING, () -> {
                     current = null;
                     settle.run();
                 });
