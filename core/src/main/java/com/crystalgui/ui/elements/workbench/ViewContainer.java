@@ -7,6 +7,7 @@ import com.crystalgui.ui.elements.desktop.WindowChrome;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.Tab;
+import com.crystalgui.ui.elements.Tooltip;
 import com.crystalgui.ui.elements.TabView;
 import com.crystalgui.ui.elements.UIText;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
@@ -37,6 +38,32 @@ public class ViewContainer extends UIElement implements WindowChrome {
     public static final String HEADER_CLASS = "__header__";
     public static final String TITLE_CLASS = "__title__";
     public static final String HIDE_CLASS = "__hide__";
+
+    /**
+     * On the header as well as {@link #HEADER_CLASS}, and it is what its styling is keyed off.
+     *
+     * <h3>Why the ancestor cannot be the scope</h3>
+     *
+     * <p>{@code __header__} is used by three widgets — {@code TableView}, {@code HeaderControl} and
+     * this one — so a bare {@code .__header__} rule would reach all of them. Scoping through
+     * {@code .__view-container__} disambiguates and was right for as long as a header stayed inside
+     * its container.</p>
+     *
+     * <p>It does not. {@code WindowChrome} <b>moves</b> this element into a window's caption, and every
+     * rule written through the ancestor stops matching the instant it leaves: the title lost its weight
+     * and colour, the row lost {@code flex-direction: row} and wrapped its tabs onto a second line, and
+     * the selected tab lost its focus tint. Nothing was wrong with any of those rules — they were
+     * simply describing an element that had moved.</p>
+     *
+     * <p>So the identity travels with the element instead. This is the same lesson
+     * {@code WindowFrame.ADOPTED_CHROME_CLASS} records from the other side: what must STOP applying
+     * after a move goes on a class the mover removes, and what must KEEP applying goes on a class the
+     * element already carries. An ancestor is the wrong place for either.</p>
+     */
+    public static final String PANEL_HEADER_CLASS = "__panel-header__";
+
+    /** What the hide mark says on hover. The same verb {@code WindowFrame}'s minimise performs. */
+    public static final String HIDE_TOOLTIP = "Hide";
     /**
      * UNIQUE, never the shared {@code "__content__"}.
      *
@@ -65,9 +92,19 @@ public class ViewContainer extends UIElement implements WindowChrome {
         markAsInternal();
 
         header.addClass(HEADER_CLASS);
+        header.addClass(PANEL_HEADER_CLASS);
         title.addClass(TITLE_CLASS);
         title.setText(titleText);
         title.setHitTest(false);
+        // IT CLAIMS ITS TEXT'S WIDTH, which a UIText does not do by default. It has no Taffy
+        // MeasureFunc (see its class note for why), so in a flex ROW it contributes NOTHING to the
+        // layout and settles at zero -- while still PAINTING its text, because nothing clips it. The
+        // header then put the view's contributed controls at the title's left edge and the two drew on
+        // top of each other: "Problems" with a File tab across the middle of it.
+        //
+        // Not a shrink, which is what it looks like and is what the sheet's `flex-shrink: 0` was added
+        // to stop. A box that was never asked for cannot be protected by refusing to shrink it.
+        title.forceSelfSizeWidth();
         header.addChild(title);
 
         // NO GLYPH. The bundled Minecraft fonts have no U+2715 and it renders as tofu -- the same trap
@@ -76,6 +113,11 @@ public class ViewContainer extends UIElement implements WindowChrome {
         hide = new Button("");
         hide.addClass(HIDE_CLASS);
         hide.onPressed.connect(onHideRequested::emit);
+        // NAMED, because the mark cannot name itself. It is a single rule -- the same glyph a window
+        // caption's minimise draws -- and in a panel header, where there is no caption to place it in
+        // the corner every window manager uses, that mark is genuinely ambiguous: collapse, minimise
+        // and hide are three different verbs and it looks like all of them.
+        Tooltip.attach(hide, HIDE_TOOLTIP);
         header.addChild(hide);
         addInternalChild(header);
 

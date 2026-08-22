@@ -8,6 +8,7 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Button;
+import com.crystalgui.ui.elements.Tooltip;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.input.UIDragController;
@@ -109,6 +110,22 @@ public class WindowFrame extends UIElement implements Disposable {
 
     /** The minimise affordance. Hides; never destroys, whatever the policy says. */
     public static final String MINIMIZE_CLASS = "__minimize__";
+
+    /**
+     * What the caption buttons say when the pointer rests on them.
+     *
+     * <p>Windows' own wording, including the one that reads like a slip: a maximised window's button
+     * says <b>Restore Down</b> rather than "Restore", because restoring is also what a MINIMISED window
+     * does and the two would otherwise share a name for opposite verbs.</p>
+     *
+     * <p>Constants rather than literals at the call sites, so the swap below cannot drift from the label
+     * it swaps to — the failure would be a button that says "Maximize" while drawing the restore glyph,
+     * which is worse than either alone.</p>
+     */
+    public static final String MINIMIZE_TOOLTIP = "Minimize";
+    public static final String MAXIMIZE_TOOLTIP = "Maximize";
+    public static final String RESTORE_TOOLTIP = "Restore Down";
+    public static final String CLOSE_TOOLTIP = "Close";
 
     /** The window's icon slot, hidden until {@link #setIcon} gives it something to draw. */
     public static final String ICON_CLASS = "__icon__";
@@ -253,6 +270,8 @@ public class WindowFrame extends UIElement implements Disposable {
     private boolean chromeWasInternal;
 
     private boolean maximized;
+    /** The maximise button's tooltip, kept because its text follows the state. @see #MAXIMIZE_TOOLTIP */
+    private final Tooltip maximizeTooltip;
     /** Where to put the window back — the MEASURED rect at the moment it was maximised. */
     private float restoreLeft, restoreTop, restoreWidth, restoreHeight;
 
@@ -278,16 +297,22 @@ public class WindowFrame extends UIElement implements Disposable {
         minimizeButton = new Button("");
         minimizeButton.addClass(MINIMIZE_CLASS);
         minimizeButton.attachListener(this::hide);
+        Tooltip.attach(minimizeButton, MINIMIZE_TOOLTIP);
         controls.addChild(minimizeButton);
 
         maximizeButton = new Button("");
         maximizeButton.addClass(MAXIMIZE_CLASS);
         maximizeButton.attachListener(this::toggleMaximized);
+        // RETAINED, because this one's text follows the state -- and Tooltip.attach ADDS a listener pair
+        // rather than replacing one, so calling it again to relabel would leave the first tooltip in
+        // place and showing, with the new text on an instance nothing ever hovers.
+        maximizeTooltip = Tooltip.attach(maximizeButton, MAXIMIZE_TOOLTIP);
         controls.addChild(maximizeButton);
 
         closeButton = new Button("");
         closeButton.addClass(CLOSE_CLASS);
         closeButton.attachListener(this::requestClose);
+        Tooltip.attach(closeButton, CLOSE_TOOLTIP);
         controls.addChild(closeButton);
 
         // BUILT NOW AND HIDDEN, rather than created when an icon arrives. Creating an element from a
@@ -992,6 +1017,7 @@ public class WindowFrame extends UIElement implements Disposable {
         restoreHeight = getRuntimeCache().getHeight();
         maximized = true;
         addClass(MAXIMIZED_CLASS);
+        maximizeTooltip.setText(RESTORE_TOOLTIP);
         StyleGroup.inlinePipeline(getStyle().getLayoutGroup(),
                 l -> l.left(0).top(0).widthPercent(100f).heightPercent(100f));
     }
@@ -1001,6 +1027,7 @@ public class WindowFrame extends UIElement implements Disposable {
         if (!maximized) return;
         maximized = false;
         removeClass(MAXIMIZED_CLASS);
+        maximizeTooltip.setText(MAXIMIZE_TOOLTIP);
         StyleGroup.inlinePipeline(getStyle().getLayoutGroup(),
                 l -> l.width(restoreWidth).height(restoreHeight));
         // AFTER clearing the flag, because applyPosition deliberately does nothing while maximised --
