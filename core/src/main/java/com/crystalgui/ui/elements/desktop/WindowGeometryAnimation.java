@@ -53,6 +53,27 @@ final class WindowGeometryAnimation implements WindowMotion {
     private final float toTop;
     private final float toWidth;
     private final float toHeight;
+    /**
+     * Whether the SIZE is animated as well as the position.
+     *
+     * <p>False for anything that is merely travelling. Writing a width and a height every frame does not
+     * merely animate them — it PINS them, at INLINE origin, to whatever they were when the animation
+     * started, for good. A taskbar preview borrowed this to slide between entries and was frozen at the
+     * size of the first window it ever showed: every later preview's panel stayed that width while its
+     * thumbnail changed underneath, so a wide window's picture hung out past the panel and every
+     * stylesheet rule aimed at the problem landed underneath an inline write and did nothing.</p>
+     */
+    private final boolean animateSize;
+
+    /**
+     * Whether the POSITION is animated.
+     *
+     * <p>False for something being resized in place — a preview's thumbnail, which is an ordinary
+     * in-flow child and has no {@code left}/{@code top} of its own to write. Writing them anyway would
+     * turn it into an offset box sliding over its siblings.</p>
+     */
+    private final boolean animatePosition;
+
     private final long startNanos;
     private final long durationNanos;
     private final Easing easing;
@@ -62,6 +83,7 @@ final class WindowGeometryAnimation implements WindowMotion {
     WindowGeometryAnimation(UIElement target, BooleanSupplier alive,
                             float fromLeft, float fromTop, float fromWidth, float fromHeight,
                             float toLeft, float toTop, float toWidth, float toHeight,
+                            boolean animatePosition, boolean animateSize,
                             long durationNanos, Easing easing, Runnable onDone) {
         this.target = target;
         this.alive = alive;
@@ -73,6 +95,8 @@ final class WindowGeometryAnimation implements WindowMotion {
         this.toTop = toTop;
         this.toWidth = toWidth;
         this.toHeight = toHeight;
+        this.animatePosition = animatePosition;
+        this.animateSize = animateSize;
         this.durationNanos = durationNanos;
         this.easing = easing;
         this.onDone = onDone;
@@ -124,7 +148,9 @@ final class WindowGeometryAnimation implements WindowMotion {
         float top = fromTop + (toTop - fromTop) * p;
         float width = fromWidth + (toWidth - fromWidth) * p;
         float height = fromHeight + (toHeight - fromHeight) * p;
-        StyleGroup.inlinePipeline(target.getStyle().getLayoutGroup(),
-                l -> l.left(left).top(top).width(width).height(height));
+        StyleGroup.inlinePipeline(target.getStyle().getLayoutGroup(), l -> {
+            if (animatePosition) l.left(left).top(top);
+            if (animateSize) l.width(width).height(height);
+        });
     }
 }

@@ -635,8 +635,11 @@ window.__dock-window__ .__strip__ {
     gap-all: 4px;
     padding-left: 2px;
     padding-bottom: 3px;
-    width: 100%;
     flex-shrink: 0;
+    /* NO WIDTH HERE. WindowPreview writes one, equal to the thumbnail's MEASURED width, so the header can
+     * never be the child that sizes the panel -- see matchHeaderToThumbnail for why neither `width: 100%`
+     * nor `width: 0; min-width: 100%` achieved that. The title inside is `width: 0; flex-grow: 1`, so it
+     * takes whatever the header ends up being and elides into it. */
 }
 
 .__window-preview__ .__pre-icon__ {
@@ -687,12 +690,25 @@ window.__dock-window__ .__strip__ {
     color: var(--preview-close-hover-fg, #FFFFFF);
 }
 
-/* The picture. A fixed box, because the panel is anchored above an entry and a preview that resized
- * itself per window would make the strip jump as you moved along it. WindowThumbnail fits the window
- * into this and centres it, so the letterboxing is this background. */
+/* The picture. THIS IS A MAXIMUM, not a size -- Windows' MaxThumbSizePx, which is one number bounding
+ * both axes rather than a width or a height. WindowThumbnail measures this square once and then writes
+ * the window's own shape scaled to fit inside it, so BOTH of a thumbnail's dimensions vary from window
+ * to window: a tall window comes back full-height and narrow, a wide one full-width and short, and the
+ * panel is built around whatever came back.
+ *
+ * Which is why there are no min/max-width bounds here any more. They were an attempt at the same idea
+ * with the height held fixed, and holding the height fixed is precisely the thing that does not work: it
+ * makes the panel's PROPORTIONS follow the window while its SIZE does not, so a tall window gets a
+ * sliver of a panel and a bound generous enough to prevent that letterboxes everything else. */
 .__window-preview__ > .__thumbnail__ {
-    width: 96px;
-    height: 54px;
+    width: 92px;
+    height: 92px;
     flex-shrink: 0;
+    /* NOT STRETCHED, which is what defeated the aspect ratio entirely. A flex column stretches its
+     * children across the cross axis by default, so the box was forced to the panel's width and
+     * `aspect-rate` never got to decide anything -- the picture went on being letterboxed inside a box
+     * that was the wrong shape for a different reason than before. Sizing to itself is what lets the
+     * ratio pick the width, and it is then the thumbnail that decides how wide the PANEL is. */
+    align-self: center;
     background-color: var(--preview-thumbnail-bg, #1E1F22);
 }
