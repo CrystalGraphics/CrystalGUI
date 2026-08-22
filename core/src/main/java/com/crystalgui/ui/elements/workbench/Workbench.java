@@ -32,6 +32,9 @@ import com.crystalgui.ui.elements.workbench.decoration.FileDecorationProvider;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.SymbolIcon;
 import com.crystalgui.text.lang.SymbolInfo;
+import com.crystalgui.text.diff.ThreeWayMerge;
+import com.crystalgui.ui.elements.Button;
+import com.crystalgui.ui.elements.Dialog;
 import com.crystalgui.ui.elements.InputDialog;
 import com.crystalgui.ui.elements.chrome.NotificationBalloons;
 import com.crystalgui.ui.elements.chrome.NotificationsView;
@@ -1628,9 +1631,75 @@ public class Workbench extends UIElement {
     }
 
     private void askWhichVersionSurvives(CgPath target, byte[] written) {
+        // CAPTURED BEFORE ANYTHING READS: finishRead overwrites cachedContent with whatever the server
+        // now holds, so a base fetched after the read is the SERVER version wearing the name of the
+        // ancestor -- and a three-way merge against that reports every one of my own edits as a conflict.
+        byte[] base = client.baseContent(target);
         ConflictDialog.ask(this, target, othersEditing(target),
                 () -> overwrite(target, written),
-                () -> openFile(target));
+                () -> openFile(target),
+                // No base, no merge. A file that was never read has no common ancestor, and offering the
+                // option and then failing is worse than not offering it.
+                base == null ? null : () -> openMerge(target, written, base));
+    }
+
+    /**
+     * Fetches the server's current copy and opens a three-way merge over it.
+     *
+     * <p>The read is what makes this asynchronous: {@code written} and {@code base} are both already in
+     * hand, and only <em>theirs</em> has to come off the wire.</p>
+     */
+    private void openMerge(CgPath target, byte[] written, byte[] base) {
+        client.read(target,
+                document -> showMerge(target, base, written, document.content()),
+                failure -> Notifications.show(saveFailed(target, failure)));
+    }
+
+    private void showMerge(CgPath target, byte[] base, byte[] mine, byte[] theirs) {
+        UIWindow window = getAttachedWindow();
+        if (window == null) return;
+
+        ThreeWayMerge merge = ThreeWayMerge.of(text(base), text(mine), text(theirs));
+        MergeView view = new MergeView(merge);
+
+        Dialog dialog = new Dialog("Merge " + target.name());
+        dialog.getContent().addChild(view);
+
+        UIElement actions = new UIElement();
+        actions.addClass(MergeView.DIALOG_ACTIONS_CLASS);
+        dialog.getContent().addChild(actions);
+
+        Button apply = new Button("Save merged");
+        Button cancel = new Button("Cancel");
+        actions.addChild(apply);
+        actions.addChild(cancel);
+
+        // GATED ON EVERY CONFLICT HAVING BEEN DECIDED, not on there being none. An undecided conflict
+        // still produces text -- it defaults to mine -- so an ungated button would write a merge nobody
+        // read and it would look like it worked.
+        Runnable syncEnabled = () -> {
+            boolean ready = view.isResolved();
+            apply.setEnabled(ready);
+            apply.setHitTest(ready);
+        };
+        view.onChanged.connect(syncEnabled);
+        syncEnabled.run();
+
+        apply.onPressed.connect(() -> {
+            String merged = view.mergedText();
+            dialog.close();
+            overwrite(target, merged.getBytes(StandardCharsets.UTF_8));
+        });
+        cancel.onPressed.connect(dialog::close);
+
+        window.addOverlay(dialog, this);
+        dialog.onClosed.connect(dialog::removeSelf);
+        dialog.showModal();
+        window.getInputHandler().requestFocus(cancel);
+    }
+
+    private static String text(byte[] bytes) {
+        return new String(bytes, StandardCharsets.UTF_8);
     }
 
     /**
