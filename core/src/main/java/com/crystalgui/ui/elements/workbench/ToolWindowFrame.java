@@ -2,6 +2,7 @@ package com.crystalgui.ui.elements.workbench;
 
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.elements.Button;
+import com.crystalgui.ui.elements.Tooltip;
 import com.crystalgui.ui.elements.desktop.WindowFrame;
 import com.crystalgui.ui.elements.desktop.WindowPolicy;
 
@@ -89,6 +90,9 @@ public class ToolWindowFrame extends WindowFrame {
     /** The "put it back in its region" affordance. */
     public static final String DOCK_CLASS = "__dock__";
 
+    /** What it says on hover, beside the window controls it sits with. @see WindowFrame#MINIMIZE_TOOLTIP */
+    public static final String DOCK_TOOLTIP = "Dock";
+
     /** Where a float first appears when nothing has been remembered, in logical pixels. */
     public static final float DEFAULT_WIDTH = 320f;
     public static final float DEFAULT_HEIGHT = 240f;
@@ -118,6 +122,7 @@ public class ToolWindowFrame extends WindowFrame {
         Button dock = new Button("");
         dock.addClass(DOCK_CLASS);
         dock.onPressed.connect(onDockRequested::emit);
+        Tooltip.attach(dock, DOCK_TOOLTIP);
         controls().addChildAt(dock, 0);
 
         setContent(container);

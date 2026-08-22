@@ -122,7 +122,11 @@ dockgroup .__missing__ {
     border-radius: var(--radius-panel, 0px);
 }
 
-.__view-container__ .__header__ {
+/* KEYED ON THE HEADER, not on the container around it. `__header__` is shared by three widgets, so the
+ * ancestor used to be what disambiguated -- correct until WindowChrome started MOVING this element into
+ * a window's caption, at which point every rule written that way stopped matching and the header lost
+ * its row direction, its height and its padding in one go. See ViewContainer.PANEL_HEADER_CLASS. */
+.__panel-header__ {
     flex-direction: row;
     align-items: center;
     flex-shrink: 0;
@@ -230,7 +234,7 @@ dockgroup > tabview > .__panes__,
  * leaves the space after the title free for a view's contributed controls -- IntelliJ reads
  * "Problems  [File 65]  [Project Errors]" on one line, and a growing title would strand them at the far
  * right. One auto margin means one claimant, so it takes all the slack rather than sharing it. */
-.__view-container__ .__header__ .__title__ {
+.__panel-header__ .__title__ {
     flex-grow: 0;
     /* NEVER SHRINKS. With the title growing, ellipsis was its own protection; once it stopped growing it
      * became the first thing flex took space from, and "Problems" rendered as "Pr" beside its own tabs. */
@@ -257,7 +261,7 @@ dockgroup > tabview > .__panes__,
  *
  * NO FILL AT REST. `button` gives every button a background, and inherited here it drew the mark as a
  * grey chip in the corner of every header — read as a control that was already pressed. */
-.__view-container__ .__header__ .__hide__ {
+.__panel-header__ .__hide__ {
     margin-left: auto;
     width: 16px;
     height: 16px;
@@ -278,7 +282,7 @@ dockgroup > tabview > .__panes__,
     opacity: 1;
 }
 
-.__view-container__ .__header__ .__hide__:hover {
+.__panel-header__ .__hide__:hover {
     color: var(--panel-header-icon-hover, #E0E0E0);
     background: none;
     background-color: var(--panel-header-icon-hover-bg, #393B40);
@@ -2133,4 +2137,13 @@ navigatorview treeview .__row__:hover {
 
 navigatorview treeview .__row__.__selected__ {
     background-color: var(--list-selected-bg, #04395E);
+}
+
+/* The panel header's Hide button waits as long as a window caption's controls do, and for the same
+ * reason: it is the SAME verb the frame's minimise performs, drawn with the same single rule, and a
+ * tool window shows one or the other depending on whether it is docked. Two presentations of one
+ * control that answered at different speeds would read as a bug in whichever you met second.
+ * @see ua/desktop.css, where the caption half of this lives. */
+.__panel-header__ .__hide__ tooltip {
+    tooltip-delay: 2;
 }

@@ -552,3 +552,21 @@ window.__tool-window__ .__title-bar__ .__close__,
 window.__tool-window__ .__title-bar__ .__maximize__ {
     display: none;
 }
+
+/* ── The caption buttons' tooltips ───────────────────────────────────────────────────
+ * TWO SECONDS, against the sheet-wide one. A tooltip's wait is a property on the TOOLTIP, and a
+ * tooltip is an internal child of the control it names -- so it is reached through that control, and
+ * its cascade position is where it SITS rather than where it paints (promotion moves only its Taffy
+ * node and its paint/hit-test entry).
+ *
+ * Longer here than anywhere else because these are the least ambiguous controls in the application:
+ * a caption's minimise, maximise and close are the same three marks, in the same corner, that every
+ * window manager has drawn since Windows 95. Nobody reads them -- they are aimed at -- so a label at
+ * the usual one second is a box arriving over the corner you are already clicking. Two seconds is
+ * long enough that only a pointer which has genuinely STOPPED gets one, which is the whole
+ * distinction the delay exists to draw. Dock is the one that is not obvious, and it keeps the same
+ * wait as its neighbours: four controls in a strip that answered at different speeds would read as
+ * three of them being broken. */
+window .__title-bar__ .__controls__ tooltip {
+    tooltip-delay: 2;
+}

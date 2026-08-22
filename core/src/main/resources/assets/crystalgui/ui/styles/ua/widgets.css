@@ -526,9 +526,16 @@ tab:checked,
  * row is not made of `tab` elements, so a rule naming only `tab` reaches the editor's tabs and
  * silently skips every panel that builds its own row. Any rule that styles a tab STATE has to list
  * the pair, which is precisely why the base pill lists them on one block rather than twice. */
+/* AND THE FRAME COUNTS AS A CONTAINER. A tool window in a window has its header -- tabs and all --
+ * adopted into the caption, which puts those tabs OUTSIDE the `viewcontainer` the two rules above
+ * name: the panel kept its focus but its selected tab went grey, which reads as the tint being broken
+ * rather than as the tab having moved. The frame encloses both the caption and the content, so
+ * `:focus-within` on it is true in exactly the same circumstances. */
 dockgroup:focus-within tab:checked,
 viewcontainer:focus-within tab:checked,
-viewcontainer:focus-within .__problem-tab__.__selected__ {
+viewcontainer:focus-within .__problem-tab__.__selected__,
+window.__tool-window__:focus-within tab:checked,
+window.__tool-window__:focus-within .__problem-tab__.__selected__ {
     background: var(--tab-focused-bg, #2F5F9E);
     color: var(--tab-focused-fg, #FFFFFF);
     border-color: var(--tab-focused-border, #4A88C7);

@@ -205,6 +205,68 @@ public class ToolWindowFloatTest extends UiTestBase {
                 titleIndent, header.getChildren().get(0).getWindowX() - header.getWindowX(), 0.01f);
     }
 
+    /**
+     * <b>The adopted header keeps its panel styling.</b>
+     *
+     * <p>Every rule for it used to be scoped through {@code .__view-container__}, which stops matching
+     * the instant {@code WindowChrome} moves the element into a caption — so a floated panel lost its
+     * row direction and wrapped its tabs onto a second line, lost the title's weight and colour, and
+     * lost the selected tab's focus tint. Nothing was wrong with any of those rules; they were
+     * describing an element that had moved.</p>
+     *
+     * <p>Asserted against the docked measurement rather than a constant: the claim is that adoption
+     * changes where the header IS and nothing about what it looks like.</p>
+     */
+    @Test
+    public void theAdoptedHeaderKeepsItsPanelStyling() {
+        manager.showPanel(INSPECTOR);
+        settle();
+        ViewContainer container = manager.containerOf(INSPECTOR);
+        UIElement header = container.captionChrome();
+        float dockedHeight = header.getRuntimeCache().getHeight();
+        float dockedIndent = header.getChildren().get(0).getWindowX() - header.getWindowX();
+        assertTrue("setup: the docked header has a box", dockedHeight > 0f);
+        assertTrue("setup would prove nothing if the docked indent were also zero", dockedIndent > 0f);
+
+        manager.floatPanel(INSPECTOR, 40f, 40f);
+        settle();
+
+        assertTrue("the header is in the caption",
+                isInside(header, manager.frameOf(INSPECTOR).titleBar()));
+        assertEquals("it lost its height when it left the container",
+                dockedHeight, header.getRuntimeCache().getHeight(), 0.01f);
+        // The indent is deliberately DROPPED in a caption (ua/desktop.css), so this asserts the one
+        // difference is the one that was asked for rather than that nothing changed at all.
+        assertEquals("a caption drops the panel indent", 0f,
+                header.getChildren().get(0).getWindowX() - header.getWindowX(), 0.01f);
+    }
+
+    /**
+     * <b>The header lays its parts out in a row that does not overlap.</b>
+     *
+     * <p>A {@code UIText} has no Taffy {@code MeasureFunc}, so in a flex row it contributes nothing and
+     * settles at zero width — while still painting its text, because nothing clips it. The title
+     * therefore drew across whatever the view contributed beside it, which reads as a z-order or
+     * padding fault rather than as a box that was never asked for. Asserted as "the next thing starts
+     * after the title ends", which is the property, rather than as a pixel width.</p>
+     */
+    @Test
+    public void theHeadersPartsDoNotOverlap() {
+        manager.showPanel(INSPECTOR);
+        settle();
+        UIElement header = manager.containerOf(INSPECTOR).captionChrome();
+        UIElement title = header.getChildren().get(0);
+
+        float titleEnd = title.getWindowX() + title.getRuntimeCache().getWidth();
+        assertTrue("the title claimed no width, so anything beside it draws over it",
+                title.getRuntimeCache().getWidth() > 0f);
+        for (int at = 1; at < header.getChildren().size(); at++) {
+            UIElement sibling = header.getChildren().get(at);
+            assertTrue("a header part starts before the title ends: " + sibling.getClasses(),
+                    sibling.getWindowX() >= titleEnd);
+        }
+    }
+
     /** And docking gives it back, or the panel returns headerless. */
     @Test
     public void dockingReturnsTheHeader() {
