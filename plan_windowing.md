@@ -822,11 +822,11 @@ snap; hover thumbnails stay deferred.
 | **W5** ✅ | Window-scoped modality: per-scope stacks, the frame overlay slot, `overlayHost`/`Dialog.showModal` retargeting, Escape per-frame | server windows, editor dialogs behaving | **Shipped 2026-08-22**, minus change 5 (the blocked pulse + the first `CgPlatform.sound()`), which the W13 row already owns. The four-points warning applies and each has its own test; Tab needed **both** halves — scoping when the focused window is blocked, and skipping blocked candidates when it is not, since a modal in one window no longer traps the whole document. A frame registers as its own last close watcher, which is what makes Escape's cascade come out dropdown → modal → window with no special case |
 | **W6** ✅ | Maximise/restore: restore rect, double-click, restore-drag, `__maximized__` | W7's editor-maximised default | **Shipped 2026-08-22.** One correction found by testing: the restore-drag fires on the first **movement**, never on the press — restoring on the press means a double-click restores and then re-maximises, so double-clicking a maximised caption appears to do nothing. Windows behaves the same way, and it is what click-and-hold on a maximised title bar does there. The restore rect is the **measured** box, since a window may never have been given an explicit size |
 | **W7** ✅ | The loader seam: engine-owned desktop, `CgUiScreen` as viewport, the editor as a maximised `HIDE_ON_CLOSE` frame, Escape end-to-end | the actual product | **Shipped 2026-08-22**, compiling; **in-game verification is still owed** — `:mc1710:compileJava` is green and nothing here has been run in a client. Escape needed no arranging at all: a frame is its own last close watcher, so the cascade already ends at the window's policy and only a leftover Escape reaches `handleKeyboardInput`. `suspendDesktop()` is the new core primitive — the compositor leaves the tree on screen close, retaining every window's state, position and z-order, and dropping the input state that would otherwise describe a screen that is no longer up. **AGENTS.md was wrong that `mc1710` is out of the build**; it is in `settings.gradle.kts` and compiles |
-| **W8** | Tool-window **FLOATING**: `FloatingDock` re-founded on an owned `WindowFrame`; `ToolWindowState.type` + floating rect; stripe drag-out; Dock/Hide chrome; the stripe toggle honours the remembered mode | the IntelliJ gesture set | Needs W5's owned-window slot |
+| **W8** ✅ | Tool windows in windows: `ToolWindowType` (docked/floating/windowed) + floating rect on `ToolWindowState`, `ToolWindowFrame`, stripe drag-out, Dock/Hide chrome, the stripe toggle honouring the remembered mode | the IntelliJ gesture set | **Shipped 2026-08-22.** `FloatingDock` was **deleted**, not re-founded: it extended `Dialog`, promoted itself to the global top layer, and had no callers — its own javadoc opened by arguing that a second window was impossible here, which CrystalOS had made false. **The tear-out produces `WINDOWED`, not IntelliJ's Float**: an owned window is parented in its owner's overlay slot, so it is clamped inside it and has no taskbar entry, and a panel dragged onto the desktop sprang back into the editor. The gesture needed no new drop target — `RegionDropZones` already answers `null` for the workbench's middle — but it lives on the drag SOURCE's `onDragEnd`, because a drop released over the desktop is dispatched to `Desktop`, which is engine-side and rightly ignorant of tool windows. Three engine-level bugs fell out and are the durable part: stylesheet candidates surviving a detach, `tagName()` being an exact-class lookup, and the record-vs-host rule for which half of a region holds a panel |
 | **W9** | Editor tear-out → **WINDOWED** frames: a drop past the editor zones opens a frame hosting its own dock area, taskbar entry and all; dragging the tab back re-docks | multi-window editing | After W7, so the torn-out window has a workbench frame to sit beside |
 | **W10** | The switcher (MRU keybind) + the first-hide notification with `Keymap.acceleratorFor` | discoverability | — |
 | **W11** | Reconnect-on-restore: `persisted` reaches the workspace client, rebind on show | remote use | Only matters once windows outlive a disconnect |
-| **W12** | Server windows as frames — **opened without focus, flashing their taskbar entry** (the no-steal rule); geometry persistence **and session restore of the window set**; remaining nice-to-haves (badges, progress entries, middle-click close) | — | Ordered by demand |
+| **W12** | Server windows as frames — **opened without focus, flashing their taskbar entry** (the no-steal rule); **GEOMETRY PERSISTENCE, EVERYWHERE IT MEANS ANYTHING** (see below) and session restore of the window set; remaining nice-to-haves (badges, progress entries, middle-click close) | — | Ordered by demand |
 | **W13** | Shell conveniences: the system menu (Alt+Space, title-bar and taskbar right-click, keyboard Move/Size), show desktop, modal-blocked pulse + the first `CgPlatform.sound()` sounds, Alt-drag, fullscreen, drag-to-edge snap | keyboard-only window management | All small, all sharing the command/keymap surface — one batch |
 | **W14** | Pin: the always-on-top band, the toggle, and the HUD — the overlay render hook, the paint-only entry, `__hud__` display-only presentation, visible-stays-live | live debugging over the running game | The one new platform capability; after W7, so there is a loader seam to extend |
 | **W15** | The task manager panel; per-window zoom | observability, accessibility | Both standalone |
@@ -963,6 +963,68 @@ Named so they read as decisions pending, not gaps nobody saw.
    ours is display-only by decision. Recorded so the display-only rule reads as chosen rather than
    overlooked — revisiting it means a platform capability for input while the game is ungrabbed,
    which is a new plan, not a W-item.
+
+---
+
+## Geometry persistence — the whole of it, deferred to W12
+
+W8 persisted exactly one thing: a floating tool window's rect, because a float's frame is destroyed on
+every hide and nothing else could say where it had been. That is the narrowest case of a general one,
+and the general one is worth doing in a single pass rather than a field at a time.
+
+**What should survive a restart**, and none of it does today beyond the one case above:
+
+| Thing | Where it lives now | Note |
+|---|---|---|
+| Each window's position and size | `WindowFrame.wantedLeft/wantedTop` + inline width/height | Save the **intent** pair, never the placed one — a clamp saved is a clamp that compounds every launch |
+| Which windows were open, and their stacking | `WindowRegistry` (open order + MRU) | Both orders, since neither is derivable from the other |
+| Maximised state and the restore rect | `WindowFrame.restoreLeft/Top/Width/Height` | Restoring maximised without the rect leaves nothing to restore *to* |
+| Hidden-but-retained windows | the registry's LRU | A hidden window with no record comes back as a fresh one, losing its content |
+| A tool window's mode and float rect | `ToolWindowState` ✅ | Done at W8; the only piece that exists |
+| Region weights and side weights | `WorkbenchRegions` / `ToolWindowLayout` ✅ | Already persisted by `WorkbenchSession` |
+| Splitter positions inside a window | `SplitView` percentages | Not captured anywhere |
+| Scroll positions | view state | **Deliberately not** — VS Code and IntelliJ both drop it, and a restored scroll into a file that changed is worse than the top |
+
+**Two rules the W8 work already paid for, and they generalise:**
+
+1. **Capture before the thing goes away, not after.** `hide()` detaches and *then* announces, so anything
+   measuring in the listener measures a freed Taffy node and records a zero. `ToolWindowFrame` snapshots
+   in its own `hide()` override for exactly this.
+2. **A zero rect is refused on the way in.** A 0×0 frame at the origin is a legal encoding and an
+   unusable window, and four floats cannot distinguish it from "never placed" — so an absent optional is
+   omitted rather than written as zeroes, and a non-positive size falls back to the default.
+
+---
+
+## Always-on-top — decided at W8, 2026-08-22
+
+A tool window torn out of the editor fell behind it the moment the editor was clicked. The obvious fix
+is to open floats **pinned**, and it is the wrong lever.
+
+**Pinned means above everything.** That is a strictly larger claim than the one the case needs: a pinned
+Inspector also sits above a window it has nothing to do with, and `Desktop.PINNED_BAND` is reserved for
+W14's HUD windows, where floating over the running game *is* the point. Spending it here would leave the
+band meaning two different things.
+
+**The relation actually wanted is Win32's owner/owned** — *"an owned window is always above its owner
+and travels with it"* — which this document already cites and W5 already implements. What W5 implements
+is ownership by **parenting** (`attachOwned`), and that is what made `FLOATING` unusable for a tear-out:
+a child's containing block is its owner, so the window is clamped inside it, and it is not in the
+`WindowRegistry`, so it has no taskbar entry.
+
+So W8 splits the two. `WindowFrame.setOwnerWindow` is the relation **without** the parenting: the frame
+stays top-level in the window layer — draggable anywhere, its own entry, its own stacking slot — and the
+one thing it inherits is that `Desktop.raise` moves the whole owner group, owner first and its owned
+windows immediately above it. Raising an *owned* window raises its owner too rather than lifting it out
+of the group, which is what every desktop does when you click a palette.
+
+`attachOwned` keeps its meaning for the case it was written for — a modal, which genuinely should be
+confined to its owner and genuinely should not be independently reachable.
+
+**Still owed, and deliberately not done here:** owned windows do not yet *travel* with their owner
+through hide and minimise. Doing it needs a record of which windows were hidden *by the owner* rather
+than by the user, so that a re-show restores exactly those — bookkeeping, not a one-liner, and it
+belongs with W12's session work where the same distinction is already needed.
 
 ---
 

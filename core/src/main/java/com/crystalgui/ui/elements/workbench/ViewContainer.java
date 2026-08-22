@@ -1,12 +1,15 @@
 package com.crystalgui.ui.elements.workbench;
 
+import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
+import com.crystalgui.ui.elements.desktop.WindowChrome;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.Tab;
 import com.crystalgui.ui.elements.TabView;
 import com.crystalgui.ui.elements.UIText;
+import dev.vfyjxf.taffy.style.TaffyDisplay;
 
 import java.util.List;
 
@@ -28,7 +31,7 @@ import java.util.List;
  * rather than inconsistent — the strip is what lets you choose, so with nothing to choose between it is
  * chrome for its own sake.</p>
  */
-public class ViewContainer extends UIElement {
+public class ViewContainer extends UIElement implements WindowChrome {
 
     public static final String CONTAINER_CLASS = "__view-container__";
     public static final String HEADER_CLASS = "__header__";
@@ -50,6 +53,7 @@ public class ViewContainer extends UIElement {
     private final UIText title = new UIText("");
     private final UIElement content = new UIElement();
     private final TabView tabs = new TabView();
+    private final Button hide;
 
     /** Fires when the header's hide button is pressed — the region's occupant asking to go away. */
     public final com.crystalgui.core.signal.Signal.Action onHideRequested =
@@ -69,7 +73,7 @@ public class ViewContainer extends UIElement {
         // NO GLYPH. The bundled Minecraft fonts have no U+2715 and it renders as tofu -- the same trap
         // UIText records for U+2026 and ConfiguratorGroup for its chevron. The mark is a real vector icon
         // set in default.css, so a theme can restyle it and no Java names a character.
-        Button hide = new Button("");
+        hide = new Button("");
         hide.addClass(HIDE_CLASS);
         hide.onPressed.connect(onHideRequested::emit);
         header.addChild(hide);
@@ -154,6 +158,43 @@ public class ViewContainer extends UIElement {
     /** The mounted view's header controls, if it offered any. @see HeaderContributor */
     @javax.annotation.Nullable
     private UIElement contributed;
+
+    /**
+     * Its header, offered to a window's caption when this container is put in one.
+     *
+     * <h3>The two-headers problem, one level down from the editor's</h3>
+     *
+     * <p>A container in a {@link ToolWindowFrame} would otherwise draw its own header immediately below
+     * the frame's caption: two title rows, one of them nearly empty, in a panel that is already small.
+     * It is the same fault {@code CrystalEditor}'s menu bar had and the same seam fixes it — the header
+     * is <b>moved</b> into the caption and moved back when the frame lets go, so there is only ever one
+     * of it and every listener on it stays where the user can reach.</p>
+     *
+     * <p>Offered unconditionally rather than only when floating, because the question a caption asks is
+     * <i>"do you have chrome"</i> and the answer does not depend on who is asking. Nothing calls this
+     * while the container is in a region — a region is not a caption.</p>
+     */
+    @Override
+    public UIElement captionChrome() {
+        return header;
+    }
+
+    /**
+     * Hides the header's own ✕ while something else is drawing one.
+     *
+     * <p>A frame's caption has a close button, so an adopted header's hide button sits four pixels from
+     * a button that does the same thing. Suppressed rather than removed: the docked presentation has no
+     * close button of its own and must be unchanged, and taking the element out of the tree would mean
+     * putting it back on the return trip — one more thing to get wrong for no gain.</p>
+     *
+     * <p>This is <b>not</b> the "hide yours" antipattern {@code WindowChrome} argues against. That is
+     * about hiding a whole bar and leaving its state on an invisible copy; here the bar is the thing
+     * being moved, and what is hidden is one redundant control inside it.</p>
+     */
+    public void setHideButtonVisible(boolean visible) {
+        StyleGroup.importantPipeline(hide.getStyle().getLayoutGroup(),
+                l -> l.display(visible ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
+    }
 
     @Override
     public boolean acceptsPublicChildren() {

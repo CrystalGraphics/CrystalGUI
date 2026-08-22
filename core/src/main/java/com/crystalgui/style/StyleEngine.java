@@ -39,8 +39,27 @@ public final class StyleEngine {
 
     /** Exactly the STYLESHEET/IMPORTANT-origin slots this engine last applied to each element — kept
      * so a re-match can remove precisely what it added, without guessing by origin (an IMPORTANT-
-     * origin slot might equally have come from user Java code via StyleGroup.setImportant()). */
-    private final Map<UIElement, List<StyleSlot<?>>> appliedByElement = new HashMap<>();
+     * origin slot might equally have come from user Java code via StyleGroup.setImportant()).
+     *
+     * <p><b>WEAK, and it SURVIVES A DETACH.</b> It used to be dropped in {@link #onElementDetached},
+     * which is correct only for an element that never comes back — and this record is the only thing
+     * that knows which candidates were the sheet's. An element detached and re-attached somewhere else
+     * therefore re-matched with {@code previouslyApplied == null} and simply <b>added</b> its new slots
+     * on top of the old ones, which kept their specificity and kept winning, permanently, with nothing
+     * in either rule looking wrong. Reparenting does not invalidate a match on its own, so anything
+     * moved out from under a descendant selector depends on this: a tool window's header adopted into a
+     * window's caption and then docked back came home still carrying the caption's {@code padding-left:
+     * 0}, and was broken only <em>after a round trip</em>. Hide-as-detach makes that shape routine.</p>
+     *
+     * <p>Withdrawing the slots at detach time instead is the obvious repair and it does not work: the
+     * removal re-resolves every touched property, a layout property's listener calls into
+     * {@code TaffyBridge}, and by then {@code unregisterElement} has already freed the Taffy node —
+     * {@code NullPointerException} out of {@code markDirtyRecursive}. The record has to outlive the
+     * detach and be spent on the next match.</p>
+     *
+     * <p>Weak keys are what keep that from being a leak: an element that really is gone takes its entry
+     * with it, and one that comes back still has it.</p> */
+    private final Map<UIElement, List<StyleSlot<?>>> appliedByElement = new WeakHashMap<>();
 
     /**
      * Resolved {@code ::highlight(name)} styles, per element, per highlight name.
@@ -132,10 +151,16 @@ public final class StyleEngine {
         dirtyMatch.add(element);
     }
 
-    /** Called when an element leaves the tree — stops tracking it for matching and animation. */
+    /**
+     * Called when an element leaves the tree — stops tracking it for matching and animation.
+     *
+     * <p>What it does <b>not</b> do is forget which slots it applied — see {@link #appliedByElement}.</p>
+     */
     public void onElementDetached(UIElement element) {
         dirtyMatch.remove(element);
-        appliedByElement.remove(element);
+        // appliedByElement is deliberately NOT cleared here — see its own note. It is what the next
+        // match spends to withdraw the rules that stopped applying, and an element that never returns
+        // takes its entry with it through the weak key.
         highlightsByElement.remove(element);
         transitionEngine.onElementDetached(element);
     }

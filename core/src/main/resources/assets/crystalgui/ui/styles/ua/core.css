@@ -116,9 +116,18 @@
  * activation focuses it PROGRAMMATICALLY (which rings by definition) on every open. Without this a
  * window would outline its whole self the moment it was opened. Which window is active is said by
  * its title bar — `window.__active__` in ua/desktop.css — exactly as IntelliJ and VS Code mark the
- * active editor through its tab rather than by drawing a rectangle round the pane. */
+ * active editor through its tab rather than by drawing a rectangle round the pane.
+ *
+ * `viewcontainer` is a tool window's whole body, and it joins for BOTH of those reasons at once. It is
+ * pane-sized by definition — it IS the panel — and it is focused programmatically every time the panel
+ * is shown, because opening a tool window puts you in it (which is what makes the rail usable from the
+ * keyboard). So without this every Project, Problems and Inspector rang its own outline on open. Flush
+ * against a region's edge that is easy to miss; in a WINDOW it is a blue rectangle just inside the
+ * frame's own border tracing the caption's underside, which is where it was finally reported. Which
+ * panel has the focus is already said by its rail button's `__panel-focused__` mark. */
 texteditor:focus-visible,
 window:focus-visible,
+viewcontainer:focus-visible,
 graphview:focus-visible,
 canvasview:focus-visible,
 scrollerview:focus-visible,

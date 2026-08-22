@@ -33,7 +33,9 @@ import java.util.function.BooleanSupplier;
  *
  * <h3>Extends {@link UIElement}, never {@code Dialog}</h3>
  * <p>{@code Dialog}'s bundle is modality, a close watcher and a backdrop — exactly what a frame must not
- * inherit, and {@code FloatingDock}'s javadoc already paid for that lesson once. What is taken from
+ * inherit, and {@code FloatingDock} paid for that lesson once already: it extended {@code Dialog} and
+ * then spent three paragraphs of its own javadoc listing what it must not be allowed to inherit, which
+ * is the tell for a wrong base class. (It was deleted at W8; {@code ToolWindowFrame} is a frame.) What is taken from
  * {@code Dialog} is the <em>pattern</em>: a positional drag from the title bar writing {@code left}/
  * {@code top} at <b>INLINE</b> origin, matching what CSS {@code resize} mandates for the size
  * {@code UIResizer} writes, so an author's {@code !important} can still pin a window down. The two
@@ -123,6 +125,31 @@ public class WindowFrame extends UIElement implements Disposable {
     public static final String CAPTION_CHROME_CLASS = "__caption-chrome__";
 
     /**
+     * On the adopted element itself, for as long as it is in a caption.
+     *
+     * <h3>Why a class and not a descendant selector</h3>
+     *
+     * <p>A bar in a caption needs its panel styling dropped — its own fill and its own indent are for
+     * sitting at the top of a panel, and in a caption they draw a second stripe inside the first. The
+     * obvious spelling is a descendant rule ({@code window > .__title-bar__ .__header__ { … }}), and it
+     * works perfectly right up until the chrome goes home, at which point <b>it keeps applying</b>.</p>
+     *
+     * <p>{@link UIElement#invalidateStyleMatch()} runs on an id, a class or a state change — and
+     * <em>not</em> on being reparented. So an element moved out from under a selector's ancestor keeps
+     * the candidates that selector gave it, at its specificity, indefinitely. A tool window docked back
+     * into its region came back with the caption's {@code padding-left: 0} and {@code flex-grow: 1}
+     * still winning: a 30px header where the sheet says 22, squeezing the panel's content into what was
+     * left. Nothing looked wrong with either rule, and the panel was only broken <em>after a round
+     * trip</em>.</p>
+     *
+     * <p>A class is the engine's own answer to this, and it is the same one {@code :checked} and
+     * {@code :hover} have each cost a round to arrive at: the cascade re-evaluates a pseudo-class or a
+     * descendant match on its own terms, and a class on yours. {@link #releaseChrome} removes it, which
+     * invalidates, which is what makes the caption styling actually stop.</p>
+     */
+    public static final String ADOPTED_CHROME_CLASS = "__caption-adopted__";
+
+    /**
      * On a window filling the work area.
      *
      * <p>Carries more than a look: the sheet turns the resize handles off through it
@@ -210,6 +237,9 @@ public class WindowFrame extends UIElement implements Disposable {
 
     /** @see #setDiscardGuard */
     private BooleanSupplier discardGuard = () -> true;
+
+    /** Which of the live owned windows are modal — the only ones that give the slot a box. */
+    private final Set<UIElement> blockers = new LinkedHashSet<>();
 
     /** What is currently SHOWING on the owned surface. @see #releaseOwned */
     private final Set<UIElement> live = new LinkedHashSet<>();
@@ -402,6 +432,8 @@ public class WindowFrame extends UIElement implements Disposable {
         // to removeInternalChild when removeChild refuses -- which it does for an internal child. That
         // fallback is the only reason a workbench's own menu bar can move here at all.
         captionChrome.addChild(chrome);
+        // AND THE CLASS, which is what a sheet must key its caption styling off. @see ADOPTED_CHROME_CLASS
+        chrome.addClass(ADOPTED_CHROME_CLASS);
         captionChrome.setDisplayed(true);
     }
 
@@ -410,6 +442,9 @@ public class WindowFrame extends UIElement implements Disposable {
         if (adoptedChrome == null) return;
         UIElement chrome = adoptedChrome;
         adoptedChrome = null;
+        // BEFORE the reparent, though either order works -- removeClass invalidates the match, and that
+        // invalidation is the entire reason the class exists. @see ADOPTED_CHROME_CLASS
+        chrome.removeClass(ADOPTED_CHROME_CLASS);
         captionChrome.setDisplayed(false);
 
         if (chromeOrigin == null) {
@@ -519,11 +554,38 @@ public class WindowFrame extends UIElement implements Disposable {
         return overlays;
     }
 
-    /** Parents an owned window onto this frame and gives the slot a box to hold it in. */
+    /** Parents an owned window onto this frame. Blocking — the caller is a modal. @see #attachOwned(UIElement, boolean) */
     public void attachOwned(UIElement owned) {
+        attachOwned(owned, true);
+    }
+
+    /**
+     * Parents an owned window onto this frame.
+     *
+     * <h3>{@code blocking} decides whether the slot has a box, and it is not a detail</h3>
+     *
+     * <p>The slot is sized to the whole frame while it holds something, which is exactly right for a
+     * <b>modal</b>: a modal's business is that nothing behind it can be reached, and a full-size
+     * transparent slot over the content is how that is spelled here.</p>
+     *
+     * <p>For a non-modal owned window — a floating tool window — it is a bug wearing modality's
+     * clothes. The window itself works, and every click anywhere else in the owner lands on the slot
+     * and does nothing: the panel reads as having opened <em>as a dialog</em>, which is what it was
+     * reported as. It also confines the thing, because a frame clamps against its containing block and
+     * that block is this slot.</p>
+     *
+     * <p>So a non-blocking owned window leaves the slot at zero, and <b>that does not hide it</b>:
+     * {@code elementHitTest} recurses into children before it ever consults the parent's own box, gated
+     * only on clipping, and the slot does not clip. A zero-sized non-clipping parent is therefore fully
+     * transparent to the pointer while its children stay hittable — which is the property this needs
+     * and the reason it can be spelled at all.</p>
+     */
+    public void attachOwned(UIElement owned, boolean blocking) {
         if (owned == null) return;
         if (owned.getParent() != overlays) overlays.addChild(owned);
         live.add(owned);
+        if (blocking) blockers.add(owned);
+        else blockers.remove(owned);
         syncOverlaySlot();
     }
 
@@ -541,6 +603,7 @@ public class WindowFrame extends UIElement implements Disposable {
     public void releaseOwned(UIElement owned) {
         if (owned == null) return;
         live.remove(owned);
+        blockers.remove(owned);
         syncOverlaySlot();
     }
 
@@ -549,8 +612,50 @@ public class WindowFrame extends UIElement implements Disposable {
         return !live.isEmpty();
     }
 
+    /**
+     * The window this one belongs to, or null — Win32's owner/owned relation.
+     *
+     * <h3>A relation, NOT the owned surface, and the pair is easy to conflate</h3>
+     *
+     * <p>{@link #attachOwned} makes a window a <b>child</b> of this frame. That gets the stacking right
+     * for free (a child paints with its parent and cannot escape it) and it costs the two things a child
+     * cannot have: the containing block is the owner, so the window is clamped inside it, and it is not
+     * in the {@code WindowRegistry}, so it has no taskbar entry. Right for a modal dialog. Wrong for a
+     * torn-out tool window, which is a first-class window that merely <em>belongs</em> to another.</p>
+     *
+     * <p>So this is the same relationship without the parenting: the frame stays top-level in the
+     * desktop's window layer — free to be dragged anywhere, its own entry, its own stacking slot — and
+     * the ONE thing it inherits is that {@link Desktop#raise} keeps it above its owner. Raising the
+     * owner carries its owned windows up with it, which is the whole of "clicking the editor must not
+     * bury the panel I pulled out of it".</p>
+     *
+     * <p><b>Not the pinned band.</b> Pinning means above <em>everything</em>, which is a different and
+     * larger claim: a pinned tool window would also sit above a window it has nothing to do with, and
+     * the band is reserved for the HUD case, where floating over the running game is the point.</p>
+     */
+    @Nullable
+    public WindowFrame ownerWindow() {
+        return ownerWindow;
+    }
+
+    /** @see #ownerWindow() */
+    public WindowFrame setOwnerWindow(@Nullable WindowFrame owner) {
+        // A window cannot own itself, and a cycle would make the raise walk below never terminate.
+        for (WindowFrame walk = owner; walk != null; walk = walk.ownerWindow) {
+            if (walk == this) return this;
+        }
+        this.ownerWindow = owner;
+        if (owner != null && desktop() != null) desktop().raise(this);
+        return this;
+    }
+
+    @Nullable
+    private WindowFrame ownerWindow;
+
     private void syncOverlaySlot() {
-        boolean occupied = !live.isEmpty();
+        // THE BLOCKERS, not the live set. Everything owned is live; only a modal wants the owner's
+        // whole surface covered. See attachOwned(UIElement, boolean).
+        boolean occupied = !blockers.isEmpty();
         StyleGroup.importantPipeline(overlays.getStyle().getLayoutGroup(), l -> {
             l.positionType(TaffyPosition.ABSOLUTE).left(0).top(0);
             if (occupied) l.widthPercent(100f).heightPercent(100f);
@@ -730,14 +835,32 @@ public class WindowFrame extends UIElement implements Disposable {
         if (state != WindowState.VISIBLE) return;
         UIElement layer = getParent();
         if (layer == null) {
-            state = WindowState.HIDDEN;
-            onHidden.emit();
+            markHidden();
             return;
         }
+        // CAPTURED BEFORE THE DETACH, because after it there is nothing left to ask. An owned frame's
+        // parent is its owner's overlay slot, and that slot is sized only while something is live on
+        // it -- so a frame that leaves without saying so leaves a full-size transparent box over its
+        // owner's content, swallowing every click on the window it came out of. Dialog releases itself
+        // in close(); a frame has to do it here, because hide() is reached from requestClose, from
+        // minimise, from dispose and from a caller, and only one of those is a place to remember it.
+        WindowFrame ownedBy = null;
+        UIElement above = layer.getParent();
+        if (above instanceof WindowFrame candidate && candidate.overlaySlot() == layer) ownedBy = candidate;
+
         // The layer's removeChild is what flips the state and tells the registry -- so a bare
         // removeSelf() by some other caller means exactly the same thing as hide(), rather than leaving
         // a window that is detached and still claims to be visible.
         layer.removeChild(this);
+        if (ownedBy != null) ownedBy.releaseOwned(this);
+        // ...WHICH ONLY HOLDS FOR A WINDOW LAYER. An OWNED frame's parent is its owner's overlay slot,
+        // an ordinary UIElement whose removeChild detaches and nothing else -- so the delegation above
+        // silently did neither half of what hide() promises: the frame left the tree still claiming to
+        // be VISIBLE, and onHidden never fired. Anything listening for a window being put away (a tool
+        // window's manager, for one) heard nothing at all, and the second hide() early-returned on a
+        // state that had never moved. Detaching is the only part the parent can be trusted with; the
+        // state is ours either way, and markHidden is idempotent so the layer path is unaffected.
+        markHidden();
     }
 
     /**
@@ -899,6 +1022,23 @@ public class WindowFrame extends UIElement implements Disposable {
         placed = true;
         applyPosition(left, top);
         return this;
+    }
+
+    /**
+     * Where the window was last <b>asked</b> to be, which is not always where it is.
+     *
+     * <p>The intent half of the pair the class note describes. Anything persisting a window's position
+     * wants this one: {@link #getX()} reports the clamped placement, so saving that and restoring it on a
+     * smaller desktop writes the clamp into the record permanently — each launch pulling the window a
+     * little further in, with nothing to attribute the drift to.</p>
+     */
+    public float getWantedLeft() {
+        return wantedLeft;
+    }
+
+    /** @see #getWantedLeft() */
+    public float getWantedTop() {
+        return wantedTop;
     }
 
     /**

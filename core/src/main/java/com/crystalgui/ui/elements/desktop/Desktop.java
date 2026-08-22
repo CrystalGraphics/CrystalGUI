@@ -206,8 +206,37 @@ public class Desktop extends UIElement {
      */
     public void raise(WindowFrame frame) {
         if (frame == null || frame.desktop() != this) return;
-        if (raiseCounter >= PINNED_BAND - 1) renormaliseStack();
-        frame.setStackOrder(++raiseCounter);
+
+        // THE WHOLE OWNER GROUP MOVES, owner first and its owned windows immediately above it — Win32's
+        // rule, and the reason a torn-out tool window does not fall behind the editor the moment the
+        // editor is clicked. Raising an OWNED window raises its owner too rather than lifting it out of
+        // the group: on every desktop, clicking a palette brings its document forward with it.
+        //
+        // Expressed as z-index over a group, not as a band. A band ("always on top") is a bigger claim
+        // than the one wanted here -- it would put a panel above windows it has nothing to do with, and
+        // PINNED_BAND above is reserved for the case where that IS the point.
+        WindowFrame root = frame;
+        for (WindowFrame walk = frame.ownerWindow(); walk != null; walk = walk.ownerWindow()) root = walk;
+
+        List<WindowFrame> group = new ArrayList<>();
+        for (WindowFrame candidate : windows.frames) {
+            if (candidate != root && ownedBy(candidate, root)) group.add(candidate);
+        }
+        // Their existing order is kept, except that the one actually raised ends up on top of its group.
+        group.sort(Comparator.comparingInt(WindowFrame::stackOrder));
+        if (frame != root && group.remove(frame)) group.add(frame);
+
+        if (raiseCounter >= PINNED_BAND - 2 - group.size()) renormaliseStack();
+        root.setStackOrder(++raiseCounter);
+        for (WindowFrame owned : group) owned.setStackOrder(++raiseCounter);
+    }
+
+    /** Whether {@code frame} is owned by {@code root}, directly or through a chain of owners. */
+    private static boolean ownedBy(WindowFrame frame, WindowFrame root) {
+        for (WindowFrame walk = frame.ownerWindow(); walk != null; walk = walk.ownerWindow()) {
+            if (walk == root) return true;
+        }
+        return false;
     }
 
     /**
