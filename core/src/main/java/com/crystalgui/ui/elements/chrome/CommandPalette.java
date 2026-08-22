@@ -62,6 +62,9 @@ public final class CommandPalette {
 
     public static final String PLACEHOLDER = "Type a command";
 
+    /** The header bar’s text — and the surface the popup is dragged by. */
+    public static final String TITLE = "All Commands";
+
     private CommandPalette() {
     }
 
@@ -83,6 +86,7 @@ public final class CommandPalette {
 
         QuickPick pick = new QuickPick();
         pick.setPlaceholder(PLACEHOLDER);
+        pick.setTitle(TITLE);
         pick.setSource(QuickPickSource.of(items));
         pick.onAccepted.connect(id -> registry.run(id, CommandContext.of(source)));
         pick.onClosed.connect(() -> {

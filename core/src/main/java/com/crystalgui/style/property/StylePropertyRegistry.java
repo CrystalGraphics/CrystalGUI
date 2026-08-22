@@ -314,6 +314,20 @@ public class StylePropertyRegistry {
     /** Seconds for a smooth scroll to substantially settle. CSS has no knob for this; browsers hard-code
      * their own curve, and this is ours — exposed so a theme can tune the feel. */
     public static final StyleProperty<Float> SCROLL_DURATION = create("scroll-duration", 0.18f);
+    /**
+     * Seconds of hovering before a {@code Tooltip} appears.
+     *
+     * <p>A property rather than a constant in the widget, and the widget's own class doc called this
+     * ahead of time: "a delay is a timing value, and timing values belong in the cascade rather than
+     * hard-coded here". The same rule that keeps pixel sizes out of Java — and it is genuinely per-place,
+     * not one number: a dense rail of icon-only buttons wants a shorter wait than a tab strip whose
+     * labels already say most of it.</p>
+     *
+     * <p>Zero shows instantly, which is what every existing caller got before this existed. Not
+     * transitionable: interpolating a delay while it is being waited out has no meaning.</p>
+     */
+    public static final StyleProperty<Float> TOOLTIP_DELAY =
+            create("tooltip-delay", 0f).setRange(0f, Float.MAX_VALUE).setAllowTransition(false);
     public static final StyleProperty<CgUiDrawable> MASK = create("mask", CgUiDrawable.EMPTY);
     // Geometry longhands for the `mask` layer, exactly mirroring the `overlay-*` trio above (same
     // types, same defaults, same CgUiLayerBox.resolve path). Defaults reproduce the previous

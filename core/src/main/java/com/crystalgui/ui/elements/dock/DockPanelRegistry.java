@@ -265,4 +265,71 @@ public final class DockPanelRegistry<C> {
     public UIElement iconElementOf(DockPanelRef ref) {
         return iconElementProvider == null ? null : iconElementProvider.apply(ref);
     }
+
+    // ── Tooltips ────────────────────────────────────────────────────────────────
+
+    /** What a tab says on hover. @see #tooltipOf */
+    @Nullable
+    private Function<DockPanelRef, String> tooltipProvider;
+
+    public DockPanelRegistry<C> setTooltipProvider(@Nullable Function<DockPanelRef, String> provider) {
+        this.tooltipProvider = provider;
+        return this;
+    }
+
+    /**
+     * What a tab says on hover, or null for no tooltip at all.
+     *
+     * <p>A tab shows a file NAME, and a name is ambiguous the moment two projects both have a
+     * {@code Main.java} — which is exactly when the answer matters. Both references put the full path
+     * here rather than in the title, because a title long enough to disambiguate is a title too long to
+     * fit in a strip.</p>
+     *
+     * <p>Pulled from a provider for the reason {@link #setTitleProvider} gives at length: the strip is
+     * rebuilt on every rearrangement, so anything pushed onto a tab has to be pushed again by somebody
+     * who noticed the rebuild.</p>
+     */
+    @Nullable
+    public String tooltipOf(DockPanelRef ref) {
+        if (tooltipProvider == null) return null;
+        String text = tooltipProvider.apply(ref);
+        return text == null || text.isEmpty() ? null : text;
+    }
+
+    /** What a tab's ICON says on hover, when it means something of its own. @see #iconTooltipOf */
+    @Nullable
+    private Function<DockPanelRef, String> iconTooltipProvider;
+
+    public DockPanelRegistry<C> setIconTooltipProvider(
+            @Nullable Function<DockPanelRef, String> provider) {
+        this.iconTooltipProvider = provider;
+        return this;
+    }
+
+    /**
+     * What the tab's icon says on hover — a second answer for the same tab, or null for one answer.
+     *
+     * <h3>Two providers rather than one pair, because two panels answer differently</h3>
+     *
+     * <p>A file tab's icon says nothing its tab does not already say: the picture comes from the file
+     * extension, which is the last few characters of the path the tab is about to show you. A
+     * DECLARATION's icon is the only place the kind appears at all — nothing in "ArrayList.class" says
+     * it is a class rather than an interface — so it earns wording of its own.</p>
+     *
+     * <p>Separate from {@link #setIconElementProvider} because the two questions have different answers
+     * for the same panel: a source-backed library tab takes a FILE icon (it is a {@code .java}) and could
+     * still want its kind read out. Folding them into one provider would force a caller to answer both or
+     * neither.</p>
+     *
+     * <p>Delivered as a {@linkplain com.crystalgui.ui.elements.Tooltip#addRegion region} of the tab's own
+     * tooltip rather than a tooltip on the icon: a tab's icon is unhittable — as every composite part is,
+     * so that a press selects the tab rather than being swallowed — and an unhittable element never
+     * receives {@code mouseenter}.</p>
+     */
+    @Nullable
+    public String iconTooltipOf(DockPanelRef ref) {
+        if (iconTooltipProvider == null) return null;
+        String text = iconTooltipProvider.apply(ref);
+        return text == null || text.isEmpty() ? null : text;
+    }
 }

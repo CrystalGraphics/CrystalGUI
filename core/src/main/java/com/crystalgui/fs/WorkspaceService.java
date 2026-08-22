@@ -70,6 +70,47 @@ public final class WorkspaceService {
     }
 
     /**
+     * Who has what open, across every peer.
+     *
+     * <p>Lives here because this is the one object every {@link WorkspaceRpc} shares — each has its own
+     * actor and its own watcher, so a per-connection home could only ever answer about itself, which is
+     * the opposite of what presence means. @see WorkspacePresence</p>
+     */
+    public WorkspacePresence presence() {
+        return presence;
+    }
+
+    private final WorkspacePresence presence = new WorkspacePresence();
+
+    /**
+     * What this actor may do in each project it can see.
+     *
+     * <p>Asked against the project's own <b>root</b>, so it is a per-project answer to a per-path
+     * question. That is a deliberate coarsening and the reason
+     * {@link WorkspaceProtocol#CAPABILITIES} is documented as a hint: a host may allow writes under
+     * {@code src/} and refuse them under {@code config/}, and no per-project broadcast can say so.
+     * Nothing here relaxes anything — {@link #authorise} still runs on the real path for every
+     * operation, which is where the trust actually lives.</p>
+     *
+     * <p>Projects the actor cannot read are omitted entirely, matching {@link #projects}: "may not read"
+     * and "is not there" look identical from outside.</p>
+     */
+    public List<ProjectCapability> capabilities(WorkspaceActor actor) {
+        List<ProjectCapability> answers = new ArrayList<>();
+        for (WorkspaceProject project : projects.all()) {
+            CgPath root = CgPath.ofProject(project.id());
+            if (!permission.allows(actor, project, root, WorkspaceOperation.READ)) continue;
+            answers.add(new ProjectCapability(project.id(), true,
+                    permission.allows(actor, project, root, WorkspaceOperation.WRITE)));
+        }
+        return answers;
+    }
+
+    /** One project's answer. @see #capabilities */
+    public record ProjectCapability(String project, boolean mayRead, boolean mayWrite) {
+    }
+
+    /**
      * One directory's entries — the listing a client caches, {@code etag} and all.
      *
      * <p>Per directory and lazy, matching a tree that expands lazily anyway. A whole-project manifest is

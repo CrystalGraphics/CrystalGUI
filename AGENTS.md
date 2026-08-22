@@ -59,17 +59,46 @@ cross-agent tool use permitted is asking the orchestrator a clarifying question,
 ./gradlew :core:test              # unit tests, CrystalGraphics ON the classpath
 ./gradlew :core:headlessTest      # server-side tests, CrystalGraphics CORE deliberately absent
 ./gradlew :core:check             # both test tasks
+./gradlew :mc1710:compileJava     # the 1.7.10 loader — IS in the build, see below
 ```
 
-`mc1710/` **is** in this build and compiles (`./gradlew :mc1710:compileJava`) — it holds the real
-1.7.10 host, `CgUiScreen`. What it does not give you is a *verified* one: running a client is a thing
-only a person at a machine can do, so "it compiles" and "it works in game" stay separate claims.
-`core/` and the harness are what you can compile **and run** end to end.
+> ~~There is **no in-game Minecraft integration reachable from this build.**~~ **False since Phase 4,
+> corrected 2026-08-21.** This paragraph told three sessions in a row that only `core/` and the harness
+> could be run end to end, and ended with *"do not claim otherwise"* — so it read as a rule rather than
+> as a fact that had gone stale. `mc1710` is in `settings.gradle.kts` and carries the whole networking
+> integration: `CgUiScreen`, `CgUiConnections`, `CgUiWorkspaceHost`, `Mc1710NetworkChannel` and four
+> probes. **Every server-side defect found this week was found by running it**, and none of them was
+> reachable from `core/` or the harness — see [Running Minecraft](#running-minecraft-mc1710-is-in-the-build).
+
+## Running Minecraft — `mc1710` IS in the build
+
+**For anything that crosses the loader seam — networking, the workspace over a wire, platform services,
+class loading on a server — this is the only thing that can see it.** `headlessTest` asserts by absence
+and reaches no loader; the GL harness is a client with a context by design.
+
+```bash
+./gradlew :mc1710:runClient                       # the dev client
+./gradlew :mc1710:runServer                       # a dedicated server
+./gradlew :mc1710:serverSmoke                     # boot a server, assert the stack came up, stop. ~48s
+./gradlew :mc1710:runObfClient                    # SRG names — production, and the only run that is
+./gradlew :mc1710:runClient -PcgJoin=localhost:25565   # join a server: TWO PROCESSES, ONE SOCKET
+./gradlew :mc1710:runClient -PcgSessionProbe      # a real Server/ClientUiSession pair over the wire
+./gradlew :mc1710:runClient -PcgNetProbe          # the raw transport, below the session layer
+```
+
+> **`serverSmoke` is the one to reach for first.** Three fatal defects — CrystalGraphics building its
+> platform services eagerly, `CgPlatform.register` demanding a GL backend, a client-only guard one level
+> too high — shipped undetected because every one is a *runtime* property ("a client-only class is
+> constructed on a server") that no test and no import scan can see. Booting a server found all three in
+> one run. It also asserts that no client-only class was **loaded**, which is the contract
+> `CommonProxy`'s javadoc has always stated and nothing checked.
 
 ## Render testing — the GL debug harness
 
-For anything visual, **do not test via Minecraft** — it isn't wired up. Use the harness: it boots in
-seconds, needs no Minecraft context, and gives you a real GL surface.
+For anything visual, **prefer the harness over Minecraft**: it boots in seconds, needs no Minecraft
+context, and gives you a real GL surface. *(This used to say Minecraft "isn't wired up", which stopped
+being true — `runClient` works. The advice survives the correction: the harness is faster and isolates
+rendering from everything else. What it cannot see is anything that crosses the loader seam.)*
 
 ```bash
 ./gradlew :gl-debug-harness:runHarness --args="--mode=cgui-gallery"   # start here
@@ -368,7 +397,7 @@ entry is visible rather than merely absent: `background`, `background-color`, `b
 `outline-offset-{top,right,bottom,left}`, `outline-width`, `overflow`, `overlay`, `overlay-fit`,
 `overlay-origin`, `overlay-position`, `resize`, `scroll-behavior`, `scroll-duration`,
 `selection-color`, `text-align`, `text-decoration-color`, `text-decoration-line`, `text-offset-x`, `text-offset-y`,
-`text-overflow`, `text-shadow`, `transform`, `transform-origin-x`, `transform-origin-y`,
+`text-overflow`, `text-shadow`, `tooltip-delay`, `transform`, `transform-origin-x`, `transform-origin-y`,
 `transition`, `white-space`, `z-index` — plus the whole layout set from `LayoutProperties`.
 
 > **This list goes stale silently.** Registering a property is a one-line addition in a 300-line file and
@@ -898,7 +927,6 @@ int value types.
   __resizer__  __resizer-{top,bottom,left,right}__
   __resizer-{top,bottom}-{left,right}__  __thumb__   __title-bar__
   __top__     __track__   __v-scroller__  __vertical__
-  __caption-chrome__  __controls__ __entries__ __entry__  __title__  __windows__
   ```
 - **No sizes, no timings, no colours in Java.** Widgets write structure and state; `default.css` gives
   functional geometry, `ore.css` gives appearance. `Switch`'s knob animation is a CSS `transition` on
@@ -1568,9 +1596,12 @@ com.crystalgui.text            Rope, TextBuffer, TextSummary, Change/ChangeSet, 
   .lang                        The semantic layer's contracts, INTERFACES ONLY: LanguageServices (the
                                per-DOCUMENT facade), SemanticTokenProvider, Resolver, CompletionProvider
                                + CompletionItem/CompletionList, SymbolInfo/SymbolKind/SymbolModifier,
-                               TypeRef, DeclarationSite, Versioned. Every engine lives in language/;
-                               this package is the whole footprint in core/, and its absence at runtime
-                               is the only feature flag. docs/CGUI_WORKBENCH_SERVICES.md
+                               TypeRef, DeclarationSite, Versioned, and TypeSearch + TypeSearchRegistry
+                               ("which types are on the classpath" — what Go to File asks, inverted for
+                               the same reason as the rest: the INDEX lives in language/ and core/ may
+                               never name it). Every engine lives in language/; this package is the whole
+                               footprint in core/, and its absence at runtime is the only feature flag.
+                               docs/CGUI_WORKBENCH_SERVICES.md
   .diagnostic                  Diagnostic, DiagnosticSet, DiagnosticSeverity, DiagnosticTag, Markers,
                                RelatedInformation — LSP-shaped, per-owner. NOT duplicated in .lang
   .wrap                        LineProjection, ProjectedLines, LineBreaksComputer (SPI),

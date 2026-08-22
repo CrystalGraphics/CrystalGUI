@@ -8,6 +8,7 @@ import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.ui.elements.Tab;
+import com.crystalgui.ui.elements.Tooltip;
 import com.crystalgui.ui.elements.dock.DockArea;
 import com.crystalgui.ui.elements.dock.DockGroup;
 import com.crystalgui.ui.elements.dock.DockLayout;
@@ -277,5 +278,128 @@ public class DockTabPresentationTest extends UiTestBase {
 
         assertTrue("the close request did not reach the dock", leaf.indexOf(javaFile) < 0);
         assertTrue("it took the wrong panel with it", leaf.indexOf(toolWindow) >= 0);
+    }
+
+    // ── An icon that is an ELEMENT rather than a name ─────────────────────────────────
+
+    /**
+     * <b>A provided element becomes the tab's icon.</b>
+     *
+     * <p>A file's icon is one picture and a NAME resolves it. A declaration's is not: {@code static} and
+     * {@code final} are layers stacked over the glyph, and a layer is an element. So the dock takes an
+     * element when one is offered — and stays ignorant of what a symbol is, which is what lets the
+     * language side hand over a widget the dock has never heard of.</p>
+     *
+     * <p>The first version of this read {@code getPreIcon()} and filled it, which answers <b>null</b> on a
+     * tab that has never had one — so a library tab lost its icon completely while every project tab kept
+     * theirs, because those go through the name path and its {@code setPreIcon} is what creates the slot.
+     * The seam had no test at all, which is why that shipped.</p>
+     */
+    @Test
+    public void aProvidedElementBecomesTheTabIcon() {
+        UIElement glyph = new UIElement();
+        glyph.addClass("__test-glyph__");
+
+        DockPanelRegistry<UIElement> registry = registry();
+        registry.setIconElementProvider(ref -> FILE_TYPE.equals(ref.typeId()) ? glyph : null);
+        setUpWith(registry, javaFile);
+
+        Tab tab = area.groupFor(leaf).tabFor(javaFile);
+        assertNotNull("no tab was built", tab);
+        assertSame("the provided element is not the tab's icon", glyph, tab.getPreIcon());
+        // AND IT IS IN THE TREE. An icon held by the tab but never attached draws nothing, which is the
+        // same symptom as having none -- so identity alone would pass against the bug this pins.
+        assertNotNull("the icon was never attached", glyph.getParent());
+    }
+
+    /**
+     * <b>And a panel the provider declines still gets its name-based icon.</b>
+     *
+     * <p>The two paths coexist on purpose: a project file needs no semantics and resolves its picture
+     * from {@code ui/icons/default.json}, which is exactly what a file-icon theme is for. Only a
+     * declaration needs the richer answer.</p>
+     */
+    @Test
+    public void aDeclinedElementFallsBackToTheNamedIcon() {
+        DockPanelRegistry<UIElement> registry = registry();
+        registry.setIconElementProvider(ref -> null);
+        setUpWith(registry, javaFile);
+
+        Tab tab = area.groupFor(leaf).tabFor(javaFile);
+        assertNotNull(tab);
+        UIElement slot = tab.getPreIcon();
+        assertNotNull("the name path was skipped when the element provider declined", slot);
+        assertNotNull("the slot carries no drawable",
+                slot.getStyle().getGeneralGroup().getValueSave(StylePropertyRegistry.OVERLAY));
+    }
+
+    /** Builds the area over a registry the caller has configured. */
+    private void setUpWith(DockPanelRegistry<UIElement> registry, DockPanelRef... panels) {
+        leaf = new DockLeaf(panels[0]);
+        for (int i = 1; i < panels.length; i++) leaf.add(panels[i]);
+        area = new DockArea(registry, DockLayout.of(leaf));
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400)
+                .flexDirection(FlexDirection.COLUMN));
+        root.addChild(area);
+        area.layout(l -> l.width(600).height(400));
+        window = new UIWindow(Ui.of(root));
+        window.getStyleEngine().addStylesheet(StyleSheetRegistry.of("crystalgui:ore"));
+        window.init(1200, 800);
+        frame();
+        frame();
+    }
+
+    // ── Hover text ─────────────────────────────────────────────────────────────────
+
+    /** The tooltip a tab was given, or null. Internal children are ordinary entries in {@code children}. */
+    private Tooltip tooltipOn(Tab tab) {
+        for (UIElement child : tab.getChildren()) {
+            if (child instanceof Tooltip) return (Tooltip) child;
+        }
+        return null;
+    }
+
+    /**
+     * <b>A tab says where its file is, and its icon says what the file IS.</b>
+     *
+     * <p>Two answers on one control, which is what the region mechanism exists for: the icon is
+     * unhittable — as every composite part is, so a press selects the tab rather than being swallowed —
+     * so a second {@code Tooltip} attached to it would never receive {@code mouseenter} and could not
+     * fire at all. This asserts the wiring, not the geometry; {@code TooltipTest} owns the resolution.</p>
+     */
+    @Test
+    public void aTabSaysWhereItIsAndItsIconSaysWhatItIs() {
+        DockPanelRegistry<UIElement> registry = registry();
+        registry.setTooltipProvider(ref -> "/workspace/src/Main.java");
+        registry.setIconTooltipProvider(ref -> FILE_TYPE.equals(ref.typeId()) ? "Final class" : null);
+        setUpWith(registry, javaFile);
+
+        Tab tab = area.groupFor(leaf).tabFor(javaFile);
+        assertNotNull("no tab was built", tab);
+        assertNotNull("the tab has an icon to anchor a region to", tab.getPreIcon());
+
+        Tooltip tip = tooltipOn(tab);
+        assertNotNull("the tab was given no tooltip at all", tip);
+        assertEquals("the tab does not say where its file is",
+                "/workspace/src/Main.java", tip.getBaseText());
+        assertEquals("the icon\'s own wording was not wired as a region of the tab\'s tooltip",
+                1, tip.regionCount());
+    }
+
+    /**
+     * <b>...and a panel with nothing to say is given no tooltip.</b>
+     *
+     * <p>An empty tooltip is not a harmless one: it is a bare rounded box that opens over the control a
+     * second after the pointer stops on it, saying nothing. Absent and empty look identical in the
+     * provider — both are "no text" — so the distinction has to be made at the point the tooltip would
+     * be built. A console, the Problems view, anything that is not about a location lands here.</p>
+     */
+    @Test
+    public void aPanelWithNothingToSayIsGivenNoTooltip() {
+        setUpWith(registry(), javaFile);
+
+        Tab tab = area.groupFor(leaf).tabFor(javaFile);
+        assertNotNull(tab);
+        assertNull("a tooltip was attached with nothing in it", tooltipOn(tab));
     }
 }

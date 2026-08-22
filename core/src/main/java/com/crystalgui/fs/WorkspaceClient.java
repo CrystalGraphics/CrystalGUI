@@ -5,6 +5,8 @@ import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.text.Change;
 
+import javax.annotation.Nullable;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -125,6 +127,14 @@ public final class WorkspaceClient<T> {
         // The server pushes these; nothing asks for them. Registered here rather than left to a caller,
         // because a client that reads a file is watching it (see read) and would otherwise be sent
         // notifications with no handler.
+        registrar.register(WorkspaceProtocol.PRESENCE, (args, respond) -> {
+            applyPresence(args);
+            respond.ok(null);
+        });
+        registrar.register(WorkspaceProtocol.CAPABILITIES, (args, respond) -> {
+            applyCapabilities(args);
+            respond.ok(null);
+        });
         registrar.register(WorkspaceProtocol.CHANGED, (args, respond) -> {
             CgPath path = CgPath.parse(args.getString(WorkspaceProtocol.PATH, ""));
             String kind = args.getString(WorkspaceProtocol.KIND, WorkspaceProtocol.KIND_MODIFIED);
@@ -136,6 +146,127 @@ public final class WorkspaceClient<T> {
             respond.ok(null);
         });
     }
+
+    /**
+     * Whether this actor may write in {@code path}'s project. <b>A hint for enablement, never the
+     * authority.</b>
+     *
+     * <h3>The problem it solves</h3>
+     *
+     * <p>A command's {@code enabledWhen} runs on the client, so it cannot ask the server <i>may I?</i>:
+     * {@code explorer.delete} looked enabled to a non-operator and the refusal arrived as a
+     * {@code NO_PERMISSIONS} failure after a round trip. Asking per menu open is worse — that is a round
+     * trip inside a UI gesture. So the answer is cached and the server pushes changes, which is VS Code's
+     * context-key model: the far side volunteers what it knows and the near side reads it synchronously.</p>
+     *
+     * <h3>Unknown means yes, and the direction is the whole design</h3>
+     *
+     * <p>Two things make the cached answer approximate. It is <b>per project</b> while
+     * {@link WorkspacePermission} is per path, so a host allowing writes under {@code src/} and refusing
+     * them under {@code config/} cannot be represented. And it can be <b>stale</b> between a change and
+     * its push, or simply absent before the first answer arrives.</p>
+     *
+     * <p>So it is optimistic: unknown is available. A wrongly-<em>greyed</em> command is a thing the user
+     * cannot do and cannot explain — there is no message, no dialog, nothing to search for. A
+     * wrongly-<em>live</em> one fails with a reason the server wrote. Being wrong in the second direction
+     * is strictly recoverable and being wrong in the first is not, which is also why nothing here relaxes
+     * a check: every operation is still authorised server-side on its real path.</p>
+     */
+    public boolean mayWrite(@Nullable CgPath path) {
+        if (path == null) return true;
+        Boolean known = writable.get(path.project());
+        return known == null || known.booleanValue();
+    }
+
+    /** Whether this actor may read in {@code path}'s project. @see #mayWrite */
+    public boolean mayRead(@Nullable CgPath path) {
+        if (path == null) return true;
+        Boolean known = readable.get(path.project());
+        return known == null || known.booleanValue();
+    }
+
+    /**
+     * Asks the server what this actor may do, and caches the answer.
+     *
+     * <p>Called once when a workspace opens. The server pushes updates afterwards, so this is a
+     * <em>seed</em> rather than a poll — calling it per menu open is the round trip the cache exists to
+     * avoid.</p>
+     */
+    public void refreshCapabilities() {
+        caller.call(WorkspaceProtocol.CAPABILITIES, new StateMap<>(ops),
+                result -> applyCapabilities(result), error -> {
+                    // Left OPTIMISTIC on failure rather than assumed-denied. A server too old to know
+                    // this method answers METHOD_NOT_FOUND, and greying out every write against an
+                    // otherwise working workspace is a far worse answer than offering one that fails.
+                });
+    }
+
+    /** Told when the cached answer changes, so a menu bar can re-evaluate what it draws. */
+    public void onCapabilitiesChanged(Runnable handler) {
+        this.onCapabilities = handler;
+    }
+
+    private void applyCapabilities(StateMap<T> in) {
+        readable.clear();
+        writable.clear();
+        for (StateMap<T> entry : in.getList(WorkspaceProtocol.PROJECT_CAPABILITIES, e -> e)) {
+            String project = entry.getString(WorkspaceProtocol.PROJECT, "");
+            if (project.isEmpty()) continue;
+            readable.put(project, entry.getBool(WorkspaceProtocol.MAY_READ, true));
+            writable.put(project, entry.getBool(WorkspaceProtocol.MAY_WRITE, true));
+        }
+        if (onCapabilities != null) onCapabilities.run();
+    }
+
+    /** Absent means unknown, which means allowed. @see #mayWrite */
+    private final Map<String, Boolean> readable = new HashMap<>();
+    private final Map<String, Boolean> writable = new HashMap<>();
+
+    @Nullable
+    private Runnable onCapabilities;
+
+    /**
+     * Who else has {@code path} open, by display name. Empty when nobody does, or nobody has said yet.
+     *
+     * <p><b>Empty is not "nobody".</b> It is "nothing has been said", and the two are indistinguishable
+     * from here — which is why this is only ever used to <em>add</em> information (a conflict naming who
+     * else is editing, a status line) and never to decide anything. A UI that hid a warning because the
+     * list was empty would hide it exactly when the server had not got round to answering.</p>
+     */
+    public List<String> whoElseHasOpen(@Nullable CgPath path) {
+        if (path == null) return java.util.Collections.emptyList();
+        List<String> others = presence.get(path);
+        return others == null ? java.util.Collections.emptyList() : others;
+    }
+
+    /** Every path this client knows somebody else has open. */
+    public java.util.Set<CgPath> pathsOthersHaveOpen() {
+        return new java.util.LinkedHashSet<>(presence.keySet());
+    }
+
+    /** Told when the presence view changes, so a status line can redraw. */
+    public void onPresenceChanged(Runnable handler) {
+        this.onPresence = handler;
+    }
+
+    private void applyPresence(StateMap<T> in) {
+        // REPLACED WHOLESALE, matching what the server sends. A merge would leave a path that has just
+        // become unoccupied showing its last occupant for ever, because "nobody is here now" arrives as
+        // an ABSENCE from the list rather than as an entry saying zero.
+        presence.clear();
+        for (StateMap<T> entry : in.getList(WorkspaceProtocol.PRESENCE_ENTRIES, e -> e)) {
+            CgPath path = CgPath.parse(entry.getString(WorkspaceProtocol.PATH, ""));
+            List<String> who = entry.getList(WorkspaceProtocol.WHO,
+                    e -> e.getString(WorkspaceProtocol.NAME, ""));
+            if (!who.isEmpty()) presence.put(path, who);
+        }
+        if (onPresence != null) onPresence.run();
+    }
+
+    private final Map<CgPath, List<String>> presence = new HashMap<>();
+
+    @Nullable
+    private Runnable onPresence;
 
     /** What the server reports when a watched file moves. */
     public record FileChanged(CgPath path, String kind, String etag) {
