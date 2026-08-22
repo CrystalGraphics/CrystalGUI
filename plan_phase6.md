@@ -81,7 +81,7 @@ empirical study across Git repositories found it describes code changes more eff
 
 ---
 
-## 6.1 The watcher reads every byte of every watched file · **one line, do it first**
+## 6.1 The watcher reads every byte of every watched file · **done 2026-08-22**
 
 `WorkspaceWatcher.poll()` calls `service.read(actor, path).etag()` — a **full content read** — to obtain an
 etag that `stat()` already yields from size and mtime. It runs every 0.5 s, per peer, per watched file,
@@ -97,7 +97,7 @@ version of 6.2 keeps the poll as its reconciliation path.
 
 ---
 
-## 6.2 A real filesystem watcher · **what "watch service" actually means**
+## 6.2 A real filesystem watcher · **done 2026-08-22**
 
 Watch the OS, not the etag: when a file is **changed, saved, moved or deleted** by anything — an external
 editor, a git checkout, a resource pack update — the server learns immediately and tells every client that
@@ -134,7 +134,7 @@ watcher sees the write on disk and must not re-report it to that peer as somebod
 
 ---
 
-## 6.3 The client end of a change · **the half that is missing entirely**
+## 6.3 The client end of a change · **done 2026-08-22**
 
 The server→client half has worked since Phase 4. `Workbench` receives `fs.changed` and refreshes the
 **file tree**. **No open editor is touched.** So today: a file changed externally while your buffer is
@@ -255,12 +255,32 @@ workspace root is the boundary, as the project registry already is for everythin
 
 ## Order, and why
 
-1. **6.1** — one line, unblocks everything, and 6.2 depends on the poll being cheap because it keeps it.
-2. **6.2 → 6.3** as a pair. A watcher whose events reach nothing is a cost with no feature; the client end
-   is the feature. 6.3 alone would also work on the existing poll, so it can start first if preferred.
+1. ~~**6.1**~~ **done.** `stat`, not `read`. Pinned by counting filesystem reads rather than by timing,
+   because the work was invisible: a throughput assertion passes whether or not the file is read.
+2. ~~**6.2 → 6.3**~~ **done, as the pair they are.**
+   - `CgFileEventSource` / `CgFileEvent` / `NioFileEventSource`, one source **per project** rather than
+     per peer (a watch is an OS handle and Linux caps them per *user*), drained **once** on the server
+     tick and fanned out, since draining is destructive.
+   - `drain()` rather than a listener: the implementation may use a thread, but nothing it owns crosses
+     that boundary — a signal emitted by a watcher thread carries that thread into every consumer, which
+     this codebase has already paid for once.
+   - **The etag stays the arbiter even when an event prompted the look.** `ENTRY_MODIFY` fires for a
+     touch that changed no bytes, and one save is often three events (truncate, write, rename), so
+     trusting the event would report a save three times.
+   - **OVERFLOW falls through to the full re-scan**, which is the entire reason 6.1 came first. Ignoring
+     it fails a test.
+   - Client end: clean reloads silently, dirty is marked and left alone, deleted keeps its buffer. The
+     mark goes through `FileDecorations`, so it reaches the tab **and** the tree from one place and
+     bubbles to the folder — colour climbing, badge not.
 3. **6.6 → 6.7 and 6.8.** The differ unlocks both, and 6.7 is the visible one.
 4. **6.4 and 6.5** are independent of all of the above and of each other.
 5. **6.9** should exist before 6.5 is called done.
+
+> **One thing 6.3 taught, recorded because the first test asserted the opposite.** A plain save of an
+> externally-changed file is **refused**, and the mark correctly stays: the write quotes an etag the
+> server no longer has, so it is a conflict and 5.5 asks which version survives. The mark clears on a
+> write that *lands* — which is why "keep mine" is now `Workbench.overwriteActiveFile()` rather than a
+> branch living inside a modal's callback, where it could not be tested without driving the modal.
 
 ---
 
