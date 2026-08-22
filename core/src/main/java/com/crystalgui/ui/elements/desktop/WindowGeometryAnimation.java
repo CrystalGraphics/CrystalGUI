@@ -2,6 +2,9 @@ package com.crystalgui.ui.elements.desktop;
 
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.easing.Easing;
+import com.crystalgui.ui.UIElement;
+
+import java.util.function.BooleanSupplier;
 
 /**
  * A window changing SIZE — driven through layout, not through a transform.
@@ -37,7 +40,11 @@ import com.crystalgui.style.easing.Easing;
  */
 final class WindowGeometryAnimation implements WindowMotion {
 
-    private final WindowFrame frame;
+    private final UIElement target;
+
+    /** Whether the thing being animated is still worth writing to. @see WindowAnimation */
+    private final BooleanSupplier alive;
+
     private final float fromLeft;
     private final float fromTop;
     private final float fromWidth;
@@ -52,11 +59,12 @@ final class WindowGeometryAnimation implements WindowMotion {
     private final Runnable onDone;
     private boolean over;
 
-    WindowGeometryAnimation(WindowFrame frame,
+    WindowGeometryAnimation(UIElement target, BooleanSupplier alive,
                             float fromLeft, float fromTop, float fromWidth, float fromHeight,
                             float toLeft, float toTop, float toWidth, float toHeight,
                             long durationNanos, Easing easing, Runnable onDone) {
-        this.frame = frame;
+        this.target = target;
+        this.alive = alive;
         this.fromLeft = fromLeft;
         this.fromTop = fromTop;
         this.fromWidth = fromWidth;
@@ -78,7 +86,7 @@ final class WindowGeometryAnimation implements WindowMotion {
     public boolean tickFrame(float deltaSeconds) {
         if (over) return false;
         // A ticker whose element has left the tree must stop; registration is one-way by design.
-        if (frame.state() == WindowState.DESTROYED) {
+        if (!alive.getAsBoolean()) {
             over = true;
             return false;
         }
@@ -116,7 +124,7 @@ final class WindowGeometryAnimation implements WindowMotion {
         float top = fromTop + (toTop - fromTop) * p;
         float width = fromWidth + (toWidth - fromWidth) * p;
         float height = fromHeight + (toHeight - fromHeight) * p;
-        StyleGroup.inlinePipeline(frame.getStyle().getLayoutGroup(),
+        StyleGroup.inlinePipeline(target.getStyle().getLayoutGroup(),
                 l -> l.left(left).top(top).width(width).height(height));
     }
 }

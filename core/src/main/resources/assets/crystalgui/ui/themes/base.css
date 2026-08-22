@@ -688,4 +688,22 @@ theme {
      * state rather than as a target. */
     --window-close-hover-bg: var(--error);
     --window-close-hover-fg: var(--fg-on-accent);
+
+    /* ── Taskbar hover previews ──────────────────────────────────────────────────────────────────
+     * The panel a taskbar entry raises on hover: a header and a live picture of the window. It is a
+     * floating surface over everything else, so it takes the RAISED surface rather than the base one,
+     * and its own close takes the same SYSTEM pair the window close does -- the destructive-control
+     * convention is about the gesture, not about which widget offers it. Derived from --error rather
+     * than from --window-close-hover-bg, because a component token derives from the system vocabulary
+     * and never from another component's: chaining them makes one widget's restyle silently move
+     * another's. */
+    --preview-bg: var(--surface-raised);
+    --preview-border: var(--border-base);
+    --preview-fg: var(--fg);
+    --preview-close-hover-bg: var(--error);
+    --preview-close-hover-fg: var(--fg-on-accent);
+
+    /* Behind the picture, so a window that does not fill the box letterboxes against something darker
+     * than the panel rather than merging into it. */
+    --preview-thumbnail-bg: var(--surface-base);
 }

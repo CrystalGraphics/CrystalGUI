@@ -603,3 +603,96 @@ window.__dock-window__ .__strip__ {
  * Declaring a `transition` on `window` again would reintroduce all of it: the animator's writes are on
  * ANIMATION origin precisely so the cascade's diff ignores them, and a live transition spec would start
  * competing for the same properties. The theme-facing control is Desktop.setAnimationsEnabled. */
+
+/* ── TASKBAR HOVER PREVIEWS ─────────────────────────────────────────────────────────────────────
+ *
+ * Windows' thumbnail preview: an icon, the window's title, a close button, and a live picture of the
+ * window itself. One panel that MOVES between entries rather than one per entry -- see TaskbarPreviews
+ * for why that is the behaviour and not an optimisation.
+ *
+ * ABSOLUTE, because it is promoted to the top layer and a promoted element's containing block is the
+ * root. AnchoredPlacement owns its left/top; nothing else may write them. */
+.__window-preview__ {
+    position: absolute;
+    flex-direction: column;
+    background-color: var(--preview-bg, #2B2B2B);
+    border-width: 1px;
+    border-color: var(--preview-border, #3D3D3D);
+    border-radius: var(--radius-panel, 4px);
+    padding-left: 3px;
+    padding-right: 3px;
+    padding-top: 2px;
+    padding-bottom: 3px;
+    z-index: 100;
+}
+
+/* The header is a ROW that fills the panel's width, and the title is the part that gives. `width: 0`
+ * plus `flex-grow: 1` is the fill idiom sideways -- neither flex-grow alone nor width: 100% works, and
+ * the parent has a width to divide because the thumbnail below it has a fixed one. */
+.__window-preview__ > .__preview-header__ {
+    flex-direction: row;
+    align-items: center;
+    gap-all: 4px;
+    padding-left: 2px;
+    padding-bottom: 3px;
+    width: 100%;
+    flex-shrink: 0;
+}
+
+.__window-preview__ .__pre-icon__ {
+    width: 10px;
+    height: 10px;
+    flex-shrink: 0;
+}
+
+/* ELIDED, and the font-size is on the TEXT rather than the header -- `font-size` does not effectively
+ * inherit here, because default.css opens with a universal rule, so a declaration on a wrapper computes
+ * on the wrapper and the label inside it stays at 10. The full title is on a tooltip; see WindowPreview. */
+.__window-preview__ .__preview-title__ {
+    width: 0;
+    flex-grow: 1;
+    font-size: 9;
+    color: var(--preview-fg, #DFE1E5);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* The close is a GLYPH, not a labelled button, so the base button rule's min-height and padding have to
+ * be cleared -- min-height is a different property from height and a base rule's minimum otherwise beats
+ * any size written at higher specificity. */
+.__window-preview__ .__preview-close__ {
+    width: 18px;
+    height: 13px;
+    min-width: 0px;
+    min-height: 0px;
+    padding-left: 0px;
+    padding-right: 0px;
+    padding-top: 0px;
+    padding-bottom: 0px;
+    flex-shrink: 0;
+    border-radius: 0px;
+    background: none;
+    background-color: transparent;
+    overlay: icon("crystalgui:x");
+    overlay-fit: contain;
+    overlay-origin: content-box;
+    color: var(--preview-fg, #DFE1E5);
+}
+
+/* WINDOWS' CLOSE RED, and both halves are needed: `background` and `background-color` are separate
+ * properties, so a rule that sets only the colour is painted over by whatever drawable won. */
+.__window-preview__ .__preview-close__:hover {
+    background: none;
+    background-color: var(--preview-close-hover-bg, #C42B1C);
+    color: var(--preview-close-hover-fg, #FFFFFF);
+}
+
+/* The picture. A fixed box, because the panel is anchored above an entry and a preview that resized
+ * itself per window would make the strip jump as you moved along it. WindowThumbnail fits the window
+ * into this and centres it, so the letterboxing is this background. */
+.__window-preview__ > .__thumbnail__ {
+    width: 96px;
+    height: 54px;
+    flex-shrink: 0;
+    background-color: var(--preview-thumbnail-bg, #1E1F22);
+}

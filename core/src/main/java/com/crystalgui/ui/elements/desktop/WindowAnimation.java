@@ -5,9 +5,12 @@ import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.style.transition.ActiveTransition;
+import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UITransform;
 
 import javax.annotation.Nullable;
+
+import java.util.function.BooleanSupplier;
 
 /**
  * One window animation, driven imperatively — the {@code AnimationController} shape.
@@ -57,7 +60,17 @@ import javax.annotation.Nullable;
  */
 final class WindowAnimation implements WindowMotion {
 
-    private final WindowFrame frame;
+    private final UIElement target;
+
+    /**
+     * Whether the thing being animated is still worth writing to.
+     *
+     * <p>A predicate rather than a state check, because the two consumers answer it differently: a
+     * window is gone once it is {@code DESTROYED}, while a taskbar preview is gone once it has left the
+     * tree. A ticker whose subject has died must stop, and registration is one-way by design.</p>
+     */
+    private final BooleanSupplier alive;
+
     private final ActiveTransition<UITransform> transform;
     private final ActiveTransition<Float> opacity;
     @Nullable
@@ -71,10 +84,11 @@ final class WindowAnimation implements WindowMotion {
      * value" is a frame of the END state, which is a visible flash at the beginning of every gesture.
      * The ticker exists to advance it, not to begin it.</p>
      */
-    WindowAnimation(WindowFrame frame, UITransform from, UITransform to,
+    WindowAnimation(UIElement target, BooleanSupplier alive, UITransform from, UITransform to,
                     float fromOpacity, float toOpacity, LengthPercent originX, LengthPercent originY,
                     long durationNanos, Easing easing, @Nullable Runnable onDone) {
-        this.frame = frame;
+        this.target = target;
+        this.alive = alive;
         this.onDone = onDone;
         long now = System.nanoTime();
         this.transform = new ActiveTransition<>(
@@ -94,10 +108,10 @@ final class WindowAnimation implements WindowMotion {
         // outlive the animation that needed it and silently re-anchor an unrelated one later -- which is
         // exactly how the previous version came to ease a maximise about the centre having computed it
         // about the corner.
-        frame.getStyle().startAnimationSlot(StylePropertyRegistry.TRANSFORM_ORIGIN_X, originX, 0);
-        frame.getStyle().startAnimationSlot(StylePropertyRegistry.TRANSFORM_ORIGIN_Y, originY, 0);
-        frame.getStyle().startAnimationSlot(StylePropertyRegistry.TRANSFORM, from, 0);
-        frame.getStyle().startAnimationSlot(StylePropertyRegistry.OPACITY, fromOpacity, 0);
+        target.getStyle().startAnimationSlot(StylePropertyRegistry.TRANSFORM_ORIGIN_X, originX, 0);
+        target.getStyle().startAnimationSlot(StylePropertyRegistry.TRANSFORM_ORIGIN_Y, originY, 0);
+        target.getStyle().startAnimationSlot(StylePropertyRegistry.TRANSFORM, from, 0);
+        target.getStyle().startAnimationSlot(StylePropertyRegistry.OPACITY, fromOpacity, 0);
         notifyTransform(from);
     }
 
@@ -116,14 +130,14 @@ final class WindowAnimation implements WindowMotion {
         if (over) return false;
         // A TICKER WHOSE ELEMENT HAS LEFT THE TREE MUST STOP, and a destroyed window has no style to
         // write to. Registration is one-way by design, so nothing else will stop it.
-        if (frame.state() == WindowState.DESTROYED) {
+        if (!alive.getAsBoolean()) {
             over = true;
             return false;
         }
         long now = System.nanoTime();
         UITransform value = transform.currentValue(now);
-        frame.getStyle().tickAnimationSlot(StylePropertyRegistry.TRANSFORM, value, 0);
-        frame.getStyle().tickAnimationSlot(StylePropertyRegistry.OPACITY, opacity.currentValue(now), 0);
+        target.getStyle().tickAnimationSlot(StylePropertyRegistry.TRANSFORM, value, 0);
+        target.getStyle().tickAnimationSlot(StylePropertyRegistry.OPACITY, opacity.currentValue(now), 0);
         notifyTransform(value);
 
         if (!transform.isFinished(now)) return true;
@@ -160,7 +174,7 @@ final class WindowAnimation implements WindowMotion {
      * animation.</p>
      */
     private void clearSlots() {
-        var style = frame.getStyle();
+        var style = target.getStyle();
         style.endAnimationSlot(StylePropertyRegistry.TRANSFORM);
         style.endAnimationSlot(StylePropertyRegistry.OPACITY);
         style.endAnimationSlot(StylePropertyRegistry.TRANSFORM_ORIGIN_X);
@@ -180,6 +194,6 @@ final class WindowAnimation implements WindowMotion {
      */
     private void notifyTransform(@Nullable UITransform value) {
         StyleProperty<UITransform> property = StylePropertyRegistry.TRANSFORM;
-        property.notifyListeners(frame, value, value);
+        property.notifyListeners(target, value, value);
     }
 }

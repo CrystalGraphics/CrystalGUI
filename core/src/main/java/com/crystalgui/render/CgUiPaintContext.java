@@ -496,6 +496,43 @@ public final class CgUiPaintContext {
         return frameId;
     }
 
+    /**
+     * Depth of nested mirror passes. @see #mirroring()
+     *
+     * <p>A counter rather than a flag because a mirror can legitimately contain another — a taskbar
+     * preview of a window that itself shows a preview — and a boolean would be cleared by the inner one
+     * on the way out, leaving the rest of the outer pass writing world matrices again.</p>
+     */
+    private int mirrorDepth;
+
+    /**
+     * Draws {@code body} as a MIRROR — a second, non-authoritative rendering of something that is also
+     * drawn somewhere else.
+     *
+     * <p>Every element reconciles its cached {@code localToWorld} against the pose it was drawn with, and
+     * that cache is what HIT-TESTING walks: the engine's rule is that the two must produce an identical
+     * matrix or clicks land somewhere other than what the user sees. Drawing a subtree a second time
+     * under a different pose therefore leaves every element in it believing it lives wherever the copy
+     * was — and a copy is normally drawn LATER (a taskbar preview lives in the top layer), so the copy
+     * wins and the real window stops being clickable where it is.</p>
+     *
+     * <p>So a mirror pass says "paint this, but do not learn anything from it". The subtree draws exactly
+     * as it would anywhere else; only the placement bookkeeping stands down.</p>
+     */
+    public void mirrored(Runnable body) {
+        mirrorDepth++;
+        try {
+            body.run();
+        } finally {
+            mirrorDepth--;
+        }
+    }
+
+    /** Whether the current draw is a mirror, and so must not update placement caches. @see #mirrored */
+    public boolean mirroring() {
+        return mirrorDepth > 0;
+    }
+
     public void beginFrame(int screenWidth, int screenHeight) {
         frameId++;
         if (frameActive) throw new IllegalStateException("beginFrame() called without matching endFrame()");
@@ -563,7 +600,7 @@ public final class CgUiPaintContext {
 
     /**
      * Eagerly creates (and cold-draws into) the layer-FBO pool slots a masked element with children
-     * commonly needs, once, on the first frame — see {@link #warmUpLayerFbo} for why. Depth 0 covers
+     * commonly needs, once, on the first frame — see {@link #warmUpLayer} for why. Depth 0 covers
      * the element's own background layer; depth 1 covers its children's nested layer; depth 2
      * covers the transient mask-shape FBO. Deeper nesting (an element whose child is *also* masked)
      * isn't pre-warmed here — it's covered automatically by {@link #acquireLayerFbo}'s own per-slot
@@ -1153,7 +1190,7 @@ public final class CgUiPaintContext {
             String name = "cgui_layer_" + layerFboPool.size();
             CgFrameBuffer newFbo = CgFrameBuffer.createOwned(name, Math.max(1, screenWidth), Math.max(1, screenHeight), LAYER_FORMAT);
             layerFboPool.add(newFbo);
-            warmUpLayerFbo(newFbo);
+            warmUpLayer(newFbo);
         }
         CgFrameBuffer fbo = layerFboPool.get(depth);
         if (fbo.getWidth() != screenWidth || fbo.getHeight() != screenHeight) {
@@ -1179,8 +1216,14 @@ public final class CgUiPaintContext {
      * <p>Self-scaling by construction: this runs from {@link #acquireLayerFbo} itself, so it covers
      * every nesting depth the UI tree ever actually reaches, not just whatever depth
      * {@link #warmUp()} eagerly primes at startup.</p>
+     *
+     * <p><b>Public, because the pool is no longer the only thing that creates one.</b> Anything holding
+     * its own render target through {@link #beginLayerFbo(CgFrameBuffer)} — a window snapshot, say —
+     * inherits this hazard exactly, and inherits it in its most confusing form: the first capture comes
+     * out missing content and every one after it is perfect, so it reads as a race in whatever was being
+     * captured rather than in the target it was drawn onto.</p>
      */
-    private void warmUpLayerFbo(CgFrameBuffer fbo) {
+    public void warmUpLayer(CgFrameBuffer fbo) {
         flush();
         CgMaterial previousMaterial = currentMaterial;
         CgTexture2D previousTexture = currentTexture;
@@ -1211,8 +1254,28 @@ public final class CgUiPaintContext {
      * @return the acquired FBO, for the caller to composite/blit once painting into it is done
      */
     public CgFrameBuffer beginLayerFbo() {
+        return beginLayerFbo(acquireLayerFbo(layerStack.size()));
+    }
+
+    /**
+     * As {@link #beginLayerFbo()}, but rendering into a target the CALLER owns and keeps.
+     *
+     * <p>The no-argument version hands out a screen-sized FBO from a per-depth pool, which is right for
+     * an opacity or mask layer: those are composited and finished within the same frame, so the pool can
+     * hand the same buffer to the next element that needs one. A SNAPSHOT is the opposite — the whole
+     * point is that it outlives the frame it was drawn in, so it cannot come from a pool that will reuse
+     * it, and it is sized to the thing it captures rather than to the screen.</p>
+     *
+     * <p>Everything else is identical, including the projection: the viewport and ortho are set from
+     * {@code target}'s own dimensions, so a caller drawing at ordinary coordinates fills it. Pair with
+     * {@link #endLayerFbo}.</p>
+     *
+     * <p>Ownership stays entirely with the caller — this neither allocates nor frees. A
+     * {@code createOwned} framebuffer bypasses {@code CgFrameBufferRegistry}, so nothing sweeps it and
+     * whoever made it has to say when it dies.</p>
+     */
+    public CgFrameBuffer beginLayerFbo(CgFrameBuffer fbo) {
         flush();
-        CgFrameBuffer fbo = acquireLayerFbo(layerStack.size());
         CgFrameData fd = CgRenderPipeline.getInstance().getFrameData();
         layerStack.push(new LayerFrame(fbo, CgGlState.save(CgGlSlot.FBO, CgGlSlot.VIEWPORT),
                 new Matrix4f(fd.projMatrix), fd.viewportW, fd.viewportH));
@@ -1269,6 +1332,31 @@ public final class CgUiPaintContext {
      * {@code uiScale} scale meant for logical-space element coordinates. Submitting an
      * already-physical-sized quad through that same scale would double-apply it. Temporarily
      * resetting the pose to identity for just this quad avoids that.</p> */
+    /**
+     * Draws a finished layer FBO into an arbitrary rect, through the active {@link PoseStack}.
+     *
+     * <p>{@link #blitLayer} composites a layer back over the whole screen at identity, which is what an
+     * opacity group needs. This is for the other case: a captured layer being drawn somewhere else and
+     * at another size — a window's snapshot in a taskbar preview. So the pose is <b>kept</b> rather than
+     * reset, the rect is in ordinary logical coordinates, and the caller places it like any other quad.</p>
+     *
+     * <p>Same material and the same flipped V as {@code blitLayer}, and for the same reasons: an FBO's
+     * contents are premultiplied alpha, because every partially-covered pixel was painted starting from
+     * a transparent clear, so compositing it needs premultiplied blend rather than the box model's
+     * straight-alpha one. Using the wrong material reproduces exactly the "AA edges look different once
+     * they have been through a layer" symptom.</p>
+     */
+    public void drawLayer(CgFrameBuffer fbo, float x, float y, float width, float height) {
+        CgTexture2D colorTex = (CgTexture2D) fbo.getColorTexture(0);
+        withMaterial(layerBlitMaterial, () -> {
+            bindTexture(colorTex);
+            quad().at(x, y).size(width, height)
+                  .uv(0f, 1f, 1f, 0f)   // V flipped — see blitLayer's javadoc
+                  .color(getColor()).submit();
+            flush();
+        });
+    }
+
     public void blitLayer(CgFrameBuffer fbo, float opacity) {
         CgTexture2D colorTex = (CgTexture2D) fbo.getColorTexture(0);
         withMaterial(layerBlitMaterial, () -> withLayerOpacity(opacity, () -> {

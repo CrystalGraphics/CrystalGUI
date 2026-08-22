@@ -2310,7 +2310,10 @@ public class UIElement implements SettingsScope, DataProvider {
 
     /** The body of {@link #drawSubtree}, with this element's own transform already on the pose. */
     private void drawSubtreeTransformed(CgUiPaintContext ctx) {
-        reconcileWorldMatrix(ctx.getPoseStack().last().pose());
+        // NOT DURING A MIRROR. A second rendering of this subtree somewhere else -- a taskbar preview --
+        // is not where this element lives, and hit-testing walks exactly this cache.
+        // @see CgUiPaintContext#mirrored
+        if (!ctx.mirroring()) reconcileWorldMatrix(ctx.getPoseStack().last().pose());
 
         GeneralGroup styleGen = style.getGeneralGroup();
         float opacity = styleGen.opacity();

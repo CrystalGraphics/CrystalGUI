@@ -74,7 +74,15 @@ public class Taskbar extends UIElement {
         entries = new UIElement();
         entries.addClass(ENTRIES_CLASS);
         addInternalChild(entries);
+        // BOTH CHILDREN BEFORE ATTACH. Adding one later means inserting a Taffy node into a parent
+        // whose children are mid-registration -- `Index (is 1) should be < child_count (0)` -- which is
+        // exactly what building the previews lazily from createEntry did, since refresh() runs from
+        // onWindowChanged. @see UIElement#taffyChildIndex
+        previews = new TaskbarPreviews(this);
     }
+
+    /** The hover previews. One panel that moves between entries. @see TaskbarPreviews */
+    private final TaskbarPreviews previews;
 
     /** A taskbar owns its entries; they follow the registry. */
     @Override
@@ -98,7 +106,7 @@ public class Taskbar extends UIElement {
 
     /** The desktop this strip belongs to — always its parent, and null only while detached. */
     @Nullable
-    private Desktop desktop() {
+    Desktop desktop() {
         for (UIElement element = getParent(); element != null; element = element.getParent()) {
             if (element instanceof Desktop) return (Desktop) element;
         }
@@ -156,6 +164,7 @@ public class Taskbar extends UIElement {
     private Button createEntry(Desktop desktop, WindowFrame frame) {
         Button entry = new Button(frame.getTitle());
         entry.addClass(ENTRY_CLASS);
+        previews.watch(entry, frame);
         entry.attachListener(() -> {
             if (frame.state() == WindowState.HIDDEN || desktop.activeWindow() != frame) {
                 // POINTER activation, so focus lands without a ring: the user pointed at this. Restoring
@@ -210,6 +219,12 @@ public class Taskbar extends UIElement {
     public void setBarVisible(boolean visible) {
         StyleGroup.importantPipeline(getStyle().getLayoutGroup(),
                 l -> l.display(visible ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
+    }
+
+    /** The window a hover preview is currently showing, or null. @see TaskbarPreviews */
+    @Nullable
+    WindowFrame previewedWindow() {
+        return previews.showingFrame();
     }
 
     /** The entry for {@code frame}, or null. Exposed for tests and for a future context menu. */
