@@ -195,15 +195,22 @@ window {
  * window carry the height of a bar most of them do not have. Growing to the tallest thing in it is
  * the one rule that is right in both cases. */
 window > .__title-bar__ {
-    min-height: 18px;
+    /* 20px = a 16px control plus the 2px gap above and below it, which is the same 2px the controls
+     * put between themselves and to the right of the last one. That is the whole derivation: the
+     * caption is as tall as its furniture needs, so the strip is evenly spaced on all four sides.
+     * At 18 the vertical gap came out 1px against 2px everywhere else -- close enough to look like a
+     * mistake rather than a choice, which is exactly what it was. */
+    min-height: 20px;
     width: 100%;
     flex-direction: row;
     align-items: center;
     flex-shrink: 0;
     padding-left: 6px;
-    /* ZERO, and it is load-bearing: it is what puts the close button's centre on the activity rail's
-     * centre line. See the controls below. */
-    padding-right: 0px;
+    /* THE SAME 2px THE CONTROLS PUT BETWEEN THEMSELVES, so the gap to the right of the close button
+     * is the gap between every other pair and the strip is evenly spaced on all four sides rather
+     * than jammed against the frame. It is load-bearing twice over: with a 16px button it is also
+     * what puts the close button's centre on the activity rail's centre line. See the controls. */
+    padding-right: 2px;
     background: var(--window-title-bg, #2B2B2B);
     color: var(--window-title-fg, #9DA0A8);
 }
@@ -282,32 +289,50 @@ window > .__title-bar__ > .__title__ {
 }
 
 /* ── The window controls ────────────────────────────────────────────────────────────────────────
- * FULL-HEIGHT BLOCKS, EDGE TO EDGE, and every number below is derived rather than chosen.
+ * THREE EQUAL SQUARES WITH ONE GAP AROUND THEM, and every number below is derived from two facts
+ * rather than chosen: the gap is 2px, and the close button's centre must land on the activity
+ * rail's.
  *
- * THE WIDTH IS THE ACTIVITY RAIL'S. `--activity-bar-w` is the workbench's own rail, 20px, whose
- * buttons it centres — and the caption's right padding is ZERO, so the close button's centre line
- * lands exactly where the rail's does. The X therefore sits directly above the rail buttons under
- * it rather than nearly above them, and it stays that way if the rail is ever re-sized, because
- * both read one variable. (The parts share a variable scope and this one is declared in
- * ua/workbench.css, which comes earlier in the manifest.)
+ * They were full-height blocks flush to the frame's edge for exactly one round -- which is what
+ * Windows and VS Code draw, and is wrong for a window this small. At 21px of caption a full-height
+ * block is nearly square already, so the "block" reads as a box jammed into the corner rather than
+ * as a control group: there is no space between the three and none at all between the last one and
+ * the border it touches. The reference those blocks come from has a 32px caption and 45px buttons,
+ * where the same shape reads as generous.
  *
- * NO GAP AND NO RADIUS. A caption button's hover fill is a full-height block in Windows, in IntelliJ
- * and in VS Code, and the reason is that the caption is the edge of the window: a rounded pill
- * floating in the middle of the bar gives the pointer a smaller target than the space it appears to
- * occupy, and leaves a dead strip above and below it that looks like part of the button and is not.
- * Adjacent blocks also make the strip read as one control group. */
+ * THE GEOMETRY, in the order it has to be derived:
+ *
+ *   - The rail is `--activity-bar-w` (20px) and sits flush to the content's right edge, so its
+ *     centre line is 10px in from that edge.
+ *   - The gap is 2px, and the caption's right padding is the same 2px -- so the last button's right
+ *     edge is 2px in from the frame's edge, exactly as its neighbours are 2px from each other.
+ *   - The close button is therefore 16px wide: 2 + 16/2 = 10, the rail's centre line. The X sits
+ *     directly above the rail buttons under it and stays there if the rail is ever re-sized,
+ *     because both numbers read the one variable. (`--activity-bar-w` is declared in
+ *     ua/workbench.css, which comes earlier in the manifest, so the scope is shared.)
+ *
+ * A 16px square is also the size every toolbar button in this application already is, so the strip
+ * matches the rail below it in more than its centre line.
+ *
+ * VERTICALLY CENTRED, NOT STRETCHED. `align-items: center` against a caption whose height is not
+ * fixed -- it grows for adopted chrome (a menu bar is 22px), and a stretched button would then be a
+ * tall slab beside a short glyph. Centring is the one rule that is right at every caption height. */
 window .__controls__ {
     flex-direction: row;
     align-self: stretch;
-    align-items: stretch;
+    align-items: center;
     flex-shrink: 0;
-    gap-all: 0px;
+    gap-all: 2px;
 }
 
 /* THE GLYPH IS SMALL INSIDE A BIG BUTTON, which is what the padding is for -- `overlay-fit: contain`
- * scales the artwork to whatever box it is given, so a 20px button would otherwise draw a 20px mark.
+ * scales the artwork to whatever box it is given, so a 16px button would otherwise draw a 16px mark.
  * `overlay-origin: content-box` moves that box inside the padding, shrinking the DRAWING without
  * shrinking the thing you have to hit. Same idiom, same reason, as `runpanel .__run-action__`.
+ *
+ * 2px, so the content box is a 12x12 square and `contain` leaves the artwork at 12 -- the size the
+ * file is drawn at. Any more padding and `contain` starts scaling it DOWN, which is how a glyph ends
+ * up a different size in a taller caption than in a short one.
  *
  * `min-height`/`min-width` are cleared because `button` carries `min-height: 14px` in the base sheet,
  * and a minimum is a DIFFERENT PROPERTY from a height: it wins at any specificity without appearing
@@ -315,11 +340,11 @@ window .__controls__ {
 window .__title-bar__ .__minimize__,
 window .__title-bar__ .__maximize__,
 window .__title-bar__ .__close__ {
-    width: var(--activity-bar-w, 20px);
-    height: 100%;
+    width: 16px;
+    height: 16px;
     min-height: 0px;
     min-width: 0px;
-    padding-all: 4px;
+    padding-all: 2px;
     flex-shrink: 0;
     border-radius: 0px;
     background: none;
