@@ -628,14 +628,27 @@ theme {
      * inactive most of the time, and every window manager marks the one you are talking to rather
      * than the several you are not. The pair has to differ in BOTH channels: a caption that only
      * changed colour would say nothing to anyone reading it as text, and one that only changed fill
-     * would say nothing at a glance across a stack of them. */
+     * would say nothing at a glance across a stack of them.
+     *
+     * Inactive is the LIGHTER of the two, which looks backwards written down and is what Windows 11
+     * does: the active caption merges with the application below it (see the pair after this one) and
+     * an inactive one steps away from it, flatter and with quieter text. Marking activity by making a
+     * window darker is the same signal read the other way round. */
     --window-title-bg: var(--surface-raised);
     --window-title-fg: var(--fg-secondary);
-    /* A LIGHTER GREY, not the accent. Painting the active caption in the accent colour reads as a
-     * selection or a focus ring rather than as chrome — the accent means "this is the thing you
-     * picked", and every window you look at is one you picked. Windows' own captions step a shade
-     * lighter and brighten their text, which is what these two do. */
-    --window-title-active-bg: var(--pressed-bg);
+    /* THE ACTIVE CAPTION IS THE APPLICATION'S OWN SURFACE, which is the half of client-side
+     * decorations that is not about where the chrome goes. Once a window hosts an application's menu
+     * bar, a caption in some other grey is a strip drawn across the top of that application rather
+     * than part of it — and the whole point of moving the bar up there was to stop having two bands.
+     * IntelliJ's New UI, GNOME's headerbars and Windows 11 all merge the two the same way.
+     *
+     * `--surface-base` is what the workbench paints itself, so the editor's window reads as one
+     * surface from its menu row down. A window with a panel body (which is most of them) still gets a
+     * caption a shade lighter than its content, which is the ordinary look.
+     *
+     * Never the accent: that means "the thing you picked", and every window you are looking at is one
+     * you picked — an accent caption reads as a selection. */
+    --window-title-active-bg: var(--surface-base);
     --window-title-active-fg: var(--fg);
 
     /* The taskbar. The island is an OVERLAY surface rather than a panel one: it floats over the
@@ -661,6 +674,11 @@ theme {
      * control that loses nothing, and dressing it as destructive would misstate what it does. */
     --window-control-fg: var(--fg-secondary);
     --window-control-hover-fg: var(--fg);
+    /* `--pressed-bg` rather than `--hover-bg`, and the reason is the surface it lands on. The hover
+     * role is tuned for a panel; a caption is darker than one, and on the ACTIVE caption -- which is
+     * the application's own surface -- `--hover-bg` comes out three points away from it and reads as
+     * nothing at all. This is the next step up the same neutral ladder. */
+    --window-control-hover-bg: var(--pressed-bg);
     /* Close, hovered: the destructive-control convention every window manager and VS Code share. The
      * glyph goes to the on-accent colour on top of it, or a hovered close button reads as an error
      * state rather than as a target. */

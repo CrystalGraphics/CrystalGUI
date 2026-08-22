@@ -647,9 +647,10 @@ editor scheme's.
 | `--window-close-hover-bg` | `var(--error)` | base.css |
 | `--window-close-hover-fg` | `var(--fg-on-accent)` | base.css |
 | `--window-control-fg` | `var(--fg-secondary)` | base.css |
+| `--window-control-hover-bg` | `var(--pressed-bg)` | base.css |
 | `--window-control-hover-fg` | `var(--fg)` | base.css |
 | `--window-fg` | `var(--fg)` | base.css |
-| `--window-title-active-bg` | `var(--pressed-bg)` | base.css |
+| `--window-title-active-bg` | `var(--surface-base)` | base.css |
 | `--window-title-active-fg` | `var(--fg)` | base.css |
 | `--window-title-bg` | `var(--surface-raised)` | base.css |
 | `--window-title-fg` | `var(--fg-secondary)` | base.css |
