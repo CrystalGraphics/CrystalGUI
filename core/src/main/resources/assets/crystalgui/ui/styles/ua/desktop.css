@@ -318,6 +318,23 @@ window .__title-bar__ .__close__:hover {
     background-color: var(--window-close-hover-bg, #F14C4C);
 }
 
+/* ── The owned surface ──────────────────────────────────────────────────────────────────────────
+ * Where a window's own modal dialogs live, and from W8 its floating tool windows. Above the content
+ * and below nothing else in the frame — an owned window is always over its owner, which is Win32's
+ * rule and the reason it is parented here rather than promoted to the global top layer (that paints
+ * above EVERY window, so a dialog would float over whichever one was raised next).
+ *
+ * Its geometry is written from Java: absolute, pinned to the frame's corner, and sized 100% only
+ * while something is actually showing on it. A full-size slot hit-tests, so one left open with
+ * nothing in it swallows every click on the window's own content — the same rule, and the same
+ * reason, as the desktop's own presence. See WindowFrame.releaseOwned.
+ *
+ * The frame keeps `overflow: visible` and only `__content__` clips, so an owned window may legally
+ * overhang its owner's edge — which a dialog wider than a narrow window has to. */
+window > .__overlays__ {
+    z-index: 10;
+}
+
 /* THE CHILD COMBINATOR IS NOT OPTIONAL HERE. `window .__content__` would reach CrystalEditor's,
  * ProjectFileTree's and every ConfiguratorGroup's `__content__` inside any window and zero their
  * heights — the trap that has now been sprung three times, each time reading as a panel bug.
