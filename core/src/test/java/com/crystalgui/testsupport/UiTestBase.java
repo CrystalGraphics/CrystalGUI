@@ -1,5 +1,6 @@
 package com.crystalgui.testsupport;
 
+import com.crystalgui.ui.elements.desktop.Desktop;
 import org.junit.Before;
 
 /**
@@ -35,5 +36,13 @@ public abstract class UiTestBase {
     @Before
     public final void installTestPlatform() {
         TestPlatformService.install();
+        // WINDOW ANIMATIONS OFF, for every test that does not deliberately turn them back on.
+        //
+        // Not squeamishness about visuals: TransitionEngine advances on System.nanoTime() and ignores
+        // the delta it is handed, so a transition cannot be stepped and a test that left one running
+        // would be asserting against wall time. Worse, a live transform is a REAL transform -- hit
+        // testing goes through the same chain the paint does -- so a test pressing a caption during an
+        // opening animation would miss it, by an amount that depends on how fast the machine is.
+        Desktop.setAnimationsEnabled(false);
     }
 }

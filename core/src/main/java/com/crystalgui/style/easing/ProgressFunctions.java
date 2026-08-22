@@ -14,6 +14,31 @@ public final class ProgressFunctions {
         public static final Easing IN_OUT_SINE = t -> (-(Math.cos(Math.PI * t) - 1) * 0.5);
         public static final Easing IN_CUBIC = t -> t * t * t;
         public static final Easing OUT_CUBIC = t -> (1 - Math.pow(1 - t, 3));
+
+        /**
+         * Penner's quadratic ease-out — {@code 1 - (1-t)^2}.
+         *
+         * <p>The gentlest of the decelerating family, and the one real window managers reach for when
+         * something is CHANGING SHAPE rather than arriving: GNOME Shell uses it for a window's
+         * maximise, unmaximise and close. Its virtue is that it still has visible speed at the
+         * half-way point, where a steeper curve has already arrived and left a long, imperceptible
+         * tail behind it.</p>
+         */
+        public static final Easing OUT_QUAD = t -> 1 - (1 - t) * (1 - t);
+
+        /**
+         * Penner's exponential ease-out — {@code 1 - 2^(-10t)}, clamped to land exactly on 1.
+         *
+         * <p>Extremely front-loaded: the thing leaves at speed and then glides to a stop. What that
+         * buys is DISTANCE — it is the curve for a window travelling somewhere, which is why GNOME
+         * Shell uses it for both halves of a minimise and for a window opening. Over a short hop it
+         * reads as a snap; over the width of a screen it reads as flight.</p>
+         *
+         * <p>The endpoint is special-cased because {@code 2^-10} is 0.00098, not 0 — without it every
+         * animation using this stops a tenth of a percent short of its target, which for a transform
+         * that is supposed to land on identity means a window left permanently a fraction off.</p>
+         */
+        public static final Easing OUT_EXPO = t -> t >= 1.0 ? 1.0 : 1 - Math.pow(2, -10 * t);
     }
 
     /**

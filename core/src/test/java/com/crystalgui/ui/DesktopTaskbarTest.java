@@ -207,6 +207,35 @@ public class DesktopTaskbarTest extends UiTestBase {
     }
 
     /**
+     * <b>...and it minimises the same way the caption's button does — animation included.</b>
+     *
+     * <p>The caption played the flight into the taskbar and then hid; this called {@code hide()}
+     * straight out and so did the same thing with no animation at all. One gesture, two call sites, and
+     * only one of them looked like a minimise — invisible to the test above, which runs with animations
+     * off and therefore cannot tell an animated hide from a bare one.</p>
+     *
+     * <p>Animations are turned on <em>after</em> the window is opened, so the only timeline that can be
+     * running when this asserts is the one the press started.</p>
+     */
+    @Test
+    public void theTaskbarMinimisesWithTheSameAnimationTheCaptionButtonUses() {
+        build();
+        WindowFrame frame = open("One");
+        assertSame(frame, desktop.activeWindow());
+
+        Desktop.setAnimationsEnabled(true);
+        try {
+            entry(frame).onPressed.emit();
+
+            assertTrue("the taskbar put the window away with no animation at all", frame.isAnimating());
+            assertEquals("it hid on the press, leaving nothing to animate",
+                    WindowState.VISIBLE, frame.state());
+        } finally {
+            Desktop.setAnimationsEnabled(false);
+        }
+    }
+
+    /**
      * And it is clickable <b>where it is drawn</b> — through the real mouse path, which is the half a
      * signal-driven test cannot answer. A strip that is laid out under the work area, or behind it, or
      * with no hit-testable box, passes every assertion above and cannot be used.

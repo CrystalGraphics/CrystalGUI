@@ -185,6 +185,26 @@ public class Desktop extends UIElement {
 
     /** The window the keyboard is talking to, or null when the desktop itself has the press. */
     @Nullable
+    /**
+     * Turns window open/close/minimise/maximise animations on or off, for the whole process.
+     *
+     * <p>Every desktop offers this — Windows' "Animate windows when minimizing and maximizing", macOS's
+     * Reduce Motion — for motion sensitivity and for remote sessions where the frames cost bandwidth.
+     * <b>Off means off, including the waiting</b>: a close takes effect on the same call rather than
+     * three frames later, so nothing downstream has to know which mode it is in.</p>
+     *
+     * <p>Static rather than per-desktop because it is a user preference about motion, not a property of
+     * one screen — and because a process has one user.</p>
+     */
+    public static void setAnimationsEnabled(boolean enabled) {
+        WindowAnimator.setEnabled(enabled);
+    }
+
+    /** @see #setAnimationsEnabled */
+    public static boolean animationsEnabled() {
+        return WindowAnimator.isEnabled();
+    }
+
     public WindowFrame activeWindow() {
         return activeWindow;
     }
@@ -382,6 +402,10 @@ public class Desktop extends UIElement {
         frame.setOwner(this);
         registry.opened(frame);
         windows.addChild(frame);
+        // A FIRST OPEN DOES NOT GO THROUGH show(), so the entry animation has to be played here as well.
+        // The two paths are genuinely different -- this one registers the window and hands it an owner,
+        // show() puts a hidden one back -- and the animation is the only thing they share.
+        frame.playOpenAnimation();
         // PROGRAMMATIC, so focus rings: nobody pointed at this window, so a keyboard user needs to be
         // told where focus went. The ring lands on whatever inside it takes focus -- never on the frame,
         // which ua/core.css exempts along with every other pane-sized widget.

@@ -162,7 +162,11 @@ public class Taskbar extends UIElement {
                 // a hidden window is part of what activate() means -- see Desktop.activate.
                 desktop.activate(frame, false);
             } else {
-                frame.hide();
+                // THE GESTURE, not the state change -- WindowFrame.minimize plays the flight into this
+                // very entry and hides at the end of it. Calling hide() here put the window away with no
+                // animation at all, while the caption's own button animated: one gesture, two call
+                // sites, and only one of them looked like a minimise.
+                frame.minimize();
             }
         });
         return entry;
