@@ -8,6 +8,7 @@ import com.crystalgui.ui.EventListenerGroup;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIFrameTicker;
 import com.crystalgui.ui.UIWindow;
+import com.crystalgui.ui.elements.desktop.WindowFrame;
 import com.crystalgui.ui.event.CloseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.input.UIDragController;
@@ -93,6 +94,10 @@ public class Dialog extends UIElement {
     private boolean modal;
     /** Built lazily: a modeless dialog never needs one, and most dialogs are modeless. */
     private UIElement backdrop;
+
+    /** The window this dialog is modal INSIDE, or null when it is modal over the whole screen. */
+    @Nullable
+    private WindowFrame ownerFrame;
 
     /** Position at the moment a move began. Accumulating from here rather than from the live box
      * keeps the drag from compounding its own deltas — same reason {@code UIResizer} snapshots size. */
@@ -250,9 +255,22 @@ public class Dialog extends UIElement {
         applyOpenState();
         startClampTicker();
 
-        // Backdrop FIRST, so it lands beneath the dialog: the top layer stacks purely by insertion order.
-        ensureBackdrop().addToTopLayer();
-        addToTopLayer();
+        // INSIDE ITS OWN WINDOW, if it has one. A modal that promoted to the global top layer would
+        // paint above every window rather than above its own -- the top layer paints after the whole
+        // main tree, so raising a different window would leave this dialog floating over the wrong one.
+        // Win32's owner/owned rule is the answer: an owned window stays above its owner AND TRAVELS
+        // WITH IT, which parenting into the frame gets for nothing.
+        //
+        // The backdrop goes first either way, so it lands beneath the dialog -- both the top layer and
+        // an ordinary child list stack by insertion order.
+        ownerFrame = WindowFrame.of(this);
+        if (ownerFrame != null) {
+            ownerFrame.attachOwned(ensureBackdrop());
+            ownerFrame.attachOwned(this);
+        } else {
+            ensureBackdrop().addToTopLayer();
+            addToTopLayer();
+        }
         window.pushModal(this);
         // Modality and Escape are separate registrations because they are separate concerns: a popover has
         // a close watcher without being modal, and a MANUAL popover is neither. Escape asks the topmost
@@ -355,6 +373,15 @@ public class Dialog extends UIElement {
                 modalWindow.popCloseWatcher(this);
                 removeFromTopLayer();
                 if (backdrop != null) backdrop.removeFromTopLayer();
+            }
+            // AND THE OWNER'S SLOT LETS GO OF ITS BOX -- a full-size owned surface hit-tests, so one
+            // left open with nothing showing swallows every click on the window's own content. The
+            // dialog stays PARENTED there (it is `display: none` while closed and re-shown from where
+            // it already is); only its claim on the slot ends.
+            if (ownerFrame != null) {
+                if (backdrop != null) ownerFrame.releaseOwned(backdrop);
+                ownerFrame.releaseOwned(this);
+                ownerFrame = null;
             }
         }
 

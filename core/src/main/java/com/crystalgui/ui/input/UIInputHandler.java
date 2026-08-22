@@ -527,6 +527,10 @@ public final class UIInputHandler implements CgSystemInput.Keyboard, CgSystemInp
 
     }
 
+    /** How many blocked candidates a single Tab will step over before giving up. Far past any real
+     * tab ring; it exists so the loop is provably finite rather than because a number was needed. */
+    private static final int TAB_SCAN_LIMIT = 512;
+
     private void moveTabFocus(Keyboard.Event event, int modifiers) {
         if (event.key() != CgKeyCodes.KEY_TAB) return;
         boolean reverse = CgModifiers.hasShift(modifiers);
@@ -535,7 +539,13 @@ public final class UIInputHandler implements CgSystemInput.Keyboard, CgSystemInp
         // because everything outside it is inert. Enforced here rather than inside `tabbable()` so the
         // cached focusable-descendant answers stay free of a condition that changes for nearly every
         // element in the tree the moment a modal opens.
-        UIElement modal = window.getActiveModal();
+        //
+        // WHICH MODAL, though, now that modality is per-window. A window-level one traps everything, so
+        // it is asked first; failing that, the trap is whatever blocks the scope focus is currently in.
+        // A modal in some OTHER window traps nothing here -- that is the entire point of scoping it --
+        // which is why the walk below also has to skip what it blocks.
+        UIElement modal = window.getActiveModal(null);
+        if (modal == null) modal = window.getActiveModal(UIWindow.modalScopeOf(focusedElement));
         UIElement scope = modal != null ? modal : window.ui.rootElement;
 
         UIElement next;
@@ -554,6 +564,24 @@ public final class UIInputHandler implements CgSystemInput.Keyboard, CgSystemInp
             }
         }
         if (next == null) return; // nothing tabbable at all
+
+        // AND NOTHING A MODAL BLOCKS. Scoping above traps Tab inside a modal when there IS one over the
+        // focused scope; this is the other half, and it only exists because a modal in one window no
+        // longer traps the whole document: tabbing out of an unblocked window would otherwise walk
+        // straight into the blocked content of the window beside it, where `tabbable()` -- which sees
+        // only the inert ATTRIBUTE, deliberately, so its cache stays valid -- has no objection.
+        //
+        // Bounded rather than "until unblocked": every candidate can be blocked, and a Tab press must
+        // never be able to spin.
+        int guard = 0;
+        while (window.isModalBlocked(next) && guard++ < TAB_SCAN_LIMIT) {
+            UIElement after = reverse
+                    ? UITreeTraversal.previousTabbable(next, modal)
+                    : UITreeTraversal.nextTabbable(next, modal);
+            if (after == null || after == focusedElement || after == next) break;
+            next = after;
+        }
+        if (window.isModalBlocked(next)) return;
 
         if (focusedElement != null) emitAndLoseFocus(focusedElement);
         focusedElement = next;

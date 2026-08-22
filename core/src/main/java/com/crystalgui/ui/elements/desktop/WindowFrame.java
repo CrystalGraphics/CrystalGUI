@@ -18,6 +18,8 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
 
 import javax.annotation.Nullable;
 
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -117,6 +119,14 @@ public class WindowFrame extends UIElement implements Disposable {
     public static final String ICON_CLASS = "__icon__";
 
     /**
+     * Where this window's <b>owned</b> windows live — its modal dialogs, and from W8 its floating tool
+     * windows. The same class the window-level layer uses, because it is the same role one level down.
+     *
+     * @see #overlaySlot()
+     */
+    public static final String OVERLAY_CLASS = "__overlays__";
+
+    /**
      * Emitted when the window comes back, carrying <b>{@code persisted}</b> — whether it was restored
      * from retention rather than shown for the first time.
      *
@@ -138,6 +148,7 @@ public class WindowFrame extends UIElement implements Disposable {
     private final UIElement titleBar;
     private final UIElement controls;
     private final UIElement content;
+    private final UIElement overlays;
     private final UIText titleLabel;
     private final UIElement icon;
     private final Button closeButton;
@@ -184,6 +195,9 @@ public class WindowFrame extends UIElement implements Disposable {
 
     /** @see #setDiscardGuard */
     private BooleanSupplier discardGuard = () -> true;
+
+    /** What is currently SHOWING on the owned surface. @see #releaseOwned */
+    private final Set<UIElement> live = new LinkedHashSet<>();
 
     public WindowFrame(String title) {
         // Out of flow and positioned: a window is placed by left/top against the desktop's window layer,
@@ -232,6 +246,11 @@ public class WindowFrame extends UIElement implements Disposable {
         content = new UIElement();
         content.addClass(CONTENT_CLASS);
         addInternalChild(content);
+
+        overlays = new UIElement();
+        overlays.addClass(OVERLAY_CLASS);
+        addInternalChild(overlays);
+        syncOverlaySlot();
 
         // TARGET-ONLY (false, false), which is Dialog's spelling and not CanvasOverlayMove's. The two
         // booleans are ADDITIVE -- the target phase is always subscribed -- so (false, true) would also
@@ -355,6 +374,87 @@ public class WindowFrame extends UIElement implements Disposable {
 
     public String getTitle() {
         return titleLabel.getText();
+    }
+
+    // ── Owned windows ───────────────────────────────────────────────────────
+
+    /**
+     * The surface this window's <b>owned</b> windows are parented on — a modal dialog today, a floating
+     * tool window at W8.
+     *
+     * <h3>Owned, not promoted</h3>
+     * <p>Win32's rule decides this: an owned window stays above its owner <em>and travels with it</em>.
+     * A modal in the global top layer would float above whichever window happened to be raised next,
+     * because the top layer paints after the whole main tree by construction — so a dialog opened in
+     * one window would end up over another. Parenting it <em>inside</em> the frame gets the whole group
+     * raising, lowering and hiding as one with no bookkeeping at all: the owner's {@code z-index}
+     * carries its owned windows with it, and detaching the owner detaches them.</p>
+     *
+     * <p>The slot sits above {@code __content__} within the frame (a {@code z-index} in the sheet), and
+     * the frame itself keeps {@code overflow: visible} while only the content clips — so an owned
+     * window may legally overhang its owner's edge, which a dialog wider than a narrow window must.</p>
+     *
+     * <h3>Sized only while it holds something</h3>
+     * <p>The same rule the desktop follows, for the same reason: a full-size slot hit-tests, so an
+     * empty one would sit over the window's own content and swallow every click. Use
+     * {@link #attachOwned}/{@link #detachOwned} rather than parenting into it by hand — they are what
+     * keep that in step.</p>
+     */
+    public UIElement overlaySlot() {
+        return overlays;
+    }
+
+    /** Parents an owned window onto this frame and gives the slot a box to hold it in. */
+    public void attachOwned(UIElement owned) {
+        if (owned == null) return;
+        if (owned.getParent() != overlays) overlays.addChild(owned);
+        live.add(owned);
+        syncOverlaySlot();
+    }
+
+    /**
+     * The counterpart — {@code owned} is no longer showing, so it stops holding the slot open.
+     *
+     * <p><b>It stays parented</b>, and that is not an oversight: a {@code Dialog} is closed with
+     * {@code display: none} and re-shown from wherever it already is, so removing it from the tree
+     * would make the second {@code show()} put it nowhere. What has to end is the slot's <em>box</em> —
+     * a full-size slot hit-tests, so one left open over a window with nothing in it swallows every
+     * click on that window's content. Hence a set of what is live rather than a look at the children:
+     * "parented here" and "currently showing" are different questions and only the second one sizes
+     * anything.</p>
+     */
+    public void releaseOwned(UIElement owned) {
+        if (owned == null) return;
+        live.remove(owned);
+        syncOverlaySlot();
+    }
+
+    /** Whether anything is currently showing on this frame's owned surface. */
+    public boolean hasOwnedWindows() {
+        return !live.isEmpty();
+    }
+
+    private void syncOverlaySlot() {
+        boolean occupied = !live.isEmpty();
+        StyleGroup.importantPipeline(overlays.getStyle().getLayoutGroup(), l -> {
+            l.positionType(TaffyPosition.ABSOLUTE).left(0).top(0);
+            if (occupied) l.widthPercent(100f).heightPercent(100f);
+            else l.width(0).height(0);
+        });
+    }
+
+    /**
+     * The window {@code element} belongs to, or null — its nearest frame ancestor.
+     *
+     * <p>The DOM chain, which is the right one: promotion moves a Taffy node and never a DOM parent, so
+     * a promoted dialog is still inside the window that opened it.</p>
+     */
+    @Nullable
+    public static WindowFrame of(@Nullable UIElement element) {
+        for (UIElement el = element; el != null; el = el.getParent()) {
+            if (el instanceof WindowFrame) return (WindowFrame) el;
+        }
+        return null;
     }
 
     // ── Activation ──────────────────────────────────────────────────────────
@@ -582,6 +682,23 @@ public class WindowFrame extends UIElement implements Disposable {
             if (wasActive) desktop.activateTopmost();
         }
         onDestroyed.emit();
+    }
+
+    /**
+     * A window is its own last close watcher, so Escape reaches its {@link #requestClose() policy}
+     * once everything it contains has had a turn.
+     *
+     * <p>Registered from the attach hook rather than from {@code Desktop.addWindow}, because a hidden
+     * window is DETACHED and {@code unregisterElement} pops its watchers on the way out — so showing it
+     * again has to re-register, and this is the one place both routes pass through.</p>
+     *
+     * <p>The frame goes on the stack FIRST, before any dialog it later opens, which is what makes the
+     * cascade come out in the right order: the dropdown, then the modal, then the window itself.</p>
+     */
+    @Override
+    protected void onWindowChanged(@Nullable UIWindow previous, @Nullable UIWindow current) {
+        super.onWindowChanged(previous, current);
+        if (current != null) current.pushCloseWatcher(this);
     }
 
     /** Set by {@link Desktop#addWindow}; cleared when the window is destroyed. */

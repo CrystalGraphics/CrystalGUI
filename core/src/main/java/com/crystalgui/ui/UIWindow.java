@@ -231,6 +231,14 @@ public final class UIWindow {
      *             right for a command palette and wrong for a context menu
      */
     public UIElement overlayHost(@Nullable UIElement near) {
+        // A WINDOW'S OWN SLOT FIRST. Anything belonging to a frame is parented inside that frame, which
+        // is what makes an owned thing travel with its owner: it raises, lowers and hides as one with
+        // the window it came from, with no bookkeeping — Win32's owner/owned group behaviour, for free.
+        // For a promoted transient (a menu, a tooltip) the DOM parent decides only cascade inheritance
+        // and lifetime, and both answers are better inside the window than at the root.
+        UIElement frame = modalScopeOf(near);
+        if (frame instanceof WindowFrame) return ((WindowFrame) frame).overlaySlot();
+
         for (UIElement element = near; element != null; element = element.getParent()) {
             if (element.acceptsPublicChildren()) return element;
         }
@@ -930,11 +938,16 @@ public final class UIWindow {
     public UIElement getHoveredElement(float mouseX, float mouseY) {
         UIElement promoted = topLayer.hitTest(mouseX, mouseY);
         if (promoted != null) return promoted;
-        // A modal makes the entire rest of the document inert, and hit-testing an inert node must act as
-        // if `pointer-events: none` — so the main-tree walk is skipped wholesale rather than filtered.
-        // The modal itself lives in the top layer, so it was already offered above.
-        if (getActiveModal() != null) return null;
-        return elementHitTest(ui.rootElement, mouseX, mouseY);
+        UIElement hit = elementHitTest(ui.rootElement, mouseX, mouseY);
+        // A modal makes everything in its scope inert, and hit-testing an inert node must act as if
+        // `pointer-events: none` — so a blocked hit answers NOTHING rather than falling through to
+        // whatever is behind it. Clicking a blocked window must not reach the window underneath.
+        //
+        // Asked of the hit rather than by skipping the walk, which is what the single global modal used
+        // to allow: a frame-scoped modal blocks one window and leaves every other one live, so there is
+        // no longer a wholesale answer to give. A window-level modal is the same predicate — it blocks
+        // everything outside itself — so this one line covers both.
+        return isModalBlocked(hit) ? null : hit;
     }
 
     // ── Modality ────────────────────────────────────────────────────────────
@@ -946,20 +959,69 @@ public final class UIWindow {
     }
 
     /**
+     * The modal <b>scope</b> an element belongs to: its nearest {@link WindowFrame} ancestor, or
+     * {@code null} for anything outside every window.
+     *
+     * <p>Modality is per-application on a desktop — a sheet blocks its window (macOS), an owned dialog
+     * blocks its owner (Win32) — and CrystalOS's "application" is the frame. A modal opened by desktop
+     * chrome, or by a UI with no compositor in play at all, has a {@code null} scope and blocks
+     * everything, which is exactly the behaviour this engine had before there were windows.</p>
+     *
+     * <p>Reads the DOM parent chain, which is the right one: promotion moves a Taffy node, never a DOM
+     * parent, so a promoted dialog is still inside the frame that opened it.</p>
+     */
+    @Nullable
+    public static UIElement modalScopeOf(@Nullable UIElement element) {
+        for (UIElement el = element; el != null; el = el.getParent()) {
+            if (el instanceof WindowFrame) return el;
+        }
+        return null;
+    }
+
+    /** The topmost modal in {@code scope}, or null. {@code null} scope means window-level. */
+    @Nullable
+    public UIElement getActiveModal(@Nullable UIElement scope) {
+        for (int i = modalStack.size() - 1; i >= 0; i--) {
+            UIElement modal = modalStack.get(i);
+            if (modalScopeOf(modal) == scope) return modal;
+        }
+        return null;
+    }
+
+    /**
      * Whether {@code element} is blocked by an active modal — i.e. inert by virtue of sitting outside it.
      *
-     * <p>Tested against the <b>topmost</b> modal only, and that is the whole rule — the spec defines
-     * inertness against "the document's active modal dialog", singular. A lower modal in the stack being
-     * blocked by a higher one is not a gap, it is the point: open a modal from inside a modal and the
-     * first correctly stops accepting input until the second closes.</p>
+     * <p>Tested against the <b>topmost</b> modal in each scope, and that is the whole rule — the spec
+     * defines inertness against "the document's active modal dialog", singular, and a desktop has one
+     * such document per window. A lower modal in a scope being blocked by a higher one is not a gap, it
+     * is the point: open a modal from inside a modal and the first correctly stops accepting input
+     * until the second closes.</p>
+     *
+     * <h3>Two scopes are consulted, never one</h3>
+     * <p>A <b>window-level</b> modal (one with no frame above it) blocks everything outside itself,
+     * including other windows — that is what a modal opened by the desktop's own chrome means, and it
+     * is the behaviour this engine had before frames existed. A <b>frame-scoped</b> modal blocks only
+     * its own frame, which is what makes a dialog in one window leave the other windows and the taskbar
+     * alive.</p>
      */
     public boolean isModalBlocked(UIElement element) {
-        UIElement modal = getActiveModal();
-        if (modal == null || element == null) return false;
+        if (element == null) return false;
+
+        UIElement windowModal = getActiveModal(null);
+        if (windowModal != null && !containsInclusive(windowModal, element)) return true;
+
+        UIElement scope = modalScopeOf(element);
+        if (scope == null) return false;
+        UIElement scopedModal = getActiveModal(scope);
+        return scopedModal != null && !containsInclusive(scopedModal, element);
+    }
+
+    /** Whether {@code element} is {@code ancestor} or inside it. */
+    private static boolean containsInclusive(UIElement ancestor, UIElement element) {
         for (UIElement el = element; el != null; el = el.getParent()) {
-            if (el == modal) return false;
+            if (el == ancestor) return true;
         }
-        return true;
+        return false;
     }
 
     /** Marks {@code element} modal. Idempotent — re-pushing raises it, matching {@link TopLayer#add}. */
@@ -988,10 +1050,51 @@ public final class UIWindow {
         closeWatchers.remove(element);
     }
 
-    /** The element Escape should ask, or {@code null}. */
+    /**
+     * The element Escape should ask, or {@code null}.
+     *
+     * <h3>The active window's cascade first, then the desktop's</h3>
+     * <p>Escape is a cascade, and with windows it gains a rung: the <b>active frame's</b> watchers are
+     * asked before anything registered outside a window. A dropdown opened inside a window closes
+     * first, then that window's modal, then the window itself — a frame registers as its own last
+     * watcher, so its {@link WindowFrame#requestClose() policy} is the natural bottom of its own stack
+     * — and only once a window has nothing left to close does Escape reach the desktop's own watchers.
+     * A live drag still eats Escape before any of it, because a drag is the innermost live
+     * interaction.</p>
+     *
+     * <p>Without the scoping, one global stack means Escape closes whatever was opened <em>last</em>
+     * anywhere on the desktop — so a dialog left open in a background window would swallow the Escape
+     * aimed at the window in front.</p>
+     */
     @Nullable
     public UIElement getTopCloseWatcher() {
-        return closeWatchers.isEmpty() ? null : closeWatchers.get(closeWatchers.size() - 1);
+        UIElement frame = activeFrame();
+        if (frame != null) {
+            UIElement scoped = topCloseWatcherFor(frame);
+            if (scoped != null) return scoped;
+        }
+        return topCloseWatcherFor(null);
+    }
+
+    @Nullable
+    private UIElement topCloseWatcherFor(@Nullable UIElement scope) {
+        for (int i = closeWatchers.size() - 1; i >= 0; i--) {
+            UIElement watcher = closeWatchers.get(i);
+            if (modalScopeOf(watcher) == scope) return watcher;
+        }
+        return null;
+    }
+
+    /**
+     * The active window, or null — <b>without building a desktop to ask</b>.
+     *
+     * <p>{@link #desktop()} attaches the compositor on first use, and answering "is anything active"
+     * must not be what causes that: a UI that never opens a window would grow a desktop the first time
+     * anybody pressed Escape.</p>
+     */
+    @Nullable
+    private UIElement activeFrame() {
+        return desktop.getParent() == null ? null : desktop.activeWindow();
     }
 
     // ── Light dismiss (the popover stack) ───────────────────────────────────
