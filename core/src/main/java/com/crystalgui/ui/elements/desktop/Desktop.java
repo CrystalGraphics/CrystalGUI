@@ -279,8 +279,14 @@ public class Desktop extends UIElement {
         registry.changed();
     }
 
-    /** Activates whatever is now in front, or nothing if the desktop is empty. */
-    private void activateTopmost() {
+    /**
+     * Activates whatever is now in front, or nothing if the desktop is empty.
+     *
+     * <p>Called when the active window was <b>destroyed</b> and only then — see the note in the layer's
+     * {@code removeChild}. A minimised window is still there to go back to; a destroyed one leaves the
+     * keyboard with nowhere to be.</p>
+     */
+    void activateTopmost() {
         WindowFrame front = null;
         for (WindowFrame frame : windows.frames) {
             if (front == null || frame.stackOrder() >= front.stackOrder()) front = frame;
@@ -492,10 +498,15 @@ public class Desktop extends UIElement {
                 // it -- and BEFORE the announcement below, so anything rendering the registry only ever
                 // sees a settled state. Announcing first showed the strip a window that was already
                 // hidden and still marked active, and nothing came along afterwards to correct it.
-                if (activeWindow == child) {
-                    deactivate();
-                    activateTopmost();
-                }
+                //
+                // AND IT HANDS OVER TO NOBODY. Leaving the tree is what MINIMISING looks like from here,
+                // and minimising is "put this away", not "switch to that one" -- activation moves
+                // keyboard focus into whatever it lands on, so handing over drops the caret into a
+                // window the user was not asking for, once per minimise. Windows does hand over; ours
+                // does not, because ours carries focus with it. Destroying the active window is the
+                // case that genuinely has nowhere to leave the keyboard, and it hands over from
+                // WindowFrame.dispose() where that distinction can still be seen.
+                if (activeWindow == child) deactivate();
                 registry.changed();
                 // LAST, and after the activation above rather than before it: eviction can destroy a
                 // window, and destroying one re-enters this method. Doing it while the active window is

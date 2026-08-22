@@ -16,6 +16,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
@@ -323,15 +324,13 @@ public class DesktopLifecycleTest extends UiTestBase {
         assertTrue("a hidden window keeps its place in the sequence",
                 desktop.registry().mruOrder().contains(first));
         assertEquals(java.util.List.of(first), desktop.registry().hidden());
-        // It is no longer the FRONT of it, and that is right rather than incidental: hiding the active
-        // window hands activation to the next one down, and being activated is what moves a window to
-        // the front of the MRU. A test that demanded otherwise would be demanding that closing the
-        // front window leave the switcher offering it back first.
-        //
-        // `third`, not `second` -- the window that takes over is the one in FRONT, which is a z-order
-        // question and not a list-order one. Opening raises, so the last one opened is on top.
-        assertSame(third, desktop.registry().mruOrder().get(0));
-        assertSame(third, desktop.activeWindow());
+        // AND IT KEEPS THE FRONT OF IT, because minimising hands activation to nobody. That is the
+        // right answer twice over: the switcher's first offer is the window you just put away, which
+        // is what a switcher is for, and nothing had to move the keyboard to get there.
+        assertSame(first, desktop.registry().mruOrder().get(0));
+        assertNull("minimising is not switching", desktop.activeWindow());
+        assertSame("and `third` is still merely the one in front", third,
+                desktop.visibleWindows().get(desktop.visibleWindows().size() - 1));
     }
 
     /** A window can be found again by the name it was opened under — what geometry is persisted
@@ -347,6 +346,53 @@ public class DesktopLifecycleTest extends UiTestBase {
 
         frame.destroy();
         assertNull("and a destroyed one is gone from the registry", desktop.registry().byKey("editor:main"));
+    }
+
+    /**
+     * <b>Minimising hands activation to nobody</b>, and closing hands it to the window in front.
+     *
+     * <p>The distinction is that activation here <em>carries the keyboard with it</em>: it restores
+     * focus into whatever it lands on. So handing over on a minimise drops the caret into a window the
+     * user did not ask for, once per minimise — putting something away is not the same gesture as
+     * switching to something else. Windows hands over in both cases; its activation does not move a
+     * caret. Destroying is the case that genuinely has nowhere to leave the keyboard, so that one
+     * still hands over.</p>
+     */
+    @Test
+    public void minimisingDoesNotActivateAnotherWindowButDestroyingDoes() {
+        build();
+        WindowFrame first = open("One");
+        WindowFrame second = open("Two");
+        assertSame(second, desktop.activeWindow());
+
+        second.hide();
+        settle();
+        assertNull("putting a window away is not switching to another", desktop.activeWindow());
+        assertFalse("...and the one behind was not disturbed", first.isActive());
+
+        desktop.activate(second);
+        settle();
+        assertSame(second, desktop.activeWindow());
+
+        second.destroy();
+        settle();
+        assertSame("but a destroyed window leaves the keyboard nowhere, so the front one takes over",
+                first, desktop.activeWindow());
+    }
+
+    /** Evicting a window the user had already put away must not reach in and change what they are
+     * looking at — the handover is for the ACTIVE window being destroyed, not for any destroy. */
+    @Test
+    public void destroyingABackgroundWindowLeavesActivationAlone() {
+        build();
+        WindowFrame background = open("One");
+        WindowFrame front = open("Two");
+        assertSame(front, desktop.activeWindow());
+
+        background.destroy();
+        settle();
+
+        assertSame("the window in front is untouched", front, desktop.activeWindow());
     }
 
     /** Activating a hidden window brings it back — which is what a taskbar entry (W4) and the switcher
