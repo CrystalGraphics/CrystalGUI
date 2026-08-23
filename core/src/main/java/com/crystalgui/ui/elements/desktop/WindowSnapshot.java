@@ -40,8 +40,30 @@ import javax.annotation.Nullable;
 final class WindowSnapshot {
 
     /** Matches the layer pool's: colour only, straight RGBA8, premultiplied by how it is drawn into. */
-    private static final CgFrameBufferFormat FORMAT =
-            CgFrameBufferFormat.builder("cgui_window_snapshot").color(0, CgTextureType.RGBA8).build();
+    /**
+     * Built on first use, never at class-init — the headless contract.
+     *
+     * <p>A {@code static final} here constructs a CrystalGraphics <b>core</b> type while this class is
+     * being initialised, which makes the whole class unloadable on a dedicated server: every reference to
+     * it throws {@code NoClassDefFoundError} rather than failing anywhere near the GL that is actually
+     * missing. And it does not stop at this class — {@code WindowFrame} has a field of this type, and a
+     * field descriptor resolves at class load, so {@code window} and {@code desktop} became unconstructible
+     * too. Exactly the trap {@code StyleSheet.DEFAULT} is documented for, which reads {@code default.css}
+     * at class-init and takes {@code StyleSheet.parse} down with it.</p>
+     *
+     * <p>Only ever read from {@link #capture}, which is a paint-time method — so on a server it is never
+     * touched, which is the whole point.</p>
+     */
+    @Nullable
+    private static CgFrameBufferFormat format;
+
+    private static CgFrameBufferFormat format() {
+        if (format == null) {
+            format = CgFrameBufferFormat.builder("cgui_window_snapshot")
+                    .color(0, CgTextureType.RGBA8).build();
+        }
+        return format;
+    }
 
     @Nullable
     private CgFrameBuffer fbo;
@@ -93,7 +115,7 @@ final class WindowSnapshot {
         // whenever one is resized, and a throwaway transparent quad is nothing against that.
         boolean fresh = false;
         if (fbo == null) {
-            fbo = CgFrameBuffer.createOwned("cgui_snapshot", physicalWidth, physicalHeight, FORMAT);
+            fbo = CgFrameBuffer.createOwned("cgui_snapshot", physicalWidth, physicalHeight, format());
             fresh = true;
         } else if (fbo.getWidth() != physicalWidth || fbo.getHeight() != physicalHeight) {
             fbo.resize(physicalWidth, physicalHeight);

@@ -30,7 +30,23 @@ import java.util.function.Consumer;
  */
 public final class WorkspaceClient<T> {
 
-    private final Caller<T> caller;
+    /**
+     * Somewhere to send a request — <b>not final, because a client outlives its connection</b>.
+     *
+     * @see #rebind(ProtocolConnection)
+     */
+    private Caller<T> caller;
+
+    /**
+     * The wire currently under this client, so rebinding to the same one is free.
+     *
+     * <p>Typed as {@code Object} because the two rebind overloads take different things and both need the
+     * guard — re-registering this client's push handlers on a router that already has them is what
+     * {@code MessageRouter} refuses outright, and a guard on only one overload is a guard that holds until
+     * somebody uses the other.</p>
+     */
+    @Nullable
+    private Object boundTo;
     private final com.crystalgui.serialization.DynamicOps<T> ops;
 
     /**
@@ -77,6 +93,9 @@ public final class WorkspaceClient<T> {
      */
     public WorkspaceClient(ClientUiSession<T> session, com.crystalgui.serialization.DynamicOps<T> ops) {
         this(session::call, session::onCall, ops);
+        // RECORDED, or the first rebind to this same wire would not recognise it and would re-register
+        // the push handlers on a router that already has them -- which MessageRouter refuses outright.
+        this.boundTo = session;
     }
 
     /**
@@ -89,6 +108,9 @@ public final class WorkspaceClient<T> {
      */
     public WorkspaceClient(ProtocolConnection<T> connection) {
         this(connection::call, connection::onRequest, connection.ops());
+        // @see the note on the session constructor: a client that does not know what it is bound to
+        // cannot tell a rebind from a re-bind to the same thing.
+        this.boundTo = connection;
     }
 
     /** One per connection, memoised weakly so a closed connection's entry goes with it. */
@@ -120,10 +142,123 @@ public final class WorkspaceClient<T> {
         }
     }
 
+    /**
+     * Moves this client onto a new connection — <b>CrystalOS W11, reconnect-on-restore</b>.
+     *
+     * <h3>Why the client survives instead of being replaced</h3>
+     *
+     * <p>A window that is hidden is <em>detached</em>, and it can stay that way across a disconnect and
+     * a rejoin — which is exactly what retention is for. Everything holding a {@code WorkspaceClient}
+     * holds it in a {@code final} field ({@code Workbench}, {@code WorkspaceTreeSource},
+     * {@code WorkspaceFileService}), and every consumer callback is registered on the client rather than
+     * on the wire. So swapping the wire underneath keeps all of that working and needs no rebind threaded
+     * through five widgets; building a second client instead would strand every one of those
+     * subscriptions on an object nobody can reach any more.</p>
+     *
+     * <p>It is also the browser's answer to the same problem. An open connection blocks retention, so
+     * bfcache closes it on the way in and reconnects on the way out — the page is not rebuilt.</p>
+     *
+     * <h3>What the far side has forgotten, and what it has not</h3>
+     *
+     * <p><b>Watches are re-issued</b>, and this is the defect that would otherwise be invisible.
+     * {@link #watched} is a client-side memo meaning "I have already asked the server to watch this", so
+     * after a reconnect it is a record of promises the new peer never made: {@code finishRead} sees the
+     * path already in the set, never re-asks, and change notifications stop <em>permanently</em> for
+     * precisely the files that were open. Nothing fails and nothing is logged — the editor simply stops
+     * noticing edits made underneath it.</p>
+     *
+     * <p><b>Presence and capabilities are dropped and re-seeded.</b> Both are pushed state describing a
+     * server this client is no longer talking to. Capabilities fall back to their optimistic default
+     * (unknown means allowed) rather than to denied, for the reason {@link #mayWrite} gives at length: a
+     * wrongly-greyed command is one the user cannot do and cannot explain.</p>
+     *
+     * <p><b>Cached content is dropped; etags are kept.</b> Serving bytes read from the old connection
+     * would be answering with a file that may have changed while nobody was watching. The etags stay
+     * because they are what a {@link #save} quotes, and the server <em>re-stats</em> before writing — so
+     * a genuinely stale write comes back as a conflict the user can act on, where a cleared etag would
+     * instead make saving a not-previously-read file into a client-side programming error.</p>
+     *
+     * @return whether anything moved — false when this is already the connection in use
+     */
+    public boolean rebind(ProtocolConnection<T> connection) {
+        if (connection == null || connection == boundTo) return false;
+        Object previous = boundTo;
+        boundTo = connection;
+        bind(connection::call, connection::onRequest);
+        // The memo follows the client, or the next forConnection on this wire builds a SECOND client and
+        // MessageRouter refuses its duplicate fs.changed registration -- from wherever that second
+        // consumer happens to be constructed. @see #forConnection
+        synchronized (BY_CONNECTION) {
+            if (previous != null) BY_CONNECTION.remove(previous);
+            BY_CONNECTION.put(connection, this);
+        }
+        reestablish();
+        return true;
+    }
+
+    /** The session-shaped rebind, mirroring the session constructor. @see #rebind(ProtocolConnection) */
+    public boolean rebind(ClientUiSession<T> session) {
+        if (session == null || session == boundTo) return false;
+        boundTo = session;
+        bind(session::call, session::onCall);
+        reestablish();
+        return true;
+    }
+
+    /** Re-asks for everything the far side used to know about us. @see #rebind(ProtocolConnection) */
+    private void reestablish() {
+        cachedContent.clear();
+
+        presence.clear();
+        if (onPresence != null) onPresence.run();
+
+        readable.clear();
+        writable.clear();
+        if (onCapabilities != null) onCapabilities.run();
+        refreshCapabilities();
+
+        // RE-ASKED, not merely remembered. The set says what this client WANTS watched; the new peer has
+        // been told none of it.
+        for (CgPath path : new java.util.ArrayList<>(watched)) {
+            call(WorkspaceProtocol.WATCH, args().putString(WorkspaceProtocol.PATH, path.toString()),
+                    ignored -> { }, ignored -> watched.remove(path));
+        }
+
+        if (onRebound != null) onRebound.run();
+    }
+
+    /**
+     * Told when this client has moved to a new wire, so a view can re-read what it is showing.
+     *
+     * <p>The client restores what the <em>protocol</em> needs — watches, capabilities, presence — and
+     * cannot know what any particular view is displaying. A file tree that listed a directory before the
+     * disconnect is showing a listing from a server it is no longer attached to, and only the tree knows
+     * that.</p>
+     */
+    public void onRebound(Runnable handler) {
+        this.onRebound = handler;
+    }
+
+    @Nullable
+    private Runnable onRebound;
+
     private WorkspaceClient(Caller<T> caller, WorkspaceRpc.Registrar<T> registrar,
                             com.crystalgui.serialization.DynamicOps<T> ops) {
-        this.caller = caller;
         this.ops = ops;
+        bind(caller, registrar);
+    }
+
+    /**
+     * Points this client at a wire and puts its push handlers on it.
+     *
+     * <p>Separated from the constructor because a <b>reconnect runs it again</b>: the handlers below live
+     * on the connection's router, so a new connection has none of them until this is repeated. Every
+     * client-level subscription ({@link #onFileChanged} and friends) is deliberately <em>not</em> touched
+     * — those belong to whoever asked, not to the wire, which is the whole reason this client's identity
+     * is worth preserving across a reconnect rather than building a second one.</p>
+     */
+    private void bind(Caller<T> caller, WorkspaceRpc.Registrar<T> registrar) {
+        this.caller = caller;
         // The server pushes these; nothing asks for them. Registered here rather than left to a caller,
         // because a client that reads a file is watching it (see read) and would otherwise be sent
         // notifications with no handler.

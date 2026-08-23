@@ -468,6 +468,14 @@ public class Workbench extends UIElement {
             fileTree.treeView().refresh();
         });
 
+        // A RECONNECT INVALIDATES EVERYTHING AT ONCE, and for a different reason than a change does --
+        // CrystalOS W11. The client survives a disconnect and rejoin so that a window retained across one
+        // comes back working, but every listing it fetched describes a server it is no longer attached
+        // to, and no fs.changed can arrive to say so: nothing was watching, because there was nothing to
+        // watch with. Wired here beside the notification above so there is one place the tree learns that
+        // the far side has moved under it.
+        client.onRebound(fileTree::markListingsStale);
+
         // How a tab presents itself. Both are PULLED by the strip when it builds a tab rather than pushed
         // in afterwards, which is what makes a rebuilt strip correct on the frame it is rebuilt -- a dock
         // rearrangement recreates every tab element, and anything pushed would have to be pushed again by
