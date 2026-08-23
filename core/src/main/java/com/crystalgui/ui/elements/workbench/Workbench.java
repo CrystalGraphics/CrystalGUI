@@ -232,6 +232,47 @@ public class Workbench extends UIElement {
      */
     private final OpenDocuments open = new OpenDocuments();
 
+    /**
+     * What this workspace declares, by qualified name — the project half of resolution.
+     *
+     * <p>Registered into {@link com.crystalgui.text.lang.ProjectSourcesRegistry} so an engine can reach
+     * it without {@code core/} ever naming an engine, the same inversion {@code TypeSearch} uses for the
+     * classpath. It pulls rather than being pushed to: the crawl, the project listing and the watcher all
+     * land on their own schedules, and an index that had to be told about each would be silently short of
+     * whichever one somebody forgot. @see ProjectIndex</p>
+     */
+    private final ProjectIndex projectIndex;
+
+    /**
+     * An open document's CURRENT text, or null when nothing has it open.
+     *
+     * <p>The buffer beats the file, always: a compiler resolving against saved text reports errors about
+     * code the author has already fixed, in the one place they are looking.</p>
+     *
+     * <p>Encoded on demand rather than cached. That is a real cost for a large file asked about often, and
+     * it is the cost §24.6 names as S4's performance work — pinning it here first would be optimising a
+     * path nothing has measured yet.</p>
+     */
+    @Nullable
+    private String openBufferText(CgPath path) {
+        FileDocument document = open.get(path);
+        if (document == null) return null;
+        byte[] bytes = document.encode();
+        return bytes == null ? null : new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    /** A background read landed, so anything that resolved without it is now out of date. */
+    private void onProjectIndexFilled() {
+        // Nothing to re-run yet: no engine consumes the index until S4. The hook exists now because the
+        // read path is what makes it necessary, and a signal added later is one every caller has to be
+        // taught about afterwards.
+    }
+
+    /** What the workspace declares. @see ProjectIndex */
+    public com.crystalgui.text.lang.ProjectSources projectSources() {
+        return projectIndex;
+    }
+
     /** How to build a document for a given panel type. Keyed by type id, so a bound editor supplies its
      * own and the text editor is simply the one registered for {@link #FILE_TYPE}. */
     private final Map<String, Function<CgPath, FileDocument>> documentFactories = new HashMap<>();
@@ -379,6 +420,10 @@ public class Workbench extends UIElement {
     @Override
     protected void registerCommands(CommandRegistry registry) {
         ExplorerCommands.register();
+        // AND WHAT THIS WORKSPACE DECLARES, so an engine can resolve a cross-file reference without
+        // core/ ever naming an engine. Contributed rather than set: two workbenches in one process are
+        // two projects, not a fight over one slot. @see ProjectSourcesRegistry
+        com.crystalgui.text.lang.ProjectSourcesRegistry.contribute(projectIndex);
         // Undo comes with a workbench because the file tree IS the workspace's UndoScope -- deleting a
         // file is undoable and reaches the workspace stack. Same ids the editor and the graph use, so
         // there is one Undo in the palette rather than one per widget.
@@ -433,6 +478,19 @@ public class Workbench extends UIElement {
     public Workbench(WorkspaceClient<?> client) {
         if (client == null) throw new IllegalArgumentException("A Workbench needs a workspace client");
         this.client = client;
+        // AFTER `client`, and it has to be: a field initialiser capturing a constructor-assigned final is
+        // a definite-assignment error, not a nullable read.
+        this.projectIndex = new ProjectIndex(
+                () -> fileTree() == null ? java.util.List.of() : fileTree().source().knownFiles(),
+                id -> fileTree() == null
+                        ? com.crystalgui.fs.SourceRoots.CONVENTION
+                        : fileTree().source().sourceRootsOf(id),
+                this::openBufferText,
+                (path, onText) -> client.read(path,
+                        read -> onText.accept(new String(read.content(),
+                                java.nio.charset.StandardCharsets.UTF_8)),
+                        error -> onText.accept(null)),
+                this::onProjectIndexFilled);
         this.fileService = new WorkspaceFileService(client, new Copies());
         this.fileTree = new ProjectFileTree(client);
         // At construction, not on the first frame with a window: the registry is global, so there is

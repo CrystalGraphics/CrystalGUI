@@ -188,6 +188,9 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
                 roots.add(root);
                 directories.add(root);
                 projectNames.put(info.id(), info.displayName());
+                // RETAINED, because the index derives a qualified name from a path and cannot do it
+                // without knowing where the name starts. The listing is the only place these arrive.
+                projectSourceRoots.put(info.id(), info.sourceRoots());
             }
             dirty = true;
             onLoaded.run();
@@ -198,6 +201,23 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
                     error.code());
             onRefused.run();
         });
+    }
+
+    /** Project id to its declared source roots, filled by the project listing. @see #sourceRootsOf */
+    private final java.util.Map<String, java.util.List<String>> projectSourceRoots =
+            new java.util.HashMap<>();
+
+    /**
+     * Where {@code projectId}'s source starts, or the convention when it has not been listed yet.
+     *
+     * <p>The fallback matters more than it looks: the crawl and the project listing are separate round
+     * trips, so files can be known before their project's roots are. Answering "no roots" in that window
+     * would index those files as declaring nothing, and nothing re-derives them afterwards — the index
+     * would be permanently short of whatever arrived early.</p>
+     */
+    public java.util.List<String> sourceRootsOf(String projectId) {
+        java.util.List<String> declared = projectSourceRoots.get(projectId);
+        return declared == null ? com.crystalgui.fs.SourceRoots.CONVENTION : declared;
     }
 
     public String displayNameOf(CgPath projectRoot) {
