@@ -54,6 +54,17 @@ public final class MenuId {
     /** Right-click inside a text editor. */
     public static final MenuId EDITOR_CONTEXT = of("editor/context");
 
+    /**
+     * A window's system menu — {@code Alt+Space}, a right-click on its title bar, a right-click on its
+     * taskbar entry (W13a).
+     *
+     * <p><b>One id for all three</b>, which is the whole point of naming a menu: the three routes differ
+     * only in where they anchor and in which window the {@code DataContext} resolves to. Three menus
+     * would be three lists to keep in step, and the one that is edited least is the one a user reaches
+     * for when the other two are unavailable.</p>
+     */
+    public static final MenuId WINDOW_SYSTEM = of("window/system");
+
     // ── The main menu bar ───────────────────────────────────────────────────────────────────────
     //
     // SIX, not VS Code's twelve. Terminal, Debug, Go, Selection, Refactor and Build have no subject in

@@ -1,6 +1,8 @@
 package com.crystalgui.ui.elements.desktop;
 
 import com.crystalgui.fs.ConfigStorage;
+import com.crystalgui.core.data.DataKey;
+import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.core.signal.ConnectionGroup;
@@ -81,7 +83,7 @@ import java.util.List;
  * happens on a click, which is precisely when a widget must never rebuild the elements it is being
  * clicked on. {@code sortedChildren} already keeps paint order and hit-testing agreeing by z.</p>
  */
-public class Desktop extends UIElement {
+public class Desktop extends UIElement implements DataProvider {
 
     /** The layer frames live on, and the work area they are bounded by. */
     public static final String WINDOW_LAYER_CLASS = "__windows__";
@@ -125,6 +127,7 @@ public class Desktop extends UIElement {
         // from anywhere else is how a command ends up existing only once something unrelated has been
         // constructed -- registered but unreachable, or bound but pointing at nothing.
         DesktopCommands.register();
+        WindowCommands.register();
 
         // DRIVEN BY THE REGISTRY, not by the layer. The layer never sees a window destroyed while it was
         // already hidden, and it sees a hide as a removal -- so hanging presence off it both missed the
@@ -387,11 +390,25 @@ public class Desktop extends UIElement {
         if (current == null && previous != null) savePersistedState();
         if (current != null) armRestorePass();
         subscriptions.disconnectAll();
+        if (previous != null) previous.removeDataProvider(this);
         if (current == null) return;
+        // THE WINDOW-LEVEL ANSWER TO "which window is this about", and the LAST resort by construction:
+        // DataContext walks the element chain first and only asks the window's providers when nothing
+        // answered. So a command invoked from inside a frame gets that frame, one invoked from a taskbar
+        // entry gets the entry's frame, and one invoked from the palette with nothing focused gets the
+        // active window -- which is the only sensible answer there and the reason this exists.
+        current.addDataProvider(this);
         subscriptions.add(current.getInputHandler().onDidChangeFocus.connect(this::focusMoved));
     }
 
     private final ConnectionGroup subscriptions = new ConnectionGroup();
+
+    /** @see #onWindowChanged — the window-level fallback for {@link WindowFrame#WINDOW_FRAME}. */
+    @Override
+    @Nullable
+    public Object getData(DataKey<?> key) {
+        return key == WindowFrame.WINDOW_FRAME ? activeWindow : null;
+    }
 
     private void focusMoved(@Nullable UIElement focused) {
         for (UIElement walk = focused; walk != null; walk = walk.getParent()) {

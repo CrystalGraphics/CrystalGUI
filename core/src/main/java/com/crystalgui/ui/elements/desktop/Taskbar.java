@@ -5,7 +5,12 @@ import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
+import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.MenuId;
+import com.crystalgui.core.data.DataKey;
+import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.ui.elements.Button;
+import com.crystalgui.ui.elements.chrome.ContextMenu;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
@@ -228,8 +233,12 @@ public class Taskbar extends UIElement {
      * taskbar feel like a taskbar is the toggle.</p>
      */
     private Button createEntry(Desktop desktop, WindowFrame frame) {
-        Button entry = new Button(frame.getTitle());
+        Button entry = new Entry(frame);
         entry.addClass(ENTRY_CLASS);
+        // W13a's third route. The rows are MenuId.WINDOW_SYSTEM's, exactly as the title bar's and
+        // Alt+Space's are -- what differs is only which window they resolve to, which Entry answers.
+        ContextMenu.attach(entry, CommandRegistry.global(),
+                pressed -> ContextMenu.of(MenuId.WINDOW_SYSTEM));
         previews.watch(entry, frame);
         entry.attachListener(() -> {
             if (frame.state() == WindowState.HIDDEN || desktop.activeWindow() != frame) {
@@ -314,5 +323,50 @@ public class Taskbar extends UIElement {
     /** The island the entries sit in. */
     public UIElement entries() {
         return entries;
+    }
+
+    /**
+     * One entry, which knows which window it stands for.
+     *
+     * <h3>An entry is NOT inside the window it represents, and that is the whole reason this exists</h3>
+     *
+     * <p>{@code DataContext}'s walk goes outward from the element a command was invoked on. For a caption
+     * button that reaches the frame in two steps; from a taskbar entry it reaches the taskbar, then the
+     * desktop — which answers with the <b>active</b> window. So right-clicking a background entry and
+     * choosing Close would close whatever window was in front instead, which is the worst failure
+     * available to a menu whose whole job is to name its subject.</p>
+     *
+     * <p>Answering {@link WindowFrame#WINDOW_FRAME} itself puts the entry ahead of the desktop in the
+     * walk — the documented rule that an element which answers must still win — so the menu is about the
+     * window whose button was pressed, and the desktop's answer stays the last resort it was written to
+     * be.</p>
+     */
+    private static final class Entry extends Button implements DataProvider {
+
+        private final WindowFrame frame;
+
+        Entry(WindowFrame frame) {
+            super(frame.getTitle());
+            this.frame = frame;
+        }
+
+        @Override
+        @Nullable
+        public Object getData(DataKey<?> key) {
+            return key == WindowFrame.WINDOW_FRAME ? frame : null;
+        }
+
+        /**
+         * {@code button} — its superclass's tag, and the one case where that is right.
+         *
+         * <p>An unregistered subclass falls back to its own lowercased class name, so this would report
+         * {@code entry} and match none of the {@code button} rules that make it look like a control —
+         * the {@code ToolWindowFrame} lesson, which cost a whole unstyled widget. An entry wants a
+         * button's look entirely, plus {@link #ENTRY_CLASS} for what differs.</p>
+         */
+        @Override
+        public String tagName() {
+            return "button";
+        }
     }
 }
