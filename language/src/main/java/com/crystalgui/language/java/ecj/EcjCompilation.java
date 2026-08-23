@@ -64,7 +64,10 @@ final class EcjCompilation {
         INameEnvironment environment = null;
         try {
             Map<String, String> options = optionsFor(releaseLevel);
-            environment = environmentFor(classpath, releaseLevel, types);
+            // SELF EXCLUDED here too: this unit is the one being compiled, so the project index
+            // answering for it would declare it twice.
+            environment = environmentFor(classpath, releaseLevel, types,
+                    SourcePackages.binaryName(className, source).replace('.', '/'));
 
             final Output collecting = output;
             ICompilerRequestor requestor = new ICompilerRequestor() {
@@ -140,7 +143,20 @@ final class EcjCompilation {
      */
     static INameEnvironment environmentFor(List<String> classpath, int releaseLevel,
                                                    TypeBytes types) {
-        return new ScriptNameEnvironment(fileSystemFor(classpath, releaseLevel), types);
+        return environmentFor(classpath, releaseLevel, types, null);
+    }
+
+    /**
+     * As above, but told which type is being compiled so the project index never answers for it.
+     *
+     * <p>The unit under analysis is already in ECJ's {@code unitsToProcess}. Answering the same name from
+     * the environment as well declares the file twice, and the duplicate lands on the author's own class.
+     * The name is <b>internal form</b> — slashes — because that is what the environment compares against.</p>
+     */
+    static INameEnvironment environmentFor(List<String> classpath, int releaseLevel,
+                                           TypeBytes types, String selfInternalName) {
+        return new ScriptNameEnvironment(fileSystemFor(classpath, releaseLevel), types,
+                com.crystalgui.text.lang.ProjectSourcesRegistry.view(), selfInternalName);
     }
 
     private static INameEnvironment fileSystemFor(List<String> classpath, int releaseLevel) {
