@@ -161,14 +161,34 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
      * classpath half is ECJ's own {@code FileSystem}, rebuilt with it — which is what the file-based
      * path did per parse anyway.</p>
      *
-     * <p>Null when no platform is registered, which is the harness, every test and a plain JVM: those
-     * take the {@code ASTParser} path exactly as before, so the route with the coverage is the route
-     * they keep.</p>
+     * <h3>Taken whether or not a platform is registered — M15 S3</h3>
+     *
+     * <p>This used to return null with no platform, so the harness, every test and a plain JVM took the
+     * {@code ASTParser} route instead. That split had to go before project sources arrive, because the two
+     * routes cannot be taught the same thing: {@code ASTParser}'s only way to hear about other source is
+     * its {@code sourcepathEntries}, which are <b>directories on disk</b> and cannot carry an unsaved
+     * buffer. Leaving it would have meant the harness resolving saved text while a Minecraft client
+     * resolved live text — two environments disagreeing about what the code says.</p>
+     *
+     * <p><b>With {@link TypeBytes#NONE} the resolution is identical by construction.</b>
+     * {@code ScriptNameEnvironment} sets its {@code live} flag from {@code types != NONE}, so with none it
+     * delegates every lookup straight to ECJ's {@code FileSystem} — the same classpath, reached through
+     * our environment instead of JDT's.</p>
+     *
+     * <p><b>It was not identical on the first attempt</b>, and the difference is recorded on
+     * {@code DomResolution.resolve}: flow-analysis warnings were missing because ECJ emits them during
+     * code generation, which that route had switched off. Switching it on made the two routes agree and
+     * made this one measurably faster than the one it replaces.</p>
+     *
+     * <p>The {@code ASTParser} route is <b>not</b> dead: {@link DomResolution#isAvailable} is a real
+     * per-band capability check, and a band that does not expose the internal resolver still falls back to
+     * it — as does {@link #parse}'s no-bindings recovery pass when this throws.</p>
      */
     private CompilationUnit live(String className, String source, List<String> classpath,
                                  int releaseLevel, INameEnvironment[] keep) {
+        if (!DomResolution.isAvailable()) return null;
+        // NONE IS FINE: no live-bytes overlay, classpath resolution unchanged.
         TypeBytes available = types;
-        if (available == TypeBytes.NONE || !DomResolution.isAvailable()) return null;
         INameEnvironment environment = null;
         try {
             environment = EcjCompilation.environmentFor(classpath, releaseLevel, available);

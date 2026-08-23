@@ -1526,7 +1526,7 @@ called out, because an order that looks like preference is one somebody reorders
 |---|---|---|---|
 | **S1** | **Source roots.** `WorkspaceProject` gains them, defaulted by convention to `src/main/java` and `src/main/js` but **declared**, so a mod may put sources elsewhere. Nothing consumes them yet | `CgPath` → (root, package, simple name) is a pure function, with the rootless case answering "no root" rather than guessing | — |
 | **S2** | **The project index, and the bridge seam.** FQN ↔ `CgPath`, core-side, built off the crawl `knownFiles()` already runs, invalidated by `WorkspaceWatcher`, and **buffer-aware** — an open document beats disk. Exposed as `ProjectSources`, JDK types only (§24.4). No engine consumes it yet | asking for `foo.Bar` returns the CURRENT text, including an unsaved edit | needs S1 to derive an FQN from a path |
-| **S3** | **Route unification, as a NO-OP.** Make `live()` the only resolving route — working with `TypeBytes.NONE` and no platform registered, which is the harness, every test and a plain JVM. **No project sources yet.** `parse(…, false)` stays as the recovery tree; the `parse(…, true)` fallback becomes dead | the existing suite is green and the harness is unchanged, having swapped the engine underneath both | must precede S4 — see below |
+| **S3** ✅ | **Route unification.** Make `live()` the only resolving route — working with `TypeBytes.NONE` and no platform registered, which is the harness, every test and a plain JVM. **No project sources yet.** `parse(…, false)` stays as the recovery tree; the `parse(…, true)` fallback becomes dead | the existing suite is green and the harness is unchanged, having swapped the engine underneath both | must precede S4 — see below |
 | **S4** | **Java cross-file resolution.** `ScriptNameEnvironment` answers a project type with `NameEnvironmentAnswer(ICompilationUnit, …)` over `ProjectSources`. **Package authority inverts**: the path wins where a root contains the file, `SourcePackages` still answers where none does, and a `package` line disagreeing with its directory becomes a diagnostic on line 1 | `Main.java` uses a type declared in `Viewer.java`; an unsaved edit in one is visible to the other; a wrong package line is reported | needs S2 and S3 |
 | **S5** | **Multi-file compile and run.** ECJ already emits every type it compiled into `Result.classes`, so the closure may arrive free — but `ScriptClassLoader` and the compiled-script cache both assume one file | running `Main.java` that uses `Viewer` works, and re-running after editing `Viewer` picks the change up | needs S4 |
 | **S6** | **JavaScript imports.** Our own syntax, blanked at its own length as `JsImports` already blanks a Java import, bound underneath to Rhino's CommonJS via a `ModuleSourceProvider` over the same index, `setSandboxed(true)` behind `ScriptPolicy` | a script imports another and gets its exports, and a refused module is refused | needs S1 + S2 only — **parallel to S3–S5** |
@@ -1564,9 +1564,10 @@ called out, because an order that looks like preference is one somebody reorders
 **M14 comes after S5**, not after S7. Rename and find-usages need Java's project-wide references, which S4
 and S5 deliver; JavaScript's arrive with S7 and can follow.
 
-### 24.8 S3 attempted, and what it found
+### 24.8 S3 — attempted, diagnosed, landed
 
-*Attempted 2026-08-22, reverted the same day. The stage did exactly what it was staged to do.*
+*Attempted, reverted, diagnosed and landed on 2026-08-22. The stage did exactly what it was staged to
+do: it found something no test could have found while the route was unreachable.*
 
 The change was one condition. `EcjSourceAnalyzer.live(…)` opened with
 
@@ -1608,5 +1609,60 @@ four-argument `resolve` on that class, and the one this binds is chosen by arity
 check, which is the same weak selector the `convert` lookup beside it already had to abandon in favour of
 arity-plus-intent.
 
-**S4 is blocked on S3, and S3 is now blocked on that diagnosis.** S1 and S2 shipped and are independent of
-it; **S6 remains fully unblocked**, since the JavaScript track shares only source roots and the index.
+#### The diagnosis
+
+Three probes, each eliminating one hypothesis.
+
+1. **It is not the wrong overload.** `CompilationUnitResolver` publishes exactly one four-argument
+   `resolve` taking an internal `ICompilationUnit`, so the arity-plus-first-parameter selector binds the
+   right method. Read out of the band-8 jar with `javap`.
+2. **It is not the options.** Dumping `getMap()` on the object JDT's own factory built showed
+   `unusedLocal=warning` and `unusedObjectAllocation=warning` — both switched on — with
+   `ignoreMethodBodies=false` and both recoveries true. Note the first of those is `warning` in the BUILT
+   map and absent from ours, so the factory is adding JDT's defaults rather than dropping our policy.
+3. **It is not the converter losing them.** Reading `compilationResult.getAllProblems()` directly off the
+   returned declaration gave **one** problem — `Unnecessary semicolon`. The problems were never produced.
+
+Which named the tier. The one problem that survived is a **parse-time** problem; both that vanished come
+out of flow analysis. And flow analysis was running.
+
+#### The cause
+
+**ECJ reports an unused local and an unused allocation during CODE GENERATION**, from
+`MethodScope.computeLocalVariablePositions` — not from `analyseCode`. `DomResolution` called
+`resolve(unit, true, true, false)` with a comment stating the opposite: *"Method bodies ARE analysed,
+because that is where unused locals and unreachable code come from … Nothing is generated."* The first
+half is true and the conclusion is not.
+
+Flipping the third argument produced all three problems and made the two routes agree exactly.
+
+#### And it is faster
+
+The obvious objection is cost — this runs per keystroke, and generation is real work. Measured on a
+13,624-character, 40-method file, twenty analyses after five warm-ups:
+
+```
+ASTParser route:                 25,935 µs / analysis
+live route, generating code:     20,905 µs / analysis     0.81x
+```
+
+**The live route is faster than the one it replaces, while generating.** Nothing is kept: `DISCARDING` is
+the requestor precisely so the emitted class files go nowhere — which is why the option was cheap to turn
+on and why it should have been on all along.
+
+#### One test changed, and it was the right one to change
+
+`AnalyzerResilienceTest.theDegradedParseKeepsItsTreeAndLosesOnlyResolution` asserted that a record with a
+missing component type — a shape JDT's DOM raises an `AssertionError` on — comes back with **no**
+resolution. That was evidence the `ASTParser` fallback had run. The live route completes the same parse
+*correctly*, so on that route there is no degradation to observe and asserting its absence would be
+asserting the analyser is worse than it is.
+
+It now asserts what survives the change and is arguably stronger: the tree is intact either way, and **if
+it resolves, it resolves right** — a route answering with a plausible wrong binding fails, and one
+answering nothing still passes, because nothing is the honest answer with no bindings. Renamed
+`theDegradedParseKeepsItsTreeAndIsNeverWrong`. The fallback itself is untouched and still guarded.
+
+#### Result
+
+`:language:test` 1179/1179, `:core:headlessTest` 1347/1347. **S3 is landed and S4 is unblocked.**
