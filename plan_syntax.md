@@ -1563,3 +1563,50 @@ called out, because an order that looks like preference is one somebody reorders
 
 **M14 comes after S5**, not after S7. Rename and find-usages need Java's project-wide references, which S4
 and S5 deliver; JavaScript's arrive with S7 and can follow.
+
+### 24.8 S3 attempted, and what it found
+
+*Attempted 2026-08-22, reverted the same day. The stage did exactly what it was staged to do.*
+
+The change was one condition. `EcjSourceAnalyzer.live(…)` opened with
+
+```java
+if (available == TypeBytes.NONE || !DomResolution.isAvailable()) return null;
+```
+
+so a host with no platform registered — the harness, every test, a plain JVM — never took the live route
+at all. Dropping the `TypeBytes.NONE` half should have been a no-op: with no live bytes,
+`ScriptNameEnvironment` sets its own `live` flag false and delegates every lookup straight to ECJ's
+`FileSystem`, which is the same classpath the `ASTParser` route resolves against. Recovery is equivalent
+too — `DomResolution.resolve` turns on statement recovery through JDT's own options factory and binding
+recovery through the convert flags, which is what `ASTParser.setStatementsRecovery`/`setBindingsRecovery`
+do. Both routes are handed the same options map, `EcjProblemPolicy.severities()` included.
+
+**It is not a no-op. `:language:test` went from green to six failures, and all six reduce to one fact:**
+
+> **The live route reports NO optional problems at all.** `problem 536870973` — an unused local — "is not
+> reported at all"; `unusedObjectAllocation` "must be switched on"; the unused-local quick fix is offered
+> over nothing; the fixture sweep loses every `QuickFixUnused` annotation it checks.
+
+Everything *else* was fine. Bindings resolved, semantic tokens were right, and
+`AnalyzerResilienceTest.theDegradedParseKeepsItsTreeAndLosesOnlyResolution` failed only because the live
+route **succeeded** where `ASTParser` had degraded — the test asserts resolution is absent and got a real
+`SymbolInfo` back. That one is arguably an improvement rather than a regression, and it still has to be
+reconciled deliberately rather than by editing the expectation.
+
+**Why this had never shown.** The live route has only ever run on a Minecraft host, because the very
+condition removed here is what kept every test and the harness on `ASTParser`. So this is the first time
+its optional-problem behaviour has been exercised anywhere with coverage — which is precisely the risk
+§24.7 named when it called S3 "the scary one" and staged it as a no-op so the suite would be the test.
+
+**What it means for the order.** S3 is not a mechanical unification and cannot be treated as one. It needs
+a diagnosis of where the optional problems are lost between `CompilationUnitResolver.resolve(unit, true,
+true, false)` and the DOM unit's `getProblems()` — `analyzeCode` is passed `true`, and unused locals come
+out of exactly that pass, so either it is not running, its problems are not reaching the converted unit,
+or the reflected 4-argument `resolve` is not the overload the call assumes. JDT publishes more than one
+four-argument `resolve` on that class, and the one this binds is chosen by arity plus a first-parameter
+check, which is the same weak selector the `convert` lookup beside it already had to abandon in favour of
+arity-plus-intent.
+
+**S4 is blocked on S3, and S3 is now blocked on that diagnosis.** S1 and S2 shipped and are independent of
+it; **S6 remains fully unblocked**, since the JavaScript track shares only source roots and the index.
