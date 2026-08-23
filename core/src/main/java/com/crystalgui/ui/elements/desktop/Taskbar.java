@@ -5,12 +5,9 @@ import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
-import com.crystalgui.core.command.CommandRegistry;
-import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.ui.elements.Button;
-import com.crystalgui.ui.elements.chrome.ContextMenu;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
@@ -235,10 +232,19 @@ public class Taskbar extends UIElement {
     private Button createEntry(Desktop desktop, WindowFrame frame) {
         Button entry = new Entry(frame);
         entry.addClass(ENTRY_CLASS);
-        // W13a's third route. The rows are MenuId.WINDOW_SYSTEM's, exactly as the title bar's and
-        // Alt+Space's are -- what differs is only which window they resolve to, which Entry answers.
-        ContextMenu.attach(entry, CommandRegistry.global(),
-                pressed -> ContextMenu.of(MenuId.WINDOW_SYSTEM));
+        // W13a's third route, and the one that is NOT ContextMenu.attach.
+        //
+        // The rows are MenuId.WINDOW_SYSTEM's, exactly as the title bar's and the keyboard route's are.
+        // What differs is the placement: attach anchors at the POINTER, which for a strip along the
+        // bottom of the screen puts a menu at the very edge, left-aligned from wherever the press landed
+        // and drifting further from its entry the wider it gets. Windows' jump list is CENTRED over its
+        // button, which is the same rule the hover previews above these entries already follow --
+        // an anchor that is a label for the thing beneath it wants centring, not left alignment.
+        entry.onMouseDown.attachListener((element, event) -> {
+            if (event.getButtonId() != CgMouseCodes.RIGHT_BUTTON) return;
+            event.stopPropagation();
+            SystemMenu.showJumpList(frame, element);
+        }, false, false);
         previews.watch(entry, frame);
         entry.attachListener(() -> {
             if (frame.state() == WindowState.HIDDEN || desktop.activeWindow() != frame) {

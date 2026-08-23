@@ -654,6 +654,23 @@ window.__dock-window__ .__strip__ {
  *
  * ABSOLUTE, because it is promoted to the top layer and a promoted element's containing block is the
  * root. AnchoredPlacement owns its left/top; nothing else may write them. */
+/* A taskbar entry's jump list wears the hover preview's surface, because from the strip's point of view
+ * they are the same object: a panel belonging to one entry, floating above it. Drawn as a bare menu it
+ * read as a context menu that happened to be nearby — the same fill, border and radius is what makes the
+ * two gestures feel like one affordance.
+ *
+ * The MENU's own rules still supply the row metrics; only the container is restyled, which is why this
+ * sets no padding of its own beyond the panel inset. */
+menu.__jump-list__ {
+    background: none;
+    background-color: var(--preview-bg, #2B2B2B);
+    border-width: 1px;
+    border-color: var(--preview-border, #3D3D3D);
+    border-radius: var(--radius-panel, 4px);
+    padding-top: 3px;
+    padding-bottom: 3px;
+}
+
 .__window-preview__ {
     position: absolute;
     flex-direction: column;
