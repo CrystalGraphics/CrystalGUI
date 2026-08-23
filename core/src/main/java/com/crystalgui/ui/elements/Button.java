@@ -7,6 +7,7 @@ import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.input.FocusPolicy;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgraphics.platform.input.CgMouseCodes;
 
 import javax.annotation.Nullable;
 
@@ -63,6 +64,21 @@ public class Button extends UIElement {
         this.setFocusPolicy(FocusPolicy.CLICK);
 
         this.attachDefaultListener(this.onMouseUp, (el, event) -> {
+            // THE LEFT BUTTON ACTIVATES, and no other one does.
+            //
+            // This checked no button at all, so a button was pressed by a right-click and a middle-click
+            // as well — which no toolkit does, and which nothing noticed until something put a context
+            // menu on a button: right-clicking a taskbar entry opened its menu AND activated the window
+            // underneath, so the menu appeared over a window that had just minimised itself.
+            //
+            // Keyboard activation is unaffected: Space and Enter synthesize this pair with button 0, so
+            // they are left presses by construction — which is the whole reason `UIInputHandler` fakes a
+            // click rather than calling into `Button`.
+            //
+            // Anything wanting another button asks for it directly, as the taskbar's middle-click close
+            // does on mouse-DOWN. That is the honest way round: activation is one gesture, and a widget
+            // that needs a second one is asking for a different event rather than for a wider `onPressed`.
+            if (event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
             if (event.isWasPressTarget() && isEnabled()) {
                 CgPlatform.sound().play("button_click");
                 onPressed.emit();
