@@ -290,13 +290,9 @@ public final class RhinoExecutor implements JsExecutor {
         if (!(compiled instanceof CompiledScript)) return;
         Map<String, String> imported = ((CompiledScript) compiled).imported();
         if (imported.isEmpty()) return;
-        for (Map.Entry<String, String> each : imported.entrySet()) {
-            String binaryName = each.getValue();
-            if (allowsClass != null && !allowsClass.test(binaryName)) continue;
-            Class<?> found = JsLoaders.load(binaryName);
-            if (found == null) continue;
-            ScriptableObject.putProperty(scope, each.getKey(), wrap(cx, scope, found));
-        }
+        // A PROJECT SCRIPT FIRST, THEN A JAVA TYPE -- and the modules holder is built per run, so nothing
+        // a previous execution imported is reachable from this one. @see JsModules
+        new JsModules(scope, allowsClass).bindInto(cx, scope, imported);
     }
 
     /**
@@ -308,6 +304,10 @@ public final class RhinoExecutor implements JsExecutor {
      * {@code Packages.a.b.C} would have produced; so a class goes through the wrap factory's class path
      * and everything else through the ordinary one.</p>
      */
+    static Object wrapForScript(Context cx, Scriptable scope, Object value) {
+        return wrap(cx, scope, value);
+    }
+
     private static Object wrap(Context cx, Scriptable scope, Object value) {
         if (value instanceof Class) return cx.getWrapFactory().wrapJavaClass(cx, scope, (Class<?>) value);
         // THE CONTEXT'S OWN FACTORY, ASKED DIRECTLY, rather than through `Context.javaToJS`. Published
