@@ -70,27 +70,24 @@ final class EcjCompilation {
                     SourcePackages.binaryName(className, source).replace('.', '/'));
 
             final Output collecting = output;
-            ICompilerRequestor requestor = new ICompilerRequestor() {
-                @Override
-                public void acceptResult(CompilationResult result) {
-                    CategorizedProblem[] problems = result.getProblems();
-                    if (problems != null) {
-                        for (CategorizedProblem problem : problems) {
-                            if (problem == null || !problem.isError()) continue;
-                            collecting.errored = true;
-                            collecting.messages.add(describe(problem));
-                        }
+            ICompilerRequestor requestor = result -> {
+                CategorizedProblem[] problems = result.getProblems();
+                if (problems != null) {
+                    for (CategorizedProblem problem : problems) {
+                        if (problem == null || !problem.isError()) continue;
+                        collecting.errored = true;
+                        collecting.messages.add(describe(problem));
                     }
-                    // COLLECTED EVEN WHEN THERE ARE ERRORS. ECJ emits class files for the types it did
-                    // manage, and a "compile always, run explicitly" model wants to be able to inspect a
-                    // partial result -- discarding them would make a failed compile indistinguishable
-                    // from one that produced nothing.
-                    ClassFile[] files = result.getClassFiles();
-                    if (files == null) return;
-                    for (ClassFile file : files) {
-                        collecting.classes.put(
-                                new String(file.fileName()).replace('/', '.'), file.getBytes());
-                    }
+                }
+                // COLLECTED EVEN WHEN THERE ARE ERRORS. ECJ emits class files for the types it did
+                // manage, and a "compile always, run explicitly" model wants to be able to inspect a
+                // partial result -- discarding them would make a failed compile indistinguishable
+                // from one that produced nothing.
+                ClassFile[] files = result.getClassFiles();
+                if (files == null) return;
+                for (ClassFile file : files) {
+                    collecting.classes.put(
+                            new String(file.fileName()).replace('/', '.'), file.getBytes());
                 }
             };
 
