@@ -1782,12 +1782,11 @@ merely emitted, and that a second run does not hand back the first run's already
 
 #### What is left
 
-**A dependency that is not open in an editor.** `ProjectIndex.sourceOf` answers from the buffer, then a
-cache, then null-plus-a-background-read — so the first run of a script whose sibling nobody has opened
-compiles without it and fails, and the run after it succeeds. Harmless for the case S5 was asked for
-(the author edited the sibling, so it is open by definition) and wrong for a cold one. The analysis path
-must not block on I/O; a run is user-initiated and could, so the two want different answers from one
-method. Unresolved, and deliberately not guessed at here.
+~~**A dependency that is not open in an editor.**~~ **Closed — see §24.11.** It was recorded here as
+unresolved and was found the same week by the JavaScript fixture, which failed on its first run for
+exactly this reason. `ProjectSources.awaitSourceOf` is the blocking variant, and the two callers that
+want different answers get them: the analysis path never blocks, and a compile that exists in order to
+RUN does. The guess this section declined to make turned out to be the right one.
 
 ### 24.11 S6 and S7 — JavaScript, and the one place §24.3 was wrong
 
@@ -1853,4 +1852,21 @@ to a module that exports nothing, and would have been invisible.
 The editor and the runtime make the same choice in the same order: a workspace file first, the classpath
 behind it. A name that completed as a Java class and ran as a project script would be worse than either
 alone. **S6 and S7 are landed**, which closes M15.
+
+#### Found by running it, not by the suite
+
+Four defects survived every test above and were found the moment the harness fixture ran, because each
+test's stand-in workspace answers instantly and knows nothing about where a file lives — so none of them
+could express the two facts that broke: a file nobody has open answers null on the first ask, and one
+index holds both languages' names.
+
+| What broke | Why the suite could not see it |
+|---|---|
+| A module nobody had open was **silently skipped**, so `App.js` died on a name declared two files away | Every stand-in answers instantly. It presented as an ASYMMETRY — `Greeter` resolved because the editor had already asked for it while analysing the file that imports it, `Formatter` was first asked for at run time — and that asymmetry is what made it legible |
+| A `.java` file could be **evaluated as a module** | Adding `src/main/js` fixtures is what created it: `SourceRoots` names any file under a declared root whatever its extension, so one index now holds `com.example.Main` beside `util.Greeter` with nothing in a NAME to tell them apart |
+| The **import line** said `public class Greeter` while the identical name two rows below said `module Greeter` | An import statement is blanked before the parser sees it, so a separate path answers from the surviving spans — and every S7 test asked about the identifier, which goes the other way |
+| A module's member had **no signature and nowhere to jump to** | It resolved, so nothing failed. A symbol with no `Signature` falls through to the popup's assembled renderer, so it drew in different colours from every other member in the file and read as a theming bug |
+
+The last two are the same lesson the invariants table already records twice, in a third costume: *a
+hand-built `SymbolInfo` where the engine had one is a second opinion, and the popup can tell.*
 
