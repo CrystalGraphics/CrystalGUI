@@ -1,5 +1,7 @@
 package com.crystalgui.language.java.exec;
 
+import com.crystalgui.text.lang.ProjectSources;
+import com.crystalgui.text.lang.ProjectSourcesRegistry;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.language.engine.JavaEngine;
 import com.crystalgui.language.engine.ScriptClassLoader;
@@ -25,6 +27,7 @@ import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
@@ -197,19 +200,75 @@ public final class ScriptHost implements ScriptRuntime {
      * cache key describes and what a caller inspecting diagnostics wants to see.</p>
      */
     public Compiled compile(ScriptPrelude.Wrapped wrapped) {
-        ScriptCacheKey key = ScriptCacheKey.of(wrapped.unitSource(), mappingsId,
-                engine.band().minimumFeatureVersion());
+        int band = engine.band().minimumFeatureVersion();
+        // THE KEY THIS SCRIPT HAD LAST TIME, which is the only way to know what to look under.
+        //
+        // A script's inputs are its own text AND every project file it resolves through, and the second
+        // half is not knowable until after a compile -- so the lookup uses what the last compile of this
+        // exact text consumed. A hint, not a record: when it is missing or stale the worst case is one
+        // wasted compile, after which it is right again.
+        ScriptCacheKey bare = ScriptCacheKey.of(wrapped.unitSource(), mappingsId, band);
+        ScriptCacheKey key = keyFor(wrapped.unitSource(), band,
+                dependencyHints.getOrDefault(bare, Set.of()));
+
         Map<String, byte[]> cached = cache.get(key);
         if (cached != null) {
             return new Compiled(this, wrapped, key, cached, List.of(), true, true);
         }
         ScriptCompiler.Result result = engine.compiler().compile(
                 wrapped.className(), wrapped.unitSource(), classpath, engine.releaseLevel());
+
+        // WHAT IT ACTUALLY DEPENDED ON, which may not be what the hint said -- an added import reaches a
+        // file the previous compile never saw. Stored against the bare key, so the next lookup for this
+        // text starts from the truth.
+        Set<String> dependencies = result.projectSources();
+        dependencyHints.put(bare, dependencies);
+        ScriptCacheKey actual = keyFor(wrapped.unitSource(), band, dependencies);
+
         // ONLY A SUCCESSFUL COMPILE IS CACHED. Caching a failure would serve it back after the author
         // fixed the file, which reads as the editor refusing to notice an edit.
-        if (result.successful()) cache.put(key, result.classes());
-        return new Compiled(this, wrapped, key, result.classes(), result.messages(),
+        if (result.successful()) cache.put(actual, result.classes());
+        return new Compiled(this, wrapped, actual, result.classes(), result.messages(),
                 false, result.successful());
+    }
+
+    /**
+     * What this script last pulled in from the workspace, by its dependency-free key.
+     *
+     * <p>Per host and never persisted, because it is a shortcut rather than a fact: an entry that is
+     * absent costs one compile, and one that is out of date produces a key nothing is stored under, which
+     * costs the same. It cannot serve a wrong answer, only a slow one.</p>
+     */
+    private final Map<ScriptCacheKey, Set<String>> dependencyHints = new java.util.HashMap<>();
+
+    /**
+     * The cache key for this text compiled against the CURRENT state of {@code dependencies}.
+     *
+     * <h3>Why the sources are read again here rather than carried out of the compile</h3>
+     *
+     * <p>Because "current" is the whole point. {@code ProjectSources.sourceOf} answers from the open
+     * editor's buffer before it answers from disk, so this fingerprints what the author can SEE — no save
+     * required, which is the property that makes running {@code Main} after editing {@code Greeter} pick
+     * the edit up. Hashing text the compile happened to hold would fingerprint the past.</p>
+     *
+     * <p>A dependency that has since disappeared hashes as absent rather than being skipped, so a deleted
+     * file is a different key too.</p>
+     */
+    private ScriptCacheKey keyFor(String source, int band, Set<String> dependencies) {
+        if (dependencies == null || dependencies.isEmpty()) {
+            return ScriptCacheKey.of(source, mappingsId, band);
+        }
+        ProjectSources project = ProjectSourcesRegistry.view();
+        // SORTED, so the fingerprint describes the SET rather than the order ECJ happened to ask in --
+        // otherwise an identical dependency set produces a different key on a later run and never hits.
+        StringBuilder digest = new StringBuilder();
+        for (String name : new java.util.TreeSet<>(dependencies)) {
+            String text = project.sourceOf(name);
+            digest.append(name).append('\u0000')
+                    .append(text == null ? "<absent>" : Integer.toHexString(text.hashCode()))
+                    .append('\u0000').append(text == null ? 0 : text.length()).append('\n');
+        }
+        return ScriptCacheKey.of(source, mappingsId, band, digest.toString());
     }
 
     /** A compilation, and where it came from. */

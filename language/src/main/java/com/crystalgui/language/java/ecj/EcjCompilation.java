@@ -53,6 +53,8 @@ final class EcjCompilation {
         final Map<String, byte[]> classes = new LinkedHashMap<String, byte[]>();
         final List<String> messages = new ArrayList<String>();
         boolean errored;
+        /** Project types this compile resolved from the workspace. @see ScriptNameEnvironment */
+        java.util.Set<String> projectSources = java.util.Collections.emptySet();
     }
 
     private EcjCompilation() {
@@ -61,7 +63,7 @@ final class EcjCompilation {
     static Output compile(String className, String source, List<String> classpath, int releaseLevel,
                           TypeBytes types) {
         Output output = new Output();
-        INameEnvironment environment = null;
+        ScriptNameEnvironment environment = null;
         try {
             Map<String, String> options = optionsFor(releaseLevel);
             // SELF EXCLUDED here too: this unit is the one being compiled, so the project index
@@ -97,6 +99,10 @@ final class EcjCompilation {
                     requestor,
                     new DefaultProblemFactory(Locale.getDefault()))
                     .compile(new ICompilationUnit[]{new InMemoryUnit(className, source)});
+            // WHAT THE WORKSPACE CONTRIBUTED, read after the compile because that is when it is known.
+            // It travels out so the cache can tell a script apart from the same script compiled against
+            // a different version of its siblings. @see ScriptCompiler.Result#projectSources
+            output.projectSources = environment.consumedProjectSources();
         } catch (OutOfMemoryError exhausted) {
             // THE ONE THING NOT TURNED INTO A MESSAGE. Building a diagnostic string after the heap has
             // run out is how a recoverable stall becomes an unrecoverable one. EcjSourceAnalyzer.parse
@@ -142,8 +148,8 @@ final class EcjCompilation {
      * the environment as well declares the file twice, and the duplicate lands on the author's own class.
      * The name is <b>internal form</b> — slashes — because that is what the environment compares against.</p>
      */
-    static INameEnvironment environmentFor(List<String> classpath, int releaseLevel,
-                                           TypeBytes types, String selfInternalName) {
+    static ScriptNameEnvironment environmentFor(List<String> classpath, int releaseLevel,
+                                                TypeBytes types, String selfInternalName) {
         return new ScriptNameEnvironment(fileSystemFor(classpath, releaseLevel), types,
                 com.crystalgui.text.lang.ProjectSourcesRegistry.view(), selfInternalName);
     }

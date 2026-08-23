@@ -11,6 +11,7 @@ import org.eclipse.jdt.core.compiler.CharOperation;
 import org.eclipse.jdt.internal.compiler.env.NameEnvironmentAnswer;
 
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -219,8 +220,27 @@ final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
         String qualified = internalName.replace('/', '.');
         String source = project.sourceOf(qualified);
         if (source == null) return null;
+        // RECORDED, because a compiled script is CACHED and this is the only place that knows what went
+        // into it. The key describes the file the author ran; a sibling it pulled in is invisible to it,
+        // so editing that sibling would leave the cache serving bytes compiled against the old one --
+        // the file would be "saved" as far as the compiler was concerned and the run would not change.
+        // @see ScriptCompiler.Result#projectSources
+        consumedProjectSources.add(qualified);
         return new NameEnvironmentAnswer(new ProjectUnit(qualified, source), null);
     }
+
+    /**
+     * Every project type this compile resolved from the workspace rather than the classpath.
+     *
+     * <p>A {@code Set} of NAMES and not of texts: the host hashes the current source itself, both when
+     * it stores an entry and when it looks one up, so the two are always compared the same way. Handing
+     * the text across would also mean retaining a copy of every file a script touched.</p>
+     */
+    Set<String> consumedProjectSources() {
+        return consumedProjectSources;
+    }
+
+    private final Set<String> consumedProjectSources = new LinkedHashSet<>();
 
     /** One project file, as the compiler's idea of a compilation unit. */
     private static final class ProjectUnit
