@@ -90,6 +90,64 @@ public final class ToolWindowManager {
     }
 
     /** Whether this tool window is currently showing — in its region, or in its frame. */
+    /**
+     * Takes a tool window out of the region half that is holding it, if one is.
+     *
+     * <p><b>Going into a frame is leaving the region, and the region has to be told.</b> Putting a panel
+     * in a frame reparents its container out from under the host ({@code setContent} does that), and a
+     * host left recording an occupant it no longer contains answers {@code isEmpty() == false} — so
+     * {@code sync()} keeps the region in the split and its whole width stays behind as a blank column
+     * beside the editor. That is the standing invariant about the host being the truth, met from a new
+     * direction.</p>
+     *
+     * <p><b>Reached only on the restore path, which is why it was missing.</b> Undocking by hand goes
+     * through {@code setType}, which hides the panel <em>while its type is still DOCKED</em>, so
+     * {@code hidePanel} takes its docked branch and clears the half. A session restore never hides
+     * anything: it decodes a placement that already says WINDOWED and calls {@code showPanel}, so
+     * {@code hidePanel}'s early return for a windowed type means nothing is ever cleared. Doing it here
+     * makes it true however the frame was reached.</p>
+     *
+     * <p>Both shares are read BEFORE the clear, for the reason {@code hidePanel} gives: a region that
+     * empties leaves the split and takes its divider with it, and neither is readable afterwards.</p>
+     */
+    private void releaseRegionSlot(String typeId) {
+        DockRegion region = regionOf(typeId);
+        RegionHost host = regions.host(region);
+        RegionSide side = showingSideOf(host, typeId);
+        if (host == null || side == null) return;
+        float weight = regions.weightOf(region);
+        float sideWeight = regions.sideWeightOf(region);
+        host.clear(side);
+        regions.sync();
+        // THE SHARES ONLY. `visible` is deliberately untouched: this runs on the way IN to a frame, and
+        // showInFrame sets it true a few lines later -- writing false here and true there would leave the
+        // record correct only because two writes happened to be ordered.
+        toolWindows.put(placementOf(typeId).withWeight(weight).withSideWeight(sideWeight));
+    }
+
+    /** Windowed tool windows asked for before there was a window to open them into. @see #showInFrame */
+    private final java.util.Set<String> pendingWindowedShows = new java.util.LinkedHashSet<>();
+
+    /**
+     * Opens whatever was asked for while the tree had no window.
+     *
+     * <p>Called when the workbench joins one. The answer has to be given <b>twice</b> for the same reason
+     * a window's focus delegate does: the moment something is asked for and the moment it can be
+     * satisfied are not the same frame, and the first one silently answers "no".</p>
+     *
+     * <p>Nothing re-checks the record here, deliberately. {@link #hidePanel} takes a panel out of the set,
+     * so a panel put away between the ask and the retry is already gone from it — and a second guard
+     * reading {@code visible()} would be a redundant one no test can distinguish from the first, which is
+     * how two mechanisms for one rule start disagreeing.</p>
+     */
+    public void retryPendingShows() {
+        if (pendingWindowedShows.isEmpty()) return;
+        for (String typeId : new java.util.ArrayList<>(pendingWindowedShows)) {
+            pendingWindowedShows.remove(typeId);
+            showPanel(typeId);
+        }
+    }
+
     public boolean isPanelOpen(String typeId) {
         if (typeOf(typeId).isWindowed()) return frames.containsKey(typeId);
         // BY IDENTITY, ACROSS BOTH HALVES -- "is this type on screen anywhere in its region".
@@ -131,6 +189,10 @@ public final class ToolWindowManager {
      * @return false, always — it is closed after this
      */
     public boolean hidePanel(String typeId) {
+        // A PANEL PUT AWAY IS NO LONGER WAITING TO OPEN. Without this a hide between the ask and the
+        // retry is undone by the retry, which is the same "an intent outlives the thing it described"
+        // shape a stale watch has.
+        pendingWindowedShows.remove(typeId);
         if (typeOf(typeId).isWindowed()) return hideFrame(typeId);
         DockRegion region = regionOf(typeId);
         RegionHost host = regions.host(region);
@@ -480,7 +542,20 @@ public final class ToolWindowManager {
         if (container == null) return false;
         UIElement anchor = regions.root();
         UIWindow window = anchor.getAttachedWindow();
-        if (window == null) return false;
+        if (window == null) {
+            // NOT A FAILURE — A "NOT YET". A windowed tool window needs a UIWindow to open into, and a
+            // session restore can legitimately run before the tree has one: a host that restores on its
+            // first frame does so before anything called UIWindow.init, and the harness does exactly
+            // that. The DOCKED path needs no window at all, so it succeeded and the windowed ones
+            // returned false into a caller that ignores the result — every float and every windowed
+            // tool window silently failed to come back, with the record on disk perfectly correct.
+            //
+            // Remembered and replayed the moment a window appears. @see #retryPendingShows
+            pendingWindowedShows.add(typeId);
+            return false;
+        }
+        pendingWindowedShows.remove(typeId);
+        releaseRegionSlot(typeId);
 
         ToolWindowFrame frame = frames.get(typeId);
         if (frame == null) {

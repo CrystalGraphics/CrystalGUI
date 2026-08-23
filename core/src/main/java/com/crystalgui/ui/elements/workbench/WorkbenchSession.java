@@ -351,8 +351,16 @@ public final class WorkbenchSession {
         for (ToolWindowState state : new ArrayList<>(workbench.toolWindows().all())) {
             DockRegion region = state.region();
             if (region == DockRegion.EDITOR) continue;
-            RegionHost host = workbench.regions().host(region);
-            boolean showing = host != null && state.typeId().equals(host.showing(state.side()));
+            // ASKED OF THE MANAGER, never derived here. "Is this on screen" already has one correct
+            // answer and this used to be a second, worse one: `host.showing(state.side())` can only see
+            // a DOCKED panel, so a tool window that was FLOATING or WINDOWED -- living in a frame rather
+            // than in a region half -- recorded as closed every single time and never came back. Its
+            // placement did survive, which is what made the bug read as "restore is broken" rather than
+            // as one field: reopening the panel by hand put it back in exactly the right place.
+            //
+            // isPanelOpen's own javadoc warns against precisely this expression, for the split-region
+            // reason it was written for. The session then reintroduced it.
+            boolean showing = workbench.toolWindowManager().isPanelOpen(state.typeId());
             workbench.toolWindows().put(state
                     .withVisible(showing)
                     .withWeight(workbench.regions().weightOf(region))

@@ -4,6 +4,8 @@ import com.crystalgui.core.settings.SettingsLayer;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.ConfigStorage;
 import com.crystalgui.fs.InMemoryConfigStorage;
+import com.crystalgui.ui.elements.desktop.WindowFrame;
+import com.crystalgui.ui.elements.workbench.ToolWindowType;
 import com.crystalgui.fs.InMemoryFileSystem;
 import com.crystalgui.fs.ProjectRegistry;
 import com.crystalgui.fs.WorkspaceActor;
@@ -72,6 +74,26 @@ public class WorkbenchSessionTest extends UiTestBase {
         ClientUiSession<Object> clientSession;
         ServerUiSession<Object> serverSession;
 
+        /**
+         * Moves the workbench into a {@code WindowFrame} on the desktop — the shape W7 made real.
+         *
+         * <p>{@code setContent}, not {@code content().addChild}: it is what adopts the workbench's menu
+         * bar into the caption, and it is the call the application makes.</p>
+         */
+        void intoWindow() {
+            workbench.removeSelf();
+            WindowFrame frame = window.openWindow(new WindowFrame("Editor").setKey("editor:main"));
+            frame.resizeTo(900, 600).moveTo(20, 20);
+            frame.setContent(workbench);
+            settle();
+        }
+
+        /** What {@code UIWindow.init} does on the frame after — the tree joins a window. */
+        void attach() {
+            window.init(1200, 800);
+            settle();
+        }
+
         void settle() {
             for (int i = 0; i < 12; i++) {
                 serverSide.deliver();
@@ -105,6 +127,10 @@ public class WorkbenchSessionTest extends UiTestBase {
      * would still pass.</p>
      */
     private Harness buildCold() {
+        return buildCold(true);
+    }
+
+    private Harness buildCold(boolean attached) {
         Harness harness = new Harness();
         InMemoryFileSystem files = new InMemoryFileSystem()
                 .seed("mymod.proj:README.md", "# hello")
@@ -127,9 +153,17 @@ public class WorkbenchSessionTest extends UiTestBase {
         root.addChild(harness.workbench);
         harness.window = new UIWindow(Ui.of(root));
         harness.window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
-        harness.window.init(1200, 800);
+        if (attached) harness.window.init(1200, 800);
         harness.session = new WorkbenchSession(harness.workbench, storage);
         return harness;
+    }
+
+    /**
+     * A workbench whose tree has <b>never joined a window</b> — what a host restoring on its first frame
+     * has, because {@code UIWindow.init} is what attaches the root and it has not run yet.
+     */
+    private Harness buildDetached() {
+        return buildCold(false);
     }
 
     @Before
@@ -562,6 +596,185 @@ public class WorkbenchSessionTest extends UiTestBase {
         third.settle();
         assertEquals("the untouched session wrote the divider away",
                 37f, restored.split.getPercentage(), 0.5f);
+    }
+
+    /**
+     * <b>...and so does one that was WINDOWED, with the workbench inside a window of its own.</b>
+     *
+     * <p>The shape the application actually runs in since W7 — the editor is a {@code WindowFrame} on a
+     * desktop, not a panel under the root — and the one the harness reported. Kept separate from the
+     * floating case because the two take different branches in {@code showInFrame}: a float is
+     * {@code attachOwned} to the workbench's own frame, a windowed one is a top-level
+     * {@code openWindow} with an owner relation. A fixture with the workbench under the bare root cannot
+     * tell them apart, because with no frame to own it a float takes the top-level branch too.</p>
+     */
+    @Test
+    public void aWindowedToolWindowComesBackOpenFromInsideAWindow() {
+        first.intoWindow();
+        first.workbench.showPanel(Workbench.PROBLEMS_TYPE);
+        first.settle();
+        first.workbench.toolWindowManager().setType(Workbench.PROBLEMS_TYPE, ToolWindowType.WINDOWED);
+        first.settle();
+        assertTrue("the fixture never opened it as a window",
+                first.workbench.toolWindowManager().isPanelOpen(Workbench.PROBLEMS_TYPE));
+
+        first.session.save(PROJECT, 1200, 800);
+
+        Harness second = build();
+        second.intoWindow();
+        second.workbench.toolWindowManager().hidePanel(Workbench.PROBLEMS_TYPE);
+        second.settle();
+        assertTrue(second.session.restore(PROJECT));
+        second.settle();
+
+        assertTrue("a windowed tool window never came back",
+                second.workbench.toolWindowManager().isPanelOpen(Workbench.PROBLEMS_TYPE));
+    }
+
+    /**
+     * <b>A windowed tool window restored BEFORE the tree has a window still opens.</b>
+     *
+     * <p>The one the harness reported, and the reason the other two tests passed while it was broken: they
+     * restore into a workbench that is already attached. A host may legitimately restore on its very first
+     * frame — before anything called {@code UIWindow.init} — and then a windowed tool window has nowhere
+     * to open into. {@code showInFrame} returned false into a caller that ignores the result, so every
+     * float and every windowed panel silently failed to come back <em>with the record on disk perfectly
+     * correct</em>, which is what made it read as "persistence is broken".</p>
+     *
+     * <p>The DOCKED path needs no window at all, so those came back and the failure looked partial.</p>
+     */
+    @Test
+    public void aWindowedToolWindowRestoredBeforeTheTreeIsAttachedStillOpens() {
+        first.intoWindow();
+        first.workbench.showPanel(Workbench.PROBLEMS_TYPE);
+        first.settle();
+        first.workbench.toolWindowManager().setType(Workbench.PROBLEMS_TYPE, ToolWindowType.WINDOWED);
+        first.settle();
+        first.session.save(PROJECT, 1200, 800);
+
+        // A WORKBENCH IN NO WINDOW AT ALL, which is what a host that restores on its first frame has.
+        Harness second = buildDetached();
+        assertTrue(second.session.restore(PROJECT));
+
+        assertFalse("the fixture was not detached, so this proves nothing",
+                second.workbench.toolWindowManager().isPanelOpen(Workbench.PROBLEMS_TYPE));
+
+        // ...and now it joins one, exactly as UIWindow.init does on the frame after.
+        second.attach();
+
+        assertTrue("a windowed tool window asked for before the tree had a window never opened",
+                second.workbench.toolWindowManager().isPanelOpen(Workbench.PROBLEMS_TYPE));
+    }
+
+    /**
+     * <b>A tool window restored into a FRAME leaves its docked region empty.</b>
+     *
+     * <p>Reported as "the auxiliary bar's space is still reserved as if it were open": the editor comes
+     * back a column narrower, with nothing in the column. A host left recording an occupant it no longer
+     * contains answers {@code isEmpty() == false}, so {@code sync()} keeps the region in the split and its
+     * whole width stays behind — the standing invariant about the host being the truth, met from a new
+     * direction.</p>
+     *
+     * <p><b>Only the restore path could reach it.</b> Undocking by hand goes through {@code setType},
+     * which hides the panel while its type is still DOCKED, so {@code hidePanel} takes its docked branch
+     * and clears the half. A restore never hides anything — it decodes a placement that already says
+     * WINDOWED and shows it — so {@code hidePanel}'s early return for a windowed type meant nothing was
+     * ever cleared.</p>
+     *
+     * <p>Asserted on {@code isEmpty()}, which is what {@code sync()} actually reads. Asserting the panel
+     * is open would pass against the bug, because it genuinely is open — in a frame, with its old column
+     * still sitting there beside the editor.</p>
+     */
+    @Test
+    public void aToolWindowRestoredIntoAFrameLeavesItsRegionEmpty() {
+        first.intoWindow();
+        first.workbench.showPanel(Workbench.PROBLEMS_TYPE);
+        first.settle();
+        first.workbench.toolWindowManager().setType(Workbench.PROBLEMS_TYPE, ToolWindowType.WINDOWED);
+        first.settle();
+        first.session.save(PROJECT, 1200, 800);
+
+        // A FRESH LAUNCH with the panel DOCKED, exactly as the workbench opens it before a record is read.
+        Harness second = build();
+        second.intoWindow();
+        second.workbench.showPanel(Workbench.PROBLEMS_TYPE);
+        second.settle();
+        DockRegion region = second.workbench.toolWindowManager().regionOf(Workbench.PROBLEMS_TYPE);
+        assertFalse("the fixture never docked it",
+                second.workbench.regions().host(region).isEmpty());
+
+        assertTrue(second.session.restore(PROJECT));
+        second.settle();
+
+        assertTrue("the region still records a panel that is now in a frame, so its column stays behind",
+                second.workbench.regions().host(region).isEmpty());
+    }
+
+    /**
+     * <b>...and one put away before the tree attaches stays away.</b>
+     *
+     * <p>The other half of the deferral. A windowed show that could not be satisfied is remembered, so
+     * something has to forget it when the panel is closed in between — otherwise the retry resurrects a
+     * panel the user has just dismissed, which is the "an intent outlives the thing it described" shape a
+     * stale watch has. {@code hidePanel} taking it out of the set is the one mechanism that does this.</p>
+     */
+    @Test
+    public void aPanelHiddenBeforeTheTreeAttachesIsNotResurrected() {
+        first.intoWindow();
+        first.workbench.showPanel(Workbench.PROBLEMS_TYPE);
+        first.settle();
+        first.workbench.toolWindowManager().setType(Workbench.PROBLEMS_TYPE, ToolWindowType.WINDOWED);
+        first.settle();
+        first.session.save(PROJECT, 1200, 800);
+
+        Harness second = buildDetached();
+        assertTrue(second.session.restore(PROJECT));
+        // PUT AWAY WHILE THE SHOW IS STILL PENDING -- there is no window yet, so nothing has opened.
+        second.workbench.toolWindowManager().hidePanel(Workbench.PROBLEMS_TYPE);
+
+        second.attach();
+
+        assertFalse("the retry reopened a panel that had just been dismissed",
+                second.workbench.toolWindowManager().isPanelOpen(Workbench.PROBLEMS_TYPE));
+    }
+
+    /**
+     * <b>A tool window that was FLOATING when the session was written comes back open.</b>
+     *
+     * <p>It did not, and the shape of the failure is why this test exists rather than a wider one. The
+     * capture derived "is this on screen" from {@code host.showing(side)} — which can only ever see a
+     * DOCKED panel, because a float lives in a frame and not in a region half. So a floating tool window
+     * recorded as {@code visible: false} every single time and was never reopened.</p>
+     *
+     * <p><b>Its placement survived perfectly</b>, which is what made it read as "restore is broken" rather
+     * than as one field: reopening the panel by hand put it back in exactly the right place, at the right
+     * size, as a float. Only the fact that it had been open was lost.</p>
+     *
+     * <p>{@code ToolWindowManager.isPanelOpen} already answered this correctly for both presentations, and
+     * its own javadoc warns against the very expression the capture had rolled by hand.</p>
+     */
+    @Test
+    public void aFloatingToolWindowComesBackOpen() {
+        first.workbench.showPanel(Workbench.PROBLEMS_TYPE);
+        first.settle();
+        first.workbench.toolWindowManager().setType(Workbench.PROBLEMS_TYPE, ToolWindowType.FLOATING);
+        first.settle();
+        assertTrue("the fixture never floated it",
+                first.workbench.toolWindowManager().isPanelOpen(Workbench.PROBLEMS_TYPE));
+
+        first.session.save(PROJECT, 1200, 800);
+
+        Harness second = build();
+        second.workbench.toolWindowManager().hidePanel(Workbench.PROBLEMS_TYPE);
+        second.settle();
+        assertTrue(second.session.restore(PROJECT));
+        second.settle();
+
+        assertTrue("a floating tool window was recorded as closed and never came back",
+                second.workbench.toolWindowManager().isPanelOpen(Workbench.PROBLEMS_TYPE));
+        assertEquals("it came back docked rather than as the float it was",
+                ToolWindowType.FLOATING,
+                second.workbench.toolWindowManager().typeOf(Workbench.PROBLEMS_TYPE));
     }
 
     private static void assertArrayEqualsMessage(String message, int[] expected, int[] actual) {

@@ -97,6 +97,16 @@ public final class CgUiScreen extends GuiScreen {
     /** The window the editor lives in. @see #initGui */
     private static WindowFrame editorWindow;
 
+    /**
+     * Which desktop's record this is.
+     *
+     * <p>Per <em>installation</em> rather than per world, deliberately. A window arrangement is about the
+     * shape of the screen and the way somebody likes to work; keying it to a save would mean starting from
+     * defaults in every new world, which is the opposite of what persistence is for. The workspace session
+     * beside it IS per project, because what a window CONTAINS is genuinely a fact about that project.</p>
+     */
+    private static final String DESKTOP_ID = "client";
+
     /** Run and Stop for the active file, or null where no engine band opened. @see #initGui */
     private static ScriptWorkbench scripting;
 
@@ -183,7 +193,12 @@ public final class CgUiScreen extends GuiScreen {
         trace("CrystalEditor construction");
         // BESIDE the workspace, not inside it: a session record is private and must not become part of
         // a project a resource pack could ship. Same reason the trash lives outside.
-        editor.useConfig(new LocalConfigStorage(new File(dataDir, "config/crystalgui").toPath()));
+        // ONE storage, shared: the editor's preferences and session records and the desktop's window
+        // arrangement all live in the same private directory, and building two would be two answers to
+        // the question of where that is.
+        LocalConfigStorage config =
+                new LocalConfigStorage(new File(dataDir, "config/crystalgui").toPath());
+        editor.useConfig(config);
 
         editor.addClass(EDITOR_CLASS);
 
@@ -231,7 +246,16 @@ public final class CgUiScreen extends GuiScreen {
         // setContent, not content().addChild -- it is what ADOPTS the editor's menu bar into the
         // caption, so the window has one header rather than two stacked on each other.
         editorWindow.setContent(editor);
+        // MAXIMISED BY DEFAULT, and only as a default: the record below overrides it when there is one.
+        // In game with nothing else on the desktop a maximised frame IS the full-screen editor that was
+        // there before W7, which is what makes the migration invisible on day one.
         editorWindow.maximize();
+
+        // WHERE THE ARRANGEMENT LIVES, and nothing else -- CrystalOS W12. The compositor owns reading it,
+        // applying it to windows as they open, and writing it again when the screen closes; a host has no
+        // business holding a second copy of that policy. AFTER the editor window is open, so the record
+        // is applied over the defaults above rather than under them.
+        uiWindow.desktop().persistTo(config, DESKTOP_ID);
         trace("UIWindow + stylesheets");
     }
 
@@ -434,12 +458,12 @@ public final class CgUiScreen extends GuiScreen {
         // were open, where they were, which was in front. Detaching is also what drops the input state:
         // the hover, the press target and any live drag would otherwise still describe a screen that is
         // no longer up. Pinned windows are the exception W14 adds here.
+        // AND EVERYTHING WRITES ITSELF. Suspending detaches the compositor, which detaches every
+        // window on it and the editor inside one -- so the desktop records its arrangement and the editor
+        // records its session and preferences, each because it went off screen and each knowing what it
+        // is responsible for. A host says where the config directory is; it does not say what to put in
+        // it. @see Desktop#persistTo and CrystalEditor#saveState
         if (uiWindow != null) uiWindow.suspendDesktop();
-        if (editor != null && uiWindow != null) {
-            editor.saveSession(Mc1710Workspace.PROJECT_ID,
-                    (int) uiWindow.getScreenWidth(), (int) uiWindow.getScreenHeight());
-            editor.savePreferences();
-        }
     }
 
     /**

@@ -1,5 +1,8 @@
 package com.crystalgui.ui;
 
+import com.crystalgraphics.platform.input.CgMouseCodes;
+import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgui.ui.elements.Button;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.ui.elements.dock.DockPanelDescriptor;
@@ -39,6 +42,8 @@ public class ToolWindowFloatTest extends UiTestBase {
 
     private UIWindow window;
     private WindowFrame workbenchWindow;
+    /** A focusable thing outside every window — where focus sits before the gesture under test. */
+    private Button elsewhere;
     private WorkbenchRegions regions;
     private ToolWindowManager manager;
 
@@ -51,6 +56,8 @@ public class ToolWindowFloatTest extends UiTestBase {
         manager = new ToolWindowManager(regions, registry);
 
         UIElement root = new UIElement().layout(l -> l.width(800).height(600));
+        elsewhere = new Button("elsewhere");
+        root.addChild(elsewhere);
         window = new UIWindow(Ui.of(root));
         window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
         window.init(800, 600);
@@ -64,6 +71,93 @@ public class ToolWindowFloatTest extends UiTestBase {
 
     private void settle() {
         for (int i = 0; i < 3; i++) window.updateWithoutPainting();
+    }
+
+    /**
+     * A real press at a point, through {@code consumeMouseEvent} — <b>not</b> {@code sendInputEvent}.
+     *
+     * <p>The difference is the whole reason the first version of these tests passed against the bug.
+     * {@code sendInputEvent} dispatches straight at an element and skips {@code emitMouseDown}, which is
+     * where click-focus happens: the real path walks up from whatever was hit to the nearest ancestor
+     * that focuses on click and focuses it <em>before</em> anything is dispatched. For a window frame
+     * that ancestor is the frame, and everything downstream then sees a window that already "has" focus.
+     * A fixture that skips it can never see that.</p>
+     */
+    private void pressAt(float x, float y) {
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().endFrame();
+        window.getInputHandler().consumeMouseEvent(new CgSystemInput.Mouse.Event(
+                Math.round(x * 2f), Math.round(y * 2f), 0, 0, CgMouseCodes.LEFT_BUTTON, true, 0f, 0L));
+        settle();
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().endFrame();
+        settle();
+    }
+
+    /** Presses a frame's caption, where a drag begins. */
+    private void pressCaption(ToolWindowFrame frame) {
+        var box = frame.getRuntimeCache();
+        pressAt(box.getX() + box.getWidth() / 2f, box.getY() + 8f);
+    }
+
+    /** Whether focus is inside the panel's own container — what lights its rail button. */
+    private boolean panelHasFocus() {
+        for (UIElement e = window.getInputHandler().getFocusedElement(); e != null; e = e.getParent()) {
+            if (e instanceof ViewContainer container) return INSPECTOR.equals(container.containerId());
+        }
+        return false;
+    }
+
+    /**
+     * <b>Grabbing a float focuses the PANEL, which is what lights its rail button.</b>
+     *
+     * <p>A drag never completes a click, so nothing downstream of a mouse-up can be relied on — the
+     * selection a click would have made never happens. The press is the moment.</p>
+     */
+    @Test
+    public void pressingAFloatFocusesItsPanel() {
+        manager.floatPanel(INSPECTOR, 40f, 40f, ToolWindowType.FLOATING);
+        settle();
+        ToolWindowFrame frame = manager.frameOf(INSPECTOR);
+        assertNotNull(frame);
+
+        // SOMEWHERE OUTSIDE EVERY WINDOW. Not the workbench frame: focusing a frame now delegates
+        // into its content, and the float is OWNED by that frame -- so focus would land right back in
+        // the panel and the precondition would be describing the thing under test.
+        window.getInputHandler().requestFocus(elsewhere);
+        settle();
+        assertFalse("the fixture starts with the panel already focused", panelHasFocus());
+
+        pressCaption(frame);
+
+        assertTrue("grabbing a float by its caption did not focus the panel inside it",
+                panelHasFocus());
+    }
+
+    /**
+     * <b>...and so does grabbing a WINDOWED one, which reaches it by a different route.</b>
+     *
+     * <p>Worth asserting separately rather than assuming: a windowed tool window is a desktop citizen, so
+     * a press goes through {@code Desktop.activate} and focus arrives via the frame's focus delegate. A
+     * float is in no registry at all and there is nothing to activate — the two ends meet at the same
+     * place through code that has nothing in common, which is exactly the shape where one quietly works
+     * and the other does not.</p>
+     */
+    @Test
+    public void pressingAWindowedToolWindowFocusesItsPanel() {
+        manager.floatPanel(INSPECTOR, 40f, 40f, ToolWindowType.WINDOWED);
+        settle();
+        ToolWindowFrame frame = manager.frameOf(INSPECTOR);
+        assertNotNull(frame);
+
+        window.getInputHandler().requestFocus(elsewhere);
+        settle();
+        assertFalse("the fixture starts with the panel already focused", panelHasFocus());
+
+        pressCaption(frame);
+
+        assertTrue("grabbing a windowed tool window by its caption did not focus the panel inside it",
+                panelHasFocus());
     }
 
     // ── Ownership ───────────────────────────────────────────────────────────────────────────────

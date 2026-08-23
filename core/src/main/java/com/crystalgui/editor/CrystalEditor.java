@@ -140,9 +140,39 @@ public class CrystalEditor extends UIElement implements Disposable, WindowChrome
      * as not. Same reason {@code Workbench} does it; see {@code DataContext}. */
     @Override
     protected void onWindowChanged(@Nullable UIWindow previous, @Nullable UIWindow current) {
+        // OFF SCREEN IS THE MOMENT TO WRITE, and the editor is what knows it -- not the host. A screen
+        // closing detaches the compositor, which detaches everything on it, so this fires without any
+        // platform having to remember. @see #saveState
+        if (current == null && previous != null) saveState(previous);
         if (previous != null) previous.removeDataProvider(this);
         if (current != null) current.addDataProvider(this);
     }
+
+    /**
+     * Writes everything this editor is responsible for keeping — its session and its preferences.
+     *
+     * <p><b>A host says where the config lives and nothing else.</b> Both platforms used to call
+     * {@code saveSession} and {@code savePreferences} themselves, with the project id and the viewport
+     * size passed back in — two copies of one policy, in two files nobody reads together, each free to
+     * forget a half. The editor knows the id (it was handed one to restore from) and knows its own
+     * window, so it knows both without being told.</p>
+     *
+     * <p>Silently does nothing before {@link #restoreSession} has named a project: there is no record to
+     * write yet, and inventing an id to write one under is worse than not writing.</p>
+     */
+    public void saveState() {
+        saveState(getAttachedWindow());
+    }
+
+    private void saveState(@Nullable UIWindow window) {
+        if (sessionProjectId == null || window == null) return;
+        saveSession(sessionProjectId, (int) window.getScreenWidth(), (int) window.getScreenHeight());
+        savePreferences();
+    }
+
+    /** Which project's session this editor is holding. @see #saveState */
+    @Nullable
+    private String sessionProjectId;
 
     /**
      * The application's own verbs — saving, layout, and the command palette.
@@ -375,6 +405,11 @@ public class CrystalEditor extends UIElement implements Disposable, WindowChrome
 
     /** Restores the last session for {@code projectId}, unless the user has turned that off. */
     public boolean restoreSession(String projectId) {
+        // REMEMBERED EVEN WHEN THE RESTORE IS DECLINED. Turning session restore off means "do not put
+        // the last arrangement back", never "stop recording this one" -- so the id is still what a save
+        // is written under, and forgetting it here would quietly stop persisting for anyone who had the
+        // setting off.
+        sessionProjectId = projectId;
         if (session == null || !workbench.resolve(WorkbenchSettings.RESTORE_SESSION)) return false;
         return session.restore(projectId);
     }
