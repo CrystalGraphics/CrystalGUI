@@ -1,6 +1,6 @@
 # Classpath Navigation — Reaching Code That Is Not In The Workspace
 
-**Status**: N1 shipped; N2–N5 planned
+**Status**: N1 shipped and its detail plan (`plan_goto.md`) CLOSED; N2–N5 planned, and unstarted by choice — see N1
 **Depends on**: `plan_viewer.md` (V1–V5, shipped) — the library viewer is the *destination* this plan
 builds routes to.
 
