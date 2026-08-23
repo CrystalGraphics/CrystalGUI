@@ -308,6 +308,20 @@ public class ProjectFileTree extends UIElement implements UndoScope {
             ticking = false;
             return false;
         }
+        // FIRST, and only while attached, which is the whole point of doing it here — CrystalOS W11.
+        //
+        // A reconnect leaves every listing describing a server this client is no longer talking to. The
+        // client repairs what the PROTOCOL needs (watches, capabilities) the moment the wire moves,
+        // because a notification missed is missed for good; a listing is different, and re-fetching one
+        // for a window nobody is looking at is exactly the invisible work a hidden window is supposed to
+        // have stopped doing. Deferring costs nothing: this ticker returns false when the element leaves
+        // the tree and onLayoutChanged registers it again when it comes back, so a restored window
+        // re-lists on its first frame and a window still put away does not.
+        if (staleListings) {
+            staleListings = false;
+            source.invalidateAll();
+            tree.refresh();
+        }
         if (pendingRefresh) {
             pendingRefresh = false;
             tree.refresh();
@@ -510,6 +524,21 @@ public class ProjectFileTree extends UIElement implements UndoScope {
 
     /** Set by a fold, drained by the ticker — see {@link #activate}. */
     private boolean pendingRefresh;
+
+    /**
+     * Marks every listing as coming from a connection that has since been replaced.
+     *
+     * <p>Acted on in {@link #drain}, which only runs while this is in a window — see there for why a
+     * hidden panel deliberately waits. Idempotent, and safe to call from anywhere: a reconnect is not a
+     * frame event and arrives whenever the wire happens to move.</p>
+     *
+     * @see com.crystalgui.fs.WorkspaceClient#onRebound
+     */
+    public void markListingsStale() {
+        staleListings = true;
+    }
+
+    private boolean staleListings;
 
     /**
      * A recycled row's writable parts.
