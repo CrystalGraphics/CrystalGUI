@@ -95,6 +95,33 @@ public interface ProjectSources {
     }
 
     /**
+     * {@link #sourceOf}, but willing to WAIT for a file nobody has open.
+     *
+     * <h3>Two callers with genuinely different answers</h3>
+     *
+     * <p>{@code sourceOf} may not block: it is called from inside an analysis, on a keystroke, and going
+     * to a workspace client there — which may be a real network round trip — would stall typing. So it
+     * answers null for a file that is neither open nor cached, schedules a read, and lets the NEXT
+     * analysis be right. That is correct for an editor, where "one analysis late" is invisible.</p>
+     *
+     * <p>It is wrong for a RUN. A run happens once, on its own thread, because somebody asked for it —
+     * and answering "not yet" there does not defer anything, it produces a failure: the import is skipped
+     * and the script dies on a name that is plainly declared two files away. Running it a second time
+     * then works, which is the worst possible shape for a bug to have.</p>
+     *
+     * <p><b>Never call this from the UI thread.</b> The read it waits on is usually delivered there, so a
+     * UI-thread caller would wait for something it is itself preventing. The bound below turns that
+     * mistake into a stutter rather than a hang, but it is still a mistake.</p>
+     *
+     * <p>Defaults to {@link #sourceOf}, which is the honest answer for a provider that has no I/O to wait
+     * on — every in-memory stand-in, and any host serving from something it already holds.</p>
+     */
+    @Nullable
+    default String awaitSourceOf(String qualifiedName) {
+        return sourceOf(qualifiedName);
+    }
+
+    /**
      * Every type the workspace declares, qualified — what a "which types exist" query has to see.
      *
      * <p>Names only, and no I/O: they come from the crawl, so this is affordable per keystroke in a way

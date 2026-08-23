@@ -61,6 +61,13 @@ public class JsProjectResolutionTest {
             return files.get(qualifiedName);
         }
 
+        /** Where the file lives — what a jump target is built from, and what says which language. */
+        @Override
+        public String pathOf(String qualifiedName) {
+            return files.containsKey(qualifiedName)
+                    ? "proj:src/main/js/" + qualifiedName.replace('.', '/') + ".js" : null;
+        }
+
         @Override
         public boolean declaresPackage(String packageName) {
             if (packageName == null || packageName.isEmpty()) return false;
@@ -276,5 +283,80 @@ public class JsProjectResolutionTest {
                 + "exports.say = function () { return Inner.word(); };\n");
 
         assertTrue(names(completeAt("import util.Outer;\nOuter.|\n")).contains("say"));
+    }
+
+    // ── Navigation, and saying the same thing twice ──────────────────────────────────
+
+    /**
+     * <b>The IMPORT LINE describes the module too, not a class.</b>
+     *
+     * <p>An import statement is blanked before the parser sees it, so no node covers those offsets and
+     * {@code resolveAt} cannot find it by walking — the spans survive on {@code JsImports.Imported} and a
+     * separate path answers from them. That path went straight to the Java engine, so hovering
+     * {@code Greeter} on the import line said <i>public class Greeter</i> while hovering the identical
+     * name two rows below said <i>module Greeter</i>. The same name, two answers, in one file.</p>
+     */
+    @Test
+    public void theImportLineDescribesTheModuleRatherThanAClass() {
+        workspace.edit("util.Greeter", "exports.hi = function () { };\n");
+
+        SymbolInfo onTheImport = resolveAt("import util.Gree|ter;\nGreeter.hi();\n");
+
+        assertNotNull("the import line resolved to nothing at all", onTheImport);
+        assertEquals("the import line still describes a Java class",
+                SymbolKind.MODULE, onTheImport.kind());
+    }
+
+    /**
+     * <b>Ctrl+B on an imported module opens its file.</b>
+     *
+     * <p>Without a declaration site the name resolves, hovers correctly and simply cannot be opened —
+     * which reads as navigation being unimplemented rather than as one field nobody filled in. The site is
+     * a PROJECT resource, so the workbench routes it to the editor rather than to the decompiler.</p>
+     */
+    @Test
+    public void anImportedModuleCanBeNavigatedTo() {
+        workspace.edit("util.Greeter", "exports.hi = function () { };\n");
+
+        SymbolInfo symbol = resolveAt("import util.Greeter;\nGree|ter.hi();\n");
+
+        assertNotNull(symbol);
+        assertNotNull("no declaration site, so Ctrl+B does nothing", symbol.declaration());
+        assertNotNull("a module must name a resource to be opened", symbol.declaration().resource());
+        assertTrue("the site does not point into the workspace: " + symbol.declaration().resource(),
+                symbol.declaration().resource().isProject());
+        assertTrue("the site names the wrong file: " + symbol.declaration().resource(),
+                symbol.declaration().resource().toString().contains("Greeter.js"));
+    }
+
+    /**
+     * <b>A member carries a signature and its own jump target.</b>
+     *
+     * <p>The signature is not decoration. A symbol without one falls through to the documentation popup's
+     * <em>assembled</em> renderer, which paints from its own three bands instead of the editor's capture
+     * scheme — so a module's member hovered in visibly different colours from every other member in the
+     * same file, and read as a theming bug rather than a missing field.</p>
+     *
+     * <p>The site points at the line the export is written at, which is why {@code JsExports} reports an
+     * offset per name rather than only the names.</p>
+     */
+    @Test
+    public void aModuleMemberCarriesASignatureAndItsOwnSite() {
+        workspace.edit("util.Greeter",
+                "exports.first = function () { };\n"
+                + "exports.second = 'value';\n");
+
+        // ASKED THE WAY A HOVER ASKS — `resolveAt` on the member itself, which is what the popup does and
+        // therefore what the reported symptom was about.
+        SymbolInfo second = resolveAt("import util.Greeter;\nGreeter.sec|ond;\n");
+
+        assertNotNull("the member did not resolve at all", second);
+        assertEquals("second", second.name());
+        assertNotNull("no signature, so the popup renders it in its own colours", second.signature());
+        assertNotNull("no declaration site, so Ctrl+B on a member does nothing", second.declaration());
+        assertTrue("the member's site does not point into the workspace",
+                second.declaration().resource().isProject());
+        assertTrue("a named export should point at its OWN line, not the top of the file",
+                second.declaration().start().row() > 0);
     }
 }

@@ -91,6 +91,21 @@ public final class ProjectSourcesRegistry {
 
         @Override
         @Nullable
+        public String awaitSourceOf(String qualifiedName) {
+            if (qualifiedName == null || qualifiedName.isEmpty()) return null;
+            for (ProjectSources provider : PROVIDERS) {
+                try {
+                    String source = provider.awaitSourceOf(qualifiedName);
+                    if (source != null) return source;
+                } catch (RuntimeException failed) {
+                    // as below
+                }
+            }
+            return null;
+        }
+
+        @Override
+        @Nullable
         public String nameOf(String workspacePath) {
             if (workspacePath == null || workspacePath.isEmpty()) return null;
             for (ProjectSources provider : PROVIDERS) {

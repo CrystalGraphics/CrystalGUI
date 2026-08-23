@@ -104,14 +104,33 @@ final class JsModules {
      * knows to try the classpath. A module that exists and <em>fails</em> is a different thing and does
      * throw: its own error is the author's to see, and swallowing it would leave them with a binding that
      * is silently undefined.</p>
+     *
+     * <p><b>And only a file of this language.</b> {@code SourceRoots} names any file under a declared
+     * root whatever its extension, and both {@code src/main/java} and {@code src/main/js} are declared —
+     * so one index holds {@code com.example.Main} and {@code util.Greeter} side by side with nothing in
+     * the NAME to say which language wrote it. Handing a {@code .js} file to a Java compiler produces a
+     * page of syntax errors about the wrong file instead of the one true thing: there is no such type.
+     * A provider that cannot say where a name lives is trusted, which keeps every in-memory stand-in
+     * behaving as it did.</p>
+
      */
     private Scriptable exportsOf(Context cx, String qualifiedName) {
         Scriptable already = loaded.get(qualifiedName);
         if (already != null) return already;
 
+        // ONLY A `.js` FILE. One index holds both languages' names; see the note on this method.
+        String path = ProjectSourcesRegistry.view().pathOf(qualifiedName);
+        if (path != null && !path.endsWith(".js")) return null;
+
         // THROUGH THE REGISTRY, so an open editor's buffer beats the file on disk -- no save required,
         // which is the same tier M15 S4 resolves against and S5 fingerprints.
-        String source = ProjectSourcesRegistry.view().sourceOf(qualifiedName);
+        //
+        // AND WAITED FOR. `sourceOf` answers null for a file nobody has open and schedules a read, which
+        // is right for an editor and wrong here: a run happens once, and "not yet" is not a deferral but
+        // a failure -- the import is skipped and the script dies on a name declared two files away, then
+        // works on the second run. Found by the harness fixture on its first execution, where App.js had
+        // already caused `util.Greeter` to be read and nothing had ever asked for `util.Formatter`.
+        String source = ProjectSourcesRegistry.view().awaitSourceOf(qualifiedName);
         if (source == null) return null;
 
         // PROTOTYPE, NOT PARENT. Making the run's scope this scope's prototype is what leaves the

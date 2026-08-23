@@ -147,12 +147,26 @@ final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
 
     ScriptNameEnvironment(INameEnvironment delegate, TypeBytes types,
                           ProjectSources project, String self) {
+        this(delegate, types, project, self, false);
+    }
+
+    /**
+     * @param mayWaitForSources whether a project file nobody has open may be WAITED for. True for a
+     *                          compile that is about to run something, false inside an analysis — see
+     *                          {@link ProjectSources#awaitSourceOf}
+     */
+    ScriptNameEnvironment(INameEnvironment delegate, TypeBytes types,
+                          ProjectSources project, String self, boolean mayWaitForSources) {
         this.delegate = delegate;
         this.types = types == null ? TypeBytes.NONE : types;
         this.live = this.types != TypeBytes.NONE;
         this.project = project == null ? ProjectSources.NONE : project;
         this.self = self;
+        this.mayWaitForSources = mayWaitForSources;
     }
+
+    /** @see ProjectSources#awaitSourceOf */
+    private final boolean mayWaitForSources;
 
     @Override
     public NameEnvironmentAnswer findType(char[][] compoundTypeName) {
@@ -218,7 +232,21 @@ final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
     private NameEnvironmentAnswer fromProject(String internalName) {
         if (internalName == null || internalName.equals(self)) return null;
         String qualified = internalName.replace('/', '.');
-        String source = project.sourceOf(qualified);
+
+        // ONLY A `.java` FILE. `SourceRoots` names any file under a declared root whatever its extension,
+        // and both `src/main/java` and `src/main/js` are declared -- so one index holds
+        // `com.example.Main` and `util.Greeter` side by side with nothing in the NAME to say which
+        // language wrote it. Handing a script to ECJ produces a page of syntax errors about the wrong
+        // file instead of the one true thing: there is no such type. A provider that cannot say where a
+        // name lives is trusted, which keeps every in-memory stand-in behaving as it did.
+        String path = project.pathOf(qualified);
+        if (path != null && !path.endsWith(".java")) return null;
+
+        // WAITED FOR ONLY WHEN SOMETHING IS ABOUT TO RUN. `sourceOf` answers null for a file nobody has
+        // open and schedules a read, which is right on a keystroke and wrong for a run: there, "not yet"
+        // is not a deferral but a failure, and running a second time makes it work. @see #mayWaitForSources
+        String source = mayWaitForSources
+                ? project.awaitSourceOf(qualified) : project.sourceOf(qualified);
         if (source == null) return null;
         // RECORDED, because a compiled script is CACHED and this is the only place that knows what went
         // into it. The key describes the file the author ran; a sibling it pulled in is invisible to it,

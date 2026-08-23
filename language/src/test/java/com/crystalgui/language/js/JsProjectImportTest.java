@@ -55,15 +55,36 @@ public class JsProjectImportTest {
     /** An unsaved workspace: qualified name to text, edited in place. */
     private static final class Buffers implements ProjectSources {
         private final Map<String, String> files = new LinkedHashMap<>();
+        private final Map<String, String> extensions = new LinkedHashMap<>();
 
         Buffers edit(String qualifiedName, String source) {
+            return edit(qualifiedName, source, ".js");
+        }
+
+        Buffers edit(String qualifiedName, String source, String extension) {
             files.put(qualifiedName, source);
+            extensions.put(qualifiedName, extension);
             return this;
         }
 
         @Override
         public String sourceOf(String qualifiedName) {
             return files.get(qualifiedName);
+        }
+
+        /**
+         * Where the file would live — the only thing that says which LANGUAGE wrote it.
+         *
+         * <p>The real index derives this from the path the file was crawled at. A stand-in answering null
+         * is trusted by both engines, which is the documented behaviour for a provider with no paths to
+         * offer and would leave the language guard with nothing to test.</p>
+         */
+        @Override
+        public String pathOf(String qualifiedName) {
+            String extension = extensions.get(qualifiedName);
+            if (extension == null) return null;
+            String root = ".js".equals(extension) ? "src/main/js" : "src/main/java";
+            return "proj:" + root + "/" + qualifiedName.replace('.', '/') + extension;
         }
 
         @Override
@@ -278,5 +299,97 @@ public class JsProjectImportTest {
         run(main);
 
         assertEquals(List.of("first", "second"), List.copyOf(Sink.WRITTEN));
+    }
+
+    // ── A file nobody has open ────────────────────────────────────────────
+
+    /** A workspace that answers null the FIRST time, as the real index does for an unopened file. */
+    private static final class NotYet implements ProjectSources {
+        private final Map<String, String> files = new LinkedHashMap<>();
+        private final java.util.Set<String> asked = new java.util.HashSet<>();
+
+        NotYet holding(String qualifiedName, String source) {
+            files.put(qualifiedName, source);
+            return this;
+        }
+
+        @Override
+        public String sourceOf(String qualifiedName) {
+            // FIRST ASK SCHEDULES A READ AND ANSWERS NOTHING -- the editor's contract, and exactly what
+            // ProjectIndex does for a file that is neither open nor cached.
+            if (!files.containsKey(qualifiedName)) return null;
+            return asked.add(qualifiedName) ? null : files.get(qualifiedName);
+        }
+
+        @Override
+        public String awaitSourceOf(String qualifiedName) {
+            asked.add(qualifiedName);
+            return files.get(qualifiedName);
+        }
+
+        @Override
+        public boolean declaresPackage(String packageName) {
+            if (packageName == null || packageName.isEmpty()) return false;
+            String prefix = packageName + ".";
+            for (String name : files.keySet()) {
+                if (name.startsWith(prefix)) return true;
+            }
+            return false;
+        }
+
+        @Override
+        public List<String> declaredTypes() {
+            return List.copyOf(files.keySet());
+        }
+    }
+
+    /**
+     * <b>A module nobody has opened is waited for, not skipped.</b>
+     *
+     * <p>The defect the harness fixture found on its first run, and it is worth stating precisely because
+     * every part of it behaves correctly. {@code sourceOf} answers null for a file that is neither open
+     * nor cached and schedules a read — right on a keystroke, where being one analysis late is invisible.
+     * A run has no next time: the import is skipped, and the script dies on
+     * {@code "Formatter" is not defined} for a name declared two files away.</p>
+     *
+     * <p>It presented as an <b>asymmetry</b>, which is what made it legible: {@code Greeter} resolved and
+     * {@code Formatter} did not, because the editor had already asked for the first while analysing the
+     * file that imports it and nothing had ever asked for the second.</p>
+     *
+     * <p>The second-run-works shape is the worst a bug can have, so this asserts on the FIRST run.</p>
+     */
+    @Test
+    public void aModuleNobodyHasOpenIsWaitedForRatherThanSkipped() throws Throwable {
+        ProjectSourcesRegistry.resetForTesting();
+        ProjectSourcesRegistry.contribute(
+                new NotYet().holding("util.Cold", "exports.word = function () { return 'cold'; };\n"));
+
+        run("import util.Cold;\n" + SINK + ".write(Cold.word());\n");
+
+        assertEquals("the first run skipped an import that was only one read away",
+                List.of("cold"), List.copyOf(Sink.WRITTEN));
+    }
+
+    /**
+     * <b>A name belonging to the OTHER language is not treated as a module.</b>
+     *
+     * <p>{@code SourceRoots} names any file under a declared root whatever its extension, and both
+     * {@code src/main/java} and {@code src/main/js} are declared — so one index holds both languages'
+     * names with nothing in a name to tell them apart. Evaluating a {@code .java} file as a script would
+     * report a syntax error about a file the author never opened; falling through to the Java tier is the
+     * answer, and it is what makes the harness workspace able to hold both fixtures at once.</p>
+     */
+    @Test
+    public void aJavaFileInTheWorkspaceIsNotLoadedAsAModule() throws Throwable {
+        workspace.edit("util.Sibling", "package util;\npublic class Sibling { }\n", ".java");
+
+        // The workspace declares the NAME, so without the guard the module tier would happily evaluate
+        // Java as JavaScript. With it, the tier declines and the Java tier finds no class of that name --
+        // leaving the binding absent, which is the honest answer and not a syntax error about a file the
+        // author never opened.
+        run("import util.Sibling;\n"
+                + "if (typeof Sibling !== 'undefined') {\n"
+                + "    throw new Error('a .java file was bound as a module');\n"
+                + "}\n");
     }
 }
