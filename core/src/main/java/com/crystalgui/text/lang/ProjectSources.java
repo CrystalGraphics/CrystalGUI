@@ -2,7 +2,6 @@ package com.crystalgui.text.lang;
 
 import javax.annotation.Nullable;
 
-import java.util.Collections;
 import java.util.List;
 
 /**
@@ -59,9 +58,6 @@ public interface ProjectSources {
      */
     boolean declaresPackage(String packageName);
 
-    /** Every type declared directly in {@code packageName}, simple names only. Never null. */
-    List<String> typesIn(String packageName);
-
     /**
      * WHERE the file declaring {@code qualifiedName} lives, as a workspace path, or null.
      *
@@ -106,11 +102,6 @@ public interface ProjectSources {
         @Override
         public boolean declaresPackage(String packageName) {
             return false;
-        }
-
-        @Override
-        public List<String> typesIn(String packageName) {
-            return Collections.emptyList();
         }
     };
 }

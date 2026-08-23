@@ -69,11 +69,6 @@ public class ProjectSourceResolutionTest extends FixFixture {
             }
             return false;
         }
-
-        @Override
-        public List<String> typesIn(String packageName) {
-            return Collections.emptyList();
-        }
     }
 
     @After
@@ -308,11 +303,6 @@ public class ProjectSourceResolutionTest extends FixFixture {
             return "com".equals(packageName)
                     || "com.example".equals(packageName)
                     || "com.example.util".equals(packageName);
-        }
-
-        @Override
-        public List<String> typesIn(String packageName) {
-            return Collections.emptyList();
         }
     }
 

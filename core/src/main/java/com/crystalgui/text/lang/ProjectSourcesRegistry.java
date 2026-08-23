@@ -104,7 +104,7 @@ public final class ProjectSourcesRegistry {
 
         @Override
         public List<String> declaredTypes() {
-            // MERGED, like typesIn and unlike sourceOf: "what exists" wants everything, and two projects
+            // MERGED and deduplicated, unlike sourceOf: "what exists" wants everything, and two projects
             // declaring different types is not the ambiguity one NAME resolving twice is.
             Set<String> merged = new LinkedHashSet<>();
             for (ProjectSources provider : PROVIDERS) {
@@ -115,22 +115,6 @@ public final class ProjectSourcesRegistry {
                 }
             }
             return merged.isEmpty() ? List.of() : new ArrayList<>(merged);
-        }
-
-        @Override
-        public List<String> typesIn(String packageName) {
-            if (packageName == null) return List.of();
-            // MERGED and deduplicated, unlike sourceOf: a completion list wants everything that exists,
-            // and two projects contributing to one package is not the ambiguity a single name is.
-            Set<String> merged = new LinkedHashSet<>();
-            for (ProjectSources provider : PROVIDERS) {
-                try {
-                    merged.addAll(provider.typesIn(packageName));
-                } catch (RuntimeException failed) {
-                    // as above
-                }
-            }
-            return new ArrayList<>(merged);
         }
     };
 

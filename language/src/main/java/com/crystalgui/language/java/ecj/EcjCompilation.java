@@ -132,19 +132,11 @@ final class EcjCompilation {
     }
 
     /**
-     * The live tiers over ECJ's own classpath resolution.
+     * The live tiers over ECJ's own classpath resolution, told which type is being compiled.
      *
      * <p>{@code types} arrives already composed, from the host — see {@link TypeBytes} for why it cannot
      * be assembled here. With {@link TypeBytes#NONE} this is exactly the file-based environment it
      * replaces.</p>
-     */
-    static INameEnvironment environmentFor(List<String> classpath, int releaseLevel,
-                                                   TypeBytes types) {
-        return environmentFor(classpath, releaseLevel, types, null);
-    }
-
-    /**
-     * As above, but told which type is being compiled so the project index never answers for it.
      *
      * <p>The unit under analysis is already in ECJ's {@code unitsToProcess}. Answering the same name from
      * the environment as well declares the file twice, and the duplicate lands on the author's own class.

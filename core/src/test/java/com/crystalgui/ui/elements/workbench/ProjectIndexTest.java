@@ -138,17 +138,6 @@ public class ProjectIndexTest {
         assertFalse(index.declaresPackage(""));
     }
 
-    /** <b>Types are listed for the package they are IN</b>, not for every ancestor of it. */
-    @Test
-    public void typesAreListedOnlyForTheirOwnPackage() {
-        add("p:src/main/java/com/example/Main.java", "class Main {}");
-        add("p:src/main/java/com/example/deep/Deep.java", "class Deep {}");
-
-        assertEquals(List.of("Main"), index.typesIn("com.example"));
-        assertEquals(List.of("Deep"), index.typesIn("com.example.deep"));
-        assertTrue(index.typesIn("com").isEmpty());
-    }
-
     // ── Text ────────────────────────────────────────────────────────────────────────────────────
 
     /**
