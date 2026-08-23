@@ -5,6 +5,7 @@ import com.crystalgui.language.engine.EngineSource;
 import com.crystalgui.language.engine.bridge.Analysis;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
+import com.crystalgui.text.diagnostic.DiagnosticTag;
 import com.crystalgui.text.syntax.SyntaxToken;
 
 import org.junit.Assume;
@@ -370,5 +371,57 @@ public class JsAnalysisTest {
         List<String> out = new ArrayList<>();
         for (Diagnostic problem : problems) out.add(problem.message());
         return out.toString();
+    }
+
+    // \u2500\u2500 Unused imports, and how both kinds are DRAWN \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
+    /** <b>An import nothing mentions is reported, in the Java engine's own words.</b> */
+    @Test
+    public void anImportNothingMentionsIsReported() {
+        List<String> messages = messagesOf("import util.Greeter;\nimport util.Unused;\nGreeter.hi();\n");
+
+        assertEquals(messages.toString(), 1, messages.size());
+        assertEquals("The import util.Unused is never used", messages.get(0));
+    }
+
+    /**
+     * <b>A SHADOWED import is unused, which is the case a name-matching walk gets wrong.</b>
+     *
+     * <p>The file mentions {@code Greeter} twice and the import is still dead: the reference binds to the
+     * local, so nothing reaches the import. Both reference editors say so. This works without a walk of
+     * our own because {@code freeNames()} means "resolves to nothing this file declares", which is exactly
+     * what an import provides \u2014 a check that looked for the identifier would call this used.</p>
+     */
+    @Test
+    public void anImportShadowedByALocalIsUnused() {
+        List<String> messages = messagesOf(
+                "import util.Greeter;\nvar Greeter = { hi: function () { return 1; } };\nGreeter.hi();\n");
+
+        assertTrue("a shadowed import was not reported: " + messages,
+                messages.contains("The import util.Greeter is never used"));
+    }
+
+    /** <b>An import that IS mentioned is not reported.</b> The regression guard for the two above. */
+    @Test
+    public void anImportThatIsUsedIsNotReported() {
+        assertEquals(List.of(), messagesOf("import util.Greeter;\nGreeter.hi();\n"));
+    }
+
+    /**
+     * <b>Dead weight is FADED, not underlined \u2014 for imports and locals alike.</b>
+     *
+     * <p>What the report was actually about. {@code SquigglesPart} skips a diagnostic carrying
+     * {@link DiagnosticTag#UNNECESSARY} and the editor styles the range through a highlight instead, so
+     * the tag is the whole difference between "delete this" and "this is wrong". The Java engine has
+     * tagged both since {@code EcjProblemPolicy} was written and JavaScript tagged neither, so the same
+     * finding squiggled in one tab and faded in the next.</p>
+     */
+    @Test
+    public void unusedThingsAreTaggedAsDeadWeightRatherThanDefects() {
+        for (Diagnostic problem : analyse("import util.Unused;\nfunction f() { var x = 1; return 2; }\n")
+                .diagnostics()) {
+            assertTrue("not drawn as dead weight: " + problem.message(),
+                    problem.hasTag(DiagnosticTag.UNNECESSARY));
+        }
     }
 }

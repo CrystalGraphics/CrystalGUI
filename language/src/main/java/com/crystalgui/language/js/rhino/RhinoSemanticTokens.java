@@ -99,12 +99,7 @@ final class RhinoSemanticTokens {
         // purpose so resolution and completion treat them alike -- but they are not alike to COLOUR.
         Set<String> importedNames = new LinkedHashSet<>();
         for (JsImports.Imported each : imports) {
-            String binary = each.binaryName();
-            int lastDot = binary.lastIndexOf('.');
-            String simple = lastDot < 0 ? binary : binary.substring(lastDot + 1);
-            int lastDollar = simple.lastIndexOf('$');
-            if (lastDollar >= 0) simple = simple.substring(lastDollar + 1);
-            if (!simple.isEmpty()) importedNames.add(simple);
+            if (!each.simpleName().isEmpty()) importedNames.add(each.simpleName());
         }
         // MARKED EVEN WHEN THE TREE IS NULL. A file that fails to parse still has imports the author
         // can read, and colouring them is the one thing still possible for it.
