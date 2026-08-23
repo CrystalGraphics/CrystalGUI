@@ -43,6 +43,18 @@ public class CgFileSystemException extends RuntimeException {
     }
 
     /**
+     * Past the ceiling, refused rather than attempted.
+     *
+     * <p>{@link CgFileError#FILE_TOO_LARGE} has been in the vocabulary since it was written and had no
+     * thrower. It has one now: the cap is checked against a {@code stat} <em>before</em> any bytes are
+     * read, so a 4 GB file costs a metadata call rather than an {@code OutOfMemoryError}.</p>
+     */
+    public static CgFileSystemException tooLarge(CgPath path, long size, long limit) {
+        return new CgFileSystemException(CgFileError.FILE_TOO_LARGE,
+                "file too large to open: " + path + " is " + size + " bytes, limit is " + limit);
+    }
+
+    /**
      * Refused.
      *
      * <p>The message deliberately does not say whether the path exists — see {@link CgFileError#NO_PERMISSIONS}.

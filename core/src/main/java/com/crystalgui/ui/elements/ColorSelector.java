@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements;
 
+import com.crystalgui.serialization.StateMap;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.render.texture.ArgbMath;
@@ -707,4 +708,38 @@ public class ColorSelector extends UIElement {
             return null;
         }
     }
+
+    /**
+     * The colour, the colour it started as, and the mode.
+     *
+     * <p>{@code originalColor} travels because it is not derivable from the current one and it is what a
+     * "revert" compares against — restoring only the live colour would leave a selector that believes it
+     * was always this colour, so the revert affordance would silently do nothing.</p>
+     *
+     * <p>The mode is written by NAME rather than by ordinal: an ordinal is a number that means something
+     * different the moment a constant is inserted, and a description outlives the build that wrote it.</p>
+     */
+    @Override
+    protected <T> void writeState(StateMap<T> out) {
+        out.putInt("color", getColor());
+        out.putInt("original", getOriginalColor());
+        out.putString("mode", getMode().name());
+    }
+
+    @Override
+    protected <T> void readState(StateMap<T> in) {
+        // Mode first: it decides what the widget shows, and setColor is interpreted against it.
+        // Falls back to the mode it already has, not to a constant: an absent key must leave the
+        // widget alone rather than quietly reset it to whichever mode happens to be declared first.
+        String mode = in.getString("mode", getMode().name());
+        for (Mode candidate : Mode.values()) {
+            if (candidate.name().equals(mode)) {
+                setMode(candidate);
+                break;
+            }
+        }
+        setInitialColor(in.getInt("original", in.getInt("color", 0xFFFFFFFF)));
+        setColor(in.getInt("color", 0xFFFFFFFF));
+    }
+
 }

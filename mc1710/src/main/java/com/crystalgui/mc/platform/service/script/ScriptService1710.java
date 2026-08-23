@@ -5,8 +5,6 @@ import com.crystalgui.language.platform.MappingCoordinates;
 import com.crystalgui.language.platform.NamespaceProbe;
 import com.crystalgui.language.platform.ScriptService;
 
-import net.minecraft.client.Minecraft;
-
 import java.io.File;
 import java.nio.file.Path;
 
@@ -20,6 +18,20 @@ import java.nio.file.Path;
  * instead.</p>
  */
 public final class ScriptService1710 implements ScriptService {
+
+    /**
+     * {@code .minecraft/config} on a client, {@code <serverdir>/config} on a dedicated server.
+     *
+     * <p>Handed in rather than looked up, which is what makes this class side-agnostic. It comes from
+     * {@code FMLPreInitializationEvent.getModConfigurationDirectory()} — the answer Forge already
+     * computes correctly for both sides.</p>
+     */
+    private final File configDirectory;
+
+    public ScriptService1710(File configDirectory) {
+        if (configDirectory == null) throw new IllegalArgumentException("configDirectory is null");
+        this.configDirectory = configDirectory;
+    }
 
     /**
      * MCP, matching {@code mc1710/gradle.properties} — {@code channel = stable},
@@ -82,14 +94,22 @@ public final class ScriptService1710 implements ScriptService {
     }
 
     /**
-     * {@code .minecraft/config/crystalgui} — beside the config, never inside the workspace.
+     * {@code config/crystalgui} — beside the config, never inside the workspace.
      *
      * <p>The rule the session record, the trash and the engine bands all already follow: derived and
      * private state must not become part of a project a resource pack could ship.</p>
+     *
+     * <p><b>This was the one member that made the whole service client-only</b> (Phase 4 A5). It read
+     * {@code Minecraft.getMinecraft().mcDataDir}, so a dedicated server could not have a script service
+     * at all — and the other four members were installation-level facts that had no such problem. The
+     * fix is not a side branch: Forge already computes the right directory for both sides and hands it
+     * over at preInit, so the class simply takes it. No {@code net.minecraft.client} reference survives
+     * here, which is what makes "is this loadable server-side" a question with a structural answer rather
+     * than one about which method happens to get called.</p>
      */
     @Override
     public Path cacheRoot() {
-        return new File(Minecraft.getMinecraft().mcDataDir, "config/crystalgui").toPath();
+        return new File(configDirectory, "crystalgui").toPath();
     }
 
     @Override

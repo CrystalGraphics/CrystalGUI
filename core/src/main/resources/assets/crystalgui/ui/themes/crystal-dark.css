@@ -143,4 +143,23 @@ theme {
 
     --activitybar-item-hover-bg: #46484b;
     --activitybar-item-checked-bg: #46484b;
+
+    /* -- Differences -----------------------------------------------------------
+     *
+     * Two strengths per kind, and the pair is the point rather than a shade choice. The BAND is a wash
+     * behind a whole line and has to leave every syntax colour on top of it readable; the MARK is a
+     * stronger fill over the characters that actually differ, so a changed line reads as
+     * mostly-unchanged with the change standing out. One strength cannot do both jobs: at the band's
+     * alpha a mark is invisible, and at the mark's alpha a band drowns the code.
+     *
+     * Green/red/blue rather than the theme accent, because these are the one place in the application
+     * where colour carries MEANING a person already knows from every other diff they have read. */
+    --diff-added-bg: #2EA04326;
+    --diff-added-fg: #2EA04359;
+    --diff-removed-bg: #F8514926;
+    --diff-removed-fg: #F8514959;
+    /* Blue rather than amber: amber is what the notification and dirty-state tokens use, and a changed
+     * line is not a warning. */
+    --diff-changed-bg: #58A6FF1F;
+    --diff-changed-fg: #58A6FF4D;
 }

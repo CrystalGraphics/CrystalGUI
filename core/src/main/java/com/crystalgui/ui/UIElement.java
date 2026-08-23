@@ -627,6 +627,80 @@ public class UIElement implements SettingsScope, DataProvider {
     }
 
     /**
+     * The children a <em>description</em> carries — public children by default.
+     *
+     * <p>Exists because "internal" answers two different questions with one flag. A composite's internals
+     * are usually scaffolding its constructor rebuilds, and serializing them would duplicate the whole
+     * structure on decode — which is why the codec skips them. But some of them are not scaffolding:
+     * a {@code TabView}'s tabs are <b>content</b>, authored by whoever built the window, and they live in
+     * an internal container purely because that is how the widget lays them out. Skipping those does not
+     * avoid duplication, it loses the window.</p>
+     *
+     * <p>So a composite may override this to say which of its internals are content. The default is
+     * unchanged, and a widget that does not override is unaffected.</p>
+     */
+    protected List<UIElement> describedChildren() {
+        List<UIElement> out = new ArrayList<>();
+        for (UIElement child : getChildren()) {
+            if (!child.isInternalUI()) out.add(child);
+        }
+        return out;
+    }
+
+    /**
+     * Puts a described child back. Must be the inverse of {@link #describedChildren()}.
+     *
+     * <p>The inverse matters more than it looks: {@code addChild} throws on a composite, so a widget that
+     * exposes content without also saying where it goes decodes into an exception rather than a window.</p>
+     */
+    protected void addDescribedChild(UIElement child) {
+        addChild(child);
+    }
+
+    /**
+     * Whether a description may carry children for this element at all.
+     *
+     * <p>Defaults to {@link #acceptsPublicChildren()}, so a composite still refuses a description that
+     * invents children for it — that guard is what catches an encoder which serialized internals. A
+     * composite that overrides {@link #describedChildren()} must override this too, or it will encode
+     * children it then refuses to decode.</p>
+     */
+    protected boolean acceptsDescribedChildren() {
+        return acceptsPublicChildren();
+    }
+
+    /**
+     * Removes every described child, so they can be replaced wholesale.
+     *
+     * <p>The third of the trio, and it exists for {@code ui/treeDelta}: re-describing an anchor means
+     * taking out what is there before putting the new set in. The default touches only public children,
+     * so a composite's internals survive — which is the same distinction {@link #describedChildren()}
+     * draws, spelled for removal.</p>
+     */
+    protected void clearDescribedChildren() {
+        for (UIElement child : new ArrayList<>(getChildren())) {
+            if (!child.isInternalUI()) removeChild(child);
+        }
+    }
+
+    /** Codec-facing entry points for the three hooks above. */
+    public final void clearDescribedChildrenFor() {
+        clearDescribedChildren();
+    }
+
+    public final List<UIElement> describedChildrenFor() {
+        return describedChildren();
+    }
+
+    public final void addDescribedChildFrom(UIElement child) {
+        addDescribedChild(child);
+    }
+
+    public final boolean acceptsDescribedChildrenFor() {
+        return acceptsDescribedChildren();
+    }
+
+    /**
      * Whether this element's {@link #writeState} survives the application closing — see
      * {@link SessionState}.
      *

@@ -1,6 +1,12 @@
 package com.crystalgui.net;
 
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.net.protocol.Call;
+import com.crystalgui.net.protocol.Envelope;
+import com.crystalgui.net.protocol.EnvelopeCodec;
+import com.crystalgui.net.protocol.MessageRouter;
+import com.crystalgui.net.protocol.ProtocolConnection;
+import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.serialization.UIDescriptionCodec;
@@ -34,7 +40,6 @@ import java.util.function.Consumer;
  */
 public final class ClientUiSession<T> {
 
-    private final UITransport<T> transport;
     private final DynamicOps<T> ops;
 
     /** hash → encoded description. Encoded, not decoded: a decoded tree is live elements, and a live
@@ -44,9 +49,31 @@ public final class ClientUiSession<T> {
 
     private final Deque<T> mailbox = new ArrayDeque<>();
 
-    private final RpcRegistry<T> rpc;
+    /** Everything inbound goes through here; nothing is dispatched by type. @see #registerUiMethods */
+    private final MessageRouter<T> router;
+
+    /** False when a {@link ProtocolConnection} drains and expires for us. @see #tick() */
+    private final boolean ownsConnection;
+
+    /** How long a call waits before its error handler is told. @see ServerUiSession */
+    private long callTimeoutMillis = 10_000L;
 
     private int windowId = -1;
+
+    /**
+     * Where handlers are registered, or {@code null} when they go straight on the router.
+     *
+     * <p>Non-null only in the BOUND shape — a session created by {@link ClientUiSessions} for a window
+     * id it has already been told. The two other shapes (owning a transport, or riding a connection as
+     * the only window on it) register directly and behave exactly as they did before 5.7, which is why
+     * {@code ui/openWindow} is still theirs to listen for.</p>
+     */
+    @Nullable
+    private UiWindowMux<T> mux;
+
+    /** Told when this session lets go of its window, so {@link ClientUiSessions} can drop it. */
+    @Nullable
+    Runnable onReleased;
     private int expectedElementCount = -1;
     @Nullable
     private UIElement root;
@@ -58,15 +85,57 @@ public final class ClientUiSession<T> {
     @Nullable
     private Consumer<String> onWindowClosed;
 
+    /** Owns its own transport, router and mailbox — the shape every test and the in-memory pair use. */
     public ClientUiSession(UITransport<T> transport, DynamicOps<T> ops) {
-        this.transport = transport;
         this.ops = ops;
-        this.rpc = new RpcRegistry<>(ops);
+        this.ownsConnection = true;
+        this.router = new MessageRouter<>(envelope -> transport.send(EnvelopeCodec.encode(ops, envelope)));
+        registerUiMethods();
         transport.setReceiver(packet -> {
             synchronized (mailbox) {
                 mailbox.add(packet);
             }
         });
+    }
+
+    /**
+     * Rides a connection somebody else owns, so this window shares one wire with every other subsystem.
+     *
+     * <p>The other constructor is still correct and is what a test uses: it owns its transport, its
+     * router and its mailbox. This one owns none of them — {@link ProtocolConnection#tick()} drains and
+     * expires, and {@link #tick()} here only flushes what the tree changed.</p>
+     *
+     * <p><b>The only window on this connection.</b> Registrations go straight on the router, exactly as
+     * they did before 5.7 — so a second of these still throws on a duplicate {@code ui/openWindow}, and
+     * that is still the right failure. For more than one window use {@link ClientUiSessions}, which owns
+     * the bootstrap message and hands each window a session bound to its id.</p>
+     *
+     * <p>Kept rather than folded into the host because it is genuinely the common case and costs a
+     * lookup less: a client with one window has nothing to demultiplex.</p>
+     */
+    public ClientUiSession(ProtocolConnection<T> connection) {
+        this.ops = connection.ops();
+        this.ownsConnection = false;
+        this.router = connection.router();
+        registerUiMethods();
+    }
+
+    /**
+     * Rides a connection <b>as one of several windows</b>, bound to an id somebody already knows.
+     *
+     * <p>Built by {@link ClientUiSessions}, which owns {@code ui/openWindow} for the connection and is
+     * therefore the only thing that can know the id before the window exists. That asymmetry with the
+     * server is not incidental: a {@code ServerUiSession} is <em>given</em> its id at construction, while
+     * a client learns one from the wire — so on this side the bootstrap message cannot itself be
+     * window-scoped, and something has to own it.</p>
+     */
+    ClientUiSession(ProtocolConnection<T> connection, int windowId) {
+        this.ops = connection.ops();
+        this.ownsConnection = false;
+        this.router = connection.router();
+        this.mux = UiWindowMux.of(connection);
+        this.windowId = windowId;
+        registerWindowMethods();
     }
 
     /** Fired once the tree exists — where a host would hand it to a {@code UIWindow} and render it. */
@@ -108,6 +177,8 @@ public final class ClientUiSession<T> {
     /** Processes everything that arrived. Called on the thread that owns the tree — never from the
      * transport's own thread, since elements are single-threaded by contract. */
     public void tick() {
+        // Riding a connection means somebody else drains and expires; there is nothing left to do here.
+        if (!ownsConnection) return;
         List<T> batch;
         synchronized (mailbox) {
             if (mailbox.isEmpty()) return;
@@ -115,80 +186,178 @@ public final class ClientUiSession<T> {
             mailbox.clear();
         }
         for (T raw : batch) {
-            UIPacket packet;
+            Envelope envelope;
             try {
-                packet = UIPacketCodec.decode(ops, raw);
+                envelope = EnvelopeCodec.decode(ops, raw);
             } catch (RuntimeException malformed) {
-                CrystalGuiCore.LOGGER.warn("Dropping an undecodable packet: {}", malformed.getMessage());
+                CrystalGuiCore.LOGGER.warn("Dropping an undecodable message: {}", malformed.getMessage());
                 continue;
             }
-            handle(packet);
+            router.accept(envelope);
         }
-        rpc.sweepTimeouts(System.currentTimeMillis());
+        router.tickTimeouts(System.currentTimeMillis());
     }
 
-    private void handle(UIPacket packet) {
-        if (packet instanceof UIPacket.OpenWindow open) {
-            if (open.protocol() != UIPacketCodec.PROTOCOL_VERSION) {
+    /** The UI half of the vocabulary. RPC methods register themselves through {@link #onCall}. */
+    private void registerUiMethods() {
+        router.onNotify(UiMethods.OPEN_WINDOW, payload -> acceptOpenWindow(read(payload)));
+        registerWindowMethods();
+    }
+
+    /**
+     * Takes an {@code ui/openWindow} body, whoever read it off the wire.
+     *
+     * <p>Package-private so {@link ClientUiSessions} can hand one over: that class owns the notification
+     * for the whole connection, because the bootstrap message is the one thing in the vocabulary that
+     * cannot be routed by a window id — it is what <em>announces</em> the id.</p>
+     */
+    void acceptOpenWindow(StateMap<T> in) {
+        {
+            int protocol = in.getInt("protocol", -1);
+            int id = in.getInt(UiMethods.WINDOW, -1);
+            if (protocol != EnvelopeCodec.VERSION) {
                 // Refuse rather than open something we will misread. A version mismatch that opens
                 // anyway shows up as a UI that is subtly wrong, which is far harder to trace than a
                 // window that plainly did not appear.
                 CrystalGuiCore.LOGGER.error("Refusing window {}: server protocol {} but this client "
-                        + "speaks {}", open.windowId(), open.protocol(), UIPacketCodec.PROTOCOL_VERSION);
+                        + "speaks {}", id, protocol, EnvelopeCodec.VERSION);
                 return;
             }
-            this.windowId = open.windowId();
-            this.sheets = open.sheets();
-            this.useUserAgentSheet = open.useUserAgentSheet();
-            this.expectedElementCount = open.elementCount();
+            this.windowId = id;
+            this.sheets = in.getList("sheets", entry -> SheetRef.CODEC.decode(ops, entry.encode()));
+            this.useUserAgentSheet = in.getBool("ua", false);
+            this.expectedElementCount = in.getInt("count", 0);
 
-            T cached = descriptionCache.get(open.descHash());
+            String hash = in.getString("hash", "");
+            T cached = descriptionCache.get(hash);
             if (cached != null) {
                 buildFrom(cached);
-            } else {
-                send(new UIPacket.RequestDescription(open.windowId(), open.descHash()));
+                return;
+            }
+            // A REQUEST now, where it used to be a bare RequestDescription with nothing tying the answer
+            // back to it. The id correlates, so two opens in flight cannot cross their descriptions.
+            StateMap<T> ask = new StateMap<>(ops);
+            ask.putInt(UiMethods.WINDOW, id);
+            ask.putString("hash", hash);
+            router.request(UiMethods.DESCRIPTION, ask.encode(),
+                    answer -> {
+                        StateMap<T> body = read(answer);
+                        T encoded = body.getRaw("root");
+                        if (encoded == null) return;
+                        descriptionCache.put(body.getString("hash", hash), encoded);
+                        buildFrom(encoded);
+                    },
+                    error -> CrystalGuiCore.LOGGER.warn("Description for window {} refused: {}", id, error));
+        }
+    }
+
+    /** Everything that is scoped to one window. Registered through the mux when there is one. */
+    private void registerWindowMethods() {
+        /*
+         * C2. Replaces an anchor's described children, then RE-DERIVES every id.
+         *
+         * The design that looked impossible assumed ids had to be stable. They are a depth-first
+         * position, so an insertion renumbers everything after it -- but they only have to be AGREED,
+         * and two peers applying the same delta to the same tree in the same order agree by
+         * construction. Nothing carries an id table and the description stays a pure description.
+         *
+         * The count is the same cross-check open() uses. A disagreement means the two sides built
+         * different structure from the same description -- a widget constructor that differs between
+         * versions, which no description can reveal -- and it is refused rather than misapplied,
+         * because every id past the divergence would be off by one.
+         */
+        bindNotify(UiMethods.TREE_DELTA, payload -> {
+            StateMap<T> in = read(payload);
+            if (in.getInt(UiMethods.WINDOW, windowId) != windowId || root == null) return;
+
+            for (StateMap<T> entry : in.getList("entries", e -> e)) {
+                int nid = entry.getInt("nid", -1);
+                UIElement anchor = NetworkIds.find(root, nid);
+                if (anchor == null) {
+                    CrystalGuiCore.LOGGER.warn("Tree delta for unknown element {}", nid);
+                    continue;
+                }
+                anchor.clearDescribedChildrenFor();
+                T children = entry.getRaw("children");
+                if (children == null) continue;
+                for (T child : ops.getListValue(children)) {
+                    UIElement decoded = UIDescriptionCodec.CODEC.decode(ops, child);
+                    anchor.addDescribedChildFrom(decoded);
+                    // WIRE THE NEW SUBTREE. A reported event is a listener this side attaches because
+                    // the description asked for it, and a delta brings elements that have never been
+                    // through buildFrom -- so without this a widget added after open renders correctly,
+                    // responds to the mouse, and reports nothing at all to the server.
+                    wireReportedEvents(decoded);
+                }
             }
 
-        } else if (packet instanceof UIPacket.Description<?> description) {
-            if (description.windowId() != windowId) return;
-            @SuppressWarnings("unchecked")
-            T encoded = (T) description.root();
-            descriptionCache.put(description.descHash(), encoded);
-            buildFrom(encoded);
+            int assigned = NetworkIds.assign(root);
+            int expected = in.getInt("count", assigned);
+            if (assigned != expected) {
+                CrystalGuiCore.LOGGER.error("Refusing a tree delta: the server numbered {} elements and "
+                        + "this client derived {} — the two sides are building different structure, so "
+                        + "every id past the divergence would be wrong", expected, assigned);
+                root = null;
+                release();
+                return;
+            }
+            expectedElementCount = assigned;
+        });
 
-        } else if (packet instanceof UIPacket.StateDelta<?> delta) {
-            if (delta.windowId() != windowId || root == null) return;
-            for (UIPacket.StateDelta.Entry<?> entry : delta.entries()) {
-                UIElement target = NetworkIds.find(root, entry.nid());
+        bindNotify(UiMethods.STATE_DELTA, payload -> {
+            StateMap<T> in = read(payload);
+            if (in.getInt(UiMethods.WINDOW, windowId) != windowId || root == null) return;
+            for (StateMap<T> entry : in.getList("entries", e -> e)) {
+                int nid = entry.getInt("nid", -1);
+                UIElement target = NetworkIds.find(root, nid);
                 if (target == null) {
-                    CrystalGuiCore.LOGGER.warn("State update for unknown element {}", entry.nid());
+                    CrystalGuiCore.LOGGER.warn("State update for unknown element {}", nid);
                     continue;
                 }
                 if (shouldSuppress(target)) continue;
-                @SuppressWarnings("unchecked")
-                T state = (T) entry.state();
+                T state = entry.getRaw("s");
+                if (state == null) continue;
                 try {
                     target.readStateFrom(new StateMap<>(ops, state));
                 } catch (RuntimeException bad) {
                     // Per-entry, so one malformed update cannot take the rest of the batch with it.
-                    CrystalGuiCore.LOGGER.warn("Bad state for element {}: {}", entry.nid(), bad.getMessage());
+                    CrystalGuiCore.LOGGER.warn("Bad state for element {}: {}", nid, bad.getMessage());
                 }
             }
+        });
 
-        } else if (packet instanceof UIPacket.RpcCall<?> call) {
-            dispatchRpc((UIPacket.RpcCall<T>) call);
-
-        } else if (packet instanceof UIPacket.RpcResult<?> result) {
-            @SuppressWarnings("unchecked")
-            UIPacket.RpcResult<T> typed = (UIPacket.RpcResult<T>) result;
-            rpc.complete(typed.callId(), typed.ok(), typed.value(), typed.error());
-
-        } else if (packet instanceof UIPacket.CloseWindow close) {
-            if (close.windowId() != windowId) return;
+        bindNotify(UiMethods.CLOSE_WINDOW, payload -> {
+            StateMap<T> in = read(payload);
+            if (in.getInt(UiMethods.WINDOW, windowId) != windowId) return;
+            String reason = in.getString("reason", "");
             root = null;
-            windowId = -1;
-            if (onWindowClosed != null) onWindowClosed.accept(close.reason());
-        }
+            release();
+            if (onWindowClosed != null) onWindowClosed.accept(reason);
+        });
+    }
+
+    /**
+     * Registers a notification where this session's registrations go.
+     *
+     * <p>The {@code != windowId} check inside each handler is kept even in mux mode, where it can no
+     * longer fail. It is not the routing — it never was — it is the guard against applying a message
+     * that was in flight when the window closed, and a check that costs an int comparison is not worth
+     * making conditional on which shape built the session.</p>
+     */
+    private void bindNotify(String method, MessageRouter.NotificationHandler<T> handler) {
+        if (mux != null) mux.onNotify(windowId, method, handler);
+        else router.onNotify(method, handler);
+    }
+
+    /** Lets go of the window id, and of the mux slots held under it. */
+    private void release() {
+        if (mux != null && windowId >= 0) mux.release(windowId);
+        windowId = -1;
+        if (onReleased != null) onReleased.run();
+    }
+
+    private StateMap<T> read(@Nullable T payload) {
+        return payload == null ? new StateMap<>(ops) : new StateMap<>(ops, payload);
     }
 
     /**
@@ -267,43 +436,59 @@ public final class ClientUiSession<T> {
     }
 
     private void report(UIElement element, String kind, @Nullable StateMap<T> payload) {
-        send(new UIPacket.UiEvent<>(windowId, element.getNetworkId(), kind,
-                payload == null ? null : payload.encode()));
+        StateMap<T> out = new StateMap<>(ops);
+        out.putInt(UiMethods.WINDOW, windowId);
+        out.putInt("nid", element.getNetworkId());
+        out.putString("kind", kind);
+        if (payload != null) out.putRaw("p", payload.encode());
+        router.notify(UiMethods.EVENT, out.encode());
     }
 
-    /** Registers a client-side RPC method the server may call. */
-    public ClientUiSession<T> onCall(String method, RpcRegistry.Handler<T> handler) {
-        rpc.register(method, handler);
+    /**
+     * Registers a client-side RPC method the server may call.
+     *
+     * <p>Window-scoped when this session is one of several, so two windows of the same application may
+     * each offer the same method name. A method that belongs to the <em>connection</em> rather than to a
+     * window — a workspace, a script runtime — registers on {@link ProtocolConnection} directly and is
+     * shared by every window, which is what it wants.</p>
+     */
+    public ClientUiSession<T> onCall(String method, Call.Handler<T> handler) {
+        // Same handler type, so nothing that calls this moves; underneath, an RPC is now an ordinary
+        // REQUEST and its correlation is the router's rather than a second id space of its own.
+        MessageRouter.RequestHandler<T> bound = (payload, respond) ->
+                handler.invoke(read(payload), new Call.Responder<T>() {
+                    @Override
+                    public void ok(@Nullable StateMap<T> value) {
+                        respond.ok(value == null ? null : value.encode());
+                    }
+
+                    @Override
+                    public void fail(String error) {
+                        respond.fail(error);
+                    }
+                });
+        if (mux != null) mux.onRequest(windowId, method, bound);
+        else router.onRequest(method, bound);
         return this;
     }
 
-    /** Calls a server-side method. */
+    /**
+     * Calls a server-side method.
+     *
+     * <p>Stamped with this session's window on the way out, so the far side's {@link UiWindowMux} can
+     * route it. The key is additive and a handler that does not read it is unaffected — which matters,
+     * because a connection-scoped method registered straight on {@link ProtocolConnection} will receive
+     * one of these unchanged and correctly ignore it.</p>
+     */
     public void call(String method, @Nullable StateMap<T> args,
                      @Nullable Consumer<StateMap<T>> onResult, @Nullable Consumer<String> onError) {
-        int callId = rpc.beginCall(onResult, onError, System.currentTimeMillis());
-        send(new UIPacket.RpcCall<>(windowId, callId, method, args == null ? null : args.encode()));
-    }
-
-    private void dispatchRpc(UIPacket.RpcCall<T> call) {
-        rpc.dispatch(call.method(), call.args(), new RpcRegistry.Responder<T>() {
-            @Override
-            public void ok(StateMap<T> value) {
-                if (call.callId() != 0) {
-                    send(new UIPacket.RpcResult<>(windowId, call.callId(), true,
-                            value == null ? null : value.encode(), ""));
-                }
-            }
-
-            @Override
-            public void fail(String error) {
-                if (call.callId() != 0) {
-                    send(new UIPacket.RpcResult<>(windowId, call.callId(), false, null, error));
-                }
-            }
-        });
-    }
-
-    private void send(UIPacket packet) {
-        transport.send(UIPacketCodec.encode(ops, packet));
+        StateMap<T> stamped = args == null ? new StateMap<>(ops) : args;
+        stamped.putInt(UiMethods.WINDOW, windowId);
+        router.request(method, stamped.encode(),
+                value -> {
+                    if (onResult != null) onResult.accept(read(value));
+                },
+                onError,
+                System.currentTimeMillis() + callTimeoutMillis);
     }
 }

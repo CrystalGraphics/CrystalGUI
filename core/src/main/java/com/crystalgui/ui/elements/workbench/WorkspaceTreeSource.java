@@ -3,6 +3,7 @@ package com.crystalgui.ui.elements.workbench;
 import com.crystalgui.fs.CgFileEntry;
 import com.crystalgui.fs.CgFileError;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.ProjectInfo;
 import com.crystalgui.fs.WorkspaceClient;
@@ -147,15 +148,40 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
         return failure;
     }
 
+    /** @deprecated a caller that cannot hear a refusal cannot retry. @see #loadProjects(Runnable, Runnable) */
+    @Deprecated
+    public void loadProjects(Runnable onLoaded) {
+        loadProjects(onLoaded, () -> { });
+    }
+
     /**
      * Asks for the project list, which is what gives the tree its roots.
      *
      * <p>Called by the host rather than on construction, because a client's window id is not valid until
      * its session has opened — and the server discards a packet addressed to another window, so a call made
      * too early is thrown away with no error at all.</p>
+     *
+     * <p><b>{@code onRefused} exists because that last sentence is a description of a bug, not of a
+     * design.</b> A caller latches so it asks once; if the one ask lands before the workspace is ready,
+     * the tree is empty for the life of the screen and nothing anywhere says why. Reporting the refusal
+     * is what lets the latch be released and the ask retried. @see ProjectFileTree#loadProjects</p>
      */
-    public void loadProjects(Runnable onLoaded) {
+    public void loadProjects(Runnable onLoaded, Runnable onRefused) {
+        // SEEDED HERE, and for the same reason the comment above gives. What this actor may do is a
+        // question about the projects, so the first moment it can be asked is the first moment they can
+        // be -- and asking it here rather than at construction means it inherits that timing for free
+        // instead of needing its own rule. The server pushes every change afterwards, so this is a seed
+        // and never a poll: calling it per menu open would be the round trip the cache exists to avoid.
+        // @see WorkspaceClient#mayWrite
+        client.refreshCapabilities();
+        // SAID OUT LOUD, both ways round. The comment above notes that a call made too early is "thrown
+        // away with no error at all" -- so the empty tree it produces is indistinguishable from a tree
+        // that was never asked, from a server with no projects, and from an answer still in flight. Four
+        // states, one appearance, and a report of it can only ever be "it was empty". Two lines make the
+        // log say which.
+        CrystalGuiCore.LOGGER.info("[cgui-fs] asking for the project list");
         client.projects(infos -> {
+            CrystalGuiCore.LOGGER.info("[cgui-fs] project list: {} project(s)", infos.size());
             roots.clear();
             for (ProjectInfo info : infos) {
                 CgPath root = info.root();
@@ -168,6 +194,9 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
         }, error -> {
             failure = "projects failed: " + error.code();
             dirty = true;
+            CrystalGuiCore.LOGGER.warn("[cgui-fs] project listing refused: {} — the tree will retry",
+                    error.code());
+            onRefused.run();
         });
     }
 

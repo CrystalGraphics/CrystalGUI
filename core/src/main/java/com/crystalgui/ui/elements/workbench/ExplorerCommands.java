@@ -119,14 +119,18 @@ public final class ExplorerCommands {
                 .binding("Mod+N")
                 .run(context -> promptNew(workbenchFor(context), context, false))
                 .enabledWhen(context -> workbenchFor(context) != null
-                        && destinationFor(workbenchFor(context), context) != null));
+                        && destinationFor(workbenchFor(context), context) != null
+                        && mayWrite(workbenchFor(context),
+                                destinationFor(workbenchFor(context), context))));
 
         registry.register(Command.of(NEW_FOLDER, "New Folder…")
                 .menu(MenuId.EXPLORER_NEW, "1_new", 20)
                 .menu(MenuId.MAIN_FILE_NEW, "1_new", 20)
                 .run(context -> promptNew(workbenchFor(context), context, true))
                 .enabledWhen(context -> workbenchFor(context) != null
-                        && destinationFor(workbenchFor(context), context) != null));
+                        && destinationFor(workbenchFor(context), context) != null
+                        && mayWrite(workbenchFor(context),
+                                destinationFor(workbenchFor(context), context))));
 
         registry.register(Command.of(RENAME, "Rename…")
                 .menu(MenuId.EXPLORER_CONTEXT, "4_modify", 10)
@@ -135,12 +139,14 @@ public final class ExplorerCommands {
                 .binding("F2")
                 .run(context -> promptRename(workbenchFor(context), context))
                 // The project root is not a file and has no parent to rename within.
-                .enabledWhen(context -> workbenchFor(context) != null && isRenameable(target(context))));
+                .enabledWhen(context -> workbenchFor(context) != null && isRenameable(target(context))
+                        && mayWrite(workbenchFor(context), target(context))));
 
         registry.register(Command.of(DELETE, "Delete")
                 .menu(MenuId.EXPLORER_CONTEXT, "4_modify", 20)
                 .run(context -> confirmDelete(workbenchFor(context), context))
-                .enabledWhen(context -> workbenchFor(context) != null && isRenameable(target(context))));
+                .enabledWhen(context -> workbenchFor(context) != null && isRenameable(target(context))
+                        && mayWrite(workbenchFor(context), target(context))));
 
         registry.register(Command.of(COPY_PATH, "Copy Path")
                 .menu(MenuId.EXPLORER_CONTEXT, "3_paths", 10)
@@ -391,6 +397,23 @@ public final class ExplorerCommands {
     /** A path that can be renamed or deleted — anything but a project root, which is not a file. */
     private static boolean isRenameable(@Nullable CgPath path) {
         return path != null && !path.isProjectRoot();
+    }
+
+    /**
+     * Whether a write here is worth offering — 5.4.
+     *
+     * <p>{@code enabledWhen} runs on the client, so it cannot ask the server <i>may I?</i>. Before this,
+     * Delete looked perfectly available to a non-operator and the refusal arrived as a
+     * {@code NO_PERMISSIONS} failure after a round trip. The answer is now cached and pushed, which is
+     * VS Code's context-key model.</p>
+     *
+     * <p><b>Unknown is yes</b>, and deliberately: the cached answer is per project while the real check
+     * is per path, and it can be stale or not yet arrived. A wrongly-greyed command is a thing the user
+     * cannot do and cannot explain; a wrongly-live one fails with a reason the server wrote. @see
+     * WorkspaceClient#mayWrite</p>
+     */
+    private static boolean mayWrite(@Nullable Workbench workbench, @Nullable CgPath path) {
+        return workbench == null || workbench.files().mayWrite(path);
     }
 
     /** Where a New lands: inside the selection when it is a folder, beside it when it is a file. */

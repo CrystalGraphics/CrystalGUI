@@ -4,10 +4,12 @@ import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.net.SheetRef;
-import com.crystalgui.net.UIPacket;
-import com.crystalgui.net.UIPacketCodec;
+import com.crystalgui.net.protocol.Envelope;
+import com.crystalgui.net.protocol.EnvelopeCodec;
+import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.serialization.Codecs;
 import com.crystalgui.serialization.PlainOps;
+import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.Checkbox;
 import com.crystalgui.ui.elements.Slider;
@@ -77,13 +79,35 @@ public class SessionHandshakeTest {
         fail("the exchange never settled — something is looping");
     }
 
-    private long countPacketsOfType(InMemoryTransport<Object> link, String type) {
+
+
+    /**
+     * Counts messages by METHOD, which is what a message is addressed by now.
+     *
+     * <p>Replaces {@code countPacketsOfType}, which decoded a packet union and read
+     * {@code packet.type()}. The assertions are the same questions — how many description requests, how
+     * many bodies — asked of the vocabulary rather than of a union of record types.</p>
+     */
+    private long countMethod(InMemoryTransport<Object> link, String method) {
         return link.sent().stream()
-                .map(raw -> UIPacketCodec.decode(PlainOps.INSTANCE, raw))
-                .filter(p -> p.type().equals(type))
+                .map(raw -> EnvelopeCodec.decode(PlainOps.INSTANCE, raw))
+                .filter(e -> methodOf(e).equals(method))
                 .count();
     }
 
+    /** Counts answers to a request method — a RESPONSE carries an id, not a method. */
+    private long countResponses(InMemoryTransport<Object> link) {
+        return link.sent().stream()
+                .map(raw -> EnvelopeCodec.decode(PlainOps.INSTANCE, raw))
+                .filter(e -> e instanceof Envelope.Response)
+                .count();
+    }
+
+    private static String methodOf(Envelope envelope) {
+        if (envelope instanceof Envelope.Request<?> request) return request.method();
+        if (envelope instanceof Envelope.Notification<?> notification) return notification.method();
+        return "";
+    }
     // ── The handshake ───────────────────────────────────────────────────────
 
     @Test
@@ -138,9 +162,8 @@ public class SessionHandshakeTest {
         settle();
 
         assertEquals("one request for the body", 1,
-                countPacketsOfType(clientLink, UIPacket.RequestDescription.TYPE));
-        assertEquals("one body sent", 1,
-                countPacketsOfType(serverLink, UIPacket.Description.TYPE));
+                countMethod(clientLink, UiMethods.DESCRIPTION));
+        assertEquals("one body sent", 1, countResponses(serverLink));
         assertEquals(1, client.cacheSize());
     }
 
@@ -176,9 +199,8 @@ public class SessionHandshakeTest {
         second.tick();
 
         assertEquals("a cached description must not be requested again",
-                0, countPacketsOfType(clientLink, UIPacket.RequestDescription.TYPE));
-        assertEquals("and must not be sent again",
-                0, countPacketsOfType(serverLink, UIPacket.Description.TYPE));
+                0, countMethod(clientLink, UiMethods.DESCRIPTION));
+        assertEquals("and must not be sent again", 0, countResponses(serverLink));
         assertNotNull("yet the client still rebuilt the tree", client.root());
         assertEquals(4, client.root().getChildren().size());
     }
@@ -210,8 +232,13 @@ public class SessionHandshakeTest {
     /** A protocol mismatch must refuse the window rather than open one it will misread. */
     @Test
     public void aProtocolMismatchRefusesTheWindow() {
-        Object bogus = UIPacketCodec.encode(PlainOps.INSTANCE,
-                new UIPacket.OpenWindow(UIPacketCodec.PROTOCOL_VERSION + 99, 7, "somehash", 1, List.of(), false));
+        StateMap<Object> open = new StateMap<>(PlainOps.INSTANCE);
+        open.putInt("protocol", EnvelopeCodec.VERSION + 99);
+        open.putInt(UiMethods.WINDOW, 7);
+        open.putString("hash", "somehash");
+        open.putInt("count", 1);
+        Object bogus = EnvelopeCodec.encode(PlainOps.INSTANCE,
+                new Envelope.Notification<>(UiMethods.OPEN_WINDOW, open.encode()));
         clientLink.setReceiver(raw -> { });
         ClientUiSession<Object> isolated = new ClientUiSession<>(clientLink, PlainOps.INSTANCE);
         serverLink.send(bogus);
@@ -227,15 +254,24 @@ public class SessionHandshakeTest {
         server.open();
         settle();
 
-        Object foreign = UIPacketCodec.encode(PlainOps.INSTANCE,
-                new UIPacket.RequestDescription(999, server.descHash()));
+        StateMap<Object> ask = new StateMap<>(PlainOps.INSTANCE);
+        ask.putInt(UiMethods.WINDOW, 999);
+        ask.putString("hash", server.descHash());
+        Object foreign = EnvelopeCodec.encode(PlainOps.INSTANCE,
+                new Envelope.Request<>(1, UiMethods.DESCRIPTION, ask.encode()));
         serverLink.clearSent();
         clientLink.send(foreign);
         serverLink.deliver();
         server.tick();
 
-        assertEquals("the server must not answer a request for a different window",
-                0, countPacketsOfType(serverLink, UIPacket.Description.TYPE));
+        // It now answers with a REFUSAL rather than silence, which is the improvement: a client
+        // asking about a window this session does not serve learns so instead of waiting out a timeout.
+        // What must not happen is a description body going out.
+        assertEquals("no description body for a different window", 0,
+                serverLink.sent().stream()
+                        .map(raw -> EnvelopeCodec.decode(PlainOps.INSTANCE, raw))
+                        .filter(e -> e instanceof Envelope.Response<?> r && r.ok())
+                        .count());
     }
 
     /** A malformed packet must be dropped with a log, not take the session down. */
@@ -264,25 +300,7 @@ public class SessionHandshakeTest {
         assertFalse(server.isOpen());
     }
 
-    // ── Packet round-trips ──────────────────────────────────────────────────
-
-    @Test
-    public void everyPacketTypeRoundTrips() {
-        assertRoundTrips(new UIPacket.OpenWindow(1, 3, "h", 5, List.of(SheetRef.ofResource("a:b", "hh")), true));
-        assertRoundTrips(new UIPacket.OpenWindow(1, 3, "h", 0, List.of(), false));
-        assertRoundTrips(new UIPacket.RequestDescription(3, "h"));
-        assertRoundTrips(new UIPacket.CloseWindow(3, "because"));
-        assertRoundTrips(new UIPacket.CloseWindow(3, ""));
-    }
-
-    private void assertRoundTrips(UIPacket packet) {
-        Object encoded = UIPacketCodec.encode(PlainOps.INSTANCE, packet);
-        assertEquals(packet, UIPacketCodec.decode(PlainOps.INSTANCE, encoded));
-        // And through a completely different representation, so nothing depends on PlainOps.
-        var json = com.crystalgui.serialization.JsonOps.INSTANCE;
-        var viaJson = UIPacketCodec.encode(json, packet);
-        assertEquals(packet, UIPacketCodec.decode(json, viaJson));
-    }
+    // ── Delivery ────────────────────────────────────────────────────────────
 
     /** Nothing moves until asked — the property that makes these orderings reproducible. */
     @Test
@@ -295,11 +313,4 @@ public class SessionHandshakeTest {
         assertNull("delivered, but not yet processed — that is tick()'s job", client.root());
     }
 
-    /** Unused, but proves Codecs' optional handling is what keeps packets small. */
-    @Test
-    public void absentOptionalFieldsAreOmitted() {
-        Object encoded = UIPacketCodec.encode(PlainOps.INSTANCE, new UIPacket.CloseWindow(3, ""));
-        var read = Codecs.read(PlainOps.INSTANCE, encoded);
-        assertFalse("an empty reason should not be written at all", read.has("reason"));
-    }
 }

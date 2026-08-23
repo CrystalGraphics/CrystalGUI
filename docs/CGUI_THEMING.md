@@ -111,7 +111,6 @@ crystal-dark.css is a migration-era pin awaiting the Islands pass; dark-plus.css
 editor scheme's.
 
 <!-- TOKENS:BEGIN -->
-
 | Token | Value | Defined in |
 |---|---|---|
 | `--accent` | `#3574F0` | crystal-dark.css |
@@ -208,6 +207,12 @@ editor scheme's.
 | `--dialog-fg` | `var(--fg)` | base.css |
 | `--dialog-picker-bg` | `#2E2E2E76` | crystal-dark.css |
 | `--dialog-title-bg` | `var(--surface-raised)` | base.css |
+| `--diff-added-bg` | `#2EA04326` | crystal-dark.css |
+| `--diff-added-fg` | `#2EA04359` | crystal-dark.css |
+| `--diff-changed-bg` | `#58A6FF1F` | crystal-dark.css |
+| `--diff-changed-fg` | `#58A6FF4D` | crystal-dark.css |
+| `--diff-removed-bg` | `#F8514926` | crystal-dark.css |
+| `--diff-removed-fg` | `#F8514959` | crystal-dark.css |
 | `--divider` | `#2B2D30` | crystal-dark.css |
 | `--doc-bg` | `var(--surface-panel)` | base.css |
 | `--doc-body-fg` | `var(--fg)` | base.css |
@@ -635,5 +640,4 @@ editor scheme's.
 | `--warning` | `#CCA700` | crystal-dark.css |
 | `--warning-icon` | `#FFAF0F` | crystal-dark.css |
 | `--workbench-bg` | `var(--surface-base)` | base.css |
-
 <!-- TOKENS:END -->

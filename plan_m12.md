@@ -1303,7 +1303,7 @@ Worth stating, because the protocol is much further along than the absence of ne
 
 | | State |
 |---|---|
-| The protocol | **Real.** `net/` ships `UIPacket`, `UIPacketCodec`, `ServerUiSession`, `ClientUiSession`, `RpcRegistry`, `NetworkIds`, `SheetRef`, `UiEventKinds`, with `serialization/` under it |
+| The protocol | **Real.** `net/protocol/` ships the four-kind `Envelope`, `EnvelopeCodec`, `MessageRouter` and the `UiMethods` vocabulary; `net/wire/` the multiplexed byte transport; `net/` the two sessions, `NetworkIds`, `SheetRef`, `UiEventKinds`, with `serialization/` under it. *(Was `UIPacket`/`UIPacketCodec`/`RpcRegistry` — deleted in the Phase 4 rewrite.)* |
 | The workspace over it | **Real, and running in-game.** `Mc1710Workspace` drives `WorkspaceService` over a genuine session pair; every listing, read and write crosses a packet |
 | `UITransport` implementations | **One: `InMemoryTransport`.** There is no Minecraft transport anywhere |
 | mc1710 networking | **None.** No channel, no packet handler, no `SimpleNetworkWrapper` |
@@ -1314,27 +1314,39 @@ lifecycle**, plus a server that has never had to do anything.
 
 ---
 
-### Stage A — establish the connection
+### Stage A — establish the connection ✅ **COMPLETE (2026-08-21)**
 
-Nothing else in Phase 4 can be validated until this exists.
+Nothing else in Phase 4 can be validated until this exists — and now it does. All six items landed, and
+the two in-game probes prove the transport and the protocol separately: `-PcgNetProbe` echoes raw frames,
+`-PcgSessionProbe` runs a real session pair over the connection lifecycle that ships.
+
+> **Two things worth carrying into Stage B.** `Protocols.contributors()` reports `[]` in a running client
+> — the mechanism is live and nothing contributes to it yet, which is exactly B1's job. And the frame
+> ceiling is the *only* version-varying quantity that reaches `core`, so a 1.20.x adapter is the four
+> `CgNetworkChannel` methods and a downgrade step, not a re-implementation.
 
 | # | Item | From |
 |---|---|---|
-| **A1** | **Measure 1.7.10's custom-payload size limit** and freeze framing on it | P6.1.10 §Minecraft — *"its custom-payload size limit must be checked before chunk sizing freezes"*; also [`plan_prephase4.md`](plan_prephase4.md) item 2 |
-| **A2** | **A Minecraft `UITransport`** — a channel plus the codec bridge, sized by A1 | The gap named above; `UITransport` has exactly one implementation today |
-| **A3** | **Server-side registration.** `CommonProxy` stops being empty | M12 §26.14 *"carried forward"* — *"`CommonProxy` is empty, so nothing registers server-side … when that lands both the registration site and that one method move"* |
-| **A4** | **Session lifecycle** — join opens, leave/disconnect/kick closes, server shutdown drains | New. Nothing models it: today both halves are constructed together and die together |
-| **A5** | **`ScriptService1710.cacheRoot()` moves** — it is the one client-shaped member, reading `Minecraft.getMinecraft().mcDataDir` | M12 §26.14 *"carried forward"* |
-| **A6** | **Two-session RPC soak** — real traffic over time, desync visible on screen | `CrystalGUI_TODO.md` P3.1, `TODO`. Written for `InMemoryTransport` and *"touches no Minecraft"*, so it can land before A2 and then be re-pointed at the real transport — which makes it Stage A's validation rather than a separate errand |
+| **A1** ✅ | **Measure 1.7.10's custom-payload size limit** and freeze framing on it — 32,766, read from `S3FPacketCustomPayload`/`C17PacketCustomPayload` and asked for through `maxFrameBytes()` rather than hardcoded | P6.1.10 §Minecraft — *"its custom-payload size limit must be checked before chunk sizing freezes"*; also [`plan_prephase4.md`](plan_prephase4.md) item 2 |
+| **A2** ✅ | **A Minecraft `UITransport`** — `WireTransport` over `FrameMultiplexer` over `Mc1710NetworkChannel`, sized by A1 | The gap named above; `UITransport` has exactly one implementation today |
+| **A3** ✅ | **Server-side registration.** `CommonProxy.init()` registers the channel and the connection lifecycle | M12 §26.14 *"carried forward"* — *"`CommonProxy` is empty, so nothing registers server-side … when that lands both the registration site and that one method move"* |
+| **A4** ✅ | **Session lifecycle** — `CgUiConnections`: join opens, leave/disconnect/kick closes, `FMLServerStoppingEvent` drains. Sessions now *ride* a `ProtocolConnection` instead of building a router, so a window shares one wire with every other subsystem | New. Nothing models it: today both halves are constructed together and die together |
+| **A5** ✅ | **`ScriptService1710.cacheRoot()` moves** — takes the config directory from `FMLPreInitializationEvent` instead of reading `Minecraft.getMinecraft()`. Not a side branch: Forge already computes the right answer for both sides. No `net.minecraft.client` reference survives in the class | M12 §26.14 *"carried forward"* |
+| **A6** ✅ | **Two-session RPC soak** — `SessionSoakTest`: 250 rounds of interleaved deltas, events and calls in both directions, asserting the two trees still agree, every call was answered, nothing is left pending and coalescing holds. Headless and deterministic, so a desync is found in seconds rather than by watching a client | `CrystalGUI_TODO.md` P3.1, `TODO`. Written for `InMemoryTransport` and *"touches no Minecraft"*, so it can land before A2 and then be re-pointed at the real transport — which makes it Stage A's validation rather than a separate errand |
 
 > **A6 is worth doing early rather than last.** It was deferred as validation that *"nothing downstream
 > is waiting on"*, which was true when the transport was in-process. It stops being true here: it is the
 > only thing that exercises two sessions over time, and Stage A is precisely where a framing or
 > lifecycle bug hides.
 
-### Stage B — move the workspace onto it
+### Stage B — move the workspace onto it ✅ **COMPLETE (2026-08-21)**
 
-The code was built for this. `Mc1710Workspace`'s own javadoc:
+The code was built for this, and the claim held: **nothing in `fs/` needed redesigning.** `WorkspaceRpc`
+already installed onto anything with a `register(method, handler)`, and `WorkspaceClient` only ever used
+its session to `call` and to `onCall` — which is exactly what a `ProtocolConnection` offers. What they
+needed was somewhere to be plugged in, which is what `Protocols` became.
+
+`Mc1710Workspace`'s own javadoc, which is what reserved this:
 
 > *Both halves of a real workspace, **in the client process** … Shortcutting that would make the later
 > phase — the same client against a workspace on a dedicated server — **a rewrite rather than a
@@ -1342,26 +1354,50 @@ The code was built for this. `Mc1710Workspace`'s own javadoc:
 
 | # | Item | From |
 |---|---|---|
-| **B1** | **Swap the transport.** Same client, same `WorkspaceService`, real connection | P6.1.10; the swap the javadoc above reserves |
-| **B2** | **Server-hosted project directories** — the actual vision: files live on the server's machine, singleplayer is the same path because the integrated server *is* one | P6.1.10 §vision — *"This is VS Code Remote, not a file browser"* |
-| **B3** | **D11 chunked transfer + manifest resolve.** Gated on A1 | P6.1.10 D11; P6.1.13 — *"Deferred; protocol shape reserved. Hard cap 100 MB"* |
-| **B4** | **Permissions on a real server.** `WorkspacePermission.ALLOW_ALL` is what mc1710 passes today | `Mc1710Workspace`; fine for one local player, not for a server |
+| **B1** ✅ | **Swap the transport.** `WorkspaceClient` gained a `ProtocolConnection` constructor and `Mc1710Workspace` went from ~160 lines holding *both* halves to a client-side handle over `CgUiConnections.client()`. The `InMemoryTransport` pair, the `ServerUiSession` and the local `WorkspaceService` are gone from the client | P6.1.10; the swap the javadoc above reserves |
+| **B2** ✅ | **Server-hosted project directories** — `CgUiWorkspaceHost` serves `<serverdir>/crystalgui/workspace` through `MinecraftServer.getFile`, contributed to every connection. One code path: single-player is the remote case with a very short wire, because the integrated server *is* a server. **A client connection is skipped** (`peer() == null`) or a single-player process would serve itself from its own client end too, both ends answering `fs.*` with whichever registered first winning | P6.1.10 §vision — *"This is VS Code Remote, not a file browser"* |
+| **B3** ✅ | **D11 chunked transfer.** `fs.read` answers inline below 1 MB and otherwise opens a transfer the client pulls with `fs.readChunk`; hard cap 100 MB, refused as `FILE_TOO_LARGE` **against a stat, before any bytes are read**. Not a performance choice — the transport bounds one reassembled message at 8 MB, so a large file *cannot* cross whole. Pull rather than push, so a client sets the pace and a resume is the same request with a different offset. `ChunkedTransferTest` pins that a caller cannot tell which path was taken | P6.1.10 D11; P6.1.13 — *"Deferred; protocol shape reserved. Hard cap 100 MB"* |
+| **B4** ✅ | **Permissions on a real server.** `OperatorsMayWrite`: everyone reads, operators write. It **reuses Minecraft's own model** rather than inventing one — `func_152596_g` is the may-use-commands check, and it already answers correctly for the case that would otherwise need special handling, since in single-player it is true for the world's owner with cheats on | `Mc1710Workspace`; fine for one local player, not for a server |
 
-### Stage C — what only matters once it is remote
+### Stage C — what only matters once it is remote ✅ **COMPLETE (2026-08-21)**
 
-Every one of these is currently listed as a known gap and none of them bites while both halves share a
-process. From `docs/CGUI_SERVER_AND_SERIALIZATION.md` §8 unless noted:
+Every one of these was listed as a known gap and none bit while both halves shared a process. Four were
+built, one was built in part with the rest argued out, and one was **refused on the plan's own rule**.
+
+> **The pattern across C2, C3 and C4 is the same, and worth naming.** Each was recorded as a gap in a
+> place that could not see the whole shape: C2 said positional ids made deltas "a real design problem",
+> C3 said tabs live in internal containers, C4 said seven widgets implement state. In each case the
+> observation was right and the conclusion did not follow — ids need to be *agreed*, not *stable*;
+> "internal" was answering two questions at once; and the number was ten, with the real defect somewhere
+> else entirely (`Dropdown`'s options never travelled).
+
+From `docs/CGUI_SERVER_AND_SERIALIZATION.md` §8 unless noted:
 
 | # | Item | Note |
 |---|---|---|
-| **C1** | **No multi-viewer fan-out** — *"One session, one client"* | The first thing a real server invalidates |
-| **C2** | **No `TreeDelta`** — a structural change means a new description and a re-open | Explicitly *"a real design problem, not an afternoon"*, because network ids are positional |
-| **C3** | **`TabView` does not round-trip** — tabs and panes live in internal containers the description codec does not descend into | A dock over the wire needs this |
-| **C4** | **Only seven widgets implement `writeState`/`readState`** | *"a new stateful widget must add them or it will silently arrive blank"* |
-| **C5** | `fs.writeDelta`, client cache, `WatchService`, conflict dialog, `fs.rename`/`delete`, resume, multi-user presence | P6.1.10 §"Out — deferred, and each is purely additive" |
-| **C6** | **No slots/inventory** — the Minecraft-specific half of a container GUI | §8. Note this is also what would revive the struck platform-tooltip item |
+| **C1** ✅ | **Multi-viewer fan-out** — `addViewer`/`removeViewer`/`callViewer`. A list of ROUTERS, not of sessions over one tree: `setObserver` holds one observer, so the alternative is not available and making it a list would cost every mutation in the application. A late viewer is sent the window immediately and replayed every `onCall` method; `call()` now *refuses* when it is ambiguous |
+| **C2** ✅ | **`ui/treeDelta`.** The premise was right and the conclusion did not follow: ids are positional, but they need to be **agreed**, not **stable** — two peers applying the same delta in the same order agree by construction, so both renumber. No id table, and the description stays a pure description. An anchor is re-described in full rather than as an edit script, and only the shallowest anchors are sent |
+| **C3** ✅ | **`TabView` round-trips.** "Internal" was answering two questions: a `Switch`'s knob is scaffolding a constructor rebuilds; a **tab is content** that happens to live in an internal container. `describedChildren`/`addDescribedChild`/`clearDescribedChildren` let a composite say which. The codec also now applies **state after children**, or an index into children is refused as out-of-range and lost |
+| **C4** ✅ | **Coverage is answered, not assumed.** It was ten, not seven; `ProgressBar` and `ColorSelector` needed it. The guard is a tag→stateful map asserted to cover `ElementRegistry` exactly, so a new tag fails until somebody decides. Writing it found the real defect: **`Dropdown`'s options never travelled**, so a networked dropdown arrived empty and unselectable with nothing thrown |
+| **C5** ◑ | **Four done, three argued.** `fs.writeDelta` (D10) and the etag-validated client cache (D13) are built and tested; **`fs.rename`/`delete` already existed**; chunked **resume** now recovers from an expired transfer rather than merely being addressable. Deliberately *not* built: **`WatchService`** — `WorkspaceWatcher`'s own javadoc already rejects it (*"quirky per platform and unreliable on network mounts"*) and says a faster path can be layered under it without changing anything above, so this is an optimisation behind an intact seam rather than a gap; the **conflict dialog** — the protocol half is done (`Failure.isConflict()` carries the live etag, and a delta against a moved file is refused rather than merged), and the dialog itself is UI work with no protocol content; **multi-user presence** — C1 gives the session its viewers and their peers, which is the data presence needs, and broadcasting it wants a consumer that does not exist |
+| **C6** ✗ | **Refused, on this plan's own rule.** `plan_prephase4.md` struck platform-delegated tooltips because *"it has no consumer … Building it now would be designing an interface for a caller that does not exist, which is the same mistake §5.1 was deferred to avoid, approached from the other end. Revive it when something renders an item, not before."* Slots are that argument exactly: there is **no item-slot widget**, and `ItemStack` appears nowhere in `core/src/main` or `mc1710/src`. An inventory protocol now would be a shape guessed against no caller, and the guess would be wrong in ways nothing could reveal until one existed. **Revive with the same trigger** |
 
 ---
+
+### What comes after — [`plan_phase5.md`](plan_phase5.md)
+
+**Phase 4 is complete and verified on a dedicated server** (2026-08-21): two processes, one socket, and
+the file a client created present in `run/server/crystalgui/workspace` and absent from `run/client`. The
+editor browses, edits and runs scripts off the server's disk.
+
+Getting there needed three CrystalGraphics fixes, because **it had never been able to load on a
+dedicated server at all** — see Phase 5 §5.9, which is the shape rather than the three instances.
+
+Phase 5 is the gap between "the workspace is served" and "a person can use it without losing work". Its
+first item outgrew it and became [`plan_windowing.md`](plan_windowing.md) — a **window lifecycle in the
+engine**, where hide is not close and close is not destroy, which every one of Win32, X11, Cocoa, the web
+and Android agrees on and this engine does not have. Escape destroying the editor, its undo history and
+every open buffer is a `GuiScreen` accident rather than a decision.
 
 ### Explicitly not Phase 4
 

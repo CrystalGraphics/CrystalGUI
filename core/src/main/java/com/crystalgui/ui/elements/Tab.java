@@ -2,6 +2,8 @@ package com.crystalgui.ui.elements;
 
 import com.crystalgui.core.signal.Signal;
 import javax.annotation.Nullable;
+import java.util.List;
+import java.util.ArrayList;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.serialization.StateMap;
@@ -85,6 +87,34 @@ public class Tab extends Button {
     /** The content pane. An ordinary element — it accepts children normally. */
     public UIElement content() {
         return pane;
+    }
+
+    /**
+     * A tab's description carries what is <em>in</em> it.
+     *
+     * <p>The pane is an internal child, so the default would describe a tab as empty — which is how a
+     * TabView used to round-trip into a set of labelled, blank pages. The pane itself is not described:
+     * it is rebuilt by the constructor, and only its contents are content.</p>
+     */
+    @Override
+    protected List<UIElement> describedChildren() {
+        return new ArrayList<>(pane.getChildren());
+    }
+
+    @Override
+    protected void addDescribedChild(UIElement child) {
+        pane.addChild(child);
+    }
+
+    @Override
+    protected boolean acceptsDescribedChildren() {
+        return true;
+    }
+
+    /** Empties the pane, not the tab. */
+    @Override
+    protected void clearDescribedChildren() {
+        pane.clearAllChildren();
     }
 
     /**

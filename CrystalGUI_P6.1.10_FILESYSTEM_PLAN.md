@@ -163,7 +163,7 @@ post-MVP polish on top of a refusal that already works.
 
 | Need | Covered by |
 |---|---|
-| Bidirectional request/response | `UIPacket.RpcCall`/`RpcResult`, `RpcRegistry` (handlers, timeouts), `ServerUiSession.onCall`/`.call` |
+| Bidirectional request/response | `Envelope.Request`/`Response`, `MessageRouter` (handlers, correlation, timeouts, cancellation), `ServerUiSession.onCall`/`.call` |
 | **Content-addressed caching, already implemented** | `OpenWindow` carries a *hash*; a client holding it rebuilds with no transfer, one that does not sends `RequestDescription`. D13 is this, for files. |
 | Canonical hashing | `ContentHash.of(ops, value)` / `canonicalBytes` |
 | A transport with no network | `InMemoryTransport` |
@@ -538,7 +538,7 @@ The port covers the filesystem. It does not cover:
 - **Authorisation** (D3) — VS Code trusts its own server. We do not.
 - **Text encoding and line endings** (G1/G2) — those live in `workbench/services/textfile`, above the
   file layer, and our `LineEnding` already matches the design.
-- **The Minecraft transport** — `channel.call(name, args)` maps onto `RpcRegistry`, but the packet
+- **The Minecraft transport** — `channel.call(name, args)` maps onto `MessageRouter`, but the packet
   limits are ours.
 
 ---
@@ -668,7 +668,7 @@ reachable in one sitting rather than one milestone.
 
 - `CrystalGUI_P6_TODO.md` §6.1.10 — the sketch this supersedes
 - `CrystalGUI_P6.1.8_CONFIGURATOR_PLAN.md` — the plan-doc pattern
-- `core/src/main/java/com/crystalgui/net/` — `RpcRegistry`, `ServerUiSession`, `InMemoryTransport`, and
+- `core/src/main/java/com/crystalgui/net/` — `MessageRouter`, `ServerUiSession`, `InMemoryTransport`, and
   the `OpenWindow`/`RequestDescription` cache handshake D13 copies
 - `core/src/main/java/com/crystalgui/text/Change.java`, `ChangeSet.java`, `LineEnding.java`
 - `core/src/main/java/com/crystalgui/serialization/DynamicOps.java`, `ContentHash.java`
