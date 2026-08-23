@@ -11,7 +11,10 @@ import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -106,11 +109,11 @@ final class JsModules {
             Class<?> found = JsLoaders.load(qualifiedName);
             if (found == null) found = projectClass(qualifiedName);
             if (found == null) {
-                report(qualifiedName, RhinoExecutor.projectClasses() == null
-                        ? "no project script declares it, it is not on the classpath, and no Java engine "
-                        + "is lent to this host -- so a `.java` file in the workspace cannot be reached"
-                        : "no project script declares it, it is not on the classpath, and the workspace's "
-                        + "own Java did not produce it");
+                report(qualifiedName, "no project script declares it, it is not on the classpath, and "
+                        + (RhinoExecutor.projectClasses() == null
+                        ? "no Java engine is lent to this host -- so a `.java` file in the workspace "
+                        + "cannot be reached at all"
+                        : "the workspace's own Java did not produce it"));
                 continue;
             }
             ScriptableObject.putProperty(scope, each.getKey(),
@@ -127,7 +130,7 @@ final class JsModules {
      * scope, and copying it would export the standard library.</p>
      */
     private static void copyTopLevelNames(Scriptable moduleScope, Scriptable exports,
-                                          java.util.Set<String> imported) {
+                                          Set<String> imported) {
         if (!(moduleScope instanceof ScriptableObject own)) return;
         for (Object id : own.getIds()) {
             if (!(id instanceof String name)) continue;
@@ -163,7 +166,7 @@ final class JsModules {
     }
 
     /** Imports already reported, so a module chain does not repeat one. @see #report */
-    private final java.util.Set<String> reported = new java.util.HashSet<>();
+    private final Set<String> reported = new HashSet<>();
 
     /**
      * A project Java type, compiled once per run and remembered.
@@ -176,7 +179,7 @@ final class JsModules {
     @Nullable
     private Class<?> projectClass(String qualifiedName) {
         if (javaTypes.containsKey(qualifiedName)) return javaTypes.get(qualifiedName);
-        java.util.function.Function<String, Class<?>> loader = RhinoExecutor.projectClasses();
+        Function<String, Class<?>> loader = RhinoExecutor.projectClasses();
         Class<?> found = loader == null ? null : loader.apply(qualifiedName);
         // A MISS IS REMEMBERED TOO. Asking again costs a compile that already failed, per import, per run.
         javaTypes.put(qualifiedName, found);

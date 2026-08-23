@@ -3,6 +3,7 @@ package com.crystalgui.language.engine.bridge;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -110,7 +111,7 @@ public interface JsExecutor {
      * <p>Never lent by a host with no Java engine open, and the default does nothing -- such a host keeps
      * exactly the behaviour it had, where a Java name resolves against the classpath or not at all.</p>
      */
-    default void useProjectClasses(java.util.function.Function<String, Class<?>> loader) {
+    default void useProjectClasses(Function<String, Class<?>> loader) {
     }
 
     /**

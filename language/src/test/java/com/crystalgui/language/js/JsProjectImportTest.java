@@ -1,11 +1,12 @@
 package com.crystalgui.language.js;
 
+import com.crystalgui.language.TestWorkspace;
+import com.crystalgui.text.lang.ProjectSources;
 import com.crystalgui.language.engine.EngineHost;
 import com.crystalgui.language.java.JavaLanguage;
 import com.crystalgui.language.engine.EngineSource;
 import com.crystalgui.language.js.host.JsHost;
 import com.crystalgui.language.run.ScriptRuntime;
-import com.crystalgui.text.lang.ProjectSources;
 import com.crystalgui.text.lang.ProjectSourcesRegistry;
 
 import org.junit.After;
@@ -53,59 +54,8 @@ public class JsProjectImportTest {
 
     private static final String SINK = "Java.type('" + Sink.class.getName() + "')";
 
-    /** An unsaved workspace: qualified name to text, edited in place. */
-    private static final class Buffers implements ProjectSources {
-        private final Map<String, String> files = new LinkedHashMap<>();
-        private final Map<String, String> extensions = new LinkedHashMap<>();
-
-        Buffers edit(String qualifiedName, String source) {
-            return edit(qualifiedName, source, ".js");
-        }
-
-        Buffers edit(String qualifiedName, String source, String extension) {
-            files.put(qualifiedName, source);
-            extensions.put(qualifiedName, extension);
-            return this;
-        }
-
-        @Override
-        public String sourceOf(String qualifiedName) {
-            return files.get(qualifiedName);
-        }
-
-        /**
-         * Where the file would live — the only thing that says which LANGUAGE wrote it.
-         *
-         * <p>The real index derives this from the path the file was crawled at. A stand-in answering null
-         * is trusted by both engines, which is the documented behaviour for a provider with no paths to
-         * offer and would leave the language guard with nothing to test.</p>
-         */
-        @Override
-        public String pathOf(String qualifiedName) {
-            String extension = extensions.get(qualifiedName);
-            if (extension == null) return null;
-            String root = ".js".equals(extension) ? "src/main/js" : "src/main/java";
-            return "proj:" + root + "/" + qualifiedName.replace('.', '/') + extension;
-        }
-
-        @Override
-        public boolean declaresPackage(String packageName) {
-            if (packageName == null || packageName.isEmpty()) return false;
-            String prefix = packageName + ".";
-            for (String name : files.keySet()) {
-                if (name.startsWith(prefix)) return true;
-            }
-            return false;
-        }
-
-        @Override
-        public List<String> declaredTypes() {
-            return List.copyOf(files.keySet());
-        }
-    }
-
-    private JsHost host;
-    private Buffers workspace;
+        private JsHost host;
+    private TestWorkspace workspace;
 
     @BeforeClass
     public static void openTheEngine() {
@@ -120,7 +70,7 @@ public class JsProjectImportTest {
         host = new JsHost(JsLanguage.executor());
         Sink.WRITTEN.clear();
         ProjectSourcesRegistry.resetForTesting();
-        workspace = new Buffers();
+        workspace = new TestWorkspace(".js");
         ProjectSourcesRegistry.contribute(workspace);
     }
 

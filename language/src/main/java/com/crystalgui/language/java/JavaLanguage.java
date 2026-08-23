@@ -25,6 +25,7 @@ import com.crystalgui.text.syntax.Language;
 import com.crystalgui.text.syntax.LanguageRegistry;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.List;
 
 /**
@@ -62,6 +63,15 @@ public final class JavaLanguage {
     private static JavaEngine engine;
     private static JobScheduler scheduler;
     private static EngineSource source;
+
+    /**
+     * The host classpath, scanned once by {@link #register}.
+     *
+     * <p>Every consumer wants the same answer, and one of them — {@link #projectClass} — is reached from
+     * a SCRIPT THREAD mid-run, where a second walk of the whole classpath is both a stall the author feels
+     * and a chance for the two to disagree about what is on it.</p>
+     */
+    private static List<String> classpath = List.of();
     /**
      * Whether {@link #register} has run — distinct from whether the engine opened. @see #register
      *
@@ -114,12 +124,9 @@ public final class JavaLanguage {
         JavaLanguage.source = source;
         // ATTEMPTED, NOT REQUIRED -- everything below registers whether or not it opened. @see #engine()
         openEngine();
-        // SCANNED ONCE, AND KEPT. Every consumer below wants the same answer, and one of them --
-        // `projectClass` -- is reached from a SCRIPT THREAD mid-run, where a second walk of the host's
-        // whole classpath is both a stall the author feels and a chance for the two to disagree about
-        // what is on it. Same argument as `hostWith` having one implementation.
-        classpath = HostClasspath.detect();
-        List<String> classpath = JavaLanguage.classpath;
+        // SCANNED ONCE, AND KEPT -- see the field. Same argument as `hostWith` having one implementation.
+        List<String> classpath = HostClasspath.detect();
+        JavaLanguage.classpath = classpath;
 
         // THE EXISTING ENTRY, WITH SERVICES ADDED -- not a new one. `.java` already resolves to a
         // tokenizer, and replacing the entry wholesale would drop whichever backend won: registering
@@ -187,7 +194,7 @@ public final class JavaLanguage {
      * invisible in a dev launch and fatal in production.</p>
      */
     @Nullable
-    private static ScriptHost hostWith(@Nullable java.nio.file.Path cacheRoot, List<String> classpath) {
+    private static ScriptHost hostWith(@Nullable Path cacheRoot, List<String> classpath) {
         JavaEngine ready = engine();
         if (ready == null) return null;
         MappingSet mappings = PlatformMappings.current();
@@ -200,19 +207,17 @@ public final class JavaLanguage {
     /** Built on first use, and shared: one compiled-script cache for every language that asks. */
     private static ScriptHost interopHost;
 
-    /** What {@link #register} scanned, so nothing scans again. @see #projectClass */
-    private static List<String> classpath = List.of();
-
     /**
      * A project Java type, compiled and defined — what a JavaScript {@code import} of one resolves to.
      *
      * <h3>The hook, and the reason it points this way</h3>
      *
      * <p>A JavaScript script can already import another script and a classpath class. The one thing it
-     * could not reach was a Java file in the same workspace — and the editor resolved it perfectly,
-     * because {@code InteropResolver} asks the Java engine, which has had the project tier since M15 S4.
-     * So the popup offered a name the run then refused, which §19.1 calls out as worse than either
-     * restriction alone.</p>
+     * could not reach was a Java file in the same workspace: it is on no classpath — a source nobody has
+     * compiled — so the name did not bind, and the author saw {@code "Main" is not defined} at the line
+     * that used it. (An earlier draft of this note claimed the EDITOR resolved such a name perfectly. It
+     * did not, for a reason of its own: every cache in {@code InteropResolver} was keyed on the class name
+     * alone, so a probe that missed once stayed missed. Fixed separately.)</p>
      *
      * <p>Everything needed already lives on {@link ScriptHost}: the compiler with the project tier, the
      * mapping pass, safepoint injection, the sandbox scan and the loader. This is the seam that lets the
