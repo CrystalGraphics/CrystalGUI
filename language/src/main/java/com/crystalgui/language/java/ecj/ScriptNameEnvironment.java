@@ -5,6 +5,9 @@ import com.crystalgui.language.engine.bridge.TypeBytes;
 import org.eclipse.jdt.internal.compiler.env.IModule;
 import org.eclipse.jdt.internal.compiler.env.IModuleAwareNameEnvironment;
 import org.eclipse.jdt.internal.compiler.env.INameEnvironment;
+import com.crystalgui.text.lang.ProjectSources;
+import com.crystalgui.text.lang.ProjectSourcesRegistry;
+import org.eclipse.jdt.core.compiler.CharOperation;
 import org.eclipse.jdt.internal.compiler.env.NameEnvironmentAnswer;
 
 import java.util.HashMap;
@@ -120,10 +123,38 @@ final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
      */
     private final boolean live;
 
+    /**
+     * What the workspace itself declares. Reached as a static because
+     * {@code com.crystalgui.text.} is <b>parent-first</b> on the band loader.
+     *
+     * <p>That is not a convenience — it is the whole reason the SPI lives in that package tree. A registry
+     * under {@code com.crystalgui.language.*} would be redefined inside the band, so its statics would be
+     * a <em>different</em> set: {@code register()} would run on the host and this would read an empty one.
+     * §15.5 A shipped precisely that, and the symptom was not a failure but a plausible answer —
+     * everything resolved from files and the feature was inert for a release.</p>
+     */
+    private final ProjectSources project;
+
+    /**
+     * The type being compiled, which must never be answered for.
+     *
+     * <p>The unit under analysis is already in ECJ's {@code unitsToProcess}. Handing the same name back
+     * from the environment as a second source unit is how a file comes to be declared twice, and the
+     * error lands on the author's own class rather than on anything they did.</p>
+     */
+    private final String self;
+
     ScriptNameEnvironment(INameEnvironment delegate, TypeBytes types) {
+        this(delegate, types, ProjectSourcesRegistry.view(), null);
+    }
+
+    ScriptNameEnvironment(INameEnvironment delegate, TypeBytes types,
+                          ProjectSources project, String self) {
         this.delegate = delegate;
         this.types = types == null ? TypeBytes.NONE : types;
         this.live = this.types != TypeBytes.NONE;
+        this.project = project == null ? ProjectSources.NONE : project;
+        this.self = self;
     }
 
     @Override
@@ -137,6 +168,18 @@ final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
     }
 
     private NameEnvironmentAnswer find(String internalName) {
+        // THE PROJECT FIRST, and OUTSIDE the `live` gate.
+        //
+        // Outside, because `live` means "there are runtime bytes to overlay" -- the harness, every test
+        // and a plain JVM have none, and those are exactly the hosts whose project files must resolve.
+        // Putting this behind the gate would make cross-file resolution a Minecraft-only feature.
+        //
+        // First, because a workspace's own source outranks a jar that happens to publish the same name.
+        // That is what every IDE does, and the alternative is that adding a dependency silently changes
+        // which file your own code compiles against.
+        NameEnvironmentAnswer fromProject = fromProject(internalName);
+        if (fromProject != null) return fromProject;
+
         if (!live) return delegate.findType(split(internalName));
 
         NameEnvironmentAnswer cached = cache.get(internalName);
@@ -161,6 +204,69 @@ final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
             return fromFiles;
         }
         return synthesized(internalName);
+    }
+
+    /**
+     * The project's own source for {@code internalName}, as a compilation unit ECJ can resolve against.
+     *
+     * <p>Null for a name the project does not declare, for the unit being compiled, and for a file whose
+     * text has not been read yet — {@link ProjectSources#sourceOf} cannot block, so "not yet" and "no"
+     * arrive the same way. The analysis simply resolves without it and the next one, after the read
+     * lands, resolves with it.</p>
+     *
+     * <p><b>Not cached here.</b> The text can change on any keystroke in another editor, and this
+     * environment outlives the call that built it — a cached source unit would pin the version of a file
+     * as it was when some earlier analysis happened to ask.</p>
+     */
+    private NameEnvironmentAnswer fromProject(String internalName) {
+        if (internalName == null || internalName.equals(self)) return null;
+        String qualified = internalName.replace('/', '.');
+        String source = project.sourceOf(qualified);
+        if (source == null) return null;
+        return new NameEnvironmentAnswer(new ProjectUnit(qualified, source), null);
+    }
+
+    /** One project file, as the compiler's idea of a compilation unit. */
+    private static final class ProjectUnit
+            implements org.eclipse.jdt.internal.compiler.env.ICompilationUnit {
+
+        private final char[] contents;
+        private final char[] mainTypeName;
+        private final char[][] packageName;
+        private final char[] fileName;
+
+        ProjectUnit(String qualifiedName, String source) {
+            this.contents = source.toCharArray();
+            int lastDot = qualifiedName.lastIndexOf('.');
+            String simple = lastDot < 0 ? qualifiedName : qualifiedName.substring(lastDot + 1);
+            this.mainTypeName = simple.toCharArray();
+            this.packageName = lastDot < 0
+                    ? CharOperation.NO_CHAR_CHAR
+                    : CharOperation.splitOn('.', qualifiedName.substring(0, lastDot).toCharArray());
+            // THE PATH IT WOULD HAVE, which ECJ compares against the declared package. A name alone would
+            // make every project file report "the declared package does not match the expected package".
+            this.fileName = (qualifiedName.replace('.', '/') + ".java").toCharArray();
+        }
+
+        @Override
+        public char[] getContents() {
+            return contents;
+        }
+
+        @Override
+        public char[] getMainTypeName() {
+            return mainTypeName;
+        }
+
+        @Override
+        public char[][] getPackageName() {
+            return packageName;
+        }
+
+        @Override
+        public char[] getFileName() {
+            return fileName;
+        }
     }
 
     /**
@@ -258,9 +364,12 @@ final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
     @Override
     public boolean isPackage(char[][] parentPackageName, char[] packageName) {
         if (delegate.isPackage(parentPackageName, packageName)) return true;
-        if (!live) return false;
 
         String name = internalName(parentPackageName, packageName);
+        // THE PROJECT'S PACKAGES, through the SHARED predicate rather than inline. @see #declaredByProject
+        if (declaredByProject(name)) return true;
+
+        if (!live) return false;
         if (resolvedPackages.contains(name)) return true;
         return isPackageName(name);
     }
@@ -274,6 +383,20 @@ final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
      * was corrected and the other was not, so the corrected method went on returning the wrong answer out
      * of the cache the stale one had filled, and the fix appeared to do nothing at all.</p>
      */
+    /**
+     * Whether the workspace declares anything at or under {@code name}, in internal form.
+     *
+     * <p>One predicate for both askers, for the reason {@link #isPackageName} states at length: they
+     * memoise into the same place and a second copy is a way for the two to disagree, decided by which
+     * ECJ happens to ask first. Deliberately <b>outside</b> the {@code live} gate — `live` means there are
+     * runtime bytes to overlay, and the hosts with none are exactly the ones whose project files must
+     * resolve.</p>
+     */
+    private boolean declaredByProject(String internalName) {
+        return internalName != null && !internalName.isEmpty()
+                && project.declaresPackage(internalName.replace('/', '.'));
+    }
+
     private boolean isPackageName(String name) {
         Boolean known = packages.get(name);
         if (known != null) return known;
@@ -352,10 +475,19 @@ final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
     public char[][] getModulesDeclaringPackage(char[][] packageName, char[] moduleName) {
         char[][] fromFiles = modules() == null
                 ? null : modules().getModulesDeclaringPackage(packageName, moduleName);
-        if (fromFiles != null || !live) return fromFiles;
+        if (fromFiles != null) return fromFiles;
+        // BEFORE the `live` early-return, or a project package is invisible on every host without a
+        // platform -- which is every host that has a workspace open.
+        if (declaredByProject(internalName(packageName, null))) return classpathModules(moduleName);
+        if (!live) return null;
 
         String name = internalName(packageName, null);
         if (name.isEmpty()) return null;
+        // THE PROJECT, ASKED HERE TOO -- and this is the exact trap the note on `isPackageName` records.
+        // The first version of M15 S4 taught `isPackage` about project packages and left this one alone,
+        // so an import of a project type failed with "The import com.example cannot be resolved" while
+        // the identical question asked the other way answered true.
+        if (declaredByProject(name)) return classpathModules(moduleName);
         if (resolvedPackages.contains(name)) return classpathModules(moduleName);
         // THE SAME PREDICATE, not a second copy of it. @see #isPackageName
         return isPackageName(name) ? classpathModules(moduleName) : null;

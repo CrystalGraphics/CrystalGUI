@@ -191,7 +191,8 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
         TypeBytes available = types;
         INameEnvironment environment = null;
         try {
-            environment = EcjCompilation.environmentFor(classpath, releaseLevel, available);
+            environment = EcjCompilation.environmentFor(classpath, releaseLevel, available,
+                    SourcePackages.binaryName(className, source).replace('.', '/'));
             CompilationUnit unit = DomResolution.resolve(new InMemoryUnit(className, source),
                     source.toCharArray(), environment, compilerOptions(releaseLevel),
                     EcjOptions.jlsLevel());
