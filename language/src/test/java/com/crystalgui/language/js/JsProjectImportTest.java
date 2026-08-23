@@ -1,6 +1,7 @@
 package com.crystalgui.language.js;
 
 import com.crystalgui.language.engine.EngineHost;
+import com.crystalgui.language.java.JavaLanguage;
 import com.crystalgui.language.engine.EngineSource;
 import com.crystalgui.language.js.host.JsHost;
 import com.crystalgui.language.run.ScriptRuntime;
@@ -381,16 +382,21 @@ public class JsProjectImportTest {
      */
     @Test
     public void aJavaFileInTheWorkspaceIsNotLoadedAsAModule() throws Throwable {
-        workspace.edit("util.Sibling", "package util;\npublic class Sibling { }\n", ".java");
+        JavaLanguage.register(null, EngineHost.defaultSource());
+        JsLanguage.useJavaEngine();
+        workspace.edit("util.Sibling",
+                "package util;\n"
+                + "public class Sibling { public static String word() { return \"java\"; } }\n", ".java");
 
         // The workspace declares the NAME, so without the guard the module tier would happily evaluate
-        // Java as JavaScript. With it, the tier declines and the Java tier finds no class of that name --
-        // leaving the binding absent, which is the honest answer and not a syntax error about a file the
-        // author never opened.
-        run("import util.Sibling;\n"
-                + "if (typeof Sibling !== 'undefined') {\n"
-                + "    throw new Error('a .java file was bound as a module');\n"
-                + "}\n");
+        // Java as JavaScript and report a syntax error about a file the author never opened. With it the
+        // tier declines and the JAVA tier answers -- so the name binds to a compiled CLASS and its static
+        // is callable, which is a different thing from a module and is asserted as one: a module's export
+        // would be a property on an object, and `Sibling.word` here is a Java method.
+        run("import util.Sibling;\n" + SINK + ".write(Sibling.word());\n");
+
+        assertEquals("a workspace .java file should bind as a compiled class",
+                List.of("java"), List.copyOf(Sink.WRITTEN));
     }
 
     // ── Exporting without saying so ────────────────────────────────────────────
@@ -447,5 +453,80 @@ public class JsProjectImportTest {
                 + SINK + ".write(Branch.say() + '/' + typeof Branch.Leaf);\n");
 
         assertEquals(List.of("leaf/undefined"), List.copyOf(Sink.WRITTEN));
+    }
+
+    // ── The workspace's own Java ─────────────────────────────────────────────
+
+    /**
+     * <b>A script imports a Java class the WORKSPACE declares, and it runs.</b>
+     *
+     * <p>The gap this closes was worse than a missing feature. A project {@code .java} file is on no
+     * classpath — it is a source nobody has compiled — so the name never bound, while the EDITOR resolved
+     * it perfectly: {@code InteropResolver} asks the Java engine, which has had the project tier since
+     * M15 S4. The popup offered {@code com.example.Main} and the run answered
+     * {@code "Main" is not defined}, which §19.1 names as worse than either restriction alone.</p>
+     *
+     * <p>The class is compiled by the JAVA host rather than here, which is the whole point: the mapping
+     * pass, safepoint injection, the sandbox scan and the loader all live there already, and four of
+     * those five are silent when a second copy drifts.</p>
+     */
+    @Test
+    public void aScriptImportsAJavaClassTheWorkspaceDeclares() throws Throwable {
+        JavaLanguage.register(null, EngineHost.defaultSource());
+        JsLanguage.useJavaEngine();
+        workspace.edit("com.example.Tool",
+                "package com.example;\n"
+                + "public class Tool {\n"
+                + "    public static String shout(String word) { return word.toUpperCase(); }\n"
+                + "}\n", ".java");
+
+        run("import com.example.Tool;\n" + SINK + ".write(Tool.shout('quiet'));\n");
+
+        assertEquals(List.of("QUIET"), List.copyOf(Sink.WRITTEN));
+    }
+
+    /**
+     * <b>...and that Java class may itself use another project file.</b>
+     *
+     * <p>Free, and worth pinning anyway: the compile goes through the ordinary path, so the project tier
+     * that resolves a sibling for a {@code .java} file resolves it here too. A second compile pipeline on
+     * this side would have had to re-earn that.</p>
+     */
+    @Test
+    public void theImportedJavaClassMayUseItsOwnSiblings() throws Throwable {
+        JavaLanguage.register(null, EngineHost.defaultSource());
+        JsLanguage.useJavaEngine();
+        workspace.edit("com.example.util.Inner",
+                "package com.example.util;\n"
+                + "public final class Inner { public static String word() { return \"inner\"; } }\n",
+                ".java");
+        workspace.edit("com.example.Outer",
+                "package com.example;\n"
+                + "import com.example.util.Inner;\n"
+                + "public class Outer { public static String say() { return \"outer+\" + Inner.word(); } }\n",
+                ".java");
+
+        run("import com.example.Outer;\n" + SINK + ".write(Outer.say());\n");
+
+        assertEquals(List.of("outer+inner"), List.copyOf(Sink.WRITTEN));
+    }
+
+    /**
+     * <b>A Java file that does not compile does not bind, and does not throw here.</b>
+     *
+     * <p>Its errors belong to its own editor, which reports them where they can be fixed. What this must
+     * not do is invent a binding or take the whole run down with somebody else's syntax error.</p>
+     */
+    @Test
+    public void aJavaFileThatDoesNotCompileSimplyDoesNotBind() throws Throwable {
+        JavaLanguage.register(null, EngineHost.defaultSource());
+        JsLanguage.useJavaEngine();
+        workspace.edit("com.example.Broken",
+                "package com.example;\npublic class Broken { this is not java }\n", ".java");
+
+        run("import com.example.Broken;\n"
+                + "if (typeof Broken !== 'undefined') {\n"
+                + "    throw new Error('a file that does not compile was bound anyway');\n"
+                + "}\n");
     }
 }
