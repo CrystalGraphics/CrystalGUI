@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.desktop;
 
+import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.ui.elements.chrome.ContextMenu;
 import com.crystalgui.core.command.MenuId;
@@ -414,6 +415,19 @@ public class WindowFrame extends UIElement implements Disposable {
         // does not own that subtree, and setHitTest applies to a whole subtree, so it would take the
         // header's own buttons out with the label.
         titleBar.onMouseDown.attachListener((element, event) -> {
+            // THE LEFT BUTTON MOVES A WINDOW, and nothing else does.
+            //
+            // A drag ends when THE BUTTON THAT STARTED IT is released, and startDrag defaults to the
+            // left one -- so a right-press began a move registered against a button that was never
+            // going to come up, and the window then followed the cursor for ever with nothing held
+            // down. There is no way out of that state short of a left-click somewhere.
+            //
+            // The defect is older than the right-click that exposes it: this listener never checked a
+            // button. It was simply unreachable until W13a put the system menu on a caption
+            // right-click, because until then nobody had a reason to press anything but the left
+            // button on a title bar. The engine's own note on startDrag records the same hazard from
+            // the middle-button side.
+            if (event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
             if (captionPressIsAControl(event.getTarget())) return;
             beginMove(event.getPosition().x(), event.getPosition().y(), event.getDetail());
         }, false, true);
