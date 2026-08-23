@@ -176,6 +176,12 @@ final class WindowMove {
             return;
         }
 
+        // MOVING LEAVES THE TILED GROUP. A window carried away from its cell is no longer in the layout,
+        // so it must stop being a partner in any joint resize -- otherwise dragging a neighbour's divider
+        // would reach out and re-tile a window sitting somewhere else entirely. Resizing deliberately does
+        // NOT clear it, which is the whole of joint resize: the cell stays, its edge moves.
+        frame.clearSnappedZone();
+
         // FROM WHERE THE WINDOW IS, not from what was last asked for. A window currently held at the
         // edge by the clamp has a wanted position further out; starting a drag from that would spend the
         // difference before anything moved.
@@ -288,12 +294,9 @@ final class WindowMove {
             frame.maximize();
             return;
         }
-        var box = desktop.windowLayer().getRuntimeCache();
-        if (box.getWidth() <= 0f || box.getHeight() <= 0f) return;
-        float[] rect = SnapZones.rectFor(zone, box.getWidth(), box.getHeight());
-        // THROUGH snapTo, which ANIMATES -- resizeTo/moveTo are instant, and a half-snap that teleported
-        // beside a corner-snap-to-maximise that eased was one gesture behaving two ways.
-        frame.snapTo(rect[0], rect[1], rect[2], rect[3]);
+        // THROUGH THE DESKTOP, which owns where the group's dividers currently are -- computing the rect
+        // here would tile against halves and silently undo a layout somebody had dragged to 3:1.
+        desktop.snapFrameTo(frame, zone);
     }
 
     /**

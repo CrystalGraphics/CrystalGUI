@@ -595,7 +595,9 @@ public class Desktop extends UIElement implements DataProvider {
         if (box.getWidth() <= 0f || box.getHeight() <= 0f) return;
         if (snapShowing && zone == snapZone) return;
 
-        float[] to = SnapZones.rectFor(zone, box.getWidth(), box.getHeight());
+        // AT THE GROUP'S LIVE CUTS, not at halves: the preview promises where the window will land,
+        // and snapping into an occupied zone gives it that zone's CURRENT size.
+        float[] to = SnapZones.rectFor(zone, box.getWidth(), box.getHeight(), splitX, splitY);
         float[] from = snapShowing ? livePreviewRect() : frameRect(source);
 
         snapSource = source;
@@ -724,6 +726,104 @@ public class Desktop extends UIElement implements DataProvider {
         var box = frame.getRuntimeCache();
         return new float[] {frame.left(), frame.top(), box.getWidth(), box.getHeight()};
     }
+
+    // ── Joint resize — the tiled group ──────────────────────────────────────────────────────────
+
+    /**
+     * Snaps {@code frame} into {@code zone}, at the group's <b>current</b> divider positions.
+     *
+     * <p>The one entry point, so the split state and the rect can never disagree. A caller computing
+     * the rect itself would tile against halves and undo whatever the group had been dragged to — which
+     * is exactly what {@code commitSnap} used to do.</p>
+     */
+    void snapFrameTo(WindowFrame frame, SnapZones.Zone zone) {
+        var area = windows.getRuntimeCache();
+        if (frame == null || zone == null || area.getWidth() <= 0f || area.getHeight() <= 0f) return;
+
+        // A FRESH GROUP STARTS AT HALVES. The divider belongs to the GROUP and must not outlive one:
+        // closing a pair that had been dragged to 3:1 and then snapping a single window left would
+        // otherwise hand it that ratio, with nothing left on screen to explain where it came from.
+        if (!anySnappedBesides(frame)) {
+            splitX = SnapZones.CENTRE_SPLIT;
+            splitY = SnapZones.CENTRE_SPLIT;
+        }
+        float[] rect = SnapZones.rectFor(zone, area.getWidth(), area.getHeight(), splitX, splitY);
+        frame.snapTo(zone, rect[0], rect[1], rect[2], rect[3]);
+    }
+
+    /**
+     * Moves a shared divider and re-tiles everything it separates — Windows' {@code JointResize}.
+     *
+     * <h3>The state is the CUT, not the pair</h3>
+     *
+     * <p>Two windows sharing an edge are {@code n} and {@code 1 − n} of one axis, so the group keeps the
+     * fraction and every member's rect is derived from it. That is what makes them unable to drift
+     * apart, and it is why a four-window layout needs no extra machinery: the vertical cut is shared by
+     * both rows, so dragging it between the top pair moves the bottom pair too and the grid stays a
+     * grid. Windows 11 describes exactly that — <i>"the rest of the windows will be adapted to maintain
+     * the design"</i> — where Windows 10 could pair two windows and no more.</p>
+     *
+     * <p><b>One grid, not a cut per row.</b> Independent cuts per row would be more general and are not
+     * what a tiled desktop means: the moment the two rows disagree, the layout is no longer a grid and
+     * the corner where four windows meet stops being one place. Dragging that corner here is a single
+     * gesture moving both cuts, which falls out of a corner handle reporting both axes.</p>
+     *
+     * <p>Applied INSTANTLY, never through {@link WindowFrame#snapTo}: this runs once per frame of a
+     * hand-driven drag, and a 250ms ease per frame would leave every window trailing the pointer.</p>
+     */
+    void jointResize(WindowFrame frame, int handleDx, int handleDy, float width, float height) {
+        SnapZones.Zone zone = frame == null ? null : frame.snappedZone();
+        var area = windows.getRuntimeCache();
+        if (zone == null || area.getWidth() <= 0f || area.getHeight() <= 0f) return;
+
+        boolean moved = false;
+        if (zone.movesVerticalDivider(handleDx)) {
+            splitX = SnapZones.splitFor(zone.xSide, frame.left(), width, area.getWidth());
+            moved = true;
+        }
+        if (zone.movesHorizontalDivider(handleDy)) {
+            splitY = SnapZones.splitFor(zone.ySide, frame.top(), height, area.getHeight());
+            moved = true;
+        }
+        // AN OUTER EDGE MOVES NOTHING ELSE. Dragging the left edge of a left-snapped window resizes one
+        // window; it is not repartitioning the screen, and treating it as a divider would make the far
+        // side of the desktop jump whenever somebody pulled a window off its own border.
+        if (moved) applySnapLayout();
+    }
+
+    /**
+     * Re-tiles every snapped window from the current cuts.
+     *
+     * <p>Includes the window being dragged, which is what makes {@link SnapZones#MIN_SPLIT} hold: the
+     * resizer has already written an unclamped size, and this writes the clamped one into the same
+     * INLINE slot afterwards.</p>
+     */
+    private void applySnapLayout() {
+        var area = windows.getRuntimeCache();
+        if (area.getWidth() <= 0f || area.getHeight() <= 0f) return;
+        for (WindowFrame frame : registry.windows()) {
+            SnapZones.Zone zone = frame.snappedZone();
+            if (zone == null || frame.state() != WindowState.VISIBLE) continue;
+            float[] rect = SnapZones.rectFor(zone, area.getWidth(), area.getHeight(), splitX, splitY);
+            frame.resizeTo(rect[2], rect[3]);
+            frame.moveTo(rect[0], rect[1]);
+        }
+    }
+
+    /** Whether any window other than {@code except} is currently tiled. */
+    private boolean anySnappedBesides(WindowFrame except) {
+        for (WindowFrame frame : registry.windows()) {
+            if (frame != except && frame.snappedZone() != null
+                    && frame.state() == WindowState.VISIBLE) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Where the work area is cut, as a fraction. @see #jointResize */
+    private float splitX = SnapZones.CENTRE_SPLIT;
+    private float splitY = SnapZones.CENTRE_SPLIT;
 
     /** @see #showSnapPreview */
     public static final String SNAP_PREVIEW_CLASS = "__snap-preview__";

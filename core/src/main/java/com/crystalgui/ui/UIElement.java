@@ -1468,6 +1468,32 @@ public class UIElement implements SettingsScope, DataProvider {
         StyleGroup.inlinePipeline(getStyle().getLayoutGroup(), l -> l.left(left).top(top));
     }
 
+    /**
+     * A user resize drag has just written this element's geometry — <b>which edges, and at the end</b>.
+     *
+     * <p>{@code handleDx} is −1 for the left edge, +1 for the right, 0 for neither; {@code handleDy}
+     * says the same about top and bottom. A corner reports both, which is what lets a listener treat one
+     * gesture as two.</p>
+     *
+     * <p>Called <b>after</b> the size and the origin are written, so an override sees the geometry the
+     * drag settled on and its own writes land last. That ordering is the whole reason this is a hook
+     * rather than something a widget could work out from {@code onLayoutChanged}: the layout callback
+     * cannot say <em>which</em> edge the user grabbed, and for anything tiled that is the only
+     * interesting part of the event — moving a left edge and moving a right edge mean opposite things
+     * to whatever is next to it.</p>
+     *
+     * <p>Fires per frame of the drag, not once at the end. A resize is continuous and anything reacting
+     * to it has to be too, which is also why it carries no "finished" flag: nothing has needed one, and
+     * a drag that is cancelled simply stops calling.</p>
+     *
+     * <p>The size is <b>handed over rather than read back</b>: the drag has only just written it to the
+     * style and layout has not run, so {@code getRuntimeCache()} is still reporting the previous frame's
+     * box. An override computing anything from that would trail the pointer by a frame — which for
+     * something tiled means the neighbour visibly lagging the window being dragged.</p>
+     */
+    protected void onUserResize(int handleDx, int handleDy, float width, float height) {
+    }
+
     // ── Keymap ───────────────────────────────────────────────────────────────
 
     /** Built lazily — an element that binds nothing costs one null field, and almost none do. */

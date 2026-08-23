@@ -68,6 +68,10 @@ public final class WindowKeyboardMove {
         if (target.state() != WindowState.VISIBLE) return false;
         if (target.isMaximized() || target.isFullscreen()) return false;
 
+        // A KEYBOARD MOVE LEAVES THE TILE, exactly as a caption drag does; a keyboard SIZE does not,
+        // for the same reason a resize handle does not -- the cell stays and its edge moves.
+        if (wanted == Mode.MOVE) target.clearSnappedZone();
+
         frame = target;
         mode = wanted;
         originLeft = target.getWantedLeft();
