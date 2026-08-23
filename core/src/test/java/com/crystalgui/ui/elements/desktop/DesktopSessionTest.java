@@ -337,4 +337,71 @@ public class DesktopSessionTest extends UiTestBase {
 
         assertTrue(launch.session.read(ID).isEmpty());
     }
+
+    // ── What this record is NOT for ─────────────────────────────────────────────────────────────
+
+    /**
+     * <b>A tool window's geometry is not this record's business.</b>
+     *
+     * <p>This file is per <em>host</em>; a tool window's placement is per <em>project</em>, stored in
+     * {@code ToolWindowState} beside its mode. Both were writing it, and the desktop's copy was applied
+     * <em>second</em> — {@code showInFrame} sets the project's bounds and then calls {@code openWindow},
+     * which is where this record is applied — so the first windowed tool window to open after launch
+     * landed wherever the previous project had left it.</p>
+     *
+     * <p>Asserted on the JSON rather than on a placed window, because the failure is a duplicated
+     * <em>record</em>: a test that opened two projects and compared positions would pass as soon as one
+     * of the two writers happened to win, which is exactly the state this replaced.</p>
+     */
+    @Test
+    public void aToolWindowIsNotWrittenToTheDesktopRecord() {
+        Launch launch = new Launch(600, 400);
+        launch.open("editor:main", 10f, 10f, 200f, 150f);
+        WindowFrame panel = launch.open("toolwindow:inspector", 300f, 40f, 180f, 120f);
+        panel.setToolWindow(true);
+        launch.settle();
+
+        String json = launch.session.toJson();
+
+        assertTrue("an ordinary window stopped being recorded", json.contains("editor:main"));
+        assertFalse("a tool window's geometry was written to the per-host desktop record",
+                json.contains("toolwindow:inspector"));
+    }
+
+    /**
+     * <b>...and a record left over from when it was must not be applied either.</b>
+     *
+     * <p>Not producing them any more leaves every record already on disk, which still names the tool
+     * window and would still be applied on the next launch — so the bleed would outlive the fix by
+     * exactly as long as somebody's config file does. The refusal is on the way in as well as the way
+     * out.</p>
+     */
+    @Test
+    public void aStaleToolWindowPlacementIsRefusedOnTheWayIn() {
+        Launch first = new Launch(600, 400);
+        WindowFrame panel = first.open("toolwindow:inspector", 300f, 40f, 180f, 120f);
+        // Written while it was still an ordinary window -- which is exactly what an old record holds.
+        first.save();
+        assertTrue(storage.read(DesktopSession.fileNameFor(ID)).contains("toolwindow:inspector"));
+        assertFalse(panel.isToolWindow());
+
+        Launch second = new Launch(600, 400);
+        second.desktop.persistTo(storage, ID);
+
+        // PLACED BEFORE IT IS OPENED, which is what a tool window manager does -- it applies the
+        // project's own bounds and then puts the frame on the desktop. Doing it the other way round
+        // overwrites whatever the record applied and the test passes against the bug, which is exactly
+        // what the first version of this did.
+        WindowFrame reopened = new WindowFrame("Inspector")
+                .setKey("toolwindow:inspector").setToolWindow(true);
+        reopened.resizeTo(90f, 70f).moveTo(12f, 14f);
+        second.window.openWindow(reopened);
+        second.settle();
+
+        // The POSITION, which is the intent pair and therefore exact. Size is deliberately not asserted:
+        // recordedWidth() is the MEASURED box, so the sheet's minimum lifts 90 to 120 and the number has
+        // nothing to do with whether the record was applied.
+        assertEquals("a stale desktop record moved a tool window", 12f, reopened.getWantedLeft(), 0.01f);
+        assertEquals(14f, reopened.getWantedTop(), 0.01f);
+    }
 }

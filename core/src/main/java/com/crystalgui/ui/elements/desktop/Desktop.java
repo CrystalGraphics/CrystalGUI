@@ -523,6 +523,10 @@ public class Desktop extends UIElement {
 
     private void applyPersistedGeometry(WindowFrame frame) {
         String key = frame.key();
+        // A TOOL WINDOW IS PLACED BY WHATEVER OWNS IT, per project -- and this record is per host. It is
+        // no longer written here, but a record from before that was, so this has to refuse to apply one
+        // rather than merely stop producing them. @see DesktopSession#isPersistable
+        if (frame.isToolWindow()) return;
         if (key == null || pendingPlacements.isEmpty()) return;
         DesktopSession.Placement placement = pendingPlacements.remove(key);
         if (placement == null) return;

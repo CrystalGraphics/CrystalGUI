@@ -20,7 +20,9 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
 
 import javax.annotation.Nullable;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
 
@@ -751,6 +753,155 @@ public class WindowFrame extends UIElement implements Disposable {
     @Nullable
     private WindowFrame ownerWindow;
 
+    /**
+     * Whether this is a <b>tool window</b> — Win32's {@code WS_EX_TOOLWINDOW}, and the answer to
+     * "should the taskbar know about this".
+     *
+     * <h3>Three consequences, and they are one idea</h3>
+     *
+     * <p>A tool window is part of the thing it belongs to rather than a destination of its own, so it is
+     * absent from {@link WindowRegistry#taskbarOrder()}, absent from
+     * {@link WindowRegistry#switcherOrder()}, and <b>hides and shows with its owner</b>. Win32 spells the
+     * same idea in one extended style bit; IntelliJ's floating tool windows behave exactly this way,
+     * which is also why they carry Dock and Hide and no maximise or close — a window nobody can reach
+     * from a taskbar must not be able to put itself somewhere a taskbar would be needed to get it back.
+     * </p>
+     *
+     * <p><b>It is not a second spelling of owned.</b> {@link #attachOwned} makes a window a child, which
+     * gets all three of these for nothing: a child of a detached subtree is detached, and a child is in
+     * no registry. This flag is for a window that is genuinely top-level — so that it can be dragged
+     * anywhere on the desktop instead of being clamped inside its owner — and still not a citizen of it.
+     * The two are orthogonal and both are in use: a {@code FLOATING} tool window is a child, a
+     * {@code WINDOWED} one is top-level with this bit set.</p>
+     *
+     * <p>The counter-example is why this is worth a flag at all. A torn-out <em>editor</em> window is
+     * also top-level and also came out of something, and it <b>does</b> deserve an entry — it is a place
+     * work happens, and closing the window it came from must not take it. So {@code DockWindow} leaves
+     * this false, and the line between "part of a window" and "a window" is one boolean rather than a
+     * class check buried in the taskbar.</p>
+     */
+    public boolean isToolWindow() {
+        return toolWindow;
+    }
+
+    /** @see #isToolWindow() */
+    public WindowFrame setToolWindow(boolean nowToolWindow) {
+        if (toolWindow == nowToolWindow) return this;
+        this.toolWindow = nowToolWindow;
+        // The taskbar and the switcher are built from filtered views, so flipping this changes what they
+        // should be showing and nothing else would tell them.
+        if (owner != null) owner.registry().changed();
+        return this;
+    }
+
+    private boolean toolWindow;
+
+    /**
+     * Tool windows this one took down with it when it hid, so showing it puts back exactly those.
+     *
+     * <p><b>Exactly those</b> is why this is a list rather than a re-walk of the owner group on the way
+     * back. A re-walk restores every hidden owned tool window, which is only the same set if nothing else
+     * can hide one — and "hidden because the owner went" and "hidden for any other reason" are
+     * indistinguishable by then.</p>
+     *
+     * <p>Stated as the rule rather than as a scenario, because the obvious scenario is <em>not</em> live:
+     * a tool window the user closes first is <b>destroyed</b>, not hidden ({@code hideFrame} drops the
+     * frame outright, since what survives a hide is the placement record), so it leaves the registry and
+     * could never be re-walked into. The discipline is what keeps that true as routes are added, and the
+     * state check on the way back is what covers a frame that died while the owner was away.</p>
+     */
+    private final List<WindowFrame> hiddenWithOwner = new ArrayList<>();
+
+    /**
+     * Takes this window's owned <b>tool</b> windows down with it — Win32's owner/owned rule.
+     *
+     * <p>A {@code FLOATING} tool window needs none of this: it is a child of {@link #overlaySlot()}, so
+     * detaching the owner detaches it, and re-attaching brings it back still in the tree. Only a
+     * top-level owned window has a life of its own to suspend, which is exactly the case
+     * {@link #isToolWindow()} exists for.</p>
+     *
+     * <h3>{@link Departure} is not decoration — it is WHEN this runs</h3>
+     *
+     * <p>The gesture rule the minimise deactivation already pays: a minimise's {@code hide()} is the
+     * animation's <em>continuation</em>, so a cascade written only there starts 400ms late and detaches
+     * with no animation of its own. What that looks like is the owner flying neatly into the taskbar and
+     * its panels blinking out of existence once it lands — which reads as the panels not being part of
+     * the gesture at all.</p>
+     *
+     * <p>So an animated departure cascades at gesture time and each tool window plays its own flight —
+     * <b>the same one the owner is playing</b>, or a window fading in place while its panels sail off to
+     * the taskbar reads as two unrelated things happening at once. Each ends in its own {@code hide()}.
+     * The synchronous {@link Departure#NOW} call from {@link #hide()} stays as the backstop
+     * for a direct API hide (which is documented to be synchronous) and skips anything already in
+     * flight — {@link #hidingWithOwner} is both the suppression flag and the "already leaving with us"
+     * marker.</p>
+     */
+    private enum Departure {
+        /** Detach immediately — a direct {@code hide()}, which is documented to be synchronous. */
+        NOW,
+        /** Fly to the taskbar, as the owner is doing. */
+        MINIMIZE,
+        /** Shrink and fade in place, as the owner is doing. */
+        CLOSE
+    }
+
+    private void cascadeHideOwnedToolWindows(Departure departure) {
+        if (owner == null) return;
+        // COPIED, because windows() is an unmodifiable VIEW of the registry's own list and hiding can
+        // reach code that removes from it. It cannot today -- the cascade suppresses onHidden, so
+        // hidePanel and its destroy() are never reached -- but that is a coupling between two files, not
+        // a property of this loop, and the failure would be a ConcurrentModificationException from
+        // minimising a window.
+        for (WindowFrame candidate : new ArrayList<>(owner.registry().windows())) {
+            if (candidate == this || !candidate.isToolWindow()) continue;
+            // ALREADY ON ITS WAY OUT WITH US -- an animated cascade started at gesture time, and this is
+            // the owner's own hide() landing afterwards. Hiding it again would cut its flight short at
+            // exactly the moment the owner's finished, which is the bug this whole method is fixing.
+            if (candidate.hidingWithOwner) continue;
+            if (candidate.state() != WindowState.VISIBLE) continue;
+            if (!ownsTransitively(candidate)) continue;
+            hiddenWithOwner.add(candidate);
+            candidate.hidingWithOwner = true;
+            // THE SAME DEPARTURE THE OWNER IS PLAYING. A window and its panels leaving together by two
+            // different animations reads as two unrelated things happening at once -- the owner fading
+            // in place while its panels sail off to the taskbar.
+            if (departure == Departure.MINIMIZE) {
+                candidate.animator.playMinimize(candidate::finishHideWithOwner);
+            } else if (departure == Departure.CLOSE) {
+                candidate.animator.playClose(candidate::finishHideWithOwner);
+            } else {
+                candidate.finishHideWithOwner();
+            }
+        }
+    }
+
+    /** The end of one tool window's cascade — see {@link #cascadeHideOwnedToolWindows}. */
+    private void finishHideWithOwner() {
+        try {
+            hide();
+        } finally {
+            hidingWithOwner = false;
+        }
+    }
+
+    /** The other half — see {@link #hiddenWithOwner}. */
+    private void showOwnedToolWindows() {
+        if (hiddenWithOwner.isEmpty()) return;
+        List<WindowFrame> putBack = new ArrayList<>(hiddenWithOwner);
+        hiddenWithOwner.clear();
+        for (WindowFrame frame : putBack) {
+            if (frame.state() == WindowState.HIDDEN) frame.show(true);
+        }
+    }
+
+    /** Whether {@code candidate} is owned by this window, at any depth. */
+    private boolean ownsTransitively(WindowFrame candidate) {
+        for (WindowFrame walk = candidate.ownerWindow; walk != null; walk = walk.ownerWindow) {
+            if (walk == this) return true;
+        }
+        return false;
+    }
+
     private void syncOverlaySlot() {
         // THE BLOCKERS, not the live set. Everything owned is live; only a modal wants the owner's
         // whole surface covered. See attachOwned(UIElement, boolean).
@@ -954,6 +1105,9 @@ public class WindowFrame extends UIElement implements Disposable {
     public boolean requestClose() {
         if (state == WindowState.DESTROYED) return false;
         if (policy == WindowPolicy.HIDE_ON_CLOSE) {
+            // Same ordering as minimise -- this hide is a continuation, so the panels are told now --
+            // and CLOSE rather than MINIMIZE, because that is the animation this window is playing.
+            cascadeHideOwnedToolWindows(Departure.CLOSE);
             animator.playClose(this::hide);
             return true;
         }
@@ -977,6 +1131,12 @@ public class WindowFrame extends UIElement implements Disposable {
      */
     public void hide() {
         if (state != WindowState.VISIBLE) return;
+        // FIRST, while this window is still the thing they are owned by and still has a box. Win32's
+        // rule: an owner going away takes its owned windows with it. Only tool windows, and only
+        // top-level ones -- a FLOATING tool window is a child of the overlay slot and leaves with the
+        // subtree for free. SYNCHRONOUS here because a direct hide() is; an animated departure has
+        // already cascaded at gesture time and this pass skips what it started. @see #isToolWindow()
+        cascadeHideOwnedToolWindows(Departure.NOW);
         UIElement layer = getParent();
         if (layer == null) {
             markHidden();
@@ -1026,6 +1186,9 @@ public class WindowFrame extends UIElement implements Disposable {
         // on a detached element -- the classes would be set and never matched.
         if (persisted) animator.playRestore();
         else animator.playOpen();
+        // AFTER this window is back, so they stack above it rather than being raised against a window
+        // that is not on the layer yet. @see #hiddenWithOwner
+        showOwnedToolWindows();
         onShown.emit(persisted);
     }
 
@@ -1100,12 +1263,22 @@ public class WindowFrame extends UIElement implements Disposable {
         this.owner = desktop;
     }
 
-    /** Flips the state on the way out of the tree, whichever route detached it. */
+    /**
+     * Flips the state on the way out of the tree, whichever route detached it.
+     *
+     * <p><b>{@code onHidden} means "this was put away", and a cascade is not that.</b> Its one listener
+     * is {@code ToolWindowManager}, which reads it as the user closing the panel and records it shut — so
+     * firing it while an owner is merely minimising would mark every tool window on that window closed,
+     * and the next session save would write it down. The window comes back; the panel does not.</p>
+     */
     void markHidden() {
         if (state != WindowState.VISIBLE) return;
         state = WindowState.HIDDEN;
-        onHidden.emit();
+        if (!hidingWithOwner) onHidden.emit();
     }
+
+    /** True for the duration of a cascade hide. @see #markHidden() */
+    private boolean hidingWithOwner;
 
     // ── Maximise ────────────────────────────────────────────────────────────
 
@@ -1384,6 +1557,11 @@ public class WindowFrame extends UIElement implements Disposable {
         // Guarded on being the active window, or minimising a background one would deactivate the
         // foreground.
         if (owner != null && owner.activeWindow() == this) owner.deactivate();
+        // THE PANELS GO NOW, WITH IT -- same reason the deactivation above moved to the press. hide() is
+        // this animation's continuation, so a cascade left to it starts when the flight LANDS: the window
+        // sails into the taskbar and its tool windows blink out afterwards, which reads as them not being
+        // part of the gesture. @see #cascadeHideOwnedToolWindows
+        cascadeHideOwnedToolWindows(Departure.MINIMIZE);
         animator.playMinimize(this::hide);
     }
 

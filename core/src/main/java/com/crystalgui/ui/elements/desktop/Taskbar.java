@@ -120,7 +120,7 @@ public class Taskbar extends UIElement {
     public void refresh() {
         Desktop desktop = desktop();
         if (desktop == null) return;
-        List<WindowFrame> live = desktop.registry().windows();
+        List<WindowFrame> live = desktop.registry().taskbarOrder();
 
         // GONE FIRST, so an entry whose window was destroyed cannot be re-used below.
         List<WindowFrame> stale = new ArrayList<>();

@@ -112,8 +112,13 @@ public class ToolWindowFrame extends WindowFrame {
         this.container = container;
         addClass(TOOL_WINDOW_CLASS);
         setPolicy(WindowPolicy.HIDE_ON_CLOSE);
+        // WS_EX_TOOLWINDOW: no taskbar entry, no switcher entry, and it hides and shows with whatever
+        // owns it. This is what makes the caption's Dock-and-Hide pair honest -- a window with no way
+        // back from a taskbar must not have controls that need one. @see WindowFrame#isToolWindow()
+        setToolWindow(true);
         // Keyed, so a session restore can find the frame that belongs to this tool window rather than
-        // opening a second one beside it.
+        // opening a second one beside it. The key is NOT a claim on the desktop's record -- a tool
+        // window's geometry is per project and lives in ToolWindowState. @see DesktopSession
         setKey("toolwindow:" + typeId);
 
         // BEFORE the window controls, which is where IntelliJ's gear sits and where every toolkit puts
@@ -166,10 +171,10 @@ public class ToolWindowFrame extends WindowFrame {
     /**
      * The tool window's name — from the field, because the caption's label is deliberately empty.
      *
-     * <p>{@code WindowFrame.getTitle()} reads the label, and the label is what the taskbar entry is
-     * built from. Emptying it to stop the caption saying "Inspector" twice would otherwise leave a
-     * blank taskbar entry — a window with no name in the one place a hidden window can be found by
-     * name.</p>
+     * <p>{@code WindowFrame.getTitle()} reads the label, and emptying the label to stop the caption
+     * saying "Inspector" twice would leave the window nameless everywhere else — a tooltip, a preview,
+     * the message an illegal reopen throws. It no longer has a taskbar entry to be blank in, but a
+     * window with no name is a debugging expense whatever is looking at it.</p>
      */
     @Override
     public String getTitle() {

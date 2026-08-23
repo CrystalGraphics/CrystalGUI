@@ -61,14 +61,54 @@ public final class WindowRegistry {
 
     private int hiddenCap = DEFAULT_HIDDEN_CAP;
 
-    /** Every live window in open order, visible or hidden. */
+    /**
+     * <b>Every</b> live window in open order, visible or hidden — tool windows included.
+     *
+     * <p>The complete list, which is what lifecycle questions want: whether the desktop has anything on
+     * it at all, what to evict, what to look up. What the taskbar and the switcher <em>show</em> is
+     * narrower — see {@link #taskbarOrder()} and {@link #switcherOrder()}.</p>
+     */
     public List<WindowFrame> windows() {
         return Collections.unmodifiableList(live);
     }
 
-    /** Most-recently-activated first. The switcher's order, and what eviction reads from the back. */
+    /** Most-recently-activated first, tool windows included. @see #switcherOrder() */
     public List<WindowFrame> mruOrder() {
         return Collections.unmodifiableList(mru);
+    }
+
+    /**
+     * Open order, <b>without tool windows</b> — what the taskbar draws.
+     *
+     * <h3>Why this is not just {@link #windows()}</h3>
+     *
+     * <p>A tool window is part of the window it belongs to rather than a destination of its own, so it
+     * has no business being an entry you can click to. That is Win32's {@code WS_EX_TOOLWINDOW} and
+     * IntelliJ's floating tool windows, which appear in neither the taskbar nor Alt+Tab; a torn-out
+     * editor window, which is a place work happens, appears in both. See
+     * {@link WindowFrame#isToolWindow()}.</p>
+     *
+     * <p><b>Filtering here rather than in {@code windows()}</b> is load-bearing and was nearly got
+     * wrong: {@code Desktop} sizes its whole surface from whether any window is open, so a filtered
+     * {@code windows()} would collapse the desktop to nothing whenever a tool window was the only thing
+     * on it — and take the tool window with it. The complete list and the shown list are different
+     * questions, and each caller asks the one it means.</p>
+     */
+    public List<WindowFrame> taskbarOrder() {
+        return withoutToolWindows(live);
+    }
+
+    /** Most-recently-activated first, without tool windows — what the switcher offers. @see #taskbarOrder() */
+    public List<WindowFrame> switcherOrder() {
+        return withoutToolWindows(mru);
+    }
+
+    private static List<WindowFrame> withoutToolWindows(List<WindowFrame> from) {
+        List<WindowFrame> out = new ArrayList<>(from.size());
+        for (WindowFrame frame : from) {
+            if (!frame.isToolWindow()) out.add(frame);
+        }
+        return out;
     }
 
     /** Just the hidden ones, in open order — what a "restore" affordance offers. */
