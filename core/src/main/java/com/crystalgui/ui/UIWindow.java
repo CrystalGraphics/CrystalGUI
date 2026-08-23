@@ -383,6 +383,18 @@ public final class UIWindow {
         return desktop().addWindow(frame);
     }
 
+    /**
+     * Opens a window that <b>takes no focus</b> and asks for attention instead — the no-steal rule.
+     *
+     * <p>For anything opening a window that the user did not just ask for: a server pushing a UI, a
+     * background job finishing. Taking the keyboard out from under whatever is being typed is the one
+     * thing every windowing system agreed to stop doing. See
+     * {@link Desktop#addWindow(WindowFrame, boolean)}.</p>
+     */
+    public <T extends WindowFrame> T openWindowInBackground(T frame) {
+        return desktop().addWindow(frame, false);
+    }
+
     /** The root's declared width/height, or {@code auto} when unset. */
     private TaffyDimension rootDimension(StyleProperty<TaffyDimension> property) {
         return Optional.ofNullable(ui.rootElement.getStyle().computeCandidate(property))

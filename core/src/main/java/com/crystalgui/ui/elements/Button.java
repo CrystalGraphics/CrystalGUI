@@ -139,6 +139,42 @@ public class Button extends UIElement {
         return this;
     }
 
+    /** What is drawn behind the label, or null. See {@link #setUnderlay}. */
+    @Nullable
+    public UIElement getUnderlay() {
+        return underlay;
+    }
+
+    /**
+     * Sets (or clears, passing {@code null}) an element drawn <b>behind</b> the label — a progress fill.
+     *
+     * <p>The third slot, and the only one that is not in the row: a taskbar entry reporting a download
+     * fills from the left as Windows' does, which is a box <em>under</em> the content rather than beside
+     * it. As a flex item it would take a share of the row and shove the label sideways as the job ran.
+     * So the sheet positions it absolutely and the slot exists to give it something to be absolute
+     * against — {@code left: 0} means the nearest positioned ancestor, so a fill parented anywhere else
+     * is measured from the wrong box.</p>
+     *
+     * <p>Inserted at index 0 and unhittable: painter's order puts it under everything added after it,
+     * and a hittable fill would swallow the press meant for the button it is inside.</p>
+     */
+    public Button setUnderlay(@Nullable UIElement fill) {
+        if (underlay != null) removeInternalChild(underlay);
+        underlay = fill;
+        if (underlay != null) {
+            underlay.setHitTest(false);
+            underlay.addClass(UNDERLAY_CLASS);
+            insertInternalChildAt(underlay, 0);
+        }
+        return this;
+    }
+
+    /** On whatever {@link #setUnderlay} was given. */
+    public static final String UNDERLAY_CLASS = "__underlay__";
+
+    @Nullable
+    private UIElement underlay;
+
     public Button attachListener(Runnable action) {
         onPressed.connect(action);
         return this;

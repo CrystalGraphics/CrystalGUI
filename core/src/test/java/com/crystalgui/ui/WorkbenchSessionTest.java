@@ -5,6 +5,7 @@ import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.ConfigStorage;
 import com.crystalgui.fs.InMemoryConfigStorage;
 import com.crystalgui.ui.elements.desktop.WindowFrame;
+import com.crystalgui.ui.elements.desktop.WindowState;
 import com.crystalgui.ui.elements.workbench.ToolWindowType;
 import com.crystalgui.fs.InMemoryFileSystem;
 import com.crystalgui.fs.ProjectRegistry;
@@ -22,6 +23,11 @@ import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.ui.elements.SplitView;
 import com.crystalgui.ui.elements.editor.TextEditor;
+import com.crystalgui.ui.elements.dock.DockLayout;
+import com.crystalgui.ui.elements.dock.DockLeaf;
+import com.crystalgui.ui.elements.dock.DockPanelRef;
+import com.crystalgui.ui.elements.dock.DockPanelRegistry;
+import com.crystalgui.ui.elements.dock.DockWindow;
 import com.crystalgui.ui.elements.dock.DockPanelDescriptor;
 import com.crystalgui.ui.elements.dock.DockRegion;
 import com.crystalgui.ui.elements.workbench.Workbench;
@@ -775,6 +781,201 @@ public class WorkbenchSessionTest extends UiTestBase {
         assertEquals("it came back docked rather than as the float it was",
                 ToolWindowType.FLOATING,
                 second.workbench.toolWindowManager().typeOf(Workbench.PROBLEMS_TYPE));
+    }
+
+    // ── Torn-out editor windows (W9, persisted at W12) ──────────────────────────────────────────
+
+    /**
+     * Tears a leaf out of {@code harness}'s main dock into a window, exactly as
+     * {@code DockArea.tearOutToWindow} does — same registry, same constructor, same
+     * {@code DockLayout.of}. What differs is only that a drag is not driven to get there.
+     */
+    private DockWindow tearOut(Harness harness, float left, float top) {
+        // A PANEL, not the leaf. DockArea.detach tears a whole GROUP out through DockLayout.tearOut and
+        // a single panel by removing it and building a fresh one-panel leaf -- and the central leaf
+        // cannot be torn out at all, so the leaf spelling returns null on a one-editor dock, which is
+        // every fixture here.
+        DockLeaf leaf = harness.workbench.dock().layout().leaves().get(0);
+        assertFalse("the fixture has no panel to tear out", leaf.panels().isEmpty());
+        DockPanelRef panel = leaf.panels().get(0);
+        leaf.remove(panel);
+        DockWindow frame = new DockWindow(harness.workbench.panels(),
+                DockLayout.of(new DockLeaf(panel)), "Torn out");
+        frame.resizeTo(420f, 300f);
+        frame.moveTo(left, top);
+        harness.window.openWindow(frame);
+        harness.workbench.dock().requestRebuild();
+        harness.settle();
+        return frame;
+    }
+
+    private List<DockWindow> dockWindowsOf(Harness harness) {
+        List<DockWindow> out = new java.util.ArrayList<>();
+        for (WindowFrame frame : harness.window.desktop().registry().windows()) {
+            if (frame instanceof DockWindow dock) out.add(dock);
+        }
+        return out;
+    }
+
+    /**
+     * <b>A torn-out editor window comes back — with its tab, and where it was.</b>
+     *
+     * <p>It was persisted by <em>nothing</em>: {@code tearOut} removes the leaf from the main layout, so
+     * it was in no project record, and a {@code DockWindow} carries no {@code WindowFrame.key()}, so it
+     * was in no desktop record either. What made that read as an editor bug rather than a persistence
+     * gap is that the file's caret and scroll survived perfectly — {@code openPaths()} reads
+     * {@code OpenDocuments}, which is document-level — leaving view state with no tab to land in.</p>
+     */
+    @Test
+    public void aTornOutWindowComesBack() {
+        first.intoWindow();
+        first.workbench.openFile(MAIN);
+        first.settle();
+        tearOut(first, 140f, 90f);
+        assertEquals("the fixture did not tear a window out", 1, dockWindowsOf(first).size());
+
+        first.session.save(PROJECT, 1200, 800);
+
+        Harness second = build();
+        second.intoWindow();
+        second.session.restore(PROJECT);
+        second.settle();
+
+        List<DockWindow> restored = dockWindowsOf(second);
+        assertEquals("the torn-out window did not come back", 1, restored.size());
+        DockWindow frame = restored.get(0);
+        assertFalse("it came back empty", frame.isEmpty());
+        assertEquals("it came back somewhere else", 140f, frame.getWantedLeft(), 1f);
+        assertEquals(90f, frame.getWantedTop(), 1f);
+
+        // ASKED OF THE WINDOW'S OWN DOCK, deliberately, and this is worth writing down: `openTabPaths`
+        // walks the MAIN dock's leaves, so it does not see a torn-out window's tabs at all. That is a
+        // pre-existing property of W9 rather than of this record -- the file's DOCUMENT is global, so
+        // `openPaths` does see it -- but it means "what is open" has two answers depending on which one
+        // is asked, and only one of them knows about torn-out windows.
+        assertTrue("the torn-out window came back without the file it held",
+                pathsIn(frame).contains(MAIN));
+    }
+
+    /** The files with a tab in {@code frame}'s own dock. @see Workbench#PATH_STATE */
+    private static List<CgPath> pathsIn(DockWindow frame) {
+        List<CgPath> out = new java.util.ArrayList<>();
+        for (DockLeaf leaf : frame.area().layout().leaves()) {
+            for (DockPanelRef panel : leaf.panels()) {
+                String raw = panel.state(Workbench.PATH_STATE, "");
+                if (!raw.isEmpty()) out.add(CgPath.parse(raw));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * <b>...and the main dock does not get it back as well.</b>
+     *
+     * <p>The failure worth naming separately: the record holds two dock trees and the panel belongs to
+     * exactly one of them. Writing the torn-out tree without having removed the leaf from the main one —
+     * or restoring both — puts the same file in two places, which looks like a working restore until you
+     * notice the duplicate tab.</p>
+     */
+    @Test
+    public void aTornOutPanelIsNotAlsoRestoredIntoTheMainDock() {
+        first.intoWindow();
+        first.workbench.openFile(MAIN);
+        first.settle();
+        tearOut(first, 140f, 90f);
+        first.session.save(PROJECT, 1200, 800);
+
+        Harness second = build();
+        second.intoWindow();
+        second.session.restore(PROJECT);
+        second.settle();
+
+        int inMainDock = 0;
+        for (DockLeaf leaf : second.workbench.dock().layout().leaves()) {
+            inMainDock += leaf.panels().size();
+        }
+        assertEquals("the torn-out panel came back in the main dock too", 0, inMainDock);
+    }
+
+    /**
+     * <b>A window torn out of somebody ELSE's workbench is not this project's to record.</b>
+     *
+     * <p>A {@code DockWindow} is a top-level desktop citizen, not a descendant of the workbench, so
+     * "which project does this belong to" cannot be answered by walking the tree. It is answered by
+     * panel-registry identity — the dock that builds its content is this workbench's. Without that
+     * discriminator a save would sweep up every dock window on the desktop, and the restore would then
+     * open another project's editors into this one.</p>
+     */
+    @Test
+    public void aDockWindowFromAnotherWorkbenchIsNotRecorded() {
+        first.intoWindow();
+        first.workbench.openFile(MAIN);
+        first.settle();
+
+        // ONE OF OURS, so the assertion below has a positive control: a filter that wrote nothing at all
+        // would satisfy "the stranger is absent" perfectly.
+        tearOut(first, 140f, 90f);
+
+        // NOT EMPTY, and that is load-bearing rather than incidental: a DockWindow holding nothing
+        // destroys itself on the frame after a drag ends, so a stranger built around an empty leaf is
+        // gone before the save runs — and the test then passes with or without the discriminator. Caught
+        // by a mutant that survived exactly because of it.
+        DockPanelRegistry<UIElement> foreign = new DockPanelRegistry<>();
+        foreign.register(DockPanelDescriptor.document("stranger", "Stranger"), ref -> new UIElement());
+        DockWindow stranger = new DockWindow(foreign,
+                DockLayout.of(new DockLeaf(new DockPanelRef("stranger"))), "Stranger window");
+        stranger.resizeTo(300f, 200f).moveTo(400f, 300f);
+        first.window.openWindow(stranger);
+        first.settle();
+        assertEquals("the foreign window closed itself before the save",
+                WindowState.VISIBLE, stranger.state());
+
+        String json = first.session.toJson(1200, 800);
+
+        // A TITLE WITH NO APOSTROPHE, deliberately. Gson HTML-escapes by default, so a `'` in the record
+        // comes out as `'` and `contains` never matches — the assertion is then vacuously true and
+        // the test passes against any filter at all. Caught by a mutant that survived twice.
+        assertTrue("the fixture is not asserting on anything", json.contains("Torn out"));
+        assertFalse("a foreign dock window was written into this project's record",
+                json.contains("Stranger window"));
+    }
+
+    /**
+     * <b>...and it still opens when the restore ran before the tree had a window.</b>
+     *
+     * <p>The ordered-failure shape the tool windows already paid for: {@code openWindow} needs a
+     * desktop, a host may legitimately restore on its first frame — before {@code UIWindow.init} — and
+     * the docked half succeeds regardless. So the record is perfect, the main dock comes back, and only
+     * the torn-out windows are missing, which reads as those windows not being saved.</p>
+     */
+    @Test
+    public void aTornOutWindowRestoredBeforeThereIsAWindowStillOpens() {
+        first.intoWindow();
+        first.workbench.openFile(MAIN);
+        first.settle();
+        tearOut(first, 140f, 90f);
+        first.session.save(PROJECT, 1200, 800);
+
+        Harness second = buildDetached();
+        second.session.restore(PROJECT);
+        assertTrue("the fixture already had a window, so this proves nothing",
+                dockWindowsOf2(second).isEmpty());
+
+        second.attach();
+
+        assertEquals("a torn-out window restored before the tree had a window never opened",
+                1, dockWindowsOf2(second).size());
+    }
+
+    /** {@link #dockWindowsOf} for a harness whose window may have no desktop yet. */
+    private List<DockWindow> dockWindowsOf2(Harness harness) {
+        var desktop = harness.window.desktopIfPresent();
+        if (desktop == null) return List.of();
+        List<DockWindow> out = new java.util.ArrayList<>();
+        for (WindowFrame frame : desktop.registry().windows()) {
+            if (frame instanceof DockWindow dock) out.add(dock);
+        }
+        return out;
     }
 
     private static void assertArrayEqualsMessage(String message, int[] expected, int[] actual) {

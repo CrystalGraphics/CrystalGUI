@@ -152,6 +152,48 @@ taskbar .__entry__ .__icon__ {
     flex-shrink: 0;
 }
 
+/* ── Attention, badge, progress ─────────────────────────────────────────────────────────────────
+ * A window opened WITHOUT FOCUS (the no-steal rule, W12) has to be able to say it appeared, or it is
+ * a window nobody knows about. Win32 flashes the button, X11 raises the urgency hint, macOS bounces
+ * the icon; here it is a class the entry carries until the window is activated.
+ *
+ * AFTER the hidden rule and before nothing, because a background-opened window is very often also a
+ * hidden one and the attention state is the more urgent thing to say. Same tie-break the disabled/hover
+ * pair already pays for: both are one class, so the later rule wins. */
+taskbar .__entry__.__attention__ {
+    color: var(--taskbar-entry-attention-fg, #DFE1E5);
+    background: none;
+    background-color: var(--taskbar-entry-attention-bg, #3574F0);
+    transition: background-color 600ms ease-in-out;
+}
+
+/* An unsaved count, an error count — the badge/colour split FileDecoration already draws. The window
+ * says WHAT; a theme says how it looks. */
+taskbar .__entry__ .__badge__ {
+    font-size: 8;
+    flex-shrink: 0;
+    padding-left: 3px;
+    padding-right: 3px;
+    color: var(--taskbar-entry-badge-fg, #DFE1E5);
+    background-color: var(--taskbar-entry-badge-bg, #C94F4F);
+    border-radius: 5px;
+}
+
+/* Progress fills the entry from the left, BEHIND the label — Windows' taskbar progress exactly.
+ *
+ * Absolute, so it takes the entry's box without being a flex item in it: as a sibling of the label it
+ * would take a share of the row and shove the text sideways as the job ran. `z-index: -1` puts it
+ * under the label rather than over it, which is what makes it a fill rather than a curtain. The WIDTH
+ * is written from Java in PERCENT, never pixels — see Taskbar.applyProgress. */
+taskbar .__entry__.__busy__ .__progress__ {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    z-index: -1;
+    background-color: var(--taskbar-entry-progress, #43536B);
+}
+
 /* ── A window ───────────────────────────────────────────────────────────────────────────────────
  * `resize: both` is what gives a frame its eight handles — UIResizer builds them from this property,
  * and the four LEADING ones only because a window is `position: absolute` (set at DEFAULT origin in

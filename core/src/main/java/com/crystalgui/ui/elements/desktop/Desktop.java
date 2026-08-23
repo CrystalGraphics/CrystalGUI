@@ -315,6 +315,10 @@ public class Desktop extends UIElement {
         // that to mean anything. Restored as PERSISTED: it is coming out of retention, which is exactly
         // the distinction the flag carries.
         if (frame.state() == WindowState.HIDDEN) frame.show(true);
+        // SEEN. Activation is the only event that means the user has looked at it, which is why the
+        // flash is not on a timer -- one that gave up after a few seconds would be a notification you
+        // could miss by looking away. @see WindowFrame#isDemandingAttention()
+        frame.clearAttention();
         raise(frame);
         if (activeWindow != frame) {
             if (activeWindow != null) activeWindow.setActive(false);
@@ -422,6 +426,30 @@ public class Desktop extends UIElement {
      * but take no focus and ask for attention instead.</p>
      */
     public <T extends WindowFrame> T addWindow(T frame) {
+        return addWindow(frame, true);
+    }
+
+    /**
+     * Puts a window on the desktop, optionally <b>without taking focus</b> — the no-steal rule (W12).
+     *
+     * <h3>Every OS converged on the same answer, and it is not "don't open the window"</h3>
+     *
+     * <p>A window opened by something other than a user gesture — a server pushing a UI, a background
+     * job finishing — must not take the keyboard out from under whatever is being typed. Windows has a
+     * foreground lock plus {@code FlashWindowEx}, X11 has the urgency hint, macOS bounces the dock icon:
+     * <em>appear, take no focus, and ask for attention instead</em>. So the window is registered,
+     * attached and animated exactly as any other, and only the raise and the activation are skipped.</p>
+     *
+     * <p>It goes in at the <b>back</b> of the MRU as well, which {@code WindowRegistry.opened} already
+     * arranges and states the reason for: a window that never took focus must not become the switcher's
+     * first offer, or the attention flash becomes a focus steal with one keystroke of delay.</p>
+     *
+     * <p>Asking for attention is part of appearing in the background rather than a second call the
+     * caller has to remember. A window that appears with no focus and no announcement is a window nobody
+     * knows opened, which is worse than either alternative — and clearing it is one line
+     * ({@link WindowFrame#clearAttention()}) for the rare caller that genuinely wants silence.</p>
+     */
+    public <T extends WindowFrame> T addWindow(T frame, boolean activate) {
         if (frame.state() == WindowState.DESTROYED) {
             throw new IllegalStateException("a destroyed window cannot be reopened: " + frame.getTitle());
         }
@@ -435,6 +463,13 @@ public class Desktop extends UIElement {
         // The two paths are genuinely different -- this one registers the window and hands it an owner,
         // show() puts a hidden one back -- and the animation is the only thing they share.
         frame.playOpenAnimation();
+        if (!activate) {
+            // NO RAISE EITHER. A background window that jumped to the front of the stack would be a
+            // focus steal missing only the focus -- it would cover the window being typed in. Its stack
+            // order is left where a fresh frame starts, which puts it behind everything raised since.
+            frame.requestAttention();
+            return frame;
+        }
         // PROGRAMMATIC, so focus rings: nobody pointed at this window, so a keyboard user needs to be
         // told where focus went. The ring lands on whatever inside it takes focus -- never on the frame,
         // which ua/core.css exempts along with every other pane-sized widget.

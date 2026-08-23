@@ -673,6 +673,20 @@ theme {
     --taskbar-entry-active-fg: var(--fg);
     --taskbar-entry-active-bg: var(--pressed-bg);
     --taskbar-entry-hidden-fg: var(--fg-disabled);
+    /* ATTENTION IS THE ONE PLACE THE STRIP USES AN ACCENT, and the ladder above is why it can. Active,
+     * hover and hidden are all steps on one grey, so nothing else in the bar competes with a hue — a
+     * window that opened without focus is the only thing here that is asking rather than reporting.
+     * Windows flashes, X11 raises an urgency hint, macOS bounces; a filled entry is the same statement
+     * in a strip that has no room to move. */
+    --taskbar-entry-attention-fg: var(--fg-on-accent);
+    --taskbar-entry-attention-bg: var(--accent);
+    /* A count, so it takes the same red every error count in the application takes rather than a colour
+     * of its own — the badge/colour split FileDecoration already draws, one level up. */
+    --taskbar-entry-badge-fg: var(--fg-on-accent);
+    --taskbar-entry-badge-bg: var(--error);
+    /* MUTED, not the accent: progress is reported continuously and behind a label that has to stay
+     * readable over it, which is the opposite of what attention wants. */
+    --taskbar-entry-progress: var(--accent-soft);
     /* The control glyphs are secondary until hovered — a title bar's buttons are not what you are
      * looking at. Minimise takes a neutral hover fill where close takes a red one: it is the one
      * control that loses nothing, and dressing it as destructive would misstate what it does. */
