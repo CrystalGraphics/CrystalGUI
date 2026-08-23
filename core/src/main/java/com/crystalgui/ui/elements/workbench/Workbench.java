@@ -261,11 +261,194 @@ public class Workbench extends UIElement {
         return bytes == null ? null : new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
     }
 
-    /** A background read landed, so anything that resolved without it is now out of date. */
+    /**
+     * A background read landed, so anything that resolved without it is now out of date.
+     *
+     * <h3>A flag, because this is not the UI thread</h3>
+     *
+     * <p>It runs on whatever thread the workspace client answers on. Walking the open editors from here
+     * would reach {@code setEnabled}-shaped state and end in {@code invalidateStyleMatch()}, adding to
+     * {@code StyleEngine}'s dirty-match set while the frame is copying it — the {@code RunSessions} crash
+     * exactly, which arrives as an {@code ArrayIndexOutOfBoundsException} out of {@code advanceFrame} with
+     * nothing about this class in the trace.</p>
+     *
+     * <p>So: set, and let {@link #tick} drain it. Coalescing is free and wanted — a workspace crawl fills
+     * many files in one frame and they all mean the same single "ask again".</p>
+     */
     private void onProjectIndexFilled() {
-        // Nothing to re-run yet: no engine consumes the index until S4. The hook exists now because the
-        // read path is what makes it necessary, and a signal added later is one every caller has to be
-        // taught about afterwards.
+        projectSourcesMoved = true;
+    }
+
+    /**
+     * Anything an open document resolves against has changed — ask the editors again.
+     *
+     * <p>Three causes, one flag, deliberately: a read landing ({@link #onProjectIndexFilled}), the crawl
+     * settling at a new size, and an open buffer moving. They are indistinguishable downstream — every one
+     * of them means "a name that did not resolve might now" — and coalescing them is the point, since a
+     * single frame routinely carries all three.</p>
+     *
+     * <p>Volatile because {@link #onProjectIndexFilled} runs on whatever thread the workspace client
+     * answers on; drained by {@link #tick} on the UI thread.</p>
+     */
+    private volatile boolean projectSourcesMoved;
+
+    // ── What the index is allowed to see ────────────────────────────────────────────────────────
+    //
+    // Three snapshots, all written on the UI thread by refreshProjectIndexInputs() and read from the
+    // ANALYSIS thread by ProjectIndex. Volatile references to immutable values, so a reader either sees
+    // the whole previous snapshot or the whole next one and never a map mid-write.
+    //
+    // This is the same hazard the run panel's Stop button hit from the other direction: there a worker
+    // thread reached INTO the cascade, here a worker thread reads state the cascade owns. Both fail as a
+    // ConcurrentModificationException or worse from a thread with nothing recognisable in its trace --
+    // and here it would not even throw where anyone could see it, because ProjectSourcesRegistry's view
+    // catches a provider's RuntimeException by design, turning the fault into "no, that type does not
+    // exist". Identical to the symptom of having no index at all.
+
+    /** Every file the crawl has reached, as of the last frame. */
+    private volatile List<CgPath> crawledFiles = List.of();
+
+    /** Project id to declared source roots, as of the last frame. */
+    private volatile Map<String, List<String>> projectRoots = Map.of();
+
+    /** Open documents' text, as of the last frame — the tier that beats the file on disk. */
+    private volatile Map<CgPath, String> bufferSnapshot = Map.of();
+
+    /** A buffer's CONTENT moved since the snapshot was taken. UI thread only. */
+    private boolean buffersDirty;
+
+    /** Which documents the snapshot covers, so opening or closing one is noticed. UI thread only. */
+    private final java.util.Set<CgPath> snapshotOver = new java.util.HashSet<>();
+
+    /** The tree source revision these snapshots were taken at. @see WorkspaceTreeSource#indexRevision() */
+    private int lastIndexRevision = -1;
+
+    /** Whether the workspace's own inputs moved on the PREVIOUS frame. @see #refreshProjectIndexInputs */
+    private boolean workspaceMovedLastFrame;
+
+    /**
+     * Re-takes the three snapshots the index reads. UI thread, once a frame.
+     *
+     * <h3>Nothing here is re-derived unless something says it changed</h3>
+     *
+     * <p>This runs every frame, so every unguarded line in it is a per-frame cost. {@code knownFiles()}
+     * builds a list of <b>every file in the workspace</b>, and the roots walk is over that same list — so
+     * taking them unconditionally meant allocating and walking the whole workspace sixty times a second to
+     * discover that nothing had happened. {@link WorkspaceTreeSource#indexRevision()} answers that in a
+     * field read.</p>
+     *
+     * <p>Buffers are the same argument one level down: encoding an open document is not free, and
+     * {@code refreshDirtyMarkers} doing it for every open file every frame is precisely what
+     * {@link OpenDocuments#onDidChangeDirty} was added to stop.</p>
+     */
+    private void refreshProjectIndexInputs() {
+        int revision = fileTree == null ? 0 : fileTree.source().indexRevision();
+        boolean workspaceMoved = revision != lastIndexRevision;
+        if (workspaceMoved) {
+            lastIndexRevision = revision;
+            List<CgPath> files = fileTree == null ? List.of() : fileTree.source().knownFiles();
+            crawledFiles = files;
+
+            Map<String, List<String>> roots = new HashMap<>();
+            for (CgPath file : files) {
+                if (file == null) continue;
+                roots.computeIfAbsent(file.project(),
+                        id -> fileTree == null ? com.crystalgui.fs.SourceRoots.CONVENTION
+                                : fileTree.source().sourceRootsOf(id));
+            }
+            projectRoots = roots;
+        }
+
+        // A BIGGER WORKSPACE RESOLVES MORE NAMES, so a crawl that grew is a reason to ask again.
+        //
+        // This is the case that shipped broken and the hardest to see, because every part of it behaves
+        // correctly. A file is opened immediately; the crawl is still walking; the package it imports has
+        // not been reached yet, so the index truthfully reports that nothing is declared there and the
+        // import is marked unresolvable. The crawl then finds it, the index becomes right, and NOTHING
+        // re-runs the analysis that was wrong -- so the error stands for the life of the session while
+        // every file opened afterwards resolves perfectly. It reads as a problem with the broken file
+        // rather than as a race with a background walk.
+        //
+        // ONCE IT SETTLES, not on every change. The crawl lands listings continuously at startup, and a
+        // debounced job whose trigger fires every frame is a job that never runs -- the first analysis
+        // would be pushed back until the whole walk finished. Announcing on the frame AFTER the last
+        // change fires at each point the crawl pauses, which is when its answer is worth re-asking.
+        if (!workspaceMoved && workspaceMovedLastFrame) projectSourcesMoved = true;
+        workspaceMovedLastFrame = workspaceMoved;
+
+        refreshBufferSnapshot();
+    }
+
+    /**
+     * Re-takes the open documents' text, when it has moved.
+     *
+     * <p>Its own method because it ends in a guard clause, and a guard clause halfway down a three-part
+     * method is a trap for whatever gets added below it — the same reason a paint method may skip the
+     * draw but never the method.</p>
+     */
+    private void refreshBufferSnapshot() {
+        List<CgPath> open = openPaths();
+        // THE SET, NOT THE COUNT. Two independent things move this snapshot -- a buffer's content, and
+        // which documents are open -- and comparing counts gets the second wrong in BOTH directions. One
+        // file closing while another opens leaves the count identical with every entry different, so the
+        // snapshot silently keeps a closed document's text, which outranks the file on disk. And a
+        // document whose text cannot be encoded never enters the snapshot at all, so the counts differ
+        // for as long as it is open and every frame re-encodes every buffer -- the exact per-frame cost
+        // this whole shape exists to avoid.
+        if (!buffersDirty && snapshotOver.size() == open.size() && snapshotOver.containsAll(open)) return;
+
+        // REBUILT WHOLE, so a closed document's text leaves with it. A stale entry here outranks the file
+        // on disk, so a document that was closed and edited elsewhere would resolve to what it used to say.
+        Map<CgPath, String> buffers = new HashMap<>();
+        for (CgPath path : open) {
+            String text;
+            try {
+                text = openBufferText(path);
+            } catch (RuntimeException unreadable) {
+                // ONE DOCUMENT'S PROBLEM IS NOT THE FRAME'S. Encoding reaches into a live widget, and a
+                // document that is closing has already disposed its tokenizer -- asking it for text throws
+                // `IllegalStateException: Parser is closed`, which is the same fault
+                // `reopeningAClosedFileShowsTheLiveEditor` was written for. Thrown from here it escapes
+                // `tick()`, so every later line of the frame is skipped: the dock never attaches the panel
+                // it was mid-way through opening, and a REOPENED FILE COMES UP BLANK. Nothing in that
+                // symptom points at a cache of source text.
+                //
+                // Skipped rather than fatal because this cache is best-effort by construction -- `sourceOf`
+                // answering null is a supported state that costs one re-analysis, and it is what a file
+                // nobody has open already returns.
+                continue;
+            }
+            if (text != null) buffers.put(path, text);
+        }
+        bufferSnapshot = buffers;
+        snapshotOver.clear();
+        snapshotOver.addAll(open);
+        buffersDirty = false;
+        // The buffer tier moved, so anything that resolved against the old one is stale -- the same
+        // announcement a landed read makes, for the same reason.
+        projectSourcesMoved = true;
+    }
+
+    /**
+     * Tells every open editor that the world outside its document moved.
+     *
+     * <p>Needed because {@code ProjectSources.sourceOf} answers null for a file nobody has open and
+     * schedules a read — so the first analysis after opening a file that names a sibling resolves nothing.
+     * Without this the error stands until the author types, which reads as the feature being flaky rather
+     * than as one missing signal.</p>
+     *
+     * <p>Broadcast to every editor rather than to the ones that asked. A services object cannot say which
+     * names it failed to resolve, and an analysis is debounced and keyed — so the cost of telling a
+     * document that did not care is one coalesced job that finds nothing changed.</p>
+     */
+    private void announceProjectSourcesMoved() {
+        if (!projectSourcesMoved) return;
+        projectSourcesMoved = false;
+        for (CgPath path : openPaths()) {
+            TextEditor editor = editorFor(path);
+            if (editor == null || editor.languageServices() == null) continue;
+            editor.languageServices().environmentChanged();
+        }
     }
 
     /** What the workspace declares. @see ProjectIndex */
@@ -420,10 +603,14 @@ public class Workbench extends UIElement {
     @Override
     protected void registerCommands(CommandRegistry registry) {
         ExplorerCommands.register();
-        // AND WHAT THIS WORKSPACE DECLARES, so an engine can resolve a cross-file reference without
-        // core/ ever naming an engine. Contributed rather than set: two workbenches in one process are
-        // two projects, not a fight over one slot. @see ProjectSourcesRegistry
-        com.crystalgui.text.lang.ProjectSourcesRegistry.contribute(projectIndex);
+        // THE PROJECT INDEX IS *NOT* CONTRIBUTED HERE, and it was, and that was the whole of S4 being
+        // dead on arrival. This method runs from UIElement's INSTANCE INITIALISER -- before the Workbench
+        // constructor body -- so `projectIndex` was still null, and `contribute` opens with
+        // `if (provider == null) return`. Nothing threw, nothing logged, and every cross-file reference in
+        // the workspace reported "cannot be resolved to a type" with the registry, the name environment
+        // and the project tier all correct and all covered by passing tests. Registration is per INSTANCE
+        // and belongs in the constructor; this hook is per CLASS and may only name statics, which is
+        // exactly what its own javadoc says. @see UIElement#registerCommands
         // Undo comes with a workbench because the file tree IS the workspace's UndoScope -- deleting a
         // file is undoable and reaches the workspace stack. Same ids the editor and the graph use, so
         // there is one Undo in the palette rather than one per widget.
@@ -480,17 +667,28 @@ public class Workbench extends UIElement {
         this.client = client;
         // AFTER `client`, and it has to be: a field initialiser capturing a constructor-assigned final is
         // a definite-assignment error, not a nullable read.
+        // SNAPSHOTS, not live views. Everything below is read from the ANALYSIS thread, inside a compile,
+        // while the UI thread is mutating the tree's listing maps and the open-document map. @see #refreshProjectIndexInputs
         this.projectIndex = new ProjectIndex(
-                () -> fileTree() == null ? java.util.List.of() : fileTree().source().knownFiles(),
-                id -> fileTree() == null
-                        ? com.crystalgui.fs.SourceRoots.CONVENTION
-                        : fileTree().source().sourceRootsOf(id),
-                this::openBufferText,
+                () -> crawledFiles,
+                id -> projectRoots.getOrDefault(id, com.crystalgui.fs.SourceRoots.CONVENTION),
+                // A LAMBDA, NEVER `bufferSnapshot::get`. A bound method reference captures the object the
+                // field points at WHEN THE REFERENCE IS MADE -- here the empty map, in this constructor --
+                // so every snapshot taken afterwards is invisible to it. It compiles, it reads as an
+                // accessor, and the buffer tier silently never answers: an open document's unsaved text
+                // loses to whatever is on disk, with nothing to see. The two lines above are lambdas for
+                // exactly this reason.
+                path -> bufferSnapshot.get(path),
                 (path, onText) -> client.read(path,
                         read -> onText.accept(new String(read.content(),
                                 java.nio.charset.StandardCharsets.UTF_8)),
                         error -> onText.accept(null)),
                 this::onProjectIndexFilled);
+        // REGISTERED HERE, where the field exists. Contributed rather than set, because two workbenches in
+        // one process are two projects rather than a fight over one slot -- which is also why this cannot
+        // live in registerCommands, which runs once per CLASS: the second workbench would never register
+        // its own index and the first would answer from a file tree nobody is looking at.
+        com.crystalgui.text.lang.ProjectSourcesRegistry.contribute(projectIndex);
         this.fileService = new WorkspaceFileService(client, new Copies());
         this.fileTree = new ProjectFileTree(client);
         // At construction, not on the first frame with a window: the registry is global, so there is
@@ -639,7 +837,13 @@ public class Workbench extends UIElement {
         // moves when somebody types. The equality guard SURVIVES the move: the announcement means
         // "content changed", which is not the same as "dirtiness flipped", and only the encode can tell
         // the difference. It just runs once per edit now instead of once per frame.
-        open.onDidChangeDirty.connect(path -> refreshDirtyMarkers());
+        open.onDidChangeDirty.connect(path -> {
+            refreshDirtyMarkers();
+            // AND THE INDEX'S VIEW OF IT. This signal means "content moved", which is exactly when a
+            // snapshot of that content stops being true. Marked rather than re-encoded, so a burst of
+            // keystrokes costs one encode on the next frame instead of one each.
+            buffersDirty = true;
+        });
         // EVERY FILE FAILURE IS REPORTED FROM ONE PLACE, and this is the whole of the change that made it
         // so. WorkspaceFileService already announced each one through onDidFail, carrying the operation --
         // and nothing listened, so all eleven call sites wrote their own `failure -> Notifications.show(...)`
@@ -2519,6 +2723,13 @@ public class Workbench extends UIElement {
         // to be in flight -- and left it off when a folder appeared later. The step is O(budget) against a
         // queue, so asking every frame costs nothing once the queue is empty.
         fileTree.source().indexStep(WorkspaceTreeSource.DEFAULT_INDEX_BUDGET);
+        // WHAT THE INDEX MAY SEE, re-taken on this thread because the crawl above just grew the list the
+        // analysis thread reads. Before announceProjectSourcesMoved, so a buffer that moved this frame is
+        // announced this frame rather than next. @see #refreshProjectIndexInputs
+        refreshProjectIndexInputs();
+        // A project file's text landed, so anything that resolved without it is stale. Drained here
+        // because the read answers on the client's thread. @see #onProjectIndexFilled
+        announceProjectSourcesMoved();
         // STAYS PER FRAME, and the attempt to move it to onWindowChanged is why this comment exists.
         //
         // It looks like a one-shot dressed as a loop -- ProjectFileTree.loadProjects latches on

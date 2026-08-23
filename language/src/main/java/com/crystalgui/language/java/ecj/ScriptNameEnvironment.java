@@ -478,7 +478,7 @@ final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
         if (fromFiles != null) return fromFiles;
         // BEFORE the `live` early-return, or a project package is invisible on every host without a
         // platform -- which is every host that has a workspace open.
-        if (declaredByProject(internalName(packageName, null))) return classpathModules(moduleName);
+        if (declaredByProject(internalName(packageName, null))) return projectModule();
         if (!live) return null;
 
         String name = internalName(packageName, null);
@@ -487,7 +487,7 @@ final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
         // The first version of M15 S4 taught `isPackage` about project packages and left this one alone,
         // so an import of a project type failed with "The import com.example cannot be resolved" while
         // the identical question asked the other way answered true.
-        if (declaredByProject(name)) return classpathModules(moduleName);
+        if (declaredByProject(name)) return projectModule();
         if (resolvedPackages.contains(name)) return classpathModules(moduleName);
         // THE SAME PREDICATE, not a second copy of it. @see #isPackageName
         return isPackageName(name) ? classpathModules(moduleName) : null;
@@ -500,6 +500,32 @@ final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
      * for {@code java.lang} is not going to name one for ours either, and asking again per package would
      * be a delegate call on the hot path of every qualified name.</p>
      */
+    /**
+     * The module a WORKSPACE package belongs to — the unnamed one, always.
+     *
+     * <h3>Why this is not {@link #classpathModules}, which is what it used to be</h3>
+     *
+     * <p>The live tier borrows {@code java/lang}'s module because a live package really does belong
+     * wherever the classpath's own types belong — those bytes came from the classpath. A project source
+     * file did not. It is compiled here, in the unnamed module, alongside the unit under analysis.</p>
+     *
+     * <p>Saying otherwise splits a package chain across two modules, and ECJ discards the result rather
+     * than complaining. On a JRT classpath {@code java/lang} answers {@code java.base}, so
+     * {@code com.example} — the compiled unit's OWN package, in the unnamed module — would acquire a
+     * subpackage {@code com.example.util} attributed to {@code java.base}. The import is then reported
+     * as <em>"The import com.example.util cannot be resolved"</em> even though this environment answered
+     * that the package exists, and the type is never asked for at all.</p>
+     *
+     * <p><b>It only shows when the imported package sits under the importing file's own.</b> An importer
+     * in an unrelated package has every segment of the chain invented by this environment, so all of them
+     * get the same wrong module and agree with each other — which is why a cross-package import test
+     * passed for a release while {@code com.example.Main} importing {@code com.example.util} did not.</p>
+     */
+    private static char[][] projectModule() {
+        // The unnamed module, spelled as ECJ spells it: a single zero-length name.
+        return new char[][]{new char[0]};
+    }
+
     private char[][] classpathModules(char[] moduleName) {
         if (classpathModules == null) {
             // THE CALLER'S OWN moduleName, never null. FileSystem.getModulesDeclaringPackage does

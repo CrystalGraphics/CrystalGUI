@@ -1917,7 +1917,39 @@ public class TextEditor extends ScrollerView implements UndoScope {
      */
     public void revealAt(TextPoint at) {
         setCaret(buffer.pointToOffset(at));
-        revealCaretCentred();
+        // NOT YET, IF THERE IS NOTHING TO CENTRE IN. @see #pendingReveal
+        if (canCentre()) {
+            pendingReveal = false;
+            revealCaretCentred();
+            return;
+        }
+        pendingReveal = true;
+    }
+
+    /**
+     * A jump that arrived before the editor had a viewport, waiting for one.
+     *
+     * <h3>Why centring silently degrades into "put it at the top"</h3>
+     *
+     * <p>{@link #revealCaretCentred} scrolls to {@code caretY - viewportHeight / 2}. Every caller that
+     * jumps into a file <b>just opened</b> — Ctrl+B into another file, Go to File with a line, a Problems
+     * row — runs the moment the read lands, which is before that tab has been through a layout pass. The
+     * height is then zero, the halving is zero, and the destination lands hard against the <em>top</em>
+     * edge with the whole of its context below it.</p>
+     *
+     * <p>That is not a broken jump but a correct one framed as badly as possible, and it reads as the
+     * centring never having been implemented — the caret really is on the right line. The same arithmetic
+     * is right the moment a height exists, so this waits for one rather than reimplementing it.</p>
+     *
+     * <p>Drained in {@link #tickFrame}, which always runs, rather than from {@code onLayoutChanged}: a
+     * newly attached editor can settle its layout in the same pass that created it, and a reveal issued
+     * from inside layout would be scrolling a box whose scroll extents are still being computed.</p>
+     */
+    private boolean pendingReveal;
+
+    /** Whether there is enough measured viewport for centring to mean anything. */
+    private boolean canCentre() {
+        return viewportHeight() > lineHeight();
     }
 
     // ── Language features ────────────────────────────────────────────────────────────────────
@@ -4969,6 +5001,11 @@ public class TextEditor extends ScrollerView implements UndoScope {
     @Override
     public boolean tickFrame(float deltaSeconds) {
         super.tickFrame(deltaSeconds);
+        // THE JUMP THAT CAME IN TOO EARLY, now that there is a viewport to centre in. @see #pendingReveal
+        if (pendingReveal && canCentre()) {
+            pendingReveal = false;
+            revealCaretCentred();
+        }
         updateWindow();
         viewCursorsPart.advanceBlink(deltaSeconds);
         zoomIndicatorPart.tick(deltaSeconds);

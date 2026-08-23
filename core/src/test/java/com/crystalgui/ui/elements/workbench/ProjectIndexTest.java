@@ -70,7 +70,7 @@ public class ProjectIndexTest {
     public void namesComeFromPathsAndCostNoIo() {
         add("p:src/main/java/com/example/Main.java", "package com.example; class Main {}");
 
-        assertEquals(List.of("com.example.Main"), index.declaredNames());
+        assertEquals(List.of("com.example.Main"), index.declaredTypes());
         assertTrue("indexing a name should not have read anything", readsRequested.isEmpty());
     }
 
@@ -80,7 +80,7 @@ public class ProjectIndexTest {
         add("p:README.md", "hello");
         add("p:src/Main.java", "class Main {}");
 
-        assertTrue(index.declaredNames().isEmpty());
+        assertTrue(index.declaredTypes().isEmpty());
     }
 
     /**
@@ -93,10 +93,10 @@ public class ProjectIndexTest {
     @Test
     public void filesArrivingLaterAreStillIndexed() {
         add("p:src/main/java/A.java", "class A {}");
-        assertEquals(List.of("A"), index.declaredNames());
+        assertEquals(List.of("A"), index.declaredTypes());
 
         add("p:src/main/java/B.java", "class B {}");
-        assertEquals(List.of("A", "B"), index.declaredNames());
+        assertEquals(List.of("A", "B"), index.declaredTypes());
     }
 
     /**
@@ -108,13 +108,13 @@ public class ProjectIndexTest {
     @Test
     public void aChangeThatKeepsTheCountIsStillNoticed() {
         CgPath was = add("p:src/main/java/A.java", "class A {}");
-        assertEquals(List.of("A"), index.declaredNames());
+        assertEquals(List.of("A"), index.declaredTypes());
 
         files.remove(was);
         add("p:src/main/java/B.java", "class B {}");
         index.invalidate(was);
 
-        assertEquals(List.of("B"), index.declaredNames());
+        assertEquals(List.of("B"), index.declaredTypes());
     }
 
     // ── Packages ────────────────────────────────────────────────────────────────────────────────

@@ -42,17 +42,53 @@ import java.util.function.Function;
  */
 final class ProjectIndex implements ProjectSources {
 
-    /** Qualified name to the file declaring it. Insertion-ordered so a collision resolves stably. */
-    private final Map<String, CgPath> byName = new LinkedHashMap<>();
+    /**
+     * The derived name map and package set, published as ONE immutable value.
+     *
+     * <h3>Why a snapshot and not two mutable fields</h3>
+     *
+     * <p>These are built on the ANALYSIS thread, and a workbench with two Java files open is two analyses
+     * — two threads, both calling {@link #ensureCurrent}. The previous shape rebuilt in place, opening
+     * with {@code byName.clear(); packages.clear();}, so a thread arriving mid-rebuild read a set that had
+     * been emptied and not yet refilled.</p>
+     *
+     * <p>It presents as <b>one file resolving and another not</b>, which reads as something specific to the
+     * file that failed — the shape of its import, the package it is in — and it sticks, because the
+     * loser also sees {@code stale} cleared and skips its own rebuild. Nothing throws: an empty package set
+     * is a complete, well-formed answer meaning "the workspace declares nothing".</p>
+     *
+     * <p>Two threads racing now both derive and both publish; the values are identical, so the loser costs
+     * one wasted derivation and nothing else. A reader takes the reference ONCE and sees a whole answer.</p>
+     */
+    private volatile Names names = Names.EMPTY;
 
-    /** Every package this project declares anything at or under, so {@link #declaresPackage} is a lookup. */
-    private final Set<String> packages = new TreeSet<>();
+    /**
+     * One derivation of the workspace's names. Immutable, published by reference.
+     *
+     * @param byName    qualified name to the file declaring it, insertion-ordered so a collision between
+     *                  two files claiming one name resolves the same way every time
+     * @param packages  every package the project declares anything at or under, so
+     *                  {@link #declaresPackage} is a lookup rather than a walk
+     * @param builtFrom how many files this was derived from. @see #ensureCurrent
+     */
+    private record Names(Map<String, CgPath> byName, Set<String> packages, int builtFrom) {
+        static final Names EMPTY = new Names(Collections.emptyMap(), Collections.emptySet(), -1);
+    }
 
-    /** Cached text for a file nobody has open, keyed by path. Cleared per file by the watcher. */
-    private final Map<CgPath, String> text = new LinkedHashMap<>();
+    /**
+     * Cached text for a file nobody has open, keyed by path. Cleared per file by the watcher.
+     *
+     * <p><b>Concurrent, and that is not decoration.</b> It is written by whatever thread the workspace
+     * client answers a read on and read from the analysis thread inside a compile. A plain map here can
+     * be walked mid-write, and the resulting failure is <em>invisible</em>: the registry view catches a
+     * {@code RuntimeException} from a provider so one broken provider cannot fail a whole compile, so a
+     * concurrent-modification fault arrives as this index calmly answering "I do not have that" — the
+     * exact shape of a type that does not exist.</p>
+     */
+    private final Map<CgPath, String> text = new java.util.concurrent.ConcurrentHashMap<>();
 
     /** Names a read is already in flight for, so a repeated miss does not repeat the request. */
-    private final Set<String> reading = new TreeSet<>();
+    private final Set<String> reading = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     /** An open document's current text, or null when it is not open. Live, never snapshotted. */
     private final Function<CgPath, String> openBuffer;
@@ -69,11 +105,8 @@ final class ProjectIndex implements ProjectSources {
     /** Project id to its declared source roots. */
     private final Function<String, List<String>> sourceRootsOf;
 
-    /** How many files the last rebuild saw, so a grown crawl is noticed without anything telling us. */
-    private int builtFrom = -1;
-
     /** Set when something changed that a count cannot see — a rename, a delete. @see #markStale */
-    private boolean stale = true;
+    private volatile boolean stale = true;
 
     ProjectIndex(java.util.function.Supplier<List<CgPath>> files,
                  Function<String, List<String>> sourceRootsOf,
@@ -101,10 +134,12 @@ final class ProjectIndex implements ProjectSources {
     private void ensureCurrent() {
         List<CgPath> current = files.get();
         int size = current == null ? 0 : current.size();
-        if (!stale && size == builtFrom) return;
-        rebuild(current, sourceRootsOf);
-        builtFrom = size;
+        // ONE READ of the volatile, so the size check and the answer cannot describe two snapshots.
+        if (!stale && size == names.builtFrom) return;
+        // CLEARED BEFORE the derivation, never after: a change landing while this runs must leave the flag
+        // set so the next ask re-derives. Clearing afterwards swallows it.
         stale = false;
+        names = derive(current, sourceRootsOf, size);
     }
 
     /** Says the name map may be wrong in a way a file count cannot show. */
@@ -129,11 +164,13 @@ final class ProjectIndex implements ProjectSources {
      * contents do not change because the crawl found a sibling, and dropping them would re-read the
      * workspace every time a directory listing landed.</p>
      */
-    private void rebuild(List<CgPath> files, Function<String, List<String>> sourceRootsOf) {
-        byName.clear();
-        packages.clear();
-        if (files == null || sourceRootsOf == null) return;
-
+    private static Names derive(List<CgPath> files, Function<String, List<String>> sourceRootsOf,
+                                int builtFrom) {
+        if (files == null || sourceRootsOf == null) {
+            return new Names(Collections.emptyMap(), Collections.emptySet(), builtFrom);
+        }
+        Map<String, CgPath> byName = new LinkedHashMap<>();
+        Set<String> packages = new TreeSet<>();
         for (CgPath file : files) {
             if (file == null) continue;
             SourceRoots.Located located = SourceRoots.locate(file, sourceRootsOf.apply(file.project()));
@@ -141,8 +178,9 @@ final class ProjectIndex implements ProjectSources {
             // FIRST DECLARATION WINS, matching the registry's rule for two projects. Re-deriving the map
             // means the order is the crawl's, which is stable for a given workspace.
             byName.putIfAbsent(located.qualifiedName(), file);
-            addPackageChain(located.packageName());
+            addPackageChain(packages, located.packageName());
         }
+        return new Names(byName, packages, builtFrom);
     }
 
     /**
@@ -152,7 +190,7 @@ final class ProjectIndex implements ProjectSources {
      * type up, so a project whose only file is {@code com/example/Main.java} must answer true for
      * {@code com} — which declares nothing itself — or {@code com.example.Main} never resolves at all.</p>
      */
-    private void addPackageChain(String packageName) {
+    private static void addPackageChain(Set<String> packages, String packageName) {
         if (packageName == null || packageName.isEmpty()) return;
         int at = -1;
         while (true) {
@@ -178,12 +216,6 @@ final class ProjectIndex implements ProjectSources {
         reading.clear();
     }
 
-    /** What the index currently knows, for tests and for a picker. */
-    List<String> declaredNames() {
-        ensureCurrent();
-        return new ArrayList<>(byName.keySet());
-    }
-
     // ── Answering ───────────────────────────────────────────────────────────────────────────────
 
     @Override
@@ -191,7 +223,7 @@ final class ProjectIndex implements ProjectSources {
     public String sourceOf(String qualifiedName) {
         if (qualifiedName == null) return null;
         ensureCurrent();
-        CgPath path = byName.get(qualifiedName);
+        CgPath path = names.byName.get(qualifiedName);
         if (path == null) return null;
 
         // THE BUFFER FIRST, always. Resolving against the saved file would report errors about text the
@@ -224,10 +256,29 @@ final class ProjectIndex implements ProjectSources {
     }
 
     @Override
+    public List<String> declaredTypes() {
+        ensureCurrent();
+        // The snapshot's own key set, not a copy: it is immutable once published and this is walked on
+        // every keystroke that opens a completion popup.
+        return new ArrayList<>(names.byName.keySet());
+    }
+
+    @Override
+    @Nullable
+    public String pathOf(String qualifiedName) {
+        if (qualifiedName == null) return null;
+        ensureCurrent();
+        CgPath path = names.byName.get(qualifiedName);
+        // NO READ, and no scheduling of one: this answers from the crawl alone, which is what makes
+        // go-to-definition able to name a file the editor has never opened.
+        return path == null ? null : path.toString();
+    }
+
+    @Override
     public boolean declaresPackage(String packageName) {
         if (packageName == null || packageName.isEmpty()) return false;
         ensureCurrent();
-        return packages.contains(packageName);
+        return names.packages.contains(packageName);
     }
 
     @Override
@@ -236,7 +287,7 @@ final class ProjectIndex implements ProjectSources {
         ensureCurrent();
         List<String> out = new ArrayList<>();
         String prefix = packageName.isEmpty() ? "" : packageName + ".";
-        for (String name : byName.keySet()) {
+        for (String name : names.byName.keySet()) {
             if (!name.startsWith(prefix)) continue;
             String rest = name.substring(prefix.length());
             // DIRECTLY IN, not under: `com.example.nested.Thing` is not a type in `com.example`.

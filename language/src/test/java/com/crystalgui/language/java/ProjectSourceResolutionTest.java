@@ -3,6 +3,7 @@ package com.crystalgui.language.java;
 import com.crystalgui.language.engine.bridge.SourceAnalyzer;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
+import com.crystalgui.text.lang.DeclarationSite;
 import com.crystalgui.text.lang.ProjectSources;
 import com.crystalgui.text.lang.ProjectSourcesRegistry;
 import com.crystalgui.text.lang.SymbolInfo;
@@ -45,6 +46,13 @@ public class ProjectSourceResolutionTest extends FixFixture {
         Workspace declare(String qualifiedName, String source) {
             files.put(qualifiedName, source);
             return this;
+        }
+
+        /** Where the real index would say the file is — derived, so a test cannot forget to set it. */
+        @Override
+        public String pathOf(String qualifiedName) {
+            if (!files.containsKey(qualifiedName)) return null;
+            return "proj:src/main/java/" + qualifiedName.replace('.', '/') + ".java";
         }
 
         @Override
@@ -222,5 +230,167 @@ public class ProjectSourceResolutionTest extends FixFixture {
         workspace.declare("com.example.Helper",
                 "package com.example;\npublic class Helper { public static String text() { return \"\"; } }\n");
         assertEquals("the edit in the other file was not seen", List.of(), errorsIn("Main", main));
+    }
+
+    // ── The harness's own shape ───────────────────────────────────────────
+
+    /**
+     * <b>An import of a SUB-package of the importing file's own package.</b>
+     *
+     * <p>{@code anIntermediatePackageResolves} puts the importer in {@code other}, which is unrelated to
+     * what it imports. The harness fixture does the commoner thing — {@code com.example.Main} importing
+     * {@code com.example.util.Greeter} — and that is a different question for the compiler: the prefix it
+     * is asked about is the importing unit's OWN package, which is already known and which the unit under
+     * analysis is deliberately excluded from answering for.</p>
+     */
+    @Test
+    public void anImportOfASubPackageOfMyOwnResolves() {
+        workspace().declare("com.example.util.Greeter",
+                "package com.example.util;\npublic class Greeter { public String greet() { return \"hi\"; } }\n");
+
+        String main = "package com.example;\n"
+                + "import com.example.util.Greeter;\n"
+                + "public class Main {\n"
+                + "    void go() { String s = new Greeter().greet(); }\n"
+                + "}\n";
+
+        assertEquals(List.of(), errorsIn("Main", main));
+    }
+
+    /**
+     * <b>A provider that is not ready yet must not make the PACKAGE disappear.</b>
+     *
+     * <p>The real index reads over a wire, so {@code sourceOf} answers null on the first ask and schedules
+     * a read — while {@code declaresPackage} answers immediately, because names come from paths and cost
+     * no I/O. Every stand-in above answers both instantly, so the asymmetry the real one has is untested.</p>
+     *
+     * <p>What matters is WHICH error comes out. "cannot be resolved to a type" is a file that has not
+     * arrived yet and will, and the next analysis fixes it. "The import com.example.util cannot be
+     * resolved" is the package being denied, which no later read can repair.</p>
+     */
+    @Test
+    public void aSourceThatHasNotArrivedYetStillLeavesThePackageDeclared() {
+        NotYet workspace = new NotYet();
+        ProjectSourcesRegistry.contribute(workspace);
+
+        String main = "package com.example;\n"
+                + "import com.example.util.Greeter;\n"
+                + "public class Main {\n"
+                + "    void go() { String s = new Greeter().greet(); }\n"
+                + "}\n";
+
+        List<String> first = errorsIn("Main", main);
+        for (String error : first) {
+            assertTrue("the package must stay declared even while its text is in flight, but got: "
+                    + error, !error.contains("The import com.example.util cannot be resolved"));
+        }
+
+        // ...and once the read lands, the next analysis is clean.
+        assertEquals("the arrived text did not resolve", List.of(), errorsIn("Main", main));
+    }
+
+    /** A workspace whose names are instant and whose TEXT arrives one ask late. @see ProjectIndex */
+    private static final class NotYet implements ProjectSources {
+        private boolean asked;
+
+        @Override
+        public String sourceOf(String qualifiedName) {
+            if (!"com.example.util.Greeter".equals(qualifiedName)) return null;
+            if (!asked) {
+                asked = true;
+                return null;
+            }
+            return "package com.example.util;\npublic class Greeter { public String greet() { return \"hi\"; } }\n";
+        }
+
+        @Override
+        public boolean declaresPackage(String packageName) {
+            return "com".equals(packageName)
+                    || "com.example".equals(packageName)
+                    || "com.example.util".equals(packageName);
+        }
+
+        @Override
+        public List<String> typesIn(String packageName) {
+            return Collections.emptyList();
+        }
+    }
+
+    // ── Navigation and documentation ─────────────────────────────────────────
+
+    /**
+     * <b>Ctrl+B on a project type points at the FILE, not at a library.</b>
+     *
+     * <p>Every declaration this engine produced for a symbol outside the edited unit was
+     * {@code DeclarationSite.inLibrary}, because that was the only kind there was. The workbench routes a
+     * non-project resource to the decompiler, so a type declared two files away opened a viewer on a
+     * {@code .class} that had never been compiled — <b>an empty tab</b>. Nothing failed: the site was
+     * well-formed, the routing was correct, and the answer was a truthful description of the wrong
+     * thing.</p>
+     */
+    @Test
+    public void aProjectTypeDeclaresItselfInTheWorkspace() {
+        workspace().declare("com.example.util.Greeter",
+                "package com.example.util;\n"
+                + "public class Greeter {\n"
+                + "    public String greet(String who) { return who; }\n"
+                + "}\n");
+
+        String main = "package com.example;\n"
+                + "import com.example.util.Greeter;\n"
+                + "public class Main {\n"
+                + "    void go() { String s = new Greeter().greet(\"x\"); }\n"
+                + "}\n";
+
+        try (SourceAnalyzer.Analysis analysis = analyse("Main", main, newestLevel())) {
+            SymbolInfo greet = analysis.resolveAt(main.indexOf(".greet(") + 2);
+            assertNotNull("the sibling's member did not resolve", greet);
+            DeclarationSite site = greet.declaration();
+            assertNotNull("no declaration site at all", site);
+            assertNotNull("a project type must name a resource", site.resource());
+            assertTrue("it was described as a library, so Ctrl+B opens the decompiler on a .class "
+                    + "that does not exist: " + site.resource(), site.resource().isProject());
+            assertTrue("the site names the wrong file: " + site.resource(),
+                    site.resource().toString().contains("Greeter.java"));
+            assertTrue("a project site must carry a real line, not the (0,0) a decompiled type gets",
+                    site.start().row() > 0);
+        }
+    }
+
+    /**
+     * <b>A project type's javadoc and real parameter names are quoted, like any other source.</b>
+     *
+     * <p>The same defect wearing a different hat. Documentation is read out of an <em>attached</em>
+     * source, and a workspace file was not one — so a sibling's member hovered with a signature assembled
+     * from its binding: no comment, and {@code shout(String)} with the parameter name dropped, which is
+     * exactly what a classpath class with no sources attached looks like. The file was open in the next
+     * tab.</p>
+     */
+    @Test
+    public void aProjectTypeQuotesItsJavadocAndParameterNames() {
+        workspace().declare("com.example.util.Formatter",
+                "package com.example.util;\n"
+                + "public final class Formatter {\n"
+                + "    /** Trims and shouts the given text. */\n"
+                + "    public static String shout(String text) { return text; }\n"
+                + "}\n");
+
+        String main = "package com.example;\n"
+                + "import com.example.util.Formatter;\n"
+                + "public class Main {\n"
+                + "    void go() { String s = Formatter.shout(\"x\"); }\n"
+                + "}\n";
+
+        try (SourceAnalyzer.Analysis analysis = analyse("Main", main, newestLevel())) {
+            SymbolInfo shout = analysis.resolveAt(main.indexOf(".shout(") + 2);
+            assertNotNull("the sibling's member did not resolve", shout);
+            assertNotNull("no javadoc was quoted from the project file", shout.documentation());
+            assertTrue("the quoted javadoc was " + shout.documentation(),
+                    shout.documentation().contains("shouts"));
+            assertNotNull("no signature", shout.signature());
+            assertTrue("the parameter name was dropped, which is what an unattached classpath class "
+                    + "looks like: " + shout.signature(),
+                    shout.signature().toString().contains("text"));
+        }
     }
 }

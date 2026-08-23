@@ -62,6 +62,40 @@ public interface ProjectSources {
     /** Every type declared directly in {@code packageName}, simple names only. Never null. */
     List<String> typesIn(String packageName);
 
+    /**
+     * WHERE the file declaring {@code qualifiedName} lives, as a workspace path, or null.
+     *
+     * <p>A {@link String} rather than a path type on purpose, and for the reason every crossing on this
+     * seam is written that way: the only caller is an engine, and an engine is loaded child-first over
+     * everything but the JDK, the bridge package and {@code com.crystalgui.text.*}. A path type lives in
+     * {@code com.crystalgui.fs}, so naming one here would have the band define its own copy.</p>
+     *
+     * <p>Separate from {@link #sourceOf} because they answer different questions and one is far cheaper:
+     * a name comes from the crawl and costs nothing, while text may be a round trip. Go-to-definition
+     * needs only the first.</p>
+     *
+     * <p>Defaults to null, which reads as "this provider cannot say" and costs the caller nothing but
+     * the fallback it already had — a library-shaped site.</p>
+     */
+    @Nullable
+    default String pathOf(String qualifiedName) {
+        return null;
+    }
+
+    /**
+     * Every type the workspace declares, qualified — what a "which types exist" query has to see.
+     *
+     * <p>Names only, and no I/O: they come from the crawl, so this is affordable per keystroke in a way
+     * {@link #sourceOf} is not. The caller does the matching, because what counts as a match — prefix,
+     * subsequence, camel-case — is the type index's rule and is not a fact about a workspace.</p>
+     *
+     * <p>Returned rather than filtered here for the same reason, and the list may be large; a caller that
+     * walks it per keystroke should expect thousands, not tens.</p>
+     */
+    default List<String> declaredTypes() {
+        return List.of();
+    }
+
     /** A project that declares nothing — what a host with no workspace open has. */
     ProjectSources NONE = new ProjectSources() {
         @Override

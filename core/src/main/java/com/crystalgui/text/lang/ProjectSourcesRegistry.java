@@ -73,6 +73,23 @@ public final class ProjectSourcesRegistry {
         }
 
         @Override
+        @Nullable
+        public String pathOf(String qualifiedName) {
+            if (qualifiedName == null || qualifiedName.isEmpty()) return null;
+            // FIRST ANSWER WINS, exactly as sourceOf does -- the two must agree about which project owns
+            // a name, or a hover would quote one file and Ctrl+B would open another.
+            for (ProjectSources provider : PROVIDERS) {
+                try {
+                    String path = provider.pathOf(qualifiedName);
+                    if (path != null) return path;
+                } catch (RuntimeException failed) {
+                    // as below
+                }
+            }
+            return null;
+        }
+
+        @Override
         public boolean declaresPackage(String packageName) {
             if (packageName == null) return false;
             for (ProjectSources provider : PROVIDERS) {
@@ -83,6 +100,21 @@ public final class ProjectSourcesRegistry {
                 }
             }
             return false;
+        }
+
+        @Override
+        public List<String> declaredTypes() {
+            // MERGED, like typesIn and unlike sourceOf: "what exists" wants everything, and two projects
+            // declaring different types is not the ambiguity one NAME resolving twice is.
+            Set<String> merged = new LinkedHashSet<>();
+            for (ProjectSources provider : PROVIDERS) {
+                try {
+                    merged.addAll(provider.declaredTypes());
+                } catch (RuntimeException failed) {
+                    // as below
+                }
+            }
+            return merged.isEmpty() ? List.of() : new ArrayList<>(merged);
         }
 
         @Override
