@@ -360,6 +360,117 @@ public class WindowCommandsTest extends UiTestBase {
         assertEquals("Restore is not the first row", WindowCommands.RESTORE, ids.get(0));
     }
 
+    // ── The taskbar's jump list ─────────────────────────────────────────────────────────────────
+
+    /**
+     * <b>A taskbar entry's menu is CENTRED over its entry and sits above the strip.</b>
+     *
+     * <p>{@code ContextMenu.attach} anchors at the pointer, which for a strip along the bottom of the
+     * screen puts the menu at the very edge, left-aligned from wherever the press landed and drifting
+     * further from its entry the wider it gets. Windows' jump list is centred over its button — the same
+     * rule the hover previews above these entries already follow, because an anchor that is a
+     * <em>label</em> for the thing beneath it wants centring rather than left alignment.</p>
+     */
+    @Test
+    public void aJumpListIsCentredAboveItsEntry() {
+        Button entry = window.desktop().taskbar().entryFor(first);
+        assertNotNull(entry);
+
+        SystemMenu.showJumpList(first, entry);
+        settle();
+
+        UIElement menu = openMenu();
+        assertNotNull("the jump list did not open", menu);
+        var on = entry.getRuntimeCache();
+        var box = menu.getRuntimeCache();
+        assertEquals("the jump list is not centred on its entry",
+                on.getX() + on.getWidth() / 2f, box.getX() + box.getWidth() / 2f, 1.5f);
+        assertTrue("the jump list is not above the strip", box.getY() + box.getHeight() <= on.getY() + 1f);
+    }
+
+    /**
+     * <b>...and it wears the hover preview's surface rather than a bare menu's.</b>
+     *
+     * <p>From the strip's point of view a jump list and a preview are the same object — a panel belonging
+     * to one entry, floating above it — so drawn as a plain menu it reads as a context menu that happens
+     * to be nearby. Asserted on the class, since what the class buys is a stylesheet's business.</p>
+     */
+    @Test
+    public void aJumpListWearsThePreviewSurface() {
+        Button entry = window.desktop().taskbar().entryFor(first);
+        SystemMenu.showJumpList(first, entry);
+        settle();
+
+        UIElement menu = openMenu();
+        assertNotNull(menu);
+        assertTrue("the jump list is drawn as a bare menu",
+                menu.hasClass(SystemMenu.JUMP_LIST_CLASS));
+
+        // ...and the keyboard route is NOT a jump list: it hangs under a caption, where the preview
+        // surface would be wrong.
+        SystemMenu.discardFor(first);
+        settle();
+        SystemMenu.showFor(first);
+        settle();
+        assertFalse("the caption menu took the taskbar panel's surface",
+                openMenu().hasClass(SystemMenu.JUMP_LIST_CLASS));
+    }
+
+    /**
+     * <b>An application can contribute its own rows, per window.</b>
+     *
+     * <p>Windows' jump list carries the app's own Tasks and Recent sections above the window-management
+     * rows, and this is the mechanism: {@code MenuContributor} computes rows <em>at open time</em>, so it
+     * can read the invoking context and answer for whichever window the menu was opened on. A contributed
+     * {@code Command} need not be registered anywhere, which is what lets "reopen this specific file"
+     * exist without one palette entry per file.</p>
+     *
+     * <p>Asserted with two windows and a contributor that names the window it was asked about, because a
+     * contributor that ignored the context entirely would produce identical rows for both and a
+     * single-window fixture could not tell.</p>
+     */
+    @Test
+    public void anApplicationCanContributeRowsPerWindow() {
+        registry().contributeMenu(MenuId.WINDOW_SYSTEM, (menu, context) -> {
+            WindowFrame frame = WindowCommands.frameFor(context);
+            if (frame == null) return List.of();
+            return List.of(MenuEntry.Item.of(
+                    Command.of("test.jump." + frame.getTitle(), "Reopen " + frame.getTitle())
+                            .run(() -> { }),
+                    "0_app", 10));
+        });
+
+        assertTrue("the contributor's row did not reach the first window's menu",
+                rowLabels(first).contains("Reopen First"));
+        assertTrue("the contributor answered about the wrong window",
+                rowLabels(second).contains("Reopen Second"));
+        assertFalse("a contributed row leaked between windows",
+                rowLabels(first).contains("Reopen Second"));
+
+        // ABOVE the window rows, because "0_app" sorts before "1_state" -- the app's own verbs first, as
+        // Windows puts Tasks and Recent above Pin and Close.
+        assertEquals("a contributed section did not come first",
+                "Reopen First", rowLabels(first).get(0));
+    }
+
+    /** Every row label the system menu would show for {@code frame}, in order. */
+    private List<String> rowLabels(WindowFrame frame) {
+        List<String> labels = new java.util.ArrayList<>();
+        CommandContext context = CommandContext.of(frame);
+        for (MenuSection section : registry().sections(MenuId.WINDOW_SYSTEM, context)) {
+            for (MenuEntry entry : section.entries()) {
+                if (entry instanceof MenuEntry.Item item) labels.add(item.command().getLabel());
+            }
+        }
+        return labels;
+    }
+
+    /** The open menu, or null. */
+    private UIElement openMenu() {
+        List<UIElement> menus = window.ui.rootElement.querySelectorAll("menu");
+        return menus.isEmpty() ? null : menus.get(0);
+    }
+
     private void rightClickTitleBar() {
         pressTitleBar(first.titleBar().getRuntimeCache(), CgMouseCodes.RIGHT_BUTTON);
     }

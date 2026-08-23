@@ -130,8 +130,21 @@ public final class WindowCommands {
         // NOT IN THE MENU IT OPENS. A row that reopens the menu it is in is a loop with a label on it;
         // Win32's system menu has no such entry either. It exists so the gesture is REBINDABLE and so the
         // palette can reach it, which is the whole argument for every window operation being a command.
+        // ALT+MINUS, NOT ALT+SPACE -- and this is a port rather than a workaround.
+        //
+        // Win32 has two system-menu chords, and the distinction is exactly ours: Alt+Space opens the
+        // system menu of a TOP-LEVEL window, and Alt+Hyphen opens the system menu of an MDI CHILD --
+        // a window living inside another application's frame. CrystalOS windows are MDI children in the
+        // most literal sense available: they are elements inside one UIWindow. So Alt+- is the chord
+        // that names what these actually are.
+        //
+        // It is also the only one that can work. Alt+Space belongs to the host: Windows opens the real
+        // window's system menu with it, and PowerToys Run takes it outright on a great many machines --
+        // reported here as "Alt+Space does nothing", with a screenshot of PowerToys. Same rule the
+        // switcher already records for Alt+Tab, which is the host's and always will be, and the reason
+        // a desktop metaphor inside an application cannot simply inherit the chords everybody knows.
         registry.register(Command.of(SYSTEM_MENU, "Window Menu")
-                .binding("Alt+Space")
+                .binding("Alt+Minus")
                 .run(WindowCommands::openSystemMenu)
                 .enabledWhen(context -> frameFor(context) != null));
     }

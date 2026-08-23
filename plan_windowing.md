@@ -223,7 +223,7 @@ what varies per window is focus, which `DataContext`'s walk already answers.
 | `window.fullscreen` | toggle fullscreen | `F11` |
 | `window.pin` | toggle pin, promoting to top-level if needed | — · **registered at W14, not W13** |
 | `window.move` / `window.size` | keyboard modes: arrows nudge, Enter commits, Escape cancels | via the system menu |
-| `window.systemMenu` | the system menu on the active frame | `Alt+Space` |
+| `window.systemMenu` | the system menu on the active frame | `Alt+-` — Alt+Space is the host OS's; see Open questions |
 | `toolwindow.hide` | hide the active tool window | `Shift+Escape` (IntelliJ's) |
 | `desktop.showDesktop` | toggle minimise-all | — |
 | `desktop.switchWindow` | the MRU switcher | decided at W10 — `Ctrl+Tab` is conventional and claimed by recent-files |
@@ -998,7 +998,7 @@ artifact:
 | W6 ✅ | maximise/restore filling the work area (the taskbar's row is not part of it), the glyph swapping to "restore", handles disappearing, double-click, and the restore-drag coming loose under the pointer |
 | W8–W9 | a window hosting a small dock: stripe float-out, Dock/Hide, tab tear-out into a new frame (`cgui-dock` keeps owning dock-*internal* behaviour) |
 | W10 ✅ | the switcher on its chord, MRU order visible — a grid of live thumbnails, and the Welcome window advertises the chord by **resolving** it through `Keymap.acceleratorFor` rather than spelling it |
-| W13a ✅ | right-click a title bar and a taskbar entry, and press `Alt+Space` — the same rows in three places, because they are one command set with three renderers |
+| W13a ✅ | right-click a title bar and a taskbar entry, and press `Alt+-` — the same rows in three places, because they are one command set with three renderers |
 | W13b | Alt-drag a window by its middle, `F11` to fullscreen (the strip goes too), and shove one at an edge to snap it |
 | W13c | show desktop as a toggle that remembers; click a modal-blocked window and watch it pulse and hear it ding; keyboard Move/Size from the system menu |
 | W14 | a **simulated game mode**: one key flips the scene to input-off, painting only pinned frames through the paint-only entry with `__hud__` styling live — the closest a GL harness can get to Minecraft without being it |
@@ -1071,7 +1071,7 @@ token-precedence assertion; test worktrees need the provisioning ritual.
     entry flashes until activated.
 14. A pinned window keeps rendering and updating over the running game with the cursor grabbed —
     display-only — and unpins back into the normal band from the desktop.
-15. Alt+Space opens the system menu on the active window, and Move/Size drive it from the keyboard.
+15. Alt+- opens the system menu on the active window, and Move/Size drive it from the keyboard.
 
 ---
 
@@ -1093,6 +1093,15 @@ Named so they read as decisions pending, not gaps nobody saw.
      conventional pick was free. `desktop.switchWindowBack` takes `Mod+Shift+Tab`, as a separate
      command rather than one command reading the Shift bit: a user who remapped to a chord already
      containing Shift would otherwise lose the reverse gesture with nothing to report it.
+   - **`window.systemMenu` = `Alt+-`, not `Alt+Space`. Resolved 2026-08-23 at W13a, from a report.**
+     Win32 has two system-menu chords and the distinction is exactly ours: `Alt+Space` opens a
+     **top-level** window's, `Alt+Hyphen` an **MDI child's** — a window living inside another
+     application's frame. CrystalOS windows are MDI children in the most literal sense available, so
+     `Alt+-` names what they are rather than being a fallback. It is also the only one that can work:
+     `Alt+Space` belongs to the host — Windows opens the real window's system menu with it, and
+     PowerToys Run claims it outright on a great many machines, which is how this was reported ("it
+     does nothing", with a screenshot of PowerToys). The same rule the switcher records for `Alt+Tab`,
+     and the reason a desktop metaphor inside an application cannot inherit the chords everybody knows.
    - **`window.close` = NO CHORD, menu only. Resolved 2026-08-23 at W13.** The worry that `Ctrl+W` is
      "plausibly claimed by tab close" turned out to be the wrong framing: the question is not who owns
      the chord but which gesture deserves one. Closing an editor tab is the frequent, cheap, undoable
