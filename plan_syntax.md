@@ -865,7 +865,7 @@ views, so the index — like everything else — holds readable names.
 > runs unchanged in dev and in a reobfuscated client, and `Minecraft.getMinecraft().` completes to 110
 > members in readable names on a jar that stores them obfuscated — **including `cgMixinProbe()`, a member
 > a mixin merged in that exists in no file on disk**, which is the claim this section was written for.
-> See `plan_m12.md` §26.4 and §26.13a.
+> See `plan_m12.md` §24.4 and §24.13a.
 >
 > `HostClasspath` (§15.2) is the file-based baseline this replaces on MC hosts, and its javadoc says
 > so, because a file list that looks complete is exactly how this gets forgotten.
@@ -1181,10 +1181,18 @@ user-visible value lands early.
 | **M12** ◐ | **Platform integration** — **Phases 1–3 are done and designed in [`plan_m12.md`](plan_m12.md)**; read that, not this row. `mc1710/` is in the build (`include("mc1710")`, and its jar bundles engine band 8), `CrystalEditor` opens in a real client, and everything this plan had been building against a stand-in is wired: §15.5 A's **live name environment** reading post-transform bytes from `LaunchClassLoader` — given to the **analyser as well as the compiler**, which is the half that nearly shipped missing — §15.5 C's **mapping data** (MCP `stable_12`, fetched at runtime and never redistributed; recorded in `THIRD-PARTY.md`, §22 row 11 closed), and the platform's `LanguageServices`/`ScriptHost` wiring. **All three acceptance criteria are met and verified in both a dev and a reobfuscated client**, the mixin-added member included. Two caveats are stated rather than ticked: no upstream digests exist to pin, and no first run has been done with the network genuinely unplugged. **❌ Remaining: `mc1201/`** — the same again for the modern loader, where the seam is already one `ByteSource`, one `MappingCoordinates` and one `NamespaceProbe`. *(M13's blocked half was parked here on the reasoning that §25.4 is a packaging question about the jar this milestone assembles. It turned out not to be: bundling the sources into `core.jar` puts them in the mod jar for free, because `:mc1710`'s shadowJar copies that jar entry for entry — so §25.2, §25.4 and §25.5 all landed under M13 and this row no longer holds them.)* | M7, M11 | ✅ a script written in readable names compiles, runs and links **inside a real 1.7.10 client**, against MC classes and a mixin-added member; ✅ completion never shows `func_147439_a` — 110 readable members on an obfuscated client; ✅ the same script runs unchanged in dev and prod |
 
 | **M13** ✅ | **All six sections are done.** ✅ **25.1** (parameter names off the class file, plus `-parameters`), ✅ **25.2** (`SourceHeaders` — a literal-aware scanner, because the transform runs host-side where JDT is behind the band), ✅ **25.3** (`SourceArchives.Archive` is a seam with two implementations and `discover` is the precedence rule written down), ✅ **25.4** (601 files, 1.84 MB, in `core.jar` and verified in the mod jar), ✅ **25.5** (a three-step chain: the running JVM, then **any other JDK on the machine** — the step that fires most often and was one line in a list — then a fetch, on request only) and ✅ **25.6** (the documentation body, which no engine had ever populated). **The licence decision that gated 25.5 is made and recorded**: we host nothing and the extract is derived on the user's own machine, which is not distribution — see `plan_m13.md`'s revisions and `THIRD-PARTY.md`. One caveat, stated rather than ticked: nothing in this build reaches the network, so the upstream URL's shape is taken from Adoptium's published API rather than from a request anybody has made. **Designed in detail in [`plan_m13.md`](plan_m13.md)** — read that before starting. **Documentation and names in production**, which is where every milestone above is quietly weakest: the popup is correct in a dev environment and mostly absent in a shipped one. Two halves priced completely differently. **Parameter names survive compilation** — `ArrayList.add` carries `e` and our own `core.jar` carries its names today, so a class-file reader over `MethodParameters`/`LocalVariableTable` (ASM is already an `api` dependency) needs no shipped artifact at all; `-parameters` on `core`/`platform`/`language` adds the interface methods it cannot reach. **Javadoc does not survive compilation and no attribute carries it**, so prose is ship-or-fetch: one build-time header transform (built from `quotedHeaderOf`'s cut and `isValue`'s rule, output still valid Java so `SourceArchives` is unchanged) feeding four producers — our own sources bundled as loose `.java` under `assets/`, the JDK **fetched** rather than bundled on GPL-derivation grounds, Minecraft's arriving with M12's mappings, third-party best-effort. Plus the one-line ECJ flag that makes `getJavadoc()` answer at all | M11; M12 for the loader packaging and for Minecraft's half | a **concrete** classpath method names its parameters with `src.zip` deliberately out of reach; one of our own **interface** methods does too; the transform's output quotes identically to the source it came from for a record, a sealed interface and a bounded generic; our sources resolve out of the mod jar through the same chain, with a real `-sources.jar` still winning; a javadoc body renders, including for an `@Override` with none via `{@inheritDoc}` |
+| **M15** | **The project model — source roots, a project index, and real cross-file imports (§24).** Today every project file is an ISLAND: `SourceAnalyzer.analyze(className, source, classpath, …)` takes ONE source string and resolves it against the HOST classpath, so `Main.java` cannot see `Viewer.java` and `JsImports` binds a Java type rather than another script. Nothing indexes what the project itself declares. This adds `src/main/java` + `src/main/js` source roots to `WorkspaceProject`, a project index (FQN ↔ `CgPath`) built off the crawl `knownFiles()` already does, and cross-file resolution through the seams both engines already have — ECJ's `NameEnvironmentAnswer(ICompilationUnit, …)` and Rhino's own CommonJS `ModuleSourceProvider`, both verified present. **The path becomes authoritative for a file's package**, inverting `SourcePackages`, which derives it from the source's own `package` line today — and the mismatch becomes a diagnostic rather than a silent disagreement | M6 (Java bindings), M10 (Rhino), M12 (the live name environment this extends) | `Main.java` uses a type declared in `Viewer.java` and both compile, run and resolve; renaming the file updates the declaration and every importer; an UNSAVED edit in one file is visible to the other's analysis; a `.js` script requires another and gets its exports; a package that disagrees with its directory is reported on line 1 |
 | **M14** | **Rename, and the three things that share its substrate.** The completeness contract's own failure mode, found by auditing against it: §18.4 says linked-edit mode is "shaped in the item model now and implemented with rename later — build linked-edit once, for both", and `CompletionItem.InsertTextFormat.SNIPPET` repeats the promise in code ("`$1`/`$2` tab stops arrive with rename"). **Rename appeared in no milestone row and in no §22 line**, so "later" resolved to nothing — which is exactly what the contract was written to stop. Nor is it refused: it is wanted, and two places already carry design for it. Grouped as one milestone because all four want the same missing primitive — **`Resolver` can answer `resolveAt` and knows nothing about the other direction**, so *find every reference to this binding* is a new SPI method both engines implement, and rename, find-usages and the highlight-all-occurrences that falls out of it are its consumers. Signature help is the odd one and belongs here anyway: it is `expectedTypeAt`'s sibling and reuses completion's popup substrate. **Linked edit is the widget half** and is built once for the pair, per §18.4 — `SNIPPET` implements only `$0` today, deliberately, and an unimplemented placeholder is inserted literally so it is wrong in a way somebody reports rather than one that silently swallows text | M6 (Java bindings), M9 (the popup and the item model), M10 (so JavaScript arrives with it rather than after it — `plan_m10.md`'s non-goals defer all three "ahead of Java having them", and this is Java having them) | renaming a local updates every reference in one undo step and none of a same-named field's; renaming a method reaches its overrides and its callers, and refuses when one is outside the workspace; find-usages lists the same set the rename would touch, which is the assertion that stops the two drifting; a completion item with `$1`/`$2` puts the caret through the stops in order; signature help shows the overload the arguments so far actually select |
 
-Critical path: M0 → M1 → M3, and M0/M4 → M5 → M6 → M7 → M8/M9 → M9.5 → M10 → M11 → M12 → M13 → M14. M2 is
-the early visible win and touches none of it.
+Critical path: M0 → M1 → M3, and M0/M4 → M5 → M6 → M7 → M8/M9 → M9.5 → M10 → M11 → M12 → M13 → **M15** → M14.
+M2 is the early visible win and touches none of it.
+
+> **M15 sits before M14, and that is a correction rather than a preference.** M14 is rename, find-usages
+> and linked edit; all three are *project-wide* operations, and there is no project for them to be wide
+> over. A rename that updates every reference cannot be built on a model where a file has no references
+> to anything but the classpath — renaming a type would touch exactly one file, which is not the feature.
+> M14's own row calls the missing `Resolver.findReferences` its primitive; M15 is what gives that
+> primitive somewhere to look.
 
 > **M9.5 sits before M10 for a reason that is not sequencing tidiness.** M10's exit criteria include
 > post-run completion on a live object, which means running a script and observing what it did — and
@@ -1328,3 +1336,183 @@ resolution checklist) is preserved in spirit above and in letter in git history;
 rows live on as §21.7's tests. v1's decisions that survived verification — tree-sitter (§3),
 vendored author queries (§12), the carve-out (§11.1), css-before-html (§12), module HQ +
 scheduler + lifecycle + allowlist (§5–7, §19) — are incorporated rather than re-decided.*
+
+---
+
+## 24. M15 — The project model
+
+*Research pass, 2026-08-22. Every claim marked **[verified]** was checked against this repository or
+against the pinned jars in this machine's Gradle cache during that pass; **[doc]** is JDT's published
+API documentation. Nothing here is recalled.*
+
+### 24.1 The problem, stated exactly
+
+A project file is an **island**. The whole seam is one method:
+
+```java
+Analysis analyze(String className, String source, List<String> classpath, int releaseLevel, long version);
+```
+
+**One source string, and a classpath of jars.** **[verified]** — `SourceAnalyzer`, and
+`ScriptCompiler.compile` has the same shape. So:
+
+- `Main.java` cannot reference a type declared in `Viewer.java`. There is no arrangement of imports that
+  would make it work, because the second file is never given to the compiler.
+- Nothing indexes what the **project** declares. `TypeIndex` indexes the classpath — sixty thousand
+  entries of other people's code — and the workspace crawl (`WorkspaceTreeSource.knownFiles()`)
+  indexes *paths*, not types. **[verified]**
+- A `.js` `import a.b.C;` binds a **Java type**, not another script. `JsImports` blanks the statement and
+  binds the name; there is no script-to-script mechanism at all. **[verified]**
+- There is no source-root concept anywhere in `core/` or `language/`. `WorkspaceProject` is
+  `(info, root, excludes)`. **[verified]**
+
+**This is why M14 cannot come first.** Rename, find-usages and linked edit are project-wide operations
+over a model with no project in it: renaming a type would update the one file it is declared in, which is
+not the feature anybody means by rename.
+
+### 24.2 Java — the two routes, and why they behave differently
+
+`EcjSourceAnalyzer.analyze` has **two** paths and picks between them at run time **[verified]**:
+
+| | How it resolves | Used by |
+|---|---|---|
+| `live(…)` | our own `INameEnvironment` — `ScriptNameEnvironment(FileSystem, TypeBytes)` driven through `Compiler` | a host with a platform registered (Minecraft) |
+| `parse(…)` | JDT's `ASTParser` | the harness, every test, a plain JVM |
+
+Both can be taught about project sources, and **they are taught differently — which is the single
+biggest hazard in this milestone.**
+
+**The `ASTParser` route already has the slot, empty:**
+
+```java
+parser.setEnvironment(entries, new String[0], new String[0], true);
+//                             ^^^^^^^^^^^^^^ sourcepathEntries
+```
+
+**[verified]** — that second argument is JDT's **sourcepath**, and **[doc]** *"all paths containing
+source types must be included in the sourcepathEntries"*. Passing the project's source roots there makes
+cross-file resolution work with a one-line change.
+
+**But [doc] is equally clear that there is *no way to supply additional compilation units as in-memory
+char arrays* in this mode.** `createASTs` takes file paths; `setSource(char[])` applies to the one unit
+being parsed. So on this route, other project files resolve **from disk only** — an unsaved edit in
+`Viewer.java` is invisible to `Main.java`'s analysis.
+
+**The `live` route has no such limit.** ECJ's answer type carries a source constructor:
+
+```java
+NameEnvironmentAnswer(ICompilationUnit, AccessRestriction)
+```
+
+**[verified]** on band 8's `jdt.core:3.26.0` *and* on band 17 — see §24.5 for where it lives there. And
+`ICompilationUnit` demands almost nothing: `getContents()`, `getMainTypeName()`, `getPackageName()`, plus
+`getFileName()` from `IDependent`; everything else is a default method **[verified]**. That is
+implementable directly over a live editor buffer.
+
+> **Decision: make the `live` route the only route for a project with source roots.** Today `live()`
+> returns null when no platform is registered, so the harness and every test take `ASTParser`. Leaving the
+> split in place would mean the harness resolves saved text and a Minecraft client resolves live text —
+> the two environments disagreeing about what the code *says*, which is precisely the shape of bug this
+> plan has paid for repeatedly (§15.5 A's inert name environment; the `getDeclaredMethods()` empty array).
+> `ScriptNameEnvironment` already delegates to ECJ's `FileSystem` for the classpath half and only
+> *overlays* live bytes, so a platform-less host is a `TypeBytes.NONE` overlay over the same file system —
+> the pieces are already shaped for it. **The risk is coverage**: the code comment records `ASTParser` as
+> "the route with the coverage", so this is a migration with a test burden, not a flag flip.
+
+### 24.3 JavaScript — Rhino already ships a module system
+
+**Rhino has never implemented ES modules, in any version we ship. [verified]** Both pinned jars contain
+**zero** AST node classes for import/export declarations, and `import`/`export` exist only as reserved-word
+tokens. They are also **renumbered between bands** — `EXPORT` is `114` on 1.7.15.1 and `125` on 1.9.1,
+`IMPORT` `115` and `126` — which is another instance of the `Token`-constant trap AGENTS already records:
+never compare a `Token.*` constant against a node type.
+
+What Rhino *does* ship, in **both** bands, is **CommonJS**: twenty classes under
+`org.mozilla.javascript.commonjs.module`, including `Require`, `RequireBuilder`, `ModuleScriptProvider`,
+`SoftCachingModuleScriptProvider` and the `ModuleSourceProvider` SPI. **[verified]**
+
+And — unusually for this codebase — **every one of those APIs is byte-identical across the two bands**,
+checked class by class with `javap`. **[verified]** No divergence to design around, which is the opposite
+of the situation `ObjectProperty.getLeft()`, `CatchClause.getVarName()` and the `NativeJavaObject`
+constructor each created.
+
+The SPI is exactly the shape needed:
+
+```java
+ModuleSource loadSource(String moduleId, Scriptable paths, Object validator);
+ModuleSource(Reader, Object securityDomain, URI uri, URI base, Object validator);
+RequireBuilder.setSandboxed(boolean).setModuleScriptProvider(…).createRequire(cx, scope);
+```
+
+A `ModuleSource` is built from a **`Reader`** — so a project script can be served straight from its live
+buffer, with no file on disk. `setSandboxed(true)` is the hook `ScriptPolicy` belongs behind.
+
+> **We still write our own import syntax, and that is the user's call and the right one.** `require()` is
+> the *runtime*; the authored form stays `import ./Other.js`-shaped and is blanked exactly as `JsImports`
+> blanks a Java import today — same length, no offset moves, which is the rule both languages already
+> share. Rhino's module machinery is what the blanked statement *binds to*, not what the author types.
+
+**The hard half is the editor, not the runtime.** `require()` returns whatever a script assigned to
+`exports`, which is a dynamic value. Static resolution of another script's exports is a genuine analysis
+problem, and §24.6 lists it as the largest unknown here.
+
+### 24.4 How a project source reaches the engine — the bridge constraint
+
+`ScriptNameEnvironment` is **child-side**: it imports `org.eclipse.jdt`, so the band loader defines it. The
+rule AGENTS states, and which §15.5 A already broke once, is that such a class may name **only JDK types,
+the bridge package and `com.crystalgui.text.*`** — anything else under `com.crystalgui.language.*` is
+silently redefined inside the band, and a static registry read there is a *different* registry.
+
+So the project-source lookup crosses as a **bridge interface over JDK types**, exactly as `TypeBytes` does
+(`byte[] readable(String)` / `byte[] synthesized(String)`) **[verified]**. Something of the shape:
+
+```java
+public interface ProjectSources {
+    ProjectSources NONE = …;
+    String sourceOf(String binaryName);   // live buffer first, then disk, then null
+    String[] typesIn(String packageName); // for completion and for `isPackage`
+}
+```
+
+**`isPackage` needs the same inversion §15.5 already documents**: ECJ asks about every segment of a
+qualified name *before* it looks the type up, so a project package with no types indexed yet must not
+answer "no".
+
+### 24.5 Two structural facts found while checking, worth recording
+
+**The ECJ compiler internals live in different artifacts per band.** `NameEnvironmentAnswer` is in
+`org.eclipse.jdt.core:3.26.0` on band 8, and is **absent from `jdt.core:3.46.0`** on band 17 — it moved to
+the separate `org.eclipse.jdt:ecj` artifact, which band 17 gets transitively (`engineBand17` pins
+`jdt.core` *without* `isTransitive = false`, unlike the compile-side pin). **[verified]** Nothing is broken
+today, but M15 leans harder on those internals than anything so far, and the `checkEngineBands` floor
+should know the class is expected from a different coordinate per band.
+
+**`SourcePackages` derives a file's package from the source's own `package` line, not from its path.**
+**[verified]** — `declaredPackage`, `unitPath`, `binaryName`. M15 inverts that: with a source root, the
+**path is authoritative**, and a `package` line that disagrees becomes a diagnostic on line 1 (which is
+what every IDE does, and is a feature rather than a cost). The existing behaviour is not wrong — it is
+correct for a *rootless* scratch file, which is what the harness scratch project is today, so both models
+have to coexist: root-relative where a root contains the file, declaration-derived where none does.
+
+### 24.6 The unknowns, ranked
+
+1. **Static resolution of `require()`.** Runtime is solved; the editor half is not. Options are to resolve
+   only the statically-analysable form (a literal module id at the top level, which is the form our own
+   syntax will emit anyway), or to fall back to the live scope as `JsCompletionProvider` already does for
+   untypable receivers. **The trap is already documented**: that fallback once fired for every statically
+   typed receiver in the file and produced a plausible wrong list rather than a visible failure.
+2. **Cost per keystroke.** Analysis currently reads one file; after this it reads the transitive closure.
+   ECJ caches inside one `Compiler` run, but the run is per keystroke. §7.3's budget is the constraint and
+   the answer is probably a shared, invalidated-by-version unit cache rather than a fresh environment per
+   analysis — which cuts against the *"a fresh environment per analysis, like a compile"* rule
+   `EcjSourceAnalyzer` currently states, and that rule exists because a transformer can add a member
+   between keystrokes. Reconciling those two is real design work, not a detail.
+3. **Migrating the harness and tests off `ASTParser`** (§24.2). The coverage lives on that route.
+4. **Running a multi-file script.** `ScriptCompiler.Result` already returns `Map<String, byte[]>` and ECJ
+   emits every type it compiled **[verified]**, so the closure may come back for free — but
+   `ScriptClassLoader` and the compiled-script cache key `(source hash, mappings hash, band)` both assume
+   one file. A cache keyed on one file's hash is **wrong** the moment that file depends on another.
+5. **Where the index lives.** It is about project files, which `core/` owns, so it belongs core-side with
+   `language/` reading it through a seam — the `TypeSearch`/`TypeSearchRegistry` shape, which now has a
+   working precedent. It must be invalidated by `WorkspaceWatcher` **[verified: `Change(path, kind, etag)`
+   with `isDeleted()`]** and must prefer an open buffer over disk.
