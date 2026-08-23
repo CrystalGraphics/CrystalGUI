@@ -4,6 +4,8 @@ import com.crystalgui.language.js.rhino.JsImports;
 import com.crystalgui.language.js.rhino.JsLoaders;
 import com.crystalgui.text.lang.ProjectSourcesRegistry;
 
+import javax.annotation.Nullable;
+
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
@@ -90,7 +92,16 @@ final class JsModules {
                 ScriptableObject.putProperty(scope, each.getKey(), module);
                 continue;
             }
+            // THE CLASSPATH, THEN THE WORKSPACE'S OWN JAVA. A project `.java` file is not on any
+            // classpath -- it is a source nobody has compiled -- so `JsLoaders` cannot see it, and before
+            // this the name simply did not bind while the EDITOR resolved it perfectly through the Java
+            // engine's project tier. A popup offering what the run refuses is the one failure §19.1 calls
+            // worse than either restriction alone.
+            //
+            // Compiled by the Java host rather than here: the mapping pass, safepoints, the sandbox scan
+            // and the loader all live there already. @see com.crystalgui.language.java.JavaLanguage#projectClass
             Class<?> found = JsLoaders.load(qualifiedName);
+            if (found == null) found = projectClass(qualifiedName);
             if (found == null) continue;
             ScriptableObject.putProperty(scope, each.getKey(),
                     RhinoExecutor.wrapForScript(cx, scope, found));
@@ -119,6 +130,27 @@ final class JsModules {
             ScriptableObject.putProperty(exports, name, ScriptableObject.getProperty(own, name));
         }
     }
+
+    /**
+     * A project Java type, compiled once per run and remembered.
+     *
+     * <p>Remembered because a compile is not free and three scripts importing one type in a single run
+     * should pay for it once — the same reason {@link #loaded} exists for modules, and with the same
+     * lifetime: a run. Anything longer would pin a class compiled from text the author has since edited,
+     * which is the trap {@code ScriptCacheKey} needed a dependency component to escape.</p>
+     */
+    @Nullable
+    private Class<?> projectClass(String qualifiedName) {
+        if (javaTypes.containsKey(qualifiedName)) return javaTypes.get(qualifiedName);
+        java.util.function.Function<String, Class<?>> loader = RhinoExecutor.projectClasses();
+        Class<?> found = loader == null ? null : loader.apply(qualifiedName);
+        // A MISS IS REMEMBERED TOO. Asking again costs a compile that already failed, per import, per run.
+        javaTypes.put(qualifiedName, found);
+        return found;
+    }
+
+    /** Project Java types reached this run, hits and misses alike. @see #projectClass */
+    private final Map<String, Class<?>> javaTypes = new HashMap<>();
 
     /**
      * What the project script {@code qualifiedName} exports, or null when the workspace has no such file.

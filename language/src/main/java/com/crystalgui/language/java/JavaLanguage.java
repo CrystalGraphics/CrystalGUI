@@ -169,18 +169,55 @@ public final class JavaLanguage {
         //
         // Inside the lambda because a provider is invoked when a workbench opens, which is later than
         // registration -- and later is what gives a first launch's background fetch time to land.
-        ScriptRuntimes.contribute(Language.JAVA, cacheRoot -> {
-            JavaEngine ready = engine();
-            if (ready == null) return null;
-            MappingSet mappings = PlatformMappings.current();
-            return new ScriptHost(ready,
-                    cacheRoot == null ? ScriptCache.inMemory() : ScriptCache.directory(cacheRoot),
-                    mappings, mappings.isIdentity() ? "identity" : "mapped",
-                    JavaLanguage.class.getClassLoader(), classpath);
-        });
+        ScriptRuntimes.contribute(Language.JAVA, cacheRoot -> hostWith(cacheRoot, classpath));
         return engine != null;
     }
 
+
+    /**
+     * A host over this engine — the one place a {@link ScriptHost} is built.
+     *
+     * <p>Two callers want one: the Run panel, per workbench, and {@link #projectClass}, once. Building it
+     * twice would be two chances to get the MAPPINGS wrong, and that is the parameter whose mistake is
+     * invisible in a dev launch and fatal in production.</p>
+     */
+    @Nullable
+    private static ScriptHost hostWith(@Nullable java.nio.file.Path cacheRoot, List<String> classpath) {
+        JavaEngine ready = engine();
+        if (ready == null) return null;
+        MappingSet mappings = PlatformMappings.current();
+        return new ScriptHost(ready,
+                cacheRoot == null ? ScriptCache.inMemory() : ScriptCache.directory(cacheRoot),
+                mappings, mappings.isIdentity() ? "identity" : "mapped",
+                JavaLanguage.class.getClassLoader(), classpath);
+    }
+
+    /** Built on first use, and shared: one compiled-script cache for every language that asks. */
+    private static ScriptHost interopHost;
+
+    /**
+     * A project Java type, compiled and defined — what a JavaScript {@code import} of one resolves to.
+     *
+     * <h3>The hook, and the reason it points this way</h3>
+     *
+     * <p>A JavaScript script can already import another script and a classpath class. The one thing it
+     * could not reach was a Java file in the same workspace — and the editor resolved it perfectly,
+     * because {@code InteropResolver} asks the Java engine, which has had the project tier since M15 S4.
+     * So the popup offered a name the run then refused, which §19.1 calls out as worse than either
+     * restriction alone.</p>
+     *
+     * <p>Everything needed already lives on {@link ScriptHost}: the compiler with the project tier, the
+     * mapping pass, safepoint injection, the sandbox scan and the loader. This is the seam that lets the
+     * other engine <em>use</em> it rather than assemble a second one, which is what would have drifted.</p>
+     *
+     * <p>Null for a name the workspace does not declare, or one that will not compile. The caller has
+     * another tier to try, and a compile error belongs to the file that has it.</p>
+     */
+    @Nullable
+    public static synchronized Class<?> projectClass(String qualifiedName) {
+        if (interopHost == null) interopHost = hostWith(null, HostClasspath.detect());
+        return interopHost == null ? null : interopHost.classOf(qualifiedName);
+    }
 
     /**
      * <b>One throwaway analysis, on a daemon thread, so the first real one is not the first one.</b>

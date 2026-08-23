@@ -453,6 +453,27 @@ public final class ScriptHost implements ScriptRuntime {
     }
 
     private Running prepare(Compiled compiled, Map<String, Object> bindings) throws Throwable {
+        ScriptClassLoader loader = loaderFor(compiled);
+        // THE BINARY NAME, which for a file declaring a package is not the file stem. Asking for
+        // the stem compiles fine and then throws ClassNotFoundException for a class that is
+        // plainly in the output -- see ScriptPrelude.Wrapped.binaryName.
+        Class<?> type = Class.forName(compiled.wrapped().binaryName(), true, loader);
+        return entryPointOf(type, loader, bindings, compiled.ref());
+    }
+
+    /**
+     * Everything between a compilation and a loader that can define it — remap, safepoints, sandbox.
+     *
+     * <h3>Its own method because it has a second caller, and must never grow a second implementation</h3>
+     *
+     * <p>A JavaScript script importing a project Java type needs exactly this and nothing else: the same
+     * mapping pass, so a Minecraft reference the author wrote in readable names still links; the same
+     * safepoint injection, so Stop reaches it; the same policy scan and the same loader gate. A parallel
+     * path on the JavaScript side would be four things to keep in step, and each of them is silent when
+     * it drifts — an unmapped class fails at link time in production only, and an uninstrumented one is
+     * simply unstoppable. @see #classOf</p>
+     */
+    private ScriptClassLoader loaderFor(Compiled compiled) throws Throwable {
         if (!compiled.successful()) {
             throw new IllegalStateException("cannot run a script that did not compile: "
                     + compiled.messages());
@@ -492,13 +513,48 @@ public final class ScriptHost implements ScriptRuntime {
         }
 
         // AND AGAIN AT THE LOADER, for the names the scan cannot see. @see ScriptClassLoader#loadClass
-        ScriptClassLoader loader = new ScriptClassLoader(instrumented, hostLoader,
+        return new ScriptClassLoader(instrumented, hostLoader,
                 current.allowsEverything() ? null : current::allowsClass);
-        // THE BINARY NAME, which for a file declaring a package is not the file stem. Asking for
-        // the stem compiles fine and then throws ClassNotFoundException for a class that is
-        // plainly in the output -- see ScriptPrelude.Wrapped.binaryName.
-        Class<?> type = Class.forName(compiled.wrapped().binaryName(), true, loader);
-        return entryPointOf(type, loader, bindings, compiled.ref());
+    }
+
+    /**
+     * A project Java type, compiled and defined — what a JavaScript {@code import} of one resolves to.
+     *
+     * <h3>Why this is here rather than on the JavaScript side</h3>
+     *
+     * <p>Everything it needs already exists here and nowhere else: the compiler with the project tier
+     * behind it (M15 S4), the mapping pass, safepoint injection, the sandbox scan and the loader. The
+     * JavaScript executor hooks into this rather than assembling its own, because four of those five are
+     * silent when they drift — an unmapped class links fine in a dev launch and dies in production, and an
+     * uninstrumented one simply cannot be stopped.</p>
+     *
+     * <p>Null rather than an exception for a name the workspace does not declare or cannot compile: the
+     * caller has another tier to try (the classpath), and a compile error belongs to the file that has it,
+     * which reports it in its own editor. What the caller must not do is invent a binding.</p>
+     *
+     * <p>The source is read with {@link com.crystalgui.text.lang.ProjectSources#awaitSourceOf}, so a file
+     * nobody has open is waited for rather than missed — a run happens once, and "not yet" there is a
+     * failure rather than a deferral.</p>
+     */
+    @Nullable
+    public Class<?> classOf(String qualifiedName) {
+        if (qualifiedName == null || qualifiedName.isEmpty()) return null;
+        String source = com.crystalgui.text.lang.ProjectSourcesRegistry.view()
+                .awaitSourceOf(qualifiedName);
+        if (source == null) return null;
+        try {
+            // THROUGH THE ORDINARY COMPILE, cache and all: a project type used by three scripts is
+            // compiled once, and editing it invalidates that entry exactly as it does for a script that
+            // imports it. @see ScriptCacheKey
+            Compiled compiled = compileSource(qualifiedName, source, Map.of());
+            if (!compiled.successful()) return null;
+            return Class.forName(qualifiedName, true, loaderFor(compiled));
+        } catch (Throwable unavailable) {
+            // INCLUDING A REFUSAL. `loaderFor` throws when the policy refuses something the class
+            // reaches, and that is an answer rather than a fault: the name does not bind, and the script
+            // fails on it if it uses it -- which is what every other refused import already does.
+            return null;
+        }
     }
 
     /**

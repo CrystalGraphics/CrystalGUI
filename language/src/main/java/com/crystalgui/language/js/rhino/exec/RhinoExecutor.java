@@ -7,6 +7,8 @@ import com.crystalgui.language.engine.bridge.MemberNameMapper;
 import com.crystalgui.language.js.rhino.JsImports;
 import com.crystalgui.language.js.rhino.JsLoaders;
 import com.crystalgui.language.js.rhino.RhinoThread;
+import javax.annotation.Nullable;
+
 import org.mozilla.javascript.BaseFunction;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.ContextFactory;
@@ -306,6 +308,32 @@ public final class RhinoExecutor implements JsExecutor {
      */
     static Object wrapForScript(Context cx, Scriptable scope, Object value) {
         return wrap(cx, scope, value);
+    }
+
+    /**
+     * How a project JAVA type is reached — lent by the host, never built here.
+     *
+     * <p>A {@code Function<String, Class<?>>} and nothing richer, because this class is loaded by the
+     * ENGINE BAND: it may name JDK types, the bridge package and {@code com.crystalgui.text.*}, and a
+     * {@code ScriptHost} is none of those. The same rule {@code TypeBytes} follows, and the same one
+     * {@code MemberNameMapper} states for its mapping set — compose host-side, cross with JDK types.</p>
+     *
+     * <p>Null until a host lends one, which is every environment with no Java engine open. Such a host
+     * keeps exactly the behaviour it had: a Java name in an import resolves against the classpath or not
+     * at all.</p>
+     */
+    private static volatile java.util.function.Function<String, Class<?>> projectClasses;
+
+    /** @see #projectClasses */
+    @Override
+    public void useProjectClasses(java.util.function.Function<String, Class<?>> loader) {
+        projectClasses = loader;
+    }
+
+    /** The lent loader, or null. @see #projectClasses */
+    @Nullable
+    static java.util.function.Function<String, Class<?>> projectClasses() {
+        return projectClasses;
     }
 
     private static Object wrap(Context cx, Scriptable scope, Object value) {
