@@ -10,6 +10,7 @@ import org.junit.Test;
 
 import java.util.List;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -148,5 +149,74 @@ public class ProjectTypeIndexTest {
             assertFalse("a project name appeared with no provider registered: " + name,
                     name.startsWith("com.example."));
         }
+    }
+
+    // \u2500\u2500 The other three queries \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
+    /**
+     * <b>An {@code import} line offers a package the WORKSPACE declares.</b>
+     *
+     * <p>{@code matching} was taught about the workspace when the index was; the three queries beside it
+     * were not, and each is what some editor affordance reads. This one backs Java's import line: typing
+     * {@code import com.} listed {@code sun} \u2014 from the JDK \u2014 and not {@code example}, in a project whose
+     * own package is {@code com.example}.</p>
+     *
+     * <p>Asserted on {@code com}, which the classpath also populates, because a package the workspace
+     * SHARES with a jar is the case that a naive union gets wrong twice over: dropped, or listed twice.</p>
+     */
+    @Test
+    public void anImportLineOffersAProjectPackage() {
+        ProjectSourcesRegistry.contribute(new Declaring(FORMATTER));
+
+        TypeIndex.Children children = index().childrenOf("com", "");
+
+        assertTrue("the workspace's own package was not offered: " + children.packages(),
+                children.packages().contains("example"));
+        assertEquals("one package, however many roots contribute to it",
+                1, children.packages().stream().filter("example"::equals).count());
+    }
+
+    /** <b>...and the type itself, once the package is complete.</b> */
+    @Test
+    public void anImportLineOffersAProjectTypeInItsOwnPackage() {
+        ProjectSourcesRegistry.contribute(new Declaring(FORMATTER));
+
+        TypeIndex.Children children = index().childrenOf("com.example.util", "");
+
+        List<String> names = children.types().stream().map(TypeIndex.Entry::simpleName).toList();
+        assertTrue("the workspace's own type was not offered: " + names, names.contains("Formatter"));
+    }
+
+    /**
+     * <b>{@code allUnder} sees it too \u2014 which is what JavaScript's import line reads.</b>
+     *
+     * <p>The two languages ask different questions of the same index: Java asks {@code childrenOf} and
+     * takes the packages it returns, JavaScript asks {@code allUnder} and derives the next segment itself.
+     * Fixing one would have left the other exactly as broken, in the language the report came from.</p>
+     */
+    @Test
+    public void everythingUnderAPrefixIncludesTheWorkspace() {
+        ProjectSourcesRegistry.contribute(new Declaring(FORMATTER));
+
+        List<String> names = namesIn(index().allUnder("com."));
+
+        assertTrue("the workspace's own type was not under its own prefix: " + names.size(),
+                names.contains(FORMATTER));
+    }
+
+    /**
+     * <b>And "did you mean" suggests the author's own type before a jar's.</b>
+     *
+     * <p>The quietest of the three: an unresolvable name in the file next door suggested
+     * {@code java.util.Formatter} and never the {@code Formatter} the workspace declares.</p>
+     */
+    @Test
+    public void didYouMeanSuggestsAProjectTypeFirst() {
+        ProjectSourcesRegistry.contribute(new Declaring(FORMATTER));
+
+        List<String> similar = index().similar("Formater");
+
+        assertTrue("the workspace's own type was not suggested: " + similar, similar.contains(FORMATTER));
+        assertEquals("a jar's type outranked the author's own", FORMATTER, similar.get(0));
     }
 }

@@ -258,6 +258,14 @@ public final class TypeIndex {
         ensureBuilt();
         List<Entry> under = new ArrayList<>();
         boolean truncated = false;
+        // THE WORKSPACE FIRST, and first for two reasons. A project file outranks a jar publishing the
+        // same name -- the ordering the whole stack uses -- and, more practically, it must never be the
+        // thing the cap drops: `net.minecraft` alone holds ~4,300 classes, so a workspace type walked
+        // second would be truncated away by a package it has nothing to do with. @see #projectEntries
+        for (Entry entry : projectEntries()) {
+            if (!startsUnder(entry.packageName(), qualifiedPrefix)) continue;
+            under.add(entry);
+        }
         for (Entry entry : entries) {
             // THE PACKAGE, NOT THE QUALIFIED NAME. `entry.packageName()` is shared between every entry of
             // one package, so this is a prefix test on an interned string rather than a concatenation per
@@ -308,12 +316,38 @@ public final class TypeIndex {
         String prefix = parent.isEmpty() ? "" : parent + ".";
 
         // SORTED AND DEDUPED. A package is a segment shared by everything in it, so the same name arrives
-        // once per class -- thousands of times for `net.minecraft.block`.
+        // once per class -- thousands of times for `net.minecraft.block`. A segment the workspace and a
+        // jar both declare lands here once, which is right: `com` is one package however many roots
+        // contribute to it.
         java.util.TreeSet<String> packages = new java.util.TreeSet<>();
         List<Entry> types = new ArrayList<>();
-        boolean truncated = false;
 
-        for (Entry entry : entries) {
+        // THE WORKSPACE FIRST -- see the note in `allUnder` for why the order is load-bearing.
+        boolean truncated = collectChildren(projectEntries(), parent, partial, prefix, packages, types);
+        truncated |= collectChildren(entries, parent, partial, prefix, packages, types);
+
+        List<String> named = new ArrayList<>(packages);
+        if (named.size() > MAX_PACKAGES) {
+            named = new ArrayList<>(named.subList(0, MAX_PACKAGES));
+            truncated = true;
+        }
+        return new Children(named, types, truncated);
+    }
+
+    /**
+     * One source's contribution to {@link #childrenOf} — its own types, and the next segment of its
+     * sub-packages.
+     *
+     * <p>Its own method because there are two sources and the body is twenty lines: a second transcription
+     * of it would be a second place for the dot-boundary arithmetic to be wrong, and the two would agree
+     * for as long as nobody edited one of them.</p>
+     *
+     * @return whether the type cap was reached; the caller ORs it across sources
+     */
+    private static boolean collectChildren(Iterable<Entry> from, String parent, String partial,
+                                           String prefix, Set<String> packages, List<Entry> types) {
+        boolean truncated = false;
+        for (Entry entry : from) {
             String owner = entry.packageName();
             if (owner.equals(parent)) {
                 if (!startsWith(entry.simpleName(), partial)) continue;
@@ -332,13 +366,7 @@ public final class TypeIndex {
             String segment = dot < 0 ? remainder : remainder.substring(0, dot);
             if (startsWith(segment, partial)) packages.add(segment);
         }
-
-        List<String> named = new ArrayList<>(packages);
-        if (named.size() > MAX_PACKAGES) {
-            named = new ArrayList<>(named.subList(0, MAX_PACKAGES));
-            truncated = true;
-        }
-        return new Children(named, types, truncated);
+        return truncated;
     }
 
     /** Case-insensitive, because a completion list is matched the way names are typed rather than spelt. */
@@ -478,13 +506,21 @@ public final class TypeIndex {
     public List<String> similar(String simpleName) {
         if (simpleName == null || simpleName.isEmpty()) return List.of();
         ensureBuilt();
+        // HOISTED, because both passes below need it and it is derived per call. @see #projectEntries
+        List<Entry> project = projectEntries();
         Set<String> simple = new LinkedHashSet<>();
+        for (Entry entry : project) simple.add(entry.simpleName());
         for (Entry entry : entries) simple.add(entry.simpleName());
         List<String> rankedSimple = SimilarNames.rank(simpleName, simple);
         if (rankedSimple.isEmpty()) return List.of();
 
         List<String> qualified = new ArrayList<>();
         for (String candidate : rankedSimple) {
+            // THE WORKSPACE FIRST, so a misspelling of the author's own type suggests their file rather
+            // than a jar that happens to share the name.
+            for (Entry entry : project) {
+                if (entry.simpleName().equals(candidate)) qualified.add(entry.qualifiedName());
+            }
             for (Entry entry : entries) {
                 if (entry.simpleName().equals(candidate)) qualified.add(entry.qualifiedName());
             }

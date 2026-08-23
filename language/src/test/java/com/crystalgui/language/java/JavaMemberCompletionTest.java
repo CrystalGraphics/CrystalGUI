@@ -1,5 +1,7 @@
 package com.crystalgui.language.java;
 
+import com.crystalgui.text.lang.ProjectSourcesRegistry;
+import com.crystalgui.text.lang.ProjectSources;
 import com.crystalgui.language.engine.EngineBand;
 import com.crystalgui.language.engine.EngineSource;
 import com.crystalgui.language.engine.JavaEngine;
@@ -743,5 +745,45 @@ public class JavaMemberCompletionTest {
         assertFalse("a call receiver in a snippet offered nothing at all", labels.isEmpty());
         assertTrue("ArrayList's members are missing from " + labels.size() + " rows: " + labels,
                 labels.toString().contains("size"));
+    }
+
+    /**
+     * <b>An {@code import} line offers a package the workspace declares \u2014 through the PROVIDER.</b>
+     *
+     * <p>The index-level test beside this one asserts the same thing one layer down, and that layer is not
+     * enough on its own: the provider reads {@code childrenOf} and then decides what to do with the
+     * packages and types it returns, and twice in this milestone an index-level assertion has passed while
+     * the editor path did something else. This is the shape that was reported \u2014 {@code import com.} in a
+     * project whose own package is {@code com.example}, offering only the JDK's {@code com.sun}.</p>
+     */
+    @Test
+    public void anImportLineOffersAProjectPackage() {
+        ProjectSourcesRegistry.contribute(new ProjectSources() {
+            @Override
+            public String sourceOf(String qualifiedName) {
+                return null;
+            }
+
+            @Override
+            public boolean declaresPackage(String packageName) {
+                return false;
+            }
+
+            @Override
+            public List<String> declaredTypes() {
+                return List.of("com.example.Main");
+            }
+        });
+        try {
+            String source = "import com.";
+            List<String> offered = new ArrayList<>();
+            for (CompletionItem item : completeAt(source, source.length(), "", true)) {
+                offered.add(item.filterKey());
+            }
+            assertTrue("the workspace's own package was not offered: " + offered,
+                    offered.contains("example"));
+        } finally {
+            ProjectSourcesRegistry.resetForTesting();
+        }
     }
 }

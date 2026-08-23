@@ -574,4 +574,22 @@ public class JsProjectResolutionTest {
         assertTrue("an unsaved edit to a project Java file did not reach the popup: " + offered,
                 offered.contains("two"));
     }
+
+    /**
+     * <b>...and the same {@code import} line in JavaScript.</b>
+     *
+     * <p>Not the same code path: Java asks the index {@code childrenOf} and takes the packages it returns,
+     * JavaScript asks {@code allUnder} and derives the next segment itself. One omission, two queries \u2014
+     * so fixing either alone leaves the other exactly as broken.</p>
+     */
+    @Test
+    public void anImportLineOffersAProjectPackage() {
+        workspace.edit("com.example.Main",
+                "package com.example;\npublic class Main { }\n", ".java");
+
+        List<String> offered = names(completeAt("import com.|\n"));
+
+        assertTrue("the workspace's own package was not offered: " + offered,
+                offered.contains("example"));
+    }
 }
