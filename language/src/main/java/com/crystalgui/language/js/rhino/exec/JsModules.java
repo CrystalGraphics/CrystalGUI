@@ -98,6 +98,29 @@ final class JsModules {
     }
 
     /**
+     * Copies a module's own top-level names onto its exports object.
+     *
+     * <p>A {@code var} or a {@code function} at the top of a module lands on the module scope itself, so
+     * "what did this file declare" is exactly that object's own ids. {@code exports} and {@code module}
+     * are skipped for the obvious reason, and the scope's PROTOTYPE is not walked — that is the run's own
+     * scope, and copying it would export the standard library.</p>
+     */
+    private static void copyTopLevelNames(Scriptable moduleScope, Scriptable exports,
+                                          java.util.Set<String> imported) {
+        if (!(moduleScope instanceof ScriptableObject own)) return;
+        for (Object id : own.getIds()) {
+            if (!(id instanceof String name)) continue;
+            if ("exports".equals(name) || "module".equals(name)) continue;
+            // AND NEVER AN IMPORT. A binding this module was handed sits on its scope exactly as its own
+            // declarations do, so copying the scope wholesale re-exported every name the file imported --
+            // `Branch.Leaf` resolved to the module Branch merely uses. An import is a name brought IN;
+            // exporting it again is a different statement that nobody wrote.
+            if (imported.contains(name)) continue;
+            ScriptableObject.putProperty(exports, name, ScriptableObject.getProperty(own, name));
+        }
+    }
+
+    /**
      * What the project script {@code qualifiedName} exports, or null when the workspace has no such file.
      *
      * <p>Null rather than an exception, because "the workspace does not declare this" is how the caller
@@ -165,6 +188,18 @@ final class JsModules {
         // the original object back would hand the importer an empty one.
         Object finished = ScriptableObject.getProperty(module, "exports");
         Scriptable result = finished instanceof Scriptable ? (Scriptable) finished : exports;
+
+        // NOTHING WAS EXPORTED EXPLICITLY, so the module's own top-level names are what it exports.
+        //
+        // The default, and the reason is the same one that made the import statement ours rather than
+        // ES's: an author writing `import util.Greeter;` should not then have to write Node's
+        // `exports.greet = ...` on the other side. A module that DOES assign to `exports` is taken at its
+        // word instead -- which is the only way to keep a helper private, since with nothing else to go
+        // on "top-level" and "exported" are the same set.
+        if (result == exports && ScriptableObject.getPropertyIds(exports).length == 0) {
+            copyTopLevelNames(moduleScope, exports, scanned.imported().keySet());
+        }
+
         loaded.put(qualifiedName, result);
         return result;
     }

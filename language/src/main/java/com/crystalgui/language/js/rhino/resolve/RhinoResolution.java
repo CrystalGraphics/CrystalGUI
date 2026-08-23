@@ -682,12 +682,15 @@ public final class RhinoResolution {
         String source = ProjectSourcesRegistry.view().sourceOf(qualifiedName);
         if (source == null) return List.of();
         List<SymbolInfo> members = new ArrayList<>();
-        for (java.util.Map.Entry<String, Integer> each : JsExports.offsetsIn(source).entrySet()) {
-            SymbolInfo member = new SymbolInfo(each.getKey(), SymbolKind.PROPERTY, null,
+        for (JsExports.Export export : JsExports.exportsIn(source)) {
+            // THE DECLARATION'S OWN KIND AND PARAMETERS. Calling every export a PROPERTY is what made a
+            // module's function hover as a bare word: `JsSignatures` renders from the KIND, so a property
+            // prints its name and nothing else while a function prints `function greet(who)`.
+            SymbolInfo member = new SymbolInfo(export.name(), export.kind(), null,
                     qualifiedName, null, Set.of(), null);
             member = member.withContainerKind(SymbolKind.MODULE)
-                    .withSignature(JsSignatures.of(member, List.of()));
-            DeclarationSite site = siteIn(qualifiedName, each.getValue());
+                    .withSignature(JsSignatures.of(member, export.parameters()));
+            DeclarationSite site = siteIn(qualifiedName, export.offset());
             members.add(site == null ? member : member.withDeclaration(site));
         }
         return members;

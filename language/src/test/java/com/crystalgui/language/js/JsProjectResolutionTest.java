@@ -359,4 +359,72 @@ public class JsProjectResolutionTest {
         assertTrue("a named export should point at its OWN line, not the top of the file",
                 second.declaration().start().row() > 0);
     }
+
+    // ── What a declaration says that an assignment cannot ────────────────────────────
+
+    /** <b>Top-level declarations complete, with no {@code exports} in the file at all.</b> */
+    @Test
+    public void topLevelDeclarationsComplete() {
+        workspace.edit("util.Plain",
+                "function hi(who) { return who; }\n"
+                + "var name = 'plain';\n");
+
+        List<String> offered = names(completeAt("import util.Plain;\nPlain.|\n"));
+
+        assertTrue("the function was not offered: " + offered, offered.contains("hi"));
+        assertTrue("the value was not offered: " + offered, offered.contains("name"));
+    }
+
+    /**
+     * <b>An exported function reads as a FUNCTION, with its parameters.</b>
+     *
+     * <p>The other half of why the implicit form is better, and the reason the hover was bare. A
+     * declaration carries a kind and parameter names; an assignment of an anonymous function to a
+     * property carries a name and little else — and {@code JsSignatures} renders from the KIND, so
+     * calling every export a property printed the name alone where a function prints
+     * {@code function hi(who)}.</p>
+     */
+    @Test
+    public void anExportedFunctionCarriesItsKindAndParameters() {
+        workspace.edit("util.Plain", "function hi(who, loudly) { return who; }\n");
+
+        SymbolInfo hi = resolveAt("import util.Plain;\nPlain.h|i('x');\n");
+
+        assertNotNull("the member did not resolve", hi);
+        assertEquals(SymbolKind.FUNCTION, hi.kind());
+        assertNotNull("no signature", hi.signature());
+        assertTrue("the parameters are missing from " + hi.signature().text(),
+                hi.signature().text().contains("who") && hi.signature().text().contains("loudly"));
+    }
+
+    /** <b>...and so does one assigned to {@code exports}</b>, which reads its right-hand side. */
+    @Test
+    public void anAssignedFunctionAlsoCarriesItsParameters() {
+        workspace.edit("util.Assigned", "exports.hi = function (who) { return who; };\n");
+
+        SymbolInfo hi = resolveAt("import util.Assigned;\nAssigned.h|i('x');\n");
+
+        assertNotNull(hi);
+        assertEquals(SymbolKind.FUNCTION, hi.kind());
+        assertTrue("the parameter is missing from " + hi.signature().text(),
+                hi.signature().text().contains("who"));
+    }
+
+    /**
+     * <b>The owner is drawn as a MODULE, not a class.</b>
+     *
+     * <p>The popup discarded a non-type {@code containerKind} and fell back to guessing from the container
+     * STRING — and {@code util.Greeter} looks like a type. It hid because the module symbol itself was
+     * fine: its own kind is MODULE, so it reached a different branch and came out right. Only members
+     * were wrong, which reads as a theming bug.</p>
+     */
+    @Test
+    public void aModuleMemberNamesItsOwnerAsAModule() {
+        workspace.edit("util.Plain", "function hi() { }\n");
+
+        SymbolInfo hi = resolveAt("import util.Plain;\nPlain.h|i();\n");
+
+        assertNotNull(hi);
+        assertEquals("the owner is not reported as a module", SymbolKind.MODULE, hi.containerKind());
+    }
 }
