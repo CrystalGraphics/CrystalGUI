@@ -529,4 +529,50 @@ public class JsProjectImportTest {
                 + "    throw new Error('a file that does not compile was bound anyway');\n"
                 + "}\n");
     }
+
+    /**
+     * <b>The harness's own shape: a module import and a Java import in ONE file.</b>
+     *
+     * <p>Written from {@code gl-debug-harness/workspace} verbatim rather than as "the same kind of
+     * thing", which is the discipline §24.9 records: every M15 defect so far has been invisible to a
+     * fixture that was merely similar. Three details are copied deliberately — the two imports sit in the
+     * same file, the JavaScript one is a real module that itself imports, and the Java one imports both a
+     * project sibling and a JDK type.</p>
+     */
+    @Test
+    public void aScriptImportsAModuleAndAProjectJavaClassAtOnce() throws Throwable {
+        JavaLanguage.register(null, EngineHost.defaultSource());
+        JsLanguage.useJavaEngine();
+        workspace.edit("util.Formatter", "function shout(w) { return w.toUpperCase(); }\n");
+        workspace.edit("util.Greeter",
+                "import util.Formatter;\n"
+                + "var defaultName = 'world';\n"
+                + "function greet(who) { return Formatter.shout(who); }\n");
+        workspace.edit("com.example.util.Helper",
+                "package com.example.util;\n"
+                + "public final class Helper { public static String word() { return \"helped\"; } }\n",
+                ".java");
+        workspace.edit("com.example.Main",
+                "package com.example;\n"
+                + "\n"
+                + "import java.util.List;\n"
+                + "import com.example.util.Helper;\n"
+                + "\n"
+                + "/** A file the author wrote, javadoc and all. */\n"
+                + "public class Main {\n"
+                + "    public static void main(String[] args) {\n"
+                + "        List<String> everyone = List.of(\"ada\");\n"
+                + "        System.out.println(everyone);\n"
+                + "    }\n"
+                + "\n"
+                + "    public static String peepoo() { return Helper.word(); }\n"
+                + "}\n", ".java");
+
+        run("import util.Greeter;\n"
+                + "import com.example.Main;\n"
+                + SINK + ".write(Main.peepoo());\n"
+                + SINK + ".write(Greeter.greet(Greeter.defaultName));\n");
+
+        assertEquals(List.of("helped", "WORLD"), List.copyOf(Sink.WRITTEN));
+    }
 }

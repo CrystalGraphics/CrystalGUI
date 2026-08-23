@@ -547,12 +547,24 @@ public final class ScriptHost implements ScriptRuntime {
             // compiled once, and editing it invalidates that entry exactly as it does for a script that
             // imports it. @see ScriptCacheKey
             Compiled compiled = compileSource(qualifiedName, source, Map.of());
-            if (!compiled.successful()) return null;
+            if (!compiled.successful()) {
+                // SAID OUT LOUD, because the caller cannot. A `null` here is indistinguishable from "the
+                // workspace declares no such name", and the two want opposite things from the author: one
+                // is a typo in the import, the other is an error in a file they are not looking at and
+                // whose own editor may not even be open. Only the first message, which is the one ECJ
+                // reports first and the one the rest usually follow from.
+                System.err.println("[crystalgui] " + qualifiedName + " is in the workspace but did not "
+                        + "compile, so nothing can import it: "
+                        + (compiled.messages().isEmpty() ? "no message" : compiled.messages().get(0)));
+                return null;
+            }
             return Class.forName(qualifiedName, true, loaderFor(compiled));
         } catch (Throwable unavailable) {
             // INCLUDING A REFUSAL. `loaderFor` throws when the policy refuses something the class
             // reaches, and that is an answer rather than a fault: the name does not bind, and the script
             // fails on it if it uses it -- which is what every other refused import already does.
+            System.err.println("[crystalgui] " + qualifiedName + " is in the workspace and could not be "
+                    + "loaded: " + unavailable);
             return null;
         }
     }

@@ -85,7 +85,10 @@ final class JsModules {
         if (imported == null || imported.isEmpty()) return;
         for (Map.Entry<String, String> each : imported.entrySet()) {
             String qualifiedName = each.getValue();
-            if (allowsClass != null && !allowsClass.test(qualifiedName)) continue;
+            if (allowsClass != null && !allowsClass.test(qualifiedName)) {
+                report(qualifiedName, "the sandbox refuses it");
+                continue;
+            }
 
             Scriptable module = exportsOf(cx, qualifiedName);
             if (module != null) {
@@ -102,7 +105,14 @@ final class JsModules {
             // and the loader all live there already. @see com.crystalgui.language.java.JavaLanguage#projectClass
             Class<?> found = JsLoaders.load(qualifiedName);
             if (found == null) found = projectClass(qualifiedName);
-            if (found == null) continue;
+            if (found == null) {
+                report(qualifiedName, RhinoExecutor.projectClasses() == null
+                        ? "no project script declares it, it is not on the classpath, and no Java engine "
+                        + "is lent to this host -- so a `.java` file in the workspace cannot be reached"
+                        : "no project script declares it, it is not on the classpath, and the workspace's "
+                        + "own Java did not produce it");
+                continue;
+            }
             ScriptableObject.putProperty(scope, each.getKey(),
                     RhinoExecutor.wrapForScript(cx, scope, found));
         }
@@ -130,6 +140,30 @@ final class JsModules {
             ScriptableObject.putProperty(exports, name, ScriptableObject.getProperty(own, name));
         }
     }
+
+    /**
+     * <b>One line, on the run's own error stream, for an import that bound to NOTHING.</b>
+     *
+     * <h3>Why this is the feature rather than a debugging aid</h3>
+     *
+     * <p>A skipped import is deliberate — an unused bad import is not fatal, and never was. But a USED
+     * one then fails as {@code ReferenceError: "Main" is not defined} at the line that uses it, several
+     * rows below the line that is actually wrong, and with nothing anywhere saying which of the four
+     * possible reasons applied. Worse when the EDITOR resolves the same name: the popup offers it, go-to
+     * opens it, and the run refuses it, which §19.1 calls out as worse than either restriction alone.</p>
+     *
+     * <p>Once per name per run, because {@link #javaTypes} remembers misses — a name imported by three
+     * modules is reported once. The same reason the mapping and the live-runtime tiers each announce
+     * themselves: "live" and "inert" are indistinguishable from the outside, so a capability that can be
+     * silently skipped has to say when it was.</p>
+     */
+    private void report(String qualifiedName, String reason) {
+        if (!reported.add(qualifiedName)) return;
+        System.err.println("[crystalgui] import " + qualifiedName + " bound to nothing: " + reason);
+    }
+
+    /** Imports already reported, so a module chain does not repeat one. @see #report */
+    private final java.util.Set<String> reported = new java.util.HashSet<>();
 
     /**
      * A project Java type, compiled once per run and remembered.
