@@ -1221,7 +1221,18 @@ completionpopup text::highlight(completion-match) {
  * Documentation popup draws its OWNER band with this vocabulary, and a top-level class is owned by a
  * package. Here rather than in a second prefix of its own, so one kind means one glyph everywhere. */
 .completion-kind-package        { background: icon("crystalgui:nodes/java/package"); }
-.completion-kind-module         { background: icon("crystalgui:nodes/java/package"); }
+/* A MODULE IS A FILE, so it takes the file's own picture rather than a package's.
+ *
+ * The only thing that reports this kind is a JavaScript project script reached through an `import`
+ * (M15 S6), and a package glyph on it said the wrong thing twice over: it is not a package, and the tab
+ * for the very same file three inches away draws the JavaScript mark. A row and a tab disagreeing about
+ * one file reads as one of them being wrong, which it was.
+ *
+ * KEYED ON THE KIND rather than on the file's extension, because a completion row carries a `SymbolKind`
+ * and not a name -- so the day something reports a MODULE that is not a `.js` file (a `module-info`, a
+ * JavaScript engine that grows real ES modules) this needs to become a per-item icon instead. Until then
+ * a second mechanism would be a table saying what this one already says. */
+.completion-kind-module         { background: icon("crystalgui:filetypes/javaScript"); }
 
 .completion-kind-method.completion-mod-abstract { background: icon("crystalgui:nodes/java/methodAbstract"); }
 .completion-kind-class.completion-mod-abstract  { background: icon("crystalgui:nodes/java/classAbstract"); }
