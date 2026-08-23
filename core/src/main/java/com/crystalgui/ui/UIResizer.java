@@ -185,6 +185,10 @@ final class UIResizer extends UIElement {
                     handle.dx < 0 ? startLeft + (startWidth - finalWidth) : target.resizeOriginLeft(),
                     handle.dy < 0 ? startTop + (startHeight - finalHeight) : target.resizeOriginTop());
         }
+
+        // LAST, so an override sees the geometry the drag settled on and its own writes are not then
+        // overwritten by the origin above. @see UIElement#onUserResize
+        target.onUserResize(handle.dx, handle.dy, finalWidth, finalHeight);
     }
 
     /**

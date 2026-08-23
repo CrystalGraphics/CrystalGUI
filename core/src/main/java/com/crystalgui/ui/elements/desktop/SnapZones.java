@@ -78,23 +78,79 @@ public final class SnapZones {
      */
     public static final float CORNER_RATIO = 0.25f;
 
-    /** Which zone a drag is over, or none. */
+    /**
+     * Which zone a drag is over, or none — <b>as a pair of sides rather than as seven names</b>.
+     *
+     * <p>{@code xSide} is −1 for the left column, +1 for the right, 0 for the full width; {@code ySide}
+     * says the same about rows. Every zone here is one cell of a 2x2 grid, so spelling them that way
+     * turns {@link #rectFor} into arithmetic instead of a seven-arm switch — and, more usefully, makes
+     * "which of my edges is a shared divider" answerable: the divider is the edge facing the middle, so
+     * a handle moving it has {@code dx == -xSide}. That is what joint resize is asking, and it would be
+     * a lookup table if the zones were only names.</p>
+     */
     public enum Zone {
         /** The left half of the work area. */
-        LEFT,
+        LEFT(-1, 0),
         /** The right half. */
-        RIGHT,
+        RIGHT(1, 0),
         /** The top-left quarter. */
-        TOP_LEFT,
+        TOP_LEFT(-1, -1),
         /** The top-right quarter. */
-        TOP_RIGHT,
+        TOP_RIGHT(1, -1),
         /** The bottom-left quarter. */
-        BOTTOM_LEFT,
+        BOTTOM_LEFT(-1, 1),
         /** The bottom-right quarter. */
-        BOTTOM_RIGHT,
+        BOTTOM_RIGHT(1, 1),
         /** The whole of it — the same thing maximise does. */
-        MAXIMIZE
+        MAXIMIZE(0, 0);
+
+        /** −1 left column, +1 right column, 0 full width. */
+        public final int xSide;
+        /** −1 top row, +1 bottom row, 0 full height. */
+        public final int ySide;
+
+        Zone(int xSide, int ySide) {
+            this.xSide = xSide;
+            this.ySide = ySide;
+        }
+
+        /**
+         * Whether a resize handle with this delta is moving a <b>shared divider</b> rather than an outer
+         * edge of the work area.
+         *
+         * <p>A cell's divider is the edge facing the middle, so it is the one whose sign opposes the
+         * side the cell is on: the left half's divider is its RIGHT edge. An outer edge answers false —
+         * dragging the left edge of a left-snapped window is resizing one window, not repartitioning the
+         * screen, and it must not drag anything else with it.</p>
+         *
+         * <p>A corner handle is both at once, which is what makes the centre of a four-window layout drag
+         * both dividers — the case Windows 11 added and Windows 10 could not do.</p>
+         */
+        public boolean movesVerticalDivider(int handleDx) {
+            return xSide != 0 && handleDx == -xSide;
+        }
+
+        /** @see #movesVerticalDivider */
+        public boolean movesHorizontalDivider(int handleDy) {
+            return ySide != 0 && handleDy == -ySide;
+        }
     }
+
+    /** The default divider position on either axis — halves, which is what a first snap means. */
+    public static final float CENTRE_SPLIT = 0.5f;
+
+    /**
+     * How far a divider may travel, as a fraction.
+     *
+     * <p>Windows stops a joint resize at the smaller window's own minimum size, which is a per-window
+     * answer we would have to ask Taffy for mid-drag. A flat fraction is the cruder rule and the honest
+     * one to start from: it guarantees neither cell can be driven to nothing, which is the failure that
+     * matters, and it is one number rather than a size negotiation between two windows.</p>
+     */
+    public static final float MIN_SPLIT = 0.15f;
+
+    /** @see #MIN_SPLIT */
+    public static final float MAX_SPLIT = 1f - MIN_SPLIT;
 
     private SnapZones() {
     }
@@ -142,33 +198,53 @@ public final class SnapZones {
         return null;
     }
 
-    /**
-     * The rect {@code zone} puts a window in: {left, top, width, height} in the work area's space.
-     *
-     * <p>Halves are computed with the <b>far side taking the remainder</b> rather than both taking
-     * {@code size / 2}: an odd work area would otherwise leave a one-pixel line of desktop showing down
-     * the middle, which is the sort of thing that looks like a rendering bug.</p>
-     */
+    /** The rect {@code zone} puts a window in, with the dividers at the centre. */
     public static float[] rectFor(Zone zone, float areaWidth, float areaHeight) {
-        float halfW = (float) Math.floor(areaWidth / 2f);
-        float halfH = (float) Math.floor(areaHeight / 2f);
-        float restW = areaWidth - halfW;
-        float restH = areaHeight - halfH;
-        switch (zone) {
-            case LEFT:
-                return new float[] {0f, 0f, halfW, areaHeight};
-            case RIGHT:
-                return new float[] {halfW, 0f, restW, areaHeight};
-            case TOP_LEFT:
-                return new float[] {0f, 0f, halfW, halfH};
-            case TOP_RIGHT:
-                return new float[] {halfW, 0f, restW, halfH};
-            case BOTTOM_LEFT:
-                return new float[] {0f, halfH, halfW, restH};
-            case BOTTOM_RIGHT:
-                return new float[] {halfW, halfH, restW, restH};
-            default:
-                return new float[] {0f, 0f, areaWidth, areaHeight};
-        }
+        return rectFor(zone, areaWidth, areaHeight, CENTRE_SPLIT, CENTRE_SPLIT);
+    }
+
+    /**
+     * The rect {@code zone} puts a window in: {left, top, width, height} in the work area's space, with
+     * the dividers wherever the group has dragged them.
+     *
+     * <p>{@code splitX}/{@code splitY} are the <b>fractions</b> the work area is cut at, which is the
+     * state joint resize actually keeps: two windows sharing an edge are {@code n} and {@code 1 − n} of
+     * one axis, so storing the cut rather than two rects is what makes the pair unable to drift apart.
+     * It is the same thing {@code SplitView} keeps for the same reason.</p>
+     *
+     * <p>The cut is <b>floored to a whole pixel and the far side takes the remainder</b>: both sides
+     * rounding independently would leave a one-pixel line of desktop showing down the middle at odd
+     * widths, which reads as a rendering bug rather than as arithmetic.</p>
+     */
+    public static float[] rectFor(Zone zone, float areaWidth, float areaHeight,
+                                  float splitX, float splitY) {
+        float cutX = (float) Math.floor(areaWidth * clampSplit(splitX));
+        float cutY = (float) Math.floor(areaHeight * clampSplit(splitY));
+
+        float left = zone.xSide > 0 ? cutX : 0f;
+        float width = zone.xSide == 0 ? areaWidth : zone.xSide < 0 ? cutX : areaWidth - cutX;
+        float top = zone.ySide > 0 ? cutY : 0f;
+        float height = zone.ySide == 0 ? areaHeight : zone.ySide < 0 ? cutY : areaHeight - cutY;
+        return new float[] {left, top, width, height};
+    }
+
+    /**
+     * The fraction a divider would sit at if {@code zone} occupied {@code near..near + extent}.
+     *
+     * <p>The inverse of {@link #rectFor} on one axis, and it reads the edge facing the middle: a left
+     * cell's divider is its far edge, a right cell's is its near one. Clamped, so a drag cannot push a
+     * cell to nothing — see {@link #MIN_SPLIT}.</p>
+     *
+     * @param side {@code Zone.xSide} or {@code Zone.ySide}; 0 means the zone spans the axis and has no
+     *             divider on it, which answers {@link #CENTRE_SPLIT} rather than dividing by nothing
+     */
+    public static float splitFor(int side, float near, float extent, float area) {
+        if (area <= 0f || side == 0) return CENTRE_SPLIT;
+        return clampSplit((side < 0 ? near + extent : near) / area);
+    }
+
+    private static float clampSplit(float split) {
+        if (Float.isNaN(split)) return CENTRE_SPLIT;
+        return Math.max(MIN_SPLIT, Math.min(MAX_SPLIT, split));
     }
 }

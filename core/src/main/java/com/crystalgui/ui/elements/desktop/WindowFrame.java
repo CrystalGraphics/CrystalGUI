@@ -1550,6 +1550,11 @@ public class WindowFrame extends UIElement implements Disposable {
      */
     public void maximize() {
         if (maximized) return;
+        // A MAXIMISED WINDOW IS IN NO TILE. It covers the whole work area, so it shares an edge with
+        // nothing and has no divider to move -- and leaving the cell recorded would let a joint resize
+        // elsewhere re-tile it back down to a half. Restoring does not put it back in the group either:
+        // it comes back to its pre-maximise rect, which is a position rather than a cell.
+        snappedZone = null;
         restoreLeft = placedLeft;
         restoreTop = placedTop;
         restoreWidth = getRuntimeCache().getWidth();
@@ -1701,7 +1706,12 @@ public class WindowFrame extends UIElement implements Disposable {
      * <p>Returns having already applied the rect when animations are off, so the disabled path stays
      * synchronous for every caller.</p>
      */
-    public WindowFrame snapTo(float left, float top, float width, float height) {
+    public WindowFrame snapTo(SnapZones.Zone zone, float left, float top, float width, float height) {
+        // THE ZONE IS RECORDED, and that is what makes the window a member of a tiled GROUP rather than
+        // a window that happens to be half-width. Joint resize pairs on it: without a recorded cell there
+        // is nothing to say which windows share a divider, and geometry cannot answer that -- a window
+        // dragged to exactly the left half by hand is not snapped, and Windows will not tile it either.
+        this.snappedZone = zone;
         var box = getRuntimeCache();
         if (animateGeometry(placedLeft, placedTop, box.getWidth(), box.getHeight(),
                 left, top, width, height, () -> applySnappedRect(left, top, width, height))) {
@@ -1715,6 +1725,48 @@ public class WindowFrame extends UIElement implements Disposable {
     private void applySnappedRect(float left, float top, float width, float height) {
         resizeTo(width, height);
         moveTo(left, top);
+    }
+
+    /**
+     * The tile this window occupies, or null — Windows' snapped state, which is <b>not</b> derivable
+     * from where the window happens to be.
+     *
+     * <p>Cleared by anything that takes the window out of its cell: a move (by caption, by Alt-drag, by
+     * the keyboard mode), a maximise, a fullscreen. Deliberately <em>not</em> cleared by a resize, which
+     * is the whole point — a joint resize moves the divider and the window stays in its cell, exactly as
+     * a column staying a column while you drag its edge.</p>
+     */
+    @Nullable
+    public SnapZones.Zone snappedZone() {
+        return snappedZone;
+    }
+
+    /** Leaves the tiled group. Safe to call when it was never in one. @see #snappedZone() */
+    public void clearSnappedZone() {
+        snappedZone = null;
+    }
+
+    @Nullable
+    private SnapZones.Zone snappedZone;
+
+    /**
+     * Joint resize — dragging a shared divider moves everything the divider separates.
+     *
+     * <p>Windows calls this {@code JointResize} and has shipped it since Windows 10 build 10547; the
+     * setting that used to gate it (<i>"When I resize a snapped window, simultaneously resize any
+     * adjacent snapped window"</i>) was removed in Windows 11 22H2 and the behaviour is now always on.
+     * Windows 10 could only pair TWO windows; 11 adapts the whole layout, which is what this does.</p>
+     *
+     * <p>Only an edge facing the middle counts. Dragging the OUTER edge of a snapped window resizes that
+     * window alone and leaves the group untouched — it is not repartitioning anything, and treating it as
+     * a divider would make the far side of the screen jump when you pulled a window away from its own
+     * border.</p>
+     */
+    @Override
+    protected void onUserResize(int handleDx, int handleDy, float width, float height) {
+        Desktop desktop = desktop();
+        if (desktop == null || snappedZone == null) return;
+        desktop.jointResize(this, handleDx, handleDy, width, height);
     }
 
     /**
