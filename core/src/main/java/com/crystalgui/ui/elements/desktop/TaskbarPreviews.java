@@ -165,6 +165,7 @@ final class TaskbarPreviews {
     /** Wires one taskbar entry's hover. Called as each entry is built. */
     void watch(Button entry, WindowFrame frame) {
         entry.onMouseEnter.attachListener((element, event) -> {
+            if (suppressed) return;
             hovered = frame;
             hoveredEntry = entry;
             hoveredSince = System.nanoTime();
@@ -183,6 +184,31 @@ final class TaskbarPreviews {
             wake();
         }, false, false);
     }
+
+    /**
+     * Stops previews appearing at all — set while a jump list is open on an entry.
+     *
+     * <h3>A preview and a menu are alternatives, never both</h3>
+     *
+     * <p>Windows shows one or the other, and opening the menu cancels the preview. Both at once is not
+     * merely busy: they occupy the same space above the same entry, so the panel sits over the menu it
+     * is supposed to have been replaced by.</p>
+     *
+     * <p>Dismissing once is not enough, which is why this is a flag rather than a call. The pointer does
+     * not leave the entry when the menu opens, so nothing takes the panel down again — the hover is
+     * still live, the delay elapses under the open menu, and it comes straight back.</p>
+     */
+    void setSuppressed(boolean nowSuppressed) {
+        if (suppressed == nowSuppressed) return;
+        suppressed = nowSuppressed;
+        if (suppressed) dismiss();
+    }
+
+    boolean isSuppressed() {
+        return suppressed;
+    }
+
+    private boolean suppressed;
 
     /** Takes the panel down at once — a click, a closed window, a rebuilt strip. */
     void dismiss() {

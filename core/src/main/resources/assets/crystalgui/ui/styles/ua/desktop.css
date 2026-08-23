@@ -669,6 +669,25 @@ menu.__jump-list__ {
     border-radius: var(--radius-panel, 4px);
     padding-top: 3px;
     padding-bottom: 3px;
+    /* WIDER THAN ITS ROWS. A menu sized purely by "Minimize" is narrower than the entry it belongs to,
+     * which reads as a tooltip rather than as a panel — and it is the same object as the preview, which
+     * is always wide enough to hold a thumbnail. A minimum rather than a width, so a contributed row
+     * with a long label still grows it. */
+    min-width: 110px;
+
+    /* THE RESTING VALUES of the rise; __rising__ below carries what it eases FROM. Both ends write the
+     * SAME function list — `translate(0, 0)` against `translate(0, 14px)` — because a transform only
+     * interpolates component-wise when the lists line up, and `none`/IDENTITY lines up with nothing and
+     * snaps at the halfway point instead. That one cost four window animations. */
+    transform: translate(0, 0);
+    opacity: 1;
+    transition: transform 150ms ease-out, opacity 150ms ease-out;
+}
+
+/* Up from below, as the hover preview it replaces does — same distance, same duration. */
+menu.__jump-list__.__rising__ {
+    transform: translate(0, 14px);
+    opacity: 0;
 }
 
 .__window-preview__ {

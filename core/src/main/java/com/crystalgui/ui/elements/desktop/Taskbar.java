@@ -96,6 +96,30 @@ public class Taskbar extends UIElement {
     /** The hover previews. One panel that moves between entries. @see TaskbarPreviews */
     private final TaskbarPreviews previews;
 
+    /**
+     * Turns hover previews off while something else owns the space above an entry — a jump list.
+     *
+     * <p>Explicit rather than relying on the preview's own mouse-down dismissal, and that is not
+     * belt-and-braces: {@code stopPropagation()} halts the remaining listeners <b>on the same element and
+     * phase</b>, so the jump list's own handler — attached first — was silencing the preview's dismissal
+     * outright. Depending on the order two listeners happen to be registered in is exactly the coupling
+     * that produced a preview sitting on top of the menu that replaced it.</p>
+     */
+    void setPreviewsSuppressed(boolean suppressed) {
+        previews.setSuppressed(suppressed);
+    }
+
+    /**
+     * Whether previews are currently silenced.
+     *
+     * <p>Exposed for one assertion that has no other observable: "the strip can preview again" is the
+     * absence of a panel plus the absence of a reason for it, and a test can otherwise only wait and
+     * conclude nothing appeared — which is equally true of a strip that is broken for good.</p>
+     */
+    public boolean previewsSuppressedForTesting() {
+        return previews.isSuppressed();
+    }
+
     /** A taskbar owns its entries; they follow the registry. */
     @Override
     public boolean acceptsPublicChildren() {
