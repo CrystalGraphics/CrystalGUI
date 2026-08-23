@@ -65,6 +65,18 @@ public final class MenuId {
      */
     public static final MenuId WINDOW_SYSTEM = of("window/system");
 
+    /**
+     * The taskbar's own context menu — a right-click on the strip rather than on an entry (W13c).
+     *
+     * <p>Windows' home for Show Desktop, and the natural place for anything else that is about the
+     * <b>set</b> of windows rather than one of them. Separate from {@link #WINDOW_SYSTEM} because the two
+     * answer different questions: that menu names a window, this one names the desktop.</p>
+     *
+     * <p>Without it {@code desktop.showDesktop} was reachable only from the command palette — registered,
+     * enabled, working, and findable by nobody. A verb with no affordance is not shipped.</p>
+     */
+    public static final MenuId TASKBAR_CONTEXT = of("taskbar/context");
+
     // ── The main menu bar ───────────────────────────────────────────────────────────────────────
     //
     // SIX, not VS Code's twelve. Terminal, Debug, Go, Selection, Refactor and Build have no subject in

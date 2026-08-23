@@ -4,6 +4,9 @@ import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.MenuEntry;
+import com.crystalgui.core.command.MenuId;
+import com.crystalgui.core.command.MenuSection;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.ui.UIElement;
@@ -133,6 +136,29 @@ public class WindowShellTest extends UiTestBase {
         dialog.showModal();
         settle();
         return dialog;
+    }
+
+    /**
+     * <b>Show Desktop has an affordance, not just a command id.</b>
+     *
+     * <p>It shipped reachable only from the command palette — registered, enabled, working, and findable
+     * by nobody, which was reported as the feature not existing. A verb with no affordance is not
+     * shipped, and the taskbar's own context menu is where Windows puts this one.</p>
+     */
+    @Test
+    public void showDesktopIsOnTheTaskbarContextMenu() {
+        CommandContext context = CommandContext.of(desktop().taskbar());
+        boolean found = false;
+        for (MenuSection section : CommandRegistry.global()
+                .sections(MenuId.TASKBAR_CONTEXT, context)) {
+            for (MenuEntry entry : section.entries()) {
+                if (entry instanceof MenuEntry.Item item
+                        && DesktopCommands.SHOW_DESKTOP.equals(item.command().getId())) {
+                    found = true;
+                }
+            }
+        }
+        assertTrue("Show Desktop has no menu to be found in", found);
     }
 
     // ── The modal-blocked pulse ─────────────────────────────────────────────────────────────────
