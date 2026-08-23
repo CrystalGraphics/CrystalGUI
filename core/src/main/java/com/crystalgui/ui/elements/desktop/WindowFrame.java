@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.desktop;
 
+import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.ui.elements.chrome.ContextMenu;
@@ -438,6 +439,33 @@ public class WindowFrame extends UIElement implements Disposable {
         // this frame through the title bar, so the menu is always about the window it was opened on.
         ContextMenu.attach(titleBar, CommandRegistry.global(),
                 pressed -> ContextMenu.of(MenuId.WINDOW_SYSTEM));
+
+        // ALT-DRAG: hold the desktop's move modifier and drag anywhere inside the window — W13b.
+        //
+        // The Linux WM staple, and the answer for a window whose title bar is tiny, covered by adopted
+        // chrome, or off the top of the work area entirely.
+        //
+        // CAPTURE PHASE, which is the whole of what makes "anywhere" true. The press has to be taken
+        // before it reaches whatever is under it — a button, an editor, a tree row — and a bubble-phase
+        // listener sees only what nothing else consumed. It also has to stopPropagation, or the window
+        // moves AND the thing beneath it is clicked.
+        //
+        // The modifier is read from the DESKTOP, never named here: Alt is contested territory in this
+        // application and a widget is the wrong place to decide. @see Desktop#moveModifier()
+        onMouseDown.attachListener((element, event) -> {
+            if (event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
+            Desktop desktop = desktop();
+            if (desktop == null) return;
+            int mask = desktop.moveModifier();
+            var input = CgPlatform.input();
+            if (mask == 0 || input == null) return;
+            if ((input.getCurrentModifiers() & mask) != mask) return;
+            event.stopPropagation();
+            // Raised first, because a press that never reaches the frame's own activation would
+            // otherwise move a window without bringing it forward.
+            desktop.activate(this);
+            beginMove(event.getPosition().x(), event.getPosition().y(), 1);
+        }, true, false);
 
         installActivation();
         // CLICK_NOT_TABBABLE is the web's tabindex="-1", and both halves are wanted. A frame must be able
@@ -1511,6 +1539,58 @@ public class WindowFrame extends UIElement implements Disposable {
         else maximize();
     }
 
+    // ── Fullscreen — W13b ───────────────────────────────────────────────────────────────────────
+
+    /**
+     * Whether this window is filling the whole desktop, taskbar included.
+     *
+     * <h3>Maximise's sibling, and it needs almost nothing of its own</h3>
+     *
+     * <p>A frame is placed against the window layer and <b>the layer's box IS the work area</b> — the
+     * taskbar is laid out as a bottom bar rather than overlaid. So hiding the strip re-flows the layer to
+     * the full height and a maximised window follows it for nothing. Fullscreen is therefore
+     * <em>maximise plus a hidden bar</em>, which is Windows' own model: maximise respects the taskbar,
+     * fullscreen covers it.</p>
+     *
+     * <p>What it does need is memory of <b>how the window got here</b>. F11 from a maximised window must
+     * come back maximised, and from a restored one must come back restored — a browser does exactly
+     * this, and getting it wrong is the kind of thing that only shows up the second time somebody uses
+     * it.</p>
+     */
+    public boolean isFullscreen() {
+        return fullscreen;
+    }
+
+    /** {@code F11} and the command both land here. */
+    public void toggleFullscreen() {
+        if (fullscreen) exitFullscreen();
+        else enterFullscreen();
+    }
+
+    public void enterFullscreen() {
+        if (fullscreen || state != WindowState.VISIBLE) return;
+        // REMEMBERED BEFORE maximising, or the answer is always "it was maximised".
+        maximizedBeforeFullscreen = maximized;
+        fullscreen = true;
+        addClass(FULLSCREEN_CLASS);
+        maximize();
+        if (owner != null) owner.fullscreenChanged();
+    }
+
+    public void exitFullscreen() {
+        if (!fullscreen) return;
+        fullscreen = false;
+        removeClass(FULLSCREEN_CLASS);
+        if (!maximizedBeforeFullscreen) restore();
+        if (owner != null) owner.fullscreenChanged();
+    }
+
+    /** @see #isFullscreen() */
+    public static final String FULLSCREEN_CLASS = "__fullscreen__";
+
+    private boolean fullscreen;
+    private boolean maximizedBeforeFullscreen;
+
     /**
      * Fills the work area, remembering the rect to come back to.
      *
@@ -1865,8 +1945,10 @@ public class WindowFrame extends UIElement implements Disposable {
         UIDragController drag = window.getInputHandler().getDragController();
         // Positional drag, zero threshold: a window must track the very first pixel, and a title bar has
         // no competing click interpretation to protect.
-        drag.startDrag(titleBar, pointerX, pointerY,
-                (mouseX, mouseY, startX, startY, deltaX, deltaY) -> {
+        drag.startDrag(titleBar, pointerX, pointerY, new UIDragController.DragListener() {
+            @Override
+            public void onDragUpdate(float mouseX, float mouseY, float startX, float startY,
+                                     float deltaX, float deltaY) {
                     placed = true;
                     // A MAXIMISED WINDOW RESTORES ON THE FIRST MOVEMENT, never on the press.
                     //
@@ -1885,8 +1967,81 @@ public class WindowFrame extends UIElement implements Disposable {
                         return;
                     }
                     applyPosition(dragStartLeft + deltaX, dragStartTop + deltaY);
-                });
+                    // SNAP IS DECIDED FROM THE POINTER, never from the window's own edge. Dragging a
+                    // wide window leftwards puts its edge at the boundary long before the hand gets
+                    // there, so an edge test snaps windows nobody was aiming at an edge with -- and a
+                    // narrow one could never reach a band at all. Every desktop reads the pointer.
+                    pendingSnap = snapZoneAt(mouseX, mouseY);
+                    Desktop desktop = desktop();
+                    if (desktop != null) {
+                        if (pendingSnap != null) desktop.showSnapPreview(pendingSnap);
+                        else desktop.hideSnapPreview();
+                    }
+            }
+
+            @Override
+            public void onDragEnd(float mouseX, float mouseY) {
+                commitSnap();
+            }
+
+            @Override
+            public void onDragCancel() {
+                // ESCAPE DURING A MOVE ABANDONS THE SNAP TOO. The preview is the only part of a
+                // cancelled drag that would otherwise stay on screen, with nothing left to take it down.
+                pendingSnap = null;
+                Desktop desktop = desktop();
+                if (desktop != null) desktop.hideSnapPreview();
+            }
+        });
     }
+
+    /**
+     * The zone a drag is over, in the WORK AREA's space.
+     *
+     * <p>A drag callback's coordinates are already local to the drag source — the title bar — which is
+     * inside this frame, which is on the window layer. So they are converted out to the layer rather
+     * than used as they arrive: the caption's own origin moves with the window, so an unconverted test
+     * would answer about a band that travels with the thing being dragged.</p>
+     */
+    @Nullable
+    private SnapZones.Zone snapZoneAt(float mouseX, float mouseY) {
+        Desktop desktop = desktop();
+        if (desktop == null || isToolWindow()) return null;
+        var area = desktop.windowLayer().getRuntimeCache();
+        var bar = titleBar.getRuntimeCache();
+        // THROUGH THE LAYOUT BOXES, not the transform chain. Both are absolute layout coordinates, so
+        // bar-local + bar-origin - layer-origin is the conversion and it stays correct under uiScale;
+        // localToWorld is in SURFACE pixels with the root transform baked in, which is the documented
+        // way to place something neatly in the wrong spot.
+        return SnapZones.forPoint(bar.getX() + mouseX - area.getX(),
+                bar.getY() + mouseY - area.getY(), area.getWidth(), area.getHeight());
+    }
+
+    /** Applies whatever the drag was hovering when it ended. @see #snapZoneAt */
+    private void commitSnap() {
+        SnapZones.Zone zone = pendingSnap;
+        pendingSnap = null;
+        Desktop desktop = desktop();
+        if (desktop != null) desktop.hideSnapPreview();
+        if (zone == null || desktop == null) return;
+
+        if (zone == SnapZones.Zone.MAXIMIZE) {
+            // THROUGH maximize(), so the restore rect, the class, the glyph and the animation are all
+            // the ones a maximise already has. A snap that wrote the rect itself would be a second
+            // maximise that the restore button knew nothing about.
+            maximize();
+            return;
+        }
+        var box = desktop.windowLayer().getRuntimeCache();
+        if (box.getWidth() <= 0f || box.getHeight() <= 0f) return;
+        float[] rect = SnapZones.rectFor(zone, box.getWidth(), box.getHeight());
+        resizeTo(rect[2], rect[3]);
+        moveTo(rect[0], rect[1]);
+    }
+
+    /** The zone the live move drag is currently over. @see #snapZoneAt */
+    @Nullable
+    private SnapZones.Zone pendingSnap;
 
     /**
      * Restores a maximised window <b>around the pointer</b>, so a drag that begins on its caption

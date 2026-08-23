@@ -1,6 +1,7 @@
 package com.crystalgui.ui.elements.desktop;
 
 import com.crystalgui.fs.ConfigStorage;
+import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.notify.Notification;
@@ -122,6 +123,15 @@ public class Desktop extends UIElement implements DataProvider {
         // layer can take it. It is display:none until a gesture opens it, so it costs a layout skip.
         switcher = new WindowSwitcher(this);
         addInternalChild(switcher);
+
+        // HIDDEN AND UNHITTABLE. A full-size element over the work area is this codebase's most-repeated
+        // failure, and the rule that makes one safe is that it takes no box at all while it is not on
+        // screen -- so it is display:none until a snap is being previewed. Unhittable regardless: it is
+        // shown only DURING a drag, which has pointer capture anyway, and a hittable preview would be
+        // one more thing for the drop to land on.
+        snapPreview.addClass(SNAP_PREVIEW_CLASS);
+        snapPreview.setHitTest(false);
+        snapPreview.setDisplayed(false);
 
         // THE WIDGET THAT OWNS THE COMMANDS REGISTERS THEM, as DockArea does for DockCommands. Registering
         // from anywhere else is how a command ends up existing only once something unrelated has been
@@ -506,6 +516,90 @@ public class Desktop extends UIElement implements DataProvider {
         return taskbar;
     }
 
+    /**
+     * The strip follows whether <b>any</b> window is fullscreen — W13b.
+     *
+     * <p>Asked of the whole set rather than tracked as one window, because two can be fullscreen at once
+     * (one behind the other) and the bar must not come back when the front one exits. A field holding
+     * "the fullscreen window" would need every exit to know whether it was the one being remembered,
+     * which is a bookkeeping question the registry can simply be asked.</p>
+     *
+     * <p>Nothing else has to move: a frame is placed against the window layer and the layer's box IS the
+     * work area, so hiding the bar re-flows the layer to full height and every maximised window follows
+     * it. That is the same property that makes maximise need no taskbar special case.</p>
+     */
+    /**
+     * The modifier that turns a press anywhere inside a window into a move — W13b's Alt-drag.
+     *
+     * <h3>Why this is a setting and not a keymap binding</h3>
+     *
+     * <p>{@code plan_windowing.md} asks for the chord to be keymap-resolved, "never a hardcoded Alt",
+     * and the reason is sound: Alt is contested territory here — {@code TextField} refuses Alt chords and
+     * {@code MenuBarView} claims Alt+letter mnemonics, and both of those were paid for.</p>
+     *
+     * <p>It cannot literally be a binding, and that is a fact about the keymap rather than a shortcut:
+     * a {@link com.crystalgui.ui.input.keymap.KeyStroke} is a <em>key</em> plus modifiers, and
+     * {@code parse("Alt")} reads "Alt" as the key name and fails. There is no way to spell a
+     * modifier-only binding, and inventing one for a single gesture would mean teaching the resolver,
+     * the palette and the accelerator renderer about a stroke that can never be pressed.</p>
+     *
+     * <p>So this is the substance of the requirement without the letter: <b>one place</b>, changeable at
+     * runtime, and nothing in {@code WindowFrame} naming a modifier. GNOME keeps the same thing as a
+     * setting for the same reason — {@code org.gnome.desktop.wm.preferences.mouse-button-modifier}.</p>
+     */
+    public int moveModifier() {
+        return moveModifier;
+    }
+
+    /** @see #moveModifier() */
+    public Desktop setMoveModifier(int mask) {
+        this.moveModifier = mask;
+        return this;
+    }
+
+    /** GNOME's own default, and the one every Linux WM ships. */
+    private int moveModifier = CgModifiers.ALT;
+
+    /**
+     * The translucent rectangle showing where a snap would land — W13b.
+     *
+     * <p>Built once and hidden, never per drag: it lives on the window layer <b>below every frame</b>
+     * (stack order 0, and every open window has raised itself above that), so it reads as a hole in the
+     * desktop rather than as a sheet over the window being dragged — which is what both Windows and
+     * GNOME draw.</p>
+     */
+    void showSnapPreview(SnapZones.Zone zone) {
+        var box = windows.getRuntimeCache();
+        if (box.getWidth() <= 0f || box.getHeight() <= 0f) return;
+        float[] rect = SnapZones.rectFor(zone, box.getWidth(), box.getHeight());
+        windows.hostDecoration(snapPreview);
+        snapPreview.setDisplayed(true);
+        StyleGroup.importantPipeline(snapPreview.getStyle().getLayoutGroup(),
+                l -> l.positionType(TaffyPosition.ABSOLUTE)
+                        .left(rect[0]).top(rect[1]).width(rect[2]).height(rect[3]));
+    }
+
+    /** Takes the snap preview off screen. Safe to call when it was never shown. */
+    void hideSnapPreview() {
+        snapPreview.setDisplayed(false);
+    }
+
+    /** @see #showSnapPreview */
+    public static final String SNAP_PREVIEW_CLASS = "__snap-preview__";
+
+    private final UIElement snapPreview = new UIElement();
+
+    void fullscreenChanged() {
+        boolean anyFullscreen = false;
+        for (WindowFrame frame : registry.windows()) {
+            if (frame.isFullscreen() && frame.state() == WindowState.VISIBLE) {
+                anyFullscreen = true;
+                break;
+            }
+        }
+        taskbar.setBarVisible(!anyFullscreen);
+    }
+
     /** The MRU switcher. @see WindowSwitcher */
     public WindowSwitcher switcher() {
         return switcher;
@@ -766,6 +860,21 @@ public class Desktop extends UIElement implements DataProvider {
 
         List<WindowFrame> frames() {
             return Collections.unmodifiableList(frames);
+        }
+
+        /**
+         * Parks the compositor's own decoration on the layer — the snap preview.
+         *
+         * <p>An <b>internal</b> child, because the public door is deliberately shut: this layer holds
+         * {@code WindowFrame}s and says so by throwing. That refusal is worth keeping (it is what stops
+         * an application parenting content into the work area), so the one thing the compositor itself
+         * needs to put there goes in through a door of its own rather than by widening that one.</p>
+         *
+         * <p>It is still an ordinary child for layout and paint order, so a preview at stack order 0
+         * sits below every window that has ever been raised — which is every open window.</p>
+         */
+        void hostDecoration(UIElement decoration) {
+            if (decoration.getParent() != this) addInternalChild(decoration);
         }
 
         @Override

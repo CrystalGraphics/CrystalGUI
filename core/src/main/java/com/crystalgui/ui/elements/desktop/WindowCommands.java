@@ -60,6 +60,7 @@ public final class WindowCommands {
     public static final String MINIMIZE = "window.minimize";
     public static final String MAXIMIZE = "window.maximize";
     public static final String RESTORE = "window.restore";
+    public static final String FULLSCREEN = "window.fullscreen";
     public static final String SYSTEM_MENU = "window.systemMenu";
 
     /**
@@ -119,6 +120,25 @@ public final class WindowCommands {
                     // taskbar entry, so a maximised one could not be un-maximised from anywhere the
                     // pointer can reach. @see WindowFrame#isToolWindow()
                     return frame != null && !frame.isMaximized() && !frame.isToolWindow()
+                            && frame.state() == WindowState.VISIBLE;
+                }));
+
+        // FULLSCREEN IS MAXIMISE'S SIBLING and sits with it in the state group -- W13b. F11 is
+        // unclaimed here and is what every browser and every editor uses; unlike Alt+Space it is not
+        // the host's, because a Minecraft client does nothing with it.
+        registry.register(Command.of(FULLSCREEN, "Full Screen")
+                .binding("F11")
+                .menu(MenuId.WINDOW_SYSTEM, GROUP_STATE, 60)
+                .run(context -> withFrame(context, WindowFrame::toggleFullscreen))
+                .toggledWhen(context -> {
+                    WindowFrame frame = frameFor(context);
+                    return frame != null && frame.isFullscreen();
+                })
+                .enabledWhen(context -> {
+                    WindowFrame frame = frameFor(context);
+                    // A TOOL WINDOW IS REFUSED for the reason Maximize is: it has no taskbar entry, and a
+                    // fullscreen one would additionally have hidden the strip that is not its way back.
+                    return frame != null && !frame.isToolWindow()
                             && frame.state() == WindowState.VISIBLE;
                 }));
 

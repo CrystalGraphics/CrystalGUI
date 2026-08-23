@@ -687,6 +687,11 @@ theme {
     /* MUTED, not the accent: progress is reported continuously and behind a label that has to stay
      * readable over it, which is the opposite of what attention wants. */
     --taskbar-entry-progress: var(--accent-soft);
+    /* The snap preview is the accent at low opacity — it is an answer to "where will this land", which
+     * is the same kind of statement the dock's own drop highlight makes, and it borrows the same hue so
+     * the two gestures do not need separate vocabularies. */
+    --snap-preview-bg: var(--accent);
+    --snap-preview-border: var(--accent-hover);
     /* The control glyphs are secondary until hovered — a title bar's buttons are not what you are
      * looking at. Minimise takes a neutral hover fill where close takes a red one: it is the one
      * control that loses nothing, and dressing it as destructive would misstate what it does. */

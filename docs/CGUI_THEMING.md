@@ -512,6 +512,8 @@ editor scheme's.
 | `--slider-thumb-hover` | `var(--fg)` | base.css |
 | `--slider-thumb-ring` | `var(--fg-on-accent)` | base.css |
 | `--slider-track` | `var(--surface-raised)` | base.css |
+| `--snap-preview-bg` | `var(--accent)` | base.css |
+| `--snap-preview-border` | `var(--accent-hover)` | base.css |
 | `--splitter-bg` | `var(--divider)` | base.css |
 | `--splitter-hover-bg` | `var(--border-strong)` | base.css |
 | `--splitter-pressed-bg` | `var(--fg)` | base.css |
