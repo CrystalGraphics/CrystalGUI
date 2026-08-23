@@ -90,6 +90,21 @@ public final class ProjectSourcesRegistry {
         }
 
         @Override
+        @Nullable
+        public String nameOf(String workspacePath) {
+            if (workspacePath == null || workspacePath.isEmpty()) return null;
+            for (ProjectSources provider : PROVIDERS) {
+                try {
+                    String name = provider.nameOf(workspacePath);
+                    if (name != null) return name;
+                } catch (RuntimeException failed) {
+                    // as below
+                }
+            }
+            return null;
+        }
+
+        @Override
         public boolean declaresPackage(String packageName) {
             if (packageName == null) return false;
             for (ProjectSources provider : PROVIDERS) {

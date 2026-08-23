@@ -38,6 +38,43 @@ public final class SourcePackages {
     private SourcePackages() {
     }
 
+    /**
+     * The package this unit actually belongs to — <b>the path's answer where there is one</b>.
+     *
+     * <h3>Which of the two authorities wins, and why it depends</h3>
+     *
+     * <p>There are two claims about a unit's package: the {@code package} line the author wrote, and the
+     * directory the file sits in. They are the same claim for a well-formed project file and they differ
+     * for two very different reasons.</p>
+     *
+     * <p>A <b>script</b> has no directory to speak of — it is compiled under a generated class name and
+     * whatever it declares is the only fact available, which is what {@code InMemoryUnit} was written to
+     * respect. Such a name arrives here UNQUALIFIED, and the declaration is taken.</p>
+     *
+     * <p>A file under a declared <b>source root</b> arrives QUALIFIED, because {@code JavaLanguage} derived
+     * its name from the path. There the path is authoritative: it is what the index used to name the type,
+     * so a {@code package} line that disagrees would have the file resolving under one name and compiling
+     * under another. Handing ECJ the path's package is what turns that into javac's own diagnostic on the
+     * package line — M15 S4's "a package line disagreeing with its directory becomes a diagnostic".</p>
+     *
+     * <p><b>Both have to be non-empty for the path to win.</b> A qualified name whose source declares no
+     * package at all is a decompiled or generated unit rather than a disagreement, and imposing a package
+     * on one would report an error against text nobody wrote. The spec sentence is about a package line
+     * that disagrees; where there is no line there is nothing to disagree with.</p>
+     */
+    static String effectivePackage(String className, String source) {
+        String declared = declaredPackage(source);
+        String fromName = packageOf(className);
+        return fromName.isEmpty() || declared.isEmpty() ? declared : fromName;
+    }
+
+    /** The package part of a qualified name, or {@code ""} when it carries none. */
+    private static String packageOf(String className) {
+        if (className == null) return "";
+        int lastDot = className.lastIndexOf('.');
+        return lastDot < 0 ? "" : className.substring(0, lastDot);
+    }
+
     /** The package {@code source} declares, or {@code ""} for the default package. */
     static String declaredPackage(String source) {
         if (source == null) return "";
@@ -58,9 +95,9 @@ public final class SourcePackages {
         int lastDot = simple.lastIndexOf('.');
         if (lastDot >= 0) simple = simple.substring(lastDot + 1);
 
-        String declared = declaredPackage(source);
-        return declared.isEmpty() ? simple + ".java"
-                : declared.replace('.', '/') + "/" + simple + ".java";
+        String effective = effectivePackage(className, source);
+        return effective.isEmpty() ? simple + ".java"
+                : effective.replace('.', '/') + "/" + simple + ".java";
     }
 
     /** The binary name a compiled unit will have — what a loader must be asked for. */

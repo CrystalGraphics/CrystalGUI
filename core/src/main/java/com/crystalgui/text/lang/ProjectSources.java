@@ -79,6 +79,22 @@ public interface ProjectSources {
     }
 
     /**
+     * The qualified name a file at {@code workspacePath} must declare — the inverse of {@link #pathOf}.
+     *
+     * <p>Derived from where the file sits, not from what it says, and that is the point: it is what makes
+     * the PATH the authority on a file's package. A file under a declared source root is named by its
+     * directory, so a {@code package} line disagreeing with that directory is a mistake rather than a
+     * second opinion — and naming the unit this way is what gets the compiler to say so.</p>
+     *
+     * <p>Null for a file under no root at all, which is not an error: a scratch script has no directory
+     * worth deriving from, and its own declaration is then the only fact available.</p>
+     */
+    @Nullable
+    default String nameOf(String workspacePath) {
+        return null;
+    }
+
+    /**
      * Every type the workspace declares, qualified — what a "which types exist" query has to see.
      *
      * <p>Names only, and no I/O: they come from the crawl, so this is affordable per keystroke in a way

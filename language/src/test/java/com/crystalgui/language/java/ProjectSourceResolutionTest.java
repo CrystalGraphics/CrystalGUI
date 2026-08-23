@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -382,5 +383,63 @@ public class ProjectSourceResolutionTest extends FixFixture {
                     + "looks like: " + shout.signature(),
                     shout.signature().toString().contains("text"));
         }
+    }
+
+    // ── Package authority ───────────────────────────────────────────────────
+
+    /**
+     * <b>A {@code package} line disagreeing with the file's directory is reported.</b>
+     *
+     * <p>The last sentence of M15 S4, and the reason the authority had to invert at all: the project index
+     * names a type from its PATH, so a file declaring a different package resolves under one name and
+     * compiles under another. Nothing caught that before — the declaration was the only claim anyone
+     * looked at, so the two could not disagree because only one of them was ever asked.</p>
+     *
+     * <p>The diagnostic is javac's own rather than one of ours. Handing ECJ the path's package is the
+     * whole implementation; it already enforces the rule and already points at the package line.</p>
+     */
+    @Test
+    public void aPackageLineDisagreeingWithItsDirectoryIsReported() {
+        List<String> errors = errorsIn("com.example.Main",
+                "package wrong;\npublic class Main { }\n");
+
+        assertFalse("a package line that contradicts the file's directory went unreported", errors.isEmpty());
+        assertTrue("reported, but not about the package: " + errors,
+                errors.toString().toLowerCase().contains("package"));
+    }
+
+    /** <b>...and one that agrees is silent.</b> The control, without which the test above passes on noise. */
+    @Test
+    public void aPackageLineAgreeingWithItsDirectoryIsSilent() {
+        assertEquals(List.of(), errorsIn("com.example.Main",
+                "package com.example;\npublic class Main { }\n"));
+    }
+
+    /**
+     * <b>A file under NO source root keeps its declaration as the authority.</b>
+     *
+     * <p>The other half of the inversion, and the half that would break everything if it were lost. A
+     * scratch script has no directory worth deriving a name from, so it arrives unqualified and whatever
+     * it declares is the only fact available. {@code SourcePackages} was written for exactly this: the
+     * harness has a {@code Main.java} declaring a package copied out of this repository, and reporting it
+     * would be an error on a file that compiles perfectly.</p>
+     */
+    @Test
+    public void aFileUnderNoRootIsNamedByItsDeclaration() {
+        assertEquals(List.of(), errorsIn("Main",
+                "package anything.at.all;\npublic class Main { }\n"));
+    }
+
+    /**
+     * <b>A qualified name whose source declares no package is not a disagreement.</b>
+     *
+     * <p>The carve-out, and it is load-bearing. A decompiled or generated unit is named from outside and
+     * may carry no {@code package} line at all; imposing the path's package on one would report an error
+     * against text nobody wrote, in a read-only viewer. The spec sentence is about a package line that
+     * disagrees — where there is no line, there is nothing to disagree with.</p>
+     */
+    @Test
+    public void aQualifiedNameWithNoPackageLineIsNotAnError() {
+        assertEquals(List.of(), errorsIn("com.example.Main", "public class Main { }\n"));
     }
 }
