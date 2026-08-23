@@ -1,5 +1,10 @@
 package com.crystalgui.ui.elements.desktop;
 
+import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.ui.elements.chrome.ContextMenu;
+import com.crystalgui.core.command.MenuId;
+import com.crystalgui.core.data.DataKey;
+import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.render.CgUiPaintContext;
@@ -413,6 +418,13 @@ public class WindowFrame extends UIElement implements Disposable {
             beginMove(event.getPosition().x(), event.getPosition().y(), event.getDetail());
         }, false, true);
 
+        // THE SYSTEM MENU ON A RIGHT-CLICK -- W13a's second of three routes. Every desktop puts it here,
+        // and it costs nothing to add because the rows are MenuId.WINDOW_SYSTEM's: this route differs
+        // from Alt+Space only in where it anchors. Built against the pressed element, whose walk reaches
+        // this frame through the title bar, so the menu is always about the window it was opened on.
+        ContextMenu.attach(titleBar, CommandRegistry.global(),
+                pressed -> ContextMenu.of(MenuId.WINDOW_SYSTEM));
+
         installActivation();
         // CLICK_NOT_TABBABLE is the web's tabindex="-1", and both halves are wanted. A frame must be able
         // to HOLD focus -- it is where focus lands when a window's content has nowhere to put it, and
@@ -795,6 +807,33 @@ public class WindowFrame extends UIElement implements Disposable {
     }
 
     private boolean toolWindow;
+
+    // ── The command surface ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * The window a window command is about — W13a.
+     *
+     * <h3>Resolved by the walk, so focus decides and the frame is found for free</h3>
+     *
+     * <p>Every window operation is a {@code Command} first and chrome second, which is what keeps the
+     * system menu, the taskbar's context menu, the title bar's and the keymap from drifting: they are
+     * four renderers of one set of ids. What varies between them is only <em>which</em> window, and that
+     * is a {@link DataContext} question rather than four separate lookups.</p>
+     *
+     * <p>{@link WindowFrame} answers it with itself, so anything focused inside a window resolves
+     * outward to that window. {@code Desktop} answers it at <b>window level</b> with the active frame,
+     * which is the documented last resort — a command invoked from the palette with nothing focused
+     * still has a subject, and an element that answers still wins, so two open windows never both
+     * resolve to whatever the desktop named.</p>
+     */
+    public static final DataKey<WindowFrame> WINDOW_FRAME =
+            DataKey.create("windowFrame", WindowFrame.class);
+
+    @Override
+    @Nullable
+    public Object getData(DataKey<?> key) {
+        return key == WINDOW_FRAME ? this : null;
+    }
 
     // ── What a taskbar entry says about this window ─────────────────────────────────────────────
 
