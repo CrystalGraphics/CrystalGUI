@@ -114,7 +114,12 @@ public final class JavaLanguage {
         JavaLanguage.source = source;
         // ATTEMPTED, NOT REQUIRED -- everything below registers whether or not it opened. @see #engine()
         openEngine();
-        List<String> classpath = HostClasspath.detect();
+        // SCANNED ONCE, AND KEPT. Every consumer below wants the same answer, and one of them --
+        // `projectClass` -- is reached from a SCRIPT THREAD mid-run, where a second walk of the host's
+        // whole classpath is both a stall the author feels and a chance for the two to disagree about
+        // what is on it. Same argument as `hostWith` having one implementation.
+        classpath = HostClasspath.detect();
+        List<String> classpath = JavaLanguage.classpath;
 
         // THE EXISTING ENTRY, WITH SERVICES ADDED -- not a new one. `.java` already resolves to a
         // tokenizer, and replacing the entry wholesale would drop whichever backend won: registering
@@ -195,6 +200,9 @@ public final class JavaLanguage {
     /** Built on first use, and shared: one compiled-script cache for every language that asks. */
     private static ScriptHost interopHost;
 
+    /** What {@link #register} scanned, so nothing scans again. @see #projectClass */
+    private static List<String> classpath = List.of();
+
     /**
      * A project Java type, compiled and defined — what a JavaScript {@code import} of one resolves to.
      *
@@ -215,7 +223,7 @@ public final class JavaLanguage {
      */
     @Nullable
     public static synchronized Class<?> projectClass(String qualifiedName) {
-        if (interopHost == null) interopHost = hostWith(null, HostClasspath.detect());
+        if (interopHost == null) interopHost = hostWith(null, classpath);
         return interopHost == null ? null : interopHost.classOf(qualifiedName);
     }
 
