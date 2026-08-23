@@ -345,9 +345,13 @@ public class Workbench extends UIElement {
         // yet, and the retry would answer "still no window" and drop the panels for good. The same rule
         // ProjectFileTree's deferred refresh follows, and for the same reason: an attach is not a moment
         // to build things in.
-        if (current != null && toolWindowManager != null) {
+        if (current != null) {
             current.registerTicker(deltaSeconds -> {
-                toolWindowManager.retryPendingShows();
+                if (toolWindowManager != null) toolWindowManager.retryPendingShows();
+                // ...AND ANYTHING ELSE THAT NEEDED A WINDOW. A session restore of torn-out editor
+                // windows has the identical problem and the identical deadline, so it rides the same
+                // deferral rather than growing a second one that could drift from it.
+                onDidJoinWindow.emit();
                 return false;
             });
         }
@@ -2144,6 +2148,21 @@ public class Workbench extends UIElement {
      * nothing could clean up after a close.</p>
      */
     public final Signal.Value<CgPath> onDidCloseDocument = new Signal.Value<>();
+
+    /**
+     * This workbench has joined a {@code UIWindow} — emitted <b>one frame after</b> the attach.
+     *
+     * <p>For anything that needs a window and may legitimately be asked for before there is one. A host
+     * may restore its session on its first frame, which is before {@code UIWindow.init} has run, so a
+     * windowed tool window and a torn-out editor window both have to be remembered and replayed.</p>
+     *
+     * <p><b>A frame later, never inside the attach hook.</b> {@code onWindowChanged} fires during the
+     * attach walk, so the rest of the subtree may not be registered yet and anything built there inserts
+     * a Taffy node into a parent whose children are still being registered — the {@code Index (is 1)
+     * should be < child_count (0)} crash. Same rule {@code ProjectFileTree}'s deferred refresh follows.
+     * </p>
+     */
+    public final Signal.Action onDidJoinWindow = new Signal.Action();
 
     private void refreshDirtyMarkers() {
         List<CgPath> dirty = unsavedFiles();

@@ -6,6 +6,8 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Button;
+import com.crystalgui.ui.elements.UIText;
+import com.crystalgraphics.platform.input.CgMouseCodes;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 
 import javax.annotation.Nullable;
@@ -54,6 +56,14 @@ public class Taskbar extends UIElement {
     public static final String HIDDEN_CLASS = "__hidden__";
     /** The entry's icon slot, hidden until the window declares one. */
     public static final String ICON_CLASS = "__icon__";
+    /** On the entry of a window that opened without focus and has not been looked at yet. */
+    public static final String ATTENTION_CLASS = "__attention__";
+    /** The entry's badge slot — an unsaved count, an error count. Absent until the window declares one. */
+    public static final String BADGE_CLASS = "__badge__";
+    /** On an entry whose window is reporting progress; the fill below is only laid out while it is on. */
+    public static final String BUSY_CLASS = "__busy__";
+    /** The bar drawn behind an entry's label while its window reports progress. */
+    public static final String PROGRESS_CLASS = "__progress__";
 
     private final UIElement entries;
 
@@ -150,7 +160,63 @@ public class Taskbar extends UIElement {
             applyIcon(entry, frame.iconName());
             setClass(entry, ACTIVE_CLASS, frame == active);
             setClass(entry, HIDDEN_CLASS, frame.state() == WindowState.HIDDEN);
+            setClass(entry, ATTENTION_CLASS, frame.isDemandingAttention());
+            applyBadge(entry, frame.badge());
+            applyProgress(entry, frame.progress());
         }
+    }
+
+    /**
+     * The window's badge, in the entry's post-icon slot.
+     *
+     * <p>Built on first use rather than always, which is the {@code SearchField} lesson: a permanent
+     * child hidden with {@code display: none} still counts for the parent's {@code gap-all}, so every
+     * entry in the strip would have gained a gap for a badge almost none of them has. Not existing is
+     * the only spelling of "costs nothing" that actually is.</p>
+     */
+    private void applyBadge(Button entry, @Nullable String badge) {
+        UIElement slot = entry.getPostIcon();
+        if (badge == null) {
+            if (slot != null) slot.setDisplayed(false);
+            return;
+        }
+        if (slot == null) {
+            slot = new UIText("");
+            slot.addClass(BADGE_CLASS);
+            slot.setHitTest(false);
+            entry.setPostIcon(slot);
+        }
+        slot.setDisplayed(true);
+        if (slot instanceof UIText text) text.setText(badge);
+    }
+
+    /**
+     * The window's progress, as a fill behind the entry's label.
+     *
+     * <p>A width in percent, which is the one thing a progress bar can be: the entry is sized by its own
+     * content and writing a pixel width onto the fill would pin it to whatever the entry measured when
+     * the job started — the documented "animate the content, never the container" trap, from the side
+     * where the container is the thing that must stay free.</p>
+     */
+    private void applyProgress(Button entry, float progress) {
+        boolean busy = progress >= 0f;
+        setClass(entry, BUSY_CLASS, busy);
+        UIElement fill = entry.getUnderlay();
+        if (!busy) {
+            if (fill != null) fill.setDisplayed(false);
+            return;
+        }
+        if (fill == null) {
+            fill = new UIElement();
+            fill.addClass(PROGRESS_CLASS);
+            // A BUTTON REFUSES PUBLIC CHILDREN, like every composite -- so this goes in the widget's own
+            // slot rather than being parented onto it. setUnderlay is what makes an absolutely
+            // positioned fill measure against the entry's box instead of against the strip's.
+            entry.setUnderlay(fill);
+        }
+        fill.setDisplayed(true);
+        float percent = Math.max(0f, Math.min(1f, progress)) * 100f;
+        StyleGroup.importantPipeline(fill.getStyle().getLayoutGroup(), l -> l.widthPercent(percent));
     }
 
     /**
@@ -178,6 +244,18 @@ public class Taskbar extends UIElement {
                 frame.minimize();
             }
         });
+        // MIDDLE-CLICK CLOSES, as it does on every taskbar and on every browser tab. Through
+        // requestClose, never destroy: the window's own policy decides what closing means, so a
+        // HIDE_ON_CLOSE window is put away and a dirty one still gets to refuse.
+        //
+        // On mouse-DOWN rather than the press pair, because a Button's activation is button-agnostic --
+        // it fires for any button, so routing this through onPressed would close the window on an
+        // ordinary left click as well.
+        entry.onMouseDown.attachListener((element, event) -> {
+            if (event.getButtonId() != CgMouseCodes.MIDDLE_BUTTON) return;
+            event.stopPropagation();
+            frame.requestClose();
+        }, false, false);
         return entry;
     }
 

@@ -796,6 +796,92 @@ public class WindowFrame extends UIElement implements Disposable {
 
     private boolean toolWindow;
 
+    // ── What a taskbar entry says about this window ─────────────────────────────────────────────
+
+    /**
+     * Whether this window is <b>asking for attention</b> — Win32's {@code FlashWindowEx}, X11's urgency
+     * hint, macOS's bouncing dock icon.
+     *
+     * <p>The other half of the no-steal rule: a window that appears without taking focus has to be able
+     * to say it appeared, or it is a window nobody knows opened. Set by
+     * {@link Desktop#addWindow(WindowFrame, boolean)} when a window opens in the background, and
+     * <b>cleared by activation</b> — which is the only event that means "the user has seen it". Not by a
+     * timer: a flash that gives up after five seconds is a notification you can miss by looking away,
+     * which is exactly what the taskbar entry exists to prevent.</p>
+     */
+    public boolean isDemandingAttention() {
+        return demandingAttention;
+    }
+
+    /** @see #isDemandingAttention() */
+    public void requestAttention() {
+        if (demandingAttention) return;
+        demandingAttention = true;
+        if (owner != null) owner.registry().changed();
+    }
+
+    /** @see #isDemandingAttention() */
+    public void clearAttention() {
+        if (!demandingAttention) return;
+        demandingAttention = false;
+        if (owner != null) owner.registry().changed();
+    }
+
+    private boolean demandingAttention;
+
+    /**
+     * A short overlay on this window's taskbar entry — an unsaved count, an error count, or null.
+     *
+     * <p>{@code FileDecoration}'s badge/colour split, one level up: the badge says <em>what</em> and a
+     * class says how it should look, so a theme decides whether an error count is red without the window
+     * knowing what red is. Kept to a few characters — it is drawn into the entry's icon slot, not given
+     * a row of its own.</p>
+     */
+    @Nullable
+    public String badge() {
+        return badge;
+    }
+
+    /** @see #badge() */
+    public WindowFrame setBadge(@Nullable String nowBadge) {
+        String cleaned = nowBadge == null || nowBadge.isEmpty() ? null : nowBadge;
+        if (java.util.Objects.equals(badge, cleaned)) return this;
+        this.badge = cleaned;
+        if (owner != null) owner.registry().changed();
+        return this;
+    }
+
+    @Nullable
+    private String badge;
+
+    /**
+     * How far along this window's work is, 0..1 — or <b>negative for "no progress to show"</b>, which is
+     * every window until something says otherwise.
+     *
+     * <p>Windows' taskbar progress: a chunked transfer or a band download has a real duration, and the
+     * entry is where a minimised window can report it. Negative rather than {@code null} because it is
+     * read every refresh and a boxed float per entry per frame is a needless allocation on a path that
+     * runs whenever the registry changes.</p>
+     *
+     * <p><b>Guarded with {@code !(x >= 0)}</b>, not {@code x < 0}: NaN fails every comparison, so the
+     * obvious test lets one through to be multiplied into a width — the documented NaN-poisons-a-layout
+     * trap, which cost a whole editor's row positions once.</p>
+     */
+    public float progress() {
+        return progress;
+    }
+
+    /** @see #progress() */
+    public WindowFrame setProgress(float nowProgress) {
+        float cleaned = !(nowProgress >= 0f) ? -1f : Math.min(1f, nowProgress);
+        if (progress == cleaned) return this;
+        this.progress = cleaned;
+        if (owner != null) owner.registry().changed();
+        return this;
+    }
+
+    private float progress = -1f;
+
     /**
      * Tool windows this one took down with it when it hid, so showing it puts back exactly those.
      *
@@ -1307,12 +1393,12 @@ public class WindowFrame extends UIElement implements Disposable {
      * written there, but one that has never been resized has no inline size at all and is whatever the
      * sheet made it.</p>
      */
-    float recordedWidth() {
+    public float recordedWidth() {
         return getParent() == null ? lastVisibleWidth : getRuntimeCache().getWidth();
     }
 
     /** @see #recordedWidth() */
-    float recordedHeight() {
+    public float recordedHeight() {
         return getParent() == null ? lastVisibleHeight : getRuntimeCache().getHeight();
     }
 

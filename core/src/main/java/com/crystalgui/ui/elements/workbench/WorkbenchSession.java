@@ -6,6 +6,8 @@ import com.crystalgui.fs.ConfigStorage;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.elements.dock.DockLeaf;
+import com.crystalgui.ui.elements.dock.DockWindow;
+import com.crystalgui.ui.elements.desktop.WindowFrame;
 import com.crystalgui.ui.elements.dock.DockPanelDescriptor;
 import com.crystalgui.ui.elements.dock.DockPanelKind;
 import com.crystalgui.ui.elements.dock.DockPanelRef;
@@ -168,6 +170,40 @@ public final class WorkbenchSession {
     private static final String KEY_VIEW = "view";
 
     /**
+     * Torn-out editor windows — the dock trees that are <b>not</b> under {@link #KEY_DOCK} (W9, persisted
+     * at W12).
+     *
+     * <h3>They were persisted by nothing at all, and did not even come back docked</h3>
+     *
+     * <p>Two independent reasons, either of which alone would have done it. {@code DockLayout.tearOut}
+     * <em>removes</em> the leaf from the layout, and {@code KEY_DOCK} is that layout — so the panel was
+     * in no project record. And {@code DockArea.tearOutToWindow} builds a {@code DockWindow} with no
+     * {@code WindowFrame.key()}, which {@code Desktop.applyPersistedGeometry} skips — so it was in no
+     * desktop record either.</p>
+     *
+     * <p>What made it read as an editor bug rather than a persistence gap is that the <em>file</em>
+     * survived: {@code openPaths()} reads {@code OpenDocuments}, which is document-level, so the caret
+     * and scroll were saved perfectly with no tab left to land in.</p>
+     *
+     * <h3>Here rather than in the desktop record, and that is not arbitrary</h3>
+     *
+     * <p>The desktop's record is per <b>host</b> and holds geometry against a key. A torn-out window is
+     * per <b>project</b> — it holds that project's documents — and what has to survive is not only where
+     * it was but <em>what was in it</em>, which is a dock tree. The same argument that keeps a tool
+     * window's placement here rather than there.</p>
+     *
+     * <p><b>No version bump</b>, for the reason {@link #KEY_WIDGETS} gives: the key is purely additive.
+     * A record written before it has no {@code windows} array, which decodes to "no torn-out windows" —
+     * and that is exactly what was true of those sessions, since nothing was recording them.</p>
+     */
+    private static final String KEY_WINDOWS = "windows";
+    private static final String KEY_TITLE = "title";
+    private static final String KEY_LEFT = "left";
+    private static final String KEY_TOP = "top";
+    private static final String KEY_WIDTH = "width";
+    private static final String KEY_HEIGHT = "height";
+
+    /**
      * How many <b>listings</b> a pending expansion is retried across before it is written off.
      *
      * <p>Was frames, when {@link #tick()} ran from a per-frame ticker. It is now driven by
@@ -200,6 +236,10 @@ public final class WorkbenchSession {
         this.workbench = workbench;
         this.storage = storage;
         workbench.onDidOpenDocument.connect(this::applyViewState);
+        // The second half of the torn-out-window restore. A record read before the workbench had a
+        // UIWindow parked its windows; this is the moment there is somewhere to open them.
+        // @see #reopenTornOutWindows
+        workbench.onDidJoinWindow.connect(this::reopenTornOutWindows);
         // AT CONSTRUCTION, not on a successful restore. The store is what reads a widget back as it leaves
         // the tree, so a first run -- which has no record to restore and would never have installed one --
         // would lose everything closed before the first save. Idempotent, and re-asserted at both entry
@@ -259,6 +299,10 @@ public final class WorkbenchSession {
         // knowable now.
         captureOpenToolWindows();
         workbench.toolWindows().encodeInto(out, KEY_TOOL_WINDOWS);
+
+        // BESIDE the dock for the same reason, one step further out: a torn-out window's tree is not in
+        // the main layout at all -- tearOut removed it. @see #KEY_WINDOWS
+        out.putList(KEY_WINDOWS, tornOutWindows(), WorkbenchSession::writeDockWindow);
 
         // Every opted-in widget in the tree, over the top of what came in. Reading the LIVE elements is
         // what makes a dragged divider survive; keeping the entries nobody built is what stops a session
@@ -324,6 +368,123 @@ public final class WorkbenchSession {
      * <p>Runs after {@code pullWeightsIntoLayout}, so the weights recorded are the ones the dividers are
      * actually at rather than the ones the layout was built with.</p>
      */
+    // ── Torn-out windows ────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Every torn-out editor window belonging to <b>this</b> workbench, in the desktop's open order.
+     *
+     * <p>Matched by <b>panel-registry identity</b>, not by walking the tree from here: a
+     * {@code DockWindow} is a top-level desktop citizen and is not under the workbench at all, which is
+     * the whole point of it. What ties it back is that its dock builds content from this workbench's
+     * registry — so anything it holds is this project's, and anything holding another registry is
+     * somebody else's window that happens to share a desktop.</p>
+     */
+    private List<DockWindow> tornOutWindows() {
+        UIWindow window = workbench.getAttachedWindow();
+        // desktopIfPresent, never desktop(): the latter BUILDS one, and a save must not create a
+        // compositor in a window that never had a window open in it.
+        var desktop = window == null ? null : window.desktopIfPresent();
+        if (desktop == null) return List.of();
+        List<DockWindow> out = new ArrayList<>();
+        for (WindowFrame frame : desktop.registry().windows()) {
+            if (frame instanceof DockWindow dock && dock.area().registry() == workbench.panels()) {
+                out.add(dock);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * One torn-out window: where it was, and the whole dock tree inside it.
+     *
+     * <p>Geometry follows {@code DesktopSession}'s rules exactly, because they are properties of a
+     * {@code WindowFrame} rather than of that record: position is the <b>intent</b> pair
+     * ({@code getWantedLeft}, never the clamped {@code getX()}, or every launch pulls the window further
+     * in) and size is {@code recordedWidth}, which answers from the last measured box so a hidden window
+     * does not record a zero.</p>
+     *
+     * <p>The title is stored rather than recomputed from the layout. It is whatever panel the window was
+     * torn out with and does not track what is in it afterwards, so there is nothing to derive it from —
+     * picking "the first panel" would rename the window on every restore.</p>
+     */
+    private static void writeDockWindow(StateMap<JsonElement> out, DockWindow frame) {
+        out.putString(KEY_TITLE, frame.getTitle());
+        out.putFloat(KEY_LEFT, frame.getWantedLeft());
+        out.putFloat(KEY_TOP, frame.getWantedTop());
+        out.putFloat(KEY_WIDTH, frame.recordedWidth());
+        out.putFloat(KEY_HEIGHT, frame.recordedHeight());
+        // The window's OWN box as the viewport, not the workbench's: this tree lives inside this window,
+        // so that is the box its weights were resolved against.
+        out.putRaw(KEY_DOCK, DockLayoutCodec.encode(frame.area().layout(), JsonOps.INSTANCE,
+                frame.recordedWidth(), frame.recordedHeight()));
+    }
+
+    /** A torn-out window as read back, before anything has been opened for it. */
+    private record TornOutWindow(String title, float left, float top, float width, float height,
+                                 DockLayout layout) {
+
+        /** @see com.crystalgui.ui.elements.desktop.DesktopSession.Placement#isUsable() */
+        boolean isUsable() {
+            return width > 0f && height > 0f;
+        }
+    }
+
+    /** Windows the record named that have not been opened yet. @see #reopenTornOutWindows */
+    private final List<TornOutWindow> pendingWindows = new ArrayList<>();
+
+    private void readTornOutWindows(StateMap<JsonElement> in) {
+        pendingWindows.clear();
+        for (TornOutWindow parsed : in.getList(KEY_WINDOWS, this::readTornOutWindow)) {
+            if (parsed != null && parsed.isUsable()) pendingWindows.add(parsed);
+        }
+    }
+
+    @Nullable
+    private TornOutWindow readTornOutWindow(StateMap<JsonElement> entry) {
+        JsonElement dock = entry.getRaw(KEY_DOCK);
+        if (dock == null) return null;
+        DockLayout layout = DockLayoutCodec.decode(dock, JsonOps.INSTANCE, workbench.panels());
+        if (layout == null) return null;
+        // A TORN-OUT WINDOW HOLDS DOCUMENTS, so the same strip the main dock gets: a record written while
+        // a tool window could still be nested in a tree would otherwise restore one into a window whose
+        // registry hands back the very element the region is showing.
+        stripToolWindows(layout);
+        if (layout.leaves().stream().allMatch(DockLeaf::isEmpty)) return null;
+        return new TornOutWindow(
+                entry.getString(KEY_TITLE, ""),
+                entry.getFloat(KEY_LEFT, 0f), entry.getFloat(KEY_TOP, 0f),
+                entry.getFloat(KEY_WIDTH, 0f), entry.getFloat(KEY_HEIGHT, 0f),
+                layout);
+    }
+
+    /**
+     * Opens the torn-out windows the record named, once there is a {@code UIWindow} to open them into.
+     *
+     * <p><b>Deferred, because a restore legitimately runs before the tree has a window.</b> A host may
+     * restore on its first frame — the harness does, above its own {@code uiWindow.init} — and
+     * {@code openWindow} needs a desktop. The docked half needs no window and succeeds, so a failure
+     * here is <em>ordered</em> rather than total, which is exactly what made the tool-window version of
+     * this look like a partial bug. Driven by {@link Workbench#onDidJoinWindow}, the same one-frame
+     * deferral the tool windows ride.</p>
+     *
+     * <p>Idempotent: the list is drained, so a second window-join opens nothing.</p>
+     */
+    public void reopenTornOutWindows() {
+        if (pendingWindows.isEmpty()) return;
+        UIWindow window = workbench.getAttachedWindow();
+        if (window == null) return;
+        List<TornOutWindow> opening = new ArrayList<>(pendingWindows);
+        pendingWindows.clear();
+        for (TornOutWindow record : opening) {
+            DockWindow frame = new DockWindow(workbench.panels(), record.layout(), record.title());
+            // BEFORE the open, so it appears at the size and place it is meant to be rather than flying
+            // in at a default and jumping -- Desktop.addWindow's own note, from the other side.
+            frame.resizeTo(record.width(), record.height());
+            frame.moveTo(record.left(), record.top());
+            window.openWindow(frame);
+        }
+    }
+
     /** Removes any panel the dock should never hold — anything whose kind is not a document. */
     private void stripToolWindows(DockLayout layout) {
         for (DockLeaf leaf : new ArrayList<>(layout.leaves())) {
@@ -426,6 +587,11 @@ public final class WorkbenchSession {
         // matters because a layout is also a thing a user can hand to another user.
         stripToolWindows(layout);
         workbench.dock().setLayout(layout);
+
+        // PARKED, not opened: a restore can legitimately run before the tree has a UIWindow to open into.
+        // @see #reopenTornOutWindows
+        readTornOutWindows(in);
+        reopenTornOutWindows();
 
         // AFTER the layout is installed, so a placement naming a path describes the tree that is now
         // there. Absent is not a failure: a record written before tool-window placements existed still has

@@ -634,10 +634,15 @@ editor scheme's.
 | `--taskbar-border` | `var(--border-base)` | base.css |
 | `--taskbar-entry-active-bg` | `var(--pressed-bg)` | base.css |
 | `--taskbar-entry-active-fg` | `var(--fg)` | base.css |
+| `--taskbar-entry-attention-bg` | `var(--accent)` | base.css |
+| `--taskbar-entry-attention-fg` | `var(--fg-on-accent)` | base.css |
+| `--taskbar-entry-badge-bg` | `var(--error)` | base.css |
+| `--taskbar-entry-badge-fg` | `var(--fg-on-accent)` | base.css |
 | `--taskbar-entry-fg` | `var(--fg-secondary)` | base.css |
 | `--taskbar-entry-hidden-fg` | `var(--fg-disabled)` | base.css |
 | `--taskbar-entry-hover-bg` | `var(--hover-bg)` | base.css |
 | `--taskbar-entry-hover-fg` | `var(--fg)` | base.css |
+| `--taskbar-entry-progress` | `var(--accent-soft)` | base.css |
 | `--tooltip-bg` | `#1E1E1EF0` | crystal-dark.css |
 | `--tooltip-border` | `#00000080` | crystal-dark.css |
 | `--tooltip-fg` | `var(--fg)` | base.css |
