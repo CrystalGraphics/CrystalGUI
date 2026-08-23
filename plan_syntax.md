@@ -1516,3 +1516,50 @@ have to coexist: root-relative where a root contains the file, declaration-deriv
    `language/` reading it through a seam — the `TypeSearch`/`TypeSearchRegistry` shape, which now has a
    working precedent. It must be invalidated by `WorkspaceWatcher` **[verified: `Change(path, kind, etag)`
    with `isDeleted()`]** and must prefer an open buffer over disk.
+
+### 24.7 Implementation order
+
+Seven stages. The ordering is **forced** in three places and free everywhere else; the forced ones are
+called out, because an order that looks like preference is one somebody reorders.
+
+| # | Stage | What it proves | Forced by |
+|---|---|---|---|
+| **S1** | **Source roots.** `WorkspaceProject` gains them, defaulted by convention to `src/main/java` and `src/main/js` but **declared**, so a mod may put sources elsewhere. Nothing consumes them yet | `CgPath` → (root, package, simple name) is a pure function, with the rootless case answering "no root" rather than guessing | — |
+| **S2** | **The project index, and the bridge seam.** FQN ↔ `CgPath`, core-side, built off the crawl `knownFiles()` already runs, invalidated by `WorkspaceWatcher`, and **buffer-aware** — an open document beats disk. Exposed as `ProjectSources`, JDK types only (§24.4). No engine consumes it yet | asking for `foo.Bar` returns the CURRENT text, including an unsaved edit | needs S1 to derive an FQN from a path |
+| **S3** | **Route unification, as a NO-OP.** Make `live()` the only resolving route — working with `TypeBytes.NONE` and no platform registered, which is the harness, every test and a plain JVM. **No project sources yet.** `parse(…, false)` stays as the recovery tree; the `parse(…, true)` fallback becomes dead | the existing suite is green and the harness is unchanged, having swapped the engine underneath both | must precede S4 — see below |
+| **S4** | **Java cross-file resolution.** `ScriptNameEnvironment` answers a project type with `NameEnvironmentAnswer(ICompilationUnit, …)` over `ProjectSources`. **Package authority inverts**: the path wins where a root contains the file, `SourcePackages` still answers where none does, and a `package` line disagreeing with its directory becomes a diagnostic on line 1 | `Main.java` uses a type declared in `Viewer.java`; an unsaved edit in one is visible to the other; a wrong package line is reported | needs S2 and S3 |
+| **S5** | **Multi-file compile and run.** ECJ already emits every type it compiled into `Result.classes`, so the closure may arrive free — but `ScriptClassLoader` and the compiled-script cache both assume one file | running `Main.java` that uses `Viewer` works, and re-running after editing `Viewer` picks the change up | needs S4 |
+| **S6** | **JavaScript imports.** Our own syntax, blanked at its own length as `JsImports` already blanks a Java import, bound underneath to Rhino's CommonJS via a `ModuleSourceProvider` over the same index, `setSandboxed(true)` behind `ScriptPolicy` | a script imports another and gets its exports, and a refused module is refused | needs S1 + S2 only — **parallel to S3–S5** |
+| **S7** | **JavaScript static resolution.** The editor half: completion and hover across scripts | `require`d names resolve in the editor, not only at run time | needs S6 |
+
+**The three forced edges.**
+
+1. **S1 before S2.** An index that maps a path to a fully-qualified name needs to know where the name
+   starts. Without roots it can only read each file's `package` line — which is I/O per file over the whole
+   workspace, and is the very thing S4 stops trusting.
+2. **S3 before S4, and this is the one worth defending.** The cheap version of S4 is one line — pass the
+   source roots as `ASTParser`'s empty `sourcepathEntries` slot — and it works. It also resolves **from
+   disk only** (§24.2), so an unsaved edit in one file is invisible to another's analysis. Shipping that
+   first teaches "save it to see your change", and then takes it away; worse, it leaves the harness and a
+   Minecraft client resolving *different text*, which is the exact bug class this stack has paid for more
+   than once. Unify first, as a no-op, so a failure afterwards is unambiguously about project sources
+   rather than about the route.
+3. **S6 is not downstream of the Java work at all.** It shares only S1 and S2. If there is ever a second
+   pair of hands, that is where they go.
+
+**Where the risk actually is**, in descending order:
+
+- **S3 is the scary one**, and deliberately so — it is a migration of the route the comment in
+  `EcjSourceAnalyzer` calls "the route with the coverage". It is staged as a no-op precisely so the whole
+  suite is the test.
+- **S5's cache key is a correctness trap.** `(source hash, mappings hash, band)` is *wrong* the moment a
+  file depends on another: editing `Viewer` must invalidate `Main`. A hash of the closure, or a
+  dependency-aware invalidation, is a design decision and not an implementation detail.
+- **S4's cost per keystroke** is the performance risk. Analysis reads one file today and the transitive
+  closure afterwards, against §7.3's budget — and the obvious fix, a shared cache of parsed units, cuts
+  against `EcjSourceAnalyzer`'s stated *"a fresh environment per analysis, like a compile"* rule, which
+  exists because a transformer can add a member between keystrokes. Reconciling the two is real work.
+- **S7 is the largest unknown** and the easiest to defer: the runtime half (S6) is complete without it.
+
+**M14 comes after S5**, not after S7. Rename and find-usages need Java's project-wide references, which S4
+and S5 deliver; JavaScript's arrive with S7 and can follow.
