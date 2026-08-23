@@ -5,6 +5,7 @@ import com.crystalgui.language.platform.ScriptServices;
 
 import com.crystalgui.text.SimilarNames;
 
+import com.crystalgui.text.lang.ProjectSourcesRegistry;
 import com.crystalgui.text.lang.SymbolKind;
 
 import java.io.File;
@@ -358,6 +359,14 @@ public final class TypeIndex {
         String needle = prefix.toLowerCase(Locale.ROOT);
         List<Entry> prefixed = new ArrayList<>();
         List<Entry> scattered = new ArrayList<>();
+        // THE WORKSPACE'S OWN TYPES, walked first so they hold the head of each tier. @see #projectEntries
+        List<Entry> projectPrefixed = new ArrayList<>();
+        List<Entry> projectScattered = new ArrayList<>();
+        for (Entry entry : projectEntries()) {
+            String candidate = entry.simpleName().toLowerCase(Locale.ROOT);
+            if (candidate.startsWith(needle)) projectPrefixed.add(entry);
+            else if (isSubsequence(needle, candidate)) projectScattered.add(entry);
+        }
         for (Entry entry : entries) {
             String candidate = entry.simpleName().toLowerCase(Locale.ROOT);
             if (candidate.startsWith(needle)) {
@@ -381,12 +390,63 @@ public final class TypeIndex {
         // agree with rather than being reshuffled a step later.
         prefixed.sort(BY_BREVITY);
         scattered.sort(BY_BREVITY);
-        List<Entry> hits = new ArrayList<>(prefixed);
+        projectPrefixed.sort(BY_BREVITY);
+        projectScattered.sort(BY_BREVITY);
+
+        // TIER FIRST, THEN PROXIMITY -- a real prefix hit beats any scattered one whatever it belongs to,
+        // and within a tier the workspace's own code beats the classpath's. That is IntelliJ's order (its
+        // weighers rank by match quality and only then by proximity) and it matters most in the case that
+        // prompted it: typing `Formatter` in a file that declares one offered java.util.Formatter,
+        // java.util.logging.Formatter and a JavaFX accessor, and not the class in the next tab.
+        List<Entry> hits = new ArrayList<>(projectPrefixed);
+        hits.addAll(prefixed);
+        hits.addAll(projectScattered);
         hits.addAll(scattered);
 
         boolean truncated = hits.size() > MAX_RESULTS;
         return new Match(truncated ? new ArrayList<>(hits.subList(0, MAX_RESULTS)) : hits, truncated);
     }
+
+    /**
+     * The workspace's declared types, as index entries.
+     *
+     * <h3>Derived per query, and deliberately not held</h3>
+     *
+     * <p>This index is built once per CLASSPATH and cached across documents — a jar does not change while
+     * the editor is open. A workspace does: every file created, renamed or deleted changes this answer, so
+     * an entry list stored beside {@code entries} would be stale with nothing to invalidate it, and the
+     * failure would be a type that exists and is never offered.</p>
+     *
+     * <p>The cost is a walk over the project's names per query, against a classpath scan of up to sixty
+     * thousand that already happens on the same keystroke. The provider answers from the crawl with no
+     * I/O, which is what makes that affordable.</p>
+     *
+     * <p>{@code container} is a marker rather than a real root: there are no bytes to read, so
+     * {@link #kindOf} falls through to its documented CLASS default. That is the honest answer here — a
+     * project type has no class file to state otherwise, and the alternative is parsing source during a
+     * keystroke to choose an icon.</p>
+     */
+    private static List<Entry> projectEntries() {
+        List<String> names;
+        try {
+            names = ProjectSourcesRegistry.view().declaredTypes();
+        } catch (RuntimeException unavailable) {
+            return List.of();
+        }
+        if (names == null || names.isEmpty()) return List.of();
+        List<Entry> out = new ArrayList<>(names.size());
+        for (String name : names) {
+            if (name == null || name.isEmpty()) continue;
+            int dot = name.lastIndexOf('.');
+            String simple = dot < 0 ? name : name.substring(dot + 1);
+            String pkg = dot < 0 ? "" : name.substring(0, dot);
+            out.add(new Entry(simple, pkg, PROJECT_CONTAINER));
+        }
+        return out;
+    }
+
+    /** Where a workspace type "lives". Shared, so every project entry costs a pointer. */
+    private static final String PROJECT_CONTAINER = "project:";
 
     /** Shortest first, then alphabetical — a total order, so the list cannot permute between keystrokes. */
     private static final Comparator<Entry> BY_BREVITY =

@@ -926,7 +926,7 @@ public final class JavaSignatures {
         if (key == null) return null;
         ASTNode declaration = source.unit().findDeclaringNode(key);
         if (declaration == null) return null;
-        return siteOf(source.unit(), declaration, topLevel);
+        return siteOf(source.unit(), declaration, topLevel, source.workspacePath());
     }
 
     /**
@@ -971,7 +971,8 @@ public final class JavaSignatures {
      * identifier, which is what {@code declarationOf} already slices for a fragment.</p>
      */
     @Nullable
-    private static DeclarationSite siteOf(CompilationUnit unit, ASTNode declaration, String topLevel) {
+    private static DeclarationSite siteOf(CompilationUnit unit, ASTNode declaration, String topLevel,
+                                         @Nullable String workspacePath) {
         ASTNode named = nameNodeOf(declaration);
         int start = named.getStartPosition();
         int line = unit.getLineNumber(start);
@@ -980,10 +981,18 @@ public final class JavaSignatures {
         // produce. A site built from it would be row -2 after the zero-basing below.
         if (line < 1) return null;
         int endLine = unit.getLineNumber(start + named.getLength());
-        return DeclarationSite.inLibrary(topLevel,
-                new TextPoint(line - 1, unit.getColumnNumber(start)),
-                new TextPoint(Math.max(line, endLine) - 1,
-                        unit.getColumnNumber(start + named.getLength())));
+        TextPoint from = new TextPoint(line - 1, unit.getColumnNumber(start));
+        TextPoint to = new TextPoint(Math.max(line, endLine) - 1,
+                unit.getColumnNumber(start + named.getLength()));
+        // A WORKSPACE FILE NAMES ITSELF. The positions are identical either way -- what differs is where
+        // the reader is sent: a project path opens the file in the editor, a library name opens the
+        // decompiler. Getting this wrong is not a failed jump but a successful one into an empty viewer
+        // for a `.class` that was never compiled.
+        if (workspacePath != null) {
+            DeclarationSite inProject = DeclarationSite.inProject(workspacePath, from, to);
+            if (inProject != null) return inProject;
+        }
+        return DeclarationSite.inLibrary(topLevel, from, to);
     }
 
     /** The identifier a declaration node introduces, or the node itself when it has no separate name. */

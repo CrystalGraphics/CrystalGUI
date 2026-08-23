@@ -223,6 +223,19 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
     }
 
     /**
+     * The seam's version of {@link #reanalyse}, for a change raised from outside the engine.
+     *
+     * <p>Same mechanism, different caller: {@link #reanalyse} is {@code protected} for an engine telling
+     * itself something (a run finished), and this is what {@code core/} can reach when a project file's
+     * text lands or a classpath grows. Debounced like any other trigger — a workbench announcing "the
+     * world moved" cannot know whether this document cared, so it has to be cheap to be wrong.</p>
+     */
+    @Override
+    public final void environmentChanged() {
+        schedule();
+    }
+
+    /**
      * Analyses arbitrary text on the calling thread — the completion probe's shape.
      *
      * <p>Version {@code -1}, because this describes text the document does not contain and must never be

@@ -1,5 +1,6 @@
 package com.crystalgui.text.lang;
 
+import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.text.TextPoint;
 
@@ -79,6 +80,34 @@ public record DeclarationSite(@Nullable Resource resource, TextPoint start, Text
         if (topLevelBinaryName == null || topLevelBinaryName.isEmpty()) return null;
         return new DeclarationSite(
                 Resource.of(Resource.SCHEME_LIBRARY, topLevelBinaryName), start, end);
+    }
+
+    /**
+     * A declaration in a file the WORKSPACE holds — another project source.
+     *
+     * <p>The counterpart to {@link #inLibrary}, and it takes a {@link String} path for exactly the same
+     * reason: the only caller is an engine, {@code com.crystalgui.fs} is not parent-first on the band
+     * loader, and a child-side class that built the path type itself would build the band's own copy of
+     * it. Composing it here — in a class the host loads — keeps that type out of the engine's constant
+     * pool entirely.</p>
+     *
+     * <p>Without this a project file's declaration could only be described as a library, so Ctrl+B on a
+     * type declared two files away opened the <b>decompiler</b> on a {@code .class} that does not exist,
+     * and the viewer came up empty. Everything worked; the site simply said the wrong thing about where
+     * the type lives.</p>
+     *
+     * @param workspacePath the declaring file's path, as {@code ProjectSources.pathOf} reports it
+     */
+    @Nullable
+    public static DeclarationSite inProject(String workspacePath, TextPoint start, TextPoint end) {
+        if (workspacePath == null || workspacePath.isEmpty()) return null;
+        try {
+            return new DeclarationSite(Resource.of(CgPath.parse(workspacePath)), start, end);
+        } catch (RuntimeException notAPath) {
+            // A path this workspace cannot spell is not worth failing a hover over -- the caller's
+            // fallback is the library-shaped site it had before this existed.
+            return null;
+        }
     }
 
     /** Whether this points into a type the workspace does not contain. @see #inLibrary */

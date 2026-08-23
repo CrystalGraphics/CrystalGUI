@@ -135,6 +135,25 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
      */
     public final Signal.Value<CgPath> onDidLoadListing = new Signal.Value<>();
 
+    /**
+     * Bumped whenever anything the PROJECT INDEX derives from changes — a directory listing, or a
+     * project's declared source roots.
+     *
+     * <p>An {@code int} rather than a signal because the one consumer is a per-frame pull, and it needs
+     * "has anything changed since I last looked" rather than "what changed". Reading it is a field load;
+     * the alternative it replaced was rebuilding a list of every file in the workspace, every frame,
+     * to find out that nothing had.</p>
+     *
+     * <p>It covers both inputs on purpose. The two arrive on separate round trips, so a counter bumped
+     * only by listings goes stale for a project whose roots land after its files — and the index would
+     * then derive every one of that project's names against the fallback convention, permanently.</p>
+     */
+    public int indexRevision() {
+        return indexRevision;
+    }
+
+    private int indexRevision;
+
     @Nullable
     private String failure;
 
@@ -192,6 +211,7 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
                 // without knowing where the name starts. The listing is the only place these arrive.
                 projectSourceRoots.put(info.id(), info.sourceRoots());
             }
+            indexRevision++;
             dirty = true;
             onLoaded.run();
         }, error -> {
@@ -769,6 +789,7 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
             // `directories`, so sorting inside the loop above would order against a set still being built.
             paths.sort(this::compare);
             children.put(directory, paths);
+            indexRevision++;
             // Whatever this listing revealed becomes the next thing to walk. Feeding the queue HERE is what
             // makes the crawl resume for a folder that appears later -- a deeper listing, or one somebody
             // just created -- rather than depending on a step happening to look in the right place.
@@ -784,6 +805,7 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
             requested.remove(directory);
             if (failed.error() != CgFileError.FILE_NOT_FOUND) {
                 children.put(directory, List.of());
+                indexRevision++;
                 // Announced too. A refused listing is still an ANSWER about this directory, and a
                 // restore waiting on it has to learn that it arrived and was empty -- otherwise the one
                 // case that never resolves is the one where the folder is gone, which is exactly the
