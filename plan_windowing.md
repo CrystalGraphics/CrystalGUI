@@ -789,6 +789,84 @@ This is where the compositor pays for itself beyond the editor:
 
 ---
 
+## Tool windows are not citizens — decided at W12, 2026-08-23
+
+Reported from a screenshot, and the screenshot is the argument: the strip along the bottom read
+**Welcome · Geometry · Crystal Editor · Inspector · Notifications**, with two *panels* sitting as peers
+of the IDE they belong to. IntelliJ does not do this. Its floating tool windows are in neither the
+taskbar nor Alt+Tab; hiding the IDE hides them and showing it shows them; and that is precisely *why*
+their captions carry Dock and Hide and no maximise or close — a window with no taskbar entry must not be
+able to put itself somewhere a taskbar would be needed to get it back.
+
+Win32 has one bit for exactly this — **`WS_EX_TOOLWINDOW`** — and it is the right port, because the
+distinction it draws is not "tool window" at all. It is *is this a destination, or is it part of one*:
+
+| | taskbar entry | switcher entry | hides with owner | desktop geometry record |
+|---|---|---|---|---|
+| Torn-out **editor** window (`DockWindow`) | yes | yes | no | yes |
+| **Tool** window, `FLOATING` or `WINDOWED` | no | no | yes | no — the project's |
+
+`WindowFrame.isToolWindow()` is that bit. Three consequences, and they were three separate defects:
+
+1. **`WindowRegistry` grew `taskbarOrder()` and `switcherOrder()`**, filtered views beside the complete
+   `windows()`/`mruOrder()`. Filtering `windows()` itself was the obvious move and is wrong: `Desktop`
+   sizes its whole surface from whether any window is open, so a tool window alone on the desktop would
+   have collapsed the surface and taken itself with it.
+2. **A hide cascade.** `FLOATING` gets this free — it is a child of the overlay slot, so detaching the
+   owner detaches it. `WINDOWED` is genuinely top-level and needed the bookkeeping W8 predicted: the
+   owner remembers *which* windows it took down, because on the way back "hidden because the owner went"
+   and "hidden because the user closed it" are indistinguishable.
+3. **The cascade must not emit `onHidden`.** That signal has exactly one listener —
+   `ToolWindowManager`, which reads it as the user closing the panel and records it shut. Firing it while
+   an owner merely minimises marks every panel on that window closed, and the *next session save writes
+   it down*: the window comes back and the panels do not.
+
+**What `WINDOWED` still means** is now only the clamp — top-level, so it reaches the whole desktop
+instead of being confined to its owner's box. That is a thin distinction and it may yet collapse into
+one mode; it is left standing because nobody asked for it to go, and because "can I drag this outside
+the IDE" is a real difference IntelliJ's Float mode also has.
+
+---
+
+## W12's tail — what a restore still does not cover
+
+Found by reading both records rather than by reasoning about them, and each is silent.
+
+**1. Tool windows restore per project, and that half works.** `session.<projectId>.json` is at version 6
+and `ToolWindowState` persists `type` and `floatingBounds` beside region/side/weight, so the Inspector
+floating in one project and docked left in another each come back their own way.
+
+**2. A torn-out editor window is persisted by nothing at all, and does not even come back docked.** Two
+independent reasons, either of which alone would do it:
+
+- `DockArea.tearOutToWindow` builds a `DockWindow` and never calls `setKey`, and
+  `Desktop.applyPersistedGeometry` early-returns on a null key. It is in no desktop record.
+- `DockLayout.tearOut` **removes** the leaf from the layout, and the session's `dock` record *is*
+  `workbench.dock().layout()`. It is in no project record either.
+
+The file's caret and scroll do survive — `openPaths()` reads `OpenDocuments`, which is document-level —
+so the view state is saved with no tab left to land in, which is the shape that makes it read as an
+editor bug rather than a persistence gap. **Fixing it needs a `windows: [{ dock, bounds }]` list beside
+the main `dock` tree**, because the panel currently exists in neither record and there is nothing to
+hang geometry off. That is the substantive remaining piece of W12.
+
+**3. Windowed tool windows were recorded twice, and the wrong copy won.** *(Fixed with the section
+above.)* Per-project as `floatingBounds`, and per-host in `desktop.<id>.json` under
+`toolwindow:<typeId>` — and `showInFrame` applies the project's bounds and *then* calls `openWindow`,
+where the desktop record is applied. Second writer wins, so the first windowed tool window to open after
+launch landed wherever the *previous project* had left it. `FLOATING` was unaffected, because
+`attachOwned` never reaches `addWindow` — so it presented as only *some* of them being wrong, which
+reads as a placement bug rather than as one fact with two owners. Both halves were needed: stop writing
+them, **and** refuse to apply a record that already has them, or the bleed outlives the fix by as long
+as somebody's config file does.
+
+**Also still open, carried from earlier Ws:** W11's reconnect has no in-game verification (the remote
+probe joins but never reconnects, and two processes from one worktree contend for the vanilla jar at
+build time), and W9's tab tear-out has no `cgui-desktop` demonstration, which the repo convention asks
+for in the same commit.
+
+---
+
 ## Deliberately not building
 
 | Not building | Why |
@@ -827,7 +905,7 @@ snap; hover thumbnails stay deferred.
 | **W9.5** ✅ | **Window animations**: open, close, minimise into the taskbar, restore out of it, and maximise/restore-down — plus `transition: none` and `TransitionEngine.isAnimating` in the style engine, and `Desktop.setAnimationsEnabled` | it is what makes a compositor read as one | **Shipped 2026-08-22**, out of order — it belonged before W10 and was simply missed. Every one of them animates `transform` and `opacity` and nothing else, which is what DWM, Quartz and Mutter all do: a compositor animates a SURFACE. `UITransform` is layout-free here, so a window flying into the taskbar reflows nothing; transitioning `left/top/width/height` instead would re-run layout for the whole window on every frame, and for a maximise that is the worst moment to pay it. Maximise is therefore **FLIP** — let layout jump to the destination, apply the inverse transform instantly, ease it away. The existing transition engine turned out to be the right substrate and short by exactly two things, both of which are general and now exist: **`transition: none`**, without which applying an entry state is a change like any other and the window animates *backwards* out of it; and **`isAnimating`**, the DOM's `transitionend`, without which an exit cannot know when to actually detach — and it cannot simply wait the duration, because durations live in the sheet and this codebase does not put timings in Java. Nothing in `WindowAnimator` names a time or a curve, which is also the accessibility switch: a theme that drops the declarations gets everything instantly through no code path of its own. **The motion is ported from `gnome-shell/js/ui/windowManager.js`** — durations, easing modes, scale factors and pivots, shape only and no code, since GNOME Shell is GPL. **It took four passes and the first three are the useful part of this row.** The first used remembered Material-ish curves and read as "not quite Windows", which it was: both Fluent curves are far more extreme than a typical web easing and Microsoft's docs say so outright. The second was driven by CSS `transition`s and was reported as buggy, chopped and flickering, with minimise and close not animating at all — four separate silent failures, every one of them from the same root, which is that **the cascade is for rest states and an animation is a timeline**. The third was an imperative driver over the engine's own `ActiveTransition` maths, writing at ANIMATION origin so the cascade cannot see or fight it — the shape `CABasicAnimation`, `ValueAnimator` and `AnimationController` all share, and the right mechanism. It was still reported as not looking native, and that one was about the NUMBERS: WinUI's are **control** tokens governing a button's hover, not a window's flight, and DWM's own window timings are published nowhere. GNOME Shell is a production window manager whose constants are readable, so `SHOW/DESTROY/MINIMIZE/WINDOW_ANIMATION_TIME` (150/150/400/250ms), `EASE_OUT_EXPO` for travel and `EASE_OUT_QUAD` for a shape change are what it now uses. `ua/desktop.css` carries a comment where the CSS rules used to be, saying why a `transition` on `window` must never come back |
 | **W10** ✅ | The switcher (MRU keybind) + the first-hide notification with `Keymap.acceleratorFor` | discoverability | **Shipped 2026-08-23.** `Mod+Tab` / `Mod+Shift+Tab`, resolved against the live keymap as open question 2 required — nothing binds a Tab stroke, the dock's Next/Previous Tab are on `Mod+PageDown`/`Mod+PageUp`, so the conventional pick was free. **`Alt+Tab` is the host OS's and a Minecraft client never sees it**, which is the whole reason a desktop metaphor inside an application needs a chord of its own. Ported in shape from GNOME Shell's `switcherPopup.js`/`altTab.js` (GPL — constants and behaviour, no code), and three of its four constants are load-bearing rather than cosmetic: **selection starts on the SECOND MRU entry** (the first is the window you are already in, so starting there makes the commonest gesture a no-op that reads as the switcher not working); the panel is **invisible for `POPUP_DELAY_TIMEOUT` 150ms** and a release inside that window commits having drawn nothing, which is the entire tap-to-bounce gesture and without which every bounce flashes a panel; and `NO_MODS_TIMEOUT` 1500ms is the only way to commit if somebody rebinds to a bare key. The modifier that holds it open is **read from the invoking command's live accelerator** and polled per frame against `getCurrentModifiers()` — GNOME's own `modifier-change` masking, which sidesteps the left/right-Alt duality entirely and cannot miss a release the way a key-up listener can. **Shift is stripped from that mask**, or letting go of Shift to cycle forwards again would commit mid-gesture. Tiles carry live `WindowThumbnail`s, so a **minimised** window shows the snapshot taken on its way out — the case the switcher exists for and the one a live-only mirror cannot draw. Escape sits on the **live-drag rung** and not the close-watcher cascade, which asks the active frame's stack first and would have minimised the window behind the switcher instead. Two defects fell out on the way: **`TextEditor` and `SearchReplaceBar` both ate Ctrl+Tab**, running their bare-Tab case regardless of the modifier — the keymap resolves only on an unconsumed event, so the chord indented the current line and the switcher never heard it, which reads as the switcher being broken rather than the editor being greedy. `TextEditor`'s own comment already stated the rule; Tab was missing from its yield list. **Arrow navigation is the same problem one level down** and is why the switcher gets first refusal on the keyboard while it is up: an arrow reaches the focused element and a focused editor moves its caret with it, so an arrow through ordinary dispatch would scroll the document behind the panel and never touch the selection. GNOME holds a modal grab (`Main.pushModal`) for the whole gesture; ours intercepts only the keys it acts on, ahead of dispatch, on the live-drag rung — **Tab deliberately excluded**, so repeating the chord keeps resolving through the keymap and the gesture stays rebindable. Left/Right are previous/next and wrap (GNOME's, modulo and all); **Up/Down move by a ROW and do not wrap**, which is a divergence: GNOME's switcher is a single line and spends the vertical arrows on an app's window sub-list we have no equivalent of, while ours wraps into a grid. The row width is read off the LAYOUT rather than computed — how many tiles fit depends on each window's shape and on what the sheet's `max-width` leaves, so re-deriving it would be a second implementation of flex-wrap free to disagree with the one on screen. Enter and Space commit on the spot with the modifier still held (GNOME's base class), which is the only way to finish at all if somebody rebinds to a bare key, and a handled key **reveals the panel** rather than waiting out the delay. **The mouse works too**: hover selects (hover IS the selection here, so the ring follows the pointer), a press activates, a press on the backdrop cancels, and each tile carries Windows' close button — red on hover, shown on the hovered tile AND the selected one, since on-hover alone it would not exist for anyone cycling with the chord. That needed the overlay to become hittable, which the standing fear says never to do; what makes it safe is that it takes no box at all whenever it is not drawn, so an invisible switcher cannot eat a click. Closing a tile goes through `requestClose` (a window's policy still decides what closing means) and drops the entry **optimistically**, because a close animates and waiting for the registry would leave a tile on screen for the window just dismissed. Selection is a **pure-white ring and no fill**: a darker fill competes with whatever the thumbnail is showing, a bright outline never does — and the colour is a theme decision rather than a derivation, which the governance test proved by refusing a token the light theme had no answer for |
 | **W11** ✅ | Reconnect-on-restore: `persisted` reaches the workspace client, rebind on show | remote use | **Shipped 2026-08-23.** The client's IDENTITY survives the reconnect and the wire under it is swapped — `WorkspaceClient.rebind`. Everything holding one holds it in a `final` field (`Workbench`, `WorkspaceTreeSource`, `WorkspaceFileService`) and every consumer callback is registered on the client rather than on the wire, so swapping underneath needs no rebind threaded through five widgets; building a second client instead would strand every one of those subscriptions on an object nobody can reach. It is also bfcache's own answer — close on entry, reconnect on restore, do not rebuild the page. **The defect that fails in silence is `watched`**: a client-side memo meaning "I have already asked the server to watch this", which after a reconnect records promises the new peer never made — `finishRead` sees the path present, never re-asks, and change notifications stop PERMANENTLY for exactly the files that were open, with no error and no log line. Watches are therefore re-issued; presence and capabilities are dropped and re-seeded (capabilities to their optimistic default, never to denied); cached content is dropped and **etags are kept**, because an etag is what a save quotes and the server re-stats before writing, so a stale write returns a conflict a user can act on. **The view half is deferred to the frame the panel comes back**, which is where `on show` genuinely belongs: a listing describes a server nobody is talking to, no `fs.changed` can ever say so, and re-fetching one for a hidden window is the invisible work a detached window is supposed to have stopped doing. It needed no new mechanism — `ProjectFileTree`'s drain ticker returns false when detached and `onLayoutChanged` registers it again on the way back. **And the loader half was a real defect, found by reading rather than by any test**: nothing ever re-asked for the client. `CgUiScreen` calls `workspace.client()` once at editor construction and `CrystalEditor` holds it for the life of the screen, so the rebind was correct and permanently unreachable — every headless test passed because a test calls `rebind` itself. `Mc1710Workspace.pump`, which was an empty method kept only so the frame loop read the same, now does the per-frame re-ask; it is free when the wire has not moved, and one re-ask repairs the whole tree because the rebind preserves the client's IDENTITY. **`serverSmoke` passes** (including "no client-only class loaded on the server"); the live disconnect/rejoin gesture against `runServer` is still unverified — the existing remote probe joins but never reconnects, and two processes from one worktree contend for the vanilla jar at build time |
-| **W12** | Server windows as frames — **opened without focus, flashing their taskbar entry** (the no-steal rule); **GEOMETRY PERSISTENCE, EVERYWHERE IT MEANS ANYTHING** (see below) and session restore of the window set; remaining nice-to-haves (badges, progress entries, middle-click close) | — | Ordered by demand |
+| **W12** | ✅ **GEOMETRY PERSISTENCE, EVERYWHERE IT MEANS ANYTHING** (see below) and session restore of the window set; ✅ **tool windows are not citizens** (`WS_EX_TOOLWINDOW` — no taskbar entry, no switcher entry, hide-with-owner). Still owed: **a torn-out editor window is persisted by nothing** (see *W12's tail*); server windows as frames — **opened without focus, flashing their taskbar entry** (the no-steal rule); nice-to-haves (badges, progress entries, middle-click close) | — | Ordered by demand |
 | **W13** | Shell conveniences: the system menu (Alt+Space, title-bar and taskbar right-click, keyboard Move/Size), show desktop, modal-blocked pulse + the first `CgPlatform.sound()` sounds, Alt-drag, fullscreen, drag-to-edge snap | keyboard-only window management | All small, all sharing the command/keymap surface — one batch |
 | **W14** | Pin: the always-on-top band, the toggle, and the HUD — the overlay render hook, the paint-only entry, `__hud__` display-only presentation, visible-stays-live | live debugging over the running game | The one new platform capability; after W7, so there is a loader seam to extend |
 | **W15** | The task manager panel; per-window zoom | observability, accessibility | Both standalone |
@@ -1029,10 +1107,10 @@ of the group, which is what every desktop does when you click a palette.
 `attachOwned` keeps its meaning for the case it was written for — a modal, which genuinely should be
 confined to its owner and genuinely should not be independently reachable.
 
-**Still owed, and deliberately not done here:** owned windows do not yet *travel* with their owner
-through hide and minimise. Doing it needs a record of which windows were hidden *by the owner* rather
-than by the user, so that a re-show restores exactly those — bookkeeping, not a one-liner, and it
-belongs with W12's session work where the same distinction is already needed.
+~~**Still owed, and deliberately not done here:** owned windows do not yet *travel* with their owner
+through hide and minimise.~~ **Done at W12** — see *Tool windows are not citizens* below. The prediction
+was right about the shape: it needed a record of which windows the owner took down, so that a re-show
+restores exactly those and not the ones the user had already closed.
 
 ---
 

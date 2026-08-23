@@ -114,9 +114,26 @@ public final class DesktopSession {
         return new GsonBuilder().setPrettyPrinting().create().toJson(out.encode()) + "\n";
     }
 
+    /**
+     * Whether this desktop's record is the right home for {@code frame}'s geometry.
+     *
+     * <h3>A tool window's geometry belongs to the PROJECT, not to the desktop</h3>
+     *
+     * <p>This record is per <em>host</em> — one file for the whole client, or the whole harness — while a
+     * tool window's placement is per <em>project</em>, stored beside its mode in {@code ToolWindowState}
+     * because opening a different project must not inherit the last one's arrangement.</p>
+     *
+     * <p>Both were writing it, which is one fact with two owners and therefore a bug waiting on an
+     * ordering: {@code showInFrame} applied the project's bounds and <em>then</em> called
+     * {@code openWindow}, so this record was applied second and won. The first windowed tool window to
+     * open after launch landed wherever the previous project had left it. Floating ones were unaffected,
+     * because {@code attachOwned} never reaches {@code addWindow} at all — so it presented as only some
+     * of them being wrong, which reads as a placement bug rather than as a duplicated record.</p>
+     */
     private static boolean isPersistable(WindowFrame frame) {
         return frame.key() != null && !frame.key().isEmpty()
-                && frame.state() != WindowState.DESTROYED;
+                && frame.state() != WindowState.DESTROYED
+                && !frame.isToolWindow();
     }
 
     /**

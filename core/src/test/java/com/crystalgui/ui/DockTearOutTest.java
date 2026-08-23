@@ -139,8 +139,15 @@ public class DockTearOutTest extends UiTestBase {
         assertNotNull("no window was opened", torn);
         assertFalse("the source dock kept the panel too", holds(beta));
         assertTrue("the window did not get the panel", holdsIn(torn.area(), beta));
+        // THE TASKBAR'S OWN LIST, not the complete one. Tool windows are live windows that are
+        // deliberately absent from it (WS_EX_TOOLWINDOW), and an editor torn out into a window is the
+        // case that must NOT be — it is a place work happens, and it is the counter-example the whole
+        // distinction is drawn against. @see WindowFrame#isToolWindow()
+        assertFalse("a torn-out editor was made a tool window", torn.isToolWindow());
         assertTrue("a torn-out editor is a taskbar citizen",
-                window.desktop().registry().windows().contains(torn));
+                window.desktop().registry().taskbarOrder().contains(torn));
+        assertTrue("a torn-out editor must be reachable from the switcher",
+                window.desktop().registry().switcherOrder().contains(torn));
     }
 
     /**

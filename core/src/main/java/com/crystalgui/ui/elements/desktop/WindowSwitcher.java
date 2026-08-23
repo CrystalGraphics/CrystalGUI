@@ -191,7 +191,7 @@ public class WindowSwitcher extends UIElement {
 
     private void begin(boolean forward, String commandId) {
         order.clear();
-        order.addAll(desktop.registry().mruOrder());
+        order.addAll(desktop.registry().switcherOrder());
         if (order.size() < 2) {
             // NOTHING TO SWITCH TO. Opening on one window shows a panel whose only entry is the window
             // already in front, which is a way of saying nothing at some expense.

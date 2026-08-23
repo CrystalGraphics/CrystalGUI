@@ -241,9 +241,12 @@ final class WindowAnimator {
      * has gone, while one that flies into the taskbar says <em>where</em> it went, which is the one thing
      * you need in order to get it back.</p>
      *
-     * <p>Falls back to the plain close animation when there is no entry to fly to — a window kept out of
-     * the taskbar by its policy, or a desktop with the strip hidden. Flying at a button that is not there
-     * would send the window into a corner for no reason.</p>
+     * <p><b>Something to aim at is found in three steps</b>, because a minimise that does not travel is
+     * not a minimise: this window's own button, then its <em>owner's</em> (a tool window has no entry by
+     * design and goes where its owner goes — see {@link #taskbarEntry()}), then the bottom centre of the
+     * work area, which is what GNOME does when there is no button at all. The plain close animation is
+     * the last resort and means the geometry could not be measured — a detached window, or a desktop
+     * mid-layout — rather than "there is no taskbar".</p>
      */
     void playMinimize(Runnable then) {
         if (!enabled) {
@@ -331,13 +334,35 @@ final class WindowAnimator {
                 UITransform.Op.scale(to.getWidth() / self.getWidth(), to.getHeight() / self.getHeight()));
     }
 
-    /** The button this window has in the taskbar, or null when it has none. */
+    /**
+     * The button this window flies to, or null when there is none to fly to.
+     *
+     * <h3>A window with no button of its own aims at its OWNER's</h3>
+     *
+     * <p>Which is the tool-window case, and it is not a fallback so much as the truthful answer. A tool
+     * window has no taskbar entry by design ({@code WS_EX_TOOLWINDOW}), and it is minimised only as part
+     * of its owner going away — so the place it went is exactly the place the owner went. Flying there
+     * says so; the plain shrink-and-fade {@link #playMinimize} would otherwise fall back to says only
+     * that it stopped existing.</p>
+     *
+     * <p>It fixes the return trip in the same stroke, because {@link #playRestore} reads this too: the
+     * panels grow back out of the same button the window does.</p>
+     *
+     * <p>Still null for a window that has no entry and no owner with one — a policy-hidden window, or a
+     * desktop with the strip off. Flying at a button that is not there would send it into a corner for
+     * no reason.</p>
+     */
     @Nullable
     private UIElement taskbarEntry() {
         Desktop desktop = frame.desktop();
         if (desktop == null) return null;
         Taskbar taskbar = desktop.taskbar();
-        return taskbar == null ? null : taskbar.entryFor(frame);
+        if (taskbar == null) return null;
+        for (WindowFrame walk = frame; walk != null; walk = walk.ownerWindow()) {
+            UIElement entry = taskbar.entryFor(walk);
+            if (entry != null) return entry;
+        }
+        return null;
     }
 
     // ── Maximise and restore-down ───────────────────────────────────────────────────────────────

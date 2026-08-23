@@ -25,10 +25,24 @@ package com.crystalgui.ui.elements.workbench;
  *       and hides when the owner hides, with no bookkeeping: the owner's {@code z-index} carries it.
  *       It is not in the {@code WindowRegistry}, so it has no taskbar entry — which is right, because
  *       it is not independently reachable.</li>
- *   <li>{@link #WINDOWED} is a <b>top-level</b> window opened through {@code UIWindow.openWindow}: its
- *       own stacking slot, its own taskbar entry, raisable and minimisable on its own. IntelliJ draws
- *       the same line, and its Window mode is the one that survives the IDE frame being minimised.</li>
+ *   <li>{@link #WINDOWED} is a <b>top-level</b> window opened through {@code UIWindow.openWindow}, with
+ *       a stacking slot of its own — so it can be dragged anywhere on the desktop instead of being
+ *       clamped inside its owner, which is the one thing a child cannot do.</li>
  * </ul>
+ *
+ * <h3>Neither is a taskbar entry, and that is the correction</h3>
+ *
+ * <p>{@code WINDOWED} used to mean "and therefore a citizen of the desktop": a taskbar button, a place
+ * in the switcher, and a life that carried on after the window it came out of was minimised. That is
+ * wrong, and it is wrong the way a screenshot shows immediately — the strip along the bottom read
+ * <i>Welcome · Geometry · Crystal Editor · Inspector · Notifications</i>, as though a panel were a
+ * peer of the IDE it belongs to.</p>
+ *
+ * <p>Win32 has a bit for exactly this ({@code WS_EX_TOOLWINDOW}) and IntelliJ uses it: a floating tool
+ * window is top-level, freely draggable, above its IDE frame, and in neither the taskbar nor Alt+Tab.
+ * Both modes here now carry {@link com.crystalgui.ui.elements.desktop.WindowFrame#isToolWindow()}, so
+ * what separates them is only the clamp. A torn-out <b>editor</b> is the thing that does deserve an
+ * entry, and it gets one by not setting the bit.</p>
  *
  * <p>That both are the same widget is the payoff of Design B. A float is not a special kind of panel
  * with a hand-rolled drag and a hand-rolled resize; it is the window widget the desktop already has,
@@ -42,7 +56,7 @@ public enum ToolWindowType {
     /** In a frame owned by the workbench's window — above it, travelling with it, no taskbar entry. */
     FLOATING,
 
-    /** In a top-level window of its own, with a stacking slot and a taskbar entry. */
+    /** Top-level, so it reaches the whole desktop — but still no taskbar entry, and still hides with its owner. */
     WINDOWED;
 
     /** Whether this mode puts the tool window in a {@code WindowFrame} rather than in a region. */
