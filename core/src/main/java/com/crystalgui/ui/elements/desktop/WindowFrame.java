@@ -441,7 +441,26 @@ public class WindowFrame extends UIElement implements Disposable {
     private void installActivation() {
         onMouseDown.attachListener((element, event) -> {
             Desktop desktop = desktop();
-            if (desktop != null) desktop.activate(this);
+            if (desktop != null) {
+                desktop.activate(this);
+                return;
+            }
+            // AN OWNED WINDOW HAS NO DESKTOP TO ACTIVATE AGAINST, and pressing one must still focus it.
+            //
+            // attachOwned parents a frame into its owner's overlay slot and deliberately does NOT make it
+            // a desktop citizen -- it is in no registry, has no taskbar entry, and has no z of its own to
+            // raise. So activate() early-returned on the null and the press did nothing at all: grabbing
+            // a floating tool window by its caption left focus wherever it had been, and its rail button
+            // stayed dark because that button lights from focus being inside the panel's container.
+            //
+            // Focus is the whole of what activation means for a window with nothing to raise and nothing
+            // to announce, so that is what is done. POINTER focus, never programmatic: a press must not
+            // ring, which is what :focus-visible exists to separate.
+            //
+            // It matters most for a DRAG, which is how the gesture was reported. A drag never completes a
+            // click -- the pointer moves, so no mouse-up lands on what the press went to -- and anything
+            // waiting for that click never happens. The press is the only moment there is.
+            restoreFocus(false);
         }, true, false);
 
         // FOCUS MEMORY. Win32 records the focus owner per window and restores it on WM_ACTIVATE; without
@@ -811,7 +830,20 @@ public class WindowFrame extends UIElement implements Disposable {
         UIWindow window = getAttachedWindow();
         if (window == null) return;
         UIInputHandler input = window.getInputHandler();
-        if (contains(input.getFocusedElement())) return;
+        // ALREADY SOMEWHERE INSIDE — but the FRAME ITSELF does not count, and that exception is the
+        // whole of a reported bug.
+        //
+        // A frame is CLICK_NOT_TABBABLE, so `emitMouseDown` walks up from whatever was hit to the nearest
+        // ancestor that focuses on click and lands on the frame BEFORE this ever runs. A plain
+        // `contains()` then reads that as "focus is already in this window" and returns, so the delegate
+        // never runs and focus stays on the frame -- which is a window that looks focused and whose
+        // CONTENT is not. Grabbing a floating tool window by its caption left its rail button dark,
+        // because that button lights from focus being inside the panel's own container.
+        //
+        // Focus on a real control inside (a caption button, something in the content) is still left
+        // alone: that is somebody's deliberate target and moving it would be theft.
+        UIElement focused = input.getFocusedElement();
+        if (focused != null && focused != this && contains(focused)) return;
 
         UIElement wanted = contains(lastFocused) && lastFocused.focusable() ? lastFocused : null;
         if (wanted == null) wanted = focusDelegate();
@@ -963,6 +995,8 @@ public class WindowFrame extends UIElement implements Disposable {
         // The layer's removeChild is what flips the state and tells the registry -- so a bare
         // removeSelf() by some other caller means exactly the same thing as hide(), rather than leaving
         // a window that is detached and still claims to be visible.
+        // MEASURED BEFORE THE DETACH, which is the whole of it -- see recordedWidth().
+        captureVisibleSize();
         layer.removeChild(this);
         if (ownedBy != null) ownedBy.releaseOwned(this);
         // ...WHICH ONLY HOLDS FOR A WINDOW LAYER. An OWNED frame's parent is its owner's overlay slot,
@@ -1074,6 +1108,86 @@ public class WindowFrame extends UIElement implements Disposable {
     }
 
     // ── Maximise ────────────────────────────────────────────────────────────
+
+    /**
+     * The rect a maximised window goes back to. Meaningless while it is not maximised.
+     *
+     * <p>Package-private: this is state {@link DesktopSession} has to be able to read and write in order
+     * to survive a restart, and nothing outside the compositor has any business with it.</p>
+     */
+    float restoreLeft() {
+        return restoreLeft;
+    }
+
+    /**
+     * The window's size as it should be RECORDED — measured while it is on screen, remembered once it is
+     * not.
+     *
+     * <p>Hiding is <b>detaching</b>, so a hidden window's Taffy node is gone and its measured box is
+     * zero. Persisting that writes a 0x0 window into the record, and a 0x0 rect is indistinguishable from
+     * "never placed" — so the window is dropped on the way back in and simply does not come back. The
+     * plan states the rule W8 paid for and this is it one level up: <em>capture before the thing goes
+     * away, not after</em>. {@code ToolWindowFrame} snapshots in its own {@code hide()} for the same
+     * reason.</p>
+     *
+     * <p>It cannot be answered from the inline style instead: a window sized by a drag has its width
+     * written there, but one that has never been resized has no inline size at all and is whatever the
+     * sheet made it.</p>
+     */
+    float recordedWidth() {
+        return getParent() == null ? lastVisibleWidth : getRuntimeCache().getWidth();
+    }
+
+    /** @see #recordedWidth() */
+    float recordedHeight() {
+        return getParent() == null ? lastVisibleHeight : getRuntimeCache().getHeight();
+    }
+
+    private void captureVisibleSize() {
+        float width = getRuntimeCache().getWidth();
+        float height = getRuntimeCache().getHeight();
+        // A NON-POSITIVE BOX IS REFUSED rather than stored: a window hidden before it was ever laid out
+        // has nothing to remember, and overwriting a good remembered size with a zero is worse than
+        // keeping a slightly old one.
+        if (width > 0f && height > 0f) {
+            lastVisibleWidth = width;
+            lastVisibleHeight = height;
+        }
+    }
+
+    private float lastVisibleWidth;
+    private float lastVisibleHeight;
+
+    /** @see #restoreLeft() */
+    float restoreTop() {
+        return restoreTop;
+    }
+
+    /** @see #restoreLeft() */
+    float restoreWidth() {
+        return restoreWidth;
+    }
+
+    /** @see #restoreLeft() */
+    float restoreHeight() {
+        return restoreHeight;
+    }
+
+    /**
+     * Seeds the rect a maximised window will go back to — for a window restored already maximised.
+     *
+     * <p>Must be called <b>after</b> {@link #maximize()}, never before: maximising captures whatever the
+     * window currently is as the rect to return to, so a value written first is overwritten by the very
+     * call it exists for. And it cannot be left to that capture, because the capture reads the
+     * <em>measured</em> box — which on a freshly restored window is whatever it was before this frame's
+     * layout ran.</p>
+     */
+    void setRestoreRect(float left, float top, float width, float height) {
+        restoreLeft = left;
+        restoreTop = top;
+        restoreWidth = width;
+        restoreHeight = height;
+    }
 
     public boolean isMaximized() {
         return maximized;

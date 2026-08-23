@@ -335,6 +335,22 @@ public class Workbench extends UIElement {
      */
     @Override
     protected void onWindowChanged(@Nullable UIWindow previous, @Nullable UIWindow current) {
+        // JOINING A WINDOW IS WHAT LETS A WINDOWED TOOL WINDOW FINALLY OPEN. A session restore can run
+        // before the tree is attached -- a host that restores on its first frame does so before anything
+        // called UIWindow.init. The docked panels come back regardless; the windowed ones had nowhere to
+        // open into and were remembered. @see ToolWindowManager#retryPendingShows
+        //
+        // ON THE NEXT FRAME, never inside this hook. This fires DURING the attach walk, so the rest of
+        // the subtree -- including the regions root the retry has to ask -- may not have been registered
+        // yet, and the retry would answer "still no window" and drop the panels for good. The same rule
+        // ProjectFileTree's deferred refresh follows, and for the same reason: an attach is not a moment
+        // to build things in.
+        if (current != null && toolWindowManager != null) {
+            current.registerTicker(deltaSeconds -> {
+                toolWindowManager.retryPendingShows();
+                return false;
+            });
+        }
         if (previous != null) previous.removeDataProvider(this);
         // THE WORKSPACE'S PROBLEM COUNT IS A CLAIM ON A SCREEN, so it belongs to an ATTACHED workbench.
         // Subscribed from the constructor instead, every workbench ever built stayed subscribed and kept

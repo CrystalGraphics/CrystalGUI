@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.desktop;
 
+import com.crystalgui.fs.ConfigStorage;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.core.signal.ConnectionGroup;
@@ -16,6 +17,8 @@ import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.List;
 
 /**
@@ -372,6 +375,13 @@ public class Desktop extends UIElement {
     @Override
     protected void onWindowChanged(@Nullable UIWindow previous, @Nullable UIWindow current) {
         super.onWindowChanged(previous, current);
+        // OFF SCREEN IS THE MOMENT TO WRITE. Suspending a compositor is what a host's screen closing
+        // does, and it deliberately touches no window's state -- so what is recorded here is exactly what
+        // was on the desktop. Arming happens on the way IN for the same reason: a desktop attached after
+        // persistTo (which is every host, since persistTo is called on a fresh one) would otherwise have
+        // no window to register its one-shot restore pass with.
+        if (current == null && previous != null) savePersistedState();
+        if (current != null) armRestorePass();
         subscriptions.disconnectAll();
         if (current == null) return;
         subscriptions.add(current.getInputHandler().onDidChangeFocus.connect(this::focusMoved));
@@ -418,6 +428,9 @@ public class Desktop extends UIElement {
         frame.setOwner(this);
         registry.opened(frame);
         windows.addChild(frame);
+        // BEFORE the animation and the activation below: a window restored from a record should open AT
+        // the size and place it is meant to be, not fly in at a default and jump. @see #persistTo
+        applyPersistedGeometry(frame);
         // A FIRST OPEN DOES NOT GO THROUGH show(), so the entry animation has to be played here as well.
         // The two paths are genuinely different -- this one registers the window and hands it an owner,
         // show() puts a hidden one back -- and the animation is the only thing they share.
@@ -444,6 +457,125 @@ public class Desktop extends UIElement {
     /** The MRU switcher. @see WindowSwitcher */
     public WindowSwitcher switcher() {
         return switcher;
+    }
+
+    // ── Persistence — CrystalOS W12 ─────────────────────────────────────────────────────────────
+
+    @Nullable
+    private DesktopSession persistence;
+    @Nullable
+    private String persistenceId;
+
+    /** Recorded placements not yet claimed by a window, by key. @see #persistTo */
+    private final Map<String, DesktopSession.Placement> pendingPlacements = new HashMap<>();
+    private List<String> pendingMru = List.of();
+    private boolean restorePassArmed;
+
+    /**
+     * Remembers this desktop's arrangement, and puts back the one it finds — CrystalOS <b>W12</b>.
+     *
+     * <h3>A platform says WHERE, and nothing else</h3>
+     *
+     * <p>The compositor is engine-owned, and so is everything about it that survives a restart. A host
+     * supplies a {@link ConfigStorage} and an id — where the record lives and which desktop it is — and
+     * gets the rest for nothing. The alternative was tried and is the reason this note exists: the same
+     * read-apply-write orchestration written once in the Minecraft screen and once in the harness scene,
+     * which is two copies of a policy that has to agree, in two places nobody reads together.</p>
+     *
+     * <h3>Geometry is APPLIED TO WINDOWS AS THEY OPEN, never used to build them</h3>
+     *
+     * <p>The obvious design hands core a factory — key in, window out — and it cannot work: only the
+     * application knows what its windows contain, so the factory is a second thing every host must write,
+     * and a host that forgets one silently loses that window. Inverting it removes the question. A host
+     * opens whatever it opens, however it likes; a window that carries a {@link WindowFrame#key()} this
+     * record names is placed where it was, and one it does not is left alone. Nothing is constructed
+     * here, so nothing needs to be known here.</p>
+     *
+     * <p>The cost is honest and worth stating: a window the host does <em>not</em> reopen does not come
+     * back. Core cannot invent it, and a record that claimed otherwise would be describing windows that
+     * cannot exist.</p>
+     */
+    public Desktop persistTo(ConfigStorage storage, String id) {
+        persistence = new DesktopSession(this, storage);
+        persistenceId = id;
+        pendingPlacements.clear();
+        for (DesktopSession.Placement placement : persistence.read(id)) {
+            pendingPlacements.put(placement.key(), placement);
+        }
+        pendingMru = persistence.readMruOrder(id);
+        // Windows already open when a host installs this are placed too -- a host that opens its editor
+        // and then asks for persistence is doing nothing wrong.
+        for (WindowFrame frame : registry.windows()) applyPersistedGeometry(frame);
+        armRestorePass();
+        return this;
+    }
+
+    /**
+     * Writes the arrangement now.
+     *
+     * <p>Called automatically when the desktop leaves the tree, which is what suspending a compositor
+     * does and therefore covers a host whose screen closes. A host that tears down some other way — the
+     * harness disposes its scene without ever detaching — calls this itself.</p>
+     */
+    public void savePersistedState() {
+        if (persistence != null && persistenceId != null) persistence.save(persistenceId);
+    }
+
+    private void applyPersistedGeometry(WindowFrame frame) {
+        String key = frame.key();
+        if (key == null || pendingPlacements.isEmpty()) return;
+        DesktopSession.Placement placement = pendingPlacements.remove(key);
+        if (placement == null) return;
+        frame.resizeTo(placement.width(), placement.height());
+        frame.moveTo(placement.left(), placement.top());
+        if (placement.maximized()) {
+            frame.maximize();
+            // AFTER the maximise: maximising captures whatever the window currently is as the rect to go
+            // back to, and on a window opened this frame that is the box from before layout ran.
+            frame.setRestoreRect(placement.left(), placement.top(),
+                    placement.width(), placement.height());
+        }
+        if (placement.hidden()) hideAfterRestore.add(frame);
+    }
+
+    private final List<WindowFrame> hideAfterRestore = new ArrayList<>();
+
+    /**
+     * Replays activation and minimisation once the host has finished opening windows.
+     *
+     * <p>Deferred by exactly one frame rather than done per window, because both are statements about the
+     * SET: the front window is whichever was activated last, and hiding one during {@code addWindow} would
+     * fight the open animation and the activation that follows it. A host opens its windows in one go
+     * during setup, so the next frame is when the set is complete.</p>
+     */
+    private void armRestorePass() {
+        if (restorePassArmed) return;
+        UIWindow window = getAttachedWindow();
+        if (window == null) return;
+        restorePassArmed = true;
+        window.registerTicker(deltaSeconds -> {
+            restorePassArmed = false;
+            runRestorePass();
+            return false;
+        });
+    }
+
+    private void runRestorePass() {
+        // LEAST RECENT FIRST, so the most recently used window is activated last and ends in front.
+        // Forwards would leave the desktop showing whatever had been looked at least recently.
+        for (int index = pendingMru.size() - 1; index >= 0; index--) {
+            WindowFrame frame = registry.byKey(pendingMru.get(index));
+            if (frame != null && frame.state() == WindowState.VISIBLE
+                    && !hideAfterRestore.contains(frame)) {
+                activate(frame, true);
+            }
+        }
+        pendingMru = List.of();
+        // AFTER the activation pass, or activating a window that was put away would bring it back.
+        for (WindowFrame frame : hideAfterRestore) {
+            if (frame.state() == WindowState.VISIBLE) frame.hide();
+        }
+        hideAfterRestore.clear();
     }
 
     /** @see #announceTheSwitcherOnce */
