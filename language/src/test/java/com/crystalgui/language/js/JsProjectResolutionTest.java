@@ -51,8 +51,15 @@ public class JsProjectResolutionTest {
     private static final class Buffers implements ProjectSources {
         private final Map<String, String> files = new LinkedHashMap<>();
 
+        private final Map<String, String> extensions = new LinkedHashMap<>();
+
         Buffers edit(String qualifiedName, String source) {
+            return edit(qualifiedName, source, ".js");
+        }
+
+        Buffers edit(String qualifiedName, String source, String extension) {
             files.put(qualifiedName, source);
+            extensions.put(qualifiedName, extension);
             return this;
         }
 
@@ -64,8 +71,10 @@ public class JsProjectResolutionTest {
         /** Where the file lives — what a jump target is built from, and what says which language. */
         @Override
         public String pathOf(String qualifiedName) {
-            return files.containsKey(qualifiedName)
-                    ? "proj:src/main/js/" + qualifiedName.replace('.', '/') + ".js" : null;
+            String extension = extensions.get(qualifiedName);
+            if (extension == null) return null;
+            String root = ".js".equals(extension) ? "src/main/js" : "src/main/java";
+            return "proj:" + root + "/" + qualifiedName.replace('.', '/') + extension;
         }
 
         @Override
@@ -506,5 +515,109 @@ public class JsProjectResolutionTest {
         assertNotNull("no signature", imported.signature());
         assertTrue("the keyword went missing from " + imported.signature().text(),
                 imported.signature().text().startsWith("var "));
+    }
+
+    // \u2500\u2500 The workspace's own Java, from JavaScript \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
+    /** A project Java class, as the harness fixture writes one. */
+    private static final String PROJECT_JAVA = "package com.example;\n"
+            + "public class Main {\n"
+            + "    /** Says the quiet part. */\n"
+            + "    public static String peepoo() { return \"fa\"; }\n"
+            + "}\n";
+
+    /**
+     * <b>An imported project Java class resolves as a CLASS.</b>
+     *
+     * <p>The editor half of the tier the run gained. A {@code .java} file in the workspace is on no
+     * classpath, so the interop probe has to reach it the way every other Java resolution does \u2014 through
+     * the project tier the name environment has carried since M15 S4.</p>
+     */
+    @Test
+    public void anImportedProjectJavaClassResolves() {
+        workspace.edit("com.example.Main", PROJECT_JAVA, ".java");
+
+        SymbolInfo symbol = resolveAt("import com.example.Main;\nMai|n.peepoo();\n");
+
+        assertNotNull("the imported project Java class did not resolve", symbol);
+        assertEquals(SymbolKind.CLASS, symbol.kind());
+    }
+
+    /** <b>...and its members complete behind the dot.</b> */
+    @Test
+    public void aProjectJavaClassesMembersComplete() {
+        workspace.edit("com.example.Main", PROJECT_JAVA, ".java");
+
+        List<String> offered = names(completeAt("import com.example.Main;\nMain.|\n"));
+
+        assertTrue("no members offered for a project Java class: " + offered,
+                offered.contains("peepoo"));
+    }
+
+    /** <b>...and one of them resolves as a METHOD, with somewhere to go.</b> */
+    @Test
+    public void aProjectJavaMemberResolvesAndCanBeNavigatedTo() {
+        workspace.edit("com.example.Main", PROJECT_JAVA, ".java");
+
+        SymbolInfo symbol = resolveAt("import com.example.Main;\nMain.peep|oo();\n");
+
+        assertNotNull("the member did not resolve", symbol);
+        assertEquals(SymbolKind.METHOD, symbol.kind());
+        assertNotNull("Ctrl+B has nowhere to go", symbol.declaration());
+    }
+
+    /**
+     * <b>A project Java class probed BEFORE the workspace declares it is not written off forever.</b>
+     *
+     * <p>The shape a real session takes and a fixture never does. {@code InteropResolver} caches a probe
+     * <em>even when the type did not resolve</em> \u2014 right for the classpath, where a name that is not a
+     * class today will not be one tomorrow, and wrong the moment the same probe can resolve against a
+     * WORKSPACE file. The index crawls in the background and {@code sourceOf} schedules a read rather than
+     * waiting, so the first ask for a project type routinely lands before there is an answer; cached, that
+     * first miss is permanent for the life of the process. Completion empty, no hover, no Ctrl+B \u2014 and
+     * nothing that ever retries.</p>
+     */
+    @Test
+    public void aProjectJavaClassProbedBeforeItExistsIsRetried() {
+        String fixture = "import com.example.Late;\nLat|e.hello();\n";
+        // ASKED FIRST, with nothing to find. This is the call that used to poison the cache.
+        resolveAt(fixture);
+
+        workspace.edit("com.example.Late",
+                "package com.example;\n"
+                + "public class Late { public static String hello() { return \"hi\"; } }\n", ".java");
+
+        SymbolInfo symbol = resolveAt(fixture);
+        assertNotNull("nothing resolved after the file arrived", symbol);
+        assertEquals("a miss from before the file existed was cached forever",
+                SymbolKind.CLASS, symbol.kind());
+    }
+
+    /**
+     * <b>...and editing one changes what completes, with no save.</b>
+     *
+     * <p>The other half of the same staleness. A jar's class is a fact for the life of the process, which
+     * is what let all three caches here be keyed on the class name alone; a workspace file is whatever the
+     * author last typed. Without this, a method added to {@code Main.java} in one tab never appears behind
+     * {@code Main.} in the {@code .js} tab beside it \u2014 the same no-save promise M15 S5 makes for running.</p>
+     */
+    @Test
+    public void editingAProjectJavaClassChangesWhatCompletes() {
+        String fixture = "import com.example.Growing;\nGrowing.|\n";
+        workspace.edit("com.example.Growing",
+                "package com.example;\n"
+                + "public class Growing { public static void one() { } }\n", ".java");
+        assertTrue("the first member never appeared", names(completeAt(fixture)).contains("one"));
+
+        workspace.edit("com.example.Growing",
+                "package com.example;\n"
+                + "public class Growing {\n"
+                + "    public static void one() { }\n"
+                + "    public static void two() { }\n"
+                + "}\n", ".java");
+
+        List<String> offered = names(completeAt(fixture));
+        assertTrue("an unsaved edit to a project Java file did not reach the popup: " + offered,
+                offered.contains("two"));
     }
 }

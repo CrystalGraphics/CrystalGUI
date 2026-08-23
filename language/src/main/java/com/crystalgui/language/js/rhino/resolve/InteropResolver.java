@@ -4,6 +4,8 @@ import com.crystalgui.language.engine.bridge.Analysis;
 import com.crystalgui.language.engine.bridge.MemberNameMapper;
 import com.crystalgui.language.engine.bridge.SourceAnalyzer;
 import com.crystalgui.language.js.rhino.JsLoaders;
+import com.crystalgui.text.lang.ProjectSources;
+import com.crystalgui.text.lang.ProjectSourcesRegistry;
 import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.text.lang.SymbolKind;
 import com.crystalgui.text.lang.SymbolModifier;
@@ -21,6 +23,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiPredicate;
 import java.util.function.Predicate;
@@ -185,6 +188,7 @@ public final class InteropResolver {
      *                   instance's members ({@code new a.b.C().})
      */
     synchronized List<SymbolInfo> membersOf(String binaryName, boolean staticSide) {
+        forgetIfProjectSourceChanged(binaryName);
         if (binaryName == null || binaryName.isEmpty()) return List.of();
         // A REFUSED CLASS HAS NO MEMBERS, which is what makes the completion list and the run agree: the
         // shutter refuses the call, and this refuses to have suggested it.
@@ -240,6 +244,7 @@ public final class InteropResolver {
      */
     @Nullable
     synchronized SymbolInfo describeMember(String binaryName, SymbolInfo member, boolean staticSide) {
+        forgetIfProjectSourceChanged(binaryName);
         if (java == null || binaryName == null || member == null || member.name().isEmpty()) return null;
         if (!permits(binaryName)) return null;
         // KEYED BY THE PARAMETER TYPES, not by how many there are. `Math.max(int, int)` and
@@ -359,10 +364,71 @@ public final class InteropResolver {
     /** Derived facts, unbounded — see {@link #memberListOf}. Cleared with the member cache. */
     private final Map<String, List<SymbolInfo>> memberLists = new HashMap<>();
 
+    /**
+     * <b>Everything cached about a class is forgotten when the WORKSPACE FILE behind it changes.</b>
+     *
+     * <h3>Why every cache here could be keyed on the name alone, and no longer can</h3>
+     *
+     * <p>All three caches assume a class is a fact for the life of the process, and for a jar that is
+     * true — which is why {@link #probeFor} caches a probe <em>even when the type did not resolve</em>,
+     * and why {@link #memberLists} is unbounded and dropped only when the policy or the mapping changes.
+     * Both are right about the classpath and neither is right about a {@code .java} file the author has
+     * open in the next tab.</p>
+     *
+     * <p>Two failures, and the first is the ugly one. The index crawls in the background and
+     * {@code sourceOf} SCHEDULES a read rather than waiting, so the first ask for a project type routinely
+     * lands before there is an answer — and that miss was then permanent: an empty member list cached
+     * under the class name, no hover, no Ctrl+B, and nothing anywhere that would ever retry. The second is
+     * the ordinary one: a method added to {@code Main.java} never appeared behind {@code Main.} in the
+     * {@code .js} file beside it, breaking the same no-save promise M15 S5 makes for running.</p>
+     *
+     * <p>Costs one index lookup for a classpath name, which is every name in most files: {@code pathOf}
+     * answers from the crawled map and, unlike {@code sourceOf}, a miss there does not schedule a read.</p>
+     */
+    private void forgetIfProjectSourceChanged(String binaryName) {
+        if (binaryName == null || binaryName.isEmpty()) return;
+        Integer now = projectStampOf(binaryName);
+        if (!projectStamps.containsKey(binaryName)) {
+            projectStamps.put(binaryName, now);
+            return;
+        }
+        if (Objects.equals(projectStamps.get(binaryName), now)) return;
+        projectStamps.put(binaryName, now);
+        Probe probe = cache.remove(binaryName);
+        if (probe != null) probe.close();
+        memberLists.remove(binaryName);
+        // THE MEMBER DESCRIPTIONS TOO, which are keyed by class-plus-member. Leaving them would quote a
+        // signature from the file as it used to be, under a member list read from the file as it is.
+        members.keySet().removeIf(key -> key.startsWith(binaryName + "#")
+                || key.startsWith(binaryName + "."));
+    }
+
+    /**
+     * A cheap stand-in for "the workspace's copy of this class", or null when it declares none.
+     *
+     * <p>A hash rather than the text: this runs on the resolution path, and holding a reference to every
+     * probed file's source would make an editor-shaped cache out of what is meant to be a validity stamp.
+     * A collision means one missed invalidation, which is exactly the behaviour that existed before this
+     * method did. {@code .java} only — one index holds both languages and a {@code .js} file is not
+     * something the Java engine was ever going to resolve.</p>
+     */
+    @Nullable
+    private static Integer projectStampOf(String binaryName) {
+        ProjectSources project = ProjectSourcesRegistry.view();
+        String path = project.pathOf(binaryName);
+        if (path == null || !path.endsWith(".java")) return null;
+        String source = project.sourceOf(binaryName);
+        return source == null ? null : source.hashCode();
+    }
+
+    /** What each cached class's workspace file looked like when it was cached. @see #forgetIfProjectSourceChanged */
+    private final Map<String, Integer> projectStamps = new HashMap<>();
+
     /** What the class itself is, for a hover over {@code java.util.ArrayList}. */
     @Nullable
     synchronized SymbolInfo describe(String binaryName, boolean staticSide) {
         if (binaryName == null || binaryName.isEmpty()) return null;
+        forgetIfProjectSourceChanged(binaryName);
         if (!permits(binaryName)) return null;
         int lastDot = binaryName.lastIndexOf('.');
         String simple = lastDot < 0 ? binaryName : binaryName.substring(lastDot + 1);
@@ -404,6 +470,7 @@ public final class InteropResolver {
      * yes/no answer could evict the member list somebody was about to read.</p>
      */
     synchronized boolean exists(String binaryName) {
+        forgetIfProjectSourceChanged(binaryName);
         if (binaryName == null || binaryName.isEmpty()) return false;
         if (!permits(binaryName)) return false;
         Boolean known = existence.get(binaryName);
@@ -419,6 +486,7 @@ public final class InteropResolver {
     public synchronized void close() {
         for (Probe probe : cache.values()) probe.close();
         cache.clear();
+        projectStamps.clear();
         members.clear();
         memberLists.clear();
         existence.clear();
