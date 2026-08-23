@@ -1,5 +1,9 @@
 package com.crystalgui.net;
 
+import com.crystalgui.serialization.Codec;
+import com.crystalgui.serialization.Codecs;
+import com.crystalgui.serialization.DynamicOps;
+
 import javax.annotation.Nullable;
 
 /**
@@ -22,6 +26,29 @@ import javax.annotation.Nullable;
  * @param id   resource id to try locally first, or {@code null} for an anonymous sheet
  */
 public record SheetRef(String hash, @Nullable String id) {
+
+    /**
+     * Its own wire form, which used to be a private field of {@code UIPacketCodec}.
+     *
+     * <p>Moved here because the envelope codec carries payloads without inspecting them, so there is no
+     * longer one place that knows every type's encoding — and a type's encoding belongs with the type
+     * rather than with whichever message happened to be the first to carry it.</p>
+     */
+    public static final Codec<SheetRef> CODEC = new Codec<SheetRef>() {
+        @Override
+        public <T> T encode(DynamicOps<T> ops, SheetRef input) {
+            return Codecs.map(ops)
+                    .field("hash", Codecs.STRING, input.hash())
+                    .optional("id", Codecs.STRING, input.id(), null)
+                    .build();
+        }
+
+        @Override
+        public <T> SheetRef decode(DynamicOps<T> ops, T input) {
+            var in = Codecs.read(ops, input);
+            return new SheetRef(in.field("hash", Codecs.STRING), in.optional("id", Codecs.STRING, null));
+        }
+    };
 
     public static SheetRef ofResource(String id, String hash) {
         return new SheetRef(hash, id);

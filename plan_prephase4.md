@@ -71,7 +71,14 @@ or a tenth bundle method is a real decision, and M12's Finding 1 already worked 
 for what the framework requires; slots for what its consumers require."* A host with no translation table
 must also be able to say so, and the SPI has no defaults by design.
 
-### 2. Measure the 1.7.10 custom-payload limit, and freeze chunk sizing on it
+### 2. ~~Measure the 1.7.10 custom-payload limit, and freeze chunk sizing on it~~ ✅ **DONE (2026-08-21)**
+
+> **32,766 client→server**, read from `C17PacketCustomPayload` (vanilla throws at `>= 32767`) and
+> `S3FPacketCustomPayload` (2,097,050 the other way, which Forge widens with `readVarShort`). Frozen
+> not as a constant but as `CgNetworkChannel.maxFrameBytes()` — **asked for, never assumed** — because
+> the four real limits across two eras differ and a hardcoded number is wrong on three of them.
+> `FrameMultiplexerTest.everyPlatformCeilingCarriesTheSameMessagesIntact` runs the engine at all four
+> plus 128 B and 4 MB. This unblocks D11 chunked transfer (Phase 4 B3).
 
 **From:** `CrystalGUI_P6.1.10_FILESYSTEM_PLAN.md` §Minecraft; repeated in `CrystalGUI_P6_TODO.md`.
 

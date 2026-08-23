@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements;
 
+import com.crystalgui.serialization.StateMap;
 import javax.annotation.Nullable;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.signal.Signal;
@@ -44,8 +45,9 @@ import java.util.List;
  * <p>The root round-trips through {@code UIDescriptionCodec} — internals are excluded and rebuilt by
  * this constructor — but <b>its tabs and their content do not</b>. A TabView's tabs live in the rail
  * and its panes in the panes container, both of which are internal, so a decoded TabView comes back
- * empty. Restoring them needs a TabView-specific {@code writeState}/{@code readState} pair that
- * records the tab list; deliberately not in the first serialization milestone.</p>
+ * empty. <b>Fixed in Phase 4 C3</b>: a tab is not scaffolding, it is content that happens to live in
+ * an internal container, so {@link #describedChildren()} exposes the tabs and each {@code Tab} exposes
+ * its own content. The selection travels as state, applied after the tabs exist.</p>
  */
 public class TabView extends UIElement {
 
@@ -220,6 +222,54 @@ public class TabView extends UIElement {
         return false;
     }
 
+    /**
+     * The tabs — content, not scaffolding.
+     *
+     * <p>{@link #acceptsPublicChildren()} stays {@code false}: adding an arbitrary element to a TabView
+     * is still a mistake, and the answer to "where does this go" is still {@code addTab}. What changed is
+     * that a <em>description</em> may carry tabs, which is a different question.</p>
+     */
+    @Override
+    protected List<UIElement> describedChildren() {
+        return new ArrayList<>(tabs);
+    }
+
+    @Override
+    protected void addDescribedChild(UIElement child) {
+        if (!(child instanceof Tab)) {
+            throw new IllegalArgumentException("a <tabview> description may only carry <tab> children, "
+                    + "not <" + child.tagName() + ">");
+        }
+        adoptTabAt((Tab) child, tabs.size());
+    }
+
+    @Override
+    protected boolean acceptsDescribedChildren() {
+        return true;
+    }
+
+    /** Removes the tabs, which is what this view's described children are. */
+    @Override
+    protected void clearDescribedChildren() {
+        for (Tab tab : new ArrayList<>(tabs)) removeTab(tab);
+    }
+
+    /**
+     * Which tab is selected — a TabView-wide invariant, so it belongs here and not on {@code Tab}.
+     *
+     * <p>Applied after the tabs arrive, which the codec now guarantees. Before that ordering existed this
+     * would have been an index into an empty view: refused as out-of-range, and lost without a word.</p>
+     */
+    @Override
+    protected <T> void writeState(StateMap<T> out) {
+        out.putInt("selected", getSelectedIndex());
+    }
+
+    @Override
+    protected <T> void readState(StateMap<T> in) {
+        selectIndex(in.getInt("selected", -1));
+    }
+
     // ── Tabs ────────────────────────────────────────────────────────────────
 
     /** Adds a tab at the end. The first tab added becomes the selected one. */
@@ -228,8 +278,18 @@ public class TabView extends UIElement {
     }
 
     public Tab addTabAt(String label, int index) {
+        return adoptTabAt(new Tab(label), index);
+    }
+
+    /**
+     * Takes an existing {@link Tab} and gives it a place — the half {@link #addTabAt} needed to share.
+     *
+     * <p>Exists for decoding: a described tab arrives already built, with its label and its whole content
+     * subtree, so it cannot be created from a string. Everything below this line used to be inside
+     * {@code addTabAt}.</p>
+     */
+    public Tab adoptTabAt(Tab tab, int index) {
         int at = Math.max(0, Math.min(tabs.size(), index));
-        Tab tab = new Tab(label);
 
         tabs.add(at, tab);
         rail.addChildAt(tab, at);

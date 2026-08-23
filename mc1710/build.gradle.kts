@@ -376,6 +376,44 @@ tasks.named<JavaExec>(runTask) {
         systemProperty("crystalgui.startup.trace", "true")
     }
 
+    // -PcgNetProbe runs BOTH in-game network probes, in order. CgUiNetProbe echoes raw frames
+    // client->server->client over the Forge channel; CgUiSessionProbe then runs a real
+    // Server/ClientUiSession pair over the same wire and checks the description handshake, a state
+    // delta, an event and a server->client call. The headless tests cover everything above
+    // CgNetworkChannel and nothing below it, so neither layer is proven without this.
+    if (providers.gradleProperty("cgNetProbe").isPresent) {
+        systemProperty("crystalgui.net.probe", "true")
+    }
+
+    // -PcgSessionProbe runs a real Server/ClientUiSession pair over the connections CgUiConnections
+    // opens on player join -- the path that ships. SEPARATE from -PcgNetProbe on purpose: a channel
+    // takes one inbound handler, so the raw transport probe owns it and the lifecycle stands down while
+    // that flag is set. One tests the engine, the other tests the wiring.
+    if (providers.gradleProperty("cgSessionProbe").isPresent) {
+        systemProperty("crystalgui.session.probe", "true")
+    }
+
+    // -PcgWireProbe moves 4 MB each way over a REAL socket and reports the rate. The frame ceiling is
+    // asymmetric by a factor of 64 on 1.7.10 -- 32,766 bytes up, 2,097,050 down -- so an upload and a
+    // download of one file are not the same transfer, and no in-JVM test can show the difference.
+    // Pair with -PcgJoin against a running :mc1710:runServer.
+    if (providers.gradleProperty("cgWireProbe").isPresent) {
+        systemProperty("crystalgui.wire.probe", "true")
+    }
+
+    // -PcgJoin=host[:port] makes the client connect straight to a server instead of the main menu.
+    // 1.7.10's own Main parses --server/--port, and Minecraft.startGame goes to GuiConnecting when
+    // serverName is set -- so this needs no code of ours, only the arguments.
+    //
+    // With -PcgRemoteProbe it is the whole point: the integrated server shares a JVM and a filesystem,
+    // so "the workspace lives on the server" is untestable in single player. Two processes is the test.
+    providers.gradleProperty("cgJoin").orNull?.let { target ->
+        val host = target.substringBefore(':')
+        val port = target.substringAfter(':', "25565")
+        args("--server", host, "--port", port)
+        systemProperty("crystalgui.remote.probe", "true")
+    }
+
     if (providers.gradleProperty("cgAutoTest").isPresent) {
         systemProperty("crystalgui.autotest", "true")
         systemProperty("crystalgui.autotest.out",
@@ -418,6 +456,78 @@ tasks.named<JavaExec>(runTask) {
         }
     }
 }
+}
+
+// ── The dedicated-server smoke check ─────────────────────────────────────────────────
+//
+//     ./gradlew :mc1710:serverSmoke
+//
+// Boots a dedicated server, asserts the server-side stack came up, stops it. Exit 0 on pass, 1 on fail.
+//
+// THIS IS THE ONLY CHECK IN THE BUILD THAT CAN SEE ITS CLASS OF BUG. Three fatal defects shipped
+// undetected until a server was booted by hand for the first time -- CrystalGraphics' platform bundle
+// building all nine services eagerly, CgPlatform asking for a GL backend unconditionally, and a
+// client-only guard sitting one level too high. Every one is a RUNTIME property ("a client-only class is
+// constructed on a server"), so 1090 headless tests could not see them, the GL harness could not see them
+// (it is a client by design), and an import scan cannot answer a question about class loading. Starting
+// the server found all three in one run. @see CgUiServerSmoke, which carries the full reasoning.
+//
+// Wired to `runServer` rather than being its own JavaExec: reproducing that task's classpath, JVM args
+// and working directory is a copy that goes stale, and the run has to be the real one or it proves
+// nothing. The task name is read out of the start parameters because a Gradle PROPERTY cannot be set by
+// a task dependency -- so `serverSmoke` and `runServer -PcgServerSmoke` are the same run, spelled twice.
+val serverSmokeRequested = gradle.startParameter.taskNames.any {
+    it == "serverSmoke" || it.endsWith(":serverSmoke")
+}
+
+val serverSmokeReport = layout.buildDirectory.file("serverSmoke/result.txt")
+
+tasks.named<JavaExec>("runServer") {
+    if (serverSmokeRequested || providers.gradleProperty("cgServerSmoke").isPresent) {
+        systemProperty("crystalgui.server.smoke", "true")
+        systemProperty("crystalgui.server.smoke.report", serverSmokeReport.get().asFile.absolutePath)
+
+        // --nogui because the dedicated server otherwise opens a Swing console and blocks on it; a check
+        // that needs a window closed is not a check a pipeline can run.
+        args("nogui")
+
+        // A PORT OF ITS OWN, and this is not tidiness -- it is the first thing the check caught, about
+        // itself. 25565 was in use (another server, a leftover, a second worktree), the bind failed, FML
+        // forced SERVER_STOPPED, FMLServerStartedEvent never fired so not one assertion ran, and the JVM
+        // exited 0: BUILD SUCCESSFUL having checked nothing. 1.7.10's MinecraftServer.main parses --port,
+        // so this needs no code of ours.
+        val port = providers.gradleProperty("cgSmokePort").orNull ?: "25599"
+        args("--port", port)
+
+        // Deleted BEFORE the run, so a stale report from a previous run cannot pass for this one.
+        doFirst { serverSmokeReport.get().asFile.delete() }
+    }
+}
+
+tasks.register("serverSmoke") {
+    group = "crystalgui"
+    description = "Boots a dedicated server, asserts the server-side stack came up, and stops it."
+    dependsOn(tasks.named("runServer"))
+    outputs.upToDateWhen { false }
+
+    // THE HALF THAT MAKES IT SOUND. The mod halts(1) when a check fails, which covers "ran and failed";
+    // nothing covered "never ran", and that is the case that actually happened on the first run. An
+    // absent report is therefore a failure with a message, never a pass.
+    doLast {
+        val file = serverSmokeReport.get().asFile
+        if (!file.isFile) {
+            throw GradleException(
+                "The dedicated server produced no smoke report at " + file.absolutePath + ".\n" +
+                    "The server did not reach FMLServerStartedEvent, so NO check ran -- this is not a " +
+                    "pass. Look above for the reason: a failed port bind, a mod refusing to load, or a " +
+                    "crash during startup. Use -PcgSmokePort=<n> if 25599 is taken.")
+        }
+        val verdict = file.readLines().firstOrNull()?.trim().orEmpty()
+        if (verdict != "PASS") {
+            throw GradleException("Dedicated-server smoke FAILED:\n" + file.readText())
+        }
+        logger.lifecycle(file.readText())
+    }
 }
 
 // ── The reobfuscated client (§26.8) ─────────────────────────────────────────────────────────────

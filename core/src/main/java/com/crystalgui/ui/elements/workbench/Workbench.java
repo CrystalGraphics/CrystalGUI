@@ -27,9 +27,14 @@ import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.chrome.Breadcrumbs;
 import com.crystalgui.ui.elements.chrome.QuickPick;
 import com.crystalgui.ui.elements.chrome.StatusBarView;
+import com.crystalgui.ui.elements.workbench.decoration.FileDecoration;
+import com.crystalgui.ui.elements.workbench.decoration.FileDecorationProvider;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.SymbolIcon;
 import com.crystalgui.text.lang.SymbolInfo;
+import com.crystalgui.text.diff.ThreeWayMerge;
+import com.crystalgui.ui.elements.Button;
+import com.crystalgui.ui.elements.Dialog;
 import com.crystalgui.ui.elements.InputDialog;
 import com.crystalgui.ui.elements.chrome.NotificationBalloons;
 import com.crystalgui.ui.elements.chrome.NotificationsView;
@@ -464,7 +469,9 @@ public class Workbench extends UIElement {
         client.onFileChanged(change -> {
             fileTree.source().invalidate(change.path().parent());
             fileTree.treeView().refresh();
+            applyExternalChange(change);
         });
+        fileTree.getDecorations().addProvider(externalChanges);
 
         // How a tab presents itself. Both are PULLED by the strip when it builds a tab rather than pushed
         // in afterwards, which is what makes a rebuilt strip correct on the frame it is rebuilt -- a dock
@@ -1403,6 +1410,7 @@ public class Workbench extends UIElement {
      */
     private void bindStatusToActiveTab() {
         statusBar.breadcrumbs().setCrumbs(trailFor(activeFilePath()));
+        refreshPresence();
 
         FileDocument active = activeDocument();
         if (active == activeStatusDocument) return;
@@ -1456,22 +1464,267 @@ public class Workbench extends UIElement {
             return false;
         }
         byte[] written = document.encode();
-        client.save(target, written,
-                etag -> {
-                    // THE BYTES THAT WERE WRITTEN become the new baseline, not the document's current
-                    // state: a document edited again while the write was in flight is still modified
-                    // afterwards, and recording what it looks like NOW would call it clean.
-                    open.markSaved(target, written);
+        client.save(target, written, etag -> saved(target, written),
+                failure -> {
+                    if (failure.isConflict()) {
+                        askWhichVersionSurvives(target, written);
+                        return;
+                    }
+                    Notifications.show(saveFailed(target, failure)
+                            .withAction("Retry", this::saveActiveFile));
+                });
+        return true;
+    }
+
+    /**
+     * THE BYTES THAT WERE WRITTEN become the new baseline, not the document's current state: a document
+     * edited again while the write was in flight is still modified afterwards, and recording what it
+     * looks like NOW would call it clean.
+     */
+    private void saved(CgPath target, byte[] written) {
+        open.markSaved(target, written);
+        // THE DISAGREEMENT IS OVER, whichever way it was resolved -- a successful write means this
+        // buffer is now what the server holds. Leaving the mark would show a conflict badge on a file
+        // that has none, which teaches people to ignore the badge.
+        externallyChanged.remove(target);
+        externallyDeleted.remove(target);
+        refreshTabTitles();
+    }
+
+    /**
+     * Phase 5.5 — a conflict is a question, not a notification.
+     *
+     * <p>This was a balloon whose single action was <i>"Reopen to take theirs"</i>, and the comment beside
+     * it already said the prose had named the fix and that it should be a button. It understated the
+     * problem twice. A balloon <b>fades</b>, so a user who was not looking takes the default — and the
+     * default was "your save silently did not happen". And that one button <b>discards unsaved work in a
+     * click</b>, while the opposite resolution, keep mine, was not offered at all.</p>
+     *
+     * <p>Both resolutions destroy something, which is exactly the case that earns a modal.
+     * @see ConflictDialog</p>
+     */
+    /**
+     * Phase 6.3 — what to do when a file changes on the server underneath an open editor.
+     *
+     * <p>The notification has crossed the wire since Phase 4 and reached <b>only the file tree</b>: an
+     * open editor was never told. So a clean buffer showed stale content for ever, a deleted file left a
+     * perfectly normal-looking tab, and a change under a dirty buffer was discovered at save time or not
+     * at all.</p>
+     *
+     * <table>
+     *   <tr><th>State</th><th>What happens</th></tr>
+     *   <tr><td>Clean, changed</td><td><b>Reloaded silently.</b> The overwhelmingly common case — a
+     *       git checkout, an external save — and prompting for it is what makes a watcher feel naggy
+     *       rather than helpful. VS Code does the same, and there is nothing to lose: the buffer and the
+     *       file agreed a moment ago</td></tr>
+     *   <tr><td>Dirty, changed</td><td>Marked and <b>left alone</b>. Reloading would destroy unsaved
+     *       work without asking; the decision belongs at save time, where {@code ConflictDialog} already
+     *       makes it with all three answers on the table</td></tr>
+     *   <tr><td>Deleted</td><td>Marked, buffer kept. Closing the tab throws away text the user may well
+     *       want to write back — which is the whole reason the buffer is worth more than the file</td></tr>
+     *   <tr><td>Not open</td><td>Nothing. The tree refresh above is the entire correct response</td></tr>
+     * </table>
+     */
+    private void applyExternalChange(WorkspaceClient.FileChanged change) {
+        CgPath path = change.path();
+        if (open.get(path) == null) return;
+
+        if (change.isDeleted()) {
+            externallyDeleted.add(path);
+            externallyChanged.remove(path);
+            refreshTabTitles();
+            return;
+        }
+
+        externallyDeleted.remove(path);
+        if (open.isDirty(path)) {
+            // MARKED, NOT RELOADED. @see ConflictDialog, which is where this is actually resolved.
+            externallyChanged.add(path);
+            refreshTabTitles();
+            return;
+        }
+
+        // CLEAN: take the new bytes without asking. forget() first, or the conditional read answers
+        // UNCHANGED out of the etag this client is holding -- which is precisely the etag that just
+        // stopped being true.
+        client.forget(path);
+        client.read(path,
+                reloaded -> {
+                    adoptInto(path, reloaded.content());
+                    open.markSaved(path, reloaded.content());
+                    externallyChanged.remove(path);
                     refreshTabTitles();
                 },
-                failure -> Notifications.show(failure.isConflict()
-                        // THE PROSE ALREADY NAMED THE FIX -- "reopen to take theirs" -- which is exactly
-                        // the case for making it a button instead of an instruction.
-                        ? Notification.error("Conflict")
-                                .withDetail(target.name() + " changed on disk")
-                                .withAction("Reopen to take theirs", () -> openFile(target))
-                        : saveFailed(target, failure).withAction("Retry", this::saveActiveFile)));
+                failure -> {
+                    // Could not take it after all. Marked rather than silently left stale, because a
+                    // buffer that disagrees with the server and says nothing is the state this whole
+                    // item exists to remove.
+                    externallyChanged.add(path);
+                    refreshTabTitles();
+                });
+    }
+
+    /**
+     * The badge an externally-changed or deleted file carries — Phase 6.3.
+     *
+     * <p>Through {@code FileDecorations} rather than a second marking mechanism, so it reaches the tab
+     * <b>and</b> the file tree from one place, merges with the other providers by weight, and bubbles to
+     * the containing folder like everything else. A decoration written straight onto the tab would have
+     * needed a second one for the tree, and the two would have disagreed.</p>
+     *
+     * <p><b>It bubbles</b>, so a folder says one of its files moved without the user opening it. The
+     * recorded rule applies: the colour climbs and the badge does not — a folder wearing a
+     * {@code ✕} would be claiming the folder itself was deleted.</p>
+     */
+    private final FileDecorationProvider externalChanges = new FileDecorationProvider() {
+        @Override
+        public String label() {
+            return "Changed on the server";
+        }
+
+        @Override
+        @Nullable
+        public FileDecoration decorationFor(CgPath path) {
+            if (externallyDeleted.contains(path)) {
+                return FileDecoration.of(90, "decoration-deleted", "✕", "Deleted on the server")
+                        .withStrikethrough(true).withBubble(true);
+            }
+            if (externallyChanged.contains(path)) {
+                return FileDecoration.of(80, "decoration-conflict", "!",
+                        "Changed on the server since you opened it").withBubble(true);
+            }
+            return null;
+        }
+
+        @Override
+        public java.util.Collection<CgPath> decorated() {
+            if (externallyChanged.isEmpty() && externallyDeleted.isEmpty()) return java.util.List.of();
+            java.util.List<CgPath> all =
+                    new java.util.ArrayList<>(externallyChanged.size() + externallyDeleted.size());
+            all.addAll(externallyChanged);
+            all.addAll(externallyDeleted);
+            return all;
+        }
+    };
+
+    /** Files that moved on the server under a DIRTY buffer, so the tab can say so. @see #applyExternalChange */
+    private final java.util.Set<CgPath> externallyChanged = new java.util.LinkedHashSet<>();
+
+    /** Files deleted on the server while still open here. @see #applyExternalChange */
+    private final java.util.Set<CgPath> externallyDeleted = new java.util.LinkedHashSet<>();
+
+    /**
+     * Phase 5.6 — who else has this file open, phrased for a human.
+     *
+     * <p>{@code null} rather than an empty string when nobody is known, because the dialog omits the
+     * whole line rather than drawing "nobody has it open" — which would be a claim, and the client cannot
+     * make it: an empty presence list means <em>nothing has been said</em>, not that the file is
+     * unoccupied. @see WorkspaceClient#whoElseHasOpen</p>
+     */
+    @Nullable
+    private String othersEditing(CgPath target) {
+        List<String> others = client.whoElseHasOpen(target);
+        if (others.isEmpty()) return null;
+        if (others.size() == 1) return others.get(0);
+        if (others.size() == 2) return others.get(0) + " and " + others.get(1);
+        return others.get(0) + " and " + (others.size() - 1) + " others";
+    }
+
+    private void askWhichVersionSurvives(CgPath target, byte[] written) {
+        // CAPTURED BEFORE ANYTHING READS: finishRead overwrites cachedContent with whatever the server
+        // now holds, so a base fetched after the read is the SERVER version wearing the name of the
+        // ancestor -- and a three-way merge against that reports every one of my own edits as a conflict.
+        byte[] base = client.baseContent(target);
+        ConflictDialog.ask(this, target, othersEditing(target),
+                () -> overwrite(target, written),
+                () -> openFile(target),
+                // No base, no merge. A file that was never read has no common ancestor, and offering the
+                // option and then failing is worse than not offering it.
+                base == null ? null : () -> openMerge(target, written, base));
+    }
+
+    /**
+     * Fetches the server's current copy and opens a three-way merge over it.
+     *
+     * <p>The read is what makes this asynchronous: {@code written} and {@code base} are both already in
+     * hand, and only <em>theirs</em> has to come off the wire.</p>
+     */
+    private void openMerge(CgPath target, byte[] written, byte[] base) {
+        client.read(target,
+                document -> showMerge(target, base, written, document.content()),
+                failure -> Notifications.show(saveFailed(target, failure)));
+    }
+
+    private void showMerge(CgPath target, byte[] base, byte[] mine, byte[] theirs) {
+        UIWindow window = getAttachedWindow();
+        if (window == null) return;
+
+        ThreeWayMerge merge = ThreeWayMerge.of(text(base), text(mine), text(theirs));
+        MergeView view = new MergeView(merge);
+
+        Dialog dialog = new Dialog("Merge " + target.name());
+        dialog.getContent().addChild(view);
+
+        UIElement actions = new UIElement();
+        actions.addClass(MergeView.DIALOG_ACTIONS_CLASS);
+        dialog.getContent().addChild(actions);
+
+        Button apply = new Button("Save merged");
+        Button cancel = new Button("Cancel");
+        actions.addChild(apply);
+        actions.addChild(cancel);
+
+        // GATED ON EVERY CONFLICT HAVING BEEN DECIDED, not on there being none. An undecided conflict
+        // still produces text -- it defaults to mine -- so an ungated button would write a merge nobody
+        // read and it would look like it worked.
+        Runnable syncEnabled = () -> {
+            boolean ready = view.isResolved();
+            apply.setEnabled(ready);
+            apply.setHitTest(ready);
+        };
+        view.onChanged.connect(syncEnabled);
+        syncEnabled.run();
+
+        apply.onPressed.connect(() -> {
+            String merged = view.mergedText();
+            dialog.close();
+            overwrite(target, merged.getBytes(StandardCharsets.UTF_8));
+        });
+        cancel.onPressed.connect(dialog::close);
+
+        window.addOverlay(dialog, this);
+        dialog.onClosed.connect(dialog::removeSelf);
+        dialog.showModal();
+        window.getInputHandler().requestFocus(cancel);
+    }
+
+    private static String text(byte[] bytes) {
+        return new String(bytes, StandardCharsets.UTF_8);
+    }
+
+    /**
+     * <b>Keep mine</b> — writes the active file over whatever the server holds.
+     *
+     * <p>Named rather than left inline inside the conflict handler, because it is one of the three
+     * answers {@code ConflictDialog} offers and the only one with no other way to reach it. A branch that
+     * exists only inside a modal's callback cannot be tested without driving the modal, which is how a
+     * resolution path ends up being the one nobody checks.</p>
+     */
+    public boolean overwriteActiveFile() {
+        CgPath target = activeFilePath();
+        if (target == null) return false;
+        FileDocument document = open.get(target);
+        if (document == null || !open.isSaveable(target)) return false;
+        overwrite(target, document.encode());
         return true;
+    }
+
+    private void overwrite(CgPath target, byte[] written) {
+        client.overwrite(target, written, etag -> saved(target, written),
+                // A SECOND failure is not another conflict -- overwrite carries no etag, so it cannot be
+                // refused as stale. Anything arriving here is a real error and belongs on the ordinary
+                // path rather than reopening the question.
+                again -> Notifications.show(saveFailed(target, again)));
     }
 
     /**
@@ -2298,6 +2551,40 @@ public class Workbench extends UIElement {
             problemCountEntry.update(entry);
         }
     }
+
+    /**
+     * Phase 5.6 — says who else has the active file open.
+     *
+     * <p>The data has existed since Phase 4 and nothing showed it: {@code fs.watch} is sent for every
+     * file a client reads, so the server has always known. What was missing was a view <em>across</em>
+     * peers — a watcher belongs to one connection — and anywhere to put the answer.</p>
+     *
+     * <p><b>Removed rather than emptied when nobody is there.</b> A permanent "1 person" slot that
+     * usually reads zero is a thing the eye learns to skip, which is the one failure a presence
+     * indicator cannot afford. Same shape as the problem count above, and for the same reason.</p>
+     */
+    private void refreshPresence() {
+        String others = othersEditing(activeFilePath());
+        if (others == null) {
+            if (presenceEntry != null) presenceEntry.dispose();
+            presenceEntry = null;
+            return;
+        }
+        StatusBarEntry entry = new StatusBarEntry("Editing",
+                others, others + " also has this file open", null, StatusBarEntry.Kind.STANDARD);
+        if (presenceEntry == null) {
+            presenceEntry = StatusBar.addEntry(entry, "workbench.presence",
+                    StatusBarAlignment.RIGHT, PRESENCE_PRIORITY);
+        } else {
+            presenceEntry.update(entry);
+        }
+    }
+
+    /** Right of the problem count and left of anything a document contributes. */
+    private static final int PRESENCE_PRIORITY = 50;
+
+    @Nullable
+    private StatusBarEntryAccessor presenceEntry;
 
     /**
      * Keeps the panel pointed at this workspace's index.

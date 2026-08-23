@@ -32,6 +32,33 @@ public final class WorkspaceProtocol {
     /** A whole file, with the etag it was read at. */
     public static final String READ = "fs.read";
 
+    /**
+     * Pulls one slice of a transfer {@link #READ} opened. <b>Client-driven</b>, deliberately.
+     *
+     * <p>A push would work — the transport has credit flow control, so the server could stream and the
+     * receiver would exert backpressure. Pull was chosen for two reasons that outlast this method: the
+     * client decides the pace, so a UI can pause or abandon a download without a cancel protocol, and a
+     * resume is the same request with a different {@link #OFFSET}, which is what D11's *"resume"* row
+     * becomes rather than a new mechanism. HTTP range requests are the same shape for the same reason.</p>
+     */
+    public static final String READ_CHUNK = "fs.readChunk";
+
+    /**
+     * Writes a text file as a {@code ChangeSet} against a known base revision — P6.1.10 <b>D10</b>.
+     *
+     * <p>D10's rule is that <i>writing branches on what the CLIENT is holding, not on what the file
+     * is</i>: a text document with a matching base revision sends a change set, anything else sends the
+     * whole file. That is knowable locally and correct for the awkward cases by construction, since a
+     * binary file cannot produce a change set and takes the whole-file path without anyone remembering a
+     * rule.</p>
+     *
+     * <p>The win is the ordinary case rather than an extreme one: typing a character into a 2 MB file
+     * sends the character instead of the file. The etag is still quoted and still re-stat'd, so the
+     * conflict story is exactly {@link #WRITE}'s — a delta against a file that moved is refused, not
+     * merged.</p>
+     */
+    public static final String WRITE_DELTA = "fs.writeDelta";
+
     /** Replace a file, quoting the etag it was read at. */
     public static final String WRITE = "fs.write";
 
@@ -104,9 +131,91 @@ public final class WorkspaceProtocol {
 
     // ── Fields ──────────────────────────────────────────────────────────────────────────────────
 
+    /**
+     * What this actor may do, per project — <b>both directions</b>.
+     *
+     * <p>A REQUEST the client makes once, and a NOTIFICATION the server pushes when the answer changes
+     * (an operator promoted, a permission node revoked). {@code MessageRouter} keys request handlers and
+     * notification handlers separately, so one name serves both without ambiguity, and it should: they
+     * are the same question, asked and volunteered.</p>
+     *
+     * <p><b>Per project, not per path</b>, and that is a real coarsening — {@link WorkspacePermission}
+     * takes a path, so a host may legitimately allow writes under {@code src/} and refuse them under
+     * {@code config/}, which no broadcast can express. This is therefore a <em>hint for enablement</em>
+     * and never the authority: every operation is still authorised server-side on its own path. The
+     * direction of the error is what makes the coarsening safe — see {@code WorkspaceClient.mayWrite}.</p>
+     */
+    public static final String CAPABILITIES = "fs.capabilities";
+
+    /** The list {@link #CAPABILITIES} carries, of {@code {project, read, write}}. */
+    public static final String PROJECT_CAPABILITIES = "caps";
+
+    /**
+     * Who else has a file open — server → client, pushed.
+     *
+     * <p>Carries {@link #PRESENCE_ENTRIES}, a list of {@code {path, who[]}} covering every path this
+     * peer is watching. <b>Whole-state rather than a delta</b>, and deliberately: the list is bounded by
+     * how many files one client has open, so it is small, and a delta stream that a peer joins halfway
+     * through has to be reconciled against a full state anyway. One shape, no reconciliation.</p>
+     */
+    public static final String PRESENCE = "fs.presence";
+
+    public static final String PRESENCE_ENTRIES = "presence";
+    public static final String WHO = "who";
+
+    public static final String PROJECT = "project";
+    public static final String MAY_READ = "read";
+    public static final String MAY_WRITE = "write";
+
     public static final String PATH = "path";
     public static final String CONTENT = "content";
     public static final String ETAG = "etag";
+
+    /**
+     * On a {@link #READ} reply: true when the content did not come with it and must be pulled.
+     *
+     * <p>Absent means inline, so an old client reading a small file sees exactly what it always did.
+     * The threshold is the server's to choose and the client must not assume one — it reads the flag.</p>
+     */
+    public static final String CHUNKED = "chunked";
+
+    /** Identifies an open transfer, for {@link #READ_CHUNK}. */
+    public static final String TRANSFER = "transfer";
+
+    // Total bytes in the file, so a client can size a progress bar before pulling anything -- the same
+    // SIZE a manifest entry already uses, deliberately not a second name for one number.
+
+    /** Where a chunk starts. */
+    public static final String OFFSET = "offset";
+
+    /** How many bytes a chunk asks for; the server may answer with fewer. */
+    public static final String LENGTH = "length";
+
+    /** True on the chunk that completes a transfer, after which the id is no longer valid. */
+    public static final String EOF = "eof";
+
+    /**
+     * A {@link #WRITE_DELTA} payload: the changes, each carrying {@link #FROM}, {@link #TO} and
+     * {@link #INSERT}.
+     *
+     * <p>{@code FROM} and {@code TO} are the pair {@code fs.rename} already uses — reused rather than
+     * duplicated under a second spelling, because they mean the same thing here (a span) and two names
+     * for one concept is how a protocol starts disagreeing with itself.</p>
+     */
+    public static final String CHANGES = "changes";
+
+    public static final String INSERT = "insert";
+
+    /**
+     * On a {@link #READ}: the etag the client already holds, and on the reply, that nothing changed.
+     *
+     * <p>HTTP's conditional GET, for the same reason — the common re-read is of a file that has not
+     * moved, and answering "still the one you have" costs a few bytes instead of the file. Absent means
+     * "send it regardless", so a client with no cache behaves exactly as before.</p>
+     */
+    public static final String IF_NONE_MATCH = "ifNoneMatch";
+
+    public static final String UNCHANGED = "unchanged";
     public static final String ENTRIES = "entries";
     public static final String PROJECT_LIST = "projects";
     public static final String NAME = "name";

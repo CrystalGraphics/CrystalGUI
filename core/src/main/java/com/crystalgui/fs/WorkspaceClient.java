@@ -1,7 +1,11 @@
 package com.crystalgui.fs;
 
 import com.crystalgui.net.ClientUiSession;
+import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.serialization.StateMap;
+import com.crystalgui.text.Change;
+
+import javax.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -26,7 +30,7 @@ import java.util.function.Consumer;
  */
 public final class WorkspaceClient<T> {
 
-    private final ClientUiSession<T> session;
+    private final Caller<T> caller;
     private final com.crystalgui.serialization.DynamicOps<T> ops;
 
     /**
@@ -38,28 +42,231 @@ public final class WorkspaceClient<T> {
      */
     private final Map<CgPath, String> etags = new HashMap<>();
 
+    /**
+     * The last content read per path, with the etag it was read at — P6.1.10 <b>D13</b>.
+     *
+     * <p>Validated by etag rather than content-addressed, which is what D13 settled on: the etag is
+     * already {@code mtime+size} and already travels, so a conditional read costs one field and no
+     * hashing. On a hit the server sends {@code unchanged} and the bytes never leave the disk — which
+     * matters most for exactly the files a chunked transfer would otherwise re-pull.</p>
+     *
+     * <p>Dropped when a change notification arrives for the path, so a stale entry cannot outlive the
+     * revision it describes.</p>
+     */
+    private final Map<CgPath, byte[]> cachedContent = new HashMap<>();
+
     /** Paths this client has asked the server to watch, so a re-read does not ask twice. */
     private final java.util.Set<CgPath> watched = new java.util.HashSet<>();
+
+    /** Somewhere to send a request. The two constructors below supply the two real ones. */
+    @FunctionalInterface
+    public interface Caller<T> {
+        void call(String method, StateMap<T> args,
+                  Consumer<StateMap<T>> onResult, Consumer<String> onError);
+    }
+
+    /** Told how far a chunked read has got. Both figures are bytes; {@code total} never changes. */
+    @FunctionalInterface
+    public interface Progress {
+        void at(int done, int total);
+    }
 
     /**
      * @param ops the wire format. Taken here rather than read off the session, which does not expose
      *            its own — widening {@code ClientUiSession} for one caller would be the worse trade.
      */
     public WorkspaceClient(ClientUiSession<T> session, com.crystalgui.serialization.DynamicOps<T> ops) {
-        this.session = session;
+        this(session::call, session::onCall, ops);
+    }
+
+    /**
+     * Rides a connection, so the workspace shares one wire with the UI and everything else on it.
+     *
+     * <p>This is Phase 4 B1 in one line, and the class needed nothing else: it only ever used the session
+     * to {@code call} and to {@code onCall}, which is exactly what a {@link ProtocolConnection} offers —
+     * so the swap the earlier design reserved really was a transport swap rather than a rewrite. The ops
+     * comes off the connection here, because a connection <em>does</em> expose its own.</p>
+     */
+    public WorkspaceClient(ProtocolConnection<T> connection) {
+        this(connection::call, connection::onRequest, connection.ops());
+    }
+
+    /** One per connection, memoised weakly so a closed connection's entry goes with it. */
+    private static final Map<ProtocolConnection<?>, WorkspaceClient<?>> BY_CONNECTION =
+            java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
+
+    /**
+     * The file client for this connection, creating it once.
+     *
+     * <p><b>Use this rather than the constructor</b> whenever the connection is shared. A
+     * {@code WorkspaceClient} registers {@code fs.changed} to receive change notifications, and
+     * {@link com.crystalgui.net.protocol.MessageRouter} refuses a duplicate registration outright — so a
+     * second one on the same wire throws, and it throws from wherever the second consumer happens to be
+     * constructed. That is the right refusal and the wrong place to discover it: two subsystems wanting
+     * file access on one connection is entirely reasonable, and what is not reasonable is each building
+     * its own notification channel for it.</p>
+     *
+     * <p>Found in game rather than in a test: an editor and a probe each built one over the same player's
+     * connection, and the second killed the client during screen init.</p>
+     */
+    @SuppressWarnings("unchecked")
+    public static <T> WorkspaceClient<T> forConnection(ProtocolConnection<T> connection) {
+        synchronized (BY_CONNECTION) {
+            WorkspaceClient<?> existing = BY_CONNECTION.get(connection);
+            if (existing != null) return (WorkspaceClient<T>) existing;
+            WorkspaceClient<T> created = new WorkspaceClient<>(connection);
+            BY_CONNECTION.put(connection, created);
+            return created;
+        }
+    }
+
+    private WorkspaceClient(Caller<T> caller, WorkspaceRpc.Registrar<T> registrar,
+                            com.crystalgui.serialization.DynamicOps<T> ops) {
+        this.caller = caller;
         this.ops = ops;
         // The server pushes these; nothing asks for them. Registered here rather than left to a caller,
         // because a client that reads a file is watching it (see read) and would otherwise be sent
         // notifications with no handler.
-        session.onCall(WorkspaceProtocol.CHANGED, (args, respond) -> {
+        registrar.register(WorkspaceProtocol.PRESENCE, (args, respond) -> {
+            applyPresence(args);
+            respond.ok(null);
+        });
+        registrar.register(WorkspaceProtocol.CAPABILITIES, (args, respond) -> {
+            applyCapabilities(args);
+            respond.ok(null);
+        });
+        registrar.register(WorkspaceProtocol.CHANGED, (args, respond) -> {
             CgPath path = CgPath.parse(args.getString(WorkspaceProtocol.PATH, ""));
             String kind = args.getString(WorkspaceProtocol.KIND, WorkspaceProtocol.KIND_MODIFIED);
             String etag = args.has(WorkspaceProtocol.ETAG)
                     ? args.getString(WorkspaceProtocol.ETAG, null) : null;
+            // Before the handler runs: a handler that re-reads must not be served the stale bytes.
+            cachedContent.remove(path);
             if (onChanged != null) onChanged.accept(new FileChanged(path, kind, etag));
             respond.ok(null);
         });
     }
+
+    /**
+     * Whether this actor may write in {@code path}'s project. <b>A hint for enablement, never the
+     * authority.</b>
+     *
+     * <h3>The problem it solves</h3>
+     *
+     * <p>A command's {@code enabledWhen} runs on the client, so it cannot ask the server <i>may I?</i>:
+     * {@code explorer.delete} looked enabled to a non-operator and the refusal arrived as a
+     * {@code NO_PERMISSIONS} failure after a round trip. Asking per menu open is worse — that is a round
+     * trip inside a UI gesture. So the answer is cached and the server pushes changes, which is VS Code's
+     * context-key model: the far side volunteers what it knows and the near side reads it synchronously.</p>
+     *
+     * <h3>Unknown means yes, and the direction is the whole design</h3>
+     *
+     * <p>Two things make the cached answer approximate. It is <b>per project</b> while
+     * {@link WorkspacePermission} is per path, so a host allowing writes under {@code src/} and refusing
+     * them under {@code config/} cannot be represented. And it can be <b>stale</b> between a change and
+     * its push, or simply absent before the first answer arrives.</p>
+     *
+     * <p>So it is optimistic: unknown is available. A wrongly-<em>greyed</em> command is a thing the user
+     * cannot do and cannot explain — there is no message, no dialog, nothing to search for. A
+     * wrongly-<em>live</em> one fails with a reason the server wrote. Being wrong in the second direction
+     * is strictly recoverable and being wrong in the first is not, which is also why nothing here relaxes
+     * a check: every operation is still authorised server-side on its real path.</p>
+     */
+    public boolean mayWrite(@Nullable CgPath path) {
+        if (path == null) return true;
+        Boolean known = writable.get(path.project());
+        return known == null || known.booleanValue();
+    }
+
+    /** Whether this actor may read in {@code path}'s project. @see #mayWrite */
+    public boolean mayRead(@Nullable CgPath path) {
+        if (path == null) return true;
+        Boolean known = readable.get(path.project());
+        return known == null || known.booleanValue();
+    }
+
+    /**
+     * Asks the server what this actor may do, and caches the answer.
+     *
+     * <p>Called once when a workspace opens. The server pushes updates afterwards, so this is a
+     * <em>seed</em> rather than a poll — calling it per menu open is the round trip the cache exists to
+     * avoid.</p>
+     */
+    public void refreshCapabilities() {
+        caller.call(WorkspaceProtocol.CAPABILITIES, new StateMap<>(ops),
+                result -> applyCapabilities(result), error -> {
+                    // Left OPTIMISTIC on failure rather than assumed-denied. A server too old to know
+                    // this method answers METHOD_NOT_FOUND, and greying out every write against an
+                    // otherwise working workspace is a far worse answer than offering one that fails.
+                });
+    }
+
+    /** Told when the cached answer changes, so a menu bar can re-evaluate what it draws. */
+    public void onCapabilitiesChanged(Runnable handler) {
+        this.onCapabilities = handler;
+    }
+
+    private void applyCapabilities(StateMap<T> in) {
+        readable.clear();
+        writable.clear();
+        for (StateMap<T> entry : in.getList(WorkspaceProtocol.PROJECT_CAPABILITIES, e -> e)) {
+            String project = entry.getString(WorkspaceProtocol.PROJECT, "");
+            if (project.isEmpty()) continue;
+            readable.put(project, entry.getBool(WorkspaceProtocol.MAY_READ, true));
+            writable.put(project, entry.getBool(WorkspaceProtocol.MAY_WRITE, true));
+        }
+        if (onCapabilities != null) onCapabilities.run();
+    }
+
+    /** Absent means unknown, which means allowed. @see #mayWrite */
+    private final Map<String, Boolean> readable = new HashMap<>();
+    private final Map<String, Boolean> writable = new HashMap<>();
+
+    @Nullable
+    private Runnable onCapabilities;
+
+    /**
+     * Who else has {@code path} open, by display name. Empty when nobody does, or nobody has said yet.
+     *
+     * <p><b>Empty is not "nobody".</b> It is "nothing has been said", and the two are indistinguishable
+     * from here — which is why this is only ever used to <em>add</em> information (a conflict naming who
+     * else is editing, a status line) and never to decide anything. A UI that hid a warning because the
+     * list was empty would hide it exactly when the server had not got round to answering.</p>
+     */
+    public List<String> whoElseHasOpen(@Nullable CgPath path) {
+        if (path == null) return java.util.Collections.emptyList();
+        List<String> others = presence.get(path);
+        return others == null ? java.util.Collections.emptyList() : others;
+    }
+
+    /** Every path this client knows somebody else has open. */
+    public java.util.Set<CgPath> pathsOthersHaveOpen() {
+        return new java.util.LinkedHashSet<>(presence.keySet());
+    }
+
+    /** Told when the presence view changes, so a status line can redraw. */
+    public void onPresenceChanged(Runnable handler) {
+        this.onPresence = handler;
+    }
+
+    private void applyPresence(StateMap<T> in) {
+        // REPLACED WHOLESALE, matching what the server sends. A merge would leave a path that has just
+        // become unoccupied showing its last occupant for ever, because "nobody is here now" arrives as
+        // an ABSENCE from the list rather than as an entry saying zero.
+        presence.clear();
+        for (StateMap<T> entry : in.getList(WorkspaceProtocol.PRESENCE_ENTRIES, e -> e)) {
+            CgPath path = CgPath.parse(entry.getString(WorkspaceProtocol.PATH, ""));
+            List<String> who = entry.getList(WorkspaceProtocol.WHO,
+                    e -> e.getString(WorkspaceProtocol.NAME, ""));
+            if (!who.isEmpty()) presence.put(path, who);
+        }
+        if (onPresence != null) onPresence.run();
+    }
+
+    private final Map<CgPath, List<String>> presence = new HashMap<>();
+
+    @Nullable
+    private Runnable onPresence;
 
     /** What the server reports when a watched file moves. */
     public record FileChanged(CgPath path, String kind, String etag) {
@@ -151,17 +358,166 @@ public final class WorkspaceClient<T> {
      * pair is {@link #forget}, which unwatches.</p>
      */
     public void read(CgPath path, Consumer<Document> onResult, Consumer<Failure> onError) {
-        call(WorkspaceProtocol.READ, args().putString(WorkspaceProtocol.PATH, path.toString()),
+        read(path, onResult, onError, null);
+    }
+
+    /**
+     * Reads, reporting progress — and transparently pulling a large file in chunks.
+     *
+     * <p><b>A caller cannot tell which happened</b>, and that is the point: the reply says whether the
+     * content came with it, and this follows up if it did not. The threshold is the server's, so a client
+     * must never assume one. {@code progress} fires for every chunk on the chunked path and not at all on
+     * the inline one, because there is nothing to report about something that already arrived.</p>
+     *
+     * <p>Refused above {@link WorkspaceService#MAX_FILE_BYTES} with {@code FILE_TOO_LARGE}, which reaches
+     * a caller as an ordinary {@link Failure} — <em>"file too large to open"</em> is an answer, not a
+     * timeout.</p>
+     */
+    public void read(CgPath path, Consumer<Document> onResult, Consumer<Failure> onError,
+                     Progress progress) {
+        StateMap<T> ask = args().putString(WorkspaceProtocol.PATH, path.toString());
+        byte[] cached = cachedContent.get(path);
+        String held = etags.get(path);
+        if (cached != null && held != null) ask.putString(WorkspaceProtocol.IF_NONE_MATCH, held);
+
+        call(WorkspaceProtocol.READ, ask,
                 result -> {
                     String etag = result.getString(WorkspaceProtocol.ETAG, "");
-                    etags.put(path, etag);
-                    if (watched.add(path)) {
-                        call(WorkspaceProtocol.WATCH,
-                                args().putString(WorkspaceProtocol.PATH, path.toString()),
-                                ignored -> { }, ignored -> watched.remove(path));
+                    if (result.getBool(WorkspaceProtocol.UNCHANGED, false)) {
+                        byte[] have = cachedContent.get(path);
+                        if (have != null) {
+                            finishRead(path, have, etag, onResult);
+                            return;
+                        }
+                        // The cache went away between asking and answering. Ask again without the
+                        // condition rather than handing back nothing -- rare, and silent if unhandled.
+                        read(path, onResult, onError, progress);
+                        return;
                     }
-                    onResult.accept(new Document(path, result.getBytes(WorkspaceProtocol.CONTENT), etag));
+                    if (!result.getBool(WorkspaceProtocol.CHUNKED, false)) {
+                        finishRead(path, result.getBytes(WorkspaceProtocol.CONTENT), etag, onResult);
+                        return;
+                    }
+                    int size = result.getInt(WorkspaceProtocol.SIZE, 0);
+                    String transfer = result.getString(WorkspaceProtocol.TRANSFER, "");
+                    if (progress != null) progress.at(0, size);
+                    pullChunk(path, transfer, size, etag, new byte[size], 0, onResult, onError, progress, true);
                 }, onError);
+    }
+
+    /**
+     * One chunk, then itself again — a continuation rather than a loop, because every call is async.
+     *
+     * <p>The buffer is allocated once from the size the server reported and filled in place, so a 90 MB
+     * file costs one array rather than a chain of concatenations. A slice that would run past the end is
+     * <b>clamped rather than trusted</b>: the size and the chunks are two statements from the other side
+     * and nothing here needs them to agree.</p>
+     */
+    private void pullChunk(CgPath path, String transfer, int size, String etag,
+                           byte[] buffer, int offset,
+                           Consumer<Document> onResult, Consumer<Failure> onError, Progress progress,
+                           boolean mayRestart) {
+        call(WorkspaceProtocol.READ_CHUNK, args()
+                        .putString(WorkspaceProtocol.TRANSFER, transfer)
+                        .putInt(WorkspaceProtocol.OFFSET, offset),
+                result -> {
+                    byte[] slice = result.getBytes(WorkspaceProtocol.CONTENT);
+                    int room = Math.max(0, buffer.length - offset);
+                    int copied = Math.min(slice.length, room);
+                    System.arraycopy(slice, 0, buffer, offset, copied);
+                    int next = offset + copied;
+                    if (progress != null) progress.at(next, size);
+                    // Either signal ends it. A server that says eof is believed; one that stops making
+                    // progress would otherwise recurse forever on a zero-length slice.
+                    if (result.getBool(WorkspaceProtocol.EOF, false) || next >= size || copied == 0) {
+                        finishRead(path, buffer, etag, onResult);
+                        return;
+                    }
+                    pullChunk(path, transfer, size, etag, buffer, next, onResult, onError, progress,
+                            mayRestart);
+                },
+                failure -> {
+                    // THE TRANSFER EXPIRED MID-PULL. The server drops one that has gone untouched, which
+                    // is what stops an abandoned download leaking -- and a slow client on a busy link can
+                    // legitimately hit it. Offset-addressed chunks make a resume "the same request with a
+                    // different offset", so the honest recovery is to start again rather than hand the
+                    // caller a not-found for a file that is plainly there. ONCE: a second failure is a
+                    // real one, and retrying forever would turn a broken transfer into a hot loop.
+                    if (mayRestart && failure.error() == CgFileError.FILE_NOT_FOUND) {
+                        read(path, onResult, onError, progress);
+                        return;
+                    }
+                    onError.accept(failure);
+                });
+    }
+
+    /**
+     * The bytes last read from the server for this path, or {@code null} if it was never read.
+     *
+     * <p><b>This is the merge base.</b> It is what both sides descend from: the editor's buffer is this
+     * plus whatever has been typed, and the server's current copy is this plus whatever somebody else did.
+     * A three-way merge needs exactly that and nothing else, which is why a conflict here never has to fall
+     * back to a two-way comparison.</p>
+     *
+     * <p>Deliberately not a copy of the array. The caller is a merge, which reads it and never writes, and
+     * copying every file on every conflict to guard against a caller that does not exist is a cost paid for
+     * nothing. @see com.crystalgui.text.diff.ThreeWayMerge</p>
+     */
+    @Nullable
+    public byte[] baseContent(CgPath path) {
+        return cachedContent.get(path);
+    }
+
+    /** The half both paths share: remember the etag, start watching, hand the document over. */
+    private void finishRead(CgPath path, byte[] content, String etag, Consumer<Document> onResult) {
+        etags.put(path, etag);
+        cachedContent.put(path, content);
+        if (watched.add(path)) {
+            call(WorkspaceProtocol.WATCH, args().putString(WorkspaceProtocol.PATH, path.toString()),
+                    ignored -> { }, ignored -> watched.remove(path));
+        }
+        onResult.accept(new Document(path, content, etag));
+    }
+
+    /**
+     * Saves a text file as a set of changes rather than as its whole content — P6.1.10 <b>D10</b>.
+     *
+     * <p>D10's rule is that writing branches on <b>what this client is holding</b>, not on what the file
+     * is: a text document with a matching base revision can send a change set, and anything else sends
+     * the whole file. That is knowable locally and correct for the awkward cases by construction — a
+     * binary file cannot produce a change set, so it takes {@link #save} without anyone remembering a
+     * rule.</p>
+     *
+     * <p>The conflict story is unchanged, deliberately: the etag is quoted, the server re-stats, and a
+     * delta against a file that moved is <b>refused rather than merged</b>. Merging is a decision with a
+     * UI attached, and it does not belong in a write path.</p>
+     *
+     * @throws IllegalStateException if the file was never read — there is no base revision for the
+     *                               changes to be against, and guessing one corrupts the file silently
+     */
+    public void writeDelta(CgPath path, List<Change> changes,
+                           Consumer<String> onSaved, Consumer<Failure> onError) {
+        String etag = etags.get(path);
+        if (etag == null) {
+            throw new IllegalStateException("writeDelta() needs a prior read to have a base etag: " + path);
+        }
+        StateMap<T> args = args()
+                .putString(WorkspaceProtocol.PATH, path.toString())
+                .putString(WorkspaceProtocol.ETAG, etag);
+        args.putList(WorkspaceProtocol.CHANGES, changes, (entry, change) -> entry
+                .putInt(WorkspaceProtocol.FROM, change.from())
+                .putInt(WorkspaceProtocol.TO, change.to())
+                .putString(WorkspaceProtocol.INSERT, change.insert()));
+        call(WorkspaceProtocol.WRITE_DELTA, args,
+                result -> {
+                    String written = result.getString(WorkspaceProtocol.ETAG, "");
+                    etags.put(path, written);
+                    // These bytes are no longer what the server holds and this client did not compute
+                    // them -- dropping beats guessing, and the next read is conditional anyway.
+                    cachedContent.remove(path);
+                    onSaved.accept(written);
+                },
+                onError);
     }
 
     /**
@@ -326,7 +682,7 @@ public final class WorkspaceClient<T> {
 
     private void call(String method, StateMap<T> args,
                       Consumer<StateMap<T>> onResult, Consumer<Failure> onError) {
-        session.call(method, args, onResult::accept,
+        caller.call(method, args, onResult::accept,
                 error -> onError.accept(Failure.parse(error)));
     }
 }

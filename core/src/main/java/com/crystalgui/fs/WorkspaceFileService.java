@@ -100,6 +100,22 @@ public class WorkspaceFileService {
     }
 
     /** The workspace history. Ctrl+Z in the explorer resolves here; an editor's own stack is its own. */
+    /**
+     * Whether a write here is likely to be allowed — for enablement, never for a decision.
+     *
+     * <p>Forwarded rather than re-derived so there is one answer: a widget that consulted a permission
+     * of its own would disagree with the one the server is pushing, and the two would disagree exactly
+     * when it mattered. @see WorkspaceClient#mayWrite</p>
+     */
+    public boolean mayWrite(@Nullable CgPath path) {
+        return client.mayWrite(path);
+    }
+
+    /** The workspace this service writes through, for anything the wrappers here do not cover. */
+    public WorkspaceClient<?> client() {
+        return client;
+    }
+
     public UndoStack undoStack() {
         return undoStack;
     }
