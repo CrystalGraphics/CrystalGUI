@@ -24,15 +24,19 @@ final class InMemoryUnit implements ICompilationUnit {
     InMemoryUnit(String className, String source) {
         this.contents = source.toCharArray();
 
-        // THE PACKAGE COMES FROM THE SOURCE, NOT FROM THE CLASS NAME, and they routinely differ: a
-        // script is compiled under a generated class name while its own text declares whatever package
-        // the author wrote. ECJ enforces javac's rule that a unit's path match its declared package, so
-        // taking the package from the class name puts a `package foo;` unit at the root and the compile
-        // fails with a message about the file's location rather than about the script.
+        // THE PACKAGE IS THE SOURCE'S, EXCEPT WHERE THE CALLER HAS A PATH -- see
+        // SourcePackages.effectivePackage, which is the one statement of the rule.
         //
-        // SourcePackages already existed for exactly this and the batch path used it to choose a
-        // directory; the only thing that has changed is that there is no directory any more.
-        String declared = SourcePackages.declaredPackage(source);
+        // The half this comment was originally written for still holds: a SCRIPT is compiled under a
+        // generated class name while its own text declares whatever package the author wrote, and taking
+        // the package from that name would put a `package foo;` unit at the root and fail the compile with
+        // a message about the file's location rather than about the script. Such a name is unqualified, so
+        // the declaration still wins.
+        //
+        // What changed with M15 S4 is that a file under a declared source root arrives QUALIFIED, named
+        // from its path -- and there the path is authoritative, because it is what the index named the type
+        // by. Handing ECJ that package is what makes a disagreeing `package` line report itself.
+        String declared = SourcePackages.effectivePackage(className, source);
 
         int lastDot = className.lastIndexOf('.');
         String simpleName = lastDot < 0 ? className : className.substring(lastDot + 1);

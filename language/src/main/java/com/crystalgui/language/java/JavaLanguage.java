@@ -20,6 +20,7 @@ import com.crystalgui.text.TextBuffer;
 import javax.annotation.Nullable;
 
 import com.crystalgui.text.lang.LanguageServices;
+import com.crystalgui.text.lang.ProjectSourcesRegistry;
 import com.crystalgui.text.syntax.Language;
 import com.crystalgui.text.syntax.LanguageRegistry;
 
@@ -284,6 +285,21 @@ public final class JavaLanguage {
      */
     static String classNameFor(Resource resource) {
         if (resource == null || resource.name() == null || resource.name().isEmpty()) return "Script";
+
+        // UNDER A SOURCE ROOT, THE PATH NAMES THE TYPE -- M15 S4's package-authority inversion.
+        //
+        // The stem alone leaves the `package` line as the only claim about where the unit lives, so a
+        // file whose declaration disagrees with its directory compiles happily under one name while the
+        // project index has already named it by another. Handing the qualified name down is what makes
+        // those the same fact, and what gets javac's own mismatch diagnostic reported when they differ.
+        //
+        // `nameOf` answers null for a file under no root, which is not a failure: a scratch script has no
+        // directory worth deriving from, and the stem below is then exactly right.
+        if (resource.isProject() && resource.asPath() != null) {
+            String qualified = ProjectSourcesRegistry.view().nameOf(resource.asPath().toString());
+            if (qualified != null && !qualified.isEmpty()) return qualified;
+        }
+
         String name = resource.name();
         int dot = name.lastIndexOf('.');
         String stem = dot > 0 ? name.substring(0, dot) : name;

@@ -1527,7 +1527,7 @@ called out, because an order that looks like preference is one somebody reorders
 | **S1** | **Source roots.** `WorkspaceProject` gains them, defaulted by convention to `src/main/java` and `src/main/js` but **declared**, so a mod may put sources elsewhere. Nothing consumes them yet | `CgPath` → (root, package, simple name) is a pure function, with the rootless case answering "no root" rather than guessing | — |
 | **S2** | **The project index, and the bridge seam.** FQN ↔ `CgPath`, core-side, built off the crawl `knownFiles()` already runs, invalidated by `WorkspaceWatcher`, and **buffer-aware** — an open document beats disk. Exposed as `ProjectSources`, JDK types only (§24.4). No engine consumes it yet | asking for `foo.Bar` returns the CURRENT text, including an unsaved edit | needs S1 to derive an FQN from a path |
 | **S3** ✅ | **Route unification.** Make `live()` the only resolving route — working with `TypeBytes.NONE` and no platform registered, which is the harness, every test and a plain JVM. **No project sources yet.** `parse(…, false)` stays as the recovery tree; the `parse(…, true)` fallback becomes dead | the existing suite is green and the harness is unchanged, having swapped the engine underneath both | must precede S4 — see below |
-| **S4** ✅ | **Java cross-file resolution.** `ScriptNameEnvironment` answers a project type with `NameEnvironmentAnswer(ICompilationUnit, …)` over `ProjectSources`. **Package authority inverts**: the path wins where a root contains the file, `SourcePackages` still answers where none does, and a `package` line disagreeing with its directory becomes a diagnostic on line 1 | `Main.java` uses a type declared in `Viewer.java`; an unsaved edit in one is visible to the other; a wrong package line is reported | needs S2 and S3 |
+| **S4** ✅ (§24.9) | **Java cross-file resolution.** `ScriptNameEnvironment` answers a project type with `NameEnvironmentAnswer(ICompilationUnit, …)` over `ProjectSources`. **Package authority inverts**: the path wins where a root contains the file, `SourcePackages` still answers where none does, and a `package` line disagreeing with its directory becomes a diagnostic on line 1 | `Main.java` uses a type declared in `Viewer.java`; an unsaved edit in one is visible to the other; a wrong package line is reported | needs S2 and S3 |
 | **S5** | **Multi-file compile and run.** ECJ already emits every type it compiled into `Result.classes`, so the closure may arrive free — but `ScriptClassLoader` and the compiled-script cache both assume one file | running `Main.java` that uses `Viewer` works, and re-running after editing `Viewer` picks the change up | needs S4 |
 | **S6** | **JavaScript imports.** Our own syntax, blanked at its own length as `JsImports` already blanks a Java import, bound underneath to Rhino's CommonJS via a `ModuleSourceProvider` over the same index, `setSandboxed(true)` behind `ScriptPolicy` | a script imports another and gets its exports, and a refused module is refused | needs S1 + S2 only — **parallel to S3–S5** |
 | **S7** | **JavaScript static resolution.** The editor half: completion and hover across scripts | `require`d names resolve in the editor, not only at run time | needs S6 |
@@ -1666,3 +1666,70 @@ answering nothing still passes, because nothing is the honest answer with no bin
 #### Result
 
 `:language:test` 1179/1179, `:core:headlessTest` 1347/1347. **S3 is landed and S4 is unblocked.**
+
+### 24.9 S4 — landed, then found to be reaching nothing
+
+S4 was committed with `:language:test` and `:core:headlessTest` green and every piece of it correct in
+isolation. It resolved nothing in the editor. Six defects, none of which any test could see, because
+**every one of them is indistinguishable from "the workspace declares no such type"** — which is a
+legitimate answer that the whole design degrades through.
+
+| # | Defect | Why nothing caught it |
+|---|---|---|
+| 1 | The index was **never registered**. `ProjectSourcesRegistry.contribute(projectIndex)` sat in `registerCommands`, which `UIElement` runs from its INSTANCE INITIALISER — before the constructor assigns the field — so it passed `null`, and `contribute` opens by returning on null | "No provider" and "a provider that knows nothing" are the same answer from outside. The engine half was tested by registering a stand-in, so it never exercised the workbench's own wiring. It is also once per CLASS, so even non-null only the first workbench would register |
+| 2 | A project package was reported in **the classpath's module**. `getModulesDeclaringPackage` borrowed whatever module `java/lang` belongs to; on a JRT that is `java.base`, while `com.example` — the compiled unit's own package — is unnamed | ECJ discards a package chain split across two modules **without a word**: it never asks for the type, it looks for the simple name in the current package. It hides completely when the importer sits in an UNRELATED package, because then every segment is invented by our environment and all of them are consistently wrong — which is exactly what `anIntermediatePackageResolves` did |
+| 3 | Nothing **re-analysed** when the index improved. `onProjectIndexFilled` was an empty method | Its own comment said no engine consumed the index yet — true when S2 wrote it, false the moment S4 landed, and nothing links the two |
+| 4 | A file opened **while the crawl was still walking** stayed wrong for the session | Every part behaves correctly: the index truthfully reports that nothing is declared in a package it has not reached. The crawl then finds it and no analysis re-runs. Reads as a problem with the file, not as a race |
+| 5 | A project type **described itself as a library**. Documentation, quoted signatures and parameter names all come from *attached* sources, and a workspace file was not one | The symptom is a plausible answer: a binding-assembled signature with no javadoc is exactly what a classpath class with no sources attached looks like, and Ctrl+B opened a decompiler on a `.class` that was never compiled |
+| 6 | Project types were **invisible to completion and to the import quick-fix** | Both are one query (`TypeIndex.matching`) and it is built from the classpath. The popup was never empty, just wrong — `Formatter` offered three JDK classes and not the one in the next tab |
+
+**What this says about the milestone's testing.** Every S4 test registered its own `ProjectSources` and
+asked the engine. That is the right test for the engine and it is the whole of what was written, so the
+one link with no coverage was the only one that mattered: `Workbench` → registry. `WorkbenchProject
+SourcesTest` now asserts across the seam — through `ProjectSourcesRegistry.view()`, never either side of
+it — and four of its five tests fail without defect 1's fix.
+
+The second lesson is sharper. Defect 2 was reproduced only by writing a test in the **harness's exact
+shape** — `com.example.Main` importing `com.example.util` — after three wrong hypotheses. The existing
+import test used `package other;`, and that one difference is the difference between passing and failing.
+A fixture that is "the same kind of thing" as the reported case is not the reported case.
+
+#### The package-authority inversion, which closes S4's last sentence
+
+§24.7's S4 row ends *"a `package` line disagreeing with its directory becomes a diagnostic on line 1"*,
+and that was the piece still unbuilt when the rest shipped. It is now one rule in one place:
+
+- `JavaLanguage.classNameFor` asks `ProjectSources.nameOf(path)` and hands the engine a **qualified**
+  name for any file under a declared source root. A file under none arrives unqualified, exactly as before.
+- `SourcePackages.effectivePackage(className, source)` is the single statement of who wins: the path
+  where the name is qualified **and** the source declares a package, the declaration otherwise.
+- The diagnostic is then **javac's own**. Handing ECJ the path's package is the entire implementation;
+  it already enforces the rule and already points at the package line.
+
+Both carve-outs are load-bearing and each has a test. A **script** is compiled under a generated class
+name and has no directory worth deriving from — `InMemoryUnit`'s original comment was written for exactly
+that case and still holds. And a **qualified name whose source declares no package** is a decompiled or
+generated unit rather than a disagreement; imposing a package on one would report an error against text
+nobody wrote, in a read-only viewer.
+
+#### Cleanup, same pass
+
+`ProjectSources.typesIn` went in with S2 for a consumer that never arrived and is subsumed by
+`declaredTypes()`; it would not have served qualified-name completion either, which needs sub-packages as
+well as types. `EcjCompilation.environmentFor`'s three-argument overload and `ScriptNameEnvironment`'s
+two-argument constructor became unreachable when S4 threaded the compiled type's own name through.
+
+Two performance shapes were wrong rather than merely untidy. The buffer snapshot was guarded on
+`bufferSnapshot.size() == openPaths().size()`, which fails in **both** directions — one file closing as
+another opens leaves the count identical with every entry different, so a closed document's text survives
+and outranks the file on disk; and a document whose text cannot be encoded never enters the snapshot, so
+the counts differ forever and every frame re-encodes everything. And `refreshProjectIndexInputs` called
+`knownFiles()` unconditionally, allocating and walking a list of every file in the workspace sixty times a
+second; `WorkspaceTreeSource.indexRevision()` now answers "has anything changed" in a field read, bumped
+by directory listings **and** by the project listing, since source roots arrive on a separate round trip.
+
+#### Result
+
+Package authority inverted with its diagnostic, and `ProjectIndex` publishing one immutable snapshot
+rather than clearing two maps in place under two analysis threads. **S4 is landed and S5 is unblocked.**
+

@@ -263,6 +263,27 @@ final class ProjectIndex implements ProjectSources {
         return new ArrayList<>(names.byName.keySet());
     }
 
+    /**
+     * What a file at this path must be called.
+     *
+     * <p>Computed rather than looked up, so it answers for a file the crawl has not reached yet — which
+     * is the common case, since a document is usually opened before the walk gets to its directory. It
+     * needs no {@link #ensureCurrent()} for the same reason: nothing here reads the name map.</p>
+     */
+    @Override
+    @Nullable
+    public String nameOf(String workspacePath) {
+        if (workspacePath == null || workspacePath.isEmpty()) return null;
+        CgPath path;
+        try {
+            path = CgPath.parse(workspacePath);
+        } catch (RuntimeException notAPath) {
+            return null;
+        }
+        SourceRoots.Located located = SourceRoots.locate(path, sourceRootsOf.apply(path.project()));
+        return located == null ? null : located.qualifiedName();
+    }
+
     @Override
     @Nullable
     public String pathOf(String qualifiedName) {
