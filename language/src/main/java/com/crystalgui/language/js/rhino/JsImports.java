@@ -86,17 +86,31 @@ public final class JsImports {
     public static final class Imported {
 
         private final String binaryName;
+        private final String simpleName;
         private final int nameStart;
         private final int keywordStart;
 
         Imported(String binaryName, int nameStart, int keywordStart) {
             this.binaryName = binaryName;
+            this.simpleName = simpleNameOf(binaryName);
             this.nameStart = nameStart;
             this.keywordStart = keywordStart;
         }
 
         public String binaryName() {
             return binaryName;
+        }
+
+        /**
+         * The name this statement actually BINDS — the last segment, a nested type unwrapped.
+         *
+         * <p>Carried rather than re-derived. {@code scan} computes it anyway to key its own map, so this
+         * costs one field, and it had already been written out a second time by the colour pass — which
+         * needs it to tell an imported name from a host binding. A third reader (the unused-import check)
+         * was one transcription too many for arithmetic that is silently wrong on a nested type.</p>
+         */
+        public String simpleName() {
+            return simpleName;
         }
 
         /** Where the qualified name begins, in the author's own offsets. Blanking preserves them. */
