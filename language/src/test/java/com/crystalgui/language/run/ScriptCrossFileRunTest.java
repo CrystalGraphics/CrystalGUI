@@ -49,10 +49,31 @@ public class ScriptCrossFileRunTest {
     /** A workspace whose files can be edited without being saved — an open buffer, in other words. */
     private static final class Buffers implements ProjectSources {
         private final Map<String, String> files = new LinkedHashMap<>();
+        private final Map<String, String> extensions = new LinkedHashMap<>();
 
         Buffers edit(String qualifiedName, String source) {
+            return edit(qualifiedName, source, ".java");
+        }
+
+        Buffers edit(String qualifiedName, String source, String extension) {
             files.put(qualifiedName, source);
+            extensions.put(qualifiedName, extension);
             return this;
+        }
+
+        /**
+         * Where the file would live \u2014 the only thing that says which LANGUAGE wrote it.
+         *
+         * <p>{@code SourceRoots} names any file under a declared root whatever its extension, and both
+         * {@code src/main/java} and {@code src/main/js} are declared, so one index holds both languages'
+         * names with nothing in the NAME to tell them apart.</p>
+         */
+        @Override
+        public String pathOf(String qualifiedName) {
+            String extension = extensions.get(qualifiedName);
+            if (extension == null) return null;
+            String root = ".js".equals(extension) ? "src/main/js" : "src/main/java";
+            return "proj:" + root + "/" + qualifiedName.replace('.', '/') + extension;
         }
 
         @Override
@@ -256,5 +277,111 @@ public class ScriptCrossFileRunTest {
         host.run(compileMain(), Map.of());
         assertEquals("the second run replayed the old sibling -- an unsaved edit was invisible to it",
                 List.of("hi", "hello"), List.copyOf(Heard.WORDS));
+    }
+
+    // ── Cycles ──────────────────────────────────────────────────────────────────
+
+    /**
+     * <b>Two project files that reference EACH OTHER compile and run.</b>
+     *
+     * <p>Mutual reference is ordinary Java and needs no cycle guard — a compiler resolves a batch of
+     * units together rather than one at a time. What is <em>not</em> ordinary is that these units arrive
+     * one at a time, pulled in by {@code ScriptNameEnvironment} as ECJ asks for them, so the second file
+     * is requested from inside the resolution of the first. Nothing in that arrangement is guaranteed by
+     * Java; it is a property of how JDT treats a source unit handed back by an environment, which is the
+     * same reason {@code compilingAScriptCompilesTheProjectFilesItUses} is asserted rather than assumed.</p>
+     */
+    @Test
+    public void twoProjectFilesThatReferenceEachOtherCompileAndRun() throws Throwable {
+        workspace.edit("com.example.util.Ping",
+                "package com.example.util;\n"
+                + "public class Ping {\n"
+                + "    public static String go() { return \"ping-\" + Pong.name(); }\n"
+                + "    public static String name() { return \"ping\"; }\n"
+                + "}\n");
+        workspace.edit("com.example.util.Pong",
+                "package com.example.util;\n"
+                + "public class Pong {\n"
+                + "    public static String name() { return \"pong\"; }\n"
+                + "    public static String back() { return Ping.name(); }\n"
+                + "}\n");
+
+        ScriptHost.Compiled compiled = host.compileSource("com.example.Cycle",
+                "package com.example;\n"
+                + "import com.example.util.Ping;\n"
+                + "public class Cycle {\n"
+                + "    public static void main(String[] args) {\n"
+                + "        " + Heard.class.getName().replace('$', '.') + ".say(Ping.go());\n"
+                + "    }\n"
+                + "}\n", Map.of());
+
+        assertTrue("did not compile: " + compiled.messages(), compiled.successful());
+        host.run(compiled, Map.of());
+        assertEquals(List.of("ping-pong"), List.copyOf(Heard.WORDS));
+    }
+
+    /**
+     * <b>A Java file cannot name a JavaScript one \u2014 which is what makes a cross-language cycle
+     * impossible rather than merely unlikely.</b>
+     *
+     * <p>One index holds both languages, so {@code util.Greeter} is a name this environment is asked
+     * about exactly as {@code com.example.util.Greeter} is. Handing JavaScript to a Java compiler produces
+     * a page of syntax errors about a file the author never opened, instead of the one true thing: there
+     * is no such type. The path is what decides, because the name cannot.</p>
+     *
+     * <p>And with the reverse already guarded on {@code .js}, neither language can reach into the other's
+     * files \u2014 so the only cycles that exist are the same-language ones the tests above cover.</p>
+     */
+    @Test
+    public void aJavaFileCannotResolveAJavaScriptProjectFile() {
+        workspace.edit("util.Greeter", "function hi() { return 'hi'; }\n", ".js");
+
+        ScriptHost.Compiled compiled = host.compileSource("com.example.Mixed",
+                "package com.example;\n"
+                + "import util.Greeter;\n"
+                + "public class Mixed { }\n", Map.of());
+
+        assertTrue("a JavaScript file must not resolve as a Java type", !compiled.successful());
+        // THE ORDINARY MESSAGE, not a pile of syntax errors from inside somebody else's file.
+        String first = compiled.messages().get(0);
+        assertTrue("expected an unresolved import, got: " + compiled.messages(),
+                first.contains("cannot be resolved"));
+    }
+
+    /**
+     * <b>...including a cycle that runs through the SCRIPT ITSELF.</b>
+     *
+     * <p>The case with something real to break. The unit being compiled is deliberately excluded from the
+     * project index — answering for it there is how a file comes to be declared twice, with the error
+     * landing on the author's own class — so when the sibling reaches back and names it, the environment
+     * says <em>no such project type</em> and ECJ has to find it in its own work list instead. That it does
+     * is the whole of this test: exclude one line too much and the sibling reports the script as
+     * unresolvable, which reads as the project tier not working at all.</p>
+     */
+    @Test
+    public void aCycleThroughTheScriptItselfCompilesAndRuns() throws Throwable {
+        workspace.edit("com.example.util.Echo",
+                "package com.example.util;\n"
+                + "import com.example.Loop;\n"
+                + "public class Echo {\n"
+                + "    public static String twice() { return Loop.word() + \"-\" + Loop.word(); }\n"
+                + "}\n");
+        String loop = "package com.example;\n"
+                + "import com.example.util.Echo;\n"
+                + "public class Loop {\n"
+                + "    public static String word() { return \"loop\"; }\n"
+                + "    public static void main(String[] args) {\n"
+                + "        " + Heard.class.getName().replace('$', '.') + ".say(Echo.twice());\n"
+                + "    }\n"
+                + "}\n";
+        // IN THE INDEX AS WELL AS COMPILED, which is what makes this a cycle rather than a one-way
+        // reference: the sibling can only name the script if the workspace declares it.
+        workspace.edit("com.example.Loop", loop);
+
+        ScriptHost.Compiled compiled = host.compileSource("com.example.Loop", loop, Map.of());
+
+        assertTrue("did not compile: " + compiled.messages(), compiled.successful());
+        host.run(compiled, Map.of());
+        assertEquals(List.of("loop-loop"), List.copyOf(Heard.WORDS));
     }
 }
