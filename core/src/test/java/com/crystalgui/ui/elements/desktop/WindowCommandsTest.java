@@ -298,4 +298,79 @@ public class WindowCommandsTest extends UiTestBase {
 
         assertTrue("right-clicking a title bar opened no menu", menuIsOpen());
     }
+
+    /**
+     * <b>...and it must not also start a window move.</b>
+     *
+     * <p>Reported from the harness: right-click a caption once and the window follows the cursor
+     * indefinitely with nothing held down. A drag ends when <em>the button that started it</em> is
+     * released and {@code startDrag} defaults to the left one — so a right-press began a move registered
+     * against a button that was never coming up, and there is no way out of that state short of
+     * left-clicking somewhere.</p>
+     *
+     * <p>The defect is <b>older than the gesture that exposed it</b>: the caption's move listener never
+     * checked a button, and nothing right-clicked a title bar until W13a put the system menu there.
+     * Asserted on the drag controller rather than on the window's position, because a press alone moves
+     * nothing — the window only runs away once the pointer does, and by then the test has stopped
+     * looking.</p>
+     */
+    @Test
+    public void rightClickingATitleBarDoesNotStartAMove() {
+        rightClickTitleBar();
+
+        assertFalse("a right-click on the caption started a window move that nothing can end",
+                window.getInputHandler().getDragController().isDragging());
+    }
+
+    /**
+     * <b>A LEFT press on the caption still starts one.</b>
+     *
+     * <p>The counter-assertion, and not a formality: a guard written as "ignore anything that is not the
+     * left button" and a guard written as "ignore everything" both make the test above pass, and the
+     * second one makes windows undraggable.</p>
+     */
+    @Test
+    public void aLeftPressOnATitleBarStillStartsAMove() {
+        var box = first.titleBar().getRuntimeCache();
+        pressTitleBar(box, CgMouseCodes.LEFT_BUTTON);
+
+        assertTrue("a left press on the caption no longer moves the window",
+                window.getInputHandler().getDragController().isDragging());
+    }
+
+    /**
+     * <b>Win32's row order: the state rows, a separator, then Close.</b>
+     *
+     * <p>Sections sort by group name as a <em>string</em>, so the first spelling put {@code "close"}
+     * before {@code "state"} and the menu came out inverted — Close at the top with the separator under
+     * it. Every other menu in the application already uses numeric prefixes for exactly this, which
+     * reads as decoration right up until it does not.</p>
+     */
+    @Test
+    public void closeIsTheLastRow() {
+        List<String> ids = new java.util.ArrayList<>();
+        CommandContext context = CommandContext.of(first);
+        for (MenuSection section : registry().sections(MenuId.WINDOW_SYSTEM, context)) {
+            for (MenuEntry entry : section.entries()) {
+                if (entry instanceof MenuEntry.Item item) ids.add(item.command().getId());
+            }
+        }
+
+        assertEquals("Close is not the last row", WindowCommands.CLOSE, ids.get(ids.size() - 1));
+        assertEquals("Restore is not the first row", WindowCommands.RESTORE, ids.get(0));
+    }
+
+    private void rightClickTitleBar() {
+        pressTitleBar(first.titleBar().getRuntimeCache(), CgMouseCodes.RIGHT_BUTTON);
+    }
+
+    private void pressTitleBar(com.crystalgui.ui.UIElement.RuntimeCache box, int button) {
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().endFrame();
+        window.getInputHandler().consumeMouseEvent(new CgSystemInput.Mouse.Event(
+                Math.round((box.getX() + box.getWidth() / 2f) * 2f),
+                Math.round((box.getY() + box.getHeight() / 2f) * 2f),
+                0, 0, button, true, 0f, 0L));
+        settle();
+    }
 }

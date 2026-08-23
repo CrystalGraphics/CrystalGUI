@@ -62,9 +62,17 @@ public final class WindowCommands {
     public static final String RESTORE = "window.restore";
     public static final String SYSTEM_MENU = "window.systemMenu";
 
-    /** The one group in the system menu that is not Close — so a separator falls in Win32's place. */
-    private static final String GROUP_STATE = "state";
-    private static final String GROUP_CLOSE = "close";
+    /**
+     * The two groups, and the numeric prefixes are load-bearing.
+     *
+     * <p>{@code CommandRegistry.sections} sorts by {@code (group, order)} with the group compared as a
+     * <b>string</b>, so a group named {@code "close"} sorts before one named {@code "state"} and the menu
+     * came out Close-first with the separator above the state rows — the exact inversion of Win32's. The
+     * prefix convention is what every other menu in the application already uses
+     * ({@code 1_appearance}, {@code 2_clipboard}); it looked like decoration until this got it wrong.</p>
+     */
+    private static final String GROUP_STATE = "1_state";
+    private static final String GROUP_CLOSE = "2_close";
 
     private static boolean registered;
 
