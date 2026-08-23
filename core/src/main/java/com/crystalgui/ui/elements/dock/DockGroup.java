@@ -557,6 +557,24 @@ public class DockGroup extends UIElement {
     }
 
     /**
+     * Drops the built widget for a panel that has been closed, so a reopen builds a fresh one.
+     *
+     * <p>The memo is keyed by {@link DockPanelRef}, which is a <b>value</b> — reopening the same file
+     * produces an equal ref and would otherwise be handed the widget built for the document that was just
+     * disposed. Nothing about that looks wrong until something touches it, and then it is an
+     * {@code IllegalStateException: Parser is closed} out of a frame tick.</p>
+     *
+     * <p>Detached as well as forgotten. The element is still a child of the tab it was shown in, and the
+     * strip that owned it is about to be rebuilt around a panel that no longer exists — so leaving it
+     * attached keeps a whole editor, its buffer and its language services alive behind a tab nobody can
+     * see. @see DockArea#closePanelDiscarding</p>
+     */
+    void forgetContent(DockPanelRef panel) {
+        UIElement built = content.remove(panel);
+        if (built != null) built.removeSelf();
+    }
+
+    /**
      * Puts whatever {@link DockBanners} had to say above {@code built}.
      *
      * <h3>Here, because this is the only place every panel passes through</h3>
