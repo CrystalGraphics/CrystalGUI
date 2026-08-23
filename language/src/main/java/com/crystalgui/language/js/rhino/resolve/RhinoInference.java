@@ -105,7 +105,7 @@ public final class RhinoInference {
     }
 
     /** The property names an object literal declares, in source order — what {@code o.} should list. */
-    static List<String> keysOf(@Nullable AstNode expression) {
+    public static List<String> keysOf(@Nullable AstNode expression) {
         AstNode node = unwrap(expression);
         if (!(node instanceof ObjectLiteral)) return List.of();
         List<String> keys = new ArrayList<>();

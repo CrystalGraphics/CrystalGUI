@@ -1528,9 +1528,9 @@ called out, because an order that looks like preference is one somebody reorders
 | **S2** | **The project index, and the bridge seam.** FQN ↔ `CgPath`, core-side, built off the crawl `knownFiles()` already runs, invalidated by `WorkspaceWatcher`, and **buffer-aware** — an open document beats disk. Exposed as `ProjectSources`, JDK types only (§24.4). No engine consumes it yet | asking for `foo.Bar` returns the CURRENT text, including an unsaved edit | needs S1 to derive an FQN from a path |
 | **S3** ✅ | **Route unification.** Make `live()` the only resolving route — working with `TypeBytes.NONE` and no platform registered, which is the harness, every test and a plain JVM. **No project sources yet.** `parse(…, false)` stays as the recovery tree; the `parse(…, true)` fallback becomes dead | the existing suite is green and the harness is unchanged, having swapped the engine underneath both | must precede S4 — see below |
 | **S4** ✅ (§24.9) | **Java cross-file resolution.** `ScriptNameEnvironment` answers a project type with `NameEnvironmentAnswer(ICompilationUnit, …)` over `ProjectSources`. **Package authority inverts**: the path wins where a root contains the file, `SourcePackages` still answers where none does, and a `package` line disagreeing with its directory becomes a diagnostic on line 1 | `Main.java` uses a type declared in `Viewer.java`; an unsaved edit in one is visible to the other; a wrong package line is reported | needs S2 and S3 |
-| **S5** | **Multi-file compile and run.** ECJ already emits every type it compiled into `Result.classes`, so the closure may arrive free — but `ScriptClassLoader` and the compiled-script cache both assume one file | running `Main.java` that uses `Viewer` works, and re-running after editing `Viewer` picks the change up | needs S4 |
-| **S6** | **JavaScript imports.** Our own syntax, blanked at its own length as `JsImports` already blanks a Java import, bound underneath to Rhino's CommonJS via a `ModuleSourceProvider` over the same index, `setSandboxed(true)` behind `ScriptPolicy` | a script imports another and gets its exports, and a refused module is refused | needs S1 + S2 only — **parallel to S3–S5** |
-| **S7** | **JavaScript static resolution.** The editor half: completion and hover across scripts | `require`d names resolve in the editor, not only at run time | needs S6 |
+| **S5** ✅ (§24.10) | **Multi-file compile and run.** ECJ already emits every type it compiled into `Result.classes`, so the closure may arrive free — but `ScriptClassLoader` and the compiled-script cache both assume one file | running `Main.java` that uses `Viewer` works, and re-running after editing `Viewer` picks the change up | needs S4 |
+| **S6** ✅ (§24.11) | **JavaScript imports.** Our own syntax, blanked at its own length as `JsImports` already blanks a Java import, bound underneath to Rhino's CommonJS via a `ModuleSourceProvider` over the same index, `setSandboxed(true)` behind `ScriptPolicy` | a script imports another and gets its exports, and a refused module is refused | needs S1 + S2 only — **parallel to S3–S5** |
+| **S7** ✅ (§24.11) | **JavaScript static resolution.** The editor half: completion and hover across scripts | `require`d names resolve in the editor, not only at run time | needs S6 |
 
 **The three forced edges.**
 
@@ -1788,4 +1788,69 @@ compiles without it and fails, and the run after it succeeds. Harmless for the c
 (the author edited the sibling, so it is open by definition) and wrong for a cold one. The analysis path
 must not block on I/O; a run is user-initiated and could, so the two want different answers from one
 method. Unresolved, and deliberately not guessed at here.
+
+### 24.11 S6 and S7 — JavaScript, and the one place §24.3 was wrong
+
+§24.3 verified that Rhino ships CommonJS in both bands, byte-identical, with a `ModuleSource` built from
+a **`Reader`** — and concluded that our import statement should bind to it. Everything in that paragraph
+is true and the conclusion does not follow.
+
+`require("x")` is an **expression** whose value the script binds itself. `import a.b.C;` is a **statement**
+that gets *blanked*, so its binding has to be injected into the scope by us — and Rhino builds each
+module's scope inside `Require`, with no per-module hook to inject into. A module that itself imported
+anything therefore could not be served at all, and a two-file script whose second file also uses a Java
+type is the ordinary shape rather than an edge case.
+
+What Rhino's implementation would have contributed beyond that is a module scope, an `exports` object, a
+cycle guard and a cache. Those are four small things, and writing them here means they answer to this
+codebase's rules instead of CommonJS's — most importantly that a module is read through `ProjectSources`,
+so an **unsaved buffer** is what runs, and that the cache lives for exactly one execution. Rhino's own
+providers cache across runs, which is the single behaviour this must not have: it is the trap
+`ScriptCacheKey` had before §24.10 gave it a dependency component, in a different costume.
+
+`JsModules` is the whole of it. Three details are load-bearing:
+
+- **The module scope takes the run's scope as its PROTOTYPE, not its parent.** That leaves the standard
+  library and the host's globals visible while keeping each module's top-level `var`s on its own object,
+  so two modules cannot see or overwrite each other's names.
+- **A cycle terminates because the entry is written before the module is evaluated.** Node does the same
+  and shares the same caveat: a module that *replaces* `module.exports` outright leaves a cyclic importer
+  holding the original object. There is no fix short of refusing cycles.
+- **The policy is asked once, ahead of both tiers.** Asking per tier would let one of them answer for a
+  name the other was refused.
+
+#### S7 — resolving it in the editor, and what that can honestly be
+
+§24.6 called this the largest unknown and it is: `require()` returns a **value**, so knowing it statically
+is analysis rather than lookup. `JsExports` reads the three shapes people write — `exports.name = …`,
+`module.exports.name = …`, and `module.exports = { … }` — and says in its own javadoc that it is an
+approximation.
+
+Two decisions inside it are worth recording.
+
+**Under-reporting is the safe direction.** A missing row costs the author a completion they can still
+type; an invented one offers a name that does not exist at run time. So exports built in a loop resolve
+to a module with *no* members rather than to guesses — and the name itself still resolves, still colours
+as a binding, and still hovers as a module. The failure is graceful rather than absent, which is what
+`aDynamicallyBuiltExportIsNotInvented` pins.
+
+**Assignments are collected wherever they appear, not only at the top level.** `if (supported) { exports.fast = … }`
+is ordinary and its export is real. The cost is that a conditional export reads as unconditional, which
+is the same over-reporting a person does by eye.
+
+A module is typed as an **object with keys** rather than as a kind of its own, because that is what its
+exports are — and every consumer that already lists an object literal's properties then lists these with
+nothing further to teach. Reading those keys goes through `RhinoInference.keysOf`, the one band-safe
+reader, because `ObjectProperty.getLeft()` is declared on a different supertype in the two Rhinos and
+`getFirstChild()` answers null on the band we run.
+
+`JsExports` blanks imports before parsing, exactly as the analyser and the executor do. Without that it
+would fail on line 1 of every module that imports anything and report no exports — which looks identical
+to a module that exports nothing, and would have been invisible.
+
+#### Result
+
+The editor and the runtime make the same choice in the same order: a workspace file first, the classpath
+behind it. A name that completed as a Java class and ran as a project script would be worse than either
+alone. **S6 and S7 are landed**, which closes M15.
 
