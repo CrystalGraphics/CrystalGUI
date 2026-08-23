@@ -488,6 +488,60 @@ public class WindowCommandsTest extends UiTestBase {
                 taskbar.previewsSuppressedForTesting() == false);
     }
 
+    /**
+     * <b>Right-clicking an entry opens its menu and does NOT also activate the window.</b>
+     *
+     * <p>{@code Button}'s activation checked no button at all, so a right-click pressed the button as
+     * well — and on a taskbar entry "pressed" means activate-or-minimise. The menu therefore appeared
+     * over a window that had just minimised itself out from under it. No toolkit activates a button on a
+     * right-click; nothing here noticed until something put a context menu on one.</p>
+     *
+     * <p>Driven through the real up/down pair, because the activation is on the UP and a fixture that
+     * only presses cannot see it — which is exactly why the middle-click test's own counter-assertion
+     * had to complete the click.</p>
+     */
+    @Test
+    public void rightClickingAnEntryDoesNotAlsoActivateTheWindow() {
+        window.desktop().activate(second);
+        settle();
+        Button entry = window.desktop().taskbar().entryFor(first);
+
+        clickEntry(entry, CgMouseCodes.RIGHT_BUTTON);
+
+        assertSame("a right-click on an entry activated its window as well as opening the menu",
+                second, window.desktop().activeWindow());
+        assertEquals("a right-click minimised the window its menu is about",
+                WindowState.VISIBLE, first.state());
+    }
+
+    /** <b>...and a left click still does.</b> The guard must name the left button, not reject all of them. */
+    @Test
+    public void leftClickingAnEntryStillActivatesTheWindow() {
+        window.desktop().activate(second);
+        settle();
+        Button entry = window.desktop().taskbar().entryFor(first);
+
+        clickEntry(entry, CgMouseCodes.LEFT_BUTTON);
+
+        assertSame("a left click on an entry no longer activates its window",
+                first, window.desktop().activeWindow());
+    }
+
+    /** A full press/release pair on {@code entry} — activation is on the UP. */
+    private void clickEntry(Button entry, int button) {
+        var box = entry.getRuntimeCache();
+        int x = Math.round((box.getX() + box.getWidth() / 2f) * 2f);
+        int y = Math.round((box.getY() + box.getHeight() / 2f) * 2f);
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().endFrame();
+        window.getInputHandler().consumeMouseEvent(new CgSystemInput.Mouse.Event(
+                x, y, 0, 0, button, true, 0f, 0L));
+        settle();
+        window.getInputHandler().consumeMouseEvent(new CgSystemInput.Mouse.Event(
+                x, y, 0, 0, button, false, 0f, 0L));
+        settle();
+    }
+
     private void hoverEntry(Button entry) {
         var box = entry.getRuntimeCache();
         window.getInputHandler().consumeMouseEvent(new CgSystemInput.Mouse.Event(
