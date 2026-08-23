@@ -134,7 +134,10 @@ public final class JsExports {
                         null, null, docFor(root, source, function, positionOf(name))));
             } else if (node instanceof VariableDeclaration declaration) {
                 String keyword = declaration.isConst() ? "const" : declaration.isLet() ? "let" : "var";
-                SymbolKind kind = declaration.isConst() ? SymbolKind.CONSTANT : SymbolKind.PROPERTY;
+                // FIELD, not PROPERTY: a top-level name is the file's surface, and the same kind the
+                // resolver reports for it where it is DECLARED. An imported member describing itself
+                // differently from its own declaration is the drift this whole seam exists to avoid.
+                SymbolKind kind = declaration.isConst() ? SymbolKind.CONSTANT : SymbolKind.FIELD;
                 for (VariableInitializer initializer : declaration.getVariables()) {
                     AstNode target = initializer.getTarget();
                     if (!(target instanceof Name named)) continue;
