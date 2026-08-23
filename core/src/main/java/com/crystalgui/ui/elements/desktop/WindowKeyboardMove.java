@@ -41,8 +41,6 @@ public final class WindowKeyboardMove {
         SIZE
     }
 
-    private final Desktop desktop;
-
     @Nullable
     private WindowFrame frame;
     @Nullable
@@ -51,19 +49,9 @@ public final class WindowKeyboardMove {
     /** Where the window was when the mode opened — what Escape puts back. */
     private float originLeft, originTop, originWidth, originHeight;
 
-    WindowKeyboardMove(Desktop desktop) {
-        this.desktop = desktop;
-    }
-
     /** Whether a keyboard move or resize is currently running. */
     public boolean isActive() {
         return frame != null && mode != null;
-    }
-
-    /** @see #isActive() */
-    @Nullable
-    public Mode mode() {
-        return mode;
     }
 
     /**
@@ -151,11 +139,5 @@ public final class WindowKeyboardMove {
         if (frame != null) frame.removeClass(ACTIVE_CLASS);
         frame = null;
         mode = null;
-    }
-
-    /** The window being moved, or null. */
-    @Nullable
-    public WindowFrame target() {
-        return frame;
     }
 }

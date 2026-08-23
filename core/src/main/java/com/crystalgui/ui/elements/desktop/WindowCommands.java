@@ -8,7 +8,7 @@ import com.crystalgui.core.command.MenuId;
 import javax.annotation.Nullable;
 
 /**
- * What can be done to <em>one</em> window — CrystalOS <b>W13a</b>.
+ * What can be done to <em>one</em> window — CrystalOS <b>W13</b>.
  *
  * <h3>A command first, chrome second</h3>
  *
@@ -94,9 +94,10 @@ public final class WindowCommands {
         registered = true;
         CommandRegistry registry = CommandRegistry.global();
 
-        // ORDERED AS WIN32'S: Restore, [Move, Size — W13c], Minimize, Maximize, separator, Close. The
-        // gaps are left in the numbering rather than closed up, so W13c's two rows land in the right
-        // places without renumbering the rest.
+        // ORDERED AS WIN32'S: Restore, Move, Size, Minimize, Maximize, Full Screen, separator, Close.
+        // The order numbers are spaced by ten rather than consecutive, which is what let W13b's Full
+        // Screen and W13c's Move and Size land in their own slots without renumbering anything already
+        // here -- and what will let W14's Pin do the same.
         registry.register(Command.of(RESTORE, "Restore")
                 .menu(MenuId.WINDOW_SYSTEM, GROUP_STATE, 10)
                 .run(context -> withFrame(context, WindowFrame::restore))
