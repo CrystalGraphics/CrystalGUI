@@ -489,7 +489,7 @@ public final class RhinoResolution {
         TypeRef type = live != null ? live : stated;
         String tier = live != null ? FROM_LAST_RUN : declaredType != null ? FROM_JSDOC : null;
 
-        SymbolInfo symbol = new SymbolInfo(identifier, declared.kind, type,
+        SymbolInfo symbol = new SymbolInfo(identifier, kindOf(declared), type,
                 tier == null ? container : suffixed(container, tier),
                 // RENDERED, not raw. This handed the description across as the author typed it, so a
                 // documented function hovered with its markdown intact -- asterisks around words meant
@@ -717,6 +717,23 @@ public final class RhinoResolution {
         if (source == null) return null;
         com.crystalgui.text.TextPoint at = new LineIndex(source).pointAt(Math.max(0, offset));
         return DeclarationSite.inProject(path, at, at);
+    }
+
+    /**
+     * What a declaration IS, once its position in the file is taken into account.
+     *
+     * <p>{@code RhinoScopes} calls every {@code var} a LOCAL_VARIABLE, which is what the language says
+     * and is not the whole story: a name at the top of a file is part of that file's surface, and since
+     * M15 S6 it is literally what the module <b>exports</b>. That is a FIELD.</p>
+     *
+     * <p>Decided HERE rather than in the renderers, and that is the point. The editor's colour and the
+     * documentation popup's signature are two different pieces of code reading one symbol, and the first
+     * attempt taught only the colour — so the same name was drawn as a field in the text and as a local
+     * in the popup hovering over it. A kind is one fact; anything derived from it then agrees for free.</p>
+     */
+    private static SymbolKind kindOf(RhinoScopes.Declaration declared) {
+        return declared.owner == null && declared.kind == SymbolKind.LOCAL_VARIABLE
+                ? SymbolKind.FIELD : declared.kind;
     }
 
     /** The names the last run left behind — what a "did you mean" must not offer to rename. */

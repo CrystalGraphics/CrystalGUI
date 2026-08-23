@@ -486,4 +486,25 @@ public class JsProjectResolutionTest {
         assertNotNull("the doc comment did not travel with the member", hi.documentation());
         assertTrue("the wrong text: " + hi.documentation(), hi.documentation().contains("Says hello"));
     }
+
+    /**
+     * <b>A top-level name is a FIELD, and every renderer agrees about that.</b>
+     *
+     * <p>Asserted as a KIND rather than as a colour, because the kind is what the editor's capture, the
+     * popup's capture and the popup's keyword are all derived from — and teaching them one at a time is
+     * how the same name came to be drawn as a field in the text and as a local in the popup hovering over
+     * it. The keyword is asserted alongside because promoting the kind is exactly what dropped it: a
+     * JavaScript field is still introduced by {@code var}, unlike a Java one.</p>
+     */
+    @Test
+    public void aTopLevelNameIsAFieldEverywhereItIsDescribed() {
+        workspace.edit("util.Plain", "var defaultName = 'world';\n");
+
+        SymbolInfo imported = resolveAt("import util.Plain;\nPlain.default|Name;\n");
+        assertNotNull(imported);
+        assertEquals("an imported top-level name is not a field", SymbolKind.FIELD, imported.kind());
+        assertNotNull("no signature", imported.signature());
+        assertTrue("the keyword went missing from " + imported.signature().text(),
+                imported.signature().text().startsWith("var "));
+    }
 }
