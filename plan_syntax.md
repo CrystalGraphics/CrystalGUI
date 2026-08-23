@@ -1733,3 +1733,59 @@ by directory listings **and** by the project listing, since source roots arrive 
 Package authority inverted with its diagnostic, and `ProjectIndex` publishing one immutable snapshot
 rather than clearing two maps in place under two analysis threads. **S4 is landed and S5 is unblocked.**
 
+### 24.10 S5 — the compile was free, the cache was the milestone
+
+Measured before designing anything: compiling `com.example.Main` against a workspace declaring
+`com.example.util.Greeter` emits **both** class files. §24.7 guessed that "the closure may arrive free"
+and it does — ECJ generates code for every unit its name environment hands it, and `ScriptClassLoader`
+already takes the whole map and defines any of them on demand. Neither needed a line.
+
+So the whole of S5 is the correctness trap §24.7 named, and it is worth stating as a user would see it
+rather than as a cache-key property:
+
+> Run `Main.java`. Edit `Greeter.java`. Run again. **Nothing changes.**
+
+The key was `(source hash, mappings hash, band)` — all about the file the author ran. A sibling it
+resolved through is invisible to that, so the second run hit the cache and replayed bytes compiled
+against a version of `Greeter` that no longer existed. Nothing reported anything, because from the key's
+point of view nothing had happened.
+
+#### A fourth component, discovered after the fact
+
+The obstacle is that a script's dependencies are not knowable until it has been compiled, so they cannot
+simply be hashed into the key at lookup time. Three parts:
+
+- **The environment records what it answered.** `ScriptNameEnvironment` is the only thing that knows a
+  project file was consumed, and it now collects those names; they ride out on
+  `ScriptCompiler.Result.projectSources` as **names**, never texts, so nothing retains a copy of every
+  file a script touched.
+- **The host looks up under last time's dependencies.** `ScriptHost` keeps a per-host hint from the
+  dependency-free key to what that exact text consumed. It is a shortcut and not a record: absent, it
+  costs one compile; stale, it produces a key nothing is stored under, which costs the same. **It cannot
+  serve a wrong answer, only a slow one** — which is also what makes a persistent directory cache safe
+  across a restart, where the hint starts empty and re-earns itself on the first run.
+- **Invalidation stays structural.** A changed dependency is a different key rather than an entry
+  somebody has to remember to evict, which is the property `ScriptCacheKey`'s other three components are
+  chosen for.
+
+#### Why no save is needed, and where that comes from
+
+The fingerprint is computed by re-reading each dependency through `ProjectSources.sourceOf` at both ends
+of the comparison — and that answers from an **open editor's buffer before it answers from disk**, a tier
+S2 built and S4 made load-bearing. So the compile and the key both see what the author can see. Hashing
+the text the compile happened to hold would have fingerprinted the past and needed a save to catch up.
+
+`runningAgainAfterEditingASiblingSeesTheEdit` is the chain end to end: run, edit the other file without
+saving it, run again, hear the difference. It is worth having beside the compile-level tests because a
+run exercises two things they cannot — that the sibling is *defined* by the script's loader rather than
+merely emitted, and that a second run does not hand back the first run's already-loaded classes.
+
+#### What is left
+
+**A dependency that is not open in an editor.** `ProjectIndex.sourceOf` answers from the buffer, then a
+cache, then null-plus-a-background-read — so the first run of a script whose sibling nobody has opened
+compiles without it and fails, and the run after it succeeds. Harmless for the case S5 was asked for
+(the author edited the sibling, so it is open by definition) and wrong for a cold one. The analysis path
+must not block on I/O; a run is user-initiated and could, so the two want different answers from one
+method. Unresolved, and deliberately not guessed at here.
+
