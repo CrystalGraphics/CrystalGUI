@@ -267,7 +267,13 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
      * <p>Built per call rather than shared: {@code CompilerEnvirons} is mutable and Rhino writes to it
      * during a parse, so one instance handed to two parsers is a race with no symptom worth naming.</p>
      */
-    private static CompilerEnvirons environs() {
+    /**
+     * Package-visible so {@link JsExports} parses a module exactly as this parses a document.
+     *
+     * <p>Two parsers configured differently would disagree about what a file says, which is the same
+     * argument the blanking above makes for having one {@code JsImports.scan}.</p>
+     */
+    static CompilerEnvirons environs() {
         CompilerEnvirons environs = new CompilerEnvirons();
         environs.setLanguageVersion(Context.VERSION_ES6);
         environs.setRecoverFromErrors(true);

@@ -2,6 +2,8 @@ package com.crystalgui.language.js.rhino.resolve;
 
 import com.crystalgui.language.engine.bridge.LiveScopeSnapshot;
 import com.crystalgui.language.js.rhino.exec.RhinoGlobals;
+import com.crystalgui.language.js.rhino.JsExports;
+import com.crystalgui.text.lang.ProjectSourcesRegistry;
 import com.crystalgui.language.js.rhino.RhinoScopes;
 import com.crystalgui.text.lang.DeclarationSite;
 import com.crystalgui.text.lang.Signature;
@@ -394,6 +396,26 @@ public final class RhinoResolution {
     }
 
     /**
+     * An imported name that the workspace declares — its exports, read statically.
+     *
+     * <p>Null when the workspace has no such file, which is how the caller knows to try the classpath.
+     * The members are an approximation by construction ({@link JsExports} says why), and the honest
+     * consequence is that a module whose exports are built dynamically resolves to an object with no
+     * properties rather than to nothing at all — the name itself is still known, still coloured as a
+     * binding, and still hovers as a module.</p>
+     */
+    @Nullable
+    private SymbolInfo fromProjectScript(String identifier, String qualifiedName) {
+        String source = ProjectSourcesRegistry.view().sourceOf(qualifiedName);
+        if (source == null) return null;
+        TypeRef type = JsTypeRef.module(qualifiedName, JsExports.namesIn(source));
+        SymbolInfo binding = new SymbolInfo(identifier, SymbolKind.MODULE, type, qualifiedName, null,
+                Set.of(), null);
+        return binding.withContainerKind(SymbolKind.MODULE)
+                .withSignature(JsSignatures.of(binding, List.of()));
+    }
+
+    /**
      * A declared name, typed by whichever tier can.
      *
      * <h3>The live tier contributes a TYPE; it never replaces the declaration</h3>
@@ -524,6 +546,14 @@ public final class RhinoResolution {
         // `interop.describe` so an imported name hovers identically to the fully qualified spelling it
         // replaced: same kind, same quoted declaration, same owner. Anything else would make the
         // shorthand read as a different thing from the name it stands for.
+        // A PROJECT SCRIPT FIRST, exactly as the runtime binds it. `import util.Greeter;` is the same
+        // statement whether it lands on a workspace file or a Java class, so the editor has to make the
+        // same choice the executor does -- and in the same order, or a name would complete as one thing
+        // and run as the other. @see com.crystalgui.language.js.rhino.exec.JsModules
+        if (imported.contains(identifier)) {
+            SymbolInfo module = fromProjectScript(identifier, typeName);
+            if (module != null) return module;
+        }
         if (imported.contains(identifier) && interop != null) {
             SymbolInfo described = interop.describe(typeName, true);
             if (described != null) return described;
