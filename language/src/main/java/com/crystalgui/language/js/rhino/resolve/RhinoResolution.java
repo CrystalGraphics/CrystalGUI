@@ -2,7 +2,6 @@ package com.crystalgui.language.js.rhino.resolve;
 
 import com.crystalgui.language.engine.bridge.LiveScopeSnapshot;
 import com.crystalgui.language.js.rhino.exec.RhinoGlobals;
-import com.crystalgui.language.js.rhino.JsExports;
 import com.crystalgui.text.lang.ProjectSourcesRegistry;
 import com.crystalgui.language.js.rhino.RhinoScopes;
 import com.crystalgui.text.lang.DeclarationSite;
@@ -686,10 +685,14 @@ public final class RhinoResolution {
             // THE DECLARATION'S OWN KIND AND PARAMETERS. Calling every export a PROPERTY is what made a
             // module's function hover as a bare word: `JsSignatures` renders from the KIND, so a property
             // prints its name and nothing else while a function prints `function greet(who)`.
-            SymbolInfo member = new SymbolInfo(export.name(), export.kind(), null,
-                    qualifiedName, null, Set.of(), null);
+            // EVERYTHING THE DECLARATION SAID, not just its name. A member with no type prints as a bare
+            // word where its own file prints `var defaultName: string`, and one with no documentation
+            // reads as undocumented rather than as a field dropped at the seam -- the same failure the
+            // Java side records for `describeMember`.
+            SymbolInfo member = new SymbolInfo(export.name(), export.kind(), export.type(),
+                    qualifiedName, export.documentation(), Set.of(), null);
             member = member.withContainerKind(SymbolKind.MODULE)
-                    .withSignature(JsSignatures.of(member, export.parameters()));
+                    .withSignature(JsSignatures.of(member, export.parameters(), export.keyword()));
             DeclarationSite site = siteIn(qualifiedName, export.offset());
             members.add(site == null ? member : member.withDeclaration(site));
         }

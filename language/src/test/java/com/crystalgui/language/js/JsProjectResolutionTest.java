@@ -427,4 +427,63 @@ public class JsProjectResolutionTest {
         assertNotNull(hi);
         assertEquals("the owner is not reported as a module", SymbolKind.MODULE, hi.containerKind());
     }
+
+    // ── An imported member describes itself as its own file does ───────────────────────
+
+    /**
+     * <b>A value export carries its type and the keyword that introduced it.</b>
+     *
+     * <p>The popup for {@code Greeter.defaultName} read {@code defaultName} while the same name hovered
+     * in its own file read {@code var defaultName: string}. Two descriptions of one declaration, and the
+     * poorer one shown in the place with less context — which is exactly backwards.</p>
+     */
+    @Test
+    public void aValueExportCarriesItsTypeAndKeyword() {
+        workspace.edit("util.Plain", "var defaultName = 'world';\n");
+
+        SymbolInfo name = resolveAt("import util.Plain;\nPlain.default|Name;\n");
+
+        assertNotNull("the member did not resolve", name);
+        assertNotNull("no type, so the signature is a bare word", name.type());
+        assertNotNull("no signature", name.signature());
+        assertTrue("the keyword is missing from " + name.signature().text(),
+                name.signature().text().contains("var"));
+        assertTrue("the type is missing from " + name.signature().text(),
+                name.signature().text().contains("string"));
+    }
+
+    /**
+     * <b>And its documentation.</b>
+     *
+     * <p>An imported member showed its container and its signature with nothing underneath, which reads
+     * as the member being undocumented rather than as a field dropped at the seam — the same failure the
+     * Java side records for {@code describeMember}, arrived at from the other language.</p>
+     */
+    @Test
+    public void anExportCarriesItsDocComment() {
+        workspace.edit("util.Plain",
+                "/** Trims and shouts. Null-safe. */\n"
+                + "function shout(text) { return text; }\n");
+
+        SymbolInfo shout = resolveAt("import util.Plain;\nPlain.sho|ut('x');\n");
+
+        assertNotNull(shout);
+        assertNotNull("the doc comment did not travel with the member", shout.documentation());
+        assertTrue("the wrong text: " + shout.documentation(),
+                shout.documentation().contains("Trims and shouts"));
+    }
+
+    /** <b>...including one written above an explicit {@code exports.} assignment.</b> */
+    @Test
+    public void anExplicitExportAlsoCarriesItsDocComment() {
+        workspace.edit("util.Assigned",
+                "/** Says hello. */\n"
+                + "exports.hi = function (who) { return who; };\n");
+
+        SymbolInfo hi = resolveAt("import util.Assigned;\nAssigned.h|i('x');\n");
+
+        assertNotNull(hi);
+        assertNotNull("the doc comment did not travel with the member", hi.documentation());
+        assertTrue("the wrong text: " + hi.documentation(), hi.documentation().contains("Says hello"));
+    }
 }

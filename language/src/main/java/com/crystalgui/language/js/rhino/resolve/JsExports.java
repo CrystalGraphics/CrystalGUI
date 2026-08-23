@@ -1,7 +1,9 @@
-package com.crystalgui.language.js.rhino;
+package com.crystalgui.language.js.rhino.resolve;
 
-import com.crystalgui.language.js.rhino.resolve.RhinoInference;
+import com.crystalgui.language.js.rhino.JsImports;
+import com.crystalgui.language.js.rhino.RhinoSourceAnalyzer;
 import com.crystalgui.text.lang.SymbolKind;
+import com.crystalgui.text.lang.TypeRef;
 
 import org.mozilla.javascript.Parser;
 import org.mozilla.javascript.ast.Assignment;
@@ -9,7 +11,6 @@ import org.mozilla.javascript.ast.AstNode;
 import org.mozilla.javascript.ast.AstRoot;
 import org.mozilla.javascript.ast.FunctionNode;
 import org.mozilla.javascript.ast.Name;
-import org.mozilla.javascript.ast.NodeVisitor;
 import org.mozilla.javascript.ast.PropertyGet;
 import org.mozilla.javascript.ast.VariableDeclaration;
 import org.mozilla.javascript.ast.VariableInitializer;
@@ -33,19 +34,23 @@ import java.util.Map;
  *
  * <p>The implicit form is the default because this language already writes its own {@code import a.b.C;}
  * rather than ES or CommonJS syntax — so requiring {@code exports.name = …} on the other side would leave
- * an author writing a Java-shaped import against a Node-shaped export, which is the worst of both. The
- * explicit form stays because it is the only way to keep something <em>private</em>: with nothing else in
- * the file to go on, "top-level" and "exported" are the same set.</p>
+ * an author writing a Java-shaped import against a Node-shaped export. The explicit form stays because it
+ * is the only way to keep something <em>private</em>: with nothing else in the file to go on, "top-level"
+ * and "exported" are the same set.</p>
  *
- * <h3>A declaration says far more than an assignment</h3>
+ * <h3>A declaration says far more than an assignment, and that is the whole reason this reads them</h3>
  *
- * <p>This is not only about what an author types. {@code function greet(who) { }} is a DECLARATION: it
- * carries a kind, its parameter names and a precise span, so a hover can render {@code function
- * greet(who)} and a jump can land on the word. {@code exports.greet = function (who) { }} is an
- * assignment of an anonymous function to a property — statically it offers a name and little else, which
- * is why a module's member used to hover as a bare word with nothing around it.</p>
+ * <p>{@code function greet(who) { }} carries a kind, its parameter names, its doc comment and a precise
+ * span. {@code exports.greet = function (who) { }} is an anonymous function assigned to a property —
+ * statically a name and little else, which is why a module's member once hovered as a bare word with
+ * nothing around it. The explicit form therefore reads its right-hand side too.</p>
  *
- * <p>So the explicit form reads its right-hand side too: assigning a function still yields a function.</p>
+ * <h3>Why it lives beside the resolver</h3>
+ *
+ * <p>Everything an export needs to describe itself is already written here: {@link RhinoInference} types
+ * an initializer, {@link RhinoJsDoc} reads the comment above a declaration, and {@link JsTypeRef} is what
+ * a type is spelled as. Reading a module anywhere else would mean either a second copy of all three or
+ * widening them for one caller.</p>
  *
  * <h3>It is still an approximation, and under-reporting is the safe direction</h3>
  *
@@ -60,16 +65,22 @@ public final class JsExports {
     }
 
     /**
-     * One exported name.
+     * One exported name, described as fully as its declaration allows.
      *
-     * @param name       what an importer writes after the dot
-     * @param kind       what it is, as far as the declaration says
-     * @param offset     where the name is written, or 0 when it has no span of its own — the keys of an
-     *                   object assigned wholesale to {@code module.exports} are read through the one
-     *                   band-safe reader, which answers with strings rather than nodes
-     * @param parameters a function's parameter names, in order; empty for anything else
+     * @param name          what an importer writes after the dot
+     * @param kind          what it is, as far as the declaration says
+     * @param offset        where the name is written, or 0 when it has no span of its own — the keys of
+     *                      an object assigned wholesale to {@code module.exports} are read through the
+     *                      one band-safe reader, which answers with strings rather than nodes
+     * @param parameters    a function's parameter names, in order; empty for anything else
+     * @param type          what the initializer says it is, or null when nothing said
+     * @param keyword       {@code var}, {@code let} or {@code const} — what actually introduced it, so a
+     *                      signature prints the word the author wrote
+     * @param documentation the doc comment above it, or null
      */
-    public record Export(String name, SymbolKind kind, int offset, List<String> parameters) {
+    public record Export(String name, SymbolKind kind, int offset, List<String> parameters,
+                         @Nullable TypeRef type, @Nullable String keyword,
+                         @Nullable String documentation) {
     }
 
     /** The names {@code source} exports, in source order. */
@@ -92,13 +103,13 @@ public final class JsExports {
 
         Map<String, Export> explicit = new LinkedHashMap<>();
         root.visit(node -> {
-            if (node instanceof Assignment) collectAssigned((Assignment) node, explicit);
+            if (node instanceof Assignment) collectAssigned(root, source, (Assignment) node, explicit);
             return true;
         });
         if (!explicit.isEmpty()) return new ArrayList<>(explicit.values());
 
         Map<String, Export> declared = new LinkedHashMap<>();
-        collectDeclared(root, declared);
+        collectDeclared(root, source, declared);
         return new ArrayList<>(declared.values());
     }
 
@@ -112,30 +123,33 @@ public final class JsExports {
      * assignment walk, which deliberately looks everywhere because {@code if (x) { exports.y = … }} is
      * ordinary.</p>
      */
-    private static void collectDeclared(AstRoot root, Map<String, Export> found) {
+    private static void collectDeclared(AstRoot root, String source, Map<String, Export> found) {
         for (Object statement : root) {
             if (!(statement instanceof AstNode node)) continue;
             if (node instanceof FunctionNode function) {
                 Name name = function.getFunctionName();
                 if (name == null) continue;
                 found.putIfAbsent(name.getIdentifier(), new Export(name.getIdentifier(),
-                        SymbolKind.FUNCTION, Math.max(0, name.getAbsolutePosition()),
-                        parameterNamesOf(function)));
+                        SymbolKind.FUNCTION, positionOf(name), parameterNamesOf(function),
+                        null, null, docFor(root, source, function, positionOf(name))));
             } else if (node instanceof VariableDeclaration declaration) {
+                String keyword = declaration.isConst() ? "const" : declaration.isLet() ? "let" : "var";
                 SymbolKind kind = declaration.isConst() ? SymbolKind.CONSTANT : SymbolKind.PROPERTY;
                 for (VariableInitializer initializer : declaration.getVariables()) {
                     AstNode target = initializer.getTarget();
                     if (!(target instanceof Name named)) continue;
-                    // A FUNCTION ASSIGNED TO A NAME IS STILL A FUNCTION -- `var f = function (a) {}` is
-                    // how half of JavaScript declares one, and calling it a property would lose its
-                    // parameters and its glyph.
                     AstNode value = initializer.getInitializer();
+                    int at = positionOf(named);
+                    // A FUNCTION ASSIGNED TO A NAME IS STILL A FUNCTION -- `var f = function (a) {}` is
+                    // how half of JavaScript declares one, and calling it a value would lose its
+                    // parameters and its glyph.
                     found.putIfAbsent(named.getIdentifier(), value instanceof FunctionNode assigned
-                            ? new Export(named.getIdentifier(), SymbolKind.FUNCTION,
-                                    Math.max(0, named.getAbsolutePosition()),
-                                    parameterNamesOf(assigned))
-                            : new Export(named.getIdentifier(), kind,
-                                    Math.max(0, named.getAbsolutePosition()), List.of()));
+                            ? new Export(named.getIdentifier(), SymbolKind.FUNCTION, at,
+                                    parameterNamesOf(assigned), null, null,
+                                    docFor(root, source, declaration, at))
+                            : new Export(named.getIdentifier(), kind, at, List.of(),
+                                    RhinoInference.typeOf(value, name -> false), keyword,
+                                    docFor(root, source, declaration, at)));
                 }
             }
         }
@@ -143,7 +157,8 @@ public final class JsExports {
 
     // ── The explicit form ───────────────────────────────────────────────────────────────────────
 
-    private static void collectAssigned(Assignment assignment, Map<String, Export> found) {
+    private static void collectAssigned(AstRoot root, String source, Assignment assignment,
+                                        Map<String, Export> found) {
         AstNode target = assignment.getLeft();
         if (!(target instanceof PropertyGet get)) return;
 
@@ -152,7 +167,8 @@ public final class JsExports {
         // Rhino versions we ship and `getFirstChild()` answers null on the band we run.
         if (isModuleExports(get)) {
             for (String key : RhinoInference.keysOf(assignment.getRight())) {
-                found.putIfAbsent(key, new Export(key, SymbolKind.PROPERTY, 0, List.of()));
+                found.putIfAbsent(key,
+                        new Export(key, SymbolKind.PROPERTY, 0, List.of(), null, null, null));
             }
             return;
         }
@@ -163,12 +179,38 @@ public final class JsExports {
         if (!isExports(owner) && !(owner instanceof PropertyGet && isModuleExports((PropertyGet) owner))) {
             return;
         }
-        int offset = Math.max(0, get.getProperty().getAbsolutePosition());
+        int at = positionOf(get.getProperty());
         AstNode value = assignment.getRight();
+        String documentation = docFor(root, source, assignment.getParent(), at);
         // FIRST WINS, so a name assigned twice points at where it was introduced.
         found.putIfAbsent(name, value instanceof FunctionNode assigned
-                ? new Export(name, SymbolKind.FUNCTION, offset, parameterNamesOf(assigned))
-                : new Export(name, SymbolKind.PROPERTY, offset, List.of()));
+                ? new Export(name, SymbolKind.FUNCTION, at, parameterNamesOf(assigned),
+                        null, null, documentation)
+                : new Export(name, SymbolKind.PROPERTY, at, List.of(),
+                        RhinoInference.typeOf(value, id -> false), null, documentation));
+    }
+
+    // ── Reading what is around a declaration ────────────────────────────────────────────────────
+
+    /**
+     * The doc comment above a declaration, as a renderer wants it.
+     *
+     * <p>Through the same reader the editor uses on the file the author has open, so a member's comment
+     * reads identically whether it is hovered where it is written or where it is imported. Without it an
+     * imported member showed its container and its signature with nothing underneath — which reads as the
+     * member being undocumented rather than as a field being dropped at the seam, and is the same failure
+     * the Java side records for {@code describeMember}.</p>
+     */
+    @Nullable
+    private static String docFor(AstRoot root, String source, @Nullable AstNode node, int offset) {
+        RhinoJsDoc doc = RhinoJsDoc.forDeclaration(root, node, offset, source);
+        if (doc == null || doc.isEmpty()) return null;
+        String markdown = doc.markdown();
+        return markdown == null || markdown.isEmpty() ? null : markdown;
+    }
+
+    private static int positionOf(AstNode node) {
+        return Math.max(0, node.getAbsolutePosition());
     }
 
     private static List<String> parameterNamesOf(FunctionNode function) {
