@@ -999,7 +999,7 @@ artifact:
 | W8–W9 | a window hosting a small dock: stripe float-out, Dock/Hide, tab tear-out into a new frame (`cgui-dock` keeps owning dock-*internal* behaviour) |
 | W10 ✅ | the switcher on its chord, MRU order visible — a grid of live thumbnails, and the Welcome window advertises the chord by **resolving** it through `Keymap.acceleratorFor` rather than spelling it |
 | W13a ✅ | right-click a title bar and a taskbar entry, and press `Alt+-` — the same rows in three places, because they are one command set with three renderers |
-| W13b ✅ | Alt-drag a window by its middle, `F11` to fullscreen (the strip goes too), and **shove the pointer into an edge** to snap — a side for the half, either end of a side for the quarter, the top for maximise. It takes contact rather than proximity, so a drag that merely passes near an edge arms nothing |
+| W13b ✅ | Alt-drag a window by its middle, `F11` to fullscreen (the strip goes too), and **shove the pointer into an edge** to snap — a side for the half, either end of a side for the quarter, the top for maximise. It takes contact rather than proximity, so a drag that merely passes near an edge arms nothing. Then **drag the seam between two snapped windows and both resize**, or the corner where four meet and all four do |
 | W13c ✅ | show desktop as a toggle that remembers; click a modal-blocked window and watch it pulse and hear it ding; keyboard Move/Size from the system menu |
 | W14 | a **simulated game mode**: one key flips the scene to input-off, painting only pinned frames through the paint-only entry with `__hud__` styling live — the closest a GL harness can get to Minecraft without being it |
 | W15 | the task manager listing the scene's own windows; per-window zoom |
