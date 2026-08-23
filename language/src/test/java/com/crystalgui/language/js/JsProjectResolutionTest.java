@@ -1,5 +1,6 @@
 package com.crystalgui.language.js;
 
+import com.crystalgui.language.TestWorkspace;
 import com.crystalgui.language.engine.EngineHost;
 import com.crystalgui.language.engine.EngineSource;
 import com.crystalgui.language.java.JavaLanguage;
@@ -7,7 +8,6 @@ import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.lang.CompletionItem;
 import com.crystalgui.text.lang.CompletionList;
 import com.crystalgui.text.lang.CompletionProvider;
-import com.crystalgui.text.lang.ProjectSources;
 import com.crystalgui.text.lang.ProjectSourcesRegistry;
 import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.text.lang.SymbolKind;
@@ -47,55 +47,9 @@ public class JsProjectResolutionTest {
 
     private static final String CARET = "|";
 
-    /** An unsaved workspace: qualified name to text. */
-    private static final class Buffers implements ProjectSources {
-        private final Map<String, String> files = new LinkedHashMap<>();
-
-        private final Map<String, String> extensions = new LinkedHashMap<>();
-
-        Buffers edit(String qualifiedName, String source) {
-            return edit(qualifiedName, source, ".js");
-        }
-
-        Buffers edit(String qualifiedName, String source, String extension) {
-            files.put(qualifiedName, source);
-            extensions.put(qualifiedName, extension);
-            return this;
-        }
-
-        @Override
-        public String sourceOf(String qualifiedName) {
-            return files.get(qualifiedName);
-        }
-
-        /** Where the file lives — what a jump target is built from, and what says which language. */
-        @Override
-        public String pathOf(String qualifiedName) {
-            String extension = extensions.get(qualifiedName);
-            if (extension == null) return null;
-            String root = ".js".equals(extension) ? "src/main/js" : "src/main/java";
-            return "proj:" + root + "/" + qualifiedName.replace('.', '/') + extension;
-        }
-
-        @Override
-        public boolean declaresPackage(String packageName) {
-            if (packageName == null || packageName.isEmpty()) return false;
-            String prefix = packageName + ".";
-            for (String name : files.keySet()) {
-                if (name.startsWith(prefix)) return true;
-            }
-            return false;
-        }
-
-        @Override
-        public List<String> declaredTypes() {
-            return List.copyOf(files.keySet());
-        }
-    }
-
-    private TextBuffer buffer;
+        private TextBuffer buffer;
     private JsLanguageServices services;
-    private Buffers workspace;
+    private TestWorkspace workspace;
 
     @BeforeClass
     public static void openTheEngines() {
@@ -109,7 +63,7 @@ public class JsProjectResolutionTest {
     @Before
     public void openWorkspace() {
         ProjectSourcesRegistry.resetForTesting();
-        workspace = new Buffers();
+        workspace = new TestWorkspace(".js");
         ProjectSourcesRegistry.contribute(workspace);
     }
 

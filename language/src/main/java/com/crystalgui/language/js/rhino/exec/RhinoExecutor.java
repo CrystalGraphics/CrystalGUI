@@ -322,6 +322,8 @@ public final class RhinoExecutor implements JsExecutor {
      * keeps exactly the behaviour it had: a Java name in an import resolves against the classpath or not
      * at all.</p>
      */
+    // QUALIFIED ON PURPOSE: this file imports Rhino's own `Function`, and a script's `function` is
+    // the more important of the two here. Three lines is cheaper than renaming that.
     private static volatile java.util.function.Function<String, Class<?>> projectClasses;
 
     /** @see #projectClasses */

@@ -1,10 +1,11 @@
 package com.crystalgui.language.run;
 
+import com.crystalgui.language.TestWorkspace;
+import com.crystalgui.text.lang.ProjectSources;
 import com.crystalgui.language.engine.EngineBand;
 import com.crystalgui.language.engine.EngineSource;
 import com.crystalgui.language.engine.JavaEngine;
 import com.crystalgui.language.java.exec.ScriptHost;
-import com.crystalgui.text.lang.ProjectSources;
 import com.crystalgui.text.lang.ProjectSourcesRegistry;
 
 import org.junit.After;
@@ -46,60 +47,9 @@ public class ScriptCrossFileRunTest {
 
     private static final String GREETER = "com.example.util.Greeter";
 
-    /** A workspace whose files can be edited without being saved — an open buffer, in other words. */
-    private static final class Buffers implements ProjectSources {
-        private final Map<String, String> files = new LinkedHashMap<>();
-        private final Map<String, String> extensions = new LinkedHashMap<>();
-
-        Buffers edit(String qualifiedName, String source) {
-            return edit(qualifiedName, source, ".java");
-        }
-
-        Buffers edit(String qualifiedName, String source, String extension) {
-            files.put(qualifiedName, source);
-            extensions.put(qualifiedName, extension);
-            return this;
-        }
-
-        /**
-         * Where the file would live \u2014 the only thing that says which LANGUAGE wrote it.
-         *
-         * <p>{@code SourceRoots} names any file under a declared root whatever its extension, and both
-         * {@code src/main/java} and {@code src/main/js} are declared, so one index holds both languages'
-         * names with nothing in the NAME to tell them apart.</p>
-         */
-        @Override
-        public String pathOf(String qualifiedName) {
-            String extension = extensions.get(qualifiedName);
-            if (extension == null) return null;
-            String root = ".js".equals(extension) ? "src/main/js" : "src/main/java";
-            return "proj:" + root + "/" + qualifiedName.replace('.', '/') + extension;
-        }
-
-        @Override
-        public String sourceOf(String qualifiedName) {
-            return files.get(qualifiedName);
-        }
-
-        @Override
-        public boolean declaresPackage(String packageName) {
-            if (packageName == null || packageName.isEmpty()) return false;
-            String prefix = packageName + ".";
-            for (String name : files.keySet()) {
-                if (name.startsWith(prefix)) return true;
-            }
-            return false;
-        }
-
-        @Override
-        public List<String> declaredTypes() {
-            return List.copyOf(files.keySet());
-        }
-    }
-
-    private JavaEngine engine;
+        private JavaEngine engine;
     private ScriptHost host;
-    private Buffers workspace;
+    private TestWorkspace workspace;
 
     private static String greeterSaying(String word) {
         return "package com.example.util;\n"
@@ -138,7 +88,7 @@ public class ScriptCrossFileRunTest {
         host = ScriptHost.of(engine);
 
         ProjectSourcesRegistry.resetForTesting();
-        workspace = new Buffers().edit(GREETER, greeterSaying("hi"));
+        workspace = new TestWorkspace(".java").edit(GREETER, greeterSaying("hi"));
         ProjectSourcesRegistry.contribute(workspace);
         Heard.WORDS.clear();
     }

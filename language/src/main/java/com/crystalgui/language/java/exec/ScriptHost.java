@@ -532,15 +532,14 @@ public final class ScriptHost implements ScriptRuntime {
      * caller has another tier to try (the classpath), and a compile error belongs to the file that has it,
      * which reports it in its own editor. What the caller must not do is invent a binding.</p>
      *
-     * <p>The source is read with {@link com.crystalgui.text.lang.ProjectSources#awaitSourceOf}, so a file
+     * <p>The source is read with {@link ProjectSources#awaitSourceOf}, so a file
      * nobody has open is waited for rather than missed — a run happens once, and "not yet" there is a
      * failure rather than a deferral.</p>
      */
     @Nullable
     public Class<?> classOf(String qualifiedName) {
         if (qualifiedName == null || qualifiedName.isEmpty()) return null;
-        String source = com.crystalgui.text.lang.ProjectSourcesRegistry.view()
-                .awaitSourceOf(qualifiedName);
+        String source = ProjectSourcesRegistry.view().awaitSourceOf(qualifiedName);
         if (source == null) return null;
         try {
             // THROUGH THE ORDINARY COMPILE, cache and all: a project type used by three scripts is
