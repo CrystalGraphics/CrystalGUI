@@ -75,6 +75,11 @@ public final class WorkspaceRpc<T> {
             out.putList(WorkspaceProtocol.PROJECT_LIST, service.projects(actor), (entry, project) -> {
                 entry.putString(WorkspaceProtocol.ID, project.id());
                 entry.putString(WorkspaceProtocol.DISPLAY_NAME, project.displayName());
+                // A NESTED LIST rather than one joined string. A separator would have to be a character
+                // no path may contain, and the only such characters are the ones CgPath already refuses --
+                // so the encoding would depend on a rule enforced somewhere else entirely.
+                entry.putList(WorkspaceProtocol.SOURCE_ROOTS, project.sourceRoots(),
+                        (root, value) -> root.putString(WorkspaceProtocol.PATH, value));
             });
             respond.ok(out);
         }));
