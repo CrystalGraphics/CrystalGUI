@@ -682,6 +682,19 @@ public class DockArea extends UIElement implements UIFrameTicker {
     public void closePanelDiscarding(DockPanelRef panel) {
         captureDividerPositions();
         if (!layout.closePanel(panel)) return;
+        // AND THE BUILT WIDGET GOES WITH IT.
+        //
+        // `DockGroup.contentFor` memoises per DockPanelRef, and a ref is a VALUE -- reopening the same
+        // file produces an equal one. So a closed tab left its element in that map and the reopen was
+        // handed back the widget built for the document that had just been disposed: a live-looking
+        // editor over a closed tokenizer, which threw `IllegalStateException: Parser is closed` out of a
+        // frame tick the moment folding asked it to parse.
+        //
+        // Here rather than on `onDidClosePanel`, because a listener is something a caller can be without
+        // -- and this is not optional bookkeeping, it is part of what closing MEANS. Deliberately not in
+        // the drag path either: a move removes and re-adds the same panel, and forgetting there would
+        // rebuild the widget being dragged mid-gesture.
+        for (DockGroup group : groups.values()) group.forgetContent(panel);
         requestRebuild();
         // ANNOUNCED, because until now closing a tab told nobody. Its document stayed open, its editor
         // stayed reachable, and anything it owned -- a preview pool, a renderer -- lived until the
