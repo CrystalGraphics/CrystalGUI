@@ -51,11 +51,6 @@ public class ProjectTypeIndexTest {
         }
 
         @Override
-        public List<String> typesIn(String packageName) {
-            return List.of();
-        }
-
-        @Override
         public List<String> declaredTypes() {
             return names;
         }

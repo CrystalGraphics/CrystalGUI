@@ -144,10 +144,6 @@ final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
      */
     private final String self;
 
-    ScriptNameEnvironment(INameEnvironment delegate, TypeBytes types) {
-        this(delegate, types, ProjectSourcesRegistry.view(), null);
-    }
-
     ScriptNameEnvironment(INameEnvironment delegate, TypeBytes types,
                           ProjectSources project, String self) {
         this.delegate = delegate;

@@ -280,20 +280,4 @@ final class ProjectIndex implements ProjectSources {
         ensureCurrent();
         return names.packages.contains(packageName);
     }
-
-    @Override
-    public List<String> typesIn(String packageName) {
-        if (packageName == null) return Collections.emptyList();
-        ensureCurrent();
-        List<String> out = new ArrayList<>();
-        String prefix = packageName.isEmpty() ? "" : packageName + ".";
-        for (String name : names.byName.keySet()) {
-            if (!name.startsWith(prefix)) continue;
-            String rest = name.substring(prefix.length());
-            // DIRECTLY IN, not under: `com.example.nested.Thing` is not a type in `com.example`.
-            if (rest.isEmpty() || rest.indexOf('.') >= 0) continue;
-            out.add(rest);
-        }
-        return out;
-    }
 }
