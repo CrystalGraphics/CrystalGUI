@@ -166,6 +166,21 @@ public class SourceRootsTest {
                 qualified("harness.scratch:src/main/java/com/example/util/Formatter.java", MAVEN));
     }
 
+    /**
+     * <b>...and the JavaScript half of it, which uses the OTHER declared root.</b>
+     *
+     * <p>Pinned separately because it is a different root doing the work: {@code src/main/js} is what
+     * turns {@code util/Greeter.js} into the name {@code util.Greeter} that an {@code import} statement
+     * writes. A fixture placed under {@code src/} instead would have no derived name at all and could not
+     * be imported — and the demonstration would fail in a way that reads as the FEATURE being broken.</p>
+     */
+    @Test
+    public void theHarnessJavaScriptFixtureIsNamedByItsRoot() {
+        assertEquals("App", qualified("harness.scratch:src/main/js/App.js", MAVEN));
+        assertEquals("util.Greeter", qualified("harness.scratch:src/main/js/util/Greeter.js", MAVEN));
+        assertEquals("util.Formatter", qualified("harness.scratch:src/main/js/util/Formatter.js", MAVEN));
+    }
+
     /** <b>...and one that does say something keeps it.</b> */
     @Test
     public void aDeclaredLayoutIsKept() {

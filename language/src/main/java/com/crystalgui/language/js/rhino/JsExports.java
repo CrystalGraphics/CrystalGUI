@@ -60,11 +60,23 @@ public final class JsExports {
      * mean "there is nothing to offer behind the dot".</p>
      */
     public static List<String> namesIn(@Nullable String source) {
-        if (source == null || source.isEmpty()) return List.of();
-        AstRoot root = parse(source);
-        if (root == null) return List.of();
+        return new ArrayList<>(offsetsIn(source).keySet());
+    }
 
-        Set<String> found = new LinkedHashSet<>();
+    /**
+     * The same names, each with the offset it is written at — what a jump needs.
+     *
+     * <p>Zero for a name that has no span of its own: the keys of an object assigned to
+     * {@code module.exports} are read through the one band-safe reader, which answers with strings and
+     * not with nodes. Landing at the top of the module is a worse answer than the exact line and a much
+     * better one than refusing to navigate at all.</p>
+     */
+    public static java.util.Map<String, Integer> offsetsIn(@Nullable String source) {
+        if (source == null || source.isEmpty()) return java.util.Map.of();
+        AstRoot root = parse(source);
+        if (root == null) return java.util.Map.of();
+
+        java.util.LinkedHashMap<String, Integer> found = new java.util.LinkedHashMap<>();
         root.visit(new NodeVisitor() {
             @Override
             public boolean visit(AstNode node) {
@@ -72,10 +84,10 @@ public final class JsExports {
                 return true;
             }
         });
-        return new ArrayList<>(found);
+        return found;
     }
 
-    private static void collect(Assignment assignment, Set<String> found) {
+    private static void collect(Assignment assignment, java.util.Map<String, Integer> found) {
         AstNode target = assignment.getLeft();
         if (!(target instanceof PropertyGet)) return;
         PropertyGet get = (PropertyGet) target;
@@ -84,7 +96,9 @@ public final class JsExports {
         // band-safe reader, because `ObjectProperty.getLeft()` is declared on a different supertype in
         // the two Rhino versions we ship and `getFirstChild()` answers null on the band we run.
         if (isModuleExports(get)) {
-            found.addAll(RhinoInference.keysOf(assignment.getRight()));
+            for (String key : RhinoInference.keysOf(assignment.getRight())) {
+                found.putIfAbsent(key, 0);
+            }
             return;
         }
 
@@ -93,7 +107,8 @@ public final class JsExports {
         if (name == null) return;
         AstNode owner = get.getTarget();
         if (isExports(owner) || (owner instanceof PropertyGet && isModuleExports((PropertyGet) owner))) {
-            found.add(name);
+            // FIRST WINS, so a name assigned twice points at where it was introduced.
+            found.putIfAbsent(name, Math.max(0, get.getProperty().getAbsolutePosition()));
         }
     }
 

@@ -295,6 +295,56 @@ final class ProjectIndex implements ProjectSources {
         return path == null ? null : path.toString();
     }
 
+    /**
+     * The same three tiers, except that the read is WAITED for instead of scheduled.
+     *
+     * <p>Bounded, because the alternative to a slow answer must never be no answer at all: a workspace
+     * that has gone away leaves the run stuttering for {@link #READ_TIMEOUT_MILLIS} and then failing on
+     * the name, which is what would have happened immediately without this.</p>
+     *
+     * <p>An interrupt is honoured and re-raised. A run is stoppable, and a script waiting on a file is
+     * exactly when somebody presses Stop — swallowing it would leave the thread unstoppable until the
+     * bound expired. @see com.crystalgui.language.run.ScriptPolicy</p>
+     */
+    @Override
+    @Nullable
+    public String awaitSourceOf(String qualifiedName) {
+        if (qualifiedName == null) return null;
+        ensureCurrent();
+        CgPath path = names.byName.get(qualifiedName);
+        if (path == null) return null;
+
+        String live = openBuffer.apply(path);
+        if (live != null) return live;
+        String cached = text.get(path);
+        if (cached != null) return cached;
+
+        java.util.concurrent.CountDownLatch landed = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicReference<String> answer =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        // ITS OWN READ, deliberately not routed through `requestRead`: that one is guarded so a repeated
+        // MISS does not repeat a request, and here a request already in flight would leave nothing to
+        // wait on -- the guard would swallow the call and the latch would never count down.
+        read.read(path, content -> {
+            answer.set(content);
+            landed.countDown();
+        });
+        try {
+            if (!landed.await(READ_TIMEOUT_MILLIS, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                return null;
+            }
+        } catch (InterruptedException stopped) {
+            Thread.currentThread().interrupt();
+            return null;
+        }
+        String content = answer.get();
+        if (content != null) text.put(path, content);
+        return content;
+    }
+
+    /** Long enough for a real round trip, short enough that a mistake is a stutter. @see #awaitSourceOf */
+    private static final long READ_TIMEOUT_MILLIS = 2_000L;
+
     @Override
     public boolean declaresPackage(String packageName) {
         if (packageName == null || packageName.isEmpty()) return false;

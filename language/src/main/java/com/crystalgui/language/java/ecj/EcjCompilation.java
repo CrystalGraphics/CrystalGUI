@@ -68,8 +68,11 @@ final class EcjCompilation {
             Map<String, String> options = optionsFor(releaseLevel);
             // SELF EXCLUDED here too: this unit is the one being compiled, so the project index
             // answering for it would declare it twice.
-            environment = environmentFor(classpath, releaseLevel, types,
-                    SourcePackages.binaryName(className, source).replace('.', '/'));
+            // MAY WAIT: this method compiles in order to RUN. The analyser builds its own environment
+            // through `environmentFor` and does not. @see ProjectSources#awaitSourceOf
+            environment = new ScriptNameEnvironment(fileSystemFor(classpath, releaseLevel), types,
+                    com.crystalgui.text.lang.ProjectSourcesRegistry.view(),
+                    SourcePackages.binaryName(className, source).replace('.', '/'), true);
 
             final Output collecting = output;
             ICompilerRequestor requestor = result -> {

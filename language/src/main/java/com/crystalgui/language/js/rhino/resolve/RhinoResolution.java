@@ -120,8 +120,19 @@ public final class RhinoResolution {
      */
     @Nullable
     public SymbolInfo describeImportedType(String binaryName) {
-        if (interop == null || binaryName == null || binaryName.isEmpty()) return null;
+        if (binaryName == null || binaryName.isEmpty()) return null;
+        // THE PROJECT FIRST, in the same order every other consumer uses. Without this the import LINE
+        // described a Java class while the identifier two rows below described a module -- the same name,
+        // two answers, in one file.
+        SymbolInfo module = fromProjectScript(simpleNameOf(binaryName), binaryName);
+        if (module != null) return module;
+        if (interop == null) return null;
         return interop.describe(binaryName, false);
+    }
+
+    private static String simpleNameOf(String qualifiedName) {
+        int lastDot = qualifiedName.lastIndexOf('.');
+        return lastDot < 0 ? qualifiedName : qualifiedName.substring(lastDot + 1);
     }
 
     // ── resolveAt ───────────────────────────────────────────────────────────────────────────────
@@ -291,6 +302,20 @@ public final class RhinoResolution {
                         : signed.withDeclaration(described.declaration());
             }
         }
+        // ANOTHER SCRIPT'S EXPORT, described from the file it is written in rather than assembled here.
+        //
+        // Without this a module's member fell to the bare property below: it resolved, so the popup
+        // opened and the name was right, and it carried no SIGNATURE -- which sends the documentation
+        // popup down its assembled renderer, painting from its own three bands instead of the editor's
+        // capture scheme. The member hovered in visibly different colours from every other member in the
+        // same file, and drew a CLASS glyph for its owner, so it read as a theming bug rather than as two
+        // missing fields. It also had nowhere to jump to. @see #exportsOf
+        if (receiver instanceof JsTypeRef && ((JsTypeRef) receiver).isModule()) {
+            for (SymbolInfo exported : exportsOf(receiver.qualifiedName())) {
+                if (identifier.equals(exported.name())) return exported;
+            }
+        }
+
         // A PROPERTY WE CANNOT TYPE IS STILL A PROPERTY. Answering null would make a hover over an
         // ordinary object member report nothing at all, which reads as the engine being absent.
         return new SymbolInfo(identifier, SymbolKind.PROPERTY, null,
@@ -406,13 +431,27 @@ public final class RhinoResolution {
      */
     @Nullable
     private SymbolInfo fromProjectScript(String identifier, String qualifiedName) {
+        // ONLY A `.js` FILE, and the editor and the runtime must agree about that or a name would
+        // complete as one thing and run as another. @see com.crystalgui.language.js.rhino.exec.JsModules
+        String path = ProjectSourcesRegistry.view().pathOf(qualifiedName);
+        if (path != null && !path.endsWith(".js")) return null;
+
+        // `sourceOf` AND NOT `awaitSourceOf`. This runs inside an analysis, on a keystroke; the run path
+        // is the one that may wait. A file nobody has open resolves on the next analysis instead, which
+        // is what the workbench's re-analysis announcement exists to make happen.
         String source = ProjectSourcesRegistry.view().sourceOf(qualifiedName);
         if (source == null) return null;
         TypeRef type = JsTypeRef.module(qualifiedName, JsExports.namesIn(source));
         SymbolInfo binding = new SymbolInfo(identifier, SymbolKind.MODULE, type, qualifiedName, null,
                 Set.of(), null);
-        return binding.withContainerKind(SymbolKind.MODULE)
+        binding = binding.withContainerKind(SymbolKind.MODULE)
                 .withSignature(JsSignatures.of(binding, List.of()));
+        // AND SOMEWHERE TO GO. Without a declaration site Ctrl+B does nothing at all -- the name resolves,
+        // hovers correctly, and simply cannot be opened, which reads as navigation being unimplemented
+        // rather than as a field nobody filled in. The top of the file, because that is what a jump to a
+        // MODULE means.
+        DeclarationSite site = siteIn(qualifiedName, 0);
+        return site == null ? binding : binding.withDeclaration(site);
     }
 
     /**
@@ -630,6 +669,50 @@ public final class RhinoResolution {
         }
     }
 
+    /**
+     * One project script's exports, as members that behave like every other member.
+     *
+     * <p>Each carries its own declaration site, so Ctrl+B lands on the line the export is written at
+     * rather than merely opening the file — except for a key of an object assigned wholesale to
+     * {@code module.exports}, which has no span of its own and lands at the top. And each carries a
+     * signature, without which the documentation popup falls back to assembling one and draws it in a
+     * different colour scheme from the rest of the file.</p>
+     */
+    private List<SymbolInfo> exportsOf(String qualifiedName) {
+        String source = ProjectSourcesRegistry.view().sourceOf(qualifiedName);
+        if (source == null) return List.of();
+        List<SymbolInfo> members = new ArrayList<>();
+        for (java.util.Map.Entry<String, Integer> each : JsExports.offsetsIn(source).entrySet()) {
+            SymbolInfo member = new SymbolInfo(each.getKey(), SymbolKind.PROPERTY, null,
+                    qualifiedName, null, Set.of(), null);
+            member = member.withContainerKind(SymbolKind.MODULE)
+                    .withSignature(JsSignatures.of(member, List.of()));
+            DeclarationSite site = siteIn(qualifiedName, each.getValue());
+            members.add(site == null ? member : member.withDeclaration(site));
+        }
+        return members;
+    }
+
+    /**
+     * Where {@code offset} sits inside another project file, as a jump target.
+     *
+     * <p>Null when the workspace cannot say where the file lives, which is every in-memory stand-in — and
+     * the caller then keeps a symbol that resolves and hovers and simply cannot be opened, which is the
+     * behaviour before any of this existed rather than a regression.</p>
+     *
+     * <p>Rows and columns rather than the offset, because that is what {@link DeclarationSite} carries and
+     * why: the answer is computed against one document and consumed against another.</p>
+     */
+    @Nullable
+    private DeclarationSite siteIn(String qualifiedName, int offset) {
+        String path = ProjectSourcesRegistry.view().pathOf(qualifiedName);
+        if (path == null) return null;
+        String source = ProjectSourcesRegistry.view().sourceOf(qualifiedName);
+        if (source == null) return null;
+        com.crystalgui.text.TextPoint at = new LineIndex(source).pointAt(Math.max(0, offset));
+        return DeclarationSite.inProject(path, at, at);
+    }
+
     /** The names the last run left behind — what a "did you mean" must not offer to rename. */
     public Set<String> liveNames() {
         return live.names();
@@ -648,6 +731,16 @@ public final class RhinoResolution {
             boolean staticSide = type instanceof JsTypeRef && ((JsTypeRef) type).isStaticSide();
             return interop.membersOf(javaName, staticSide);
         }
+        // ANOTHER SCRIPT'S EXPORTS, read from its own file so each one carries a signature and a place
+        // to jump to. The generic object path below could produce the NAMES from `keys()` alone, and that
+        // is what it did first -- but a member with no signature falls through to the popup's assembled
+        // renderer, which paints in its own bands rather than the editor's capture scheme, so a module's
+        // member hovered visibly differently from every other member in the file. @see JsExports
+        if (type instanceof JsTypeRef && ((JsTypeRef) type).isModule()) {
+            List<SymbolInfo> exported = exportsOf(type.qualifiedName());
+            if (!exported.isEmpty()) return exported;
+        }
+
         List<SymbolInfo> members = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
 
