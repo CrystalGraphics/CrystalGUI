@@ -36,6 +36,7 @@ public final class DesktopCommands {
 
     public static final String SWITCH_WINDOW = "desktop.switchWindow";
     public static final String SWITCH_WINDOW_BACK = "desktop.switchWindowBack";
+    public static final String SHOW_DESKTOP = "desktop.showDesktop";
 
     private static boolean registered;
 
@@ -64,6 +65,26 @@ public final class DesktopCommands {
                 .binding("Mod+Shift+Tab")
                 .run(context -> cycle(context, false))
                 .enabledWhen(DesktopCommands::hasSomethingToSwitchTo));
+
+        // NO CHORD -- W13c. The plan says this "earns its keybind exactly when floats and torn-out
+        // editors multiply", and it is reachable from the palette meanwhile. Win+D is unavailable for
+        // the reason Alt+Tab is: Super belongs to the host, and a Minecraft client never sees it.
+        registry.register(Command.of(SHOW_DESKTOP, "Show Desktop")
+                .run(context -> {
+                    Desktop desktop = desktopFor(context);
+                    if (desktop != null) desktop.toggleShowDesktop();
+                })
+                .toggledWhen(context -> {
+                    Desktop desktop = desktopFor(context);
+                    return desktop != null && desktop.isShowingDesktop();
+                })
+                .enabledWhen(context -> {
+                    Desktop desktop = desktopFor(context);
+                    // Nothing to show and nothing to put back is not a state worth offering: with no
+                    // windows at all the desktop IS shown, and the row would toggle nothing.
+                    return desktop != null
+                            && (desktop.isShowingDesktop() || desktop.registry().size() > 0);
+                }));
     }
 
     /** Testing seam — {@code CommandRegistry.resetForTesting()} drops the registrations, not this flag. */

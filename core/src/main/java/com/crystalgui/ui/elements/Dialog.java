@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements;
 
+import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.style.StyleGroup;
@@ -73,6 +74,42 @@ public class Dialog extends UIElement {
      * is the arrangement {@code menu .__items__} already uses.</p>
      */
     public static final String OPEN_CLASS = "__open__";
+
+    /**
+     * On a modal for one beat after a click was swallowed by it — W13c.
+     *
+     * <p>The sheet gives it a brief scale-and-brighten; this class is what starts it, and it is dropped
+     * on the next frame so pressing repeatedly re-plays rather than latching.</p>
+     */
+    public static final String PULSE_CLASS = "__pulse__";
+
+    /**
+     * Says "this dialog is why that click did nothing" — Windows' exact behaviour.
+     *
+     * <p>Without it, window-scoped modality's failure mode reads as <em>this window ignores my
+     * clicks</em>, which is indistinguishable from a bug. The visible half is a class the sheet
+     * transitions; the audible half is the <b>first real consumer of {@code CgPlatform.sound()}</b>, an
+     * SPI wired on every loader that nothing used.</p>
+     *
+     * <p>The class is removed on the following frame rather than after a timer: a transition needs the
+     * value to go back for the next press to move it again, and a one-frame round trip is enough because
+     * the sheet's own duration is what the eye sees. Latching it instead would mean the second click at
+     * a stuck window did nothing at all — which is the exact complaint this exists to answer.</p>
+     */
+    public void pulse() {
+        UIWindow window = getAttachedWindow();
+        if (window == null || pulsing) return;
+        pulsing = true;
+        addClass(PULSE_CLASS);
+        CgPlatform.sound().play("dialog_blocked");
+        window.registerTicker(delta -> {
+            removeClass(PULSE_CLASS);
+            pulsing = false;
+            return false;
+        });
+    }
+
+    private boolean pulsing;
 
     /** Emitted after the dialog closes, however it was closed. */
     public final Signal.Action onClosed = new Signal.Action();

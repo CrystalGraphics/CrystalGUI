@@ -1038,6 +1038,31 @@ public final class UIWindow {
         return null;
     }
 
+    /**
+     * The modal that would swallow a press at {@code (mouseX, mouseY)}, or null — W13c.
+     *
+     * <h3>Being blocked has to be SHOWN, or it reads as a bug</h3>
+     *
+     * <p>{@link #getHoveredElement} answers {@code null} for a blocked hit, deliberately: inertness must
+     * act as {@code pointer-events: none} rather than falling through to whatever is behind. But null is
+     * also what "clicked bare desktop" looks like, and the two produce very different expectations — a
+     * window that silently ignores clicks is indistinguishable from one that has hung.</p>
+     *
+     * <p>So this re-asks the question the hit test threw away: which modal is responsible. Windows pulses
+     * that dialog and dings, and that is the whole of what makes window-scoped modality legible.</p>
+     *
+     * <p>Answers the modal for the <b>hit's own scope</b>, never the topmost anywhere: with per-window
+     * modality a press on window A must pulse A's dialog, not whichever one happens to be on top of the
+     * stack in window B.</p>
+     */
+    @Nullable
+    public UIElement modalBlockingAt(float mouseX, float mouseY) {
+        UIElement hit = elementHitTest(ui.rootElement, mouseX, mouseY);
+        if (hit == null || !isModalBlocked(hit)) return null;
+        UIElement scoped = getActiveModal(modalScopeOf(hit));
+        return scoped != null ? scoped : getActiveModal();
+    }
+
     /** The topmost modal in {@code scope}, or null. {@code null} scope means window-level. */
     @Nullable
     public UIElement getActiveModal(@Nullable UIElement scope) {
@@ -1174,6 +1199,20 @@ public final class UIWindow {
         // NEVER desktop(), which builds one on first use: a key press in an application that has never
         // opened a window must not be what attaches a compositor to it.
         return desktop.getParent() != null && desktop.switcher().handleKey(key);
+    }
+
+    /**
+     * Offers a key to a running keyboard Move/Size, ahead of dispatch — W13c.
+     *
+     * <p>Same rung and same reason as the switcher above: a mode with no element of its own gets no keys,
+     * because dispatch goes to whatever has focus and a focused editor moves its caret with an arrow.</p>
+     *
+     * <p>Only the keys it acts on are taken — anything else <b>ends the mode and is not eaten</b>, so the
+     * keystroke does whatever it was going to do. That is Windows' behaviour and it is what stops a mode
+     * nobody remembers entering from swallowing the keyboard.</p>
+     */
+    public boolean routeKeyToKeyboardMove(int key, boolean fine) {
+        return desktop.getParent() != null && desktop.keyboardMove().handleKey(key, fine);
     }
 
     // ── Light dismiss (the popover stack) ───────────────────────────────────

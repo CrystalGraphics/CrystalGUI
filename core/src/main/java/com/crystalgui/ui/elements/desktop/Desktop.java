@@ -332,6 +332,13 @@ public class Desktop extends UIElement implements DataProvider {
         // flash is not on a timer -- one that gave up after a few seconds would be a notification you
         // could miss by looking away. @see WindowFrame#isDemandingAttention()
         frame.clearAttention();
+        // THE SHOW-DESKTOP MEMORY IS DROPPED HERE. Once a window has been used, "put it back how it was"
+        // no longer describes anything the user would recognise, and a second Win+D should mean a fresh
+        // minimise-all. Windows drops its own on exactly this event. @see #toggleShowDesktop()
+        //
+        // Cleared rather than checked for membership: restoring a window FROM the show-desktop set also
+        // counts, because at that point the set no longer describes the screen either.
+        minimizedByShowDesktop.clear();
         raise(frame);
         if (activeWindow != frame) {
             if (activeWindow != null) activeWindow.setActive(false);
@@ -588,6 +595,55 @@ public class Desktop extends UIElement implements DataProvider {
     public static final String SNAP_PREVIEW_CLASS = "__snap-preview__";
 
     private final UIElement snapPreview = new UIElement();
+
+    /**
+     * Minimise everything, or put back exactly what was minimised — Windows' {@code Win+D}, W13c.
+     *
+     * <h3>A toggle with a memory, and the memory is what makes it a toggle</h3>
+     *
+     * <p>"Restore everything" would be wrong: a desktop where three windows were already minimised
+     * before the gesture would come back with three windows nobody asked for. So it puts back
+     * <em>exactly the set it took down</em> — which is also the only definition under which pressing it
+     * twice is a no-op.</p>
+     *
+     * <p><b>And it forgets the moment anything is activated in between.</b> Once the user has gone and
+     * used a window, "put it back how it was" no longer describes anything they would recognise, and a
+     * second press should mean a fresh minimise-all rather than resurrecting a set from before whatever
+     * they just did. Windows drops its own memory on exactly the same event.</p>
+     */
+    public void toggleShowDesktop() {
+        if (!minimizedByShowDesktop.isEmpty()) {
+            List<WindowFrame> putBack = new ArrayList<>(minimizedByShowDesktop);
+            minimizedByShowDesktop.clear();
+            for (WindowFrame frame : putBack) {
+                if (frame.state() == WindowState.HIDDEN) frame.show(true);
+            }
+            return;
+        }
+        for (WindowFrame frame : registry.windows()) {
+            // TOOL WINDOWS RIDE WITH THEIR OWNER and are not taken down separately -- a WINDOWED one
+            // hides when its owner does, so minimising it here would put it in the memory twice and
+            // bring it back on its own. @see WindowFrame#isToolWindow()
+            if (frame.isToolWindow() || frame.state() != WindowState.VISIBLE) continue;
+            minimizedByShowDesktop.add(frame);
+            frame.minimize();
+        }
+    }
+
+    /** Whether the last thing this desktop did was a show-desktop that has not been undone. */
+    public boolean isShowingDesktop() {
+        return !minimizedByShowDesktop.isEmpty();
+    }
+
+    /** @see #toggleShowDesktop() */
+    private final List<WindowFrame> minimizedByShowDesktop = new ArrayList<>();
+
+    /** Keyboard Move/Size — W13c. @see WindowKeyboardMove */
+    public WindowKeyboardMove keyboardMove() {
+        return keyboardMove;
+    }
+
+    private final WindowKeyboardMove keyboardMove = new WindowKeyboardMove(this);
 
     void fullscreenChanged() {
         boolean anyFullscreen = false;

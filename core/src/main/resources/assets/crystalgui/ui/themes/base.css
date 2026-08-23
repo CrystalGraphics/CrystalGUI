@@ -86,6 +86,9 @@ theme {
 
     --dialog-bg: var(--surface-panel);
     --dialog-border: var(--border-base);
+    /* The blocked pulse borrows the accent, because it is an ANSWER to a click rather than an error: the
+     * dialog is saying "over here", not "you did something wrong". Red would read as the latter. */
+    --dialog-pulse-border: var(--accent);
     --dialog-close-bg: var(--surface-overlay);
     --dialog-close-fg: var(--fg);
     --dialog-close-hover-bg: var(--error);

@@ -160,6 +160,20 @@ dialog {
     outline: 1px var(--dialog-border, #1A1A1A);
     color: var(--dialog-fg, #DDDDDD);
     z-index: 5;
+    /* THE RESTING END of the blocked pulse — __pulse__ below carries what it eases FROM, which is the
+     * way round a transition has to be written: a value written once from Java is itself transitionable,
+     * so the engine eases toward it and the cleanup retargets it back. Both ends name the same transform
+     * function, because a list that does not line up snaps at the halfway point instead of lerping. */
+    transform: scale(1, 1);
+    transition: transform 120ms ease-out, outline-color 120ms ease-out;
+}
+
+/* Says "this dialog is why that click did nothing" — Windows' own answer, and the thing that keeps
+ * window-scoped modality from reading as a hung window. A brief swell and a brightened edge; the class
+ * is dropped on the next frame, so pressing repeatedly re-plays rather than latching. */
+dialog.__pulse__ {
+    transform: scale(1.03, 1.03);
+    outline: 1px var(--dialog-pulse-border, #3574F0);
 }
 /* `ColorControl`'s popup only. Translucent-over-OPAQUE composites right back to opaque (tinted, but
  * alpha 1.0) — colorselector's own `#1E1E1E76` sitting directly on this element's normal `#2E2E2E`

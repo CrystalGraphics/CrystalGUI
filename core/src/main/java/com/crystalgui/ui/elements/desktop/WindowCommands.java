@@ -47,12 +47,12 @@ import javax.annotation.Nullable;
  *
  * <h3>What is deliberately absent</h3>
  *
- * <p>{@code window.move}/{@code window.size} (keyboard Move/Size) are W13c and {@code window.fullscreen}
- * is W13b; {@code window.pin} is W14 and {@code desktop.taskManager} is W15. <b>A command lands with its
+ * <p>{@code window.pin} is W14's and {@code desktop.taskManager} is W15's. <b>A command lands with its
  * feature, never ahead of it</b>: the registry carries {@code enabled} and both menu renderers dim rather
  * than hide, so registering one whose feature does not exist puts a permanently grey row in every menu
  * that shows it. Grey means "not right now"; a row that can never be anything else misdescribes the
- * application.</p>
+ * application. {@code window.fullscreen} arrived with W13b and {@code window.move}/{@code window.size}
+ * with W13c, each in the slot the numbering had been leaving for it.</p>
  */
 public final class WindowCommands {
 
@@ -61,6 +61,8 @@ public final class WindowCommands {
     public static final String MAXIMIZE = "window.maximize";
     public static final String RESTORE = "window.restore";
     public static final String FULLSCREEN = "window.fullscreen";
+    public static final String MOVE = "window.move";
+    public static final String SIZE = "window.size";
     public static final String SYSTEM_MENU = "window.systemMenu";
 
     /**
@@ -102,6 +104,20 @@ public final class WindowCommands {
                     WindowFrame frame = frameFor(context);
                     return frame != null && frame.isMaximized();
                 }));
+
+        // MOVE AND SIZE, in Win32's own slots between Restore and Minimize -- W13c. No chord: they are
+        // reached from the menu, which is the only place they make sense. A window whose title bar has
+        // ended up off the work area is exactly what they are for, and that window cannot be right-
+        // clicked either -- so Alt+- is the route that matters and it already exists.
+        registry.register(Command.of(MOVE, "Move")
+                .menu(MenuId.WINDOW_SYSTEM, GROUP_STATE, 20)
+                .run(context -> beginKeyboard(context, WindowKeyboardMove.Mode.MOVE))
+                .enabledWhen(context -> canNudge(frameFor(context))));
+
+        registry.register(Command.of(SIZE, "Size")
+                .menu(MenuId.WINDOW_SYSTEM, GROUP_STATE, 30)
+                .run(context -> beginKeyboard(context, WindowKeyboardMove.Mode.SIZE))
+                .enabledWhen(context -> canNudge(frameFor(context))));
 
         registry.register(Command.of(MINIMIZE, "Minimize")
                 .menu(MenuId.WINDOW_SYSTEM, GROUP_STATE, 40)
@@ -185,6 +201,30 @@ public final class WindowCommands {
     @Nullable
     public static WindowFrame frameFor(CommandContext context) {
         return context.data().get(WindowFrame.WINDOW_FRAME);
+    }
+
+    /**
+     * Whether a keyboard nudge would mean anything for {@code frame}.
+     *
+     * <p>Refused for a maximised or fullscreen window: both are geometries the compositor owns, and
+     * nudging one would leave a window that claims to be maximised and is not. Win32 greys its own Move
+     * and Size in exactly that state.</p>
+     */
+    private static boolean canNudge(@Nullable WindowFrame frame) {
+        return frame != null && frame.state() == WindowState.VISIBLE
+                && !frame.isMaximized() && !frame.isFullscreen();
+    }
+
+    private static void beginKeyboard(CommandContext context, WindowKeyboardMove.Mode mode) {
+        WindowFrame frame = frameFor(context);
+        if (frame == null) return;
+        Desktop desktop = frame.desktop();
+        if (desktop == null) return;
+        // ACTIVATED FIRST. The mode takes keys ahead of dispatch, so it works on a background window
+        // perfectly well -- and a window being nudged while another one is lit is exactly the sort of
+        // thing that reads as the wrong window moving.
+        desktop.activate(frame);
+        desktop.keyboardMove().begin(frame, mode);
     }
 
     private static void withFrame(CommandContext context, java.util.function.Consumer<WindowFrame> action) {
