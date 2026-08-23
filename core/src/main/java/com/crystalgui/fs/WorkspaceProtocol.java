@@ -221,6 +221,9 @@ public final class WorkspaceProtocol {
     public static final String NAME = "name";
     public static final String ID = "id";
     public static final String DISPLAY_NAME = "displayName";
+
+    /** A project's source roots, as a list of entries each carrying one {@link #PATH}. @see SourceRoots */
+    public static final String SOURCE_ROOTS = "sourceRoots";
     public static final String DIRECTORY = "directory";
     public static final String SIZE = "size";
     public static final String MTIME = "mtime";

@@ -330,7 +330,12 @@ public final class WorkspaceClient<T> {
             List<ProjectInfo> out = new ArrayList<>();
             result.getList(WorkspaceProtocol.PROJECT_LIST, entry -> out.add(new ProjectInfo(
                     entry.getString(WorkspaceProtocol.ID, ""),
-                    entry.getString(WorkspaceProtocol.DISPLAY_NAME, ""))));
+                    entry.getString(WorkspaceProtocol.DISPLAY_NAME, ""),
+                    // ABSENT MEANS THE CONVENTION, not "no roots" -- an older server that does not send
+                    // the field describes an ordinary project, and reading it as rootless would silently
+                    // switch every file back to declaration-derived packages.
+                    entry.getList(WorkspaceProtocol.SOURCE_ROOTS,
+                            root -> root.getString(WorkspaceProtocol.PATH, "")))));
             onResult.accept(out);
         }, onError);
     }
