@@ -575,4 +575,55 @@ public class JsProjectImportTest {
 
         assertEquals(List.of("helped", "WORLD"), List.copyOf(Sink.WRITTEN));
     }
+
+    /**
+     * <b>A cycle terminates under IMPLICIT exports too — which is now the default.</b>
+     *
+     * <p>{@code aCycleBetweenTwoModulesTerminates} was written when every module said {@code exports.x =}
+     * out loud, and that is a different path: an explicit export lands on the exports object <em>as the
+     * module evaluates</em>, so a cyclic importer holding that object watches it fill up. Implicit exports
+     * are copied across by {@code copyTopLevelNames} <b>after</b> evaluation finishes, so for the whole of
+     * the cycle the object is empty rather than partly filled.</p>
+     *
+     * <p>It still works, and for the reason the guard exists at all: what is handed over is the same
+     * OBJECT, so a name read after both modules have finished is there. Node's caveat is ours, one step
+     * sharper — reading a cyclic import at a module's top level sees nothing, and reading it from a
+     * function called later sees everything.</p>
+     */
+    @Test
+    public void aCycleTerminatesUnderImplicitExportsToo() throws Throwable {
+        workspace.edit("util.A",
+                "import util.B;\n"
+                + "var name = 'A';\n"
+                + "function viaB() { return B.name; }\n");
+        workspace.edit("util.B",
+                "import util.A;\n"
+                + "var name = 'B';\n"
+                + "var sawDuringLoad = typeof A.name;\n");
+
+        run("import util.A;\nimport util.B;\n"
+                + SINK + ".write(A.name + '/' + A.viaB() + '/' + B.sawDuringLoad);\n");
+
+        // A/B because the object filled in before either name was read; `undefined` because B looked at
+        // A at its own top level, which is the one moment there is nothing there yet.
+        assertEquals(List.of("A/B/undefined"), List.copyOf(Sink.WRITTEN));
+    }
+
+    /**
+     * <b>A module that imports ITSELF terminates.</b>
+     *
+     * <p>Degenerate and worth a line: the cycle guard is a lookup in a map written before evaluation, so
+     * the self case is the two-module case with both halves the same entry. It costs nothing to pin and
+     * would otherwise be the shape that recurses — the entry is present, so nothing re-enters.</p>
+     */
+    @Test
+    public void aModuleThatImportsItselfTerminates() throws Throwable {
+        workspace.edit("util.Ouroboros",
+                "import util.Ouroboros;\n"
+                + "var name = 'self';\n");
+
+        run("import util.Ouroboros;\n" + SINK + ".write(Ouroboros.name);\n");
+
+        assertEquals(List.of("self"), List.copyOf(Sink.WRITTEN));
+    }
 }
