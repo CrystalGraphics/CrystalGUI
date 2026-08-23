@@ -430,6 +430,17 @@ public class WindowFrame extends UIElement implements Disposable {
             // the middle-button side.
             if (event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
             if (captionPressIsAControl(event.getTarget())) return;
+            // ON THE BAR, and this guard belongs HERE rather than inside beginMove.
+            //
+            // A synthesized activation press (Space/Enter on a focused element) carries the cursor's
+            // position, which may be nowhere near the bar — honouring one teleports the window. That is a
+            // statement about presses dispatched AT this element, which is what this listener receives.
+            //
+            // It sat in beginMove and silently disabled Alt-drag the moment that arrived: Alt-drag
+            // presses the CONTENT by definition, so "is the pointer on the caption" was false every time
+            // and the move was refused before anything could go wrong. Nothing failed; the gesture simply
+            // did nothing at all.
+            if (!titleBar.containsScreenPoint(event.getPosition().x(), event.getPosition().y())) return;
             beginMove(event.getPosition().x(), event.getPosition().y(), event.getDetail());
         }, false, true);
 
@@ -1924,9 +1935,6 @@ public class WindowFrame extends UIElement implements Disposable {
     private void beginMove(float pointerX, float pointerY, int detail) {
         UIWindow window = getAttachedWindow();
         if (window == null) return;
-        // A synthesized activation press (Space/Enter on a focused element) carries the cursor's position,
-        // which may be nowhere near the bar. Honouring one teleports the window.
-        if (!titleBar.containsScreenPoint(pointerX, pointerY)) return;
 
         // DOUBLE-CLICK TOGGLES, and starts no drag. Windows' gesture. Returning here matters: the second
         // press would otherwise begin a move as well, so the smallest tremor after a double-click would

@@ -1,5 +1,10 @@
 package com.crystalgui.ui.elements.desktop;
 
+import com.crystalgraphics.platform.input.CgModifiers;
+import com.crystalgraphics.platform.input.CgMouseCodes;
+import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgraphics.platform.service.CgInputService;
+import com.crystalgui.testsupport.TestPlatformService;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
@@ -154,6 +159,89 @@ public class WindowGesturesTest extends UiTestBase {
         Command fullscreen = CommandRegistry.global().get(WindowCommands.FULLSCREEN);
         assertNotNull(fullscreen);
         assertTrue("Full Screen lost its chord", fullscreen.bindings().contains("F11"));
+    }
+
+    // ── Alt-drag ────────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * <b>Holding the move modifier and pressing the window's CONTENT starts a move.</b>
+     *
+     * <p>The gesture shipped doing nothing, and the reason is worth keeping: {@code beginMove} carried a
+     * guard refusing any press that was not on the title bar. It was right where it was written — a
+     * synthesized Space/Enter press carries the cursor's position, which may be nowhere near the bar, and
+     * honouring one teleports the window — and it silently disabled Alt-drag the moment that arrived,
+     * because Alt-drag presses the content <em>by definition</em>. Nothing failed. The guard now lives on
+     * the caption listener, which is the path it is a statement about.</p>
+     *
+     * <p>Driven through {@code consumeMouseEvent} at a point inside the content, with the modifier
+     * reported by a stub: the listener is in the CAPTURE phase and reads the live modifier state, and a
+     * fixture that dispatched straight at an element would skip both.</p>
+     */
+    @Test
+    public void altDraggingTheContentStartsAMove() {
+        UIElement inside = new UIElement().layout(l -> l.width(120).height(60));
+        frame.content().addChild(inside);
+        settle();
+
+        withModifier(CgModifiers.ALT, () -> pressAt(inside));
+
+        assertTrue("Alt-dragging a window's content started no move",
+                window.getInputHandler().getDragController().isDragging());
+    }
+
+    /**
+     * <b>...and without the modifier the same press does nothing to the window.</b>
+     *
+     * <p>The counter-assertion that gives the one above meaning: a listener that ignored the modifier
+     * would make every press anywhere in any window start a drag, which is a far worse bug than the
+     * gesture not working.</p>
+     */
+    @Test
+    public void pressingTheContentWithoutTheModifierStartsNoMove() {
+        UIElement inside = new UIElement().layout(l -> l.width(120).height(60));
+        frame.content().addChild(inside);
+        settle();
+
+        pressAt(inside);
+
+        assertFalse("a plain press inside a window started a window move",
+                window.getInputHandler().getDragController().isDragging());
+    }
+
+    /**
+     * Runs {@code body} with {@code mask} reported as held.
+     *
+     * <p>Through the test platform's own input slot rather than a whole replacement service: the modifier
+     * is <b>polled</b>, not carried on the event — which is what lets the gesture survive a modifier
+     * pressed after the mouse went down, and what makes it untestable without a stub.</p>
+     */
+    private void withModifier(int mask, Runnable body) {
+        TestPlatformService.get().input(new CgInputService() {
+            @Override public int getCurrentModifiers() { return mask; }
+            @Override public int translateKeyboardCodes(int platformCode) { return platformCode; }
+            @Override public boolean isKeyDown(int localKeyCode) { return false; }
+            @Override public int translateMouseCodes(int platformCode) { return platformCode; }
+            @Override public boolean isMouseDown(int localMouseCode) { return false; }
+            @Override public int howManyMouseButtons() { return 3; }
+            @Override public String getClipboard() { return ""; }
+            @Override public void setClipboard(String text) { }
+        });
+        try {
+            body.run();
+        } finally {
+            TestPlatformService.get().input(TestPlatformService.STUB_INPUT);
+        }
+    }
+
+    private void pressAt(UIElement target) {
+        var box = target.getRuntimeCache();
+        window.getInputHandler().beginFrame();
+        window.getInputHandler().endFrame();
+        window.getInputHandler().consumeMouseEvent(new CgSystemInput.Mouse.Event(
+                Math.round((box.getX() + box.getWidth() / 2f) * 2f),
+                Math.round((box.getY() + box.getHeight() / 2f) * 2f),
+                0, 0, CgMouseCodes.LEFT_BUTTON, true, 0f, 0L));
+        settle();
     }
 
     // ── Snap ────────────────────────────────────────────────────────────────────────────────────
