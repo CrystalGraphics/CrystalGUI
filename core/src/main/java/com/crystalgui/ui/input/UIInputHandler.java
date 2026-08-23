@@ -11,6 +11,7 @@ import com.crystalgraphics.platform.input.CgSystemInput.Mouse;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgCursor;
+import com.crystalgui.ui.elements.Dialog;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.input.keymap.KeyEventType;
 import com.crystalgui.ui.input.keymap.KeyStroke;
@@ -402,6 +403,16 @@ public final class UIInputHandler implements CgSystemInput.Keyboard, CgSystemInp
             return true;
         }
 
+        // ...AND THE SAME RUNG FOR KEYBOARD MOVE/SIZE (W13c), for the identical reason: it is a mode with
+        // no element, so every key it needs would otherwise reach the focused one -- and a focused editor
+        // moves its caret with an arrow. Shift is the fine step, which is why the modifier is read here
+        // rather than inside the mode.
+        if (event.pressed()
+                && window.routeKeyToKeyboardMove(event.key(),
+                        CgModifiers.hasShift(CgPlatform.input().getCurrentModifiers()))) {
+            return true;
+        }
+
         // Then the close watcher. Deliberately AFTER the drag branch: a drag inside a menu must eat Escape
         // before the menu does, because it is the innermost live interaction — the ordering hazard flagged
         // when Dialog was researched.
@@ -683,6 +694,23 @@ public final class UIInputHandler implements CgSystemInput.Keyboard, CgSystemInp
         // document — it means inertness ATE the press. Treating the two the same drops the caret out of a
         // dialog's text field the moment you click its dim backdrop, which no dialog anywhere does.
         boolean absorbedByModal = targetElement == null && window.getActiveModal() != null;
+
+        // ...AND BEING BLOCKED IS SHOWN, never silent — W13c.
+        //
+        // A window that quietly ignores clicks is indistinguishable from one that has hung, which is
+        // window-scoped modality's whole failure mode. Windows pulses the dialog responsible and dings;
+        // so does this, and it is the first real consumer of CgPlatform.sound() — an SPI wired on every
+        // loader that nothing used.
+        //
+        // Asked at the POINTER rather than from `absorbedByModal` above, because that flag cannot tell
+        // which modal is responsible: with per-window modality a press on one window must pulse THAT
+        // window's dialog, not whichever is topmost somewhere else. It is also why this is not simply
+        // gated on the flag — a press on bare desktop while a modal is open sets it too.
+        if (absorbedByModal) {
+            var position = hoverFrameData.eventPosition();
+            UIElement blocking = window.modalBlockingAt(position.x(), position.y());
+            if (blocking instanceof Dialog dialog) dialog.pulse();
+        }
 
         // THE NEAREST FOCUSABLE ANCESTOR, not the exact element hit — the DOM's rule, which is why
         // clicking a <button>'s inner text focuses the button.
