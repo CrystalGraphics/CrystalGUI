@@ -654,6 +654,29 @@ window.__dock-window__ .__strip__ {
  *
  * ABSOLUTE, because it is promoted to the top layer and a promoted element's containing block is the
  * root. AnchoredPlacement owns its left/top; nothing else may write them. */
+/* ── Snap preview (W13b) ────────────────────────────────────────────────────────────────────────
+ * Where a drag-to-edge would put the window. Below every frame — it is placed on the window layer and
+ * every open window has raised itself above stack order 0 — so it reads as a hole in the desktop rather
+ * than as a sheet over the thing being dragged, which is what both Windows and GNOME draw.
+ *
+ * Its rect is written from Java at IMPORTANT; only the appearance is here. */
+.__snap-preview__ {
+    background-color: var(--snap-preview-bg, #3574F0);
+    opacity: 0.25;
+    border-width: 1px;
+    border-color: var(--snap-preview-border, #4A82F2);
+    border-radius: var(--radius-panel, 4px);
+}
+
+/* A fullscreen window has no border and no rounding: there is nothing beside it for either to separate
+ * it from, and a 1px rule down the edge of the screen reads as a rendering artefact. The taskbar's
+ * absence is not styled here — the strip is LAID OUT, so hiding it re-flows the work area and the
+ * window follows for free. */
+window.__fullscreen__ {
+    border-width: 0;
+    border-radius: 0;
+}
+
 /* A taskbar entry's jump list wears the hover preview's surface, because from the strip's point of view
  * they are the same object: a panel belonging to one entry, floating above it. Drawn as a bare menu it
  * read as a context menu that happened to be nearby — the same fill, border and radius is what makes the
