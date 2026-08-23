@@ -392,4 +392,60 @@ public class JsProjectImportTest {
                 + "    throw new Error('a .java file was bound as a module');\n"
                 + "}\n");
     }
+
+    // ── Exporting without saying so ────────────────────────────────────────────
+
+    /**
+     * <b>A module that says nothing exports its top-level declarations.</b>
+     *
+     * <p>The default, and it is the same argument that made the import statement ours rather than ES's:
+     * an author writing {@code import util.Greeter;} should not then have to write Node's
+     * {@code exports.greet = …} on the other side. A plain {@code function} is a declaration and reads
+     * like one.</p>
+     */
+    @Test
+    public void aModuleWithNoExportsOffersItsTopLevelDeclarations() throws Throwable {
+        workspace.edit("util.Plain",
+                "function hi() { return 'hi'; }\n"
+                + "var name = 'plain';\n");
+
+        run("import util.Plain;\n" + SINK + ".write(Plain.hi() + '/' + Plain.name);\n");
+
+        assertEquals(List.of("hi/plain"), List.copyOf(Sink.WRITTEN));
+    }
+
+    /**
+     * <b>...and a module that DOES say so is taken at its word.</b>
+     *
+     * <p>The reason the explicit form stays. With nothing else in a file to go on, "top-level" and
+     * "exported" are the same set — so assigning to {@code exports} is the only way to keep a helper
+     * private, and adding the top-level names on top would export exactly what the author was being
+     * explicit in order to hide.</p>
+     */
+    @Test
+    public void anExplicitExportKeepsTheRestPrivate() throws Throwable {
+        workspace.edit("util.Guarded",
+                "function secret() { return 'secret'; }\n"
+                + "exports.open = function () { return 'open'; };\n");
+
+        run("import util.Guarded;\n"
+                + SINK + ".write(typeof Guarded.secret);\n"
+                + SINK + ".write(Guarded.open());\n");
+
+        assertEquals(List.of("undefined", "open"), List.copyOf(Sink.WRITTEN));
+    }
+
+    /** <b>A module's own imports stay out of its exports</b> — they are bindings, not declarations. */
+    @Test
+    public void anImportedNameIsNotItselfExported() throws Throwable {
+        workspace.edit("util.Leaf", "function word() { return 'leaf'; }\n");
+        workspace.edit("util.Branch",
+                "import util.Leaf;\n"
+                + "function say() { return Leaf.word(); }\n");
+
+        run("import util.Branch;\n"
+                + SINK + ".write(Branch.say() + '/' + typeof Branch.Leaf);\n");
+
+        assertEquals(List.of("leaf/undefined"), List.copyOf(Sink.WRITTEN));
+    }
 }
