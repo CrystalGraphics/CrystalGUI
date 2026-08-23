@@ -1,8 +1,9 @@
 # Search Everywhere — Research, and What We Should Build
 
 **Milestone**: `plan_navigation.md` N1
-**Status**: G1 + G2 shipped — one merged Go to File over workspace **and** classpath, over a
-streaming source contract
+**Status**: **CLOSED.** G1 + G2 shipped — one merged Go to File over workspace **and** classpath, over
+a streaming source contract. **G3 and G4 are declined**, not pending: the user called the result
+"everything I wanted and more" and stopped here. See §10.
 
 > The request was "let's start with Go to File". The screenshots are **Search Everywhere** — Go to File
 > is one *tab* inside it. That distinction shapes everything below, because the popup is not a file
@@ -347,6 +348,29 @@ later without moving anything.
 **5. Yes, the location suffix ships in G1.** One regex and one `containsAnyChar` guard, ported from
 `AbstractGotoSEContributor` (§3), and `openResource(resource, onOpened)` already has the callback to
 reveal a position once the text has landed. It is what makes a pasted stack-trace line work.
+
+---
+
+## 10. Why this stops at G2
+
+G3 (tabs, a loadable "… more") and G4 (remembered geometry, a footer, a scope toggle) are **declined
+rather than deferred**, which is a different thing and worth writing down so a later reader does not
+treat them as a backlog.
+
+What shipped answers the question the plan opened with — *reach code you do not own* — and the two
+milestones left are both about a **fuller Search Everywhere**, not about reaching anything new. Tabs
+partition a list that is already partitioned and already capped; a footer restates the path the row
+already shows; remembered geometry is a preference store for a popup that reopens centred at the size you
+left it.
+
+Two pieces of G3/G4 landed early because they were load-bearing rather than polish, and their absence
+would have been felt: **drag and resize** came in G1 (a popup with no chrome has nowhere to grab), and
+**per-group caps** came in G2 (one shared cap is spent on files before a type is ever offered). What is
+left is the part that is genuinely optional.
+
+The one thing here a future reader might legitimately want is `... more` as a **loadable row**: G2's
+header count says there is more and offers no way to reach it. Narrowing the query is the answer today,
+and it is the answer both references expect too — but if this is ever reopened, that is the row to build.
 
 ---
 
