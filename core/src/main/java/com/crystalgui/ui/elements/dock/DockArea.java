@@ -914,10 +914,11 @@ public class DockArea extends UIElement implements UIFrameTicker {
      * uses, so the source collapses exactly as it would have if the panel had landed in another dock.
      * Anything else leaves the tab in two places at once.</p>
      *
-     * <p>Positioned at the pointer, in the DESKTOP's local space. A drag callback's coordinates are
-     * already local to its source — the tab — which is a box a few dozen pixels wide somewhere in a tab
-     * strip, so using them directly puts the window at the top-left corner of the screen. The pointer
-     * position is raw surface pixels and has to be converted once, against the root.</p>
+     * <p>Positioned at the pointer, in the DESKTOP's local space, and taken from the RAW pointer rather
+     * than from the drag callback. A callback's coordinates have already been converted out of surface
+     * pixels — against the drag source, which is a tab — so they are in the source's local space, and
+     * that is not the space a window's insets are written in. The raw position is converted once, here,
+     * against the root.</p>
      */
     private void tearOutToWindow(DockDragPayload payload, float mx, float my) {
         UIWindow window = getAttachedWindow();

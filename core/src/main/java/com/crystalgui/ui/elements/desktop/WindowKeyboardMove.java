@@ -1,6 +1,8 @@
 package com.crystalgui.ui.elements.desktop;
 
+import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgraphics.platform.service.CgInputService;
 
 import javax.annotation.Nullable;
 
@@ -98,16 +100,10 @@ public final class WindowKeyboardMove {
                 finish();
                 return true;
             case CgKeyCodes.KEY_LEFT:
-                nudge(-step(fine), 0f);
-                return true;
             case CgKeyCodes.KEY_RIGHT:
-                nudge(step(fine), 0f);
-                return true;
             case CgKeyCodes.KEY_UP:
-                nudge(0f, -step(fine));
-                return true;
             case CgKeyCodes.KEY_DOWN:
-                nudge(0f, step(fine));
+                nudgeFrom(key, fine);
                 return true;
             default:
                 // ANYTHING ELSE COMMITS AND IS NOT EATEN. Windows ends the mode on the next unrelated
@@ -120,6 +116,45 @@ public final class WindowKeyboardMove {
 
     private static float step(boolean fine) {
         return fine ? FINE_STEP : STEP;
+    }
+
+    /**
+     * One arrow press, moving on <b>both</b> axes when both are held — the diagonal.
+     *
+     * <h3>The held arrows are POLLED; the event only says which one fired</h3>
+     *
+     * <p>A key event names one key, so switching on it can only ever move on one axis. That is not
+     * merely a missing diagonal: with two arrows down, a keyboard repeats <em>the last one pressed</em>
+     * and nothing else, so holding Left and then Up produced a stream of Up events and the window
+     * travelled straight upwards while two arrows were held. The gesture looked like it had forgotten
+     * the first key rather than like it had never asked.</p>
+     *
+     * <p>So it is asked, the same way the window switcher asks whether its modifier is still down: the
+     * live key state answers for keys nobody is sending events about. <b>The arriving key is counted
+     * whether or not the poll agrees</b> — the platform's key state and its event queue are updated
+     * independently, so a press can legitimately arrive a frame before {@code isKeyDown} reports it, and
+     * a single tap that polled as "nothing held" would move nothing at all.</p>
+     *
+     * <p>Opposite arrows cancel, which is what falls out of summing them and is also what a user holding
+     * both means. And a diagonal step is deliberately <b>not</b> normalised: these are discrete grid
+     * nudges, so scaling by {@code 1/√2} would land a window on fractional pixels to keep a speed that
+     * nothing about the gesture promises. Windows' own keyboard Move does not normalise either.</p>
+     */
+    private void nudgeFrom(int key, boolean fine) {
+        float step = step(fine);
+        float dx = 0f;
+        float dy = 0f;
+        if (key == CgKeyCodes.KEY_LEFT || held(CgKeyCodes.KEY_LEFT)) dx -= step;
+        if (key == CgKeyCodes.KEY_RIGHT || held(CgKeyCodes.KEY_RIGHT)) dx += step;
+        if (key == CgKeyCodes.KEY_UP || held(CgKeyCodes.KEY_UP)) dy -= step;
+        if (key == CgKeyCodes.KEY_DOWN || held(CgKeyCodes.KEY_DOWN)) dy += step;
+        nudge(dx, dy);
+    }
+
+    /** Whether {@code key} is down right now. False when no platform is registered. */
+    private static boolean held(int key) {
+        CgInputService input = CgPlatform.input();
+        return input != null && input.isKeyDown(key);
     }
 
     private void nudge(float dx, float dy) {

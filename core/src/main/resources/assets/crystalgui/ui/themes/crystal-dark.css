@@ -84,6 +84,21 @@ theme {
 
     --blackboard-drop-line: #44C0FF;
 
+    /* THE SNAP PREVIEW: a neutral translucent wash with a brighter edge — the region a drag is
+     * proposing, drawn over whatever is behind it.
+     *
+     * GREY rather than the accent, which is a correction. An accent-coloured sheet laid over a window
+     * reads as a tint being applied to that window rather than as a region being offered for it, and the
+     * dock's own drop highlight is not the precedent it looks like: that fills a small empty slot, where
+     * this covers live content. Windows, GNOME's tile preview and KWin's electric-border preview are all
+     * neutral.
+     *
+     * The border carries far more alpha than the fill (AA against 40) because the border is what makes
+     * the rect legible: a wash states the area and the edge states where it stops. Dimmed to match the
+     * fill it is just a slightly different wash, which is exactly what `opacity` on the element used to
+     * produce. */
+    --snap-preview-bg: #9AA0A640;
+    --snap-preview-border: #C8CDD2AA;
     --colorpicker-bg: #1E1E1EDD;
     --colorpicker-handle-shadow: #00000080;
 

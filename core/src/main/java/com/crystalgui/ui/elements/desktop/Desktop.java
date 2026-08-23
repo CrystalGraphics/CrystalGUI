@@ -8,6 +8,8 @@ import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.style.easing.Easing;
+import com.crystalgui.style.easing.ProgressFunctions;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.input.keymap.KeyChord;
@@ -568,33 +570,203 @@ public class Desktop extends UIElement implements DataProvider {
     private int moveModifier = CgModifiers.ALT;
 
     /**
-     * The translucent rectangle showing where a snap would land — W13b.
+     * Shows — or re-aims — the rect a window would land in, <b>animating between shapes</b>.
      *
-     * <p>Built once and hidden, never per drag: it lives on the window layer <b>below every frame</b>
-     * (stack order 0, and every open window has raised itself above that), so it reads as a hole in the
-     * desktop rather than as a sheet over the window being dragged — which is what both Windows and
-     * GNOME draw.</p>
+     * <h3>It morphs from the WINDOW, which is what makes it a proposal rather than a label</h3>
+     *
+     * <p>A preview that simply appeared at its destination states the answer; one that grows out of the
+     * window being dragged states the <em>change</em>, which is the question the user is actually asking.
+     * It also means both ends of every animation are a real place on screen, so nothing has to fade or
+     * pop: the first show morphs from the window's own rect, a change of zone morphs from wherever the
+     * preview currently is, and an animated hide morphs back to the window.</p>
+     *
+     * <p>Through {@link WindowGeometryAnimation} — the same driver a maximise uses — and not a CSS
+     * transition, for the reason the whole compositor follows: an animation is a <b>timeline</b>, and
+     * the cascade is for rest states. Layout rather than a transform costs nothing here that it costs a
+     * window, because this element has no content to reflow. It is an empty box.</p>
+     *
+     * <p><b>Called every frame of a drag while the pointer stays in one zone</b>, so it must be a no-op
+     * for an unchanged zone. Restarting the timeline per frame would ease from the live rect toward the
+     * same target for ever — approaching it and never arriving, which reads as a sluggish preview
+     * rather than as an animation being re-armed sixty times a second.</p>
      */
-    void showSnapPreview(SnapZones.Zone zone) {
+    void showSnapPreview(SnapZones.Zone zone, WindowFrame source) {
         var box = windows.getRuntimeCache();
         if (box.getWidth() <= 0f || box.getHeight() <= 0f) return;
-        float[] rect = SnapZones.rectFor(zone, box.getWidth(), box.getHeight());
+        if (snapShowing && zone == snapZone) return;
+
+        float[] to = SnapZones.rectFor(zone, box.getWidth(), box.getHeight());
+        float[] from = snapShowing ? livePreviewRect() : frameRect(source);
+
+        snapSource = source;
+        snapZone = zone;
+        snapShowing = true;
         windows.hostDecoration(snapPreview);
-        snapPreview.setDisplayed(true);
+        // ABSOLUTE at IMPORTANT and the RECT at inline, which is the split the animation needs: being
+        // out of flow is a structural fact about this element, while its geometry is what a timeline
+        // writes. Writing the rect at IMPORTANT too -- as this did -- puts it permanently above the
+        // animation's own slot, so every frame of every timeline would be overwritten by the last
+        // static value and nothing would ever move.
         StyleGroup.importantPipeline(snapPreview.getStyle().getLayoutGroup(),
-                l -> l.positionType(TaffyPosition.ABSOLUTE)
-                        .left(rect[0]).top(rect[1]).width(rect[2]).height(rect[3]));
+                l -> l.positionType(TaffyPosition.ABSOLUTE));
+        stackPreviewUnder(source);
+        snapPreview.setDisplayed(true);
+        animateSnapPreview(from, to, null);
     }
 
-    /** Takes the snap preview off screen. Safe to call when it was never shown. */
+    /**
+     * Puts the preview <b>above every other window and below the one being dragged</b>.
+     *
+     * <h3>A decoration with no z is a decoration at z = 0, which is behind everything</h3>
+     *
+     * <p>{@link #raise} gives every window a {@code z-index} from a counter that only ever goes up, so
+     * a window that has been clicked even once sits above a preview that was never given one. That was
+     * survivable while the preview was larger than the windows it was under — you saw it around them and
+     * it read as working. Put a window in the very half being previewed and the preview is <b>entirely
+     * behind it</b>: no highlight, no feedback, and the gesture reads as refusing an occupied zone.
+     * It is not refusing anything; the snap lands correctly, which is what made the report so specific.
+     * </p>
+     *
+     * <p><b>Below the dragged window, not above it.</b> Above is one line and looks fine until you watch
+     * it: the wash is drawn over the window in your hand, so the thing you are holding greys out and
+     * reads as disabled at the exact moment it is being acted on. Windows draws its preview behind the
+     * dragged window for the same reason.</p>
+     *
+     * <p>The preview takes the slot the dragged window currently holds and the window moves up one, so
+     * the two can never tie — {@code raiseCounter} hands out each value once, so nothing else is left at
+     * the value being vacated. (If that raise happens to trip {@code renormaliseStack}, the preview ends
+     * up above everything for that one drag, which is the mild version of the artefact and is not worth
+     * a second mechanism to avoid.)</p>
+     */
+    private void stackPreviewUnder(WindowFrame source) {
+        int previewZ = raiseCounter;
+        raise(source);
+        StyleGroup.importantPipeline(snapPreview.getStyle().getGeneralGroup(),
+                g -> g.zIndex(previewZ));
+    }
+
+    /**
+     * Takes the snap preview off screen, <b>contracting back into the window</b> it belongs to.
+     *
+     * <p>For a drag that wandered off the edge, or one abandoned with Escape — the cases where nothing
+     * replaces the preview, so it has to be seen to go somewhere. Safe to call when it was never shown.
+     * </p>
+     */
     void hideSnapPreview() {
+        if (!snapShowing) return;
+        snapShowing = false;
+        snapZone = null;
+        // NEVER null while showing: snapShowing is only set by showSnapPreview, which requires a source.
+        animateSnapPreview(livePreviewRect(), frameRect(snapSource), this::hideSnapPreviewNow);
+    }
+
+    /**
+     * Takes it off screen at once — for a snap that was <b>accepted</b>.
+     *
+     * <p>Not symmetrical with {@link #hideSnapPreview}, and deliberately: on release the window itself
+     * animates into the very rect the preview is occupying, so contracting the preview back to where the
+     * window <em>used</em> to be would play the gesture backwards beside the thing doing it forwards.
+     * The window is the animation once there is a window to watch.</p>
+     */
+    void hideSnapPreviewNow() {
+        cancelSnapMotion();
+        snapShowing = false;
+        snapZone = null;
+        snapSource = null;
         snapPreview.setDisplayed(false);
+    }
+
+    /** Replaces whatever was running, and settles synchronously when animations are off. */
+    private void animateSnapPreview(float[] from, float[] to, @Nullable Runnable then) {
+        cancelSnapMotion();
+        UIWindow window = getAttachedWindow();
+        // ANIMATIONS OFF MUST TURN OFF THE WAITING TOO, or `then` lands a frame late and a hide is
+        // asynchronous in a mode where nothing is animating. Same contract WindowAnimator states.
+        if (!WindowAnimator.isEnabled() || window == null) {
+            applySnapRect(to);
+            if (then != null) then.run();
+            return;
+        }
+        WindowGeometryAnimation motion = new WindowGeometryAnimation(
+                snapPreview, () -> snapPreview.getParent() != null,
+                from[0], from[1], from[2], from[3],
+                to[0], to[1], to[2], to[3],
+                true, true, SNAP_PREVIEW_NANOS, SNAP_PREVIEW_EASING,
+                () -> {
+                    snapMotion = null;
+                    if (then != null) then.run();
+                });
+        snapMotion = motion;
+        window.registerTicker(motion);
+    }
+
+    private void cancelSnapMotion() {
+        if (snapMotion != null) snapMotion.cancel();
+        snapMotion = null;
+    }
+
+    /** INLINE, which is the slot {@link WindowGeometryAnimation} writes — so the two never disagree. */
+    private void applySnapRect(float[] rect) {
+        StyleGroup.inlinePipeline(snapPreview.getStyle().getLayoutGroup(),
+                l -> l.left(rect[0]).top(rect[1]).width(rect[2]).height(rect[3]));
+    }
+
+    /** Where the preview is RIGHT NOW, in the work area's own coordinates. */
+    private float[] livePreviewRect() {
+        var area = windows.getRuntimeCache();
+        var box = snapPreview.getRuntimeCache();
+        return new float[] {box.getX() - area.getX(), box.getY() - area.getY(),
+                box.getWidth(), box.getHeight()};
+    }
+
+    /** A frame's rect in the same space — {@code left()}/{@code top()} are already work-area insets. */
+    private float[] frameRect(WindowFrame frame) {
+        var box = frame.getRuntimeCache();
+        return new float[] {frame.left(), frame.top(), box.getWidth(), box.getHeight()};
     }
 
     /** @see #showSnapPreview */
     public static final String SNAP_PREVIEW_CLASS = "__snap-preview__";
 
+    /**
+     * Short, because this is feedback and not a window.
+     *
+     * <p>The window timings do not transfer: a minimise is 400ms because the whole information content
+     * of a minimise is <em>where the window went</em>, and it has a screen to cross. A preview is
+     * answering a question the hand is still asking, so it has to keep up with the hand.</p>
+     */
+    private static final long SNAP_PREVIEW_NANOS = 150L * 1_000_000L;
+
+    /**
+     * {@code OUT_QUAD}, by the rule that what makes individual frames visible is <b>peak velocity</b>.
+     *
+     * <p>A preview crossing between halves travels a large part of the work area, and {@code OUT_EXPO}
+     * opens at nearly seven times its average speed — a quarter of the journey in the first frame. Expo
+     * is kept for things that only scale within their own box.</p>
+     */
+    private static final Easing SNAP_PREVIEW_EASING = ProgressFunctions.Premade.OUT_QUAD;
+
+    /**
+     * The translucent rectangle showing where a snap would land — W13b.
+     *
+     * <p>Built once and hidden, never per drag, so it costs a display-skip when nothing is being
+     * dragged. Its Z is assigned per show: see {@link #stackPreviewUnder}.</p>
+     */
     private final UIElement snapPreview = new UIElement();
+
+    /** Whether the preview is on screen or on its way off. @see #showSnapPreview */
+    private boolean snapShowing;
+
+    /** The zone currently being previewed — the guard against re-arming the timeline every frame. */
+    @Nullable
+    private SnapZones.Zone snapZone;
+
+    /** The window the preview morphs out of and back into. */
+    @Nullable
+    private WindowFrame snapSource;
+
+    @Nullable
+    private WindowMotion snapMotion;
 
     /**
      * Minimise everything, or put back exactly what was minimised — Windows' {@code Win+D}, W13c.
