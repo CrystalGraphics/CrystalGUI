@@ -7,7 +7,10 @@ import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
+import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.MenuId;
 import com.crystalgui.ui.elements.Button;
+import com.crystalgui.ui.elements.chrome.ContextMenu;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
@@ -86,6 +89,15 @@ public class Taskbar extends UIElement {
         entries = new UIElement();
         entries.addClass(ENTRIES_CLASS);
         addInternalChild(entries);
+
+        // THE STRIP'S OWN CONTEXT MENU -- Windows' home for Show Desktop, and W13c's answer to a command
+        // that was registered, enabled, working and findable by nobody: the palette was its only route.
+        //
+        // A right-click on an ENTRY never reaches here, because the entry's own handler consumes it and
+        // opens the jump list instead -- which is the distinction the two menus exist for. This one is
+        // about the SET of windows; that one names a window.
+        ContextMenu.attach(this, CommandRegistry.global(),
+                pressed -> ContextMenu.of(MenuId.TASKBAR_CONTEXT));
         // BOTH CHILDREN BEFORE ATTACH. Adding one later means inserting a Taffy node into a parent
         // whose children are mid-registration -- `Index (is 1) should be < child_count (0)` -- which is
         // exactly what building the previews lazily from createEntry did, since refresh() runs from

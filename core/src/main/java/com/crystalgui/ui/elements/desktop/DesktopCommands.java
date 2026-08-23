@@ -3,6 +3,7 @@ package com.crystalgui.ui.elements.desktop;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.MenuId;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 
@@ -67,9 +68,15 @@ public final class DesktopCommands {
                 .enabledWhen(DesktopCommands::hasSomethingToSwitchTo));
 
         // NO CHORD -- W13c. The plan says this "earns its keybind exactly when floats and torn-out
-        // editors multiply", and it is reachable from the palette meanwhile. Win+D is unavailable for
-        // the reason Alt+Tab is: Super belongs to the host, and a Minecraft client never sees it.
+        // editors multiply", and Win+D is unavailable for the reason Alt+Tab is: Super belongs to the
+        // host, and a Minecraft client never sees it.
+        //
+        // BUT NO CHORD IS NOT NO AFFORDANCE. It shipped reachable only from the command palette --
+        // registered, enabled, working, and findable by nobody, which was reported as the feature not
+        // existing. The taskbar's own context menu is where Windows puts it and where somebody looking
+        // for it would look.
         registry.register(Command.of(SHOW_DESKTOP, "Show Desktop")
+                .menu(MenuId.TASKBAR_CONTEXT, "1_desktop", 10)
                 .run(context -> {
                     Desktop desktop = desktopFor(context);
                     if (desktop != null) desktop.toggleShowDesktop();
