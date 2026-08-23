@@ -148,6 +148,24 @@ public class SourceRootsTest {
         assertEquals(SourceRoots.CONVENTION, new ProjectInfo("p", "P", List.of()).sourceRoots());
     }
 
+    /**
+     * <b>The harness fixture's own paths, pinned.</b>
+     *
+     * <p>These are the exact files {@code HarnessWorkspace} seeds for the cross-file demonstration, and
+     * the names asserted here are the ones their {@code package} declarations state. If the layout and
+     * this derivation ever disagree, the fixture stops resolving and reads as the FEATURE being broken
+     * rather than the fixture being misplaced — which is the worst way for a demonstration to fail.</p>
+     */
+    @Test
+    public void theHarnessCrossFileFixtureIsNamedAsItsPackagesDeclare() {
+        assertEquals("com.example.Main",
+                qualified("harness.scratch:src/main/java/com/example/Main.java", MAVEN));
+        assertEquals("com.example.util.Greeter",
+                qualified("harness.scratch:src/main/java/com/example/util/Greeter.java", MAVEN));
+        assertEquals("com.example.util.Formatter",
+                qualified("harness.scratch:src/main/java/com/example/util/Formatter.java", MAVEN));
+    }
+
     /** <b>...and one that does say something keeps it.</b> */
     @Test
     public void aDeclaredLayoutIsKept() {
