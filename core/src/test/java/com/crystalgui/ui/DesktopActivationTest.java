@@ -201,10 +201,20 @@ public class DesktopActivationTest extends UiTestBase {
     }
 
     /**
-     * <b>Dragging a window must not make it forget where the caret was.</b> A press on the title bar
-     * focuses the FRAME — {@code emitMouseDown} walks up to the nearest ancestor that focuses on click,
-     * and a title bar is not focusable — so a memory that recorded every focus event inside the frame
-     * would record the frame itself and lose the control the user had been using.
+     * <b>Dragging a window must not make it forget where the caret was.</b>
+     *
+     * <p>A press on the title bar focuses the FRAME — {@code emitMouseDown} walks up to the nearest
+     * ancestor that focuses on click, and a title bar is not focusable — so a memory that recorded every
+     * focus event inside the frame would record the frame itself and lose the control the user had been
+     * using. {@code onFocus} therefore refuses a target that <em>is</em> this frame.</p>
+     *
+     * <p><b>The press then hands focus straight back</b>, and this test used to assert the opposite. The
+     * press dispatch reaches {@code installActivation}, which activates the window, which restores its
+     * focus owner — and {@code restoreFocus} deliberately does not count the frame ITSELF as "focus is
+     * already inside this window", precisely because click-focus lands there before anything has been
+     * dispatched. Reading it as focused-inside is what left a floating tool window looking focused with
+     * its content cold. So the frame holding focus is a state that exists for the width of one dispatch,
+     * and asserting on it was asserting on the gap.</p>
      */
     @Test
     public void draggingTheTitleBarDoesNotClobberTheFocusMemory() {
@@ -216,11 +226,37 @@ public class DesktopActivationTest extends UiTestBase {
         input.requestFocus(remembered);
         pressTitleBarOf(first);
         settle();
-        assertSame("the press lands on the frame itself", first, input.getFocusedElement());
+        assertSame("the press left focus on the caption instead of handing it back",
+                remembered, input.getFocusedElement());
 
         desktop.activate(second);
         desktop.activate(first);
         assertSame("and the memory still points at the control", remembered, input.getFocusedElement());
+    }
+
+    /**
+     * The other half, and the one that gives the test above its meaning: a caption press <b>does</b>
+     * move focus into the window.
+     *
+     * <p>Without it, a build where the press moved no focus at all would satisfy the assertion above —
+     * focus would simply still be sitting where {@code requestFocus} put it, having never left.</p>
+     *
+     * <p>The window is opened with <b>no</b> focus owner of its own, so there is nothing remembered to
+     * restore and the delegate answers: {@code firstFocusableIn} the content, which is the button. That a
+     * window with a control in it never comes to rest holding focus <em>itself</em> is the point — the
+     * frame is where focus lands for the width of one dispatch and then moves on.</p>
+     */
+    @Test
+    public void aCaptionPressPutsFocusInsideTheWindow() {
+        build();
+        WindowFrame frame = open("One", 20, 20);
+        input.blurIfFocused(input.getFocusedElement());
+
+        pressTitleBarOf(frame);
+        settle();
+
+        assertSame("a caption press left focus on the frame rather than in the window",
+                buttonIn(frame), input.getFocusedElement());
     }
 
     // ── The desktop itself ──────────────────────────────────────────────────

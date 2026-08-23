@@ -8,8 +8,6 @@ import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Menu;
 import com.crystalgui.ui.elements.chrome.MenuBuilder;
 
-import javax.annotation.Nullable;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -131,7 +129,7 @@ public final class SystemMenu {
         // preview -- they occupy the same space above the same entry, so both at once puts the panel over
         // the menu that replaced it. Suppressed rather than dismissed once: the pointer never leaves the
         // entry, so the hover is still live and the delay would simply elapse again under the open menu.
-        Taskbar taskbar = taskbarOf(anchor);
+        Taskbar taskbar = Taskbar.of(anchor);
         if (taskbar != null) {
             taskbar.setPreviewsSuppressed(true);
             SUPPRESSED.put(frame, taskbar);
@@ -226,15 +224,6 @@ public final class SystemMenu {
 
         List<Menu> live = LIVE.remove(frame);
         if (live != null) MenuBuilder.discard(new ArrayList<>(live));
-    }
-
-    /** The strip {@code element} belongs to, walking out — null for anything that is not in one. */
-    @Nullable
-    private static Taskbar taskbarOf(UIElement element) {
-        for (UIElement walk = element; walk != null; walk = walk.getParent()) {
-            if (walk instanceof Taskbar strip) return strip;
-        }
-        return null;
     }
 
     /** Frame → the strip whose previews it silenced. @see #discardFor */

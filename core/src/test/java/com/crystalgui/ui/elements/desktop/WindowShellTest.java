@@ -1,6 +1,7 @@
 package com.crystalgui.ui.elements.desktop;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgraphics.platform.service.CgInputService;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
@@ -8,6 +9,7 @@ import com.crystalgui.core.command.MenuEntry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.command.MenuSection;
 import com.crystalgui.style.sheet.StyleSheet;
+import com.crystalgui.testsupport.TestPlatformService;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
@@ -290,6 +292,89 @@ public class WindowShellTest extends UiTestBase {
     public void keysPassThroughWhenNoModeIsRunning() {
         assertFalse(window.routeKeyToKeyboardMove(CgKeyCodes.KEY_LEFT, false));
         assertFalse(window.routeKeyToKeyboardMove(CgKeyCodes.KEY_ESCAPE, false));
+    }
+
+    /**
+     * <b>Two arrows held move the window diagonally.</b>
+     *
+     * <p>Driven the way a keyboard actually behaves rather than by sending two events: with two keys
+     * down a keyboard repeats <b>only the last one pressed</b>, so holding Left and then Up delivers a
+     * stream of Up and nothing at all about Left. A test that sent one of each would pass against the
+     * one-axis-per-event version this replaces — it would simply take two steps to arrive.</p>
+     */
+    @Test
+    public void holdingTwoArrowsMovesDiagonally() {
+        float startLeft = first.getWantedLeft();
+        float startTop = first.getWantedTop();
+        desktop().keyboardMove().begin(first, WindowKeyboardMove.Mode.MOVE);
+
+        withHeld(key -> key == CgKeyCodes.KEY_LEFT,
+                () -> window.routeKeyToKeyboardMove(CgKeyCodes.KEY_UP, false));
+        settle();
+
+        assertEquals("the HELD arrow moved nothing — only the event's own key was read",
+                startLeft - WindowKeyboardMove.STEP, first.getWantedLeft(), 0.01f);
+        assertEquals("the arriving arrow moved nothing",
+                startTop - WindowKeyboardMove.STEP, first.getWantedTop(), 0.01f);
+    }
+
+    /**
+     * <b>...and the SIZE mode is diagonal too</b>, since a corner resize is the one people reach for.
+     */
+    @Test
+    public void holdingTwoArrowsResizesOnBothAxes() {
+        float startWidth = first.recordedWidth();
+        float startHeight = first.recordedHeight();
+        desktop().keyboardMove().begin(first, WindowKeyboardMove.Mode.SIZE);
+
+        withHeld(key -> key == CgKeyCodes.KEY_RIGHT,
+                () -> window.routeKeyToKeyboardMove(CgKeyCodes.KEY_DOWN, false));
+        settle();
+
+        assertEquals(startWidth + WindowKeyboardMove.STEP, first.recordedWidth(), 0.01f);
+        assertEquals(startHeight + WindowKeyboardMove.STEP, first.recordedHeight(), 0.01f);
+    }
+
+    /**
+     * <b>Opposite arrows cancel</b> — the counter-assertion that gives the two above their meaning.
+     *
+     * <p>Without it, an implementation that simply moved on both axes whenever any arrow arrived would
+     * satisfy them. It is also what a user holding Left and Right means.</p>
+     */
+    @Test
+    public void oppositeArrowsCancel() {
+        float startLeft = first.getWantedLeft();
+        desktop().keyboardMove().begin(first, WindowKeyboardMove.Mode.MOVE);
+
+        withHeld(key -> key == CgKeyCodes.KEY_LEFT,
+                () -> window.routeKeyToKeyboardMove(CgKeyCodes.KEY_RIGHT, false));
+        settle();
+
+        assertEquals("two opposing arrows moved the window", startLeft, first.getWantedLeft(), 0.01f);
+    }
+
+    /**
+     * Runs {@code body} with {@code down} deciding which keys report as held.
+     *
+     * <p>Through the platform's input slot because the held arrows are <b>polled</b> — an event names
+     * one key, and the whole point is the keys nobody is sending events about.</p>
+     */
+    private void withHeld(java.util.function.IntPredicate down, Runnable body) {
+        TestPlatformService.get().input(new CgInputService() {
+            @Override public int getCurrentModifiers() { return 0; }
+            @Override public int translateKeyboardCodes(int platformCode) { return platformCode; }
+            @Override public boolean isKeyDown(int localKeyCode) { return down.test(localKeyCode); }
+            @Override public int translateMouseCodes(int platformCode) { return platformCode; }
+            @Override public boolean isMouseDown(int localMouseCode) { return false; }
+            @Override public int howManyMouseButtons() { return 3; }
+            @Override public String getClipboard() { return ""; }
+            @Override public void setClipboard(String text) { }
+        });
+        try {
+            body.run();
+        } finally {
+            TestPlatformService.get().input(TestPlatformService.STUB_INPUT);
+        }
     }
 
     /** Shift is the fine step — a window is placed by eye, so the coarse one is the common case. */

@@ -356,6 +356,28 @@ public class Taskbar extends UIElement {
         return previews.showingFrame();
     }
 
+    /**
+     * The strip {@code element} is in, or null — its nearest taskbar ancestor.
+     *
+     * <p>The same walk {@link WindowFrame#of} does, and here for the same reason: it is a question about
+     * a widget, so it belongs beside the widget rather than in whichever consumer needed it first. Both
+     * take the DOM chain, which for anything that can be <b>promoted</b> is the only chain that answers
+     * truthfully — promotion moves a Taffy node and never a DOM parent.</p>
+     *
+     * <p><b>It does not answer for a menu the strip opened</b>, which is the case worth stating because
+     * it looks like it should. A promoted popover's DOM parent is the overlay host and not the element
+     * it was invoked from, so walking out of a jump list reaches the root without ever meeting the
+     * taskbar — {@code SystemMenu} therefore remembers the strip it suppressed rather than re-deriving
+     * it on the way out.</p>
+     */
+    @Nullable
+    public static Taskbar of(@Nullable UIElement element) {
+        for (UIElement el = element; el != null; el = el.getParent()) {
+            if (el instanceof Taskbar) return (Taskbar) el;
+        }
+        return null;
+    }
+
     /** The entry for {@code frame}, or null. Exposed for tests and for a future context menu. */
     @Nullable
     public Button entryFor(WindowFrame frame) {

@@ -1,7 +1,5 @@
 package com.crystalgui.ui.elements.desktop;
 
-import com.crystalgraphics.platform.CgPlatform;
-import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.ui.elements.chrome.ContextMenu;
 import com.crystalgui.core.command.MenuId;
@@ -19,7 +17,6 @@ import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.Tooltip;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.input.FocusPolicy;
-import com.crystalgui.ui.input.UIDragController;
 import com.crystalgui.ui.input.UIInputHandler;
 import com.crystalgui.ui.tree.UITreeTraversal;
 import dev.vfyjxf.taffy.style.FlexDirection;
@@ -268,10 +265,6 @@ public class WindowFrame extends UIElement implements Disposable {
     /** Whether a position has been written at all — {@code Desktop} cascades the ones that have not. */
     private boolean placed;
 
-    /** Origin at the moment a move began. Accumulating from here rather than from the live box keeps a
-     * drag from compounding its own deltas — the same reason {@code UIResizer} snapshots its size. */
-    private float dragStartLeft, dragStartTop;
-
     /** Where focus was when this window last had it. @see #restoreFocus */
     @Nullable
     private UIElement lastFocused;
@@ -399,50 +392,12 @@ public class WindowFrame extends UIElement implements Disposable {
         addInternalChild(overlays);
         syncOverlaySlot();
 
-        // TARGET AND BUBBLE, with the controls filtered out by hand -- see captionPressIsAControl.
+        // THE POINTER MOVE GESTURES -- caption drag, Alt-drag, drag-to-edge snap. @see WindowMove
         //
-        // It was target-only, which is Dialog's spelling, and the reason was sound: the two booleans are
-        // ADDITIVE, so subscribing the bubble phase also hears every press on the close button, and a
-        // press there would start a window drag as well as closing the window.
-        //
-        // What that misses is that target-only can only ever hear presses on the BAR ITSELF, which works
-        // exactly as long as everything in the caption is unhittable. The frame's own title label is, so
-        // it held -- until a window ADOPTED somebody else's header into its caption (WindowChrome), and a
-        // panel's title is an ordinary hittable UIText. So a floating Notifications window could not be
-        // dragged by the word "Notifications", only by the gap beside it, which reads as the window
-        // being stuck rather than as the label being in the way.
-        //
-        // The frame cannot fix that by reaching into the adopted chrome and unhitting parts of it: it
-        // does not own that subtree, and setHitTest applies to a whole subtree, so it would take the
-        // header's own buttons out with the label.
-        titleBar.onMouseDown.attachListener((element, event) -> {
-            // THE LEFT BUTTON MOVES A WINDOW, and nothing else does.
-            //
-            // A drag ends when THE BUTTON THAT STARTED IT is released, and startDrag defaults to the
-            // left one -- so a right-press began a move registered against a button that was never
-            // going to come up, and the window then followed the cursor for ever with nothing held
-            // down. There is no way out of that state short of a left-click somewhere.
-            //
-            // The defect is older than the right-click that exposes it: this listener never checked a
-            // button. It was simply unreachable until W13a put the system menu on a caption
-            // right-click, because until then nobody had a reason to press anything but the left
-            // button on a title bar. The engine's own note on startDrag records the same hazard from
-            // the middle-button side.
-            if (event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
-            if (captionPressIsAControl(event.getTarget())) return;
-            // ON THE BAR, and this guard belongs HERE rather than inside beginMove.
-            //
-            // A synthesized activation press (Space/Enter on a focused element) carries the cursor's
-            // position, which may be nowhere near the bar — honouring one teleports the window. That is a
-            // statement about presses dispatched AT this element, which is what this listener receives.
-            //
-            // It sat in beginMove and silently disabled Alt-drag the moment that arrived: Alt-drag
-            // presses the CONTENT by definition, so "is the pointer on the caption" was false every time
-            // and the move was refused before anything could go wrong. Nothing failed; the gesture simply
-            // did nothing at all.
-            if (!titleBar.containsScreenPoint(event.getPosition().x(), event.getPosition().y())) return;
-            beginMove(event.getPosition().x(), event.getPosition().y(), event.getDetail());
-        }, false, true);
+        // Beside WindowKeyboardMove rather than inline, which is the asymmetry the split closes: the
+        // keyboard half has been its own class since it was written, and the pointer half is the one
+        // with two listeners, a live drag and the coordinate-space rules.
+        WindowMove.install(this);
 
         // THE SYSTEM MENU ON A RIGHT-CLICK -- W13a's second of three routes. Every desktop puts it here,
         // and it costs nothing to add because the rows are MenuId.WINDOW_SYSTEM's: this route differs
@@ -450,33 +405,6 @@ public class WindowFrame extends UIElement implements Disposable {
         // this frame through the title bar, so the menu is always about the window it was opened on.
         ContextMenu.attach(titleBar, CommandRegistry.global(),
                 pressed -> ContextMenu.of(MenuId.WINDOW_SYSTEM));
-
-        // ALT-DRAG: hold the desktop's move modifier and drag anywhere inside the window — W13b.
-        //
-        // The Linux WM staple, and the answer for a window whose title bar is tiny, covered by adopted
-        // chrome, or off the top of the work area entirely.
-        //
-        // CAPTURE PHASE, which is the whole of what makes "anywhere" true. The press has to be taken
-        // before it reaches whatever is under it — a button, an editor, a tree row — and a bubble-phase
-        // listener sees only what nothing else consumed. It also has to stopPropagation, or the window
-        // moves AND the thing beneath it is clicked.
-        //
-        // The modifier is read from the DESKTOP, never named here: Alt is contested territory in this
-        // application and a widget is the wrong place to decide. @see Desktop#moveModifier()
-        onMouseDown.attachListener((element, event) -> {
-            if (event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
-            Desktop desktop = desktop();
-            if (desktop == null) return;
-            int mask = desktop.moveModifier();
-            var input = CgPlatform.input();
-            if (mask == 0 || input == null) return;
-            if ((input.getCurrentModifiers() & mask) != mask) return;
-            event.stopPropagation();
-            // Raised first, because a press that never reaches the frame's own activation would
-            // otherwise move a window without bringing it forward.
-            desktop.activate(this);
-            beginMove(event.getPosition().x(), event.getPosition().y(), 1);
-        }, true, false);
 
         installActivation();
         // CLICK_NOT_TABBABLE is the web's tabindex="-1", and both halves are wanted. A frame must be able
@@ -1747,6 +1675,49 @@ public class WindowFrame extends UIElement implements Disposable {
     }
 
     /**
+     * Moves and sizes the window in one gesture, <b>animating the change</b> — the tiled counterpart of
+     * {@link #maximize()}.
+     *
+     * <h3>Why this exists beside {@code moveTo} + {@code resizeTo}, which are instant</h3>
+     *
+     * <p>Those two are how a caller <em>states</em> a geometry: a session restoring twelve windows, a
+     * keyboard nudge that has to keep up with key repeat, a drag writing the pointer's position every
+     * frame. None of them should animate, and a drag least of all — it is already a hand-driven
+     * animation.</p>
+     *
+     * <p>A snap is the opposite kind of event. The window jumps somewhere the hand did not put it, and
+     * it is the same jump a maximise makes — which has animated since W9. A half-snap that teleported
+     * while a corner-snap-to-maximise eased was the two halves of one gesture behaving differently, and
+     * the drag-to-edge preview morphing into place and then handing over to a window that simply
+     * appeared made it unmissable.</p>
+     *
+     * <p>Through the same {@link WindowGeometryAnimation} a maximise uses, so it animates <b>layout</b>
+     * rather than a transform: this changes the window's size, so its content reflows, and a transform
+     * would draw the destination's layout at the source's geometry. And it starts from
+     * {@link #left()}/{@link #top()} — where the window <em>is</em> — rather than the wanted position,
+     * for the same reason a drag does: a window held at the edge by the clamp would otherwise open its
+     * animation somewhere it has never been.</p>
+     *
+     * <p>Returns having already applied the rect when animations are off, so the disabled path stays
+     * synchronous for every caller.</p>
+     */
+    public WindowFrame snapTo(float left, float top, float width, float height) {
+        var box = getRuntimeCache();
+        if (animateGeometry(placedLeft, placedTop, box.getWidth(), box.getHeight(),
+                left, top, width, height, () -> applySnappedRect(left, top, width, height))) {
+            return this;
+        }
+        applySnappedRect(left, top, width, height);
+        return this;
+    }
+
+    /** The settle. Ordinary writes, so the window ends in the state any other caller would leave it. */
+    private void applySnappedRect(float left, float top, float width, float height) {
+        resizeTo(width, height);
+        moveTo(left, top);
+    }
+
+    /**
      * Whether an open/close/minimise/maximise animation is playing on this window right now.
      *
      * <p>The observable the animations otherwise have none of. They are driven on a per-frame ticker
@@ -1915,180 +1886,30 @@ public class WindowFrame extends UIElement implements Disposable {
     }
 
     /**
-     * Whether a press in the caption belongs to something in it rather than to the caption.
+     * The box this window is placed and clamped against — its containing block.
      *
-     * <p><b>Focusability is the test</b>, and it is not a proxy — it is the question. A control is a
-     * thing you can put the keyboard on: every button in the caption is focusable, and nothing that is
-     * merely being displayed there is. A window's title, an icon, an adopted panel header's label are
-     * all {@code FocusPolicy.NONE}, so they read as caption, which is what they look like.</p>
+     * <p>Package-private because {@code UIElement.resizeContainingBlock()} is {@code protected} and is
+     * declared in another package, so a collaborator here cannot ask for it directly. {@code
+     * CanvasOverlayMove} takes a supplier for exactly this reason and says so.</p>
      *
-     * <p>Walked up to the bar and no further, so the FRAME's own focusability — it is
-     * {@code CLICK_NOT_TABBABLE}, deliberately — cannot answer yes for every press in it.</p>
+     * <p>Not {@code desktop().windowLayer()}, which is the same element only for a top-level window: an
+     * OWNED frame's containing block is its owner's overlay slot, and clamping it against the layer
+     * would let it be dragged out of the window it belongs to.</p>
      */
-    private boolean captionPressIsAControl(@Nullable UIElement target) {
-        for (UIElement walk = target; walk != null && walk != titleBar; walk = walk.getParent()) {
-            if (walk.focusable()) return true;
-        }
-        return false;
-    }
-
-    private void beginMove(float pointerX, float pointerY, int detail) {
-        UIWindow window = getAttachedWindow();
-        if (window == null) return;
-
-        // DOUBLE-CLICK TOGGLES, and starts no drag. Windows' gesture. Returning here matters: the second
-        // press would otherwise begin a move as well, so the smallest tremor after a double-click would
-        // drag the window it had just restored.
-        if (detail >= 2) {
-            toggleMaximized();
-            return;
-        }
-
-        // FROM WHERE THE WINDOW IS, not from what was last asked for. A window currently held at the
-        // edge by the clamp has a wanted position further out; starting a drag from that would spend the
-        // difference before anything moved.
-        dragStartLeft = placedLeft;
-        dragStartTop = placedTop;
-
-        UIDragController drag = window.getInputHandler().getDragController();
-        // Positional drag, zero threshold: a window must track the very first pixel, and a title bar has
-        // no competing click interpretation to protect.
-        drag.startDrag(titleBar, pointerX, pointerY, new UIDragController.DragListener() {
-            @Override
-            public void onDragUpdate(float mouseX, float mouseY, float startX, float startY,
-                                     float deltaX, float deltaY) {
-                    placed = true;
-                    // A MAXIMISED WINDOW RESTORES ON THE FIRST MOVEMENT, never on the press.
-                    //
-                    // Windows' restore-drag, and the ordering is what makes it work rather than a
-                    // detail: restoring on the press means the FIRST press of a double-click restores
-                    // and the second re-maximises, so double-clicking a maximised caption appears to do
-                    // nothing at all. Click-and-hold on a maximised title bar does nothing there too --
-                    // it is the movement that tears the window loose.
-                    if (maximized) {
-                        if (deltaX == 0f && deltaY == 0f) return;
-                        restoreUnderPointer(mouseX, mouseY);
-                        // Re-baselined so the delta already spent is not applied a second time: from
-                        // here the drag continues from wherever the restore put the window.
-                        dragStartLeft = placedLeft - deltaX;
-                        dragStartTop = placedTop - deltaY;
-                        return;
-                    }
-                    applyPosition(dragStartLeft + deltaX, dragStartTop + deltaY);
-                    // SNAP IS DECIDED FROM THE POINTER, never from the window's own edge. Dragging a
-                    // wide window leftwards puts its edge at the boundary long before the hand gets
-                    // there, so an edge test snaps windows nobody was aiming at an edge with -- and a
-                    // narrow one could never reach a band at all. Every desktop reads the pointer.
-                    pendingSnap = snapZoneAt(mouseX, mouseY);
-                    Desktop desktop = desktop();
-                    if (desktop != null) {
-                        if (pendingSnap != null) desktop.showSnapPreview(pendingSnap);
-                        else desktop.hideSnapPreview();
-                    }
-            }
-
-            @Override
-            public void onDragEnd(float mouseX, float mouseY) {
-                commitSnap();
-            }
-
-            @Override
-            public void onDragCancel() {
-                // ESCAPE DURING A MOVE ABANDONS THE SNAP TOO. The preview is the only part of a
-                // cancelled drag that would otherwise stay on screen, with nothing left to take it down.
-                pendingSnap = null;
-                Desktop desktop = desktop();
-                if (desktop != null) desktop.hideSnapPreview();
-            }
-        });
+    @Nullable
+    UIElement workArea() {
+        return resizeContainingBlock();
     }
 
     /**
-     * The zone a drag is over, in the WORK AREA's space.
+     * Marks the window deliberately positioned, so {@link Desktop} stops cascading it.
      *
-     * <p>A drag callback's coordinates are already local to the drag source — the title bar — which is
-     * inside this frame, which is on the window layer. So they are converted out to the layer rather
-     * than used as they arrive: the caption's own origin moves with the window, so an unconverted test
-     * would answer about a band that travels with the thing being dragged.</p>
+     * <p>Separate from {@link #moveTo} for the one caller that has to claim the position before it has
+     * one: a drag on a MAXIMISED caption is a placement decision from its first callback, while the
+     * restore that gives the window a position does not happen until the pointer actually moves.</p>
      */
-    @Nullable
-    private SnapZones.Zone snapZoneAt(float mouseX, float mouseY) {
-        Desktop desktop = desktop();
-        if (desktop == null || isToolWindow()) return null;
-        var area = desktop.windowLayer().getRuntimeCache();
-        var bar = titleBar.getRuntimeCache();
-        // THROUGH THE LAYOUT BOXES, not the transform chain. Both are absolute layout coordinates, so
-        // bar-local + bar-origin - layer-origin is the conversion and it stays correct under uiScale;
-        // localToWorld is in SURFACE pixels with the root transform baked in, which is the documented
-        // way to place something neatly in the wrong spot.
-        return SnapZones.forPoint(bar.getX() + mouseX - area.getX(),
-                bar.getY() + mouseY - area.getY(), area.getWidth(), area.getHeight());
-    }
-
-    /** Applies whatever the drag was hovering when it ended. @see #snapZoneAt */
-    private void commitSnap() {
-        SnapZones.Zone zone = pendingSnap;
-        pendingSnap = null;
-        Desktop desktop = desktop();
-        if (desktop != null) desktop.hideSnapPreview();
-        if (zone == null || desktop == null) return;
-
-        if (zone == SnapZones.Zone.MAXIMIZE) {
-            // THROUGH maximize(), so the restore rect, the class, the glyph and the animation are all
-            // the ones a maximise already has. A snap that wrote the rect itself would be a second
-            // maximise that the restore button knew nothing about.
-            maximize();
-            return;
-        }
-        var box = desktop.windowLayer().getRuntimeCache();
-        if (box.getWidth() <= 0f || box.getHeight() <= 0f) return;
-        float[] rect = SnapZones.rectFor(zone, box.getWidth(), box.getHeight());
-        resizeTo(rect[2], rect[3]);
-        moveTo(rect[0], rect[1]);
-    }
-
-    /** The zone the live move drag is currently over. @see #snapZoneAt */
-    @Nullable
-    private SnapZones.Zone pendingSnap;
-
-    /**
-     * Restores a maximised window <b>around the pointer</b>, so a drag that begins on its caption
-     * carries on from where the hand already is.
-     *
-     * <p>The pointer keeps its fraction across the caption: grab a maximised window three-quarters of
-     * the way along its title bar and the restored window appears with the cursor three-quarters along
-     * <em>its</em> title bar. Keeping the left edge instead — the obvious alternative — makes a window
-     * grabbed on its right-hand side leap out from under the cursor, which is why no window manager
-     * does it that way. The vertical offset inside the caption is simply preserved, since the caption's
-     * height does not change.</p>
-     *
-     * <p>Measured before restoring and applied after, using the <em>recorded</em> restore width rather
-     * than a fresh measurement: layout has not run yet at this point, so the box still reports the
-     * maximised size.</p>
-     */
-    private void restoreUnderPointer(float pointerX, float pointerY) {
-        // ALREADY IN LAYOUT UNITS. UIDragController.tick runs screenToLocal against the drag SOURCE
-        // before it calls the listener -- that conversion is most of why the callback exists -- so a
-        // second one here halves the coordinate and the window comes back at about half the distance
-        // across the caption. The pointer position in a mouse-DOWN listener is the other way round:
-        // that one is raw, which is why the guard above uses containsScreenPoint.
-        float barWidth = titleBar.getRuntimeCache().getWidth();
-        float alongCaption = pointerX - titleBar.getRuntimeCache().getX();
-        float fraction = barWidth > 0f
-                ? Math.max(0f, Math.min(1f, alongCaption / barWidth))
-                : 0.5f;
-
-        UIElement area = resizeContainingBlock();
-        float areaX = area == null ? 0f : area.getRuntimeCache().getX();
-        float areaY = area == null ? 0f : area.getRuntimeCache().getY();
-        // The caption stays where it is vertically -- its height does not change, so preserving the
-        // frame's own top keeps the pointer at the same place down the bar.
-        float top = getRuntimeCache().getY() - areaY;
-
-        restore();
-
-        float width = restoreWidth > 0f ? restoreWidth : getRuntimeCache().getWidth();
-        applyPosition(pointerX - areaX - fraction * width, top);
+    void markPlaced() {
+        placed = true;
     }
 
     /** Records the intent, then writes it clamped. */

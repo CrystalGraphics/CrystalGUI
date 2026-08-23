@@ -660,11 +660,23 @@ window.__dock-window__ .__strip__ {
  * than as a sheet over the thing being dragged, which is what both Windows and GNOME draw.
  *
  * Its rect is written from Java at IMPORTANT; only the appearance is here. */
+/* THE TRANSPARENCY IS IN THE COLOURS, never in `opacity`, and both reasons are load-bearing.
+ *
+ * The visible one: `opacity` dims the whole element, its border included, so a border can never read as
+ * LIGHTER than the fill it surrounds — which is the whole shape of this affordance. A wash states the
+ * region and a brighter edge states where it ends, and the edge is what keeps the rect legible over
+ * whatever it happens to be covering. Dimmed with the fill it is just a slightly different wash.
+ *
+ * The other is cost: `opacity` puts an element through the layer-FBO pass, and this one is the size of
+ * the work area. A decoration shown for the length of a drag has no business allocating and compositing
+ * a full-screen framebuffer every frame in order to be see-through. Alpha in the fill is one quad.
+ *
+ * No transition here either — the geometry is a TIMELINE driven by WindowGeometryAnimation, which is the
+ * standing rule for anything the compositor animates: the cascade is for rest states. */
 .__snap-preview__ {
-    background-color: var(--snap-preview-bg, #3574F0);
-    opacity: 0.25;
+    background-color: var(--snap-preview-bg, #9AA0A640);
     border-width: 1px;
-    border-color: var(--snap-preview-border, #4A82F2);
+    border-color: var(--snap-preview-border, #C8CDD2AA);
     border-radius: var(--radius-panel, 4px);
 }
 

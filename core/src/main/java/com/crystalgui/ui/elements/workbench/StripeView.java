@@ -287,8 +287,9 @@ public class StripeView extends UIElement {
      * floated frame's {@code left}/{@code top} mean — it is parented into that window's overlay slot,
      * whose origin is the window's own. Two ways to get this wrong and both place the frame neatly
      * somewhere else: the pointer position is <em>raw surface pixels</em>, so using it directly is out
-     * by {@code uiScale}; and a drag callback's own coordinates are local to the drag SOURCE, which is
-     * the rail button — a box about 20px wide somewhere down the side of the workbench.</p>
+     * by {@code uiScale}; and a drag callback's own coordinates have already been converted against the
+     * drag SOURCE — the rail button — so they are in that element's local space rather than this one's.
+     * </p>
      *
      * <p>With no owning frame — a bare {@code UIWindow} with nothing open on its desktop — the float
      * becomes top-level and its insets are the desktop's, so the root is the right space. A legitimate

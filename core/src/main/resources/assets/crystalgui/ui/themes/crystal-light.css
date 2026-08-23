@@ -88,6 +88,16 @@ theme {
 
     --blackboard-drop-line: #3574F0;
 
+    /* THE SNAP PREVIEW, the light theme's answer. @see crystal-dark.css for what it is and why it is
+     * grey rather than the accent.
+     *
+     * The relationship is what carries over, not the colours: a neutral wash with an edge that has far
+     * more presence than the fill. Over a light desktop that means a DARKER grey than the dark theme's,
+     * because contrast is what makes a wash read as a wash rather than as a slight discolouration —
+     * lifting a light surface a little looks like a rendering artefact, while shading it reads as
+     * something laid over it. */
+    --snap-preview-bg: #5A5F6640;
+    --snap-preview-border: #3C4046AA;
     --colorpicker-bg: #FFFFFFEE;
     --colorpicker-handle-shadow: #00000040;
 
