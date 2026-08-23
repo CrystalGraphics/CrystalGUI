@@ -296,6 +296,22 @@ final class RhinoSemanticTokens {
         // A CONST IS NEVER REASSIGNED and never captured-in-the-interesting-sense: it cannot change, so
         // neither refinement says anything a reader did not already know from the colour.
         if (declared.kind == SymbolKind.CONSTANT) return base;
+
+        // A NAME AT THE TOP OF A FILE IS A GLOBAL, and drawing it as a local was the last place this
+        // engine still described JavaScript as if every `var` were the same thing.
+        //
+        // It is not a nicety: since M15 S6 a module's top-level declarations are what it EXPORTS, so this
+        // is the difference between "a scratch value in this function" and "part of this file's surface"
+        // -- and it is exactly the distinction Java draws by giving a field its own colour. `owner` is
+        // null only at file scope, which is the whole test; a `var` inside a function is hoisted to that
+        // function and reports it, so nothing below the top level is caught by this.
+        if (declared.owner == null && declared.kind == SymbolKind.LOCAL_VARIABLE) {
+            // THE REFINEMENTS STILL APPLY. A reassigned global is still worth marking, and the stem is
+            // kept so a scheme with nothing for `variable.global.reassigned` falls back to the global
+            // colour rather than to the local one.
+            if (declared.reassigned) return "variable.global.reassigned";
+            return atUse && declared.captured ? "variable.global.captured" : "variable.global";
+        }
         if (declared.reassigned) return base + ".reassigned";
         // THE STEM IS KEPT. This was a literal `"variable.captured"`, which silently retyped whatever it
         // described: a captured FUNCTION came out as a variable, losing both its kind and its colour.

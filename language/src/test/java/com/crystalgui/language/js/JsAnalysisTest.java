@@ -297,7 +297,25 @@ public class JsAnalysisTest {
     @Test
     public void aPropertyNameIsNeitherAReferenceNorUnresolved() {
         assertEquals(List.of(), capturesOf("var o = {k: 1}; var v = o.k;", "k"));
-        assertEquals(List.of("variable", "variable"), capturesOf("var o = {k: 1}; var v = o.k;", "o"));
+        // `variable.global` because `o` is declared at the TOP of the file. What this test is about is
+        // that `k` gets nothing and `o` gets something — see aTopLevelNameIsAGlobal for the colour.
+        assertEquals(List.of("variable.global", "variable.global"),
+                capturesOf("var o = {k: 1}; var v = o.k;", "o"));
+    }
+
+    /**
+     * <b>A name at the top of a file is a global; one inside a function is a local.</b>
+     *
+     * <p>Not a nicety. Since M15 S6 a module's top-level declarations are what it <em>exports</em>, so
+     * this is the difference between "a scratch value in this function" and "part of this file's
+     * surface" — the same distinction Java draws by giving a field its own colour, and the reason both
+     * halves are asserted together: a rule that promoted everything would be no rule at all.</p>
+     */
+    @Test
+    public void aTopLevelNameIsAGlobalAndOneInsideAFunctionIsNot() {
+        assertEquals(List.of("variable.global"), capturesOf("var atTheTop = 1;", "atTheTop"));
+        assertEquals(List.of("variable"),
+                capturesOf("function f() { var inside = 1; return inside; }", "inside").subList(0, 1));
     }
 
     /**
