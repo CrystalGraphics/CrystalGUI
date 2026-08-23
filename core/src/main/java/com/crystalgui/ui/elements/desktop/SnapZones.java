@@ -61,6 +61,12 @@ public final class SnapZones {
     @Nullable
     public static Zone forPoint(float pointerX, float pointerY, float areaWidth, float areaHeight) {
         if (areaWidth <= 0f || areaHeight <= 0f) return null;
+        // BOUNDED VERTICALLY AND NOT HORIZONTALLY, which is deliberate rather than an oversight.
+        //
+        // Past a side edge is still AT that edge -- a pointer dragged off the left of the work area is
+        // asking for the left half as plainly as one two pixels inside it. Past the bottom is different:
+        // that is the taskbar, and a drag over the strip is not a snap. The top is guarded for symmetry
+        // with it, though a caption cannot leave the top of the work area to reach it.
         if (pointerY < 0f || pointerY > areaHeight) return null;
         // TOP FIRST, so the corners belong to maximise rather than to a half. Dragging into the top-left
         // corner of the screen is how somebody maximises a window they are already moving leftwards, and

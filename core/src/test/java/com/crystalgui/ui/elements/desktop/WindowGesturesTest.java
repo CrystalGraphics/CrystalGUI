@@ -190,6 +190,30 @@ public class WindowGesturesTest extends UiTestBase {
     }
 
     /**
+     * <b>The modifier is a setting, and changing it changes the gesture.</b>
+     *
+     * <p>The plan asks for this chord to be keymap-resolved and it cannot be — a {@code KeyStroke} is a
+     * key plus modifiers, so there is no way to spell a modifier-only binding. {@code moveModifier} is
+     * the substance of that requirement instead: one place, changeable at runtime. <b>That claim needs a
+     * test or it is only a comment</b> — a setter nothing exercises is indistinguishable from a
+     * hardcoded constant with a public mutator in front of it.</p>
+     */
+    @Test
+    public void theMoveModifierIsRebindable() {
+        UIElement inside = new UIElement().layout(l -> l.width(120).height(60));
+        frame.content().addChild(inside);
+        settle();
+        window.desktop().setMoveModifier(CgModifiers.CTRL);
+
+        withModifier(CgModifiers.ALT, () -> pressAt(inside));
+        assertFalse("the old modifier still dragged after it was changed",
+                window.getInputHandler().getDragController().isDragging());
+
+        withModifier(CgModifiers.CTRL, () -> pressAt(inside));
+        assertTrue("the new modifier does not drag", window.getInputHandler().getDragController().isDragging());
+    }
+
+    /**
      * <b>...and without the modifier the same press does nothing to the window.</b>
      *
      * <p>The counter-assertion that gives the one above meaning: a listener that ignored the modifier

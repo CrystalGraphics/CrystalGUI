@@ -643,7 +643,7 @@ public class Desktop extends UIElement implements DataProvider {
         return keyboardMove;
     }
 
-    private final WindowKeyboardMove keyboardMove = new WindowKeyboardMove(this);
+    private final WindowKeyboardMove keyboardMove = new WindowKeyboardMove();
 
     void fullscreenChanged() {
         boolean anyFullscreen = false;

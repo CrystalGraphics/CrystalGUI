@@ -473,19 +473,27 @@ public class WindowCommandsTest extends UiTestBase {
 
         SystemMenu.showJumpList(first, entry);
         settle();
+
+        // THE FLAG, not "no panel appeared". TaskbarPreviews advances on System.nanoTime(), so a settle
+        // loop cannot reach its 500ms delay at all -- a test that hovers and waits sixty frames sees no
+        // preview whether or not anything is suppressing it, and passes against a build that suppresses
+        // nothing. It did: extracting the shared open sequence briefly moved the suppression BEFORE the
+        // discard that lifts it, and this test was green throughout.
+        assertTrue("the jump list did not silence the hover previews",
+                taskbar.previewsSuppressedForTesting());
         assertNull("the hover preview survived the menu that replaced it", taskbar.previewedWindow());
 
-        // A hover while the menu is open must not bring it back.
+        // A hover while the menu is open must not re-arm it.
         hoverEntry(entry);
-        for (int i = 0; i < 60; i++) settle();
-        assertNull("a preview reappeared over an open jump list", taskbar.previewedWindow());
+        settle();
+        assertTrue("hovering the entry re-armed previews under an open jump list",
+                taskbar.previewsSuppressedForTesting());
 
         SystemMenu.discardFor(first);
         settle();
         // ...and previews are not disabled for good once the menu has gone.
-        hoverEntry(entry);
-        assertTrue("closing the jump list left the strip unable to preview",
-                taskbar.previewsSuppressedForTesting() == false);
+        assertFalse("closing the jump list left the strip unable to preview",
+                taskbar.previewsSuppressedForTesting());
     }
 
     /**

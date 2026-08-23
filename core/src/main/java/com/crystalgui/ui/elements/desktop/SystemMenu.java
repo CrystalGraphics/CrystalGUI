@@ -3,15 +3,17 @@ package com.crystalgui.ui.elements.desktop;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.ui.AnchoredPlacement;
-
-import javax.annotation.Nullable;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Menu;
 import com.crystalgui.ui.elements.chrome.MenuBuilder;
 
+import javax.annotation.Nullable;
+
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.WeakHashMap;
 
 /**
  * Where a window's system menu is PUT — the two placements that are not a pointer (W13a).
@@ -80,15 +82,10 @@ public final class SystemMenu {
         UIWindow window = frame.getAttachedWindow();
         if (window == null) return;
 
-        discardFor(frame);
-
         // BUILT AGAINST THE FRAME, so every enabledWhen resolves to this window rather than to whatever
-        // happens to be focused. That matters most for the route that has no pointer: Alt+- with
-        // focus inside window A must not offer window B's rows.
-        Menu menu = MenuBuilder.build(MenuId.WINDOW_SYSTEM, CommandRegistry.global(), frame);
-        List<Menu> live = MenuBuilder.present(menu, frame, window);
-        LIVE.put(frame, live);
-        menu.onClosed.connect(() -> discardFor(frame));
+        // happens to be focused. That matters most for the route that has no pointer: Alt+- with focus
+        // inside window A must not offer window B's rows.
+        Menu menu = open(frame, frame, window);
 
         // UNDER the title bar, at its left edge -- Win32's placement, and the one that does not cover the
         // caption you just asked about. Read off the BAR's own measured box rather than the frame's
@@ -121,8 +118,15 @@ public final class SystemMenu {
         UIWindow window = frame.getAttachedWindow();
         if (window == null) return;
 
-        discardFor(frame);
+        // BUILT AGAINST THE ENTRY, whose DataProvider answers for the window it stands for -- which is
+        // how the same rows come out about a background window rather than the active one.
+        Menu menu = open(frame, anchor, window);
 
+        // SUPPRESSED AFTER THE OPEN, never before it. `open` discards whatever chain was already up, and
+        // discarding is what LIFTS a suppression -- so suppressing first and opening second silences the
+        // previews for exactly as long as it takes the next statement to undo it. Ordering, not logic:
+        // both halves were correct and the pair was not.
+        //
         // A PREVIEW AND A MENU ARE ALTERNATIVES. Windows shows one or the other and the menu cancels the
         // preview -- they occupy the same space above the same entry, so both at once puts the panel over
         // the menu that replaced it. Suppressed rather than dismissed once: the pointer never leaves the
@@ -132,8 +136,6 @@ public final class SystemMenu {
             taskbar.setPreviewsSuppressed(true);
             SUPPRESSED.put(frame, taskbar);
         }
-
-        Menu menu = MenuBuilder.build(MenuId.WINDOW_SYSTEM, CommandRegistry.global(), anchor);
         // THE SAME SURFACE THE HOVER PREVIEW WEARS. A jump list and a preview are the same object from
         // the strip's point of view -- a panel that belongs to one entry and floats above it -- so they
         // read as one thing only if they are drawn as one. A bare menu over the taskbar looked like a
@@ -144,9 +146,6 @@ public final class SystemMenu {
         // itself transitionable, so the engine eases toward it and the cleanup retargets it back:
         // nothing animates, and no test sees it.
         menu.addClass(RISING_CLASS);
-        List<Menu> live = MenuBuilder.present(menu, anchor, window);
-        LIVE.put(frame, live);
-        menu.onClosed.connect(() -> discardFor(frame));
 
         // ANCHORED TO THE ENTRY, not to the pointer -- showFor rather than showAt.
         //
@@ -195,6 +194,28 @@ public final class SystemMenu {
         });
     }
 
+    /**
+     * Builds, presents and registers one system menu — everything both routes do identically.
+     *
+     * <p>{@code source} is what the rows are resolved against and {@code frame} is what the chain is
+     * remembered under, and they are not always the same element: the keyboard route builds against the
+     * frame itself, while a taskbar entry answers for a window it is not inside. Splitting them here is
+     * what lets both routes share the rest.</p>
+     *
+     * <p>The previous chain is discarded first, which is a correctness requirement rather than tidiness:
+     * promotion reparents a popover's Taffy node to the root, so a leftover sibling is still a DOM child
+     * of its host but no longer one of its Taffy children — and the next insertion is computed against a
+     * child list that has quietly emptied. {@code ContextMenu.attach} records the same hazard, with the
+     * crash it produces.</p>
+     */
+    private static Menu open(WindowFrame frame, UIElement source, UIWindow window) {
+        discardFor(frame);
+        Menu menu = MenuBuilder.build(MenuId.WINDOW_SYSTEM, CommandRegistry.global(), source);
+        LIVE.put(frame, MenuBuilder.present(menu, source, window));
+        menu.onClosed.connect(() -> discardFor(frame));
+        return menu;
+    }
+
     /** Closes and drops {@code frame}'s menu chain, if it has one. */
     public static void discardFor(WindowFrame frame) {
         // PREVIEWS COME BACK, and the strip is REMEMBERED rather than found from the menu: a promoted
@@ -217,7 +238,7 @@ public final class SystemMenu {
     }
 
     /** Frame → the strip whose previews it silenced. @see #discardFor */
-    private static final java.util.Map<WindowFrame, Taskbar> SUPPRESSED = new java.util.WeakHashMap<>();
+    private static final Map<WindowFrame, Taskbar> SUPPRESSED = new WeakHashMap<>();
 
     /**
      * Frame → its live chain.
@@ -226,5 +247,5 @@ public final class SystemMenu {
      * whole content subtree and its documents reachable from a static map for the life of the process.
      * The same reason {@code StyleEngine} keeps its applied-slot record weakly.</p>
      */
-    private static final java.util.Map<WindowFrame, List<Menu>> LIVE = new java.util.WeakHashMap<>();
+    private static final Map<WindowFrame, List<Menu>> LIVE = new WeakHashMap<>();
 }
