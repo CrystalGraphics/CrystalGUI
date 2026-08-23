@@ -3,6 +3,8 @@ package com.crystalgui.ui.elements.desktop;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.ui.AnchoredPlacement;
+
+import javax.annotation.Nullable;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Menu;
@@ -50,6 +52,17 @@ public final class SystemMenu {
      * to one entry, floating above it — and they read as one idea only if they are drawn as one.</p>
      */
     public static final String JUMP_LIST_CLASS = "__jump-list__";
+
+    /**
+     * On a jump list for the one frame before it is placed — its <b>starting</b> values, not its resting
+     * ones.
+     *
+     * <p>The rise is a transition, so the resting value lives in the sheet and this class carries what it
+     * eases <em>from</em>. The other way round does not work: a one-frame write from Java is itself
+     * transitionable, so the engine eases toward it and the cleanup retargets it back — nothing animates,
+     * and nothing reports that nothing did.</p>
+     */
+    public static final String RISING_CLASS = "__rising__";
 
     private SystemMenu() {
     }
@@ -109,12 +122,28 @@ public final class SystemMenu {
         if (window == null) return;
 
         discardFor(frame);
+
+        // A PREVIEW AND A MENU ARE ALTERNATIVES. Windows shows one or the other and the menu cancels the
+        // preview -- they occupy the same space above the same entry, so both at once puts the panel over
+        // the menu that replaced it. Suppressed rather than dismissed once: the pointer never leaves the
+        // entry, so the hover is still live and the delay would simply elapse again under the open menu.
+        Taskbar taskbar = taskbarOf(anchor);
+        if (taskbar != null) {
+            taskbar.setPreviewsSuppressed(true);
+            SUPPRESSED.put(frame, taskbar);
+        }
+
         Menu menu = MenuBuilder.build(MenuId.WINDOW_SYSTEM, CommandRegistry.global(), anchor);
         // THE SAME SURFACE THE HOVER PREVIEW WEARS. A jump list and a preview are the same object from
         // the strip's point of view -- a panel that belongs to one entry and floats above it -- so they
         // read as one thing only if they are drawn as one. A bare menu over the taskbar looked like a
         // context menu that happened to be nearby.
         menu.addClass(JUMP_LIST_CLASS);
+        // ...AND IT RISES, like the preview it replaces. The resting values are in the sheet and the
+        // STARTING ones are the class -- never the other way round. A one-frame write from Java is
+        // itself transitionable, so the engine eases toward it and the cleanup retargets it back:
+        // nothing animates, and no test sees it.
+        menu.addClass(RISING_CLASS);
         List<Menu> live = MenuBuilder.present(menu, anchor, window);
         LIVE.put(frame, live);
         menu.onClosed.connect(() -> discardFor(frame));
@@ -158,15 +187,37 @@ public final class SystemMenu {
             // COMPUTED rather than read back: the y placement resolved to is in the promoted space this
             // is trying to avoid reading, and "above the anchor" is one subtraction.
             menu.moveTo(Math.max(0f, Math.min(centred, widest)), on.y() - box.getHeight() - GAP);
+            // DROPPED ONCE IT IS PLACED, which starts the rise. Doing it before the placement would
+            // animate from wherever the unmeasured first frame put it, which is a rise from the wrong
+            // place -- the panel would slide sideways as well as up.
+            menu.removeClass(RISING_CLASS);
             return false;
         });
     }
 
     /** Closes and drops {@code frame}'s menu chain, if it has one. */
     public static void discardFor(WindowFrame frame) {
+        // PREVIEWS COME BACK, and the strip is REMEMBERED rather than found from the menu: a promoted
+        // popover's parent is the overlay host, not the element it was opened from, so walking out of the
+        // menu never reaches the taskbar. That divergence is the whole reason promotion is documented.
+        Taskbar suppressed = SUPPRESSED.remove(frame);
+        if (suppressed != null) suppressed.setPreviewsSuppressed(false);
+
         List<Menu> live = LIVE.remove(frame);
         if (live != null) MenuBuilder.discard(new ArrayList<>(live));
     }
+
+    /** The strip {@code element} belongs to, walking out — null for anything that is not in one. */
+    @Nullable
+    private static Taskbar taskbarOf(UIElement element) {
+        for (UIElement walk = element; walk != null; walk = walk.getParent()) {
+            if (walk instanceof Taskbar strip) return strip;
+        }
+        return null;
+    }
+
+    /** Frame → the strip whose previews it silenced. @see #discardFor */
+    private static final java.util.Map<WindowFrame, Taskbar> SUPPRESSED = new java.util.WeakHashMap<>();
 
     /**
      * Frame → its live chain.

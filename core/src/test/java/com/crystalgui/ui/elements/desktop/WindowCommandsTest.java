@@ -23,6 +23,7 @@ import java.util.List;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
@@ -451,6 +452,49 @@ public class WindowCommandsTest extends UiTestBase {
         // Windows puts Tasks and Recent above Pin and Close.
         assertEquals("a contributed section did not come first",
                 "Reopen First", rowLabels(first).get(0));
+    }
+
+    /**
+     * <b>A preview and a jump list are alternatives — opening the menu cancels the preview.</b>
+     *
+     * <p>Windows shows one or the other. Both at once is not merely busy: they occupy the same space
+     * above the same entry, so the panel sits over the menu that was supposed to have replaced it.</p>
+     *
+     * <p>The first attempt relied on the preview's own mouse-down dismissal, which the jump list's
+     * handler silenced: {@code stopPropagation()} halts the remaining listeners <b>on the same element
+     * and phase</b>, and the jump list's was attached first. Suppression is also not a single dismissal
+     * — the pointer never leaves the entry, so the hover stays live and the delay would elapse again
+     * under the open menu.</p>
+     */
+    @Test
+    public void openingAJumpListCancelsThePreviewAndKeepsItAway() {
+        Taskbar taskbar = window.desktop().taskbar();
+        Button entry = taskbar.entryFor(first);
+
+        SystemMenu.showJumpList(first, entry);
+        settle();
+        assertNull("the hover preview survived the menu that replaced it", taskbar.previewedWindow());
+
+        // A hover while the menu is open must not bring it back.
+        hoverEntry(entry);
+        for (int i = 0; i < 60; i++) settle();
+        assertNull("a preview reappeared over an open jump list", taskbar.previewedWindow());
+
+        SystemMenu.discardFor(first);
+        settle();
+        // ...and previews are not disabled for good once the menu has gone.
+        hoverEntry(entry);
+        assertTrue("closing the jump list left the strip unable to preview",
+                taskbar.previewsSuppressedForTesting() == false);
+    }
+
+    private void hoverEntry(Button entry) {
+        var box = entry.getRuntimeCache();
+        window.getInputHandler().consumeMouseEvent(new CgSystemInput.Mouse.Event(
+                Math.round((box.getX() + box.getWidth() / 2f) * 2f),
+                Math.round((box.getY() + box.getHeight() / 2f) * 2f),
+                0, 0, 0, false, 0f, 0L));
+        settle();
     }
 
     /** Every row label the system menu would show for {@code frame}, in order. */
