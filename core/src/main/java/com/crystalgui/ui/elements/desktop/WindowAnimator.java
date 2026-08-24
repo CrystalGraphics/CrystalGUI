@@ -58,18 +58,34 @@ import javax.annotation.Nullable;
  */
 final class WindowAnimator {
 
-    // ── The motion spec, from gnome-shell/js/ui/windowManager.js ─────────────────────────────────
+    // ── The motion spec: gnome-shell/js/ui/windowManager.js, then TUNED BY EYE ───────────────────
+    //
+    // GNOME's own constants were ported verbatim because DWM publishes none of its numbers, which makes
+    // GNOME the only production window manager whose timings can honestly be cited. That argument
+    // settles where to START and not where to end up: GNOME is tuning a full-screen desktop on a
+    // compositor with motion blur, while these windows live INSIDE an application and are opened,
+    // minimised and closed far more often than a desktop's are. Once the frame pacing was fixed they
+    // read as sluggish, which is a judgement only watching them can make.
+    //
+    // The result is NOT a uniform scale, and the shape of what survived is the interesting part. An
+    // arrival and a departure came down hardest (150 -> 125), a minimise less (400 -> 350), and a shape
+    // change did not move at all -- it is the one gesture that REFLOWS rather than travelling, so its
+    // duration is paying for something the others are not. A uniform 75% was tried first and was wrong
+    // in exactly that place.
+    //
+    // The GNOME source value is kept on each line below, so the distance from the reference stays
+    // legible rather than being quietly forgotten.
 
-    /** {@code SHOW_WINDOW_ANIMATION_TIME} — a window arriving. */
-    private static final long SHOW_NANOS = 150L * 1_000_000L;
+    /** {@code SHOW_WINDOW_ANIMATION_TIME} (150ms) — a window arriving. */
+    private static final long SHOW_NANOS = 125L * 1_000_000L;
 
-    /** {@code DESTROY_WINDOW_ANIMATION_TIME} — a window closing. */
-    private static final long DESTROY_NANOS = 150L * 1_000_000L;
+    /** {@code DESTROY_WINDOW_ANIMATION_TIME} (150ms) — a window closing. */
+    private static final long DESTROY_NANOS = 125L * 1_000_000L;
 
-    /** {@code MINIMIZE_WINDOW_ANIMATION_TIME} — a window crossing the screen to the taskbar, and back. */
-    private static final long MINIMIZE_NANOS = 400L * 1_000_000L;
+    /** {@code MINIMIZE_WINDOW_ANIMATION_TIME} (400ms) — a window crossing the screen to the taskbar, and back. */
+    private static final long MINIMIZE_NANOS = 350L * 1_000_000L;
 
-    /** {@code WINDOW_ANIMATION_TIME} — a window changing SHAPE: maximise, restore-down. */
+    /** {@code WINDOW_ANIMATION_TIME} (250ms — unchanged) — a window changing SHAPE: maximise, restore-down. */
     private static final long SIZE_NANOS = 250L * 1_000_000L;
 
     /**
