@@ -1346,6 +1346,14 @@ public final class CgUiPaintContext {
      * straight-alpha one. Using the wrong material reproduces exactly the "AA edges look different once
      * they have been through a layer" symptom.</p>
      */
+    /**
+     * {@link #drawLayer(CgFrameBuffer, float, float, float, float)} at a given alpha.
+     *
+     * <p>A flat tint, and for a single texture that is exactly right: group opacity only needs a layer
+     * pass because a subtree's own overlapping content would be double-darkened by a per-draw multiply,
+     * and a photograph of that subtree has already resolved every overlap. So a surface can be faded for
+     * the cost of one quad — which is the whole point of animating one. @see UIElement#paintAsSurface</p>
+     */
     public void drawLayer(CgFrameBuffer fbo, float x, float y, float width, float height) {
         CgTexture2D colorTex = (CgTexture2D) fbo.getColorTexture(0);
         withMaterial(layerBlitMaterial, () -> {

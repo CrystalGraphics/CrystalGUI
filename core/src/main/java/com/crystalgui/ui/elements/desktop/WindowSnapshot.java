@@ -143,20 +143,34 @@ final class WindowSnapshot {
         // once per allocation -- a minimise, or a resize of a window that has been minimised before.
         if (fresh) {
             ctx.warmUpLayer(fbo);
-            renderInto(ctx, frame, box.getX(), box.getY());
+            renderInto(ctx, frame, box.getX(), box.getY(), scale);
         }
-        renderInto(ctx, frame, box.getX(), box.getY());
+        renderInto(ctx, frame, box.getX(), box.getY(), scale);
     }
 
     /** One pass of the window into {@link #fbo}. @see #capture */
-    private void renderInto(CgUiPaintContext ctx, WindowFrame frame, float originX, float originY) {
+    private void renderInto(CgUiPaintContext ctx, WindowFrame frame, float originX, float originY, float scale) {
         // THE SCISSOR IS SCREEN-SPACE and this target is not the screen. An enclosing clip -- the
         // desktop's, a scroller's -- would be applied in coordinates that mean nothing here, and would
         // cut the photograph along whatever line happened to be active.
         ctx.getScissorStack().clearScissorIfNeeded();
         ctx.beginLayerFbo(fbo);
         ctx.getPoseStack().pushPose();
-        // The window's own origin to zero, in LOGICAL units -- the pose applies the scale after this, so
+        // A PHOTOGRAPH IS TAKEN IN THE WINDOW'S RESTING FRAME OF REFERENCE, never in the animation's
+        // current one -- so the ambient pose is DISCARDED rather than built on.
+        //
+        // This runs from paintOverlay, which is inside the frame's own drawSubtree, and drawSubtree has
+        // already pushed the animation's transform. Building on that bakes the animation into the
+        // picture, which is then drawn under the same transform AGAIN. It is invisible for a minimise
+        // and a close, whose start transform is neutral, and it wrecks the two that start scaled: an
+        // open photographed a sliver, and a restore-from-minimise photographed a shrunken corner.
+        //
+        // setIdentity, then the ROOT scale alone -- which is uiScale, the one thing that genuinely
+        // belongs in the picture, since the FBO is sized in physical pixels. Same reasoning as
+        // blitLayer, which sets identity for the same reason.
+        ctx.getPoseStack().setIdentity();
+        ctx.getPoseStack().last().pose().scale(scale, scale, 1f);
+        // The window's own origin to zero, in LOGICAL units -- the scale above applies after this, so
         // translating here is in the same space the elements draw in.
         ctx.getPoseStack().last().pose().translate(-originX, -originY, 0f);
         try {

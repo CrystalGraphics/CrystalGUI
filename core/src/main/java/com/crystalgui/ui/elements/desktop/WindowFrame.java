@@ -10,8 +10,11 @@ import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.render.texture.CgUiSvg;
+import com.crystalgui.style.ElementStyle;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.UITransform;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.Tooltip;
@@ -243,12 +246,84 @@ public class WindowFrame extends UIElement implements Disposable {
      * what the subtree is actually about to be drawn with — {@code uiScale} times whatever any ancestor
      * has scaled. A snapshot allocated against the wrong one is blurry or four times too large.</p>
      */
+    /**
+     * While a surface animation is playing, draw the PHOTOGRAPH instead of the whole window.
+     *
+     * <h3>The cost this removes</h3>
+     *
+     * <p>An animating window has {@code opacity < 1}, and a group opacity makes {@code drawSubtree}
+     * isolate the subtree in a layer FBO — which re-renders <b>everything inside the window, every
+     * frame</b>. Measured in a client: a minimise of the editor dropped the render loop from a steady
+     * 120Hz to between 60 and, in the worst case seen, 9 — and because a window animation is ticked
+     * once per rendered frame, the animation's own smoothness collapsed with it. Reported as animations
+     * running at "10-20fps while the game holds 120", which is precisely backwards: the game was not
+     * holding 120 for those 400ms, and nothing else was slow enough to notice.</p>
+     *
+     * <p>So the window is photographed once when the animation starts and the picture is what moves and
+     * fades — {@code DWM}, {@code Quartz} and Mutter all animate a surface, and this file's own note on
+     * {@code WindowAnimation} already said a compositor animates the window's surface. It was animating
+     * the live tree.</p>
+     *
+     * <h3>Two guards, and both are load-bearing</h3>
+     *
+     * <p><b>Not while the capture is pending</b>: {@code paintOverlay} is where the photograph is taken,
+     * and returning early here would skip it — so the animation would run for ever on whatever stale
+     * picture a previous minimise had left, or on nothing at all.</p>
+     *
+     * <p><b>Only for a SURFACE animation</b>: a maximise animates layout, so its content genuinely
+     * reflows and a stretched photograph of the old layout is the artefact {@code WindowGeometryAnimation}
+     * exists to avoid.</p>
+     */
+
     @Override
     protected void paintOverlay(CgUiPaintContext ctx) {
         super.paintOverlay(ctx);
         if (!snapshotPending) return;
         snapshotPending = false;
-        snapshot.capture(ctx, this, ctx.getPoseStack().last().pose().m00());
+        UIWindow window = getAttachedWindow();
+        if (window == null) return;
+
+        // THE ROOT SCALE, never the live pose's. pose().m00() here is uiScale MULTIPLIED BY the
+        // animation's own scale, so an open -- which starts at a sliver -- sized its photograph to the
+        // sliver and then stretched it back over the whole window.
+        float uiScale = window.getRootTransform().m00();
+
+        // AND THE ANIMATION'S OPACITY IS SUPPRESSED FOR THE DURATION OF THE SHOT. The other half of the
+        // same rule: drawSubtree reads this element's opacity, so a photograph taken mid-fade is a faded
+        // photograph, which is then faded AGAIN every frame it is drawn. playOpen and the restore from a
+        // minimise both start at opacity 0, so the picture came out at about 6% and the window appeared
+        // to snap into existence at the end of the animation with nothing visible before it.
+        //
+        // A PHOTOGRAPH IS OF THE WINDOW AT REST, so the running animation's own transform and opacity
+        // are suppressed for the length of the shot -- and through the ANIMATION SLOT, because that is
+        // where WindowAnimation writes them. A StyleGroup write at the same origin is simply outranked
+        // by the slot and does nothing at all.
+        //
+        // Both halves were learned from the same photograph. drawSubtree reads this element's opacity,
+        // so one taken mid-fade is a faded picture that is then faded AGAIN wherever it is drawn; and
+        // clearing the ambient pose in renderInto is not enough, because the capture re-enters
+        // drawSubtree and the first thing drawSubtree does is push this element's own transform.
+        //
+        // Only a minimise photographs itself now, and it does so on a frame where both are already
+        // neutral -- so this guards a picture taken at any other moment rather than fixing a live bug.
+        ElementStyle style = getStyle();
+        boolean slotted = isAnimating();
+        Float animatedOpacity = slotted ? style.getComputed(StylePropertyRegistry.OPACITY) : null;
+        UITransform animatedTransform = slotted ? style.getComputed(StylePropertyRegistry.TRANSFORM) : null;
+        if (animatedOpacity != null) style.tickAnimationSlot(StylePropertyRegistry.OPACITY, 1f, 0);
+        if (animatedTransform != null) {
+            style.tickAnimationSlot(StylePropertyRegistry.TRANSFORM, UITransform.IDENTITY, 0);
+        }
+        try {
+            snapshot.capture(ctx, this, uiScale);
+        } finally {
+            if (animatedOpacity != null) {
+                style.tickAnimationSlot(StylePropertyRegistry.OPACITY, animatedOpacity, 0);
+            }
+            if (animatedTransform != null) {
+                style.tickAnimationSlot(StylePropertyRegistry.TRANSFORM, animatedTransform, 0);
+            }
+        }
     }
     private final UIElement captionChrome;
     private final UIElement overlays;
@@ -1853,6 +1928,69 @@ public class WindowFrame extends UIElement implements Disposable {
         animator.playOpen();
     }
 
+    // ── Last measured box ───────────────────────────────────────────────────────────────────────
+
+    private float lastBoxW, lastBoxH;
+
+
+    private void rememberBox() {
+        var box = getRuntimeCache();
+        if (box.getWidth() <= 0f || box.getHeight() <= 0f) return;
+        lastBoxW = box.getWidth();
+        lastBoxH = box.getHeight();
+    }
+
+    /**
+     * This frame's box, falling back to the last one that was actually measured.
+     *
+     * <p><b>A REATTACHED WINDOW HAS NO BOX YET, and a restore reads one in the same breath as the
+     * reattach.</b> {@code show(true)} calls {@code owner.reattach(this)} and then starts the restore
+     * animation immediately — deliberately, since an animation writes styles and a detached element
+     * matches no selector — but the reattach has only just registered a fresh Taffy node, whose layout
+     * does not run until the next {@code calculateLayout}. So the live box is 0x0 for exactly one frame.</p>
+     *
+     * <p>Everything downstream then failed quietly and in order: {@code toward} refuses a zero-sized
+     * self, so did the fallback, so {@code towardTaskbar} answered null and {@code playRestore} took its
+     * last resort and played the ENTRY animation instead — a window that had flown into the taskbar came
+     * back unfolding from its own centre. The minimise is immune because a window is fully laid out on
+     * the way out, which is what makes the pair look asymmetric rather than broken.</p>
+     *
+     * <p>Deferring the animation a frame is the other repair and is worse: frame one would then draw the
+     * window at rest, full size, which is the flash the "write the START value in the constructor" rule
+     * exists to prevent. The geometry is known — it simply is not in the live cache yet.</p>
+     */
+    /**
+     * <b>The POSITION is always live; only the SIZE is ever remembered.</b>
+     *
+     * <p>Measured, not assumed: a detached frame's runtime cache keeps its x/y and zeroes only its
+     * width and height. Falling back to a remembered POSITION was therefore both unnecessary and wrong,
+     * because {@code rememberBox} runs from {@code onLayoutChanged} <em>before</em> {@code applyPosition}
+     * corrects the window — so it records where the window was BEFORE the correction, and a window that
+     * moves once (cascaded, then moved to its persisted position) leaves a remembered position that never
+     * catches up. The probe caught it exactly: remembered {@code 871,435.5} against a live {@code 391,165.5}.</p>
+     *
+     * <p>A restore then aimed its flight from a point far up and to the left of the window, which reads as
+     * the window flying in from the left of the screen. <b>Only on the FIRST restore</b> — afterwards the
+     * window has been laid out where it really is, so the remembered value is finally correct, which is
+     * precisely how it was reported.</p>
+     */
+    float boxX() { return getRuntimeCache().getX(); }
+
+    /** @see #boxX() */
+    float boxY() { return getRuntimeCache().getY(); }
+
+    /** @see #boxX() */
+    float boxWidth() {
+        float live = getRuntimeCache().getWidth();
+        return live > 0f ? live : lastBoxW;
+    }
+
+    /** @see #boxX() */
+    float boxHeight() {
+        float live = getRuntimeCache().getHeight();
+        return live > 0f ? live : lastBoxH;
+    }
+
     /** Whether this frame has been given a position — by a caller, a drag, or the desktop's cascade. */
     public boolean isPlaced() {
         return placed;
@@ -1920,6 +2058,7 @@ public class WindowFrame extends UIElement implements Disposable {
     @Override
     protected void onLayoutChanged() {
         super.onLayoutChanged();
+        rememberBox();
         if (placed) {
             applyPosition(wantedLeft, wantedTop);
             return;

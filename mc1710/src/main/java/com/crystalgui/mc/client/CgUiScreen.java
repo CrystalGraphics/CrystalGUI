@@ -259,6 +259,24 @@ public final class CgUiScreen extends GuiScreen {
         // applying it to windows as they open, and writing it again when the screen closes; a host has no
         // business holding a second copy of that policy.
         uiWindow.desktop().persistTo(config, DESKTOP_ID);
+
+        // ATTACHED HERE, not left to the first frame -- a window opened before the tree HAS a UIWindow
+        // gets no animation at all.
+        //
+        // WindowAnimator.start() begins `UIWindow window = frame.getAttachedWindow(); if (window == null)
+        // return;`, which is right (an animation writes styles, and invalidateStyleMatch early-returns on
+        // a detached element) and is silent. initGui builds the desktop and opens the editor immediately,
+        // while the init below used to happen only in drawScreen -- so the FIRST window of every session
+        // opened with no timeline, and every later one animated correctly. Every launch is a fresh
+        // client, so the first open is exactly the one anybody testing this looks at: reported as the
+        // open animation being broken when there was no open animation to be broken.
+        //
+        // Calling it twice is free -- drawScreen calls it every frame anyway, which is how a resize is
+        // picked up -- and the display size is just as knowable here as it is there.
+        //
+        // Same trap AGENTS.md already records for a session restore that runs above uiWindow.init in the
+        // same method. It is the ATTACH that is the precondition, not the paint.
+        uiWindow.init(mc.displayWidth, mc.displayHeight);
         trace("UIWindow + stylesheets");
     }
 

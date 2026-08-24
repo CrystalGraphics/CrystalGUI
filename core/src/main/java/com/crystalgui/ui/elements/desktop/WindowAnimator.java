@@ -78,7 +78,20 @@ final class WindowAnimator {
      * <p>Its virtue is the snap: a window unfolding from a sliver wants to be most of the way there
      * before you have registered it starting.</p>
      */
-    private static final Easing ARRIVING = ProgressFunctions.Premade.OUT_EXPO;
+    /**
+     * An opening window's curve — {@link #MOVING}'s twin, and deliberately NOT expo.
+     *
+     * <p>It was OUT_EXPO, on the standing rule that expo is kept "only for an opening window, whose
+     * whole journey is a scale within its own box". That exemption assumed an open is a SMALL scale
+     * change. This one runs from {@link #SHOW_SCALE_X} — one percent — to full size, which is a
+     * hundredfold growth: it travels further than the minimise the rule was written to protect.</p>
+     *
+     * <p>Expo's velocity at t=0 is 6.93x its average, so over {@link #SHOW_NANOS} at 120Hz the window
+     * reached 33% of its growth in the FIRST frame, 55% by the second and 97% by the halfway point,
+     * leaving nine frames to cover the last three percent. Reported exactly as it behaves: "it feels
+     * like the animation is 2 frames, one intermediate and the other the final state".</p>
+     */
+    private static final Easing ARRIVING = ProgressFunctions.Premade.OUT_QUAD;
 
     /**
      * {@code EASE_OUT_QUAD} — a close, a size change, and (deviating from GNOME) a minimise.
@@ -257,12 +270,12 @@ final class WindowAnimator {
         // has nothing left to draw -- so a taskbar preview of a minimised one has to be a picture taken
         // while it was still whole. Requested here, taken on the next paint, which is still frame one of
         // the animation and therefore still an untransformed, fully opaque window.
-        frame.requestSnapshot();
         UITransform into = towardTaskbar();
         if (into == null) {
             playClose(then);
             return;
         }
+        frame.requestSnapshot();
         start(NEUTRAL_MAPPING, into, 1f, 0f, CORNER, CORNER, MINIMIZE_NANOS, MOVING, then);
     }
 
@@ -291,6 +304,7 @@ final class WindowAnimator {
      * is all that is left.</p>
      */
     @Nullable
+
     private UITransform towardTaskbar() {
         UIElement entry = taskbarEntry();
         UITransform viaEntry = entry == null ? null : toward(entry);
@@ -304,12 +318,13 @@ final class WindowAnimator {
         if (desktop == null) return null;
         var area = desktop.windowLayer().getRuntimeCache();
         if (area.getWidth() <= 0f || area.getHeight() <= 0f) return null;
-        var self = frame.getRuntimeCache();
-        if (self.getWidth() <= 0f || self.getHeight() <= 0f) return null;
+        // THE REMEMBERED BOX, not the live one -- a restore asks this a frame before its reattached
+        // node has been laid out. @see WindowFrame#boxX()
+        if (frame.boxWidth() <= 0f || frame.boxHeight() <= 0f) return null;
         return UITransform.of(
                 UITransform.Op.translate(
-                        LengthPercent.px(area.getX() + area.getWidth() / 2f - self.getX()),
-                        LengthPercent.px(area.getY() + area.getHeight() - self.getY())),
+                        LengthPercent.px(area.getX() + area.getWidth() / 2f - frame.boxX()),
+                        LengthPercent.px(area.getY() + area.getHeight() - frame.boxY())),
                 UITransform.Op.scale(MINIMIZE_FALLBACK_SCALE, MINIMIZE_FALLBACK_SCALE));
     }
 
@@ -324,14 +339,16 @@ final class WindowAnimator {
     private UITransform toward(@Nullable UIElement target) {
         if (target == null) return null;
         var to = target.getRuntimeCache();
-        var self = frame.getRuntimeCache();
-        if (self.getWidth() <= 0f || self.getHeight() <= 0f) return null;
+        // THE REMEMBERED BOX. @see WindowFrame#boxX()
+        float selfW = frame.boxWidth();
+        float selfH = frame.boxHeight();
+        if (selfW <= 0f || selfH <= 0f) return null;
         if (to.getWidth() <= 0f || to.getHeight() <= 0f) return null;
         return UITransform.of(
                 UITransform.Op.translate(
-                        LengthPercent.px(to.getX() - self.getX()),
-                        LengthPercent.px(to.getY() - self.getY())),
-                UITransform.Op.scale(to.getWidth() / self.getWidth(), to.getHeight() / self.getHeight()));
+                        LengthPercent.px(to.getX() - frame.boxX()),
+                        LengthPercent.px(to.getY() - frame.boxY())),
+                UITransform.Op.scale(to.getWidth() / selfW, to.getHeight() / selfH));
     }
 
     /**
@@ -385,6 +402,8 @@ final class WindowAnimator {
         if (window == null) return false;
 
         cancelCurrent();
+        // NOT a surface animation: a size change REFLOWS the content, so a photograph of the old layout
+        // stretched to the new box is exactly the artefact this driver exists to avoid.
         WindowGeometryAnimation animation = new WindowGeometryAnimation(frame, this::frameIsLive,
                 fromLeft, fromTop, fromWidth, fromHeight, toLeft, toTop, toWidth, toHeight,
                 true, true, SIZE_NANOS, MOVING, () -> {
@@ -413,6 +432,19 @@ final class WindowAnimator {
             if (then != null) then.run();
             return;
         }
+        // A WINDOW ANIMATES ITS LIVE CONTENTS, NOT A PHOTOGRAPH OF THEM -- measured, not assumed.
+        //
+        // Drawing a snapshot for the animation's duration is what a real compositor does, and it was
+        // tried here to stop a fade re-rendering the whole window every frame. It bought NOTHING: the
+        // same minimise measures 49 ticks at a mean 8ms gap either way, because the choppiness it was
+        // meant to cure was never the layer FBO -- it was the clock, stamped at construction, advanced
+        // on wall time and charged for stalled frames nobody ever saw. With that fixed the live path is
+        // exactly as smooth, and the photograph was pure cost: it drew a visibly different window for
+        // the length of every gesture, having produced a whitened one, a blank one and an invisible one
+        // on the way there.
+        //
+        // WindowSnapshot itself stays -- a MINIMISED window is detached and has nothing left to draw, so
+        // its taskbar preview genuinely needs a picture taken while it was still whole. @see #playMinimize
         WindowAnimation animation = new WindowAnimation(frame, this::frameIsLive,
                 from, to, fromOpacity, toOpacity,
                 originX, originY, durationNanos, easing, () -> {

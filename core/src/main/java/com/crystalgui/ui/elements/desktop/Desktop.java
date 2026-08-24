@@ -1296,7 +1296,26 @@ public class Desktop extends UIElement implements DataProvider {
         @Override
         protected void onLayoutChanged() {
             super.onLayoutChanged();
-            for (int i = 0; i < frames.size(); i++) frames.get(i).reclamp();
+            for (int i = 0; i < frames.size(); i++) {
+                WindowFrame frame = frames.get(i);
+                // AN UNPLACED WINDOW IS PLACED HERE, because THIS is the moment it becomes possible.
+                //
+                // placeByCascade needs the work area AND the frame measured, and on the pass that first
+                // puts a window on an empty desktop neither is: the compositor deliberately takes up no
+                // space until a window exists, so the layer is 0x0 when the frame's own onLayoutChanged
+                // asks. It returns without placing and without marking the frame placed -- correct, and
+                // it leaves nobody to try again, because growing the work area does not resize a frame
+                // that has a width and a height of its own, so the frame's callback never fires a second
+                // time.
+                //
+                // The window is therefore DRAWN at its unplaced position -- hard against the left of the
+                // work area -- for as long as that lasts, and lands at its cascade offset whenever
+                // something else finally dirties layout. During an entry animation that reads as the
+                // window flying in from the left of the screen, and only ever on a window's FIRST open,
+                // which is exactly how it was reported.
+                if (frame.isPlaced()) frame.reclamp();
+                else placeByCascade(frame);
+            }
         }
     }
 }

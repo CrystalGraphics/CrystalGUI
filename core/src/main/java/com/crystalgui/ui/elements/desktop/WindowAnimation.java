@@ -71,8 +71,35 @@ final class WindowAnimation implements WindowMotion {
      */
     private final BooleanSupplier alive;
 
-    private final ActiveTransition<UITransform> transform;
-    private final ActiveTransition<Float> opacity;
+    private ActiveTransition<UITransform> transform;
+    private ActiveTransition<Float> opacity;
+
+    /** @see #tickFrame — the clock is rebased on the first advance, the value is not. */
+    private final UITransform from;
+    private final UITransform to;
+    private final float fromOpacity;
+    private final float toOpacity;
+    private final long durationNanos;
+    private final Easing easing;
+    private boolean clockStarted;
+    private long virtualNow;
+    private long lastRealNow;
+
+    /**
+     * The most an animation may be advanced by a single frame — three frames at 60Hz.
+     *
+     * <p>Long enough that ordinary jitter passes through untouched, short enough that one stalled frame
+     * cannot swallow a whole gesture.</p>
+     */
+    private static final long MAX_STEP_NANOS = 50L * 1_000_000L;
+
+    /** A gap longer than this is a stall, not a frame — nothing was presented across it. */
+    private static final long STALL_NANOS = 100L * 1_000_000L;
+
+    /** How long an animation will wait for the loop to settle before playing regardless. */
+    private static final int MAX_STALLED_TICKS = 60;
+
+    private int stalledTicks;
     @Nullable
     private final Runnable onDone;
     private boolean over;
@@ -90,11 +117,30 @@ final class WindowAnimation implements WindowMotion {
         this.target = target;
         this.alive = alive;
         this.onDone = onDone;
-        long now = System.nanoTime();
+        // THE VALUE STARTS HERE; THE CLOCK STARTS ON THE FIRST TICK. Both halves are load-bearing and
+        // they pull in opposite directions.
+        //
+        // Stamping the clock here too assumes construction and the first frame are adjacent, which is
+        // true for every gesture made WITH the game running and false for the one that matters most: a
+        // host builds its screen and opens its first window outside the frame loop, and the editor is
+        // then constructed, the workspace connected and shaders compiled before a frame is ever drawn.
+        // By the first tick the whole 150ms had elapsed, so the animation completed on that tick having
+        // rendered NOTHING -- `ticks=0 over 0ms` in the probe, and "it just opens instantly" on screen.
+        // Every later gesture was fine, so it read as the open animation being broken rather than as a
+        // clock that had run out before anyone looked at it.
+        //
+        // The start VALUE still cannot wait (see the javadoc above): a frame between "asked for" and
+        // "showing its start value" is a frame of the END state.
+        this.from = from;
+        this.to = to;
+        this.fromOpacity = fromOpacity;
+        this.toOpacity = toOpacity;
+        this.durationNanos = durationNanos;
+        this.easing = easing;
         this.transform = new ActiveTransition<>(
-                StylePropertyRegistry.TRANSFORM, from, to, now, 0L, durationNanos, easing);
+                StylePropertyRegistry.TRANSFORM, from, to, System.nanoTime(), 0L, durationNanos, easing);
         this.opacity = new ActiveTransition<>(
-                StylePropertyRegistry.OPACITY, fromOpacity, toOpacity, now, 0L, durationNanos, easing);
+                StylePropertyRegistry.OPACITY, fromOpacity, toOpacity, System.nanoTime(), 0L, durationNanos, easing);
 
         // THE ORIGIN IS PINNED FOR THE WHOLE ANIMATION, and it is PER ANIMATION.
         //
@@ -134,7 +180,53 @@ final class WindowAnimation implements WindowMotion {
             over = true;
             return false;
         }
-        long now = System.nanoTime();
+        // A VIRTUAL CLOCK, ADVANCED BY CAPPED STEPS -- not wall time.
+        //
+        // An animation should advance by RENDERED time. Wall time is the same thing right up until the
+        // frame loop stalls, and the first window of a session opens into the worst stall there is: the
+        // editor is being constructed and its shaders compiled, so the probe measured two frames 154ms
+        // APART for a 150ms animation. It completed on its second tick having drawn one frame, which on
+        // screen is indistinguishable from no animation at all.
+        //
+        // Capping a step is the standard frame-loop guard (the same one that stops physics spiralling on
+        // a slow frame) and it is the honest reading: nobody saw the 154ms, because nothing was drawn
+        // during it, so charging the animation for it animates against time the user never observed.
+        // A stall now costs the animation one capped step and it plays out over the frames that follow.
+        long real = System.nanoTime();
+        long delta = lastRealNow == 0L ? 0L : real - lastRealNow;
+        lastRealNow = real;
+
+        if (!clockStarted) {
+            // IT DOES NOT BEGIN UNTIL THE COMPOSITOR IS PRESENTING FRAMES.
+            //
+            // The first windows of a session open into the worst stall there is -- an editor being
+            // constructed, shaders compiled, font atlases built -- and the harness measures the first two
+            // gaps at 398ms and 282ms for a 150ms animation. Beginning there spends the whole gesture on
+            // frames nobody saw: capping a step softened that to three visible frames, which still reads
+            // as a jump rather than a motion.
+            //
+            // So it HOLDS at its start value (already written in the constructor, so there is nothing to
+            // flash) until it sees one ordinary gap, then plays in full. Bounded, or a permanently slow
+            // host would hold forever and never animate at all.
+            if (delta == 0L || (delta > STALL_NANOS && stalledTicks++ < MAX_STALLED_TICKS)) return true;
+            clockStarted = true;
+            virtualNow = real;
+            transform = new ActiveTransition<>(
+                    StylePropertyRegistry.TRANSFORM, from, to, real, 0L, durationNanos, easing);
+            opacity = new ActiveTransition<>(
+                    StylePropertyRegistry.OPACITY, fromOpacity, toOpacity, real, 0L, durationNanos, easing);
+        } else if (delta > STALL_NANOS && stalledTicks++ < MAX_STALLED_TICKS) {
+            // A STALL IS NOT A SLOW FRAME, IT IS NO FRAME -- so it advances the animation by nothing.
+            //
+            // The same rule that decides when to begin, applied for the rest of the run. Capping the
+            // step instead still charged a 154ms gap 50ms of a 150ms gesture: a third of the animation
+            // spent on a frame nobody saw, which on screen is one of the jumps this whole exercise is
+            // about. Bounded by the same counter, so a host that never settles still finishes.
+            return true;
+        } else {
+            virtualNow += Math.min(delta, MAX_STEP_NANOS);
+        }
+        long now = virtualNow;
         UITransform value = transform.currentValue(now);
         target.getStyle().tickAnimationSlot(StylePropertyRegistry.TRANSFORM, value, 0);
         target.getStyle().tickAnimationSlot(StylePropertyRegistry.OPACITY, opacity.currentValue(now), 0);

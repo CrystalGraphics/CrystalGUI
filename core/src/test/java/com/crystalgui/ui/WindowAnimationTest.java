@@ -202,4 +202,55 @@ public class WindowAnimationTest extends UiTestBase {
         assertTrue("the restore did not take over", frame.isAnimating());
         assertFalse("it is still maximised", frame.isMaximized());
     }
+
+    /**
+     * <b>An animation asked for OUTSIDE the frame loop still plays.</b>
+     *
+     * <p>The clock used to be stamped in the constructor, which assumes construction and the first frame
+     * are adjacent. A host builds its screen and opens its first window before any frame is drawn — and
+     * then constructs an editor, connects a workspace and compiles shaders — so by the first tick the
+     * whole duration had elapsed and the animation completed having drawn nothing. Reported as an open
+     * that "just opens instantly"; the probe read {@code ticks=0 over 0ms}.</p>
+     *
+     * <p>Every later gesture was unaffected, because those begin with the frame loop already running,
+     * which is what made it look like the open animation specifically was broken.</p>
+     */
+    @Test
+    public void anAnimationStartedBeforeTheFirstFrameStillPlays() throws InterruptedException {
+        WindowFrame frame = window.openWindow(new WindowFrame("Late"));
+        frame.resizeTo(200, 140);
+
+        // LONGER THAN THE OPEN ANIMATION, and deliberately with no frame in between: this is the gap
+        // between a host's initGui and its first render.
+        Thread.sleep(400L);
+
+        frame();
+        assertTrue("the animation ran out its whole duration before it was ever advanced -- it was "
+                + "constructed with a clock that had already expired", frame.isAnimating());
+    }
+
+    /**
+     * <b>A stalled frame cannot swallow a whole animation.</b>
+     *
+     * <p>The first window of a session opens while the editor is still being constructed and its shaders
+     * compiled, so the frame loop is stalled: the probe measured two frames 154ms apart for a 150ms
+     * animation, which completed on its second tick having drawn a single frame. Nobody saw that 154ms —
+     * nothing was drawn during it — so charging the animation for it animates against time the user never
+     * observed.</p>
+     *
+     * <p>An animation advances by RENDERED time, in capped steps, which is the same frame-loop guard that
+     * stops physics spiralling on a slow frame.</p>
+     */
+    @Test
+    public void aStalledFrameDoesNotConsumeTheWholeAnimation() throws InterruptedException {
+        WindowFrame frame = window.openWindow(new WindowFrame("Stall"));
+        frame.resizeTo(200, 140);
+
+        frame();                 // the clock starts here
+        Thread.sleep(400L);      // ...and the loop stalls for longer than the animation lasts
+        frame();
+
+        assertTrue("one stalled frame ran the animation to completion -- it is advancing on wall time "
+                + "rather than on rendered time", frame.isAnimating());
+    }
 }
