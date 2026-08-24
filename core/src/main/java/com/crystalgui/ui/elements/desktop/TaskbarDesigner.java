@@ -177,6 +177,24 @@ public final class TaskbarDesigner {
             glass.setSpecular(v);
             refreshReadout();
         }));
+        body.addChild(note("Rim is the hairline at the boundary; glow is the broad falloff. "
+                + "The rim should dominate \u2014 a highlight made mostly of glow reads as bloom."));
+        body.addChild(slider("Rim", 0f, 1f, glass.getEdgeHighlight(), "%.2f", v -> {
+            glass.setEdgeHighlight(v);
+            refreshReadout();
+        }));
+        body.addChild(slider("Rim width", 0f, 12f, glass.getEdgeWidth(), "%.1f", v -> {
+            glass.setEdgeWidth(v);
+            refreshReadout();
+        }));
+        body.addChild(slider("Glow", 0f, 1f, glass.getGlow(), "%.2f", v -> {
+            glass.setGlow(v);
+            refreshReadout();
+        }));
+        body.addChild(slider("Chromatic", 0f, 1f, glass.getChromatic(), "%.2f", v -> {
+            glass.setChromatic(v);
+            refreshReadout();
+        }));
         body.addChild(slider("Noise", 0f, 0.25f, glass.getNoise(), "%.3f", v -> {
             glass.setNoise(v);
             refreshReadout();
@@ -239,7 +257,9 @@ public final class TaskbarDesigner {
             glass.setBlurRadius(live.getBlurRadius()).setTint(live.getTint())
                  .setSaturation(live.getSaturation()).setBezel(live.getBezel())
                  .setIor(live.getIor()).setSpecular(live.getSpecular())
-                 .setNoise(live.getNoise()).setFallbackColor(live.getFallbackColor());
+                 .setNoise(live.getNoise()).setFallbackColor(live.getFallbackColor())
+                 .setGlow(live.getGlow()).setEdgeHighlight(live.getEdgeHighlight())
+                 .setEdgeWidth(live.getEdgeWidth()).setChromatic(live.getChromatic());
         }
         islandWidth = Math.max(80f, island.getRuntimeCache().getWidth());
         islandHeight = Math.max(12f, island.getRuntimeCache().getHeight());
@@ -304,10 +324,12 @@ public final class TaskbarDesigner {
         sb.append(String.format(Locale.ROOT,
                 "    background: glass(blur %.0f, tint %s,%n"
                 + "                      bezel %.0f, ior %.2f, specular %.2f, noise %.3f,%n"
-                + "                      saturation %.2f, fallback %s);%n",
+                + "                      saturation %.2f, glow %.2f, edge %.2f, edge-width %.1f,%n"
+                + "                      chromatic %.2f, fallback %s);%n",
                 glass.getBlurRadius(), hex(glass.getTint()), glass.getBezel(), glass.getIor(),
                 glass.getSpecular(), glass.getNoise(), glass.getSaturation(),
-                hex(glass.getFallbackColor())));
+                glass.getGlow(), glass.getEdgeHighlight(), glass.getEdgeWidth(),
+                glass.getChromatic(), hex(glass.getFallbackColor())));
         sb.append("}\n");
         if (offsetX != 0f || offsetY != 0f) {
             sb.append(String.format(Locale.ROOT,

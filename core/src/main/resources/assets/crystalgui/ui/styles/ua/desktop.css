@@ -119,8 +119,9 @@ taskbar .__entries__ {
      * the union of what actually asks for a backdrop, so a strip a fortieth of the screen pays for a
      * fortieth of the screen. The first version captured the whole surface and took a 120fps desktop to
      * 50-70 for this one line. */
-    background: glass(blur 12, tint var(--taskbar-glass-tint, #662B2D30),
-                      bezel 10, ior 1.5, specular 0.3, noise 0.035, saturation 1.4,
+    background: glass(blur 12, tint var(--taskbar-glass-tint, #2B2D3066),
+                      bezel 10, ior 1.5, specular 1.0, noise 0.035, saturation 1.4,
+                      glow 0.1, edge 0.25, edge-width 3, chromatic 0.2,
                       fallback var(--glass-fallback, #2B2D30));
     outline: 1px var(--taskbar-border, #393B40);
     border-radius: var(--radius-panel, 8px);
