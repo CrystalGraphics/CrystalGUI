@@ -516,12 +516,45 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
             return JavaQuickFixes.in(unit, source, version, releaseLevel, from, to, context);
         }
 
+        /**
+         * Everything the compiler found here — <b>syntax only, while the file does not parse.</b>
+         *
+         * <h3>A resolution error over a recovered tree is a guess, and it points somewhere innocent</h3>
+         *
+         * <p>Reported as "why is this erroring when it has a semicolon above it". Given</p>
+         *
+         * <pre>    System.out.;
+         *     System.out.println("fa");</pre>
+         *
+         * <p>ECJ reports two errors: the syntax error on the {@code ;}, which is right, and
+         * <em>"System cannot be resolved or is not a field"</em> on the NEXT line, which is not. Recovery
+         * DELETES the offending token, so the two statements join into
+         * {@code System.out.System.out.println("fa")} and the blame lands on a line that is perfectly
+         * correct. Nothing failed: every step did its job on a reading of the text nobody wrote.</p>
+         *
+         * <p>So while a unit carries a syntax problem, only syntax problems are reported. This is the same
+         * judgement ECJ itself already makes one step earlier — it skips {@code analyseCode()} entirely,
+         * which is why {@link #optionalProblemsAnalysed} exists and why no WARNING survives a parse
+         * failure. Extending it to resolution errors is that reasoning finished rather than a new policy:
+         * both are computed from a tree the parser invented.</p>
+         *
+         * <p><b>The cost is real and is the right trade.</b> A genuine semantic error elsewhere in the
+         * file stays hidden until the syntax is fixed. That is what javac does, it is the order people
+         * work in anyway, and it matters most while TYPING — where every half-written line is a syntax
+         * error and every semantic error in the file is therefore both noise and, as here, wrong.</p>
+         *
+         * <p>Our own inspections go with them, for the same reason they are skipped by the compiler: a
+         * finding about code the parser guessed at is a finding about nothing.</p>
+         */
         @Override
         public List<Diagnostic> diagnostics() {
             List<Diagnostic> found = new ArrayList<>();
             CompilationUnit resolved = unit;
             if (resolved == null) return found;
+            boolean parsed = optionalProblemsAnalysed();
             for (IProblem problem : resolved.getProblems()) {
+                // SYNTAX ONLY WHILE IT DOES NOT PARSE. @see #diagnostics
+                if (!parsed && !isSyntax(problem)) continue;
                 DiagnosticSeverity severity = problem.isError() ? DiagnosticSeverity.ERROR
                         : problem.isWarning() ? DiagnosticSeverity.WARNING : DiagnosticSeverity.INFORMATION;
                 // THE SAME ANSWER THE QUICK-FIX ROUTER READS. @see ProblemSpans -- a mark computed apart
@@ -538,8 +571,19 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                         "java", Integer.toString(problem.getID()),
                         EcjProblemPolicy.tagsFor(problem.getID()), java.util.List.of()));
             }
-            found.addAll(inspections(resolved));
+            if (parsed) found.addAll(inspections(resolved));
             return found;
+        }
+
+        /**
+         * ECJ's own category, not an id range — the ranges are internal and the category is published.
+         *
+         * <p>A problem that is not categorized at all is not a syntax error, which is the same reading
+         * {@link #optionalProblemsAnalysed} takes of the same API.</p>
+         */
+        private static boolean isSyntax(IProblem problem) {
+            return problem instanceof CategorizedProblem categorized
+                    && categorized.getCategoryID() == CategorizedProblem.CAT_SYNTAX;
         }
 
         /**
