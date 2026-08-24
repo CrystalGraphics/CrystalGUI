@@ -433,6 +433,47 @@ public class DesktopLifecycleTest extends UiTestBase {
         assertEquals(WindowState.HIDDEN, minimised.state());
     }
 
+    /**
+     * <b>A window can still be HIDDEN after the desktop has been suspended and resumed.</b>
+     *
+     * <p>The nastiest defect of the CrystalOS work so far, and it needed a real client to find because
+     * every test opened its desktop once. {@code resumeDesktop} re-attaches through
+     * {@code addInternalChild}, which ends in {@code markAsInternal()} — and that <b>recurses</b>. By
+     * resume time the desktop is carrying WINDOWS, so every frame was marked internal;
+     * {@code removeChild} silently refuses an internal child and returns a boolean nobody checks; and
+     * {@code hide()} therefore detached nothing.</p>
+     *
+     * <p>What that looks like is not "hide is broken". The window reports {@code HIDDEN}, stays on
+     * screen, stays hit-testable, and the next press that reaches it activates it straight back — so
+     * minimise, hide and close all read as "the window will not close", and only after a close-and-
+     * reopen, because the first desktop of a session has no windows on it when it is first attached.</p>
+     *
+     * <p>Asserted on the PARENT rather than on the state, because the state was always right — it was the
+     * detach that never happened. {@code isInternalUI} is checked too, since that is the mechanism and a
+     * test that only asserted the symptom would pass against a fix that suppressed it somewhere else.</p>
+     */
+    @Test
+    public void aWindowCanStillBeHiddenAfterTheDesktopIsResumed() {
+        build();
+        WindowFrame frame = open("One");
+        settle();
+
+        window.suspendDesktop();
+        settle();
+        window.resumeDesktop();
+        settle();
+
+        assertFalse("re-attaching the desktop marked its windows internal, so they can never detach",
+                frame.isInternalUI());
+
+        frame.hide();
+        settle();
+
+        assertEquals(WindowState.HIDDEN, frame.state());
+        assertNull("the window reports HIDDEN but is still in the tree — visible and clickable",
+                frame.getParent());
+    }
+
     /** Activating a hidden window brings it back — which is what a taskbar entry (W4) and the switcher
      * (W10) both mean by "activate". */
     @Test

@@ -360,7 +360,14 @@ public final class UIWindow {
      */
     public void suspendDesktop() {
         desktopSuspended = true;
-        if (desktop.getParent() != null) ui.rootElement.removeInternalChild(desktop);
+        // DETACHED WITHOUT GIVING UP ITS INTERNAL STATUS, which is the whole difference between this and
+        // removeInternalChild. That one clears the flag, so resuming has to re-declare the desktop
+        // internal -- and markAsInternal() RECURSES, so it marked every WINDOW that had arrived since.
+        // removeChild silently refuses an internal child, so hide() then detached nothing: a window that
+        // reported HIDDEN, stayed on screen, stayed clickable, and sprang back on the next press.
+        // Only reachable after a close-and-reopen, because the first desktop of a session is attached
+        // empty. @see UIElement#removeChildInternal
+        if (desktop.getParent() != null) ui.rootElement.removeChildInternal(desktop);
     }
 
     /** Puts the compositor back. @see #suspendDesktop() */

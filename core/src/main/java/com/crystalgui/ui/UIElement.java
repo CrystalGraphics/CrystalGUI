@@ -798,12 +798,33 @@ public class UIElement implements SettingsScope, DataProvider {
         for (UIElement child : children) child.markAsInternal();
     }
 
-    /** Adds {@code child} bypassing the {@link #acceptsPublicChildren()} guard, then marks it internal.
+    /**
+     * Adds {@code child} bypassing the {@link #acceptsPublicChildren()} guard, then marks it internal.
      * Composite widgets call this (never {@code addChild}/{@code addChildAt}) to build their own
-     * privately-owned structural children. */
+     * privately-owned structural children.
+     *
+     * <h3>An element that is ALREADY internal is re-parented, never re-marked</h3>
+     *
+     * <p>{@link #markAsInternal()} <b>recurses</b>, and that is right when a composite hands over a
+     * subtree it has just built — every part of it is structure. It is wrong on a RE-ATTACH, because by
+     * then the subtree has grown things that are deliberately public, and re-marking sweeps them up.</p>
+     *
+     * <p>It cost a whole class of failure in the compositor. {@code UIWindow.resumeDesktop} re-attaches
+     * the desktop when a host's screen is reopened, and by then the desktop is carrying WINDOWS — so
+     * every frame was marked internal, and {@code removeChild} <b>silently refuses an internal child</b>
+     * and returns a boolean nobody checks. {@code WindowFrame.hide()} therefore detached nothing: the
+     * window reported {@code HIDDEN}, stayed on screen, stayed hit-testable, and the next press that
+     * reached it activated it straight back. Minimise, hide and close all looked broken, and only after
+     * a close-and-reopen — the first desktop of a session was fine, because it had no windows on it when
+     * it was first attached.</p>
+     *
+     * <p>The ordering this rule depends on is already documented as a trap ("children added before the
+     * {@code addInternalChild(container)} call are internal, children added after it are public"); this
+     * is that same trap reached by re-adding rather than by adding late.</p>
+     */
     public final UIElement addInternalChild(UIElement child) {
         addChildAtInternal(child, children.size());
-        child.markAsInternal();
+        if (!child.isInternalUI()) child.markAsInternal();
         return this;
     }
 
@@ -814,7 +835,17 @@ public class UIElement implements SettingsScope, DataProvider {
         return removeChildInternal(child);
     }
 
-    private boolean removeChildInternal(UIElement child) {
+    /**
+     * Detaches {@code child} <b>without touching its internal status</b> — the re-parent primitive.
+     *
+     * <p>Package-private on purpose. {@link #removeInternalChild} is the public counterpart and it gives
+     * the flag up, which is right when a composite hands a part back (a workbench's menu bar returning
+     * from a window caption has to become a public child again). It is wrong for something that is only
+     * going off-tree TEMPORARILY, because the re-add then has to re-declare it internal — and
+     * {@link #markAsInternal()} recurses, so it sweeps up everything the subtree has gained meanwhile.
+     * {@code UIWindow.suspendDesktop} is that case: the compositor comes back carrying windows.</p>
+     */
+    boolean removeChildInternal(UIElement child) {
         children.remove(child);
         child.onRemoved();
         // Before the parent link is cleared, so an observer can still see where it was.

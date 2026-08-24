@@ -304,12 +304,31 @@ public class DesktopModalityTest extends UiTestBase {
         settle();
 
         assertTrue("the background window's dialog is untouched", stale.isOpen());
-        assertNull("...and the front window took the Escape itself", front.getAttachedWindow());
+        // AND THE FRONT WINDOW DOES NOT TAKE IT EITHER, which is the half that changed: a window is no
+        // longer its own close watcher, so with nothing transient open in it the Escape falls through to
+        // the host. This used to assert the window had closed itself.
+        assertNotNull("a window closed itself on Escape", front.getAttachedWindow());
     }
 
-    /** And inside one window it is still a cascade: the modal closes before the window does. */
+    /**
+     * <b>Escape closes a window's modal, and then stops — it does not go on to close the window.</b>
+     *
+     * <h3>The second half is a deliberate reversal, not a regression</h3>
+     *
+     * <p>This asserted that a second Escape "reaches the window's own policy" and put the window away.
+     * That is not what Escape means anywhere: it dismisses what is TRANSIENT — a menu, a popover, a
+     * dialog, a live drag — and no desktop closes an application window with it. Windows and GNOME want
+     * Alt+F4, macOS wants Cmd+W, and IntelliJ spends plain Escape on returning focus to the editor and
+     * asks for Shift+Escape before it will even hide a tool window.</p>
+     *
+     * <p>It surfaced the moment the compositor became somewhere to live rather than a frame around one
+     * application: Escape in the editor put the editor away and a second Escape left the desktop — two
+     * presses to get out, the first of which did something nobody asked for. In a Minecraft host the two
+     * rules then agree, which is what makes this right rather than merely conventional: Escape means
+     * "give me the game back", and one press now does it from anywhere on the desktop.</p>
+     */
     @Test
-    public void escapeClosesAWindowsModalBeforeTheWindow() {
+    public void escapeClosesAWindowsModalAndStopsThere() {
         build();
         WindowFrame frame = open("One", 20);
         Dialog dialog = openModalIn(frame);
@@ -321,6 +340,6 @@ public class DesktopModalityTest extends UiTestBase {
 
         pressEscape();
         settle();
-        assertNull("the second Escape reaches the window's own policy", frame.getAttachedWindow());
+        assertNotNull("a second Escape closed the window itself", frame.getAttachedWindow());
     }
 }
