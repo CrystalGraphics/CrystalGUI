@@ -42,6 +42,60 @@ public final class SourceRoots {
     }
 
     /**
+     * What a directory IS in a project's layout — what IntelliJ draws a different icon for.
+     *
+     * <p>Four roles and no more, because a single-module project has no others to distinguish. A tree
+     * that draws one folder glyph for all of them makes {@code src/main/java} look like an ordinary
+     * directory that happens to be nested deeply, which is exactly the thing a reader is scanning for.</p>
+     */
+    public enum Role {
+
+        /** The project root. One per project here — see {@link #roleOf}. */
+        MODULE,
+
+        /** A declared source root: where package names start counting from. */
+        SOURCE_ROOT,
+
+        /** Inside a source root, so its name is a package segment rather than a directory name. */
+        PACKAGE,
+
+        /** Everything else — {@code src}, {@code build}, a resources tree, a project with no roots. */
+        FOLDER
+    }
+
+    /**
+     * Which of the four {@code directory} is, given the project's declared roots.
+     *
+     * <h3>One module, and it is the project</h3>
+     *
+     * <p>IntelliJ shows a Gradle source set as a module, so {@code src/main} carries the module icon
+     * there and {@code src/main/java} the source-root one. That modelling needs a project to have several
+     * modules to be worth anything, and ours has one — so the project root is the module, and {@code src}
+     * and {@code src/main} are the ordinary folders they are. The distinction the icons exist to draw is
+     * root / source-root / package, and that survives intact.</p>
+     *
+     * <p>{@code relativePath} is project-relative, as every {@link CgPath} in a workspace is: empty means
+     * the project root itself. The longest matching root wins, for the reason {@link #locate} gives.</p>
+     */
+    public static Role roleOf(@Nullable String relativePath, @Nullable List<String> roots) {
+        String within = relativePath == null ? "" : normalise(relativePath);
+        if (within == null || within.isEmpty()) return Role.MODULE;
+        if (roots == null || roots.isEmpty()) return Role.FOLDER;
+
+        Role role = Role.FOLDER;
+        for (String root : roots) {
+            String normalised = normalise(root);
+            if (normalised == null || normalised.isEmpty()) continue;
+            if (within.equals(normalised)) return Role.SOURCE_ROOT;
+            // NOT `return`, because roots nest: with `src` and `src/main/java` both declared, a path under
+            // the second is under the first as well, and a package is the more specific answer. Only
+            // SOURCE_ROOT is exact enough to answer immediately.
+            if (contains(normalised, within)) role = Role.PACKAGE;
+        }
+        return role;
+    }
+
+    /**
      * Where {@code path} sits relative to the first root that contains it, or null when no root does.
      *
      * <h3>Null is an answer, not a failure</h3>
