@@ -163,6 +163,10 @@ public final class JavaLanguage {
         // as the archives above -- the index is a scan of the classpath, not something the compiler owns,
         // so it answers on a host whose engine never opens.
         ClasspathTypeSearch.register();
+        // AND WHAT A PROJECT `.java` FILE DECLARES, through the same `symbolOf` seam the library side
+        // already answers for `library://`. Nothing served `project://`, so the identical question about
+        // the author's own file had nobody to ask. @see ProjectSourceSymbols
+        ProjectSourceSymbols.register();
 
         // AND WARM THE ENGINE, off this thread. @see #warm
         warm(classpath);

@@ -147,6 +147,25 @@ public class Tooltip extends UIElement {
      * Taffy's layout entirely, and is also short-circuited by both {@code drawSubtree} and
      * {@code elementHitTest}, so one property covers layout, paint and input together.</p>
      */
+    /**
+     * Hides the box while it has nothing to say, and brings it back when it does.
+     *
+     * <h3>An empty tooltip is never wanted, anywhere</h3>
+     *
+     * <p>It draws a bare rounded rectangle over whatever is underneath — an answer-shaped thing with no
+     * answer in it, which reads as a rendering fault rather than as silence. The dock recorded this as a
+     * REASON NOT TO WIRE a region without a base text; it is really a reason to make emptiness mean
+     * "say nothing", which is what every other text surface in the engine already does.</p>
+     *
+     * <p>That is what lets a REGION be the only thing a tooltip says. The project tree wants exactly
+     * that: its icon knows what a file declares, and the row itself has nothing to add that the row is
+     * not already showing — where a dock tab genuinely does, because a tab is a name with no path
+     * around it.</p>
+     */
+    private void applyEmptiness() {
+        setHidden(label.getText().isEmpty());
+    }
+
     private void setHidden(boolean hidden) {
         StyleGroup.importantPipeline(getStyle().getLayoutGroup(),
                 l -> l.display(hidden ? TaffyDisplay.NONE : TaffyDisplay.FLEX));
@@ -247,10 +266,26 @@ public class Tooltip extends UIElement {
      * placement itself is: a region can be reflowed out from under a stationary pointer, and a listener
      * would only notice the next time the mouse moved.</p>
      */
-    public Tooltip addRegion(UIElement region, String text) {
+    public Tooltip addRegion(UIElement region, @Nullable String text) {
         Objects.requireNonNull(region, "region");
+        // REPLACED, NEVER STACKED, and empty REMOVES.
+        //
+        // Both follow from the callers being pooled. A dock tab re-anchors its icon region every time the
+        // icon is re-read, and a tree row is a different file every time the view recycles it -- so
+        // appending would grow one dead region per refresh, each pointing at an element that is either
+        // detached or now showing something else. There is no remove() to pair with an add here, so
+        // "say nothing about this element" has to be spellable, and empty is how every other text setter
+        // in the engine spells it.
+        if (regions != null) regions.removeIf(existing -> existing.element == region);
+        if (text == null || text.isEmpty()) {
+            if (activeRegion != null && activeRegion.element == region) {
+                activeRegion = null;
+                label.setText(baseText);
+            }
+            return this;
+        }
         if (regions == null) regions = new ArrayList<>(2);
-        regions.add(new Region(region, text == null ? "" : text));
+        regions.add(new Region(region, text));
         return this;
     }
 
@@ -343,6 +378,7 @@ public class Tooltip extends UIElement {
         // BEFORE placement, not after: the wording decides the box, and the box decides whether the
         // tooltip flips above its anchor. Resolving afterwards places the previous frame's text.
         resolveRegion();
+        applyEmptiness();
         reposition();
 
         if (!placementTickerRunning) {
@@ -454,7 +490,17 @@ public class Tooltip extends UIElement {
      * tooltip is just {@code Side.BOTTOM} with no offset.</p>
      */
     public void reposition() {
-        AnchoredPlacement.place(this, anchor, side, gap);
+        // AGAINST WHATEVER IS SPEAKING. A region exists because a sub-area of the anchor means something
+        // of its own, so the box has to point at the thing it is describing rather than at the element it
+        // happens to be parented to. A dock TAB is small enough that the difference is a few pixels and
+        // this went unnoticed there; a full-width tree ROW put "Final class" at the left edge of the
+        // panel, a hundred pixels from the icon it was about.
+        //
+        // Re-read every frame rather than latched at show time, for the same reason the placement is:
+        // the pointer moves from label to icon without ever leaving the anchor, and the ticker calls
+        // resolveRegion() immediately before this.
+        UIElement against = activeRegion == null ? anchor : activeRegion.element;
+        AnchoredPlacement.place(this, against, side, gap);
     }
 
     /**
@@ -493,6 +539,9 @@ public class Tooltip extends UIElement {
                 return false;
             }
             resolveRegion();
+            // EVERY FRAME, because the pointer moves between regions without leaving the anchor: a row
+            // whose icon speaks and whose label does not has to fall silent halfway across itself.
+            applyEmptiness();
             reposition();
             return true;
         }

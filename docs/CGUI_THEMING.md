@@ -504,7 +504,7 @@ editor scheme's.
 | `--searchfield-option-on-fg` | `var(--fg-on-accent)` | base.css |
 | `--searchfield-option-on-hover-bg` | `var(--accent-hover)` | base.css |
 | `--selection-bg` | `#04395E` | crystal-dark.css |
-| `--selection-inactive-bg` | `#2E3033` | crystal-dark.css |
+| `--selection-inactive-bg` | `#46484B` | crystal-dark.css |
 | `--slider-disabled-fill` | `var(--fg-disabled)` | base.css |
 | `--slider-disabled-thumb` | `var(--fg-disabled)` | base.css |
 | `--slider-fill` | `var(--success)` | base.css |
@@ -634,8 +634,8 @@ editor scheme's.
 | `--tree-match-fg` | `var(--fg)` | base.css |
 | `--tree-selected-bg` | `var(--accent-soft)` | base.css |
 | `--tree-selected-fg` | `var(--fg-on-accent)` | base.css |
-| `--tree-selected-inactive-bg` | `var(--surface-raised)` | base.css |
-| `--tree-selected-inactive-fg` | `var(--fg-secondary)` | base.css |
+| `--tree-selected-inactive-bg` | `var(--selection-inactive-bg)` | base.css |
+| `--tree-selected-inactive-fg` | `var(--fg)` | base.css |
 | `--tree-twisty-fg` | `var(--fg-secondary)` | base.css |
 | `--warning` | `#CCA700` | crystal-dark.css |
 | `--warning-icon` | `#FFAF0F` | crystal-dark.css |
