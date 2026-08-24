@@ -627,14 +627,17 @@ theme {
      * editor or a tool panel would have had docked. The CAPTION is raised above it, which is the whole
      * of what makes a title bar read as furniture rather than as the first row of the content.
      *
-     * The border is `--border-strong` rather than `--border-base`: a window's edge is the only thing
-     * separating it from ANOTHER WINDOW of the same colour, which is a harder job than separating a
-     * panel from the chrome around it. It is also what the nothing-drawn-in-the-colour-of-what-it-sits-on
-     * rule is checking here — a window outlined in its own fill is a window you cannot see the edge of,
-     * and this is a compositor, so overlapping is the normal case rather than the exception. */
+     * THERE IS NO `--window-border`, and its absence is the decision rather than an omission. A window
+     * was outlined in `--border-strong`, on the reasoning that a window's edge is the only thing
+     * separating it from ANOTHER WINDOW of the same colour — a harder job than separating a panel from
+     * the chrome around it. That reasoning still holds; it is simply not worth the line it costs, and a
+     * raised caption already tells two overlapping windows apart.
+     *
+     * Left DEFINED but unused it would be worse than either: a theme could set it, see nothing happen,
+     * and have nothing to look at to find out why. A token that does nothing is a promise the sheet does
+     * not keep. */
     --window-bg: var(--surface-panel);
     --window-fg: var(--fg);
-    --window-border: var(--border-strong);
     /* THE INACTIVE CAPTION IS THE BASE, and the active one is the exception -- most windows are
      * inactive most of the time, and every window manager marks the one you are talking to rather
      * than the several you are not. The pair has to differ in BOTH channels: a caption that only

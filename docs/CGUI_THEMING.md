@@ -669,7 +669,6 @@ editor scheme's.
 | `--warning` | `#CCA700` | crystal-dark.css |
 | `--warning-icon` | `#FFAF0F` | crystal-dark.css |
 | `--window-bg` | `var(--surface-panel)` | base.css |
-| `--window-border` | `var(--border-strong)` | base.css |
 | `--window-close-hover-bg` | `var(--error)` | base.css |
 | `--window-close-hover-fg` | `var(--fg-on-accent)` | base.css |
 | `--window-control-fg` | `var(--fg-secondary)` | base.css |
