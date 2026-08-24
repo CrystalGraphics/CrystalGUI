@@ -101,6 +101,18 @@ public final class CgUiGlass implements CgUiDrawable, CornerRadiusAware {
         return this;
     }
 
+    // READ BACK, for a tuner that has to show what it is about to change and print it as CSS. A setter
+    // without a getter is fine for a drawable the cascade owns outright; it stops being fine the moment
+    // something has to SEED itself from the live value rather than from a guess at the stylesheet's.
+    public float getBlurRadius() { return blurRadius; }
+    public int getTint() { return tintArgb; }
+    public float getSaturation() { return saturation; }
+    public float getBezel() { return bezel; }
+    public float getIor() { return ior; }
+    public float getSpecular() { return specular; }
+    public float getNoise() { return noise; }
+    public int getFallbackColor() { return fallbackColorArgb; }
+
     @Override
     public void setCornerRadii(float rxTL, float ryTL, float rxTR, float ryTR,
                                float rxBR, float ryBR, float rxBL, float ryBL) {

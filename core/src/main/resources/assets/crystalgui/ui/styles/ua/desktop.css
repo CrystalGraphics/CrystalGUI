@@ -1012,3 +1012,80 @@ menu.__jump-list__.__rising__ {
     align-self: center;
     background-color: var(--preview-thumbnail-bg, #1E1F22);
 }
+
+/* -- taskbar designer -------------------------------------------------------------------------
+ * A DESIGN TOOL's chrome, not a shipped panel's.
+ *
+ * It reuses the SYSTEM tokens (--fg, --fg-secondary, --surface-panel) rather than declaring a
+ * component vocabulary of its own. Six --designer-* tokens is what the first draft wrote, and
+ * StyleGovernanceTest refused it -- correctly: a token is a promise every theme has to keep, and a
+ * debug tool is not worth widening the vocabulary every theme must then define. */
+.__taskbar-designer__ .__designer__ {
+    /* The fill idiom: a column taking the frame's height, the scroller inside it growing, the
+     * actions and readout keeping their own. `height: 0` is the basis flex-grow divides from --
+     * without it the content's own height wins and the panel overhangs the frame. */
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+    gap-all: 6px;
+    padding-all: 8px;
+}
+
+.__designer-body__ {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+    gap-all: 3px;
+    overflow: auto;
+}
+
+/* Label / control / readout, with the two text columns fixed so the numbers do not reflow as they
+ * change -- a readout that moves while you drag is one you cannot read. */
+.__designer-row__ {
+    flex-direction: row;
+    align-items: center;
+    gap-all: 8px;
+    width: 100%;
+}
+
+.__designer-label__ { width: 110px; }
+/* font-size on the TEXT element, never on a wrapper: `* { font-size: 10 }` is a candidate on every
+ * element, so inheritance never reaches a label through its row. */
+.__designer-label__, .__designer-value__, .__designer-note__, .__designer-heading__ { font-size: 10; }
+.__designer-label__ { color: var(--fg-secondary, #9DA0A8); }
+.__designer-value__ { width: 46px; color: var(--fg-secondary, #9DA0A8); }
+
+.__designer-slider__ {
+    width: 0;
+    flex-grow: 1;
+    /* A control that can shrink to nothing is not a control. */
+    min-width: 90px;
+}
+
+.__designer-heading__ {
+    color: var(--fg, #DFE1E5);
+    padding-top: 6px;
+}
+
+.__designer-note__ {
+    color: var(--fg-secondary, #9DA0A8);
+    white-space: normal;
+    width: 100%;
+}
+
+.__designer-actions__ {
+    flex-direction: row;
+    gap-all: 6px;
+    width: 100%;
+}
+
+/* The paste-ready rule. */
+.__designer-readout__ {
+    width: 100%;
+    font-size: 10;
+    white-space: normal;
+    color: var(--fg-secondary, #9DA0A8);
+    background-color: var(--surface-panel, #191A1C);
+    padding-all: 6px;
+    border-radius: 4px;
+}
