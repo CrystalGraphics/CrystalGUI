@@ -2338,3 +2338,22 @@ navigatorview treeview .__row__.__selected__ {
 .__merge-panes__ > .__divider__:active {
     background: var(--editor-gutter-bg, var(--panel-bg, #191A1C));
 }
+
+/*
+ * WHAT A DIRECTORY IS IN THE LAYOUT -- module, source root, package.
+ *
+ * Keyed on `noderole-*`, which `FilesRenderer` swaps onto the icon element the same way it swaps
+ * `filetype-*`. Two prefixes because they answer different questions: a TYPE is read off the file's name
+ * (VS Code's icon-theme model, which is why `FileIconTheme` knows nothing about paths) and a ROLE is read
+ * off its path. IntelliJ's tree decides the same way round, with the file-type registry as the fallback.
+ *
+ * Here rather than in Java for the reason `SymbolIcon` gives about `completion-kind-*`: a table of icon
+ * names in code is a second vocabulary saying what the stylesheet already says, and the copy that goes
+ * wrong looks like a row with an icon rather than a row with the WRONG icon. A theme can reach these.
+ *
+ * These beat `FileIconTheme`'s folder drawable because it is written at DEFAULT origin precisely so a
+ * sheet can. A row that stops being a package loses the class, and the folder icon comes back.
+ */
+.noderole-module      { overlay: icon("crystalgui:nodes/java/module"); }
+.noderole-source-root { overlay: icon("crystalgui:nodes/java/sourceRoot"); }
+.noderole-package     { overlay: icon("crystalgui:nodes/java/package"); }
