@@ -125,6 +125,9 @@ public class ProjectTreeCompactFoldersTest extends UiTestBase {
 
     @Test
     public void aSingleChildChainIsOneRow() {
+        // TURNED ON EXPLICITLY: compaction ships OFF until there is a setting to turn it back on, so a
+        // test about compaction has to ask for it rather than inherit it.
+        tree.source().setCompactFolders(true);
         expandAll();
         // chain/a/b, not a/b: the carve-out protects the ROOT's row, and `chain` is a child of the root
         // rather than the root itself -- so `a` merges into `chain` exactly as `b` merges into `a`. VS
@@ -192,6 +195,7 @@ public class ProjectTreeCompactFoldersTest extends UiTestBase {
     /** A row that stops being a chain loses its label rather than keeping a path that is no longer true. */
     @Test
     public void aLabelIsDroppedWhenTheChainStops() {
+        tree.source().setCompactFolders(true);
         expandAll();
         assertEquals("chain/a/b", tree.source().rowLabel(CgPath.parse("mymod.proj:chain/a/b")));
 
