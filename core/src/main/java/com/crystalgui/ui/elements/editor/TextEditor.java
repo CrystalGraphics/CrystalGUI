@@ -3147,6 +3147,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // nothing, which is why it looked like an empty member list and why Ctrl+Space -- which has no such
         // guard -- worked on the very same text.
         if (language.isCompletionTrigger(typed)) {
+            if (EditorSuggest.TRACE) EditorSuggest.trace("typed '" + typed + "' -> TRIGGER CHARACTER");
             closeCompletion();
             openCompletion(CompletionProvider.TriggerKind.CHARACTER, String.valueOf(typed));
             return;
@@ -3154,7 +3155,10 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
         // The autopopup half still defers: every character of a word would otherwise restart the session and
         // throw away the list it is narrowing.
-        if (suggest.isLive()) return;
+        if (suggest.isLive()) {
+            if (EditorSuggest.TRACE) EditorSuggest.trace("typed '" + typed + "' -> deferred, a list is already live");
+            return;
+        }
         // TYPING A NAME OPENS THE LIST TOO -- IntelliJ's autopopup, and without it the only way in was
         // Ctrl+Space, which is a thing you have to remember rather than a thing that helps.
         //
