@@ -273,6 +273,45 @@ public class EditorTypingHighlightTest extends EditorTestBase {
     }
 
     /**
+     * <b>...and the same is true when the parse lands MID-BURST, which is the case that actually happens.</b>
+     *
+     * <p>The test above stages its announcement <em>after</em> typing has settled, and that is the rarer
+     * half. An analysis is debounced by 300ms and the settle is 300ms, so in ordinary typing the parse
+     * lands while {@code editing} is still true — a burst of keystrokes, a pause at the end of a word, the
+     * parse arriving in that pause. On that path the rows are recorded in {@code staleRows} rather than
+     * dropped, and the settle used to drop <b>every one of them unconditionally</b> without ever asking
+     * about the recovery. So the guard was installed on one of the two ways into the cache and missing
+     * from the one a keystroke actually takes.</p>
+     *
+     * <p>Reported as an unfinished line recolouring the line below it, which is the same symptom the test
+     * above pins — and it survived that test because the fixture reproduced the sequence nobody types.</p>
+     */
+    @Test
+    public void anAnnouncementLandingMidBurstStillKeepsTheSwallowedRowOnSettle() {
+        buildWithGrammar();
+        caretAfterValue();
+        List<TextRange> swallowed = highlightedOn(2);
+        List<TextRange> faraway = highlightedOn(0);
+        assertFalse("row 2 has colours to lose", swallowed.isEmpty());
+        assertFalse("row 0 has colours to lose", faraway.isEmpty());
+
+        type("Counter");
+        showEditor();
+        // WHILE STILL EDITING -- no settle between the keystrokes and the parse.
+        int row2Start = editor.buffer().document().lineStartOffset(2);
+        tokenizer.recovered = new int[] {editor.buffer().document().lineStartOffset(1),
+                row2Start + editor.buffer().document().line(2).length()};
+        tokenizer.recovering = true;
+        tokenizer.listener.tokensChanged(0, SyntaxTokenizer.InvalidationListener.EVERYTHING);
+        showEditor();
+
+        waitForSettle();
+
+        assertEquals("the row the recovery swallowed keeps what it had", swallowed, highlightedOn(2));
+        assertTrue("a row outside it must still take the new answer", highlightedOn(0).isEmpty());
+    }
+
+    /**
      * <b>Pressing Enter keeps the colours of the rows below it.</b>
      *
      * <p>The cache is keyed by row index, so a line-count change makes every row below describe someone

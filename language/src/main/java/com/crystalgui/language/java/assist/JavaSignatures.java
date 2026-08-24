@@ -821,21 +821,35 @@ public final class JavaSignatures {
     }
 
     /**
-     * The comment on a declaring node.
+     * The comment on a declaring node — <b>one step up at most, and only for a field</b>.
      *
      * <p>A field's declaring node is its {@code VariableDeclarationFragment} and the comment belongs to
      * the {@code FieldDeclaration} above it — the same off-by-one-level the signature path has to
-     * handle, arriving here from the other direction.</p>
+     * handle, arriving here from the other direction. That one step is the whole of the allowance.</p>
+     *
+     * <h3>Walking up to <em>any</em> {@code BodyDeclaration} gives a local its METHOD's javadoc</h3>
+     *
+     * <p>This used to climb until it found one, which is right for the field and wrong for everything
+     * else that starts below a body: a local variable's fragment sits under a
+     * {@code VariableDeclarationStatement}, so the walk carried on through the {@code Block} and landed
+     * on the enclosing {@code MethodDeclaration}. A parameter reaches it in a single step. So hovering
+     * any local or any parameter inside a documented method rendered that method's entire javadoc as if
+     * it were the variable's own — and it is <b>not</b> a recovery artefact: it reproduces on a file that
+     * parses perfectly, which is why it survived every fixture built around broken text.</p>
+     *
+     * <p>Neither construct can carry a doc comment at all — javadoc is defined on declarations, and a
+     * local variable is a statement. So the honest answer is nothing, and nothing is what the popup is
+     * already built to draw: it hides a blank body rather than leaving a gap under the declaration.</p>
      */
     @Nullable
     private static String renderedDocOf(@Nullable ASTNode declaration) {
-        for (ASTNode at = declaration; at != null; at = at.getParent()) {
-            if (at instanceof BodyDeclaration) {
-                return JavaDocs.render(((BodyDeclaration) at).getJavadoc());
-            }
-            if (at instanceof CompilationUnit) return null;
+        ASTNode carrier = declaration;
+        if (carrier instanceof VariableDeclarationFragment
+                && carrier.getParent() instanceof FieldDeclaration) {
+            carrier = carrier.getParent();
         }
-        return null;
+        return carrier instanceof BodyDeclaration
+                ? JavaDocs.render(((BodyDeclaration) carrier).getJavadoc()) : null;
     }
 
     /** Which of the two quoting shapes a declaring node is, or null if it is neither. */

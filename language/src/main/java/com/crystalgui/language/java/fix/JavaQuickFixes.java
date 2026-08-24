@@ -114,7 +114,7 @@ public final class JavaQuickFixes {
             // ASKED OF THE SAME PLACE THE UNDERLINE IS DRAWN. @see ProblemSpans -- these used to be two
             // independent readings of one problem, and a mark moved on one side went unreachable on the
             // other.
-            if (!ProblemSpans.reaches(unit, problem, from, to)) continue;
+            if (!ProblemSpans.reaches(unit, source, problem, from, to)) continue;
             for (Correction correction : BY_PROBLEM.getOrDefault(problem.getID(), List.of())) {
                 contribute(correction, context, problem, actions);
             }

@@ -1159,4 +1159,61 @@ public class JavaDocBodyTest {
             analysis.close();
         }
     }
+
+    /**
+     * <b>A local variable does not carry the javadoc of the method it is written in.</b>
+     *
+     * <p>{@code renderedDocOf} walked up until it found any {@code BodyDeclaration}. That is exactly right
+     * for a field — whose declaring node is a fragment one level under the {@code FieldDeclaration} that
+     * holds the comment — and it does not stop there for anything else: a local's fragment sits under a
+     * {@code VariableDeclarationStatement}, so the walk carried on through the {@code Block} and landed on
+     * the enclosing method. Hovering any local inside a documented method rendered that method's whole
+     * javadoc as the variable's own.</p>
+     *
+     * <p><b>This file parses perfectly</b>, which is the point: it was found while chasing a recovery
+     * cascade and is not one, so no fixture built around broken text could have shown it.</p>
+     */
+    @Test
+    public void aLocalVariableDoesNotInheritItsMethodsDocComment() {
+        String source = ""
+                + "public class Script {\n"
+                + "    /** Answers how many rows are loaded. */\n"
+                + "    int rows() {\n"
+                + "        String tally = \"q\";\n"
+                + "        return tally.length();\n"
+                + "    }\n"
+                + "}\n";
+        assertNull("a local was given its enclosing method's javadoc", docAt(source, "tally = "));
+    }
+
+    /** ...nor does a parameter, which reaches the same method in a single step. */
+    @Test
+    public void aParameterDoesNotInheritItsMethodsDocComment() {
+        String source = ""
+                + "public class Script {\n"
+                + "    /** Answers how many rows are loaded. */\n"
+                + "    int rows(String tally) { return tally.length(); }\n"
+                + "}\n";
+        assertNull("a parameter was given its enclosing method's javadoc", docAt(source, "tally)"));
+    }
+
+    /**
+     * The counter-assertion, and it is what the walk existed for: a FIELD still finds its comment.
+     *
+     * <p>A field's declaring node really is one level below the declaration carrying the doc, so a fix
+     * written as "never look at the parent" would satisfy both tests above and silently empty every field
+     * hover in the application.</p>
+     */
+    @Test
+    public void aFieldStillShowsItsOwnDocComment() {
+        String source = ""
+                + "public class Script {\n"
+                + "    /** How many rows are loaded. */\n"
+                + "    int rows = 1;\n"
+                + "    int use() { return rows; }\n"
+                + "}\n";
+        String docs = docAt(source, "rows;");
+        assertNotNull("a field lost the comment written directly above it", docs);
+        assertTrue("<" + docs + ">", docs.contains("How many rows are loaded"));
+    }
 }

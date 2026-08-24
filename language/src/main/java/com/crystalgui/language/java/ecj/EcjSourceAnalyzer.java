@@ -27,6 +27,7 @@ import org.eclipse.jdt.core.dom.AbstractTypeDeclaration;
 import org.eclipse.jdt.core.dom.AnonymousClassDeclaration;
 import org.eclipse.jdt.core.dom.Assignment;
 import org.eclipse.jdt.core.dom.Block;
+import org.eclipse.jdt.core.dom.BodyDeclaration;
 import org.eclipse.jdt.core.dom.CatchClause;
 import org.eclipse.jdt.core.dom.ClassInstanceCreation;
 import org.eclipse.jdt.core.dom.CompilationUnit;
@@ -56,6 +57,7 @@ import org.eclipse.jdt.core.dom.SimpleName;
 import org.eclipse.jdt.core.dom.TagElement;
 import org.eclipse.jdt.core.dom.SimpleType;
 import org.eclipse.jdt.core.dom.SingleVariableDeclaration;
+import org.eclipse.jdt.core.dom.Statement;
 import org.eclipse.jdt.core.dom.StructuralPropertyDescriptor;
 import org.eclipse.jdt.core.dom.Type;
 import org.eclipse.jdt.core.dom.VariableDeclarationExpression;
@@ -560,7 +562,7 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                 // THE SAME ANSWER THE QUICK-FIX ROUTER READS. @see ProblemSpans -- a mark computed apart
                 // from the range a fix is reachable over is how a squiggle ends up somewhere its own fix
                 // cannot be asked for.
-                int[] span = ProblemSpans.marked(resolved, problem);
+                int[] span = ProblemSpans.marked(resolved, source, problem);
                 TextPoint start = pointOf(resolved, span[0]);
                 TextPoint end = pointOf(resolved, span[1]);
                 // TAGGED HERE, from the same table that decided the problem was worth reporting. A tag
@@ -1143,6 +1145,31 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                 return binding == null ? null : describe(resolved, name, binding);
             }
             return expressionAt(resolved, offset);
+        }
+
+        /**
+         * Whether the statement at {@code offset} carries JDT's {@code RECOVERED} flag. @see Analysis
+         *
+         * <p><b>{@code RECOVERED}, never {@code MALFORMED}</b>, and the two are not interchangeable here.
+         * Measured on the reported file: the invented {@code dsa System} statement is {@code RECOVERED},
+         * while {@code MALFORMED} sits on the whole enclosing {@code MethodDeclaration} — so keying on
+         * malformedness would silence hover for every symbol in a method for as long as any one statement
+         * in it was unfinished, which is most of the time anyone is typing.</p>
+         *
+         * <p>The walk therefore stops at the nearest {@link Statement} or {@link BodyDeclaration}, that
+         * node included: a construct is recovered or it is not, and its neighbours are not implicated.</p>
+         */
+        @Override
+        public boolean recoveredAt(int offset) {
+            CompilationUnit resolved = unit;
+            if (resolved == null) return false;
+            // LENGTH 1 -- a zero-length range is "covered" by any node ENDING at the offset. @see
+            // #expressionAt, which paid for that distinction with a completion bug.
+            for (ASTNode at = NodeFinder.perform(resolved, offset, 1); at != null; at = at.getParent()) {
+                if ((at.getFlags() & ASTNode.RECOVERED) != 0) return true;
+                if (at instanceof Statement || at instanceof BodyDeclaration) return false;
+            }
+            return false;
         }
 
         /**
