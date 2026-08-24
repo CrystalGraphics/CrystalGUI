@@ -9,6 +9,7 @@ import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UITransform;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Button;
+import com.crystalgui.ui.elements.ColorSelector;
 import com.crystalgui.ui.elements.Slider;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.event.MouseEvent;
@@ -186,11 +187,9 @@ public final class TaskbarDesigner {
         }));
 
         body.addChild(heading("Tint"));
-        body.addChild(note("A is how much tint sits over the blur."));
-        addChannel(body, "Tint R", 16);
-        addChannel(body, "Tint G", 8);
-        addChannel(body, "Tint B", 0);
-        addChannel(body, "Tint A", 24);
+        body.addChild(note("The colour laid over the blur. ALPHA IS THE ONE THAT MATTERS \u2014 it is how "
+                + "much of the tint sits over the backdrop, and the easiest thing here to overdo."));
+        body.addChild(tintPicker());
 
         // THE READOUT SCROLLS WITH THE CONTROLS; only the buttons are pinned. It is eight lines of CSS
         // and it grows, so below the scroll region it simply fell off the bottom of the window, taking
@@ -329,13 +328,26 @@ public final class TaskbarDesigner {
 
     // ── control builders ─────────────────────────────────────────────────────────────────────────
 
-    private void addChannel(UIElement body, String label, int shift) {
-        int initial = (glass.getTint() >>> shift) & 0xFF;
-        body.addChild(slider(label, 0f, 255f, initial, "%.0f", v -> {
-            int value = Math.max(0, Math.min(255, Math.round(v)));
-            glass.setTint((glass.getTint() & ~(0xFF << shift)) | (value << shift));
+    /**
+     * The tint, as a real picker rather than four channel sliders.
+     *
+     * <p><b>Alpha lives in the colour</b>, which is why {@link ColorSelector} is the right widget and not
+     * an approximation of one: it carries ARGB throughout and composites its swatches over a transparency
+     * checkerboard, so a half-alpha tint <em>reads</em> as half-alpha while you are choosing it. Four
+     * sliders can express the same number and cannot show you that, and this is a value judged by eye —
+     * the whole reason the panel exists.</p>
+     */
+    private UIElement tintPicker() {
+        int initial = glass.getTint();
+        ColorSelector picker = new ColorSelector();
+        picker.addClass("__designer-tint__");
+        picker.setColor(initial);
+        picker.onColorChanged.connect(argb -> {
+            glass.setTint(argb);
             refreshReadout();
-        }));
+        });
+        resets.add(() -> picker.setColor(initial));
+        return picker;
     }
 
     private UIElement slider(String label, float min, float max, float initial,
