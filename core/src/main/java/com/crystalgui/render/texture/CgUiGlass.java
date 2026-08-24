@@ -45,7 +45,15 @@ public final class CgUiGlass implements CgUiDrawable, CornerRadiusAware {
     private float saturation = 1.35f;
     private float bezel = 8f;
     private float ior = 1.5f;
-    private float specular = 0.35f;
+    // 1.0 because `specular` is a MASTER MULTIPLIER over the glow and the rim, not a highlight in its
+    // own right -- which is how both production references are parameterised (theirs is `specular: 1`
+    // over `glow: 0.1` and `edgeHighlight: 0.25`). Defaulting it to a fraction, as the first version
+    // did, silently scaled the researched weights down to a third of themselves.
+    private float specular = 1.0f;
+    private float glow = 0.10f;
+    private float edgeHighlight = 0.25f;
+    private float edgeWidth = 3f;
+    private float chromatic = 0.20f;
     private float noise = 0.04f;
     private int fallbackColorArgb = 0xFF2B2D30;
 
@@ -83,9 +91,43 @@ public final class CgUiGlass implements CgUiDrawable, CornerRadiusAware {
         return this;
     }
 
-    /** Highlight strength — the Fresnel edge and the rim. {@code 0} compiles them out. */
+    /** Master highlight strength, scaling both the glow and the rim. {@code 0} compiles them out. */
     public CgUiGlass setSpecular(float specular) {
         this.specular = Math.max(0f, specular);
+        return this;
+    }
+
+    /**
+     * The BROAD falloff along the light axis — bloom rather than an edge.
+     *
+     * <p>Deliberately the weaker of the two: a highlight made mostly of this reads as glow, not as a
+     * surface. The reference implementations weight it about 0.1 against a 0.25 rim.</p>
+     */
+    public CgUiGlass setGlow(float glow) {
+        this.glow = Math.max(0f, glow);
+        return this;
+    }
+
+    /** The THIN band at the boundary — what actually reads as "this has an edge". @see #setGlow */
+    public CgUiGlass setEdgeHighlight(float edgeHighlight) {
+        this.edgeHighlight = Math.max(0f, edgeHighlight);
+        return this;
+    }
+
+    /** Width of that band, in PIXELS — a rim is a hairline whatever the bezel behind it is doing. */
+    public CgUiGlass setEdgeWidth(float edgeWidth) {
+        this.edgeWidth = Math.max(0f, edgeWidth);
+        return this;
+    }
+
+    /**
+     * How far apart the three colour channels refract. {@code 0} compiles the extra taps out.
+     *
+     * <p>Costs two more lens taps when on, because a prism separates colours by refracting each
+     * wavelength through a DIFFERENT ANGLE — one tap tinted three ways cannot express that.</p>
+     */
+    public CgUiGlass setChromatic(float chromatic) {
+        this.chromatic = Math.max(0f, chromatic);
         return this;
     }
 
@@ -110,6 +152,10 @@ public final class CgUiGlass implements CgUiDrawable, CornerRadiusAware {
     public float getBezel() { return bezel; }
     public float getIor() { return ior; }
     public float getSpecular() { return specular; }
+    public float getGlow() { return glow; }
+    public float getEdgeHighlight() { return edgeHighlight; }
+    public float getEdgeWidth() { return edgeWidth; }
+    public float getChromatic() { return chromatic; }
     public float getNoise() { return noise; }
     public int getFallbackColor() { return fallbackColorArgb; }
 
@@ -141,7 +187,7 @@ public final class CgUiGlass implements CgUiDrawable, CornerRadiusAware {
         // Each of these compiles its layer out entirely rather than branching past it, which is what
         // makes plain frosted glass and the full liquid surface one material instead of three.
         MATERIAL.toggleKeyword("WITH_REFRACTION", ior > 1.001f && bezel > 0f);
-        MATERIAL.toggleKeyword("WITH_CHROMATIC", ior > 1.001f && bezel > 0f && specular > 0f);
+        MATERIAL.toggleKeyword("WITH_CHROMATIC", ior > 1.001f && bezel > 0f && chromatic > 0f);
         MATERIAL.toggleKeyword("WITH_SPECULAR", specular > 0f);
         MATERIAL.toggleKeyword("WITH_NOISE", noise > 0f);
 
@@ -160,11 +206,18 @@ public final class CgUiGlass implements CgUiDrawable, CornerRadiusAware {
                 b.set1f("_Bezel", bezel);
                 b.set1f("_Ior", ior);
                 b.set1f("_Specular", specular);
+                b.set1f("_Glow", glow);
+                b.set1f("_EdgeHighlight", edgeHighlight);
+                b.set1f("_EdgeWidth", edgeWidth);
+                b.set1f("_Chromatic", chromatic);
                 b.set1f("_Noise", noise);
                 // Fixed in ELEMENT space, not screen space, so the highlight does not swim across the
                 // surface when the window it belongs to is dragged. Up and to the left, which is where
                 // every UI toolkit has put its light since bevels were invented.
-                b.vec2("_LightDir", -0.55f, -0.83f);
+                // 45 degrees, which is where both references put it -- and with a symmetric
+                // highlight the axis is a diagonal rather than a direction, so a diagonal is the
+                // honest spelling of it.
+                b.vec2("_LightDir", -0.7071f, -0.7071f);
         });
         ctx.withMaterial(MATERIAL, () ->
                 ctx.quad().at(x, y).size(width, height).color(ctx.getColor()).submit());

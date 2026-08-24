@@ -53,6 +53,10 @@ Properties {
     _Bezel      ("Bezel width (px)",       float) = 8.0
     _Ior        ("Index of refraction",    float) = 1.5
     _Specular   ("Specular strength",      float) = 0.0
+    _Glow       ("Broad glow along the light axis", float) = 0.10
+    _EdgeHighlight ("Thin rim band strength",       float) = 0.25
+    _EdgeWidth  ("Rim band width (px)",             float) = 3.0
+    _Chromatic  ("Chromatic aberration",            float) = 0.20
     _Noise      ("Grain amount",           float) = 0.0
     _LightDir   ("Light direction",        vec2)  = (-0.55, -0.83)
     _LayerOpacity ("Layer Opacity",        float) = 1.0
@@ -121,6 +125,17 @@ Pass {
                     mix(_BackdropRect.w, _BackdropRect.y, clamp(uv.y, 0.0, 1.0)));
     }
 
+    /**
+     * One lens tap: the backdrop at {@code uv}, sharp at the bezel and blurred in the interior.
+     *
+     * <p>Real glass is thickest and least diffuse at its edge, and the edge is also where the
+     * refraction is -- blurring the very thing being bent throws the lens away.</p>
+     */
+    vec4 cg_lensTap(vec2 uv, float edge) {
+        vec2 b = cg_backdropUv(uv);
+        return mix(cg_backdrop(_SharpTex, b), cg_backdrop(_MainTex, b), smoothstep(0.0, 1.0, edge));
+    }
+
     void vertex(out v2f o) {
         gl_Position = cg_ProjMatrix * vec4(CG_QUAD_WORLD_POS, 1.0);
         o.uv    = CG_QUAD_UV;
@@ -137,7 +152,7 @@ Pass {
         float bezel = max(1.0, _Bezel);
         float edge  = clamp(-dist / bezel, 0.0, 1.0);
 
-        vec2 uv = i.uv;
+        vec2 disp = vec2(0.0, 0.0);
         vec2 grad = vec2(0.0, 0.0);
         float slope = 0.0;
 
@@ -161,16 +176,26 @@ Pass {
         float theta1 = atan(slope);
         float theta2 = asin(clamp(sin(theta1) / max(1.0, _Ior), -1.0, 1.0));
         float shift  = tan(theta1 - theta2) * bezel;
-        uv = i.uv + grad * shift / max(vec2(1.0), _BoxSize);
+        disp = grad * shift / max(vec2(1.0), _BoxSize);
 #endif
 
-        // The bezel shows the SHARP backdrop and the interior the blurred one. Real glass is
-        // thickest and least diffuse at its edge, and it is also where the refraction is -- blurring
-        // the very thing being bent throws the lens away.
-        vec2 buv = cg_backdropUv(uv);
-        vec4 blurred = cg_backdrop(_MainTex, buv);
-        vec4 sharp   = cg_backdrop(_SharpTex, buv);
-        vec4 c = mix(sharp, blurred, smoothstep(0.0, 1.0, edge));
+#ifdef WITH_CHROMATIC
+        // CHROMATIC ABERRATION IS THREE TAPS AT THREE DISPLACEMENT SCALES, one per channel -- not one
+        // tap tinted three ways. A prism separates colours because each wavelength REFRACTS BY A
+        // DIFFERENT ANGLE, so the only faithful model is to run the displacement three times and keep
+        // one channel from each. The staggered factors are the reference implementation's:
+        // red bends most, blue least, green between.
+        //
+        // The first version scaled the red and blue taps by 0.985 and 1.015 -- a 3% spread, where the
+        // reference's default is 20%. At that size the fringe is invisible at any radius anybody would
+        // use, which reads as the feature not being wired up rather than as being too subtle.
+        vec4 cR = cg_lensTap(i.uv + disp * (1.0 + 0.20 * _Chromatic), edge);
+        vec4 cG = cg_lensTap(i.uv + disp * (1.0 + 0.10 * _Chromatic), edge);
+        vec4 cB = cg_lensTap(i.uv + disp, edge);
+        vec4 c = vec4(cR.r, cG.g, cB.b, 1.0);
+#else
+        vec4 c = cg_lensTap(i.uv + disp, edge);
+#endif
 
         // THE BACKDROP IS OPAQUE ONCE UN-PREMULTIPLIED. A capture is transparent wherever nothing
         // has been drawn yet -- the scene's own clear, the gap between one layer's content and the next
@@ -182,17 +207,6 @@ Pass {
         // A pane of glass covers what is behind it. Its own alpha is its SHAPE, applied at the end.
         c.a = 1.0;
 
-#ifdef WITH_CHROMATIC
-        // Red and blue refract by slightly different amounts, so a lens fringes at its rim. Scaled by
-        // (1 - edge) so it vanishes where the glass is flat: fringing across a whole surface does not
-        // read as optics, it reads as a broken sampler.
-        float fringe = (1.0 - edge) * 0.6;
-        vec2 dR = grad * (shift * 0.985) / max(vec2(1.0), _BoxSize);
-        vec2 dB = grad * (shift * 1.015) / max(vec2(1.0), _BoxSize);
-        c.r = mix(c.r, cg_backdrop(_SharpTex, cg_backdropUv(i.uv + dR)).r, fringe);
-        c.b = mix(c.b, cg_backdrop(_SharpTex, cg_backdropUv(i.uv + dB)).b, fringe);
-#endif
-
         // Saturation lift. A heavy blur averages a scene toward grey, so without this the backdrop's
         // colour -- the only reason to sample it at all -- is the first thing the blur destroys.
         float lum = luminance(c.rgb);
@@ -202,15 +216,30 @@ Pass {
         c.rgb = mix(c.rgb, _Tint.rgb, _Tint.a);
 
 #ifdef WITH_SPECULAR
-        // Three separate things, not one gloss:
-        //   fresnel  -- brightens toward the boundary from any angle
-        //   lambert  -- the edge FACING the light is brighter than the one away from it
-        //   rim      -- a thin bright line right at the boundary, which is what actually reads as
-        //               "this has an edge" rather than "this fades out"
-        float fresnel = pow(1.0 - edge, 3.0);
-        float lambert = max(0.0, dot(-grad, normalize(_LightDir + vec2(1e-6, 0.0))));
-        float rim     = 1.0 - smoothstep(0.0, 0.18, edge);
-        c.rgb += vec3(fresnel * (0.35 + 0.65 * lambert) + rim * 0.35) * _Specular;
+        // THE HIGHLIGHT IS SYMMETRIC ABOUT THE LIGHT AXIS, and getting that wrong is what made the
+        // first version read as an EMBOSSED BUTTON rather than as glass.
+        //
+        // A lambertian surface is bright where it faces the light and dark where it faces away, so
+        // `max(0, dot(-n, L))` lights one side and leaves the other flat -- which is a bevel. A lens is
+        // not a lambertian surface: light entering one edge leaves through the opposite one, so BOTH
+        // ends of the light axis catch it. Both production references model exactly this, each by
+        // taking the ABSOLUTE projection onto that axis: the reference map writes the same highlight
+        // into the top-left and bottom-right quadrants, and the CSS recreations spell it as a pair of
+        // opposed inset shadows (`inset 3px 3px ... rgba(255,255,255,.45)` AND `inset -3px -3px ...`).
+        float proj = abs(dot(grad, normalize(_LightDir + vec2(1e-6, 0.0))));
+
+        // TWO TERMS, and the thin one dominates. A broad falloff alone is a glow, which reads as
+        // bloom rather than as a surface; the thin band at the boundary is what actually says "this
+        // has an edge". The reference's defaults weight them 0.25 rim against 0.10 glow -- the
+        // opposite of the first version here, which had the broad term nearly three times the rim.
+        float glow = _Glow * pow(proj, 1.5) * (1.0 - edge);
+
+        // `dist` is negative inside, so this is 1 at the boundary and 0 one band-width in. In PIXELS,
+        // not in bezel fractions: a rim is a fixed hairline whatever the bezel is doing behind it.
+        float band = clamp(1.0 + dist / max(0.5, _EdgeWidth), 0.0, 1.0);
+        float rim  = _EdgeHighlight * band * pow(proj, 1.5);
+
+        c.rgb += vec3(glow + rim) * _Specular;
 #endif
 
 #ifdef WITH_NOISE

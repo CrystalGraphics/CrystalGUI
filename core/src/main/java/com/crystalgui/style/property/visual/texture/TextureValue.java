@@ -151,6 +151,10 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
                 case "bezel" -> { if (number != null) { glass.setBezel(number); anyRecognised = true; } }
                 case "ior" -> { if (number != null) { glass.setIor(number); anyRecognised = true; } }
                 case "specular" -> { if (number != null) { glass.setSpecular(number); anyRecognised = true; } }
+                case "glow" -> { if (number != null) { glass.setGlow(number); anyRecognised = true; } }
+                case "edge" -> { if (number != null) { glass.setEdgeHighlight(number); anyRecognised = true; } }
+                case "edge-width" -> { if (number != null) { glass.setEdgeWidth(number); anyRecognised = true; } }
+                case "chromatic" -> { if (number != null) { glass.setChromatic(number); anyRecognised = true; } }
                 case "noise" -> { if (number != null) { glass.setNoise(number); anyRecognised = true; } }
                 case "saturation" -> { if (number != null) { glass.setSaturation(number); anyRecognised = true; } }
                 case "tint" -> {

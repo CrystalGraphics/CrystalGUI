@@ -635,3 +635,55 @@ turns "please look at your screen and tell me what you see" into something answe
 
 The property prefix must be `crystalgui.` or `crystalgraphics.`; the build forwards only those two to the
 harness JVM, and a differently-named flag is accepted on the command line and reaches nothing.
+
+
+### R4 — what production implementations do that the first version did not
+
+Researched against two working recreations and the reference write-up behind them:
+[kube.io's derivation](https://kube.io/blog/liquid-glass-css-svg/),
+[PallavAg/liquid-glass-web-react](https://github.com/PallavAg/liquid-glass-web-react) (the most rigorous
+of them — an analytic displacement map with baked specular), and
+[ui-layouts' component](https://github.com/ui-layouts/uilayouts) (the one that prompted the pass).
+
+**The physics was already right.** Convex squircle height profile, normal by central difference on it,
+Snell for the bend, displacement along the SDF gradient — kube.io derives exactly that, and G5 has
+implemented it since it shipped. ui-layouts is the outlier and is *less* physical: its "bend layer" is
+`feTurbulence` fractal noise through `feDisplacementMap`, which is a wobble rather than a lens. Worth
+knowing before copying it — what is worth taking from it is its LAYER STACK, not its distortion.
+
+Three things were genuinely wrong or missing:
+
+1. **THE HIGHLIGHT WAS ONE-SIDED, AND THAT IS WHY IT READ AS AN EMBOSSED BUTTON.** The first version
+   used `max(0, dot(-n, L))` — lambertian, bright where the surface faces the light and flat where it
+   faces away, which is a bevel. A lens is not a lambertian surface: light entering one edge leaves
+   through the opposite one, so BOTH ends of the light axis catch it. Both references model exactly
+   this and neither is subtle about it — the reference map writes the same highlight value into the
+   top-left and bottom-right quadrants (`Math.abs(px + py)` for both), and the CSS recreations spell it
+   as a matched PAIR of opposed inset shadows: `inset 3px 3px 3px rgba(255,255,255,.45)` **and**
+   `inset -3px -3px 3px rgba(255,255,255,.45)`. It is now `abs(dot(grad, L))`.
+
+2. **THE THIN RIM MUST DOMINATE THE BROAD GLOW.** The first version weighted a Fresnel falloff up to
+   1.0 against a 0.35 rim — nearly three to one the wrong way. A highlight made mostly of broad
+   falloff reads as bloom; the hairline at the boundary is what says "this has an edge". The
+   reference's defaults are `edgeHighlight: 0.25` against `glow: 0.1`, both with exponent 1.5, and the
+   rim band is measured in PIXELS (`edgeWidth: 3`) rather than as a fraction of the bezel — a rim is a
+   hairline whatever the bezel behind it is doing.
+
+3. **CHROMATIC ABERRATION IS THREE TAPS, NOT ONE TAP TINTED.** A prism separates colours because each
+   wavelength refracts through a different ANGLE, so the faithful model runs the displacement three
+   times and keeps one channel from each: the reference uses scales `[s(1+0.2c), s(1+0.1c), s]`. The
+   first version scaled red and blue by 0.985 and 1.015 — a 3% spread against the reference's 20%
+   default, which is invisible at any radius anybody would use and reads as the feature not being
+   wired up.
+
+**`specular` is now a MASTER MULTIPLIER** over both terms, as it is in the reference (`specular: 1`
+over `glow: 0.1` and `edgeHighlight: 0.25`), and defaults to 1. Defaulting it to a fraction silently
+scaled the researched weights down to a third of themselves.
+
+**Still not taken, deliberately:** the reference's `splay` (damps X displacement near the top and bottom
+edges so refraction follows the nearest edge rather than being purely radial) is largely what an SDF
+gradient already does, since that gradient points along the nearest edge's normal by construction. Its
+`domeDepth` — a whole-surface spherical magnification on top of the bezel — is a real effect we do not
+have and would be the next thing worth adding. And an outer DROP SHADOW (`0 4px 4px rgba(0,0,0,.15)`,
+in every CSS recreation) cannot be drawn by a `CgUiDrawable` at all: a drawable paints inside its own
+rect, and a shadow is outside it. That belongs to the box model, not to this material.
