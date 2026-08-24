@@ -1,5 +1,8 @@
 package com.crystalgui.language.java;
 
+import com.crystalgui.core.async.JobKey;
+import com.crystalgui.core.async.JobLane;
+import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.ResourceContentProvider;
 import com.crystalgui.fs.ResourceRegistry;
@@ -20,6 +23,8 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Serves the text behind {@code library://} — what the viewer shows for a class the workspace lacks.
@@ -147,7 +152,10 @@ public final class LibrarySources implements ResourceContentProvider {
     public SymbolInfo symbolOf(Resource resource) {
         if (resource == null) return null;
         String binaryName = resource.path();
-        List<String> classpath = HostClasspath.detect();
+        // THE CACHE IS CONSULTED BEFORE THE CLASSPATH IS DETECTED, and it used to be the other way round
+        // -- so every answered call still paid for a full classpath probe. This is a PRESENTATION
+        // provider: the dock re-reads it on every strip rebuild, so that cost landed on the frame.
+        //
         // A SOURCE-BACKED TAB GETS ONE TOO, and it used to be refused here on the ground that
         // `ArrayList.java` is a FILE and should take the icon one in the project would. That reasoning
         // inverted the moment a project `.java` started showing what it declares: the two are now the
@@ -156,12 +164,49 @@ public final class LibrarySources implements ResourceContentProvider {
         synchronized (SYMBOLS) {
             if (SYMBOLS.containsKey(binaryName)) return SYMBOLS.get(binaryName);
         }
-        SymbolInfo described = describe(binaryName, classpath);
-        synchronized (SYMBOLS) {
-            SYMBOLS.put(binaryName, described);
-        }
-        return described;
+        scheduleDescribe(resource, binaryName);
+        // NOT YET, rather than an answer bought with a frame. @see ResourceRegistry#onSymbolResolved
+        return null;
     }
+
+    /**
+     * Works out what a class is, <b>off the thread that draws frames</b>, once per name.
+     *
+     * <h3>Measured at 761ms, on a method that reads like a getter</h3>
+     *
+     * <p>{@code describe} compiles a probe unit against the whole classpath, and this is reached from a
+     * tab presentation and a tree row bind — both on the frame thread. So the first time any library
+     * class appeared in the dock the application stopped for the better part of a second, and nothing at
+     * either call site suggested it might: the signature is {@code SymbolInfo symbolOf(Resource)}.</p>
+     *
+     * <p><b>The glyph arrives late instead</b>, which is the trade every IDE makes for the same reason —
+     * a decompiled tab shows a generic icon for a moment and then the right one. The alternative is not
+     * "the correct icon immediately", it is a frozen frame.</p>
+     *
+     * <p>{@code PENDING} is what keeps a run of presentation reads from queueing one job each: the dock
+     * re-reads every tab on every strip rebuild, so an unguarded miss would submit dozens for one class.
+     * The key is the same for all of them, so the scheduler would collapse them anyway — the set makes
+     * that a property of this code rather than of a scheduler detail.</p>
+     */
+    private static void scheduleDescribe(Resource resource, String binaryName) {
+        if (!PENDING.add(binaryName)) return;
+        JobScheduler.shared()
+                .job(JobKey.of(LibrarySources.class, "describe-" + binaryName), JobLane.LATENCY,
+                        context -> describe(binaryName, HostClasspath.detect()))
+                .onDone(described -> {
+                    // ON THE UI THREAD, during drain -- which is what makes storing and announcing safe
+                    // to do together, and what lets the announcement reach a widget directly.
+                    synchronized (SYMBOLS) {
+                        SYMBOLS.put(binaryName, described);
+                    }
+                    PENDING.remove(binaryName);
+                    ResourceRegistry.symbolResolved(resource);
+                })
+                .submit();
+    }
+
+    /** Names a describe is already running for. @see #scheduleDescribe */
+    private static final Set<String> PENDING = ConcurrentHashMap.newKeySet();
 
     /**
      * What the engine says a type is, or null.

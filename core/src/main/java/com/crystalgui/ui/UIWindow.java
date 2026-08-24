@@ -5,6 +5,7 @@ import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.async.JobScheduler;
+import com.crystalgui.core.async.UiThread;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.style.StyleEngine;
@@ -641,6 +642,10 @@ public final class UIWindow {
     }
 
     private float advanceFrame() {
+        // THIS IS THE THREAD THAT OWNS THE TREE, and from here anything expensive reached on it can be
+        // named rather than merely felt. Marked from the frame itself so it is right whatever drives one
+        // -- a real window, the harness, or a test stepping frames by hand. @see UiThread
+        UiThread.markCurrent();
         long now = System.nanoTime();
         float deltaSeconds = (now - lastFrameNanos) / 1_000_000_000f;
         lastFrameNanos = now;
