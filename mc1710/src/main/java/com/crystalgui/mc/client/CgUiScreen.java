@@ -372,6 +372,13 @@ public final class CgUiScreen extends GuiScreen {
         // BUILT, and only RAISED for F6. Opening a window already shows it, so an empty desktop now has
         // something on it and a taskbar to reach it by; what F7 must not do is put it in front.
         if (!showEditorOnOpen) return;
+        // CONSUMED, because it is a REQUEST and not a mode. It is static (a Minecraft GuiScreen is
+        // constructed fresh on every display, so nothing about the request can live on the instance),
+        // and left latched it stays true for the rest of the session -- so any later initGui re-raises
+        // a window the user has just put away. Minecraft calls initGui from setWorldAndResolution, which
+        // runs on every display resize, so "minimise the editor and nudge the game window" would bring
+        // it straight back with nothing on screen to explain why.
+        showEditorOnOpen = false;
         if (editorWindow.state() == WindowState.HIDDEN) editorWindow.show(true);
         uiWindow.desktop().activate(editorWindow);
     }
