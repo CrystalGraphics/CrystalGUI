@@ -75,10 +75,13 @@ public final class SourceRoots {
      * and it generalises the way the real thing does: roots under {@code src/test} would make a second
      * module, which is what a test source set is.</p>
      *
-     * <p>So the PROJECT root is not automatically a module — it is one only when a root sits directly
-     * inside it. That is deliberate. A project root already has a row that says it is a project; giving
-     * it the module glyph as well would put two module icons in one tree and tell the reader nothing
-     * about where source actually starts.</p>
+     * <p><b>The project root is a module too</b>, whatever it declares. It was briefly not — on the
+     * argument that its row already says it is a project, so a second module glyph would be noise — and
+     * that argument is wrong about which thing a module icon names. It does not mean "here is a project";
+     * it means "here is a compilation unit with source under it", and the project root is one of those
+     * even when the source sits three directories down. A plain folder glyph there says the opposite.
+     * Two module rows in one tree is the correct picture of a Gradle project, which is what IntelliJ
+     * draws for one.</p>
      *
      * <p>{@code relativePath} is project-relative, as every {@link CgPath} in a workspace is: empty is the
      * project root itself. Roles are ranked rather than returned first-match, because roots nest — see
@@ -87,6 +90,10 @@ public final class SourceRoots {
     public static Role roleOf(@Nullable String relativePath, @Nullable List<String> roots) {
         String normalisedPath = relativePath == null ? null : normalise(relativePath);
         String within = normalisedPath == null ? "" : normalisedPath;
+        // THE PROJECT ROOT, BEFORE THE ROOTS ARE CONSULTED. It is a module because of what it is, not
+        // because of what it declares -- a project that has not been given source roots yet still has a
+        // root, and drawing a plain folder there says it is an ordinary directory somebody opened.
+        if (within.isEmpty()) return Role.MODULE;
         if (roots == null || roots.isEmpty()) return Role.FOLDER;
 
         Role role = Role.FOLDER;

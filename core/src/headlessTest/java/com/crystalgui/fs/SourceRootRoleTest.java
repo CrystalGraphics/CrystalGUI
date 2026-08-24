@@ -35,16 +35,20 @@ public class SourceRootRoleTest {
     }
 
     /**
-     * <b>The project root is NOT a module for free.</b>
+     * <b>...and so is the project root, whatever it declares.</b>
      *
-     * <p>It is one only when a root sits directly inside it. A project root already has a row saying it
-     * is a project; the module glyph there as well would put two of them in one tree and say nothing
-     * about where source starts.</p>
+     * <p>Two module rows in one tree is the correct picture of a Gradle project rather than a mistake: a
+     * module icon does not mean "here is a project", it means "here is a compilation unit with source
+     * under it", and both the root and {@code src/main} are that. A project with no source roots
+     * declared yet still has a root, and a plain folder glyph there reads as an ordinary directory
+     * somebody happened to open.</p>
      */
     @Test
-    public void theProjectRootIsAModuleOnlyWhenARootIsDirectlyInIt() {
-        assertEquals(SourceRoots.Role.FOLDER, SourceRoots.roleOf("", ROOTS));
+    public void theProjectRootIsAlwaysAModule() {
+        assertEquals(SourceRoots.Role.MODULE, SourceRoots.roleOf("", ROOTS));
         assertEquals(SourceRoots.Role.MODULE, SourceRoots.roleOf("", List.of("java", "js")));
+        assertEquals("a project with no roots still has one", SourceRoots.Role.MODULE,
+                SourceRoots.roleOf("", List.of()));
     }
 
     /** <b>A declared root is a source root, and both of them are.</b> */
@@ -112,7 +116,6 @@ public class SourceRootRoleTest {
      */
     @Test
     public void aProjectWithNoRootsHasNoPackages() {
-        assertEquals(SourceRoots.Role.FOLDER, SourceRoots.roleOf("", List.of()));
         assertEquals(SourceRoots.Role.FOLDER, SourceRoots.roleOf("src/main/java", List.of()));
         assertEquals(SourceRoots.Role.FOLDER, SourceRoots.roleOf("anything", null));
     }
@@ -122,7 +125,7 @@ public class SourceRootRoleTest {
     public void separatorsAndEdgesAreNormalised() {
         assertEquals(SourceRoots.Role.SOURCE_ROOT, SourceRoots.roleOf("src\\main\\java", ROOTS));
         assertEquals(SourceRoots.Role.SOURCE_ROOT, SourceRoots.roleOf("/src/main/java/", ROOTS));
-        assertEquals("a null path is the project root", SourceRoots.Role.FOLDER,
+        assertEquals("a null path is the project root", SourceRoots.Role.MODULE,
                 SourceRoots.roleOf(null, ROOTS));
     }
 }
