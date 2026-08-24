@@ -27,11 +27,27 @@ import javax.annotation.Nullable;
  * type the script does not contain, so the field has to exist even while the only consumer that can act on
  * it is a same-document jump.</p>
  *
+ * <h3>{@code member} is a position that does not exist yet</h3>
+ *
+ * <p>A class with no attached source has no coordinates at all until it has been <b>decompiled</b>, and
+ * decompiling to answer a hover that may never be acted on would put hundreds of milliseconds behind
+ * every one — see {@code JavaSignatures.declarationWithoutSource}. So such a site names the type, carries
+ * {@code (0,0)}, and records <em>which member was asked for</em>; whoever produces the text is then the
+ * one that can say where in it that member is. Null everywhere else, including for every site that
+ * already knows its own position.</p>
+ *
  * @param resource where it is declared, or null for the document that was asked
  * @param start    first character of the declaration's name
  * @param end      one past its last character
+ * @param member   the member to find once the text exists, or null when {@code start} is already right
  */
-public record DeclarationSite(@Nullable Resource resource, TextPoint start, TextPoint end) {
+public record DeclarationSite(@Nullable Resource resource, TextPoint start, TextPoint end,
+                              @Nullable String member) {
+
+    /** A site whose position is already known — everything but the sourceless-classpath case. */
+    public DeclarationSite(@Nullable Resource resource, TextPoint start, TextPoint end) {
+        this(resource, start, end, null);
+    }
 
     public DeclarationSite {
         if (start == null || end == null) {
@@ -108,6 +124,21 @@ public record DeclarationSite(@Nullable Resource resource, TextPoint start, Text
             // fallback is the library-shaped site it had before this existed.
             return null;
         }
+    }
+
+    /**
+     * A member of a library type whose source nobody has — the type, and the member to look for.
+     *
+     * <p>The position is {@code (0,0)} because none exists: this is the class that will be decompiled,
+     * and its members have no line numbers until it has been. Naming the member is what lets the reader
+     * land on it rather than at the top of the file. @see #member</p>
+     */
+    @Nullable
+    public static DeclarationSite inLibraryMember(String topLevelBinaryName, String member) {
+        if (topLevelBinaryName == null || topLevelBinaryName.isEmpty()) return null;
+        return new DeclarationSite(Resource.of(Resource.SCHEME_LIBRARY, topLevelBinaryName),
+                new TextPoint(0, 0), new TextPoint(0, 0),
+                member == null || member.isEmpty() ? null : member);
     }
 
     /** Whether this points into a type the workspace does not contain. @see #inLibrary */

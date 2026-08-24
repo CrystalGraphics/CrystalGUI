@@ -1363,7 +1363,7 @@ public class Workbench extends UIElement {
             // Ctrl+B into anything on the classpath did nothing -- and it read as the engine having
             // no answer, when the engine had simply never been asked for one.
             if (!site.resource().isProject()) {
-                openResourceAt(site.resource(), site.start());
+                openResourceAt(site.resource(), site.start(), site.member());
                 return;
             }
             openFileAt(site.resource().asPath(), site.start());
@@ -1481,6 +1481,14 @@ public class Workbench extends UIElement {
 
     /** @see #openFileAt — the same act for a resource the workspace does not hold. */
     public void openResourceAt(Resource resource, @Nullable TextPoint at) {
+        openResourceAt(resource, at, null);
+    }
+
+    /**
+     * @param member the member to land on once the text exists, or null when {@code at} is already right
+     *               — see {@code DeclarationSite.member}
+     */
+    public void openResourceAt(Resource resource, @Nullable TextPoint at, @Nullable String member) {
         if (resource == null) return;
         openResource(resource, () -> {
             TextEditor opened = viewers.get(resource.toString());
@@ -1488,7 +1496,36 @@ public class Workbench extends UIElement {
             if (at != null) opened.revealAt(at);
             UIWindow window = getAttachedWindow();
             if (window != null) window.getInputHandler().requestFocus(opened);
+            if (member != null) revealMember(resource, opened, member);
         });
+    }
+
+    /**
+     * Moves the caret onto {@code member} once the provider has worked out where it is.
+     *
+     * <h3>Off the UI thread, and the reveal to the top happens anyway</h3>
+     *
+     * <p>{@link ResourceContentProvider#locate} parses the reconstructed text, which is the same order of
+     * cost as producing it, so it cannot run in the callback that opened the tab. The tab therefore opens
+     * at the top and the caret arrives a moment later — which is the behaviour every IDE has for a
+     * decompiled class and is strictly better than the alternative of holding the tab closed until a
+     * parse finishes.</p>
+     *
+     * <p><b>Nothing is revealed if the tab moved on.</b> A reader who navigates twice quickly must not
+     * have the first answer land in the second class, so the viewer is re-read from the map rather than
+     * captured, and a null answer leaves the caret where the open put it.</p>
+     */
+    private void revealMember(Resource resource, TextEditor viewer, String member) {
+        ResourceContentProvider provider = ResourceRegistry.providerFor(resource);
+        if (provider == null) return;
+        jobs().job(JobKey.of(this, "locate-member"), JobLane.LATENCY,
+                        context -> provider.locate(resource, member))
+                .onDone(point -> {
+                    if (point == null) return;
+                    if (viewers.get(resource.toString()) != viewer) return;
+                    viewer.revealAt(point);
+                })
+                .submit();
     }
 
     /**

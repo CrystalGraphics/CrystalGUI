@@ -275,12 +275,63 @@ public final class JavaSignatures {
             // show the declaration here.
             ITypeBinding type = ((ITypeBinding) binding).getTypeDeclaration();
             out.word(declarationKeyword(type), "keyword");
+            // NAMED BY THE TYPES IT IS NESTED IN. @see #appendNestedPrefix -- the band above this line
+            // carries the PACKAGE, so a bare simple name left nothing anywhere in the popup saying the
+            // type was nested at all, and pointed a reader at a package the name is not directly in.
+            appendNestedPrefix(out, type);
             out.append(name, typeCapture(type));
             appendTypeParameters(out, type);
             appendSupertypes(out, type, broken);
             return out.build();
         }
         return out.build();
+    }
+
+    /**
+     * The types a nested declaration is written inside — {@code Script.}, {@code Script.Middle.}.
+     *
+     * <p>Nothing for a top-level type, which is what keeps a separator from being written with nothing in
+     * front of it. <b>The whole chain, not one level</b>: a single {@code Outer.} is the shape that reads
+     * correctly on every two-level fixture and silently loses the middle of a three-level one.</p>
+     *
+     * <h3>Each segment is coloured as the kind IT is</h3>
+     *
+     * <p>Not one capture over the whole dotted name, which is how this was first written and is wrong the
+     * moment the kinds differ: {@code Main.Shape} — a class holding a sealed interface — drew
+     * <em>{@code Main}</em> in the interface colour, because the token covering the whole string took the
+     * capture of the thing at the end of it. A qualified name is a path through several declarations and
+     * each one is what it is, so each is asked separately. The dots belong to neither and stay
+     * uncaptured.</p>
+     *
+     * <h3>What is deliberately excluded</h3>
+     *
+     * <p><b>A type variable, which has a declaring class and is not nested in it.</b> {@code T} on
+     * {@code Box<T>} reports {@code Box} as its declaring class, so the obvious walk renders {@code Box.T}
+     * — a type that does not exist. It reaches here at all because {@link #of} routes type variables past
+     * the assembled-type branch and they arrive back in this one when nothing can be quoted. Primitives,
+     * arrays and wildcards are excluded for the same reason: each has an enclosing something and none of
+     * them is a member of it.</p>
+     *
+     * <p><b>And a chain through an ANONYMOUS class is abandoned rather than shortened.</b> Such a link has
+     * no name to write, and skipping it would render {@code Outer.Inner} for a type that is not directly
+     * inside {@code Outer} — a name a reader could not use. Nothing is the honest answer, which is why the
+     * chain is collected in full before a character of it is written.</p>
+     */
+    private static void appendNestedPrefix(Signature.Builder out, ITypeBinding type) {
+        if (type.isTypeVariable() || type.isPrimitive() || type.isArray() || type.isWildcardType()) {
+            return;
+        }
+        List<ITypeBinding> enclosing = new ArrayList<>();
+        for (ITypeBinding at = type.getDeclaringClass(); at != null; at = at.getDeclaringClass()) {
+            String simple = at.getName();
+            if (simple == null || simple.isEmpty()) return;
+            enclosing.add(at);
+        }
+        for (int i = enclosing.size() - 1; i >= 0; i--) {
+            ITypeBinding at = enclosing.get(i);
+            out.append(at.getName(), typeCapture(at));
+            out.raw(".");
+        }
     }
 
     /**
@@ -973,7 +1024,26 @@ public final class JavaSignatures {
         if (binding == null || binding.isRecovered()) return null;
         String topLevel = topLevelSourceName(binding);
         if (topLevel == null) return null;
-        return DeclarationSite.inLibrary(topLevel, new TextPoint(0, 0), new TextPoint(0, 0));
+        // AND WHICH MEMBER, so the reader can land on it once the text exists. The position stays (0,0)
+        // -- there is nothing to compute one from yet -- but a type is not the answer to "where is this
+        // method declared", and the top of the file is where every member of every sourceless class used
+        // to arrive. @see DeclarationSite#member
+        return DeclarationSite.inLibraryMember(topLevel, memberNameOf(binding));
+    }
+
+    /**
+     * The member to look for in reconstructed output — null when the binding <b>is</b> the type.
+     *
+     * <p>A type needs no member: the reader is going to the class and the top of the file is where the
+     * class declaration is. A constructor is named after its type and would find the type's own
+     * declaration, which is the same place a reader wants for it anyway.</p>
+     */
+    @Nullable
+    private static String memberNameOf(IBinding binding) {
+        if (binding instanceof ITypeBinding) return null;
+        if (binding instanceof IMethodBinding && ((IMethodBinding) binding).isConstructor()) return null;
+        String name = binding.getName();
+        return name == null || name.isEmpty() ? null : name;
     }
 
     /**
