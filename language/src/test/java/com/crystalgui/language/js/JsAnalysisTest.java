@@ -5,6 +5,7 @@ import com.crystalgui.language.engine.EngineSource;
 import com.crystalgui.language.engine.bridge.Analysis;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
+import com.crystalgui.text.diagnostic.DiagnosticTag;
 import com.crystalgui.text.syntax.SyntaxToken;
 
 import org.junit.Assume;
@@ -297,7 +298,27 @@ public class JsAnalysisTest {
     @Test
     public void aPropertyNameIsNeitherAReferenceNorUnresolved() {
         assertEquals(List.of(), capturesOf("var o = {k: 1}; var v = o.k;", "k"));
-        assertEquals(List.of("variable", "variable"), capturesOf("var o = {k: 1}; var v = o.k;", "o"));
+        // `variable.member` because `o` is declared at the TOP of the file. What this test is about is
+        // that `k` gets nothing and `o` gets something — see the test below for which colour.
+        assertEquals(List.of("variable.member", "variable.member"),
+                capturesOf("var o = {k: 1}; var v = o.k;", "o"));
+    }
+
+    /**
+     * <b>A name at the top of a file is a FIELD; one inside a function is a local.</b>
+     *
+     * <p>Not a nicety. Since M15 S6 a module's top-level declarations are what it <em>exports</em>, so
+     * this is the difference between "a scratch value in this function" and "part of this file's
+     * surface", which is what a field IS. It reuses {@code variable.member} rather than naming something
+     * new, because every scheme has already decided how to draw a field — Islands purple against a grey
+     * local, Eclipse Dark cyan against yellow, Dark+ deliberately alike. Both halves are asserted
+     * together: a rule that promoted everything would be no rule at all.</p>
+     */
+    @Test
+    public void aTopLevelNameIsAFieldAndOneInsideAFunctionIsNot() {
+        assertEquals(List.of("variable.member"), capturesOf("var atTheTop = 1;", "atTheTop"));
+        assertEquals(List.of("variable"),
+                capturesOf("function f() { var inside = 1; return inside; }", "inside").subList(0, 1));
     }
 
     /**
@@ -350,5 +371,57 @@ public class JsAnalysisTest {
         List<String> out = new ArrayList<>();
         for (Diagnostic problem : problems) out.add(problem.message());
         return out.toString();
+    }
+
+    // \u2500\u2500 Unused imports, and how both kinds are DRAWN \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
+    /** <b>An import nothing mentions is reported, in the Java engine's own words.</b> */
+    @Test
+    public void anImportNothingMentionsIsReported() {
+        List<String> messages = messagesOf("import util.Greeter;\nimport util.Unused;\nGreeter.hi();\n");
+
+        assertEquals(messages.toString(), 1, messages.size());
+        assertEquals("The import util.Unused is never used", messages.get(0));
+    }
+
+    /**
+     * <b>A SHADOWED import is unused, which is the case a name-matching walk gets wrong.</b>
+     *
+     * <p>The file mentions {@code Greeter} twice and the import is still dead: the reference binds to the
+     * local, so nothing reaches the import. Both reference editors say so. This works without a walk of
+     * our own because {@code freeNames()} means "resolves to nothing this file declares", which is exactly
+     * what an import provides \u2014 a check that looked for the identifier would call this used.</p>
+     */
+    @Test
+    public void anImportShadowedByALocalIsUnused() {
+        List<String> messages = messagesOf(
+                "import util.Greeter;\nvar Greeter = { hi: function () { return 1; } };\nGreeter.hi();\n");
+
+        assertTrue("a shadowed import was not reported: " + messages,
+                messages.contains("The import util.Greeter is never used"));
+    }
+
+    /** <b>An import that IS mentioned is not reported.</b> The regression guard for the two above. */
+    @Test
+    public void anImportThatIsUsedIsNotReported() {
+        assertEquals(List.of(), messagesOf("import util.Greeter;\nGreeter.hi();\n"));
+    }
+
+    /**
+     * <b>Dead weight is FADED, not underlined \u2014 for imports and locals alike.</b>
+     *
+     * <p>What the report was actually about. {@code SquigglesPart} skips a diagnostic carrying
+     * {@link DiagnosticTag#UNNECESSARY} and the editor styles the range through a highlight instead, so
+     * the tag is the whole difference between "delete this" and "this is wrong". The Java engine has
+     * tagged both since {@code EcjProblemPolicy} was written and JavaScript tagged neither, so the same
+     * finding squiggled in one tab and faded in the next.</p>
+     */
+    @Test
+    public void unusedThingsAreTaggedAsDeadWeightRatherThanDefects() {
+        for (Diagnostic problem : analyse("import util.Unused;\nfunction f() { var x = 1; return 2; }\n")
+                .diagnostics()) {
+            assertTrue("not drawn as dead weight: " + problem.message(),
+                    problem.hasTag(DiagnosticTag.UNNECESSARY));
+        }
     }
 }

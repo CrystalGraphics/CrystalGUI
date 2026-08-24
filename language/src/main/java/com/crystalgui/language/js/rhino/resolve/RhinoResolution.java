@@ -2,6 +2,7 @@ package com.crystalgui.language.js.rhino.resolve;
 
 import com.crystalgui.language.engine.bridge.LiveScopeSnapshot;
 import com.crystalgui.language.js.rhino.exec.RhinoGlobals;
+import com.crystalgui.text.lang.ProjectSourcesRegistry;
 import com.crystalgui.language.js.rhino.RhinoScopes;
 import com.crystalgui.text.lang.DeclarationSite;
 import com.crystalgui.text.lang.Signature;
@@ -118,8 +119,19 @@ public final class RhinoResolution {
      */
     @Nullable
     public SymbolInfo describeImportedType(String binaryName) {
-        if (interop == null || binaryName == null || binaryName.isEmpty()) return null;
+        if (binaryName == null || binaryName.isEmpty()) return null;
+        // THE PROJECT FIRST, in the same order every other consumer uses. Without this the import LINE
+        // described a Java class while the identifier two rows below described a module -- the same name,
+        // two answers, in one file.
+        SymbolInfo module = fromProjectScript(simpleNameOf(binaryName), binaryName);
+        if (module != null) return module;
+        if (interop == null) return null;
         return interop.describe(binaryName, false);
+    }
+
+    private static String simpleNameOf(String qualifiedName) {
+        int lastDot = qualifiedName.lastIndexOf('.');
+        return lastDot < 0 ? qualifiedName : qualifiedName.substring(lastDot + 1);
     }
 
     // ── resolveAt ───────────────────────────────────────────────────────────────────────────────
@@ -289,6 +301,20 @@ public final class RhinoResolution {
                         : signed.withDeclaration(described.declaration());
             }
         }
+        // ANOTHER SCRIPT'S EXPORT, described from the file it is written in rather than assembled here.
+        //
+        // Without this a module's member fell to the bare property below: it resolved, so the popup
+        // opened and the name was right, and it carried no SIGNATURE -- which sends the documentation
+        // popup down its assembled renderer, painting from its own three bands instead of the editor's
+        // capture scheme. The member hovered in visibly different colours from every other member in the
+        // same file, and drew a CLASS glyph for its owner, so it read as a theming bug rather than as two
+        // missing fields. It also had nowhere to jump to. @see #exportsOf
+        if (receiver instanceof JsTypeRef && ((JsTypeRef) receiver).isModule()) {
+            for (SymbolInfo exported : exportsOf(receiver.qualifiedName())) {
+                if (identifier.equals(exported.name())) return exported;
+            }
+        }
+
         // A PROPERTY WE CANNOT TYPE IS STILL A PROPERTY. Answering null would make a hover over an
         // ordinary object member report nothing at all, which reads as the engine being absent.
         return new SymbolInfo(identifier, SymbolKind.PROPERTY, null,
@@ -394,6 +420,40 @@ public final class RhinoResolution {
     }
 
     /**
+     * An imported name that the workspace declares — its exports, read statically.
+     *
+     * <p>Null when the workspace has no such file, which is how the caller knows to try the classpath.
+     * The members are an approximation by construction ({@link JsExports} says why), and the honest
+     * consequence is that a module whose exports are built dynamically resolves to an object with no
+     * properties rather than to nothing at all — the name itself is still known, still coloured as a
+     * binding, and still hovers as a module.</p>
+     */
+    @Nullable
+    private SymbolInfo fromProjectScript(String identifier, String qualifiedName) {
+        // ONLY A `.js` FILE, and the editor and the runtime must agree about that or a name would
+        // complete as one thing and run as another. @see com.crystalgui.language.js.rhino.exec.JsModules
+        String path = ProjectSourcesRegistry.view().pathOf(qualifiedName);
+        if (path != null && !path.endsWith(".js")) return null;
+
+        // `sourceOf` AND NOT `awaitSourceOf`. This runs inside an analysis, on a keystroke; the run path
+        // is the one that may wait. A file nobody has open resolves on the next analysis instead, which
+        // is what the workbench's re-analysis announcement exists to make happen.
+        String source = ProjectSourcesRegistry.view().sourceOf(qualifiedName);
+        if (source == null) return null;
+        TypeRef type = JsTypeRef.module(qualifiedName, JsExports.namesIn(source));
+        SymbolInfo binding = new SymbolInfo(identifier, SymbolKind.MODULE, type, qualifiedName, null,
+                Set.of(), null);
+        binding = binding.withContainerKind(SymbolKind.MODULE)
+                .withSignature(JsSignatures.of(binding, List.of()));
+        // AND SOMEWHERE TO GO. Without a declaration site Ctrl+B does nothing at all -- the name resolves,
+        // hovers correctly, and simply cannot be opened, which reads as navigation being unimplemented
+        // rather than as a field nobody filled in. The top of the file, because that is what a jump to a
+        // MODULE means.
+        DeclarationSite site = siteIn(qualifiedName, 0);
+        return site == null ? binding : binding.withDeclaration(site);
+    }
+
+    /**
      * A declared name, typed by whichever tier can.
      *
      * <h3>The live tier contributes a TYPE; it never replaces the declaration</h3>
@@ -429,7 +489,7 @@ public final class RhinoResolution {
         TypeRef type = live != null ? live : stated;
         String tier = live != null ? FROM_LAST_RUN : declaredType != null ? FROM_JSDOC : null;
 
-        SymbolInfo symbol = new SymbolInfo(identifier, declared.kind, type,
+        SymbolInfo symbol = new SymbolInfo(identifier, kindOf(declared), type,
                 tier == null ? container : suffixed(container, tier),
                 // RENDERED, not raw. This handed the description across as the author typed it, so a
                 // documented function hovered with its markdown intact -- asterisks around words meant
@@ -524,6 +584,14 @@ public final class RhinoResolution {
         // `interop.describe` so an imported name hovers identically to the fully qualified spelling it
         // replaced: same kind, same quoted declaration, same owner. Anything else would make the
         // shorthand read as a different thing from the name it stands for.
+        // A PROJECT SCRIPT FIRST, exactly as the runtime binds it. `import util.Greeter;` is the same
+        // statement whether it lands on a workspace file or a Java class, so the editor has to make the
+        // same choice the executor does -- and in the same order, or a name would complete as one thing
+        // and run as the other. @see com.crystalgui.language.js.rhino.exec.JsModules
+        if (imported.contains(identifier)) {
+            SymbolInfo module = fromProjectScript(identifier, typeName);
+            if (module != null) return module;
+        }
         if (imported.contains(identifier) && interop != null) {
             SymbolInfo described = interop.describe(typeName, true);
             if (described != null) return described;
@@ -600,6 +668,74 @@ public final class RhinoResolution {
         }
     }
 
+    /**
+     * One project script's exports, as members that behave like every other member.
+     *
+     * <p>Each carries its own declaration site, so Ctrl+B lands on the line the export is written at
+     * rather than merely opening the file — except for a key of an object assigned wholesale to
+     * {@code module.exports}, which has no span of its own and lands at the top. And each carries a
+     * signature, without which the documentation popup falls back to assembling one and draws it in a
+     * different colour scheme from the rest of the file.</p>
+     */
+    private List<SymbolInfo> exportsOf(String qualifiedName) {
+        String source = ProjectSourcesRegistry.view().sourceOf(qualifiedName);
+        if (source == null) return List.of();
+        List<SymbolInfo> members = new ArrayList<>();
+        for (JsExports.Export export : JsExports.exportsIn(source)) {
+            // THE DECLARATION'S OWN KIND AND PARAMETERS. Calling every export a PROPERTY is what made a
+            // module's function hover as a bare word: `JsSignatures` renders from the KIND, so a property
+            // prints its name and nothing else while a function prints `function greet(who)`.
+            // EVERYTHING THE DECLARATION SAID, not just its name. A member with no type prints as a bare
+            // word where its own file prints `var defaultName: string`, and one with no documentation
+            // reads as undocumented rather than as a field dropped at the seam -- the same failure the
+            // Java side records for `describeMember`.
+            SymbolInfo member = new SymbolInfo(export.name(), export.kind(), export.type(),
+                    qualifiedName, export.documentation(), Set.of(), null);
+            member = member.withContainerKind(SymbolKind.MODULE)
+                    .withSignature(JsSignatures.of(member, export.parameters(), export.keyword()));
+            DeclarationSite site = siteIn(qualifiedName, export.offset());
+            members.add(site == null ? member : member.withDeclaration(site));
+        }
+        return members;
+    }
+
+    /**
+     * Where {@code offset} sits inside another project file, as a jump target.
+     *
+     * <p>Null when the workspace cannot say where the file lives, which is every in-memory stand-in — and
+     * the caller then keeps a symbol that resolves and hovers and simply cannot be opened, which is the
+     * behaviour before any of this existed rather than a regression.</p>
+     *
+     * <p>Rows and columns rather than the offset, because that is what {@link DeclarationSite} carries and
+     * why: the answer is computed against one document and consumed against another.</p>
+     */
+    @Nullable
+    private DeclarationSite siteIn(String qualifiedName, int offset) {
+        String path = ProjectSourcesRegistry.view().pathOf(qualifiedName);
+        if (path == null) return null;
+        String source = ProjectSourcesRegistry.view().sourceOf(qualifiedName);
+        if (source == null) return null;
+        com.crystalgui.text.TextPoint at = new LineIndex(source).pointAt(Math.max(0, offset));
+        return DeclarationSite.inProject(path, at, at);
+    }
+
+    /**
+     * What a declaration IS, once its position in the file is taken into account.
+     *
+     * <p>{@code RhinoScopes} calls every {@code var} a LOCAL_VARIABLE, which is what the language says
+     * and is not the whole story: a name at the top of a file is part of that file's surface, and since
+     * M15 S6 it is literally what the module <b>exports</b>. That is a FIELD.</p>
+     *
+     * <p>Decided HERE rather than in the renderers, and that is the point. The editor's colour and the
+     * documentation popup's signature are two different pieces of code reading one symbol, and the first
+     * attempt taught only the colour — so the same name was drawn as a field in the text and as a local
+     * in the popup hovering over it. A kind is one fact; anything derived from it then agrees for free.</p>
+     */
+    private static SymbolKind kindOf(RhinoScopes.Declaration declared) {
+        return declared.owner == null && declared.kind == SymbolKind.LOCAL_VARIABLE
+                ? SymbolKind.FIELD : declared.kind;
+    }
+
     /** The names the last run left behind — what a "did you mean" must not offer to rename. */
     public Set<String> liveNames() {
         return live.names();
@@ -618,6 +754,16 @@ public final class RhinoResolution {
             boolean staticSide = type instanceof JsTypeRef && ((JsTypeRef) type).isStaticSide();
             return interop.membersOf(javaName, staticSide);
         }
+        // ANOTHER SCRIPT'S EXPORTS, read from its own file so each one carries a signature and a place
+        // to jump to. The generic object path below could produce the NAMES from `keys()` alone, and that
+        // is what it did first -- but a member with no signature falls through to the popup's assembled
+        // renderer, which paints in its own bands rather than the editor's capture scheme, so a module's
+        // member hovered visibly differently from every other member in the file. @see JsExports
+        if (type instanceof JsTypeRef && ((JsTypeRef) type).isModule()) {
+            List<SymbolInfo> exported = exportsOf(type.qualifiedName());
+            if (!exported.isEmpty()) return exported;
+        }
+
         List<SymbolInfo> members = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
 

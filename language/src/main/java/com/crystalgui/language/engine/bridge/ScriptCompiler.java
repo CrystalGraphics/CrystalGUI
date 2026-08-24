@@ -1,6 +1,7 @@
 package com.crystalgui.language.engine.bridge;
 
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 
 /**
@@ -72,7 +73,33 @@ public interface ScriptCompiler {
      * band 8 exists for the JVM the *scripts* run on, not for one this module runs on. The day that
      * changes, this is one of the types that has to change with it.</p>
      */
-    record Result(boolean successful, Map<String, byte[]> classes, List<String> messages) {
+    record Result(boolean successful, Map<String, byte[]> classes, List<String> messages,
+                  Set<String> projectSources) {
+
+        /** Three-argument form for a compile that reached no workspace at all. */
+        public Result(boolean successful, Map<String, byte[]> classes, List<String> messages) {
+            this(successful, classes, messages, Set.of());
+        }
+
+        /**
+         * Every PROJECT type this compile pulled in from the workspace, by qualified name.
+         *
+         * <p>What a cache has to know and cannot work out. A compiled script is keyed on the text of the
+         * file the author ran; a sibling it resolved through is invisible to that key, so editing the
+         * sibling would leave the cache serving bytes compiled against the old one — the run would not
+         * change, which reads as the edit not having been picked up rather than as a caching decision.</p>
+         *
+         * <p><b>Names, not texts.</b> The host hashes the current source itself, at both ends of the
+         * comparison, so the two are always measured the same way — and nothing here retains a copy of
+         * every file a script happened to touch.</p>
+         *
+         * <p>Empty for a compile with no workspace behind it, which is every test, the harness's own
+         * fixtures and a plain JVM. Such a script is cached on its own text alone, exactly as before.</p>
+         */
+        @Override
+        public Set<String> projectSources() {
+            return projectSources;
+        }
 
         /** Whether bytecode was produced. False means {@link #messages()} says why. */
         @Override

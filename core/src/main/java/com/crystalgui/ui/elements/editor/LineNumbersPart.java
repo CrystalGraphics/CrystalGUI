@@ -91,7 +91,9 @@ final class LineNumbersPart extends EditorViewPart {
             // field updated only when it moves, so measuring the digits afresh at layout time meant the
             // two could disagree on any frame where the font had not resolved: the numbers got a
             // zero-width box and every one of them piled up in the same place.
-            final float numberLeft = editor.paddingLeft() + editor.gutterPadLeft();
+            // AFTER the chevron column, which is zero wide unless something is offering chevrons.
+            final float numberLeft = editor.paddingLeft() + editor.gutterChevronWidth()
+                    + editor.gutterPadLeft();
             final float numberWidth = editor.gutterNumbersWidth();
             StyleGroup.defaultPipeline(number.getStyle().getLayoutGroup(),
                     l -> l.positionType(TaffyPosition.ABSOLUTE)

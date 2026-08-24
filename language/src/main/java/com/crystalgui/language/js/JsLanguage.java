@@ -367,6 +367,10 @@ public final class JsLanguage {
         if (java == null) return;
         javaLent = true;
         analyzer.useJavaEngine(java.analyzer(), HostClasspath.detect(), java.releaseLevel());
+        // AND THE RUNTIME HALF OF THE SAME LOAN. The line above lets the EDITOR describe a Java type; this
+        // one lets a script actually import one the workspace declares. Lending only the first is what
+        // made the popup offer `com.example.Main` and the run refuse it.
+        if (executor != null) executor.useProjectClasses(JavaLanguage::projectClass);
     }
 
     /** Re-lends the Java engine — for a host that opened the two languages in the other order. */

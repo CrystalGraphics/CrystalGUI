@@ -7,6 +7,7 @@ import com.crystalgui.ui.text.TextRange;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -28,22 +29,149 @@ import java.util.List;
  * while the widget lights up characters by another produces rows sorted by relevance and highlighted by
  * something else — which reads as a highlighting bug and is really a disagreement about matching.</p>
  *
+ * <h3>A source PUSHES; it does not return a list</h3>
+ *
+ * <p>It used to return {@code List<QuickPickEntry>}, and the paragraph above explains why that could not
+ * last: a list is an answer that is already complete, and the case this seam exists for is the one where
+ * it is not. IntelliJ's equivalent is {@code fetchElements(pattern, indicator, consumer)} for the same
+ * reason — a provider streams into a consumer and is cancelled by an indicator, and the popup renders what
+ * has arrived so far.</p>
+ *
+ * <p>Changed while there were four implementations rather than a dozen. The shape is what matters now;
+ * today's only consumer drains it synchronously ({@link #drain}), and an asynchronous source can hold its
+ * {@link ResultSink} and push later without the widget or any other source noticing.</p>
+ *
  * <h3>Ordering is the source's answer, not a suggestion</h3>
  *
- * <p>{@link QuickPick} renders the returned list in order and pre-selects the first row, so the source
- * decides what Enter does on an untouched query. That is the same contract the node create menu has, and
- * the same reason its ranking bug — pressing Enter created the wrong node — was worth a matcher rewrite.</p>
+ * <p>{@link QuickPick} renders the pushed rows in order and pre-selects the first, so the source decides
+ * what Enter does on an untouched query. That is the same contract the node create menu has, and the same
+ * reason its ranking bug — pressing Enter created the wrong node — was worth a matcher rewrite.</p>
  */
 @FunctionalInterface
 public interface QuickPickSource {
 
     /**
-     * The rows for this query, best first.
+     * Pushes the rows for this query, best first, until the sink stops wanting them.
      *
      * @param query never null; may be {@link SearchQuery#isEmpty() empty}, which conventionally means
-     *              "show everything" rather than "show nothing"
+     *              "show everything" rather than "show nothing" — though a source over something unbounded
+     *              may reasonably read it as the latter
+     * @param sink  where rows go. <b>Stop as soon as {@link ResultSink#accept} answers false</b>; carrying
+     *              on is not merely wasteful, it is how a source over sixty thousand entries stalls a
+     *              keystroke
      */
-    List<QuickPickEntry> query(SearchQuery query);
+    void fetch(SearchQuery query, ResultSink sink);
+
+    /**
+     * Where a source's rows go.
+     *
+     * <p>Deliberately not a {@code Consumer}: a consumer cannot say <em>stop</em>, and the two things this
+     * adds beyond accepting a row are both about stopping. {@link #accept} answers false when no more are
+     * wanted, and {@link #markTruncated} is how a source that stopped early says so — which the widget
+     * cannot infer, because a source that pushed exactly the cap and a source that had exactly that many
+     * look identical from here.</p>
+     */
+    interface ResultSink {
+
+        /**
+         * Takes one row.
+         *
+         * @return false when no more are wanted. A source that keeps pushing after a false is not wrong so
+         *         much as pointless — the rows are dropped — but it pays for every one of them.
+         */
+        boolean accept(QuickPickEntry entry);
+
+        /**
+         * True once nothing more will be taken — a cap reached, or a newer query having superseded this
+         * one. Worth checking inside a loop that does real work per candidate.
+         */
+        boolean isCancelled();
+
+        /**
+         * Says there was more than was pushed.
+         *
+         * <p><b>The single most important thing on this interface</b>, and the easiest to leave out. Every
+         * index behind a picker is bounded, and a truncated list is indistinguishable from a complete one
+         * unless it says so — so a row that exists but fell past a cap looks exactly like a row that does
+         * not exist. That is the worst answer a search can give: it is wrong, and it is wrong in the
+         * direction that stops the user looking.</p>
+         */
+        void markTruncated();
+    }
+
+    /** A drained source: the rows it pushed, and whether there were more. */
+    record Batch(List<QuickPickEntry> entries, boolean truncated) {
+
+        public Batch {
+            entries = entries == null ? Collections.emptyList() : List.copyOf(entries);
+        }
+
+        public static final Batch EMPTY = new Batch(Collections.emptyList(), false);
+    }
+
+    /**
+     * Collects a source's answer into a list, stopping at {@code limit}.
+     *
+     * <p>What a synchronous consumer wants, and the only thing {@link QuickPick} does today. It is a static
+     * helper rather than a default method on purpose: a source must not be able to <em>override</em> how it
+     * is drained, or the cap becomes advisory.</p>
+     */
+    static Batch drain(QuickPickSource source, SearchQuery query, int limit) {
+        if (source == null || limit <= 0) return Batch.EMPTY;
+        Collector collector = new Collector(limit);
+        source.fetch(query == null ? SearchQuery.EMPTY : query, collector);
+        return new Batch(collector.entries, collector.truncated);
+    }
+
+    /**
+     * {@link #drain}'s sink. Caps, and learns from the <b>one extra row</b> whether the cap bit.
+     *
+     * <h3>Why it accepts up to the limit and then asks for one more</h3>
+     *
+     * <p>The obvious version returns false on the row that fills the list — and then can never tell a
+     * source that had exactly {@code limit} rows from one that had ten thousand, because a well-behaved
+     * source stops the moment it is refused and both look identical from here. Truncation would be
+     * unreportable for precisely the sources that need it most.</p>
+     *
+     * <p>So the limit-th row is accepted with a {@code true}, the source offers one more, and <em>that</em>
+     * refusal is the evidence. It is the same fetch-{@code n+1}-to-know-there-is-a-next-page trick a
+     * paginated query uses, and it costs one extra candidate per query.</p>
+     *
+     * <p>A source that stops for a reason of its own — polling {@link #isCancelled}, or having narrowed
+     * before it answered — must call {@link #markTruncated} itself. It knows there was more and this
+     * cannot: nothing was ever refused.</p>
+     */
+    final class Collector implements ResultSink {
+
+        private final List<QuickPickEntry> entries = new ArrayList<>();
+        private final int limit;
+        private boolean truncated;
+
+        Collector(int limit) {
+            this.limit = limit;
+        }
+
+        @Override
+        public boolean accept(QuickPickEntry entry) {
+            if (entries.size() >= limit) {
+                // THE ROW PAST THE END. Not stored, and its existence is the whole answer.
+                truncated = true;
+                return false;
+            }
+            if (entry != null) entries.add(entry);
+            return true;
+        }
+
+        @Override
+        public boolean isCancelled() {
+            return entries.size() >= limit;
+        }
+
+        @Override
+        public void markTruncated() {
+            truncated = true;
+        }
+    }
 
     /**
      * A source over a fixed list, matched with {@link SearchMatcher}.
@@ -71,13 +199,14 @@ public interface QuickPickSource {
         }
 
         @Override
-        public List<QuickPickEntry> query(SearchQuery query) {
+        public void fetch(SearchQuery query, ResultSink sink) {
             if (query.isEmpty()) {
                 List<QuickPickItem> sorted = new ArrayList<>(items);
                 sorted.sort(ALPHABETICAL);
-                List<QuickPickEntry> all = new ArrayList<>(sorted.size());
-                for (QuickPickItem item : sorted) all.add(QuickPickEntry.plain(item));
-                return all;
+                for (QuickPickItem item : sorted) {
+                    if (!sink.accept(QuickPickEntry.plain(item))) return;
+                }
+                return;
             }
 
             List<Scored> scored = new ArrayList<>();
@@ -95,14 +224,16 @@ public interface QuickPickSource {
                         labelWon ? List.of() : toRanges(best)));
             }
 
-            // Descending by score (SearchMatch's natural order), then alphabetical. The matcher
-            // deliberately leaves equal scores equal and documents the tiebreak as the caller's job.
+            // MATCHED IN FULL BEFORE ANYTHING IS PUSHED, and that is not a missed streaming opportunity.
+            // Ranking is a property of the whole set, so a source that pushed as it matched would emit an
+            // order it then wanted to change -- which is precisely the case the sink cannot express.
+            // Streaming pays off where the CANDIDATES arrive over time; here they are already in memory.
             scored.sort(Comparator.comparing((Scored s) -> s.match)
                     .thenComparing(s -> s.item, ALPHABETICAL));
 
-            List<QuickPickEntry> out = new ArrayList<>(scored.size());
-            for (Scored s : scored) out.add(new QuickPickEntry(s.item, s.labelRanges, s.categoryRanges));
-            return out;
+            for (Scored s : scored) {
+                if (!sink.accept(new QuickPickEntry(s.item, s.labelRanges, s.categoryRanges))) return;
+            }
         }
 
         private static List<TextRange> toRanges(SearchMatch match) {

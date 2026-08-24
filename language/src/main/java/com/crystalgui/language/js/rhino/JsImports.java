@@ -3,6 +3,7 @@ package com.crystalgui.language.js.rhino;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -86,17 +87,31 @@ public final class JsImports {
     public static final class Imported {
 
         private final String binaryName;
+        private final String simpleName;
         private final int nameStart;
         private final int keywordStart;
 
         Imported(String binaryName, int nameStart, int keywordStart) {
             this.binaryName = binaryName;
+            this.simpleName = simpleNameOf(binaryName);
             this.nameStart = nameStart;
             this.keywordStart = keywordStart;
         }
 
         public String binaryName() {
             return binaryName;
+        }
+
+        /**
+         * The name this statement actually BINDS — the last segment, a nested type unwrapped.
+         *
+         * <p>Carried rather than re-derived. {@code scan} computes it anyway to key its own map, so this
+         * costs one field, and it had already been written out a second time by the colour pass — which
+         * needs it to tell an imported name from a host binding. A third reader (the unused-import check)
+         * was one transcription too many for arithmetic that is silently wrong on a nested type.</p>
+         */
+        public String simpleName() {
+            return simpleName;
         }
 
         /** Where the qualified name begins, in the author's own offsets. Blanking preserves them. */
@@ -191,6 +206,31 @@ public final class JsImports {
      */
     public static String blank(String source) {
         return scan(source).source();
+    }
+
+    /**
+     * Which of {@code imports} nothing in the file mentions.
+     *
+     * <h3>One definition, because two readers ask</h3>
+     *
+     * <p>The analyser asks it to raise the warning and the fix catalog asks it to offer "Remove unused
+     * import". Two transcriptions of the same predicate is a warning with no fix, or a fix on a line with
+     * no warning, and both look like the feature half-working rather than like a disagreement.</p>
+     *
+     * <p>{@code referenced} is the set of FREE names — those resolving to nothing the file declares, which
+     * is exactly what an import provides. That is what makes shadowing come out right: a file importing
+     * {@code Greeter} and then declaring its own {@code var Greeter} mentions the name and the import is
+     * still dead, because the reference binds to the local.</p>
+     */
+    public static List<Imported> unusedIn(List<Imported> imports, Set<String> referenced) {
+        if (imports == null || imports.isEmpty()) return List.of();
+        List<Imported> unused = new ArrayList<>();
+        for (Imported each : imports) {
+            String simple = each.simpleName();
+            if (simple.isEmpty() || referenced.contains(simple)) continue;
+            unused.add(each);
+        }
+        return unused;
     }
 
     /** The names this script imports, without touching the source. */

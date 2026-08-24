@@ -5,6 +5,7 @@ import com.crystalgui.language.platform.ScriptServices;
 
 import com.crystalgui.text.SimilarNames;
 
+import com.crystalgui.text.lang.ProjectSourcesRegistry;
 import com.crystalgui.text.lang.SymbolKind;
 
 import java.io.File;
@@ -257,6 +258,14 @@ public final class TypeIndex {
         ensureBuilt();
         List<Entry> under = new ArrayList<>();
         boolean truncated = false;
+        // THE WORKSPACE FIRST, and first for two reasons. A project file outranks a jar publishing the
+        // same name -- the ordering the whole stack uses -- and, more practically, it must never be the
+        // thing the cap drops: `net.minecraft` alone holds ~4,300 classes, so a workspace type walked
+        // second would be truncated away by a package it has nothing to do with. @see #projectEntries
+        for (Entry entry : projectEntries()) {
+            if (!startsUnder(entry.packageName(), qualifiedPrefix)) continue;
+            under.add(entry);
+        }
         for (Entry entry : entries) {
             // THE PACKAGE, NOT THE QUALIFIED NAME. `entry.packageName()` is shared between every entry of
             // one package, so this is a prefix test on an interned string rather than a concatenation per
@@ -307,12 +316,38 @@ public final class TypeIndex {
         String prefix = parent.isEmpty() ? "" : parent + ".";
 
         // SORTED AND DEDUPED. A package is a segment shared by everything in it, so the same name arrives
-        // once per class -- thousands of times for `net.minecraft.block`.
+        // once per class -- thousands of times for `net.minecraft.block`. A segment the workspace and a
+        // jar both declare lands here once, which is right: `com` is one package however many roots
+        // contribute to it.
         java.util.TreeSet<String> packages = new java.util.TreeSet<>();
         List<Entry> types = new ArrayList<>();
-        boolean truncated = false;
 
-        for (Entry entry : entries) {
+        // THE WORKSPACE FIRST -- see the note in `allUnder` for why the order is load-bearing.
+        boolean truncated = collectChildren(projectEntries(), parent, partial, prefix, packages, types);
+        truncated |= collectChildren(entries, parent, partial, prefix, packages, types);
+
+        List<String> named = new ArrayList<>(packages);
+        if (named.size() > MAX_PACKAGES) {
+            named = new ArrayList<>(named.subList(0, MAX_PACKAGES));
+            truncated = true;
+        }
+        return new Children(named, types, truncated);
+    }
+
+    /**
+     * One source's contribution to {@link #childrenOf} — its own types, and the next segment of its
+     * sub-packages.
+     *
+     * <p>Its own method because there are two sources and the body is twenty lines: a second transcription
+     * of it would be a second place for the dot-boundary arithmetic to be wrong, and the two would agree
+     * for as long as nobody edited one of them.</p>
+     *
+     * @return whether the type cap was reached; the caller ORs it across sources
+     */
+    private static boolean collectChildren(Iterable<Entry> from, String parent, String partial,
+                                           String prefix, Set<String> packages, List<Entry> types) {
+        boolean truncated = false;
+        for (Entry entry : from) {
             String owner = entry.packageName();
             if (owner.equals(parent)) {
                 if (!startsWith(entry.simpleName(), partial)) continue;
@@ -331,13 +366,7 @@ public final class TypeIndex {
             String segment = dot < 0 ? remainder : remainder.substring(0, dot);
             if (startsWith(segment, partial)) packages.add(segment);
         }
-
-        List<String> named = new ArrayList<>(packages);
-        if (named.size() > MAX_PACKAGES) {
-            named = new ArrayList<>(named.subList(0, MAX_PACKAGES));
-            truncated = true;
-        }
-        return new Children(named, types, truncated);
+        return truncated;
     }
 
     /** Case-insensitive, because a completion list is matched the way names are typed rather than spelt. */
@@ -358,6 +387,14 @@ public final class TypeIndex {
         String needle = prefix.toLowerCase(Locale.ROOT);
         List<Entry> prefixed = new ArrayList<>();
         List<Entry> scattered = new ArrayList<>();
+        // THE WORKSPACE'S OWN TYPES, walked first so they hold the head of each tier. @see #projectEntries
+        List<Entry> projectPrefixed = new ArrayList<>();
+        List<Entry> projectScattered = new ArrayList<>();
+        for (Entry entry : projectEntries()) {
+            String candidate = entry.simpleName().toLowerCase(Locale.ROOT);
+            if (candidate.startsWith(needle)) projectPrefixed.add(entry);
+            else if (isSubsequence(needle, candidate)) projectScattered.add(entry);
+        }
         for (Entry entry : entries) {
             String candidate = entry.simpleName().toLowerCase(Locale.ROOT);
             if (candidate.startsWith(needle)) {
@@ -381,12 +418,63 @@ public final class TypeIndex {
         // agree with rather than being reshuffled a step later.
         prefixed.sort(BY_BREVITY);
         scattered.sort(BY_BREVITY);
-        List<Entry> hits = new ArrayList<>(prefixed);
+        projectPrefixed.sort(BY_BREVITY);
+        projectScattered.sort(BY_BREVITY);
+
+        // TIER FIRST, THEN PROXIMITY -- a real prefix hit beats any scattered one whatever it belongs to,
+        // and within a tier the workspace's own code beats the classpath's. That is IntelliJ's order (its
+        // weighers rank by match quality and only then by proximity) and it matters most in the case that
+        // prompted it: typing `Formatter` in a file that declares one offered java.util.Formatter,
+        // java.util.logging.Formatter and a JavaFX accessor, and not the class in the next tab.
+        List<Entry> hits = new ArrayList<>(projectPrefixed);
+        hits.addAll(prefixed);
+        hits.addAll(projectScattered);
         hits.addAll(scattered);
 
         boolean truncated = hits.size() > MAX_RESULTS;
         return new Match(truncated ? new ArrayList<>(hits.subList(0, MAX_RESULTS)) : hits, truncated);
     }
+
+    /**
+     * The workspace's declared types, as index entries.
+     *
+     * <h3>Derived per query, and deliberately not held</h3>
+     *
+     * <p>This index is built once per CLASSPATH and cached across documents — a jar does not change while
+     * the editor is open. A workspace does: every file created, renamed or deleted changes this answer, so
+     * an entry list stored beside {@code entries} would be stale with nothing to invalidate it, and the
+     * failure would be a type that exists and is never offered.</p>
+     *
+     * <p>The cost is a walk over the project's names per query, against a classpath scan of up to sixty
+     * thousand that already happens on the same keystroke. The provider answers from the crawl with no
+     * I/O, which is what makes that affordable.</p>
+     *
+     * <p>{@code container} is a marker rather than a real root: there are no bytes to read, so
+     * {@link #kindOf} falls through to its documented CLASS default. That is the honest answer here — a
+     * project type has no class file to state otherwise, and the alternative is parsing source during a
+     * keystroke to choose an icon.</p>
+     */
+    private static List<Entry> projectEntries() {
+        List<String> names;
+        try {
+            names = ProjectSourcesRegistry.view().declaredTypes();
+        } catch (RuntimeException unavailable) {
+            return List.of();
+        }
+        if (names == null || names.isEmpty()) return List.of();
+        List<Entry> out = new ArrayList<>(names.size());
+        for (String name : names) {
+            if (name == null || name.isEmpty()) continue;
+            int dot = name.lastIndexOf('.');
+            String simple = dot < 0 ? name : name.substring(dot + 1);
+            String pkg = dot < 0 ? "" : name.substring(0, dot);
+            out.add(new Entry(simple, pkg, PROJECT_CONTAINER));
+        }
+        return out;
+    }
+
+    /** Where a workspace type "lives". Shared, so every project entry costs a pointer. */
+    private static final String PROJECT_CONTAINER = "project:";
 
     /** Shortest first, then alphabetical — a total order, so the list cannot permute between keystrokes. */
     private static final Comparator<Entry> BY_BREVITY =
@@ -418,13 +506,21 @@ public final class TypeIndex {
     public List<String> similar(String simpleName) {
         if (simpleName == null || simpleName.isEmpty()) return List.of();
         ensureBuilt();
+        // HOISTED, because both passes below need it and it is derived per call. @see #projectEntries
+        List<Entry> project = projectEntries();
         Set<String> simple = new LinkedHashSet<>();
+        for (Entry entry : project) simple.add(entry.simpleName());
         for (Entry entry : entries) simple.add(entry.simpleName());
         List<String> rankedSimple = SimilarNames.rank(simpleName, simple);
         if (rankedSimple.isEmpty()) return List.of();
 
         List<String> qualified = new ArrayList<>();
         for (String candidate : rankedSimple) {
+            // THE WORKSPACE FIRST, so a misspelling of the author's own type suggests their file rather
+            // than a jar that happens to share the name.
+            for (Entry entry : project) {
+                if (entry.simpleName().equals(candidate)) qualified.add(entry.qualifiedName());
+            }
             for (Entry entry : entries) {
                 if (entry.simpleName().equals(candidate)) qualified.add(entry.qualifiedName());
             }

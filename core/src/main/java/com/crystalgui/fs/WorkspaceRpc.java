@@ -75,6 +75,11 @@ public final class WorkspaceRpc<T> {
             out.putList(WorkspaceProtocol.PROJECT_LIST, service.projects(actor), (entry, project) -> {
                 entry.putString(WorkspaceProtocol.ID, project.id());
                 entry.putString(WorkspaceProtocol.DISPLAY_NAME, project.displayName());
+                // A NESTED LIST rather than one joined string. A separator would have to be a character
+                // no path may contain, and the only such characters are the ones CgPath already refuses --
+                // so the encoding would depend on a rule enforced somewhere else entirely.
+                entry.putList(WorkspaceProtocol.SOURCE_ROOTS, project.sourceRoots(),
+                        (root, value) -> root.putString(WorkspaceProtocol.PATH, value));
             });
             respond.ok(out);
         }));
@@ -308,9 +313,28 @@ public final class WorkspaceRpc<T> {
      *
      * @return how many notifications were sent
      */
+    /**
+     * Tells this peer about a batch of filesystem events — Phase 6.2.
+     *
+     * <p>Separate from {@link #pollAndNotify} and called far more often: the point of an OS watcher is
+     * that an external save reaches the client on the next <b>tick</b> rather than at the next half-second
+     * reconcile. The batch is drained once by {@code WorkspaceService} and handed to every peer, since
+     * draining is destructive.</p>
+     */
+    public int notifyFileEvents(List<CgFileEvent> events, Notifier<T> notifier,
+                                com.crystalgui.serialization.DynamicOps<T> ops) {
+        return send(watcher.pollEvents(actor, events), notifier, ops);
+    }
+
     public int pollAndNotify(Notifier<T> notifier, com.crystalgui.serialization.DynamicOps<T> ops) {
         pollPresence(notifier, ops);
         List<WorkspaceWatcher.Change> changes = watcher.poll(actor);
+        return send(changes, notifier, ops);
+    }
+
+    /** One shape for a change on the wire, whether a poll or an event found it. */
+    private int send(List<WorkspaceWatcher.Change> changes, Notifier<T> notifier,
+                     com.crystalgui.serialization.DynamicOps<T> ops) {
         for (WorkspaceWatcher.Change change : changes) {
             StateMap<T> args = new StateMap<T>(ops)
                     .putString(WorkspaceProtocol.PATH, change.path().toString())

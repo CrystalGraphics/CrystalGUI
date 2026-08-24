@@ -141,7 +141,13 @@ public final class JavaLanguageServices extends AnalysedLanguageServices {
         if (library || ScriptPrelude.declaresType(source)) {
             return engine.analyzer().analyze(className, source, classpath, releaseLevel(), version);
         }
-        ScriptPrelude.Wrapped wrapped = ScriptHost.preludeFor(className, ScriptBindings.types()).wrap(source);
+        // THE SIMPLE NAME, because the prelude writes a class DECLARATION with it and `class com.x.Main`
+        // is not Java. A qualified name reaches here whenever the file sits under a source root (M15 S4
+        // names such a unit by its path), and a snippet is precisely the case with nothing to disagree
+        // about: it declares no type and no package, so the path has no claim to be authoritative over.
+        int lastDot = className.lastIndexOf('.');
+        String simple = lastDot < 0 ? className : className.substring(lastDot + 1);
+        ScriptPrelude.Wrapped wrapped = ScriptHost.preludeFor(simple, ScriptBindings.types()).wrap(source);
         Analysis unit = engine.analyzer().analyze(wrapped.className(), wrapped.unitSource(), classpath,
                 engine.releaseLevel(), version);
         // AND EVERY ANSWER TRANSLATED BACK, or the editor would be describing a document the author

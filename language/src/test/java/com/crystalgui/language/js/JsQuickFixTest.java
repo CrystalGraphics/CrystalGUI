@@ -487,4 +487,47 @@ public class JsQuickFixTest {
         assertTrue("the condition was wrapped instead of the loop: " + wrapped,
                 wrapped.contains("try {\n    while (i < xs.length)"));
     }
+
+    // \u2500\u2500 Unused imports \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
+    /**
+     * <b>"Remove unused import" takes the whole line.</b>
+     *
+     * <p>The offer Java has always made, on the same finding. Asserted on the TEXT the edit produces \u2014
+     * the only assertion an edit at the wrong offsets cannot pass, and the one that catches the line
+     * surviving as a blank, which is how an automated edit teaches people not to trust it.</p>
+     */
+    @Test
+    public void anUnusedImportCanBeRemoved() {
+        assertEquals("import util.Greeter;\nGreeter.hi();\n",
+                applied("import util.Greeter;\nimport util.Un|used;\nGreeter.hi();\n",
+                        "Remove unused import"));
+    }
+
+    /**
+     * <b>...offered from anywhere on the statement, the keyword included.</b>
+     *
+     * <p>The fade deliberately covers the NAME only, because that is the span JDT marks for Java and the
+     * two languages sit in one editor. A fix is reached by putting the caret on the line though, so a
+     * reader who lands on the word {@code import} must not be told there is nothing to do here.</p>
+     */
+    @Test
+    public void theFixIsOfferedAcrossTheWholeStatement() {
+        String tail = ";\nvar x = 1;\nconsole.log(x);\n";
+        for (String fixture : new String[] {
+                "im|port util.Unused" + tail,
+                "import |util.Unused" + tail,
+                "import util.Unu|sed" + tail,
+                "import util.Unused|" + tail}) {
+            assertTrue("not offered in [" + fixture.substring(0, fixture.indexOf(';') + 1) + "]",
+                    titlesAt(fixture).contains("Remove unused import"));
+        }
+    }
+
+    /** <b>An import that IS used offers nothing.</b> The guard that stops this deleting live code. */
+    @Test
+    public void aUsedImportIsNotOffered() {
+        assertFalse(titlesAt("import util.Gre|eter;\nGreeter.hi();\n")
+                .contains("Remove unused import"));
+    }
 }

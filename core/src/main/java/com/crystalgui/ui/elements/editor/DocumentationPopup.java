@@ -1403,7 +1403,17 @@ public final class DocumentationPopup extends Popover {
         // member of an interface showed a class mark. `containerKind` is null for a symbol whose owner is
         // a package, and for any producer that has no binding to ask, which is what the guess is for.
         SymbolKind owner = symbol.containerKind();
-        if (owner != null && owner.isType()) return owner;
+        // A MODULE AND A PACKAGE ARE OWNERS TOO, and gating on `isType()` silently threw both away.
+        //
+        // The guard read as defensive and was a filter: an engine that had gone to the trouble of saying
+        // "this member's owner is a MODULE" had its answer discarded, and the guess below then read the
+        // container STRING -- `util.Greeter` looks like a type, so every member of a JavaScript module
+        // drew a class mark. It hid because the module symbol ITSELF was fine: its own kind is MODULE, so
+        // it reached the switch below and came out right, and only members were wrong.
+        if (owner != null && (owner.isType() || owner == SymbolKind.MODULE
+                || owner == SymbolKind.PACKAGE)) {
+            return owner;
+        }
         SymbolKind kind = symbol.kind();
         if (kind == null) return null;
         switch (kind) {

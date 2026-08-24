@@ -99,12 +99,7 @@ final class RhinoSemanticTokens {
         // purpose so resolution and completion treat them alike -- but they are not alike to COLOUR.
         Set<String> importedNames = new LinkedHashSet<>();
         for (JsImports.Imported each : imports) {
-            String binary = each.binaryName();
-            int lastDot = binary.lastIndexOf('.');
-            String simple = lastDot < 0 ? binary : binary.substring(lastDot + 1);
-            int lastDollar = simple.lastIndexOf('$');
-            if (lastDollar >= 0) simple = simple.substring(lastDollar + 1);
-            if (!simple.isEmpty()) importedNames.add(simple);
+            if (!each.simpleName().isEmpty()) importedNames.add(each.simpleName());
         }
         // MARKED EVEN WHEN THE TREE IS NULL. A file that fails to parse still has imports the author
         // can read, and colouring them is the one thing still possible for it.
@@ -296,6 +291,28 @@ final class RhinoSemanticTokens {
         // A CONST IS NEVER REASSIGNED and never captured-in-the-interesting-sense: it cannot change, so
         // neither refinement says anything a reader did not already know from the colour.
         if (declared.kind == SymbolKind.CONSTANT) return base;
+
+        // A NAME AT THE TOP OF A FILE IS A FIELD, and it takes the capture every scheme already colours.
+        //
+        // Not a nicety: since M15 S6 a module's top-level declarations are what it EXPORTS, so this is
+        // the difference between "a scratch value in this function" and "part of this file's surface" --
+        // which is precisely what a FIELD is, and precisely the distinction Java draws by giving one its
+        // own colour. `owner` is null only at file scope, which is the whole test; a `var` inside a
+        // function is hoisted to that function and reports it, so nothing below the top level is caught.
+        //
+        // `variable.member` AND NOT A NEW NAME. The first attempt invented `variable.global`, which every
+        // scheme and the user-agent sheet were silent about -- so it fell back to `variable` and looked
+        // exactly like the local it was meant to be told apart from. The vocabulary already had the right
+        // word: Islands draws a field purple against a grey local, Eclipse Dark cyan against yellow, and
+        // Dark+ deliberately draws them alike. Adding a token would have been re-deciding, per scheme,
+        // something each of them had already decided.
+        if (declared.owner == null && declared.kind == SymbolKind.LOCAL_VARIABLE) {
+            String field = SymbolKind.FIELD.captureName();
+            // THE REFINEMENTS STILL APPLY, and the stem is kept so a scheme with nothing for
+            // `variable.member.reassigned` falls back to the field colour rather than to the local one.
+            if (declared.reassigned) return field + ".reassigned";
+            return atUse && declared.captured ? field + ".captured" : field;
+        }
         if (declared.reassigned) return base + ".reassigned";
         // THE STEM IS KEPT. This was a literal `"variable.captured"`, which silently retyped whatever it
         // described: a captured FUNCTION came out as a variable, losing both its kind and its colour.

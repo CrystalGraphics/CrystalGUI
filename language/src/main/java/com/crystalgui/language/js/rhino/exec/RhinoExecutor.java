@@ -7,6 +7,8 @@ import com.crystalgui.language.engine.bridge.MemberNameMapper;
 import com.crystalgui.language.js.rhino.JsImports;
 import com.crystalgui.language.js.rhino.JsLoaders;
 import com.crystalgui.language.js.rhino.RhinoThread;
+import javax.annotation.Nullable;
+
 import org.mozilla.javascript.BaseFunction;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.ContextFactory;
@@ -290,13 +292,9 @@ public final class RhinoExecutor implements JsExecutor {
         if (!(compiled instanceof CompiledScript)) return;
         Map<String, String> imported = ((CompiledScript) compiled).imported();
         if (imported.isEmpty()) return;
-        for (Map.Entry<String, String> each : imported.entrySet()) {
-            String binaryName = each.getValue();
-            if (allowsClass != null && !allowsClass.test(binaryName)) continue;
-            Class<?> found = JsLoaders.load(binaryName);
-            if (found == null) continue;
-            ScriptableObject.putProperty(scope, each.getKey(), wrap(cx, scope, found));
-        }
+        // A PROJECT SCRIPT FIRST, THEN A JAVA TYPE -- and the modules holder is built per run, so nothing
+        // a previous execution imported is reachable from this one. @see JsModules
+        new JsModules(scope, allowsClass).bindInto(cx, scope, imported);
     }
 
     /**
@@ -308,6 +306,38 @@ public final class RhinoExecutor implements JsExecutor {
      * {@code Packages.a.b.C} would have produced; so a class goes through the wrap factory's class path
      * and everything else through the ordinary one.</p>
      */
+    static Object wrapForScript(Context cx, Scriptable scope, Object value) {
+        return wrap(cx, scope, value);
+    }
+
+    /**
+     * How a project JAVA type is reached — lent by the host, never built here.
+     *
+     * <p>A {@code Function<String, Class<?>>} and nothing richer, because this class is loaded by the
+     * ENGINE BAND: it may name JDK types, the bridge package and {@code com.crystalgui.text.*}, and a
+     * {@code ScriptHost} is none of those. The same rule {@code TypeBytes} follows, and the same one
+     * {@code MemberNameMapper} states for its mapping set — compose host-side, cross with JDK types.</p>
+     *
+     * <p>Null until a host lends one, which is every environment with no Java engine open. Such a host
+     * keeps exactly the behaviour it had: a Java name in an import resolves against the classpath or not
+     * at all.</p>
+     */
+    // QUALIFIED ON PURPOSE: this file imports Rhino's own `Function`, and a script's `function` is
+    // the more important of the two here. Three lines is cheaper than renaming that.
+    private static volatile java.util.function.Function<String, Class<?>> projectClasses;
+
+    /** @see #projectClasses */
+    @Override
+    public void useProjectClasses(java.util.function.Function<String, Class<?>> loader) {
+        projectClasses = loader;
+    }
+
+    /** The lent loader, or null. @see #projectClasses */
+    @Nullable
+    static java.util.function.Function<String, Class<?>> projectClasses() {
+        return projectClasses;
+    }
+
     private static Object wrap(Context cx, Scriptable scope, Object value) {
         if (value instanceof Class) return cx.getWrapFactory().wrapJavaClass(cx, scope, (Class<?>) value);
         // THE CONTEXT'S OWN FACTORY, ASKED DIRECTLY, rather than through `Context.javaToJS`. Published

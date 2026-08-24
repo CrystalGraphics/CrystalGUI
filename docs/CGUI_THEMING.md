@@ -208,6 +208,12 @@ editor scheme's.
 | `--dialog-picker-bg` | `#2E2E2E76` | crystal-dark.css |
 | `--dialog-pulse-border` | `var(--accent)` | base.css |
 | `--dialog-title-bg` | `var(--surface-raised)` | base.css |
+| `--diff-added-bg` | `#2EA04326` | crystal-dark.css |
+| `--diff-added-fg` | `#2EA04359` | crystal-dark.css |
+| `--diff-changed-bg` | `#58A6FF1F` | crystal-dark.css |
+| `--diff-changed-fg` | `#58A6FF4D` | crystal-dark.css |
+| `--diff-removed-bg` | `#F8514926` | crystal-dark.css |
+| `--diff-removed-fg` | `#F8514959` | crystal-dark.css |
 | `--divider` | `#2B2D30` | crystal-dark.css |
 | `--doc-bg` | `var(--surface-panel)` | base.css |
 | `--doc-body-fg` | `var(--fg)` | base.css |
@@ -505,7 +511,7 @@ editor scheme's.
 | `--searchfield-option-on-fg` | `var(--fg-on-accent)` | base.css |
 | `--searchfield-option-on-hover-bg` | `var(--accent-hover)` | base.css |
 | `--selection-bg` | `#04395E` | crystal-dark.css |
-| `--selection-inactive-bg` | `#2E3033` | crystal-dark.css |
+| `--selection-inactive-bg` | `#46484B` | crystal-dark.css |
 | `--slider-disabled-fill` | `var(--fg-disabled)` | base.css |
 | `--slider-disabled-thumb` | `var(--fg-disabled)` | base.css |
 | `--slider-fill` | `var(--success)` | base.css |
@@ -657,8 +663,8 @@ editor scheme's.
 | `--tree-match-fg` | `var(--fg)` | base.css |
 | `--tree-selected-bg` | `var(--accent-soft)` | base.css |
 | `--tree-selected-fg` | `var(--fg-on-accent)` | base.css |
-| `--tree-selected-inactive-bg` | `var(--surface-raised)` | base.css |
-| `--tree-selected-inactive-fg` | `var(--fg-secondary)` | base.css |
+| `--tree-selected-inactive-bg` | `var(--selection-inactive-bg)` | base.css |
+| `--tree-selected-inactive-fg` | `var(--fg)` | base.css |
 | `--tree-twisty-fg` | `var(--fg-secondary)` | base.css |
 | `--warning` | `#CCA700` | crystal-dark.css |
 | `--warning-icon` | `#FFAF0F` | crystal-dark.css |

@@ -1,7 +1,9 @@
 # Search Everywhere — Research, and What We Should Build
 
 **Milestone**: `plan_navigation.md` N1
-**Status**: G1 shipped — one merged Go to File over workspace **and** classpath
+**Status**: **CLOSED.** G1 + G2 shipped — one merged Go to File over workspace **and** classpath, over
+a streaming source contract. **G3 and G4 are declined**, not pending: the user called the result
+"everything I wanted and more" and stopped here. See §10.
 
 > The request was "let's start with Go to File". The screenshots are **Search Everywhere** — Go to File
 > is one *tab* inside it. That distinction shapes everything below, because the popup is not a file
@@ -263,16 +265,29 @@ destinations, and `routeDefinitionsOf` now delegates to both rather than carryin
 by quality, kind glyphs on types and file icons on files, the query lit inside each name, and
 `Main.java:42` opening at line 42.
 
-### G2 — Streaming sources
+### G2 — Streaming sources — **SHIPPED**
 
-Change `QuickPickSource` to push into a consumer with a cancellation token, before there are three
-implementations of the old shape. Do this **before** G3, not after.
+`QuickPickSource.fetch(query, ResultSink)` replaces `query(SearchQuery) → List`. The sink can refuse a
+row, report cancellation, and be told there was more; `drain` is the synchronous collector today's only
+consumer uses, and an async source can hold its sink and push later without the widget noticing. Changed
+while there were four implementations rather than a dozen, which was the whole argument for doing it here.
+
+**Truncation came with it**, because the sink is where a cap lives. `QuickPick` caps at 100 and shows
+`100+ matches` in the header; `GoToFile` caps each half at 50 first, since every project file outranks
+every classpath type and one shared cap is spent on files before a type is ever offered.
+
+> **The non-obvious part**: a sink cannot infer truncation from refusing a row, because a well-behaved
+> source stops the moment it is refused — so a source with exactly `limit` rows and one with ten thousand
+> look identical. The limit-th row is therefore accepted with a `true`, the source offers one more, and
+> *that* refusal is the evidence. Fetch-`n+1`-to-know-there-is-a-next-page, and the first version without
+> it reported nothing at all.
 
 ### G3 — The rest of the merge, and the tabs
 
-Per-group caps and `... more` (G1 has neither — it lists everything both halves return). Tabs as filters
-over the same merged model — `All`, `Files`, `Classes`, `Actions` — which is what folds `CommandPalette`
-in as well. Dedup across providers already exists in `TypeSearchRegistry`, by qualified name.
+`... more` as a row that loads the next page, rather than G2's header count — which says there is more
+and gives no way to reach it. Tabs as filters over the same merged model — `All`, `Files`, `Classes`,
+`Actions` — which is what folds `CommandPalette` in as well. Per-group caps and dedup across providers
+already exist (G2, and `TypeSearchRegistry` by qualified name).
 
 ### G4 — Chrome
 
@@ -333,6 +348,29 @@ later without moving anything.
 **5. Yes, the location suffix ships in G1.** One regex and one `containsAnyChar` guard, ported from
 `AbstractGotoSEContributor` (§3), and `openResource(resource, onOpened)` already has the callback to
 reveal a position once the text has landed. It is what makes a pasted stack-trace line work.
+
+---
+
+## 10. Why this stops at G2
+
+G3 (tabs, a loadable "… more") and G4 (remembered geometry, a footer, a scope toggle) are **declined
+rather than deferred**, which is a different thing and worth writing down so a later reader does not
+treat them as a backlog.
+
+What shipped answers the question the plan opened with — *reach code you do not own* — and the two
+milestones left are both about a **fuller Search Everywhere**, not about reaching anything new. Tabs
+partition a list that is already partitioned and already capped; a footer restates the path the row
+already shows; remembered geometry is a preference store for a popup that reopens centred at the size you
+left it.
+
+Two pieces of G3/G4 landed early because they were load-bearing rather than polish, and their absence
+would have been felt: **drag and resize** came in G1 (a popup with no chrome has nowhere to grab), and
+**per-group caps** came in G2 (one shared cap is spent on files before a type is ever offered). What is
+left is the part that is genuinely optional.
+
+The one thing here a future reader might legitimately want is `... more` as a **loadable row**: G2's
+header count says there is more and offers no way to reach it. Narrowing the query is the answer today,
+and it is the answer both references expect too — but if this is ever reopened, that is the row to build.
 
 ---
 

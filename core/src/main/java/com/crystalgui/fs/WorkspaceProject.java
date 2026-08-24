@@ -45,6 +45,18 @@ public record WorkspaceProject(ProjectInfo info, Path root, List<String> exclude
     }
 
     /**
+     * Where this project's source starts. @see SourceRoots
+     *
+     * <p>Delegated to {@link ProjectInfo} rather than held here, and the split is deliberate:
+     * {@link #excludes} is a <b>server-side</b> rule about what is never listed, while source roots are
+     * what a <b>client-side</b> index derives qualified names with. A workspace can be remote, so
+     * anything the client must know has to travel, and {@code ProjectInfo} is what travels.</p>
+     */
+    public java.util.List<String> sourceRoots() {
+        return info.sourceRoots();
+    }
+
+    /**
      * The owning mod's namespace — everything before the first dot.
      *
      * <p>An id with no dot is entirely its own namespace, which keeps a single-project mod from having to

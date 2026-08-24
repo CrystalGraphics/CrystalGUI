@@ -43,7 +43,16 @@ theme {
     --hover-bg: #2E3033;
     --pressed-bg: #35373B;
     --selection-bg: #04395E;
-    --selection-inactive-bg: #2E3033;
+    /* A step ABOVE the surfaces rather than between them. At #2E3033 this was three units from
+     * --surface-overlay and five from --surface-raised, which is not a difference a selection can carry:
+     * on a panel it read as a faint smudge rather than as a highlight, and against a raised surface it
+     * nearly vanished.
+     *
+     * THE GREY THIS THEME ALREADY HIGHLIGHTS WITH, rather than a fourth one invented for this: it is
+     * what the activity bar draws a hovered and a checked item in. Not DERIVED from those, though, and
+     * crystal-light is why -- there the three are three different values, so they are independent tokens
+     * that happen to agree here. Tying them together would make a light theme unable to say so. */
+    --selection-inactive-bg: #46484B;
     --focus-ring: #0060DF;
     --error: #F14C4C;
     --warning: #CCA700;
@@ -163,4 +172,23 @@ theme {
      * merely against a panel. Windows' switcher uses the same. */
     --switcher-selected-ring: #FFFFFF;
     --activitybar-item-checked-bg: #46484b;
+
+    /* -- Differences -----------------------------------------------------------
+     *
+     * Two strengths per kind, and the pair is the point rather than a shade choice. The BAND is a wash
+     * behind a whole line and has to leave every syntax colour on top of it readable; the MARK is a
+     * stronger fill over the characters that actually differ, so a changed line reads as
+     * mostly-unchanged with the change standing out. One strength cannot do both jobs: at the band's
+     * alpha a mark is invisible, and at the mark's alpha a band drowns the code.
+     *
+     * Green/red/blue rather than the theme accent, because these are the one place in the application
+     * where colour carries MEANING a person already knows from every other diff they have read. */
+    --diff-added-bg: #2EA04326;
+    --diff-added-fg: #2EA04359;
+    --diff-removed-bg: #F8514926;
+    --diff-removed-fg: #F8514959;
+    /* Blue rather than amber: amber is what the notification and dirty-state tokens use, and a changed
+     * line is not a warning. */
+    --diff-changed-bg: #58A6FF1F;
+    --diff-changed-fg: #58A6FF4D;
 }

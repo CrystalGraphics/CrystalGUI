@@ -1221,7 +1221,18 @@ completionpopup text::highlight(completion-match) {
  * Documentation popup draws its OWNER band with this vocabulary, and a top-level class is owned by a
  * package. Here rather than in a second prefix of its own, so one kind means one glyph everywhere. */
 .completion-kind-package        { background: icon("crystalgui:nodes/java/package"); }
-.completion-kind-module         { background: icon("crystalgui:nodes/java/package"); }
+/* A MODULE IS A FILE, so it takes the file's own picture rather than a package's.
+ *
+ * The only thing that reports this kind is a JavaScript project script reached through an `import`
+ * (M15 S6), and a package glyph on it said the wrong thing twice over: it is not a package, and the tab
+ * for the very same file three inches away draws the JavaScript mark. A row and a tab disagreeing about
+ * one file reads as one of them being wrong, which it was.
+ *
+ * KEYED ON THE KIND rather than on the file's extension, because a completion row carries a `SymbolKind`
+ * and not a name -- so the day something reports a MODULE that is not a `.js` file (a `module-info`, a
+ * JavaScript engine that grows real ES modules) this needs to become a per-item icon instead. Until then
+ * a second mechanism would be a table saying what this one already says. */
+.completion-kind-module         { background: icon("crystalgui:filetypes/javaScript"); }
 
 .completion-kind-method.completion-mod-abstract { background: icon("crystalgui:nodes/java/methodAbstract"); }
 .completion-kind-class.completion-mod-abstract  { background: icon("crystalgui:nodes/java/classAbstract"); }
@@ -1806,3 +1817,89 @@ documentationpopup .__doc-footer-edit__ {
  * Deleted rather than hidden: a hidden child still counts for a `gap-all`, so `display: none` would have
  * left exactly the space it used to take. The pencil's command, editor.goToDefinition, is untouched and
  * still bound to Ctrl+B and Ctrl+Click. */
+
+/* -- Difference decorations (Phase 6.7) ----------------------------------------
+ *
+ * Three kinds, two granularities. A BAND spans the viewport and says "this line differs"; a MARK sits on
+ * the characters that differ and is drawn stronger, so a changed line reads as mostly-unchanged with the
+ * changed part standing out -- which is the whole reason the character pass exists.
+ *
+ * Both are painted with a low-alpha fill rather than an opaque one: they sit BEHIND the text, and an
+ * opaque band would have to re-state the foreground colour for every syntax scheme to stay readable. */
+.__diff-band__ {
+    /* Behind everything else in the viewport. The current-line band and the selection are both drawn
+     * later and both may be true of the same row at once. */
+    z-index: -2;
+}
+
+.__diff-mark__ {
+    z-index: -1;
+}
+
+.__diff-band__.__diff-added__ {
+    background-color: var(--diff-added-bg, #2EA04326);
+}
+
+.__diff-band__.__diff-removed__ {
+    background-color: var(--diff-removed-bg, #F8514926);
+}
+
+.__diff-band__.__diff-changed__ {
+    background-color: var(--diff-changed-bg, #58A6FF1F);
+}
+
+/* The character marks: the same hues, harder, because they are the answer rather than the context. */
+.__diff-mark__.__diff-added__ {
+    background-color: var(--diff-added-fg, #2EA04359);
+}
+
+.__diff-mark__.__diff-removed__ {
+    background-color: var(--diff-removed-fg, #F8514959);
+}
+
+.__diff-mark__.__diff-changed__ {
+    background-color: var(--diff-changed-fg, #58A6FF4D);
+}
+
+/* A change with no rows on this side. Drawn as a rule at the boundary and given the FULL-strength colour
+ * rather than the band's wash: it is two pixels tall, and at 15% alpha it is invisible -- which is the
+ * failure this marker exists to prevent. */
+.__diff-band__.__diff-thin__.__diff-added__ {
+    background-color: var(--diff-added-fg, #2EA04359);
+}
+
+.__diff-band__.__diff-thin__.__diff-removed__ {
+    background-color: var(--diff-removed-fg, #F8514959);
+}
+
+.__diff-band__.__diff-thin__.__diff-changed__ {
+    background-color: var(--diff-changed-fg, #58A6FF4D);
+}
+
+/* The revert control beside a difference.
+ *
+ * NO OPACITY, AND THEREFORE NO HOVER STATE, and that is a rendering constraint rather than a taste.
+ *
+ * It was `opacity: 0.7` with `:hover { opacity: 1 }`, and the two looked like different artwork: the
+ * dimmed one came apart into fragments while the hovered one was crisp. The cause is in `UIElement`'s
+ * paint path -- an element whose opacity is not 1 has its whole subtree rendered into an offscreen layer
+ * FBO and blitted back (see `drawSubtree` and `CgUiPaintContext#beginLayerFbo`), so the vector icon is
+ * rasterised through an intermediate buffer instead of straight onto the surface at the pose scale. At
+ * full opacity that round trip does not happen, which is exactly why hovering "fixed" it.
+ *
+ * So anything that wants to dim an icon has to do it with COLOUR, not with alpha on the element. This one
+ * simply does not dim: the artwork is already quiet, and a control that only appears beside a difference
+ * does not need a resting state to distinguish it from one that is always there. */
+.__diff-chevron__ {
+    background: icon("crystalgui:general/action/doubleArrowRight");
+    /* Above the bands and the line numbers: it is a control, and a control the text draws over is one
+     * nobody finds. */
+    z-index: 6;
+}
+/* The mirrored gutter is positioned from Java, not from here.
+ *
+ * It was a rule -- `position: absolute; right: 0` -- and it did nothing: the numbers stayed on the left
+ * while the widget's x-arithmetic had already moved, so the gutter painted over the first seven
+ * characters of every line. The gutter, the fold column and the text viewport are all placed by hand from
+ * TextEditor's own measurements, and the gutter is simply the one that had been getting away with being
+ * left where flow put it. @see TextEditor#setGutterOnRight */

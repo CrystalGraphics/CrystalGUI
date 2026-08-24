@@ -16,6 +16,10 @@ import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.desktop.WindowFrame;
 import com.crystalgui.ui.elements.desktop.WindowPolicy;
 import com.crystalgui.ui.elements.desktop.WindowState;
+import com.crystalgui.mc.net.CgUiConnections;
+import com.crystalgui.net.protocol.ProtocolConnection;
+
+import javax.annotation.Nullable;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
@@ -120,8 +124,22 @@ public final class CgUiScreen extends GuiScreen {
     /** Run and Stop for the active file, or null where no engine band opened. @see #initGui */
     private static ScriptWorkbench scripting;
 
-    /** Whether the project list has been asked for. @see Mc1710Workspace#isConnected */
-    private static boolean projectsAsked;
+    /**
+     * The connection the project list was last asked on, or {@code null} for never.
+     *
+     * <p>Was a {@code boolean}, and the editor is <b>static and outlives every screen</b> —
+     * {@code disposeAll} says so itself: <i>"frees the editor at game shutdown, not called on close"</i>.
+     * So a one-shot flag meant the project list was asked for <b>at most once per game session</b>,
+     * however many worlds were joined afterwards. Leave a world, join another, press F6: an empty Project
+     * panel, no root, New File and New Folder greyed because there is nowhere to create INTO — and
+     * nothing in the log, because the ask never happened rather than failing.</p>
+     *
+     * <p>Keyed on the connection because that is what actually changes. Re-opening the editor on the same
+     * wire must not re-ask (the tree already has its roots and a second listing would be pure churn), and
+     * a new wire must.</p>
+     */
+    @Nullable
+    private static ProtocolConnection<Object> projectsAskedOn;
 
     private long lastFrameNanos = System.nanoTime();
 
@@ -456,6 +474,9 @@ public final class CgUiScreen extends GuiScreen {
         // leaves the workspace connected with nothing yet built to ask it anything.
         if (editor != null && !projectsAsked && workspace.isConnected()) {
             projectsAsked = true;
+        ProtocolConnection<Object> live = CgUiConnections.client();
+        if (live != null && live != projectsAskedOn) {
+            projectsAskedOn = live;
             editor.workbench().fileTree().loadProjects();
             // AFTER loadProjects, never before: the restore parks the folders it wants expanded and
             // retries until the listings that reveal them arrive, so asking first parks everything.
@@ -653,6 +674,6 @@ public final class CgUiScreen extends GuiScreen {
         editorWindow = null;
         uiWindow = null;
         workspace = null;
-        projectsAsked = false;
+        projectsAskedOn = null;
     }
 }

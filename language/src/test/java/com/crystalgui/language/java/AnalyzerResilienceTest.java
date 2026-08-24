@@ -1,10 +1,13 @@
 package com.crystalgui.language.java;
 
 import com.crystalgui.language.engine.bridge.SourceAnalyzer;
+import com.crystalgui.text.lang.SymbolKind;
+import com.crystalgui.text.lang.SymbolInfo;
 
 import org.junit.Test;
 
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import com.crystalgui.language.engine.bridge.Analysis;
@@ -95,20 +98,41 @@ public class AnalyzerResilienceTest extends FixFixture {
     }
 
     /**
-     * <b>And the degraded parse is degraded, not merely alive.</b> The two above would both pass against
-     * a guard that swallowed the failure and handed back an empty shell — this is what says the fallback
-     * produced a real tree, with the grammar-level answer intact and only resolution missing.
+     * <b>And whatever route handles it, the answer is a real one — never an empty shell, never a wrong
+     * binding.</b>
+     *
+     * <p>The two above would both pass against a guard that swallowed the failure and handed back
+     * nothing; this is what says a real tree came out, with the grammar-level answer intact.</p>
+     *
+     * <h3>This used to assert resolution was ABSENT, and M15 S3 made that the wrong question</h3>
+     *
+     * <p>The shape is one JDT's DOM raises an {@code AssertionError} on, so {@code ASTParser} degraded to
+     * a no-bindings parse and losing resolution <em>was</em> the evidence that the fallback had run. The
+     * live route completes the same parse, correctly — so on that route there is no degradation to
+     * observe, and asserting its absence would be asserting that the analyser is worse than it is.</p>
+     *
+     * <p>What is worth pinning survives the change and is arguably stronger: the analysis is usable
+     * either way, and if it does resolve, it resolves <b>right</b>. A route that answered with a plausible
+     * wrong binding for a type it could not see would fail this; one that answers nothing still passes,
+     * because nothing is the honest answer when the tree has no bindings. The fallback itself is still
+     * there and still guarded — {@code DomResolution.isAvailable} is a real per-band check — it is simply
+     * no longer the route this input takes.</p>
      */
     @Test
-    public void theDegradedParseKeepsItsTreeAndLosesOnlyResolution() {
+    public void theDegradedParseKeepsItsTreeAndIsNeverWrong() {
         if (newestLevel() < 16) return;
         try (SourceAnalyzer.Analysis analysis = analyse("Probe", RECORD_OVER_MISSING_TYPES, newestLevel())) {
             assertTrue("a file with no syntax error must still report as fully parsed",
                     analysis.optionalProblemsAnalysed());
             assertTrue("and the tree survives, so the grammar-level answer does too",
                     !analysis.semanticTokens().isEmpty());
-            assertNull("resolution is what failed, so resolution is what must be absent",
-                    analysis.resolveAt(RECORD_OVER_MISSING_TYPES.indexOf("items.isEmpty") + 1));
+            SymbolInfo resolved =
+                    analysis.resolveAt(RECORD_OVER_MISSING_TYPES.indexOf("items.isEmpty") + 1);
+            if (resolved != null) {
+                assertEquals("a route that resolves this must resolve it correctly, not plausibly",
+                        "items", resolved.name());
+                assertEquals(SymbolKind.PARAMETER, resolved.kind());
+            }
         }
     }
 

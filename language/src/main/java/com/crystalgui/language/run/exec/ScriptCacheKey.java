@@ -38,11 +38,13 @@ public final class ScriptCacheKey {
     private final String sourceHash;
     private final String mappingsHash;
     private final int band;
+    private final String dependencyHash;
 
-    private ScriptCacheKey(String sourceHash, String mappingsHash, int band) {
+    private ScriptCacheKey(String sourceHash, String mappingsHash, int band, String dependencyHash) {
         this.sourceHash = sourceHash;
         this.mappingsHash = mappingsHash;
         this.band = band;
+        this.dependencyHash = dependencyHash;
     }
 
     /**
@@ -51,8 +53,37 @@ public final class ScriptCacheKey {
      * @param band         the band's minimum feature version, which is what the bytecode targets
      */
     public static ScriptCacheKey of(String source, String mappingsHash, int band) {
+        return of(source, mappingsHash, band, "");
+    }
+
+    /**
+     * As above, plus a fingerprint of the OTHER files this compile depended on.
+     *
+     * <p>The component M15 S5 added, and the one that keeps the scheme above honest. Everything else here
+     * describes the file the author ran; once a script can resolve a sibling, that file's text is no
+     * longer the whole input, so a key built from it alone would serve bytes compiled against a version
+     * of the sibling that no longer exists. The author would edit the other file, run again, and see the
+     * old behaviour — which reads as the edit not having been picked up rather than as a cache decision,
+     * and is worse than a slow compile by a wide margin.</p>
+     *
+     * <p>It stays STRUCTURAL, which is the property the three components above are chosen for: a changed
+     * dependency is a different key, not an entry somebody has to remember to evict. The caller computes
+     * the fingerprint because only it knows how to read a workspace — and because this package is the
+     * engine-neutral Run shell and may not name a language.</p>
+     *
+     * @param dependencyHash any stable digest of what the compile pulled in, or {@code ""} for a script
+     *                       that reached nothing outside itself — which is every script with no workspace
+     *                       behind it, and keeps such a key identical to the three-component form
+     */
+    public static ScriptCacheKey of(String source, String mappingsHash, int band, String dependencyHash) {
         return new ScriptCacheKey(sha256(source == null ? "" : source),
-                mappingsHash == null ? "identity" : mappingsHash, band);
+                mappingsHash == null ? "identity" : mappingsHash, band,
+                dependencyHash == null ? "" : dependencyHash);
+    }
+
+    /** A digest of what this compile depended on beyond its own text, or {@code ""}. */
+    public String dependencyHash() {
+        return dependencyHash;
     }
 
     public String sourceHash() {
@@ -75,7 +106,8 @@ public final class ScriptCacheKey {
      * somebody has to work out why a cache is not hitting.</p>
      */
     public String fileName() {
-        return sourceHash + "-" + sanitise(mappingsHash) + "-" + band;
+        return sourceHash + "-" + sanitise(mappingsHash) + "-" + band
+                + (dependencyHash.isEmpty() ? "" : "-" + sanitise(dependencyHash));
     }
 
     private static String sanitise(String value) {
@@ -108,12 +140,13 @@ public final class ScriptCacheKey {
         if (!(other instanceof ScriptCacheKey)) return false;
         ScriptCacheKey key = (ScriptCacheKey) other;
         return band == key.band && sourceHash.equals(key.sourceHash)
-                && mappingsHash.equals(key.mappingsHash);
+                && mappingsHash.equals(key.mappingsHash)
+                && dependencyHash.equals(key.dependencyHash);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(sourceHash, mappingsHash, band);
+        return Objects.hash(sourceHash, mappingsHash, band, dependencyHash);
     }
 
     @Override

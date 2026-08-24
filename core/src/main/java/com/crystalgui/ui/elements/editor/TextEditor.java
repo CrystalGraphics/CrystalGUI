@@ -131,6 +131,19 @@ public class TextEditor extends ScrollerView implements UndoScope {
     public static final String SYNTAX_CLASS = UIText.SYNTAX_CLASS;
     public static final String CARET_CLASS = "__caret__";
     public static final String SELECTION_CLASS = "__selection__";
+
+    /** Difference decorations. The band spans the viewport; the mark sits on the characters it marks. */
+    public static final String DIFF_BAND_CLASS = "__diff-band__";
+    public static final String DIFF_MARK_CLASS = "__diff-mark__";
+    public static final String DIFF_ADDED_CLASS = "__diff-added__";
+    public static final String DIFF_REMOVED_CLASS = "__diff-removed__";
+    public static final String DIFF_CHANGED_CLASS = "__diff-changed__";
+    /** A change with no rows on this side: a rule at the boundary rather than a band over a line. */
+    public static final String DIFF_THIN_CLASS = "__diff-thin__";
+    /** The gutter control that pushes one side of a difference onto the other. */
+    public static final String DIFF_CHEVRON_CLASS = "__diff-chevron__";
+    /** Present while the gutter is mirrored to the right-hand edge. @see #setGutterOnRight */
+    public static final String GUTTER_RIGHT_CLASS = "__gutter-right__";
     public static final String GUTTER_CLASS = "__gutter__";
     public static final String INDENT_GUIDE_CLASS = "__indent-guide__";
     /** Added to the one guide belonging to the block the caret is in — see {@code layOutIndentGuides}. */
@@ -261,6 +274,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * numbers sideways the moment a line is wider than the viewport.</p>
      */
     private final UIElement gutter = new UIElement();
+    private boolean gutterOnRight;
     @Getter
     private boolean gutterVisible = true;
     /**
@@ -476,11 +490,56 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private final ErrorStripePart errorStripePart = new ErrorStripePart(this);
     private final InspectionWidgetPart inspectionWidgetPart = new InspectionWidgetPart(this);
     private final QuickFixBulbPart quickFixBulbPart = new QuickFixBulbPart(this);
+    private final DiffBandsPart diffBandsPart = new DiffBandsPart(this);
+    private final DiffChevronPart diffChevronPart = new DiffChevronPart(this);
     /** Every part, in paint order, so the frame drives one list rather than a dozen named calls. */
     private final java.util.List<EditorViewPart> viewParts = java.util.List.of(
-            gutterEdgePart, indentGuidesPart, whitespacePart, rulersPart, foldingDecorationsPart,
+            // BEFORE the current-line band and the selection, so a diff band is the backmost of the
+            // three. All three can be true of one row at once, and the one that answers "where am I"
+            // must not be buried under the one that answers "what changed".
+            diffBandsPart, gutterEdgePart, indentGuidesPart, whitespacePart, rulersPart,
+            foldingDecorationsPart,
             zoomIndicatorPart, lineNumbersPart, currentLinePart, selectionsPart, squigglesPart, errorStripePart, inspectionWidgetPart,
-            quickFixBulbPart, viewCursorsPart);
+            quickFixBulbPart, viewCursorsPart, diffChevronPart);
+
+    // ── Difference decorations ─────────────────────────────────────────────────────────────────
+
+    private DiffDecorations diffDecorations = DiffDecorations.NONE;
+
+    /**
+     * Marks this editor up as one side of a comparison.
+     *
+     * <p>Data, with no back-reference to the other text: an editor showing an ordinary file simply never
+     * receives any, and behaves exactly as it always did. @see DiffDecorations</p>
+     */
+    public TextEditor setDiffDecorations(DiffDecorations decorations) {
+        this.diffDecorations = decorations == null ? DiffDecorations.NONE : decorations;
+        invalidateWindow();
+        return this;
+    }
+
+    DiffDecorations diffDecorations() {
+        return diffDecorations;
+    }
+
+    private java.util.function.IntConsumer diffRevertHandler;
+
+    /**
+     * Offers a {@code »} control beside each difference, which calls back with the difference's index.
+     *
+     * <p>The editor does not know what reverting <em>means</em> — it holds one text and cannot see the
+     * other. It reports which difference was pressed and the caller, which has both sides, performs the
+     * edit. Absent by default, so an editor showing an ordinary file grows no controls.</p>
+     */
+    public TextEditor setDiffRevertHandler(java.util.function.IntConsumer handler) {
+        this.diffRevertHandler = handler;
+        invalidateWindow();
+        return this;
+    }
+
+    java.util.function.IntConsumer diffRevertHandler() {
+        return diffRevertHandler;
+    }
 
     // ── Diagnostics ────────────────────────────────────────────────────────────────────────────
     //
@@ -600,6 +659,11 @@ public class TextEditor extends ScrollerView implements UndoScope {
     /** The arrows' strip. Owned here so its attachment order among siblings is unchanged. */
     UIElement foldColumn() {
         return foldColumn;
+    }
+
+    /** The gutter box itself, for the view parts and for measuring where it landed. */
+    UIElement gutterElement() {
+        return gutter;
     }
 
     /** One row's expanded display text and column maps, plus the measured x of each display index. */
@@ -1647,7 +1711,55 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * front and the caret trailed the glyph it had just moved past.</p>
      */
     float textOriginX() {
-        return getTaffyLayout().padding().left + gutterWidth + codeLeftPad();
+        // Mirrored: no gutter to skip on this side, but the vertical bar is here instead.
+        float leading = gutterOnRight ? verticalBarThickness() : gutterWidth;
+        return getTaffyLayout().padding().left + leading + codeLeftPad();
+    }
+
+    /**
+     * Puts the line-number gutter on the <b>right</b> edge instead of the left.
+     *
+     * <p>For the left pane of a side-by-side diff, and for nothing else. Both references mirror it there
+     * for the same reason: the two panes' line numbers then meet in the middle, so a reader comparing
+     * line 1631 against line 1631 looks at one place rather than sweeping across the whole width. It is a
+     * property of the <em>comparison</em>, not of the editor, which is why it is off by default and why
+     * an editor showing an ordinary file is untouched by its existence.</p>
+     *
+     * <p><b>Only the geometry mirrors, not the text.</b> The code still reads left to right and still
+     * starts at the left edge; what moves is the gutter and the width the text is given.</p>
+     */
+    public TextEditor setGutterOnRight(boolean value) {
+        if (gutterOnRight == value) return this;
+        gutterOnRight = value;
+        if (value) {
+            addClass(GUTTER_RIGHT_CLASS);
+        } else {
+            removeClass(GUTTER_RIGHT_CLASS);
+            // UNDO THE PLACEMENT, or the flag is one-way. layOutMirroredGutter writes at IMPORTANT and
+            // then returns early once the flag is off, so the box would stay pinned to the far edge with
+            // nothing left to explain why. Handing the properties back to `auto` returns the gutter to
+            // the sheet, which is where an unmirrored one has always got its geometry.
+            StyleGroup.importantPipeline(gutter.getStyle().getLayoutGroup(),
+                    l -> l.positionType(TaffyPosition.RELATIVE)
+                            .leftAuto().topAuto().widthAuto().heightAuto());
+            StyleGroup.importantPipeline(verticalScroller().getStyle().getLayoutGroup(),
+                    l -> l.leftAuto().right(0f));
+        }
+        invalidateWindow();
+        return this;
+    }
+
+    public boolean isGutterOnRight() {
+        return gutterOnRight;
+    }
+
+    /** Where the gutter's own box begins, in this element's coordinates. */
+    float gutterLeft() {
+        // MIRRORED, THE BAR MOVES TOO -- see layOutMirroredGutter -- so the gutter reaches the edge
+        // rather than stopping short of a bar that is no longer there.
+        return gutterOnRight
+                ? Math.max(0f, getClientWidth() - gutterWidth)
+                : getTaffyLayout().padding().left;
     }
 
     /**
@@ -1812,7 +1924,39 @@ public class TextEditor extends ScrollerView implements UndoScope {
      */
     public void revealAt(TextPoint at) {
         setCaret(buffer.pointToOffset(at));
-        revealCaretCentred();
+        // NOT YET, IF THERE IS NOTHING TO CENTRE IN. @see #pendingReveal
+        if (canCentre()) {
+            pendingReveal = false;
+            revealCaretCentred();
+            return;
+        }
+        pendingReveal = true;
+    }
+
+    /**
+     * A jump that arrived before the editor had a viewport, waiting for one.
+     *
+     * <h3>Why centring silently degrades into "put it at the top"</h3>
+     *
+     * <p>{@link #revealCaretCentred} scrolls to {@code caretY - viewportHeight / 2}. Every caller that
+     * jumps into a file <b>just opened</b> — Ctrl+B into another file, Go to File with a line, a Problems
+     * row — runs the moment the read lands, which is before that tab has been through a layout pass. The
+     * height is then zero, the halving is zero, and the destination lands hard against the <em>top</em>
+     * edge with the whole of its context below it.</p>
+     *
+     * <p>That is not a broken jump but a correct one framed as badly as possible, and it reads as the
+     * centring never having been implemented — the caret really is on the right line. The same arithmetic
+     * is right the moment a height exists, so this waits for one rather than reimplementing it.</p>
+     *
+     * <p>Drained in {@link #tickFrame}, which always runs, rather than from {@code onLayoutChanged}: a
+     * newly attached editor can settle its layout in the same pass that created it, and a reveal issued
+     * from inside layout would be scrolling a box whose scroll extents are still being computed.</p>
+     */
+    private boolean pendingReveal;
+
+    /** Whether there is enough measured viewport for centring to mean anything. */
+    private boolean canCentre() {
+        return viewportHeight() > lineHeight();
     }
 
     // ── Language features ────────────────────────────────────────────────────────────────────
@@ -3622,7 +3766,23 @@ public class TextEditor extends ScrollerView implements UndoScope {
      */
     private float measureGutter() {
         if (!gutterVisible) return 0f;
-        return gutterNumberWidth() + gutterFoldWidth();
+        return gutterChevronWidth() + gutterNumberWidth() + gutterFoldWidth();
+    }
+
+    /**
+     * Room inside the gutter for the revert chevrons, or zero when nothing is offering any.
+     *
+     * <p>Reserved rather than overlaid. A chevron drawn on top of the code is legible only where the line
+     * happens to be short, and it covers the one thing the reader is comparing; reserving the column costs
+     * a character's width on an editor that has chevrons and nothing at all on one that does not.</p>
+     *
+     * <p>Derived from the line height rather than being a constant, because the mark is an icon drawn
+     * into a square box: tying it to the row keeps it proportionate at every zoom level, which a pixel
+     * value would not. Three quarters of a row, so the column is narrow enough that the numbers stay close
+     * to the code rather than being pushed away by a control that is only sometimes there.</p>
+     */
+    float gutterChevronWidth() {
+        return diffRevertHandler == null ? 0f : lineHeight() * 0.75f;
     }
 
     /**
@@ -4319,7 +4479,15 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     /** Width of the code area — the client box, less the gutter and whatever the vertical bar covers. */
     float textViewportWidth() {
-        return Math.max(0f, getClientWidth() - textViewportLeft() - verticalBarThickness());
+        // MIRRORED, the gutter is at the far end rather than behind the origin, so its width comes off
+        // the far side instead of having already been skipped by textViewportLeft. Forgetting it lets the
+        // text run underneath the numbers, which reads as the gutter being transparent.
+        // Mirrored, the bar is already behind textViewportLeft and the gutter is at the far end;
+        // unmirrored it is the other way round. Subtracting both in either case takes a bar's width
+        // out twice and leaves a strip of dead space down one side.
+        float gutterInset = gutterOnRight ? gutterWidth : 0f;
+        float barInset = gutterOnRight ? 0f : verticalBarThickness();
+        return Math.max(0f, getClientWidth() - textViewportLeft() - barInset - gutterInset);
     }
 
     /**
@@ -4345,6 +4513,40 @@ public class TextEditor extends ScrollerView implements UndoScope {
         StyleGroup.defaultPipeline(textViewport().getStyle().getLayoutGroup(),
                 l -> l.positionType(TaffyPosition.ABSOLUTE)
                         .left(left).top(0f).width(width).height(height));
+        layOutMirroredGutter(height);
+    }
+
+    /**
+     * Pins the gutter to the right-hand edge while {@link #setGutterOnRight} is on.
+     *
+     * <p><b>Here rather than in the sheet, and that was learned the hard way.</b> It was written as
+     * {@code position: absolute; right: 0} in {@code editor.css} and it did nothing at all — the numbers
+     * stayed where flow had put them while {@link #textOriginX} had already stopped reserving room for
+     * them, so the gutter painted over the first several characters of every line and the chevron sat
+     * alone at the far edge. Every other box in this widget is placed from its own measurements; the
+     * gutter was the one getting away with being left where flow put it.</p>
+     *
+     * <p>Nothing is written while the gutter is on the left, so an ordinary editor keeps taking its
+     * geometry from the sheet exactly as before.</p>
+     */
+    private void layOutMirroredGutter(float height) {
+        if (!gutterOnRight) return;
+        final float left = gutterLeft();
+        final float width = gutterWidth;
+        // IMPORTANT ORIGIN, and it has to be. A DEFAULT-origin write sits BELOW the user-agent sheet, and
+        // ua/editor.css styles `.__gutter__` -- so the box was told left=562 and laid out at 0, silently.
+        // Measured before it was believed: the arithmetic was correct the whole time and the cascade was
+        // throwing it away. Same reason UIText pushes its measured height back at IMPORTANT.
+        StyleGroup.importantPipeline(gutter.getStyle().getLayoutGroup(),
+                l -> l.positionType(TaffyPosition.ABSOLUTE)
+                        .left(left).top(0f).width(width).height(height));
+
+        // THE VERTICAL BAR MIRRORS WITH IT, to the outer edge. Left on the right it would sit between
+        // the two panes' gutters -- in the one place a side-by-side view has no room, and on the side
+        // the reader is comparing across. The outer edge is where the other pane's bar already is, so
+        // the pair reads as a frame around the comparison rather than as a divider through it.
+        StyleGroup.importantPipeline(verticalScroller().getStyle().getLayoutGroup(),
+                l -> l.positionType(TaffyPosition.ABSOLUTE).left(0f).rightAuto());
     }
 
 
@@ -4806,6 +5008,11 @@ public class TextEditor extends ScrollerView implements UndoScope {
     @Override
     public boolean tickFrame(float deltaSeconds) {
         super.tickFrame(deltaSeconds);
+        // THE JUMP THAT CAME IN TOO EARLY, now that there is a viewport to centre in. @see #pendingReveal
+        if (pendingReveal && canCentre()) {
+            pendingReveal = false;
+            revealCaretCentred();
+        }
         updateWindow();
         viewCursorsPart.advanceBlink(deltaSeconds);
         zoomIndicatorPart.tick(deltaSeconds);

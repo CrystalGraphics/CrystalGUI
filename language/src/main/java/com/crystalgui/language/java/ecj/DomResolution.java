@@ -122,10 +122,21 @@ final class DomResolution {
             Object tables = found.tables.newInstance();
             found.bindingTables.set(resolver, tables);
 
-            // verifyMethods, analyzeCode, generateCode. Method bodies ARE analysed, because that is where
-            // unused locals and unreachable code come from -- the optional problems a file has to parse
-            // to get at all. Nothing is generated.
-            Object declaration = found.resolve.invoke(resolver, unit, true, true, false);
+            // verifyMethods, analyzeCode, GENERATE CODE -- and the third one is not what it looks like.
+            //
+            // It read `false` here, with a comment claiming unused locals come out of `analyseCode`. They
+            // do not. ECJ reports an unused local and an unused allocation from
+            // `MethodScope.computeLocalVariablePositions`, which runs during CODE GENERATION -- so with
+            // generation off this route resolved perfectly, coloured correctly, and reported no optional
+            // problem that comes from flow analysis at all. Measured rather than reasoned: the same
+            // fixture gave three problems through `ASTParser` and one through here, and the one that
+            // survived (`Unnecessary semicolon`) is a PARSE-time problem, which is what named the tier.
+            //
+            // It cost nothing to switch on. On a 13.6k-char, 40-method file this route measured
+            // ~20.9ms per analysis with generation against ~25.9ms for `ASTParser` -- 0.81x, so it is
+            // FASTER than the route it replaces even while generating. Nothing is kept: `DISCARDING` is
+            // the requestor precisely so the class files it emits go nowhere.
+            Object declaration = found.resolve.invoke(resolver, unit, true, true, true);
             if (declaration == null) return null;
             // THE FLAGS ARE THE RECOVERY, and passing 0 is why this shipped broken. `ASTParser` sets
             // setStatementsRecovery and setBindingsRecovery, which its own note calls "the entire
