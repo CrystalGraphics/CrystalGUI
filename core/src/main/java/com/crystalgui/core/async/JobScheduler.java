@@ -300,7 +300,12 @@ public final class JobScheduler implements Disposable {
                 continue;
             }
             try {
+                // NAMED WHILE PROFILING. `drain` is a bucket that can hide anything: an onDone runs on the
+                // frame thread by contract, so one expensive handler is one expensive frame and nothing in
+                // the phase total says which. @see FrameProfile
+                long profiled = FrameProfile.begin();
                 completion.deliver();
+                FrameProfile.end(profiled, "done:" + completion.key);
             } catch (RuntimeException failed) {
                 // A throwing consumer must not take the frame down with it, and must not stop the rest of
                 // this tick's results being delivered.

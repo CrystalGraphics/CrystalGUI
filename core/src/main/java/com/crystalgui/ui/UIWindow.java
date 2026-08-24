@@ -5,6 +5,7 @@ import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.async.JobScheduler;
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.async.UiThread;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataProvider;
@@ -615,6 +616,8 @@ public final class UIWindow {
      */
     public void updateWithoutPainting() {
         advanceFrame();
+        // A HEADLESS FRAME IS OVER HERE, because there is no paint to follow it. @see #paintFrame
+        FrameProfile.frameEnd();
     }
 
     /** Shared prologue of {@link #paintFrame()} and {@link #updateWithoutPainting()}. */
@@ -646,6 +649,7 @@ public final class UIWindow {
         // named rather than merely felt. Marked from the frame itself so it is right whatever drives one
         // -- a real window, the harness, or a test stepping frames by hand. @see UiThread
         UiThread.markCurrent();
+        FrameProfile.frameBegin();
         long now = System.nanoTime();
         float deltaSeconds = (now - lastFrameNanos) / 1_000_000_000f;
         lastFrameNanos = now;
@@ -659,11 +663,14 @@ public final class UIWindow {
         // spawns a thread pool. A window in a headless test that schedules nothing creates nothing —
         // the same guard, for the same reason, as CgUiPaintContext.hasInstance().
         if (JobScheduler.hasShared()) JobScheduler.shared().drain();
+        FrameProfile.mark("drain");
 
         tracePhase("begin");
         styleEngine.calculateStyle(deltaSeconds);
+        FrameProfile.mark("style");
         tracePhase("style cascade");
         tickAnimations(deltaSeconds);
+        FrameProfile.mark("tickers");
         tracePhase("animations");
         // A TICKER MAY HAVE BUILT A SUBTREE, not merely set a class on one — and an element that has
         // never matched a selector must not reach Taffy at all, because the FIRST layout pass is where
@@ -684,7 +691,9 @@ public final class UIWindow {
         // the CSS, the widget or the text; the rows had simply been measured once before they had a
         // style, and one bit of that measurement was permanent.
         if (styleEngine.hasPendingMatches()) styleEngine.calculateStyle(0f);
+        FrameProfile.mark("style");
         calculateLayout();
+        FrameProfile.mark("layout");
 
         // STYLE AND LAYOUT INTERLEAVE UNTIL CLEAN — they are not one pass each in a fixed order.
         //
@@ -711,8 +720,15 @@ public final class UIWindow {
         // inside calculateLayout rather than here.
         for (int pass = 0; pass < MAX_RESTYLE_PASSES && styleEngine.hasPendingMatches(); pass++) {
             styleEngine.calculateStyle(0f);
+            FrameProfile.mark("style");
             calculateLayout();
+            FrameProfile.mark("layout");
+            FrameProfile.count("restyle-passes", 1);
         }
+        // NOT frameEnd(). A frame is not over here -- paintFrame goes on to bind the context, draw the
+        // whole subtree, paint the top layer and dispatch input, and ending the profile at the bottom of
+        // advanceFrame made every one of those INVISIBLE. That is how a reported drop survived three
+        // rounds of fixing things the profile could see. @see #paintFrame
         return deltaSeconds;
     }
 
@@ -737,20 +753,26 @@ public final class UIWindow {
         // definitions drifted before.
         pose.mulPoseMatrix(rootTransform);
 
+        FrameProfile.mark("gl:begin");
         ui.rootElement.drawSubtree(paintContext);
         // FONTS AND ICONS RESOLVE HERE. A glyph atlas is built the first time a string is measured or
         // drawn, and every SVG is parsed the first time it is asked for.
+        FrameProfile.mark("gl:draw");
         tracePhase("drawSubtree (glyph atlases, icon SVGs)");
 
         pose.popPose();
 
         topLayer.paint(paintContext, pose, rootTransform);
+        FrameProfile.mark("gl:toplayer");
 
         paintContext.endFrame();
+        FrameProfile.mark("gl:end");
         inputHandler.beginFrame();
         inputHandler.endFrame();
+        FrameProfile.mark("input");
         tracePhase("top layer + endFrame");
         tracedFirstFrame = true;
+        FrameProfile.frameEnd();
     }
 
 
@@ -950,7 +972,11 @@ public final class UIWindow {
             // Snapshot: a ticker may register another (or itself) while running.
             for (UIFrameTicker ticker : new ArrayList<>(tickers)) {
                 long tickerStart = TRACE_FIRST_FRAME && !tracedFirstFrame ? System.nanoTime() : 0L;
+                // PER TICKER, because "tickers" as one bucket can hide anything: the workbench, an
+                // editor and a dozen widgets all tick from here. @see FrameProfile
+                long profiled = FrameProfile.begin();
                 if (!ticker.tickFrame(deltaSeconds)) tickers.remove(ticker);
+                FrameProfile.end(profiled, "tick:" + ticker.getClass().getSimpleName());
                 if (tickerStart != 0L) {
                     long cost = (System.nanoTime() - tickerStart) / 1_000_000;
                     // ONLY THE ONES WORTH LOOKING AT. A first frame runs dozens of tickers and almost all

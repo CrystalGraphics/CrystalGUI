@@ -16,6 +16,7 @@ import com.crystalgui.render.texture.CgUiQuad;
 import com.crystalgui.render.texture.CgUiRoundedRect;
 import com.crystalgui.render.texture.CgUiSprite;
 import com.crystalgui.style.ElementStyle;
+import com.crystalgui.style.StyleEngine;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.property.layout.LayoutProperties;
@@ -416,7 +417,7 @@ public class UIElement implements SettingsScope, DataProvider {
             }
         }
         onStyleChanged();
-        invalidateStyleMatch();
+        invalidateStateMatch();
     }
 
     public void setPressed(boolean pressed) {
@@ -424,7 +425,7 @@ public class UIElement implements SettingsScope, DataProvider {
         if (this.isPressed == pressed) return;
         this.isPressed = pressed;
         onStyleChanged();
-        invalidateStyleMatch();
+        invalidateStateMatch();
     }
 
     /**
@@ -453,14 +454,26 @@ public class UIElement implements SettingsScope, DataProvider {
         this.isFocused = focused;
         this.isFocusVisible = nextVisible;
         onStyleChanged();
-        invalidateStyleMatch();
+        invalidateStateMatch();
         // :focus-within is an ANCESTOR'S state, so this element alone re-matching is not enough --
-        // the whole chain above it changed too. Cheap and bounded: focus moves rarely and a path is
-        // a few dozen links, where the alternative (invalidating everything) is the whole tree.
-        // Both the losing and the gaining element run this, which is what covers both chains.
+        // the whole chain above it changed too. Both the losing and the gaining element run this,
+        // which is what covers both chains.
+        //
+        // THE ANCESTOR ITSELF, and the keyed descendants ONCE FROM THE ROOT. This used to call
+        // invalidateStyleMatch() on each ancestor, whose own note called the walk "cheap and bounded"
+        // -- the walk UP is bounded and every step of it recursed DOWN over an entire subtree, so the
+        // outermost ancestor re-matched the whole window. Measured at 713 elements for one click. A
+        // subject keyed on :focus-within can be anywhere under any ancestor, so one narrowed walk from
+        // the root covers every chain at the cost of one, and the redundancy of doing it per ancestor
+        // goes with it. @see #invalidateStateMatch
+        if (attachedWindow == null) return;
+        StyleEngine engine = attachedWindow.getStyleEngine();
+        UIElement topmost = null;
         for (UIElement ancestor = getParent(); ancestor != null; ancestor = ancestor.getParent()) {
-            ancestor.invalidateStyleMatch();
+            engine.markDirty(ancestor);
+            topmost = ancestor;
         }
+        if (topmost != null) topmost.invalidateStateDescendants(engine);
     }
 
     /**
@@ -483,7 +496,7 @@ public class UIElement implements SettingsScope, DataProvider {
         if (this.isHovered == hovered) return;
         this.isHovered = hovered;
         onStyleChanged();
-        invalidateStyleMatch();
+        invalidateStateMatch();
     }
 
     /**
@@ -2282,6 +2295,37 @@ public class UIElement implements SettingsScope, DataProvider {
      * every candidate-value push (including the ones a re-match itself produces), so folding this
      * into it would re-trigger selector matching on every single style write.
      */
+    /**
+     * A <b>state</b> change — {@code :hover}, {@code :focus}, {@code :active}, {@code :disabled}.
+     *
+     * <h3>Why this is not {@link #invalidateStyleMatch()}</h3>
+     *
+     * <p>Both have to reach descendants, because a descendant selector can key off this element
+     * ({@code checkbox:checked .__mark__}). They differ in <em>how many</em> descendants can possibly
+     * care. An identity change alters which of {@code .__panel__ .__row__}-shaped rules apply and the
+     * answer is broad; a STATE change can only reach subjects some rule places after a pseudo-class, and
+     * across every sheet this project ships that set is thirteen entries.</p>
+     *
+     * <p>Measured in a running client before this split: one hover change re-matched <b>291</b> elements
+     * and a single focus change <b>713</b>, at 20-25µs each — most of a frame per mouse move, and the
+     * whole of a sustained drop from 120fps to 55 with a file open. The subtree still has to be walked;
+     * what it no longer does is re-match every node in it. @see StyleEngine#stateReaches</p>
+     */
+    protected void invalidateStateMatch() {
+        if (attachedWindow == null) return;
+        StyleEngine engine = attachedWindow.getStyleEngine();
+        engine.markDirty(this);
+        invalidateStateDescendants(engine);
+    }
+
+    /** Marks only the descendants an ancestor's state can reach. @see #invalidateStateMatch */
+    private void invalidateStateDescendants(StyleEngine engine) {
+        for (UIElement child : children) {
+            if (engine.stateReaches(child)) engine.markDirty(child);
+            child.invalidateStateDescendants(engine);
+        }
+    }
+
     protected void invalidateStyleMatch() {
         if (attachedWindow == null) return;
         attachedWindow.getStyleEngine().markDirty(this);
