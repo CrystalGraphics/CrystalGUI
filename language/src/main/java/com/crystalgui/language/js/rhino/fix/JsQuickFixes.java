@@ -1,6 +1,7 @@
 package com.crystalgui.language.js.rhino.fix;
 
 import com.crystalgui.language.js.rhino.exec.RhinoGlobals;
+import com.crystalgui.language.js.rhino.JsImports;
 import com.crystalgui.language.js.rhino.RhinoScopes;
 import com.crystalgui.language.js.rhino.RhinoTokens;
 import com.crystalgui.language.js.rhino.resolve.RhinoInference;
@@ -69,12 +70,16 @@ public final class JsQuickFixes {
     private final JsRewrites edits;
     private final RhinoResolution resolution;
 
+    /** The file's import statements, which are BLANKED before the parser runs and so have no nodes. */
+    private final List<JsImports.Imported> imports;
+
     public JsQuickFixes(@Nullable AstRoot root, RhinoScopes scopes, JsRewrites edits,
-                 RhinoResolution resolution) {
+                 RhinoResolution resolution, List<JsImports.Imported> imports) {
         this.root = root;
         this.scopes = scopes;
         this.edits = edits;
         this.resolution = resolution;
+        this.imports = imports == null ? List.of() : imports;
     }
 
     /**
@@ -84,9 +89,14 @@ public final class JsQuickFixes {
      * clearest to read rather than trying to rank as it goes.</p>
      */
     public List<CodeAction> actionsIn(int from, int to) {
-        if (root == null) return List.of();
         List<CodeAction> actions = new ArrayList<>();
         int caret = Math.max(0, from);
+
+        // BEFORE THE TREE CHECK, because an import statement is BLANKED before the parser sees it -- so
+        // this is one of the few things still answerable for a file that did not parse, and the only fix
+        // in this catalog that does not walk a node.
+        removeUnusedImport(actions, caret);
+        if (root == null) return actions;
 
         RhinoScopes.Declaration unused = unusedDeclarationAt(caret, to);
         if (unused != null) removeUnused(actions, unused);
@@ -119,6 +129,48 @@ public final class JsQuickFixes {
     @Nullable private JsIntentions intentions;
 
     // ── Corrections ─────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * "Remove unused import" — the same offer Java makes, on the same line, doing the same thing.
+     *
+     * <h3>Reused rather than reimplemented, in the two places that could have drifted</h3>
+     *
+     * <p>WHICH imports are unused is {@link JsImports#unusedIn}, which the analyser also asks — so a
+     * warning without a fix, or a fix on a line with no warning, is not expressible. WHAT the edit is
+     * comes from {@link Change#deleteWithItsLine}, which is Java's own unused-import deletion moved into
+     * {@code com.crystalgui.text}: whole line when the import is alone on it, the span alone otherwise.
+     * Neither engine may import the other, so a shared utility MOVES there rather than being referenced
+     * in place.</p>
+     *
+     * <p>Offered when the caret is anywhere on the statement, keyword included. The FADE deliberately
+     * covers only the name — that is the span JDT marks and the two languages should agree — but a fix is
+     * reached by putting the caret on the line, and a reader who lands on the greyed-out word
+     * {@code import} would otherwise be told there is nothing to do here.</p>
+     */
+    private void removeUnusedImport(List<CodeAction> actions, int caret) {
+        if (imports.isEmpty()) return;
+        for (JsImports.Imported each : JsImports.unusedIn(imports, scopes.referencedNames())) {
+            int from = each.keywordStart();
+            int to = each.nameStart() + each.binaryName().length();
+            // PAST THE NAME, so a caret resting on the `;` or at the end of the line still offers it.
+            if (caret < from || caret > to + 1) continue;
+            // THE CATALOG'S OWN DELETION, which is what the sibling fix below uses -- it takes the indent
+            // back and the line break forward, so the line closes up rather than going blank. Java's
+            // unused-import fix computes the same thing from JDT's node; two adjacent fixes here reaching
+            // for two different helpers would be the worse kind of sharing.
+            actions.add(fix("remove-unused-import", "Remove unused import",
+                    edits.deleteStatement(from, semicolonAfter(to))));
+            return;
+        }
+    }
+
+    /** Past the {@code ;} when the statement has one, so the line does not keep its terminator. */
+    private int semicolonAfter(int end) {
+        String text = edits.textIn(end, end + 2);
+        int at = 0;
+        while (at < text.length() && (text.charAt(at) == ' ' || text.charAt(at) == '\t')) at++;
+        return at < text.length() && text.charAt(at) == ';' ? end + at + 1 : end;
+    }
 
     /**
      * "Remove 'x'" — for a declaration the analyser has already warned about.

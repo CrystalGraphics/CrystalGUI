@@ -2,6 +2,7 @@ package com.crystalgui.language.js.rhino.resolve;
 
 import com.crystalgui.text.lang.Signature;
 import com.crystalgui.text.lang.SymbolInfo;
+import com.crystalgui.text.lang.SymbolKind;
 import com.crystalgui.text.lang.SymbolModifier;
 import com.crystalgui.text.lang.TypeRef;
 
@@ -186,6 +187,12 @@ final class JsSignatures {
             case CONSTANT:
                 return "const";
             case LOCAL_VARIABLE:
+            // A TOP-LEVEL NAME IS REPORTED AS A FIELD and is still introduced by a keyword -- unlike a
+            // Java field, which is declared by its type. Promoting the kind without this dropped the
+            // `var` from every top-level declaration's signature, which is the shape of every mistake in
+            // this file: a rendering that reads a KIND has to be told when a kind starts meaning
+            // something new. @see RhinoResolution#kindOf
+            case FIELD:
                 // `var`, unless the caller said otherwise. RhinoScopes records which keyword was written
                 // and passes it in; this is the answer for a symbol that reached here from somewhere with
                 // no declaration node to read -- the live scope, or a host binding -- where `var` is what
@@ -200,8 +207,11 @@ final class JsSignatures {
         switch (symbol.kind()) {
             case CONSTANT: return "constant";
             case PARAMETER: return "variable.parameter";
-            case PROPERTY:
-            case FIELD: return "property";
+            case PROPERTY: return "property";
+            // A FIELD TAKES THE EDITOR'S OWN NAME FOR IT. Both resolve to one colour in every scheme we
+            // ship, so this changes no pixel today -- what it changes is that the popup and the text are
+            // saying the same word about the same name, which is the only reason they cannot drift.
+            case FIELD: return SymbolKind.FIELD.captureName();
             default: return "variable";
         }
     }

@@ -136,6 +136,32 @@ public interface LanguageServices extends AutoCloseable {
     }
 
     /**
+     * Something OUTSIDE this document changed in a way that changes what resolves inside it.
+     *
+     * <h3>Why the seam needs this at all</h3>
+     *
+     * <p>Every other trigger for re-analysis is an edit, and an edit is something the services object can
+     * see for itself — it holds the buffer. This is the class of change it cannot: another project file's
+     * text arriving, a JavaScript run leaving globals behind, a classpath gaining an entry. The document
+     * is character-for-character what it was and its meaning is different.</p>
+     *
+     * <p>The project index is the case that forced it. {@code sourceOf} answers from a cache and returns
+     * null for a file nobody has open, scheduling a read — so the FIRST analysis after opening a file
+     * that names a sibling resolves nothing, and without this the error stands until the author happens
+     * to type. It would present as a cross-file reference that is broken on open and fixes itself on the
+     * next keystroke, which reads as flakiness rather than as a missing signal.</p>
+     *
+     * <p><b>A hint, not a command.</b> An implementation may debounce, coalesce or ignore it — a caller
+     * announcing "the world moved" cannot know whether this document cared, so over-firing has to be
+     * cheap. The default does nothing, which is the honest answer for a tier with no analysis to re-run.</p>
+     *
+     * <p>Called on the <b>UI thread</b>. The events that cause it — a read landing, a script finishing —
+     * arrive on worker threads, so whoever raises it hops first; see {@code Workbench.tick}.</p>
+     */
+    default void environmentChanged() {
+    }
+
+    /**
      * Releases everything held for this document — a parse tree, a compiler, a classloader, <b>and the
      * providers handed out above</b>.
      *

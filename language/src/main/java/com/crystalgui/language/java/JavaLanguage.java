@@ -20,10 +20,12 @@ import com.crystalgui.text.TextBuffer;
 import javax.annotation.Nullable;
 
 import com.crystalgui.text.lang.LanguageServices;
+import com.crystalgui.text.lang.ProjectSourcesRegistry;
 import com.crystalgui.text.syntax.Language;
 import com.crystalgui.text.syntax.LanguageRegistry;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.List;
 
 /**
@@ -61,6 +63,15 @@ public final class JavaLanguage {
     private static JavaEngine engine;
     private static JobScheduler scheduler;
     private static EngineSource source;
+
+    /**
+     * The host classpath, scanned once by {@link #register}.
+     *
+     * <p>Every consumer wants the same answer, and one of them — {@link #projectClass} — is reached from
+     * a SCRIPT THREAD mid-run, where a second walk of the whole classpath is both a stall the author feels
+     * and a chance for the two to disagree about what is on it.</p>
+     */
+    private static List<String> classpath = List.of();
     /**
      * Whether {@link #register} has run — distinct from whether the engine opened. @see #register
      *
@@ -113,7 +124,9 @@ public final class JavaLanguage {
         JavaLanguage.source = source;
         // ATTEMPTED, NOT REQUIRED -- everything below registers whether or not it opened. @see #engine()
         openEngine();
+        // SCANNED ONCE, AND KEPT -- see the field. Same argument as `hostWith` having one implementation.
         List<String> classpath = HostClasspath.detect();
+        JavaLanguage.classpath = classpath;
 
         // THE EXISTING ENTRY, WITH SERVICES ADDED -- not a new one. `.java` already resolves to a
         // tokenizer, and replacing the entry wholesale would drop whichever backend won: registering
@@ -150,6 +163,10 @@ public final class JavaLanguage {
         // as the archives above -- the index is a scan of the classpath, not something the compiler owns,
         // so it answers on a host whose engine never opens.
         ClasspathTypeSearch.register();
+        // AND WHAT A PROJECT `.java` FILE DECLARES, through the same `symbolOf` seam the library side
+        // already answers for `library://`. Nothing served `project://`, so the identical question about
+        // the author's own file had nobody to ask. @see ProjectSourceSymbols
+        ProjectSourceSymbols.register();
 
         // AND WARM THE ENGINE, off this thread. @see #warm
         warm(classpath);
@@ -168,18 +185,56 @@ public final class JavaLanguage {
         //
         // Inside the lambda because a provider is invoked when a workbench opens, which is later than
         // registration -- and later is what gives a first launch's background fetch time to land.
-        ScriptRuntimes.contribute(Language.JAVA, cacheRoot -> {
-            JavaEngine ready = engine();
-            if (ready == null) return null;
-            MappingSet mappings = PlatformMappings.current();
-            return new ScriptHost(ready,
-                    cacheRoot == null ? ScriptCache.inMemory() : ScriptCache.directory(cacheRoot),
-                    mappings, mappings.isIdentity() ? "identity" : "mapped",
-                    JavaLanguage.class.getClassLoader(), classpath);
-        });
+        ScriptRuntimes.contribute(Language.JAVA, cacheRoot -> hostWith(cacheRoot, classpath));
         return engine != null;
     }
 
+
+    /**
+     * A host over this engine — the one place a {@link ScriptHost} is built.
+     *
+     * <p>Two callers want one: the Run panel, per workbench, and {@link #projectClass}, once. Building it
+     * twice would be two chances to get the MAPPINGS wrong, and that is the parameter whose mistake is
+     * invisible in a dev launch and fatal in production.</p>
+     */
+    @Nullable
+    private static ScriptHost hostWith(@Nullable Path cacheRoot, List<String> classpath) {
+        JavaEngine ready = engine();
+        if (ready == null) return null;
+        MappingSet mappings = PlatformMappings.current();
+        return new ScriptHost(ready,
+                cacheRoot == null ? ScriptCache.inMemory() : ScriptCache.directory(cacheRoot),
+                mappings, mappings.isIdentity() ? "identity" : "mapped",
+                JavaLanguage.class.getClassLoader(), classpath);
+    }
+
+    /** Built on first use, and shared: one compiled-script cache for every language that asks. */
+    private static ScriptHost interopHost;
+
+    /**
+     * A project Java type, compiled and defined — what a JavaScript {@code import} of one resolves to.
+     *
+     * <h3>The hook, and the reason it points this way</h3>
+     *
+     * <p>A JavaScript script can already import another script and a classpath class. The one thing it
+     * could not reach was a Java file in the same workspace: it is on no classpath — a source nobody has
+     * compiled — so the name did not bind, and the author saw {@code "Main" is not defined} at the line
+     * that used it. (An earlier draft of this note claimed the EDITOR resolved such a name perfectly. It
+     * did not, for a reason of its own: every cache in {@code InteropResolver} was keyed on the class name
+     * alone, so a probe that missed once stayed missed. Fixed separately.)</p>
+     *
+     * <p>Everything needed already lives on {@link ScriptHost}: the compiler with the project tier, the
+     * mapping pass, safepoint injection, the sandbox scan and the loader. This is the seam that lets the
+     * other engine <em>use</em> it rather than assemble a second one, which is what would have drifted.</p>
+     *
+     * <p>Null for a name the workspace does not declare, or one that will not compile. The caller has
+     * another tier to try, and a compile error belongs to the file that has it.</p>
+     */
+    @Nullable
+    public static synchronized Class<?> projectClass(String qualifiedName) {
+        if (interopHost == null) interopHost = hostWith(null, classpath);
+        return interopHost == null ? null : interopHost.classOf(qualifiedName);
+    }
 
     /**
      * <b>One throwaway analysis, on a daemon thread, so the first real one is not the first one.</b>
@@ -284,6 +339,21 @@ public final class JavaLanguage {
      */
     static String classNameFor(Resource resource) {
         if (resource == null || resource.name() == null || resource.name().isEmpty()) return "Script";
+
+        // UNDER A SOURCE ROOT, THE PATH NAMES THE TYPE -- M15 S4's package-authority inversion.
+        //
+        // The stem alone leaves the `package` line as the only claim about where the unit lives, so a
+        // file whose declaration disagrees with its directory compiles happily under one name while the
+        // project index has already named it by another. Handing the qualified name down is what makes
+        // those the same fact, and what gets javac's own mismatch diagnostic reported when they differ.
+        //
+        // `nameOf` answers null for a file under no root, which is not a failure: a scratch script has no
+        // directory worth deriving from, and the stem below is then exactly right.
+        if (resource.isProject() && resource.asPath() != null) {
+            String qualified = ProjectSourcesRegistry.view().nameOf(resource.asPath().toString());
+            if (qualified != null && !qualified.isEmpty()) return qualified;
+        }
+
         String name = resource.name();
         int dot = name.lastIndexOf('.');
         String stem = dot > 0 ? name.substring(0, dot) : name;

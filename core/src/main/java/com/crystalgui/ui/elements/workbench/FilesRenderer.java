@@ -2,18 +2,28 @@ package com.crystalgui.ui.elements.workbench;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.fs.CgPath;
+import com.crystalgui.fs.Resource;
+import com.crystalgui.fs.ResourceContentProvider;
+import com.crystalgui.fs.ResourceRegistry;
+import com.crystalgui.fs.SourceRoots;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.elements.SymbolIcon;
 import com.crystalgui.ui.elements.TextField;
+import com.crystalgui.ui.elements.Tooltip;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.elements.tree.TreeRenderer;
 import com.crystalgui.ui.elements.tree.TreeRow;
 import com.crystalgui.ui.elements.workbench.decoration.FileDecoration;
 import com.crystalgui.ui.input.UIInputHandler;
 
+import javax.annotation.Nullable;
+
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -61,8 +71,21 @@ final class FilesRenderer implements TreeRenderer<CgPath> {
         // for. A recycled row keeps its slots and bind() only ever writes into them.
         UIElement twisty = new UIElement();
         twisty.addClass(ProjectFileTree.TWISTY_CLASS);
-        UIElement icon = new UIElement();
+        // A SYMBOL ICON, because a `.java` row is a DECLARATION and the rest are not.
+        //
+        // The same widget the completion popup and a library tab build, so a class glyph cannot come to
+        // mean one thing in a tab and another in the tree -- and it carries the `static`/`final` marks,
+        // which are stacked layers rather than a picture and so cannot travel as an icon name. A row that
+        // is not a declaration calls `showNothing()`; see bind().
+        SymbolIcon icon = new SymbolIcon();
         icon.addClass(ProjectFileTree.ICON_CLASS);
+        // THE TOOLTIP IS THE ROW'S, and the icon is a REGION of it.
+        //
+        // Not attached to the icon, which would need the icon to be hittable for a pointer to reach it --
+        // and a hittable part swallows the press meant for the row. That is worse here than it sounds:
+        // click-focus targets the exact element hit rather than the nearest focusable ancestor, and an
+        // icon is not focusable, so `emitMouseDown` would blur the tree and hand focus to nothing. The
+        // dock's tabs solved the identical problem the identical way. @see Tooltip#addRegion
         UIText label = new UIText("");
         UIText badge = new UIText("");
         badge.addClass(ProjectFileTree.BADGE_CLASS);
@@ -104,6 +127,9 @@ final class FilesRenderer implements TreeRenderer<CgPath> {
         row.addChild(label);
         row.addChild(badge);
         row.addChild(editor);
+        // ATTACHED ONCE, here rather than in bind: `Tooltip.attach` ADDS a listener pair rather than
+        // replacing one, so a row that was bound twice would show two tooltips.
+        tips.put(row, Tooltip.attach(row, ""));
         slots.put(row, new ProjectFileTree.RowParts(twisty, icon, label, badge, editor));
         tree.editing().installEditor(row, editor);
         // A FOLDER TOGGLES ON ONE CLICK; A FILE OPENS ON TWO. Not one rule for both, and the
@@ -180,19 +206,65 @@ final class FilesRenderer implements TreeRenderer<CgPath> {
         // dead strip down the left of the panel.
         parts.twisty().setHitTest(directory);
         FileIconTheme theme = FileIconTheme.getDefault();
+        // A module, a source root and a package wear one folder glyph otherwise -- which makes
+        // `src/main/java` look like an ordinary directory that happens to be nested deeply, and that is
+        // the one thing a reader scanning a tree is looking for.
+        //
+        // THE ROLE IS A CLASS AND NOTHING ELSE. The glyph for it is `noderole-*` in the stylesheet, beside
+        // the `completion-kind-*` vocabulary every other icon in the application is drawn from, and it
+        // beats the theme's inline default because a rule outranks the DEFAULT origin written below. A
+        // Java table of icon NAMES here would be the exact failure `SymbolIcon` was written to remove --
+        // its javadoc says so: two tables saying one thing, and the wrong one looks like a tab with an
+        // icon rather than a tab with the wrong icon.
+        SourceRoots.Role role = directory ? tree.source().roleOf(item) : null;
         // THE ITEM'S OWN NAME, never the row label: a compacted row reads "main/java/com" and asking
         // the theme about that string would look up an extension of "/com".
         CgUiDrawable glyph = theme.drawableFor(item.name(), directory, row.expanded());
-        // EMPTY, never null: null is how the cascade spells "nobody set this", so writing it would
-        // leave the previous file's icon in place on a recycled row rather than clearing it.
+        // WHAT THE FILE DECLARES, through the SAME seam a library tab asks -- `symbolOf` on the
+        // resource's provider. `LibrarySources` answers it for `library://`, which is why a
+        // `FlexDirection.class` tab draws an enum; `ProjectSourceSymbols` answers it for `project://`.
+        // The tree asks the question and never the engine, so neither can grow its own opinion.
+        SymbolInfo declared = directory ? null : declaredIn(item);
+        if (declared != null) {
+            parts.icon().show(declared.kind(), declared.modifiers());
+        } else {
+            // NOT `show(null, ...)`, which draws the UNKNOWN glyph as a background -- under the
+            // file-type overlay written below, that is two pictures on one row. @see SymbolIcon
+            parts.icon().showNothing();
+        }
+        // THE FILE-TYPE ICON ONLY WHEN THERE IS NO SYMBOL. They are different CSS properties -- a kind
+        // paints `background`, a file type paints `overlay` -- so writing both draws both.
         //
-        // DEFAULT origin, matching what TreeView already does for the row's indent. The theme JSON is
-        // a default the cascade can beat -- write it INLINE and `.filetype-java { overlay: icon(...) }`
-        // in a stylesheet silently does nothing, which makes the icon the one part of a row a theme
-        // cannot touch.
+        // EMPTY, never null: null is how the cascade spells "nobody set this", so writing it would leave
+        // the previous file's icon in place on a recycled row rather than clearing it.
+        //
+        // DEFAULT origin, matching what TreeView already does for the row's indent. The theme JSON is a
+        // default the cascade can beat -- write it INLINE and `.filetype-java { overlay: icon(...) }` in
+        // a stylesheet silently does nothing, which makes the icon the one part of a row a theme cannot
+        // touch.
+        CgUiDrawable painted = declared != null ? CgUiDrawable.EMPTY
+                : (glyph == null ? CgUiDrawable.EMPTY : glyph);
         StyleGroup.defaultPipeline(parts.icon().getStyle().getGeneralGroup(),
-                g -> g.overlay(glyph == null ? CgUiDrawable.EMPTY : glyph));
+                g -> g.overlay(painted));
+        // A DECLARATION'S WORDS, OR A DIRECTORY'S. Both from `SymbolIcon`, which is where every "what
+        // is this node, in words" answer lives -- so the picture and the sentence cannot drift apart.
+        String described = declared != null
+                ? SymbolIcon.describe(declared.kind(), declared.modifiers())
+                : SymbolIcon.describe(role);
+        Tooltip tip = tips.get(template);
+        if (tip != null) {
+            // NOTHING FOR THE ROW ITSELF. A tab needs its path -- it is a bare name with no structure
+            // around it -- and a tree row is the structure, so repeating the path is noise over the
+            // thing that already says it. The ICON is the only part with something of its own to say,
+            // and an empty tooltip now stays hidden rather than drawing a bare box. @see Tooltip
+            tip.addRegion(parts.icon(), described == null ? "" : described);
+        }
         ProjectFileTree.swapPrefixedClass(parts.icon(), ProjectFileTree.FILETYPE_PREFIX, theme.classFor(name, directory));
+        // SWAPPED, never added: a template is a different row every time the view reuses it, so leaving
+        // the previous row's role on the element lets the cascade resolve whichever rule happens to win.
+        ProjectFileTree.swapPrefixedClass(parts.icon(), ProjectFileTree.NODEROLE_PREFIX,
+                role == null ? null : ProjectFileTree.NODEROLE_PREFIX
+                        + role.name().toLowerCase(Locale.ROOT).replace('_', '-'));
 
         FileDecoration decoration = tree.getDecorations().resolve(item, directory);
         ProjectFileTree.swapPrefixedClass(template, ProjectFileTree.DECORATION_PREFIX,
@@ -200,6 +272,26 @@ final class FilesRenderer implements TreeRenderer<CgPath> {
         parts.badge().setText(decoration == null || decoration.letter() == null
                 ? "" : decoration.letter());
     }
+
+    /**
+     * What this file declares, or null.
+     *
+     * <p>Asked of the resource's own provider, which is how a tab already answers the same question. A
+     * row outside a source root, one whose text nobody has read yet, or a file of a language with no
+     * provider all answer null and keep the file-type icon -- the three-tier degradation the language
+     * stack is built on rather than a fallback invented here.</p>
+     */
+    @Nullable
+    private static SymbolInfo declaredIn(CgPath file) {
+        Resource resource = Resource.of(file);
+        ResourceContentProvider provider = ResourceRegistry.providerFor(resource);
+        if (provider == null) return null;
+        SymbolInfo symbol = provider.symbolOf(resource);
+        return symbol == null || symbol.kind() == null ? null : symbol;
+    }
+
+    /** One tooltip per template, attached once. @see #createTemplate */
+    private final Map<UIElement, Tooltip> tips = new HashMap<>();
 
     @Override
     public void unbind(UIElement template) {

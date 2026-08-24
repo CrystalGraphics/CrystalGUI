@@ -1,5 +1,7 @@
 package com.crystalgui.language.java.exec;
 
+import com.crystalgui.text.lang.ProjectSources;
+import com.crystalgui.text.lang.ProjectSourcesRegistry;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.language.engine.JavaEngine;
 import com.crystalgui.language.engine.ScriptClassLoader;
@@ -25,6 +27,7 @@ import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
@@ -197,19 +200,75 @@ public final class ScriptHost implements ScriptRuntime {
      * cache key describes and what a caller inspecting diagnostics wants to see.</p>
      */
     public Compiled compile(ScriptPrelude.Wrapped wrapped) {
-        ScriptCacheKey key = ScriptCacheKey.of(wrapped.unitSource(), mappingsId,
-                engine.band().minimumFeatureVersion());
+        int band = engine.band().minimumFeatureVersion();
+        // THE KEY THIS SCRIPT HAD LAST TIME, which is the only way to know what to look under.
+        //
+        // A script's inputs are its own text AND every project file it resolves through, and the second
+        // half is not knowable until after a compile -- so the lookup uses what the last compile of this
+        // exact text consumed. A hint, not a record: when it is missing or stale the worst case is one
+        // wasted compile, after which it is right again.
+        ScriptCacheKey bare = ScriptCacheKey.of(wrapped.unitSource(), mappingsId, band);
+        ScriptCacheKey key = keyFor(wrapped.unitSource(), band,
+                dependencyHints.getOrDefault(bare, Set.of()));
+
         Map<String, byte[]> cached = cache.get(key);
         if (cached != null) {
             return new Compiled(this, wrapped, key, cached, List.of(), true, true);
         }
         ScriptCompiler.Result result = engine.compiler().compile(
                 wrapped.className(), wrapped.unitSource(), classpath, engine.releaseLevel());
+
+        // WHAT IT ACTUALLY DEPENDED ON, which may not be what the hint said -- an added import reaches a
+        // file the previous compile never saw. Stored against the bare key, so the next lookup for this
+        // text starts from the truth.
+        Set<String> dependencies = result.projectSources();
+        dependencyHints.put(bare, dependencies);
+        ScriptCacheKey actual = keyFor(wrapped.unitSource(), band, dependencies);
+
         // ONLY A SUCCESSFUL COMPILE IS CACHED. Caching a failure would serve it back after the author
         // fixed the file, which reads as the editor refusing to notice an edit.
-        if (result.successful()) cache.put(key, result.classes());
-        return new Compiled(this, wrapped, key, result.classes(), result.messages(),
+        if (result.successful()) cache.put(actual, result.classes());
+        return new Compiled(this, wrapped, actual, result.classes(), result.messages(),
                 false, result.successful());
+    }
+
+    /**
+     * What this script last pulled in from the workspace, by its dependency-free key.
+     *
+     * <p>Per host and never persisted, because it is a shortcut rather than a fact: an entry that is
+     * absent costs one compile, and one that is out of date produces a key nothing is stored under, which
+     * costs the same. It cannot serve a wrong answer, only a slow one.</p>
+     */
+    private final Map<ScriptCacheKey, Set<String>> dependencyHints = new java.util.HashMap<>();
+
+    /**
+     * The cache key for this text compiled against the CURRENT state of {@code dependencies}.
+     *
+     * <h3>Why the sources are read again here rather than carried out of the compile</h3>
+     *
+     * <p>Because "current" is the whole point. {@code ProjectSources.sourceOf} answers from the open
+     * editor's buffer before it answers from disk, so this fingerprints what the author can SEE — no save
+     * required, which is the property that makes running {@code Main} after editing {@code Greeter} pick
+     * the edit up. Hashing text the compile happened to hold would fingerprint the past.</p>
+     *
+     * <p>A dependency that has since disappeared hashes as absent rather than being skipped, so a deleted
+     * file is a different key too.</p>
+     */
+    private ScriptCacheKey keyFor(String source, int band, Set<String> dependencies) {
+        if (dependencies == null || dependencies.isEmpty()) {
+            return ScriptCacheKey.of(source, mappingsId, band);
+        }
+        ProjectSources project = ProjectSourcesRegistry.view();
+        // SORTED, so the fingerprint describes the SET rather than the order ECJ happened to ask in --
+        // otherwise an identical dependency set produces a different key on a later run and never hits.
+        StringBuilder digest = new StringBuilder();
+        for (String name : new java.util.TreeSet<>(dependencies)) {
+            String text = project.sourceOf(name);
+            digest.append(name).append('\u0000')
+                    .append(text == null ? "<absent>" : Integer.toHexString(text.hashCode()))
+                    .append('\u0000').append(text == null ? 0 : text.length()).append('\n');
+        }
+        return ScriptCacheKey.of(source, mappingsId, band, digest.toString());
     }
 
     /** A compilation, and where it came from. */
@@ -394,6 +453,27 @@ public final class ScriptHost implements ScriptRuntime {
     }
 
     private Running prepare(Compiled compiled, Map<String, Object> bindings) throws Throwable {
+        ScriptClassLoader loader = loaderFor(compiled);
+        // THE BINARY NAME, which for a file declaring a package is not the file stem. Asking for
+        // the stem compiles fine and then throws ClassNotFoundException for a class that is
+        // plainly in the output -- see ScriptPrelude.Wrapped.binaryName.
+        Class<?> type = Class.forName(compiled.wrapped().binaryName(), true, loader);
+        return entryPointOf(type, loader, bindings, compiled.ref());
+    }
+
+    /**
+     * Everything between a compilation and a loader that can define it — remap, safepoints, sandbox.
+     *
+     * <h3>Its own method because it has a second caller, and must never grow a second implementation</h3>
+     *
+     * <p>A JavaScript script importing a project Java type needs exactly this and nothing else: the same
+     * mapping pass, so a Minecraft reference the author wrote in readable names still links; the same
+     * safepoint injection, so Stop reaches it; the same policy scan and the same loader gate. A parallel
+     * path on the JavaScript side would be four things to keep in step, and each of them is silent when
+     * it drifts — an unmapped class fails at link time in production only, and an uninstrumented one is
+     * simply unstoppable. @see #classOf</p>
+     */
+    private ScriptClassLoader loaderFor(Compiled compiled) throws Throwable {
         if (!compiled.successful()) {
             throw new IllegalStateException("cannot run a script that did not compile: "
                     + compiled.messages());
@@ -433,13 +513,59 @@ public final class ScriptHost implements ScriptRuntime {
         }
 
         // AND AGAIN AT THE LOADER, for the names the scan cannot see. @see ScriptClassLoader#loadClass
-        ScriptClassLoader loader = new ScriptClassLoader(instrumented, hostLoader,
+        return new ScriptClassLoader(instrumented, hostLoader,
                 current.allowsEverything() ? null : current::allowsClass);
-        // THE BINARY NAME, which for a file declaring a package is not the file stem. Asking for
-        // the stem compiles fine and then throws ClassNotFoundException for a class that is
-        // plainly in the output -- see ScriptPrelude.Wrapped.binaryName.
-        Class<?> type = Class.forName(compiled.wrapped().binaryName(), true, loader);
-        return entryPointOf(type, loader, bindings, compiled.ref());
+    }
+
+    /**
+     * A project Java type, compiled and defined — what a JavaScript {@code import} of one resolves to.
+     *
+     * <h3>Why this is here rather than on the JavaScript side</h3>
+     *
+     * <p>Everything it needs already exists here and nowhere else: the compiler with the project tier
+     * behind it (M15 S4), the mapping pass, safepoint injection, the sandbox scan and the loader. The
+     * JavaScript executor hooks into this rather than assembling its own, because four of those five are
+     * silent when they drift — an unmapped class links fine in a dev launch and dies in production, and an
+     * uninstrumented one simply cannot be stopped.</p>
+     *
+     * <p>Null rather than an exception for a name the workspace does not declare or cannot compile: the
+     * caller has another tier to try (the classpath), and a compile error belongs to the file that has it,
+     * which reports it in its own editor. What the caller must not do is invent a binding.</p>
+     *
+     * <p>The source is read with {@link ProjectSources#awaitSourceOf}, so a file
+     * nobody has open is waited for rather than missed — a run happens once, and "not yet" there is a
+     * failure rather than a deferral.</p>
+     */
+    @Nullable
+    public Class<?> classOf(String qualifiedName) {
+        if (qualifiedName == null || qualifiedName.isEmpty()) return null;
+        String source = ProjectSourcesRegistry.view().awaitSourceOf(qualifiedName);
+        if (source == null) return null;
+        try {
+            // THROUGH THE ORDINARY COMPILE, cache and all: a project type used by three scripts is
+            // compiled once, and editing it invalidates that entry exactly as it does for a script that
+            // imports it. @see ScriptCacheKey
+            Compiled compiled = compileSource(qualifiedName, source, Map.of());
+            if (!compiled.successful()) {
+                // SAID OUT LOUD, because the caller cannot. A `null` here is indistinguishable from "the
+                // workspace declares no such name", and the two want opposite things from the author: one
+                // is a typo in the import, the other is an error in a file they are not looking at and
+                // whose own editor may not even be open. Only the first message, which is the one ECJ
+                // reports first and the one the rest usually follow from.
+                System.err.println("[crystalgui] " + qualifiedName + " is in the workspace but did not "
+                        + "compile, so nothing can import it: "
+                        + (compiled.messages().isEmpty() ? "no message" : compiled.messages().get(0)));
+                return null;
+            }
+            return Class.forName(qualifiedName, true, loaderFor(compiled));
+        } catch (Throwable unavailable) {
+            // INCLUDING A REFUSAL. `loaderFor` throws when the policy refuses something the class
+            // reaches, and that is an answer rather than a fault: the name does not bind, and the script
+            // fails on it if it uses it -- which is what every other refused import already does.
+            System.err.println("[crystalgui] " + qualifiedName + " is in the workspace and could not be "
+                    + "loaded: " + unavailable);
+            return null;
+        }
     }
 
     /**

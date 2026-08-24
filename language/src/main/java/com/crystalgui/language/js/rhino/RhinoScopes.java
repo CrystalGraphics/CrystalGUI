@@ -19,6 +19,8 @@ import javax.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.List;
 import java.util.Map;
 
@@ -201,6 +203,19 @@ public final class RhinoScopes {
 
     public List<Declaration> declarations() {
         return inOrder;
+    }
+
+    /**
+     * Every name the file uses and does not declare, by identifier.
+     *
+     * <p>{@link #freeNames()} with the nodes discarded. Two readers want the set rather than the
+     * occurrences — the unused-import warning and the fix that removes one — and both would otherwise
+     * build it from the list themselves. @see com.crystalgui.language.js.rhino.JsImports#unusedIn</p>
+     */
+    public Set<String> referencedNames() {
+        Set<String> referenced = new HashSet<>();
+        for (Name free : freeNames()) referenced.add(free.getIdentifier());
+        return referenced;
     }
 
     public List<Name> freeNames() {

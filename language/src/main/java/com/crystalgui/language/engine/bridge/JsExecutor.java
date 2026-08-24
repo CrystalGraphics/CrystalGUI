@@ -3,6 +3,7 @@ package com.crystalgui.language.engine.bridge;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -88,6 +89,29 @@ public interface JsExecutor {
      * direction, so a per-run one could disagree with what the editor is showing.</p>
      */
     default void useMemberNames(MemberNameMapper mapper) {
+    }
+
+    /**
+     * How to reach a Java type the WORKSPACE declares, rather than one on the classpath.
+     *
+     * <p>A project {@code .java} file is on no classpath -- it is a source nobody has compiled -- so a
+     * script importing one bound nothing, while the editor resolved it perfectly through the Java
+     * engine's project tier. A name the popup offers and the run refuses is the failure §19.1 calls worse
+     * than either restriction alone, and this is the seam that closes it.</p>
+     *
+     * <p><b>Here rather than a direct call, and that is not ceremony.</b> The lending side is host-side
+     * and may not name a Rhino type; the receiving side is defined by the engine band. Reaching across
+     * without a bridge method fails at LINK time with {@code NoClassDefFoundError: ContextFactory} from
+     * inside a registration -- which is what the first attempt did.</p>
+     *
+     * <p>A {@code Function<String, Class<?>>} and nothing richer, for the reason every crossing here is
+     * shaped that way: the implementation is a {@code ScriptHost}, which the band cannot name. Compose
+     * host-side, cross with JDK types only.</p>
+     *
+     * <p>Never lent by a host with no Java engine open, and the default does nothing -- such a host keeps
+     * exactly the behaviour it had, where a Java name resolves against the classpath or not at all.</p>
+     */
+    default void useProjectClasses(Function<String, Class<?>> loader) {
     }
 
     /**

@@ -9,6 +9,7 @@ Per-directory detail lives beside the assets it covers; this is the index.
 
 | What | Where | Licence | Notes |
 |---|---|---|---|
+| **IntelliJ diff/merge algorithms** | `core/src/main/java/com/crystalgui/text/diff/` | **Apache 2.0** | © 2000–2024 JetBrains s.r.o. **Ported source, modified** — `DiffRange` (`util/Range`), `DiffIterable` (`comparison/iterables/FairDiffIterable`), `MergeRange` (`util/MergeRange`), `MergeRanges` (`ComparisonMergeUtil.FairMergeBuilder` + `ChangeBuilder`), `ComparisonPolicy` (`comparison/ComparisonPolicy` + the equality half of `ComparisonUtil`). Each class names its upstream file and its modifications in its own javadoc, per § 4(b) |
 | IntelliJ Platform icons | `core/src/main/resources/assets/crystalgui/ui/icons/filetypes/` | Apache 2.0 | © 2000–2021 JetBrains s.r.o. Verbatim. See [ATTRIBUTION.md](core/src/main/resources/assets/crystalgui/ui/icons/ATTRIBUTION.md) |
 | Feather icons | `core/src/main/resources/assets/crystalgui/ui/icons/` | MIT | © 2013–2023 Cole Bemis. Verbatim |
 | Minecraft fonts | `core/src/main/resources/assets/crystalgui/ui/fonts/` | Public domain | `Minecraft.otf`, `MinecraftRegular.otf` |
@@ -257,7 +258,7 @@ wrong by someone moving fast:
 | Source | Licence | What is permitted |
 |---|---|---|
 | VS Code / Monaco, CodeMirror 6 | **MIT** | **Port the code.** Attribute in the class javadoc, naming the source file |
-| **IntelliJ Community** | **Apache 2.0** | **Port the code**, with attribution and the statement of modifications § 4(b) asks for. What is ported today is *behaviour rather than source*: `JavaDocs` follows `JavaDocInfoGenerator`’s block-tag section order (deprecated → params → return → throws → since → author/version → the API tags → see-also → unrecognised last) and its inline-tag mapping, each named at the rule it decides. The file-type icons in the table above are the same licence arriving as assets |
+| **IntelliJ Community** | **Apache 2.0** | **Port the code**, with attribution and the statement of modifications § 4(b) asks for. **Source is now ported, not only behaviour** — the diff/merge algorithms in the table above, each carrying its own § 4(b) statement. *(This row read "behaviour rather than source" until 2026-08-22, which was true when written and stopped being true the moment `com.crystalgui.text.diff` took `FairMergeBuilder`. A licence index that describes an older state of the repository is worse than none, because it is the thing somebody checks instead of looking.)* Behaviour-only ports remain: `JavaDocs` follows `JavaDocInfoGenerator`’s block-tag section order (deprecated → params → return → throws → since → author/version → the API tags → see-also → unrecognised last) and its inline-tag mapping, each named at the rule it decides. The file-type icons in the table above are the same licence arriving as assets |
 | **Zed** | **GPL-3.0** | **Read for shape only.** Copying it would impose GPL on this repository. `Rope`/`TextSummary` take `SumTree`'s *design*; not a line of its code |
 
 ## Trademarks

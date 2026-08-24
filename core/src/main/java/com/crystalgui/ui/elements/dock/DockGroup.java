@@ -19,6 +19,7 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
 
 import java.util.ArrayList;
 import com.crystalgui.core.dispose.Disposer;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.LinkedHashMap;
@@ -279,14 +280,16 @@ public class DockGroup extends UIElement {
         for (Tab tab : tabs.getTabs()) tab.content().clearAllChildren();
         tabs.clearTabs();
         tabByPanel.clear();
+        // WITH THEM, because `addTab` below builds NEW Tab objects every time -- and this runs on every
+        // split, drag and reorder. Keyed by Tab, so without this the map keeps one dead tab and its
+        // tooltip per rebuild, forever.
+        tabTooltips.clear();
 
         for (DockPanelRef panel : wanted) {
             Tab tab = tabs.addTab(area.registry().titleOf(panel));
             // AN ELEMENT FIRST, because a name cannot carry a declaration's static and final marks --
             // those are stacked layers rather than a picture. @see DockPanelRegistry#iconElementOf
-            UIElement glyph = area.registry().iconElementOf(panel);
-            if (glyph != null) applyIconElement(tab, glyph);
-            else applyIcon(tab, area.registry().iconOf(panel));
+            applyIconTo(tab, panel);
             // AT BUILD TIME, which is the whole reason the decoration is pulled from a provider rather
             // than pushed onto the tab: the strip is rebuilt on every rearrangement, and anything pushed
             // would have to be pushed again by somebody who noticed.
@@ -332,7 +335,38 @@ public class DockGroup extends UIElement {
         // may call this freely.
         tab.setText(area.registry().titleOf(panel));
         applyDecoration(tab, panel);
+        applyIconTo(tab, panel);
     }
+
+    /**
+     * Re-reads the tab's icon — <b>which used to be pulled once and kept.</b>
+     *
+     * <p>That was right while an icon was a function of the file NAME: the name is in the ref, the ref is
+     * immutable, and a panel whose ref changed is a different panel. It stopped being right when a tab
+     * started showing what its file DECLARES. That answer is read through {@code ProjectSources}, which
+     * does not have it until the file has been read — so the tab is built before the answer exists, and
+     * an icon pulled once is the file-type glyph forever.</p>
+     *
+     * <p>The tooltip's second region is re-anchored with it, because {@link #applyIconElement} REPLACES
+     * the slot: a region registered against the old element points at something no longer in the tree,
+     * so the icon would keep its picture and lose its words. The tooltip itself is retained rather than
+     * re-attached, since {@code Tooltip.attach} adds a listener pair rather than replacing one.</p>
+     */
+    private void applyIconTo(Tab tab, DockPanelRef panel) {
+        // AN ELEMENT FIRST, for the reason the build path gives: a name cannot carry a declaration's
+        // static and final marks.
+        UIElement glyph = area.registry().iconElementOf(panel);
+        if (glyph != null) applyIconElement(tab, glyph);
+        else applyIcon(tab, area.registry().iconOf(panel));
+
+        Tooltip tooltip = tabTooltips.get(tab);
+        String iconText = area.registry().iconTooltipOf(panel);
+        UIElement icon = tab.getPreIcon();
+        if (tooltip != null && iconText != null && icon != null) tooltip.addRegion(icon, iconText);
+    }
+
+    /** The tooltip attached to each tab, so its icon region can be re-anchored. @see #applyIconTo */
+    private final Map<Tab, Tooltip> tabTooltips = new HashMap<>();
 
     /**
      * Puts the panel's {@code decoration-*} class on its tab, replacing whichever one it had.
@@ -385,11 +419,11 @@ public class DockGroup extends UIElement {
      * every element in the entered chain, so the tab's tooltip and the icon's would both show, stacked.
      * {@link Tooltip#addRegion} is the one mechanism that answers both.</p>
      *
-     * <p><b>Built once per tab, never refreshed.</b> Same argument as the icon's: both are functions of
-     * the ref, the ref is immutable, and a panel whose ref changed is a different panel — at which point
-     * {@link #sync} rebuilds the strip anyway. A re-read here would be work that provably cannot find
-     * anything, on a path called from a frame tick. And {@code Tooltip.attach} <em>adds</em> a listener
-     * pair rather than replacing one, so calling it twice on a tab leaves two tooltips showing.</p>
+     * <p><b>Attached once per tab, and never a second time</b> — {@code Tooltip.attach} adds a listener
+     * pair rather than replacing one, so calling it twice leaves two tooltips showing. The instance is
+     * retained instead, and {@link #applyIconTo} re-anchors the ICON region when the icon is re-read.
+     * (The icon itself used to share this paragraph's "never refreshed" reasoning. It no longer can: a
+     * tab now shows what its file declares, and that answer arrives after the tab does.)</p>
      *
      * <p>An icon answer without a tab answer is not wired: the base text is what the tooltip says
      * everywhere else on the tab, and an empty one draws a bare rounded box over most of the control.</p>
@@ -399,6 +433,8 @@ public class DockGroup extends UIElement {
         if (text == null) return;
 
         Tooltip tooltip = Tooltip.attach(tab, text);
+        // RETAINED, so a later icon can re-anchor its region rather than attaching a second tooltip.
+        tabTooltips.put(tab, tooltip);
         String iconText = area.registry().iconTooltipOf(panel);
         UIElement icon = tab.getPreIcon();
         if (iconText != null && icon != null) tooltip.addRegion(icon, iconText);
@@ -591,6 +627,24 @@ public class DockGroup extends UIElement {
      */
     void forgetContent(DockPanelRef panel) {
         content.remove(panel);
+    }
+
+    /**
+     * Drops the built widget for a panel that has been closed, so a reopen builds a fresh one.
+     *
+     * <p>The memo is keyed by {@link DockPanelRef}, which is a <b>value</b> — reopening the same file
+     * produces an equal ref and would otherwise be handed the widget built for the document that was just
+     * disposed. Nothing about that looks wrong until something touches it, and then it is an
+     * {@code IllegalStateException: Parser is closed} out of a frame tick.</p>
+     *
+     * <p>Detached as well as forgotten. The element is still a child of the tab it was shown in, and the
+     * strip that owned it is about to be rebuilt around a panel that no longer exists — so leaving it
+     * attached keeps a whole editor, its buffer and its language services alive behind a tab nobody can
+     * see. @see DockArea#closePanelDiscarding</p>
+     */
+    void forgetContent(DockPanelRef panel) {
+        UIElement built = content.remove(panel);
+        if (built != null) built.removeSelf();
     }
 
     /**

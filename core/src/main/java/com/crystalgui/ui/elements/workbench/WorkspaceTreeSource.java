@@ -3,7 +3,9 @@ package com.crystalgui.ui.elements.workbench;
 import com.crystalgui.fs.CgFileEntry;
 import com.crystalgui.fs.CgFileError;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.fs.CgPath;
+import com.crystalgui.fs.SourceRoots;
 import com.crystalgui.fs.ProjectInfo;
 import com.crystalgui.fs.WorkspaceClient;
 import com.crystalgui.core.search.SearchMatch;
@@ -134,6 +136,25 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
      */
     public final Signal.Value<CgPath> onDidLoadListing = new Signal.Value<>();
 
+    /**
+     * Bumped whenever anything the PROJECT INDEX derives from changes — a directory listing, or a
+     * project's declared source roots.
+     *
+     * <p>An {@code int} rather than a signal because the one consumer is a per-frame pull, and it needs
+     * "has anything changed since I last looked" rather than "what changed". Reading it is a field load;
+     * the alternative it replaced was rebuilding a list of every file in the workspace, every frame,
+     * to find out that nothing had.</p>
+     *
+     * <p>It covers both inputs on purpose. The two arrive on separate round trips, so a counter bumped
+     * only by listings goes stale for a project whose roots land after its files — and the index would
+     * then derive every one of that project's names against the fallback convention, permanently.</p>
+     */
+    public int indexRevision() {
+        return indexRevision;
+    }
+
+    private int indexRevision;
+
     @Nullable
     private String failure;
 
@@ -147,14 +168,25 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
         return failure;
     }
 
+    /** @deprecated a caller that cannot hear a refusal cannot retry. @see #loadProjects(Runnable, Runnable) */
+    @Deprecated
+    public void loadProjects(Runnable onLoaded) {
+        loadProjects(onLoaded, () -> { });
+    }
+
     /**
      * Asks for the project list, which is what gives the tree its roots.
      *
      * <p>Called by the host rather than on construction, because a client's window id is not valid until
      * its session has opened — and the server discards a packet addressed to another window, so a call made
      * too early is thrown away with no error at all.</p>
+     *
+     * <p><b>{@code onRefused} exists because that last sentence is a description of a bug, not of a
+     * design.</b> A caller latches so it asks once; if the one ask lands before the workspace is ready,
+     * the tree is empty for the life of the screen and nothing anywhere says why. Reporting the refusal
+     * is what lets the latch be released and the ask retried. @see ProjectFileTree#loadProjects</p>
      */
-    public void loadProjects(Runnable onLoaded) {
+    public void loadProjects(Runnable onLoaded, Runnable onRefused) {
         // SEEDED HERE, and for the same reason the comment above gives. What this actor may do is a
         // question about the projects, so the first moment it can be asked is the first moment they can
         // be -- and asking it here rather than at construction means it inherits that timing for free
@@ -162,20 +194,72 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
         // and never a poll: calling it per menu open would be the round trip the cache exists to avoid.
         // @see WorkspaceClient#mayWrite
         client.refreshCapabilities();
+        // SAID OUT LOUD, both ways round. The comment above notes that a call made too early is "thrown
+        // away with no error at all" -- so the empty tree it produces is indistinguishable from a tree
+        // that was never asked, from a server with no projects, and from an answer still in flight. Four
+        // states, one appearance, and a report of it can only ever be "it was empty". Two lines make the
+        // log say which.
+        CrystalGuiCore.LOGGER.info("[cgui-fs] asking for the project list");
         client.projects(infos -> {
+            CrystalGuiCore.LOGGER.info("[cgui-fs] project list: {} project(s)", infos.size());
             roots.clear();
             for (ProjectInfo info : infos) {
                 CgPath root = info.root();
                 roots.add(root);
                 directories.add(root);
                 projectNames.put(info.id(), info.displayName());
+                // RETAINED, because the index derives a qualified name from a path and cannot do it
+                // without knowing where the name starts. The listing is the only place these arrive.
+                projectSourceRoots.put(info.id(), info.sourceRoots());
             }
+            indexRevision++;
             dirty = true;
             onLoaded.run();
         }, error -> {
             failure = "projects failed: " + error.code();
             dirty = true;
+            CrystalGuiCore.LOGGER.warn("[cgui-fs] project listing refused: {} — the tree will retry",
+                    error.code());
+            onRefused.run();
         });
+    }
+
+    /** Project id to its declared source roots, filled by the project listing. @see #sourceRootsOf */
+    private final java.util.Map<String, java.util.List<String>> projectSourceRoots =
+            new java.util.HashMap<>();
+
+    /**
+     * Where {@code projectId}'s source starts, or the convention when it has not been listed yet.
+     *
+     * <p>The fallback matters more than it looks: the crawl and the project listing are separate round
+     * trips, so files can be known before their project's roots are. Answering "no roots" in that window
+     * would index those files as declaring nothing, and nothing re-derives them afterwards — the index
+     * would be permanently short of whatever arrived early.</p>
+     */
+    /**
+     * What {@code path} is in its own project's layout — module, source root, package or folder.
+     *
+     * <h3>Asked here rather than assembled by the caller, and that is about what comes next</h3>
+     *
+     * <p>A renderer could call {@link #sourceRootsOf} and {@link SourceRoots#roleOf} itself; it is two
+     * lines. But the ROLE is a fact about a project, and this is the only class that holds projects.
+     * When a project can depend on another as a library, the answer stops being derivable from the path
+     * and the roots alone — the same directory is a module in the project you opened and a library in the
+     * one that depends on it, and nothing in a {@link CgPath} says which. Then this method learns about
+     * project KIND and no caller changes.</p>
+     *
+     * <p>Which is also the argument against a second {@code Map<String, Kind>} beside
+     * {@link #projectSourceRoots} when that day comes: two parallel maps keyed by project id drift, and a
+     * record per project does not. @see ProjectFileTree#NODEROLE_PREFIX</p>
+     */
+    public SourceRoots.Role roleOf(CgPath path) {
+        if (path == null) return SourceRoots.Role.FOLDER;
+        return SourceRoots.roleOf(path.path(), sourceRootsOf(path.project()));
+    }
+
+    public java.util.List<String> sourceRootsOf(String projectId) {
+        java.util.List<String> declared = projectSourceRoots.get(projectId);
+        return declared == null ? com.crystalgui.fs.SourceRoots.CONVENTION : declared;
     }
 
     /**
@@ -478,10 +562,12 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
      * Whether a single-child directory chain renders as one row — VS Code's
      * {@code explorer.compactFolders}, IntelliJ's <i>Compact Empty Middle Packages</i>.
      *
-     * <p><b>On by default</b>, as it is in VS Code, and the reason is arithmetic: {@code src/main/java/
-     * com/crystalgui} is five rows and one useful one. A tree of Java or C# packages is mostly chains.</p>
+     * <p><b>Off for now</b>, and that is a gap rather than a decision. It is on in VS Code and the reason
+     * is arithmetic — {@code src/main/java/com/crystalgui} is five rows and one useful one — but there is
+     * no setting to turn it back on with, so shipping it on means a reader who wants the packages spelled
+     * out cannot have them. It goes back to {@code true} the day it is settable.</p>
      */
-    private boolean compactFolders = true;
+    private boolean compactFolders = false;
 
     /** The displayed label for a compacted row — {@code "main/java/com/crystalgui"}. */
     private final Map<CgPath, String> compactLabels = new HashMap<>();
@@ -562,6 +648,12 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
                 if (inner == null || inner.size() != 1 || !filter.isEmpty()) break;
                 CgPath only = inner.get(0);
                 if (!directories.contains(only)) break;
+                // AND NEVER THROUGH A ROLE BOUNDARY. A source root is not a package, so swallowing it into
+                // the chain below hides where source starts -- `src/main/java/com/example` rendered as one
+                // row called `java/com/example`, wearing the PACKAGE icon of its deepest segment, and the
+                // source root simply gone from the tree. IntelliJ compacts middle PACKAGES and stops at
+                // the root for exactly this reason. @see SourceRoots#roleOf
+                if (roleOf(end) != SourceRoots.Role.PACKAGE && roleOf(end) != SourceRoots.Role.FOLDER) break;
                 swallowed.add(end);
                 end = only;
                 label.append('/').append(only.name());
@@ -740,6 +832,7 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
             // `directories`, so sorting inside the loop above would order against a set still being built.
             paths.sort(this::compare);
             children.put(directory, paths);
+            indexRevision++;
             // Whatever this listing revealed becomes the next thing to walk. Feeding the queue HERE is what
             // makes the crawl resume for a folder that appears later -- a deeper listing, or one somebody
             // just created -- rather than depending on a step happening to look in the right place.
@@ -755,6 +848,7 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
             requested.remove(directory);
             if (failed.error() != CgFileError.FILE_NOT_FOUND) {
                 children.put(directory, List.of());
+                indexRevision++;
                 // Announced too. A refused listing is still an ANSWER about this directory, and a
                 // restore waiting on it has to learn that it arrived and was empty -- otherwise the one
                 // case that never resolves is the one where the folder is gone, which is exactly the

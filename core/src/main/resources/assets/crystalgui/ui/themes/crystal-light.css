@@ -162,4 +162,16 @@ theme {
      * where dark-theme white disappears. Near-black is the readable answer, and it is the reason this is
      * a theme decision rather than a derivation from the system vocabulary. */
     --switcher-selected-ring: #1E1F22;
+
+    /* -- Differences -----------------------------------------------------------
+     *
+     * The dark theme's pair, retuned rather than reused. The dark values are lifted off a near-black
+     * ground and read as a faint glow; over white the same alphas read as dirty smudges, so the hues move
+     * to their light-ground equivalents and keep the two strengths the band/mark split needs. */
+    --diff-added-bg: #2DA44E26;
+    --diff-added-fg: #2DA44E59;
+    --diff-removed-bg: #CF222E26;
+    --diff-removed-fg: #CF222E59;
+    --diff-changed-bg: #0969DA1F;
+    --diff-changed-fg: #0969DA4D;
 }

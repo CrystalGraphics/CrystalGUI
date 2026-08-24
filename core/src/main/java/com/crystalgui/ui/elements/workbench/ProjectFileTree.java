@@ -13,6 +13,7 @@ import com.crystalgui.ui.ClipboardActions;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.UiDataKeys;
+import com.crystalgui.ui.elements.SymbolIcon;
 import com.crystalgui.ui.elements.TextField;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.elements.chrome.ContextMenu;
@@ -120,6 +121,21 @@ public class ProjectFileTree extends UIElement implements UndoScope {
     /** Class prefixes the row swaps per bind; see {@link #swapPrefixedClass}. */
     static final String FILETYPE_PREFIX = "filetype-";
     static final String DECORATION_PREFIX = "decoration-";
+
+    /**
+     * What a directory IS in the layout — module, source root, package or plain folder.
+     *
+     * <p>Separate from {@link #FILETYPE_PREFIX} because they answer different questions and only one is
+     * about the file. A type is read off the NAME, which is VS Code's icon-theme model and is why
+     * {@code FileIconTheme} knows nothing about paths; a role is read off the PATH and is a fact about the
+     * project. IntelliJ's tree decides the icon the same way round, with the file-type registry as the
+     * fallback rather than the authority.</p>
+     *
+     * <p>It is also the only part of the icon a test can SEE. A drawable is an SVG document, and asserting
+     * on one means asserting on geometry — the shape of test that breaks on a redesign and proves nothing
+     * in the meantime.</p>
+     */
+    static final String NODEROLE_PREFIX = "noderole-";
 
     /**
      * The decorations shown on rows. Empty until something registers a provider, which is why a tree with
@@ -263,7 +279,21 @@ public class ProjectFileTree extends UIElement implements UndoScope {
     public void loadProjects() {
         if (projectsRequested) return;
         projectsRequested = true;
-        source.loadProjects(tree::refresh);
+        source.loadProjects(tree::refresh, () -> {
+            // RELEASED, so the caller's per-frame retry is a retry rather than a name for one.
+            //
+            // The latch used to be set on the ATTEMPT and never cleared, and Workbench.tick's comment
+            // said out loud what that costs -- "one early call poisons it permanently" -- while its own
+            // ticker made exactly that early call, on the first frame the workbench attaches, guarded
+            // only by whether there is a window. CgUiScreen asks properly, gated on isConnected(), and
+            // by then the latch was already spent.
+            //
+            // Reported from a client: F6 the instant a world finished loading gave an empty Project
+            // panel with New File and New Folder greyed -- because there was no project root to create
+            // INTO, not because anything was refused. Waiting a few seconds before opening the editor
+            // worked, which is why it survived this long.
+            projectsRequested = false;
+        });
     }
 
     /**
@@ -549,7 +579,7 @@ public class ProjectFileTree extends UIElement implements UndoScope {
      */
     /** Package-private, so the parts beside this class can write into a row without reaching for
      * children by index. @see ExplorerEditing */
-    record RowParts(UIElement twisty, UIElement icon, UIText label, UIText badge,
+    record RowParts(UIElement twisty, SymbolIcon icon, UIText label, UIText badge,
                     TextField editor) {
     }
 
@@ -707,7 +737,15 @@ public class ProjectFileTree extends UIElement implements UndoScope {
         return rowItems.get(row);
     }
 
-    /** Defers a refresh to the ticker — never immediate, see {@link #activate}. */
+    /**
+     * Defers a refresh to the ticker — never immediate, see {@link #activate}.
+     *
+     * <p>Also how the workbench says a project READ has landed. A row's icon is what the file declares,
+     * and that is read through {@code ProjectSources} — which answers null for a file nobody has read yet
+     * and schedules the read, because this is asked while painting. So the first paint of a package draws
+     * file-type icons and the real answers arrive afterwards, one at a time, with nothing in the tree
+     * watching for them.</p>
+     */
     void requestRefresh() {
         pendingRefresh = true;
     }

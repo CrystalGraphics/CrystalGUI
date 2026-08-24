@@ -53,6 +53,8 @@ final class EcjCompilation {
         final Map<String, byte[]> classes = new LinkedHashMap<String, byte[]>();
         final List<String> messages = new ArrayList<String>();
         boolean errored;
+        /** Project types this compile resolved from the workspace. @see ScriptNameEnvironment */
+        java.util.Set<String> projectSources = java.util.Collections.emptySet();
     }
 
     private EcjCompilation() {
@@ -61,33 +63,36 @@ final class EcjCompilation {
     static Output compile(String className, String source, List<String> classpath, int releaseLevel,
                           TypeBytes types) {
         Output output = new Output();
-        INameEnvironment environment = null;
+        ScriptNameEnvironment environment = null;
         try {
             Map<String, String> options = optionsFor(releaseLevel);
-            environment = environmentFor(classpath, releaseLevel, types);
+            // SELF EXCLUDED here too: this unit is the one being compiled, so the project index
+            // answering for it would declare it twice.
+            // MAY WAIT: this method compiles in order to RUN. The analyser builds its own environment
+            // through `environmentFor` and does not. @see ProjectSources#awaitSourceOf
+            environment = new ScriptNameEnvironment(fileSystemFor(classpath, releaseLevel), types,
+                    com.crystalgui.text.lang.ProjectSourcesRegistry.view(),
+                    SourcePackages.binaryName(className, source).replace('.', '/'), true);
 
             final Output collecting = output;
-            ICompilerRequestor requestor = new ICompilerRequestor() {
-                @Override
-                public void acceptResult(CompilationResult result) {
-                    CategorizedProblem[] problems = result.getProblems();
-                    if (problems != null) {
-                        for (CategorizedProblem problem : problems) {
-                            if (problem == null || !problem.isError()) continue;
-                            collecting.errored = true;
-                            collecting.messages.add(describe(problem));
-                        }
+            ICompilerRequestor requestor = result -> {
+                CategorizedProblem[] problems = result.getProblems();
+                if (problems != null) {
+                    for (CategorizedProblem problem : problems) {
+                        if (problem == null || !problem.isError()) continue;
+                        collecting.errored = true;
+                        collecting.messages.add(describe(problem));
                     }
-                    // COLLECTED EVEN WHEN THERE ARE ERRORS. ECJ emits class files for the types it did
-                    // manage, and a "compile always, run explicitly" model wants to be able to inspect a
-                    // partial result -- discarding them would make a failed compile indistinguishable
-                    // from one that produced nothing.
-                    ClassFile[] files = result.getClassFiles();
-                    if (files == null) return;
-                    for (ClassFile file : files) {
-                        collecting.classes.put(
-                                new String(file.fileName()).replace('/', '.'), file.getBytes());
-                    }
+                }
+                // COLLECTED EVEN WHEN THERE ARE ERRORS. ECJ emits class files for the types it did
+                // manage, and a "compile always, run explicitly" model wants to be able to inspect a
+                // partial result -- discarding them would make a failed compile indistinguishable
+                // from one that produced nothing.
+                ClassFile[] files = result.getClassFiles();
+                if (files == null) return;
+                for (ClassFile file : files) {
+                    collecting.classes.put(
+                            new String(file.fileName()).replace('/', '.'), file.getBytes());
                 }
             };
 
@@ -97,6 +102,10 @@ final class EcjCompilation {
                     requestor,
                     new DefaultProblemFactory(Locale.getDefault()))
                     .compile(new ICompilationUnit[]{new InMemoryUnit(className, source)});
+            // WHAT THE WORKSPACE CONTRIBUTED, read after the compile because that is when it is known.
+            // It travels out so the cache can tell a script apart from the same script compiled against
+            // a different version of its siblings. @see ScriptCompiler.Result#projectSources
+            output.projectSources = environment.consumedProjectSources();
         } catch (OutOfMemoryError exhausted) {
             // THE ONE THING NOT TURNED INTO A MESSAGE. Building a diagnostic string after the heap has
             // run out is how a recoverable stall becomes an unrecoverable one. EcjSourceAnalyzer.parse
@@ -132,15 +141,20 @@ final class EcjCompilation {
     }
 
     /**
-     * The live tiers over ECJ's own classpath resolution.
+     * The live tiers over ECJ's own classpath resolution, told which type is being compiled.
      *
      * <p>{@code types} arrives already composed, from the host — see {@link TypeBytes} for why it cannot
      * be assembled here. With {@link TypeBytes#NONE} this is exactly the file-based environment it
      * replaces.</p>
+     *
+     * <p>The unit under analysis is already in ECJ's {@code unitsToProcess}. Answering the same name from
+     * the environment as well declares the file twice, and the duplicate lands on the author's own class.
+     * The name is <b>internal form</b> — slashes — because that is what the environment compares against.</p>
      */
-    static INameEnvironment environmentFor(List<String> classpath, int releaseLevel,
-                                                   TypeBytes types) {
-        return new ScriptNameEnvironment(fileSystemFor(classpath, releaseLevel), types);
+    static ScriptNameEnvironment environmentFor(List<String> classpath, int releaseLevel,
+                                                TypeBytes types, String selfInternalName) {
+        return new ScriptNameEnvironment(fileSystemFor(classpath, releaseLevel), types,
+                com.crystalgui.text.lang.ProjectSourcesRegistry.view(), selfInternalName);
     }
 
     private static INameEnvironment fileSystemFor(List<String> classpath, int releaseLevel) {

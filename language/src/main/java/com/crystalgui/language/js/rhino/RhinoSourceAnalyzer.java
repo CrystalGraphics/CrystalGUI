@@ -6,6 +6,7 @@ import com.crystalgui.language.engine.bridge.MemberNameMapper;
 import com.crystalgui.language.engine.bridge.SourceAnalyzer;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
+import com.crystalgui.text.diagnostic.DiagnosticTag;
 import com.crystalgui.language.engine.bridge.CodeActionContext;
 import com.crystalgui.text.lang.CodeAction;
 import com.crystalgui.text.lang.SymbolInfo;
@@ -19,12 +20,14 @@ import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Parser;
 import org.mozilla.javascript.ast.AstNode;
 import org.mozilla.javascript.ast.AstRoot;
+import org.mozilla.javascript.ast.Name;
 import org.mozilla.javascript.ast.ErrorCollector;
 import org.mozilla.javascript.ast.IfStatement;
 import org.mozilla.javascript.ast.KeywordLiteral;
 import org.mozilla.javascript.ast.ParseProblem;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -227,6 +230,7 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
         boolean parsed = root != null && !hasError(reported);
         if (parsed) {
             reported = withUnusedWarnings(reported, scopes, lines);
+            reported = withUnusedImports(reported, scanned.statements(), scopes, lines);
             reported = withConstantConditions(reported, root, text, lines);
             // AND WHAT AN OLDER HOST WOULD REFUSE, if one has been named. Gated on the same `parsed`
             // flag as the other two and for a sharper reason than theirs: this reports constructs THIS
@@ -257,7 +261,8 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
                 name, JsKeywords.measuredBy(RhinoSourceAnalyzer::parses), bindings,
                 scanned.imported().keySet());
         return new ParsedScript(version, text, root, scopes, reported, parsed, resolution,
-                new JsQuickFixes(root, scopes, new JsRewrites(text, version), resolution),
+                new JsQuickFixes(root, scopes, new JsRewrites(text, version), resolution,
+                        scanned.statements()),
                 bindings.keySet(), scanned.statements());
     }
 
@@ -267,7 +272,13 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
      * <p>Built per call rather than shared: {@code CompilerEnvirons} is mutable and Rhino writes to it
      * during a parse, so one instance handed to two parsers is a race with no symptom worth naming.</p>
      */
-    private static CompilerEnvirons environs() {
+    /**
+     * Visible so {@code JsExports} parses a module exactly as this parses a document.
+     *
+     * <p>Two parsers configured differently would disagree about what a file says, which is the same
+     * argument the blanking above makes for having one {@code JsImports.scan}.</p>
+     */
+    public static CompilerEnvirons environs() {
         CompilerEnvirons environs = new CompilerEnvirons();
         environs.setLanguageVersion(Context.VERSION_ES6);
         environs.setRecoverFromErrors(true);
@@ -351,10 +362,64 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
                     lines.pointAt(declared.offset + declared.length),
                     DiagnosticSeverity.WARNING,
                     "'" + declared.name + "' is declared but never used",
-                    RhinoProblemPolicy.OWNER, null));
+                    RhinoProblemPolicy.OWNER, null, UNNECESSARY, List.of()));
         }
         return out;
     }
+
+    /**
+     * An {@code import} nothing in the file mentions.
+     *
+     * <h3>{@code freeNames()} already answers this, exactly</h3>
+     *
+     * <p>A free name is one that resolves to nothing the file declares — which is precisely what an
+     * import provides. So "is this import used" is "is its bound name free somewhere", with no walk of
+     * our own and no second opinion about scoping.</p>
+     *
+     * <p>It gets SHADOWING right for free, and that is the case a name-matching walk would get wrong:
+     * a file that imports {@code Greeter} and then declares its own {@code var Greeter} has a reference
+     * which is NOT free, because it binds to the local — so the import really is unused, and both
+     * reference editors say so. A walk looking for the identifier would call it used.</p>
+     *
+     * <p>The mark covers the qualified NAME and not the {@code import} keyword. That is what JDT reports
+     * for its own unused import — {@code ImportReference} carries both a {@code declarationSourceStart},
+     * which includes the keyword, and a {@code sourceStart}, which does not, and the problem is raised on
+     * the second — so the two languages fade the same span in the same editor. Fading the keyword too was
+     * the first version of this, and it reads as the LINE being disabled rather than as the name being
+     * dead weight.</p>
+     */
+    private static List<Diagnostic> withUnusedImports(List<Diagnostic> problems,
+                                                      List<JsImports.Imported> imports,
+                                                      RhinoScopes scopes, LineIndex lines) {
+        if (imports.isEmpty()) return problems;
+        List<JsImports.Imported> unused = JsImports.unusedIn(imports, scopes.referencedNames());
+        if (unused.isEmpty()) return problems;
+
+        List<Diagnostic> out = new ArrayList<>(problems);
+        for (JsImports.Imported each : unused) {
+            out.add(new Diagnostic(lines.pointAt(each.nameStart()),
+                    lines.pointAt(each.nameStart() + each.binaryName().length()),
+                    DiagnosticSeverity.WARNING,
+                    // THE JAVA ENGINE'S OWN WORDING. The two languages sit in one editor and one Problems
+                    // panel, and a reader should not have to learn that "never used" and "unused" are the
+                    // same finding reported by different engines.
+                    "The import " + each.binaryName() + " is never used",
+                    RhinoProblemPolicy.OWNER, null, UNNECESSARY, List.of()));
+        }
+        return out;
+    }
+
+    /**
+     * Dead weight, faded rather than underlined.
+     *
+     * <p>{@code SquigglesPart} skips a diagnostic carrying this, and the editor styles the range through
+     * a highlight instead. The distinction is what the mark MEANS: "nothing reads this" tells you to
+     * delete something, where a warning tells you something is wrong. The Java engine has drawn its
+     * unused imports and locals this way since {@code EcjProblemPolicy} was written; JavaScript's were
+     * reported without it, so the same finding squiggled in one file and faded in the next.</p>
+     */
+    private static final Set<DiagnosticTag> UNNECESSARY = Set.of(DiagnosticTag.UNNECESSARY);
+
 
     /**
      * {@code if (false)} and {@code while (true)} — a branch whose condition cannot vary.

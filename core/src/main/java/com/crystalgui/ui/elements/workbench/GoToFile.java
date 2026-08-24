@@ -13,6 +13,7 @@ import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.chrome.QuickPick;
 import com.crystalgui.ui.elements.chrome.QuickPickEntry;
 import com.crystalgui.ui.elements.chrome.QuickPickItem;
+import com.crystalgui.ui.elements.chrome.QuickPickSource.ResultSink;
 import com.crystalgui.ui.text.TextRange;
 
 import javax.annotation.Nullable;
@@ -85,6 +86,9 @@ public final class GoToFile {
     private static final int WEIGHT_FILE = 100;
     private static final int WEIGHT_TYPE = 200;
 
+    /** How many rows either half may contribute. @see #trimTo */
+    private static final int MAX_PER_GROUP = 50;
+
     private GoToFile() {
     }
 
@@ -111,7 +115,8 @@ public final class GoToFile {
         pick.setRetainQuery(true);
         // THE LIST, NOT THE WORKBENCH. Read per query rather than snapshotted at open, so a listing that
         // lands while the picker is up is searchable without reopening it.
-        pick.setSource(query -> rowsFor(query, workbench.fileTree().source().knownFiles()));
+        pick.setSource((query, sink) ->
+                fetchInto(query, workbench.fileTree().source().knownFiles(), sink));
         pick.onAccepted.connect(id -> {
             // THE LOCATION COMES FROM THE QUERY, NOT THE ROW. `Main.java:42` narrows to `Main.java` for
             // matching, so every row is a match for the name and none of them carries the line — which
@@ -142,33 +147,62 @@ public final class GoToFile {
      * stated reason; driving this through a real {@code UIWindow} would test the shell rather than the
      * ranking, and the ranking is the part with decisions in it.</p>
      */
-    public static List<QuickPickEntry> rowsFor(SearchQuery query, List<CgPath> files) {
+    public static void fetchInto(SearchQuery query, List<CgPath> files, ResultSink sink) {
         // AN EMPTY QUERY LISTS NOTHING, which is the one place this diverges from the command palette's
         // "empty means everything". Everything, here, is the workspace plus sixty thousand types: not a
         // list, and not one that could be usefully ordered without a query to order it by.
         String typed = query == null ? "" : query.text();
         QueryLocation location = QueryLocation.parse(typed);
         String name = location.name();
-        if (name.isEmpty()) return List.of();
+        if (name.isEmpty()) return;
 
         // MATCH AGAINST THE STRIPPED NAME, not what was typed. Otherwise the first `:` of a pasted
         // `Main.java:42` empties the list, which reads as the search breaking on a keystroke.
         SearchQuery effective = name.equals(typed) ? query : SearchQuery.of(name);
 
-        List<Scored> scored = new ArrayList<>();
-        collectTypes(name, effective, scored);
-        collectFiles(files, effective, scored);
+        List<Scored> fileRows = new ArrayList<>();
+        collectFiles(files, effective, fileRows);
+        List<Scored> typeRows = new ArrayList<>();
+        collectTypes(name, effective, typeRows);
 
-        // GROUP FIRST, then quality within the group. @see WEIGHT_FILE for why this order and not the
-        // other -- as a tie-break under the score it was unreachable.
-        scored.sort(Comparator.comparingInt((Scored s) -> s.weight)
-                .thenComparing(s -> s.match, Comparator.nullsLast(Comparator.naturalOrder()))
+        // RANKED WITHIN EACH GROUP, then pushed group by group -- which is the same order the single
+        // sort produced and is cheaper to reason about, since the group is now the outer key.
+        // @see WEIGHT_FILE for why the group leads and is not a tie-break.
+        boolean cut = trimTo(fileRows, MAX_PER_GROUP) | trimTo(typeRows, MAX_PER_GROUP);
+        if (cut) sink.markTruncated();
+
+        if (!push(fileRows, sink)) return;
+        push(typeRows, sink);
+    }
+
+    /**
+     * Sorts a group and cuts it to {@code max}.
+     *
+     * <h3>A cap PER GROUP, because one overall cap starves the second one</h3>
+     *
+     * <p>Project files are pushed first and every one of them outranks every classpath type
+     * ({@link #WEIGHT_FILE}), so a single shared cap is spent on files before a type is ever offered —
+     * and a query matching a few hundred filenames would list no classes at all, which reads as the
+     * classpath half having broken rather than as a cap. Each group gets its own budget.</p>
+     *
+     * @return whether anything was cut, which is the only way the caller can know to say so
+     */
+    private static boolean trimTo(List<Scored> group, int max) {
+        group.sort(Comparator.comparing((Scored s) -> s.match,
+                        Comparator.nullsLast(Comparator.naturalOrder()))
                 .thenComparing(s -> s.item.label())
                 .thenComparing(s -> s.item.id()));
+        if (group.size() <= max) return false;
+        group.subList(max, group.size()).clear();
+        return true;
+    }
 
-        List<QuickPickEntry> rows = new ArrayList<>(scored.size());
-        for (Scored s : scored) rows.add(new QuickPickEntry(s.item, rangesOf(s.labelMatch), List.of()));
-        return rows;
+    /** Pushes a ranked group. Returns false once the sink has had enough. */
+    private static boolean push(List<Scored> group, ResultSink sink) {
+        for (Scored s : group) {
+            if (!sink.accept(new QuickPickEntry(s.item, rangesOf(s.labelMatch), List.of()))) return false;
+        }
+        return true;
     }
 
     private static void collectTypes(String name, SearchQuery effective, List<Scored> out) {

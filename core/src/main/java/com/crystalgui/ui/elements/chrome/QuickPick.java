@@ -68,6 +68,12 @@ public class QuickPick extends Popover {
     /** The text in that bar. @see #setTitle */
     public static final String TITLE_CLASS = "__qp-title__";
 
+    /** Pushes the truncation hint to the right-hand end of the header. */
+    public static final String HEADER_SPACER_CLASS = "__qp-header-spacer__";
+
+    /** "100+ matches", shown only when the list was cut short. @see #isTruncated */
+    public static final String TRUNCATION_CLASS = "__qp-truncated__";
+
     public static final String SEARCH_CLASS = "__search__";
     public static final String RESULTS_CLASS = "__results__";
     public static final String CATEGORY_CLASS = "__qp-category__";
@@ -132,7 +138,12 @@ public class QuickPick extends Popover {
 
     private final UIElement content = new UIElement();
     private final UIElement header = new UIElement();
+    private final UIElement headerSpacer = new UIElement();
     private final UIText title = new UIText("");
+    private final UIText truncation = new UIText("");
+
+    /** Whether the last query had more answers than were listed. @see #isTruncated */
+    private boolean truncated;
 
     /** Position at the moment a move began, so the drag accumulates from there and not from itself. */
     private float dragStartLeft, dragStartTop;
@@ -143,7 +154,7 @@ public class QuickPick extends Popover {
     private final ObservableList<QuickPickEntry> results = new ObservableList<>();
     private final ListView<QuickPickEntry> list = new ListView<>(results);
 
-    private QuickPickSource source = query -> List.of();
+    private QuickPickSource source = (query, sink) -> { };
 
     public QuickPick() {
         setMode(Mode.AUTO);
@@ -162,6 +173,12 @@ public class QuickPick extends Popover {
         title.addClass(TITLE_CLASS);
         title.setHitTest(false);
         header.addChild(title);
+        headerSpacer.addClass(HEADER_SPACER_CLASS);
+        headerSpacer.setHitTest(false);
+        header.addChild(headerSpacer);
+        truncation.addClass(TRUNCATION_CLASS);
+        truncation.setHitTest(false);
+        header.addChild(truncation);
         header.onMouseDown.attachListener((el, event) -> beginMove(event), false, true);
         content.addChild(header);
         // Marked internal exactly ONCE, while empty. markAsInternal() RECURSES, so stamping a populated
@@ -196,7 +213,7 @@ public class QuickPick extends Popover {
     }
 
     public QuickPick setSource(QuickPickSource source) {
-        this.source = source == null ? query -> List.of() : source;
+        this.source = source == null ? (query, sink) -> { } : source;
         return this;
     }
 
@@ -273,6 +290,17 @@ public class QuickPick extends Popover {
         // be settled while there is no viewport to settle against.
         refresh();
         return this;
+    }
+
+    /** Puts the "more than this" hint in the header, or takes it away. */
+    private void setTruncated(boolean cut) {
+        this.truncated = cut;
+        // The COUNT plus a plus, rather than a sentence: the bar is 22px beside a title, and "100+
+        // matches" says both what you are looking at and that it is not everything. A bare "more results"
+        // says the second half and hides the first.
+        truncation.setText(cut ? MAX_RESULTS + "+ matches" : "");
+        StyleGroup.importantPipeline(truncation.getStyle().getLayoutGroup(),
+                l -> l.display(cut ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
     }
 
     /** What the header says. Empty hides the bar, so a picker that wants no chrome keeps none. */
@@ -377,11 +405,36 @@ public class QuickPick extends Popover {
 
     // ── Query and selection ─────────────────────────────────────────────────────────────────────
 
+    /**
+     * The most rows any one query may produce.
+     *
+     * <p>Not a display bound — the list virtualises, so a longer one costs nothing to draw. It is a bound
+     * on how much a <em>source</em> may be asked to produce per keystroke, which for the classpath index
+     * is the difference between a list and a stall. Reaching it is reported rather than obeyed silently;
+     * see {@link #isTruncated}.</p>
+     */
+    private static final int MAX_RESULTS = 100;
+
+    /**
+     * Whether the last query had more answers than are listed.
+     *
+     * <p>Surfaced in the header, because a list that silently stops is the worst answer a search can
+     * give: a row that exists but fell past the cap looks exactly like a row that does not exist, and
+     * the user stops looking. Both the source and the cap can cause it — see
+     * {@link QuickPickSource.ResultSink#markTruncated}.</p>
+     */
+    public boolean isTruncated() {
+        return truncated;
+    }
+
     /** Re-asks the source and rebuilds the row model. */
     public void refresh() {
-        List<QuickPickEntry> entries = source.query(SearchQuery.of(search.getText()));
+        QuickPickSource.Batch batch =
+                QuickPickSource.drain(source, SearchQuery.of(search.getText()), MAX_RESULTS);
+        List<QuickPickEntry> entries = batch.entries();
         results.clear();
         for (QuickPickEntry entry : entries) results.add(entry);
+        setTruncated(batch.truncated());
         sizeListToContent(entries.size());
         // Land on the best row that can actually be chosen, so Enter on an untouched query does the obvious
         // thing. This is why the source's ORDER is a contract rather than a suggestion -- and why the search

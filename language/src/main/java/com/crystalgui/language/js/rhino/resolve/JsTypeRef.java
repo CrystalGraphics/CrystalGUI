@@ -77,6 +77,33 @@ public final class JsTypeRef implements TypeRef {
         return new JsTypeRef(OBJECT, OBJECT, false, false, keys);
     }
 
+    /**
+     * Another project script, seen through its {@code import} — M15 S7.
+     *
+     * <p>Deliberately an OBJECT with keys rather than a kind of its own, because that is what a module's
+     * exports are: {@code require()} hands back a value, and every consumer that already lists an object
+     * literal's properties lists these with no further teaching. The qualified name is kept so a hover
+     * can say which file the value came from.</p>
+     */
+    static JsTypeRef module(String qualifiedName, @Nullable List<String> keys) {
+        JsTypeRef made = new JsTypeRef(simpleNameOf(qualifiedName), qualifiedName, false, false, keys);
+        made.module = true;
+        return made;
+    }
+
+    /**
+     * Whether this is another project script rather than an ordinary object.
+     *
+     * <p>Asked by {@code membersOf}, which can then read the module's own file and give every member a
+     * signature and a place to jump to — things a bare list of keys cannot carry. Not final only because
+     * the constructor is shared with five other factories; nothing outside {@link #module} writes it.</p>
+     */
+    boolean isModule() {
+        return module;
+    }
+
+    private boolean module;
+
     /** The properties this object is known to have, or empty. */
     List<String> keys() {
         return keys;

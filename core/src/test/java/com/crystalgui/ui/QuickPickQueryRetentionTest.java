@@ -56,9 +56,9 @@ public class QuickPickQueryRetentionTest extends UiTestBase {
 
     private static final class Rows implements QuickPickSource {
         @Override
-        public List<QuickPickEntry> query(com.crystalgui.core.search.SearchQuery query) {
-            return List.of(QuickPickEntry.plain(QuickPickItem.of("a", "Alpha")),
-                    QuickPickEntry.plain(QuickPickItem.of("b", "Beta")));
+        public void fetch(com.crystalgui.core.search.SearchQuery query, ResultSink sink) {
+            if (!sink.accept(QuickPickEntry.plain(QuickPickItem.of("a", "Alpha")))) return;
+            sink.accept(QuickPickEntry.plain(QuickPickItem.of("b", "Beta")));
         }
     }
 

@@ -27,9 +27,14 @@ import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.chrome.Breadcrumbs;
 import com.crystalgui.ui.elements.chrome.QuickPick;
 import com.crystalgui.ui.elements.chrome.StatusBarView;
+import com.crystalgui.ui.elements.workbench.decoration.FileDecoration;
+import com.crystalgui.ui.elements.workbench.decoration.FileDecorationProvider;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.SymbolIcon;
 import com.crystalgui.text.lang.SymbolInfo;
+import com.crystalgui.text.diff.ThreeWayMerge;
+import com.crystalgui.ui.elements.Button;
+import com.crystalgui.ui.elements.Dialog;
 import com.crystalgui.ui.elements.InputDialog;
 import com.crystalgui.ui.elements.chrome.NotificationBalloons;
 import com.crystalgui.ui.elements.chrome.NotificationsView;
@@ -229,6 +234,240 @@ public class Workbench extends UIElement {
      */
     private final OpenDocuments open = new OpenDocuments();
 
+    /**
+     * What this workspace declares, by qualified name — the project half of resolution.
+     *
+     * <p>Registered into {@link com.crystalgui.text.lang.ProjectSourcesRegistry} so an engine can reach
+     * it without {@code core/} ever naming an engine, the same inversion {@code TypeSearch} uses for the
+     * classpath. It pulls rather than being pushed to: the crawl, the project listing and the watcher all
+     * land on their own schedules, and an index that had to be told about each would be silently short of
+     * whichever one somebody forgot. @see ProjectIndex</p>
+     */
+    private final ProjectIndex projectIndex;
+
+    /**
+     * An open document's CURRENT text, or null when nothing has it open.
+     *
+     * <p>The buffer beats the file, always: a compiler resolving against saved text reports errors about
+     * code the author has already fixed, in the one place they are looking.</p>
+     *
+     * <p>Encoded on demand rather than cached. That is a real cost for a large file asked about often, and
+     * it is the cost §24.6 names as S4's performance work — pinning it here first would be optimising a
+     * path nothing has measured yet.</p>
+     */
+    @Nullable
+    private String openBufferText(CgPath path) {
+        FileDocument document = open.get(path);
+        if (document == null) return null;
+        byte[] bytes = document.encode();
+        return bytes == null ? null : new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    /**
+     * A background read landed, so anything that resolved without it is now out of date.
+     *
+     * <h3>A flag, because this is not the UI thread</h3>
+     *
+     * <p>It runs on whatever thread the workspace client answers on. Walking the open editors from here
+     * would reach {@code setEnabled}-shaped state and end in {@code invalidateStyleMatch()}, adding to
+     * {@code StyleEngine}'s dirty-match set while the frame is copying it — the {@code RunSessions} crash
+     * exactly, which arrives as an {@code ArrayIndexOutOfBoundsException} out of {@code advanceFrame} with
+     * nothing about this class in the trace.</p>
+     *
+     * <p>So: set, and let {@link #tick} drain it. Coalescing is free and wanted — a workspace crawl fills
+     * many files in one frame and they all mean the same single "ask again".</p>
+     */
+    private void onProjectIndexFilled() {
+        projectSourcesMoved = true;
+    }
+
+    /**
+     * Anything an open document resolves against has changed — ask the editors again.
+     *
+     * <p>Three causes, one flag, deliberately: a read landing ({@link #onProjectIndexFilled}), the crawl
+     * settling at a new size, and an open buffer moving. They are indistinguishable downstream — every one
+     * of them means "a name that did not resolve might now" — and coalescing them is the point, since a
+     * single frame routinely carries all three.</p>
+     *
+     * <p>Volatile because {@link #onProjectIndexFilled} runs on whatever thread the workspace client
+     * answers on; drained by {@link #tick} on the UI thread.</p>
+     */
+    private volatile boolean projectSourcesMoved;
+
+    // ── What the index is allowed to see ────────────────────────────────────────────────────────
+    //
+    // Three snapshots, all written on the UI thread by refreshProjectIndexInputs() and read from the
+    // ANALYSIS thread by ProjectIndex. Volatile references to immutable values, so a reader either sees
+    // the whole previous snapshot or the whole next one and never a map mid-write.
+    //
+    // This is the same hazard the run panel's Stop button hit from the other direction: there a worker
+    // thread reached INTO the cascade, here a worker thread reads state the cascade owns. Both fail as a
+    // ConcurrentModificationException or worse from a thread with nothing recognisable in its trace --
+    // and here it would not even throw where anyone could see it, because ProjectSourcesRegistry's view
+    // catches a provider's RuntimeException by design, turning the fault into "no, that type does not
+    // exist". Identical to the symptom of having no index at all.
+
+    /** Every file the crawl has reached, as of the last frame. */
+    private volatile List<CgPath> crawledFiles = List.of();
+
+    /** Project id to declared source roots, as of the last frame. */
+    private volatile Map<String, List<String>> projectRoots = Map.of();
+
+    /** Open documents' text, as of the last frame — the tier that beats the file on disk. */
+    private volatile Map<CgPath, String> bufferSnapshot = Map.of();
+
+    /** A buffer's CONTENT moved since the snapshot was taken. UI thread only. */
+    private boolean buffersDirty;
+
+    /** Which documents the snapshot covers, so opening or closing one is noticed. UI thread only. */
+    private final java.util.Set<CgPath> snapshotOver = new java.util.HashSet<>();
+
+    /** The tree source revision these snapshots were taken at. @see WorkspaceTreeSource#indexRevision() */
+    private int lastIndexRevision = -1;
+
+    /** Whether the workspace's own inputs moved on the PREVIOUS frame. @see #refreshProjectIndexInputs */
+    private boolean workspaceMovedLastFrame;
+
+    /**
+     * Re-takes the three snapshots the index reads. UI thread, once a frame.
+     *
+     * <h3>Nothing here is re-derived unless something says it changed</h3>
+     *
+     * <p>This runs every frame, so every unguarded line in it is a per-frame cost. {@code knownFiles()}
+     * builds a list of <b>every file in the workspace</b>, and the roots walk is over that same list — so
+     * taking them unconditionally meant allocating and walking the whole workspace sixty times a second to
+     * discover that nothing had happened. {@link WorkspaceTreeSource#indexRevision()} answers that in a
+     * field read.</p>
+     *
+     * <p>Buffers are the same argument one level down: encoding an open document is not free, and
+     * {@code refreshDirtyMarkers} doing it for every open file every frame is precisely what
+     * {@link OpenDocuments#onDidChangeDirty} was added to stop.</p>
+     */
+    private void refreshProjectIndexInputs() {
+        int revision = fileTree == null ? 0 : fileTree.source().indexRevision();
+        boolean workspaceMoved = revision != lastIndexRevision;
+        if (workspaceMoved) {
+            lastIndexRevision = revision;
+            List<CgPath> files = fileTree == null ? List.of() : fileTree.source().knownFiles();
+            crawledFiles = files;
+
+            Map<String, List<String>> roots = new HashMap<>();
+            for (CgPath file : files) {
+                if (file == null) continue;
+                roots.computeIfAbsent(file.project(),
+                        id -> fileTree == null ? com.crystalgui.fs.SourceRoots.CONVENTION
+                                : fileTree.source().sourceRootsOf(id));
+            }
+            projectRoots = roots;
+        }
+
+        // A BIGGER WORKSPACE RESOLVES MORE NAMES, so a crawl that grew is a reason to ask again.
+        //
+        // This is the case that shipped broken and the hardest to see, because every part of it behaves
+        // correctly. A file is opened immediately; the crawl is still walking; the package it imports has
+        // not been reached yet, so the index truthfully reports that nothing is declared there and the
+        // import is marked unresolvable. The crawl then finds it, the index becomes right, and NOTHING
+        // re-runs the analysis that was wrong -- so the error stands for the life of the session while
+        // every file opened afterwards resolves perfectly. It reads as a problem with the broken file
+        // rather than as a race with a background walk.
+        //
+        // ONCE IT SETTLES, not on every change. The crawl lands listings continuously at startup, and a
+        // debounced job whose trigger fires every frame is a job that never runs -- the first analysis
+        // would be pushed back until the whole walk finished. Announcing on the frame AFTER the last
+        // change fires at each point the crawl pauses, which is when its answer is worth re-asking.
+        if (!workspaceMoved && workspaceMovedLastFrame) projectSourcesMoved = true;
+        workspaceMovedLastFrame = workspaceMoved;
+
+        refreshBufferSnapshot();
+    }
+
+    /**
+     * Re-takes the open documents' text, when it has moved.
+     *
+     * <p>Its own method because it ends in a guard clause, and a guard clause halfway down a three-part
+     * method is a trap for whatever gets added below it — the same reason a paint method may skip the
+     * draw but never the method.</p>
+     */
+    private void refreshBufferSnapshot() {
+        List<CgPath> open = openPaths();
+        // THE SET, NOT THE COUNT. Two independent things move this snapshot -- a buffer's content, and
+        // which documents are open -- and comparing counts gets the second wrong in BOTH directions. One
+        // file closing while another opens leaves the count identical with every entry different, so the
+        // snapshot silently keeps a closed document's text, which outranks the file on disk. And a
+        // document whose text cannot be encoded never enters the snapshot at all, so the counts differ
+        // for as long as it is open and every frame re-encodes every buffer -- the exact per-frame cost
+        // this whole shape exists to avoid.
+        if (!buffersDirty && snapshotOver.size() == open.size() && snapshotOver.containsAll(open)) return;
+
+        // REBUILT WHOLE, so a closed document's text leaves with it. A stale entry here outranks the file
+        // on disk, so a document that was closed and edited elsewhere would resolve to what it used to say.
+        Map<CgPath, String> buffers = new HashMap<>();
+        for (CgPath path : open) {
+            String text;
+            try {
+                text = openBufferText(path);
+            } catch (RuntimeException unreadable) {
+                // ONE DOCUMENT'S PROBLEM IS NOT THE FRAME'S. Encoding reaches into a live widget, and a
+                // document that is closing has already disposed its tokenizer -- asking it for text throws
+                // `IllegalStateException: Parser is closed`, which is the same fault
+                // `reopeningAClosedFileShowsTheLiveEditor` was written for. Thrown from here it escapes
+                // `tick()`, so every later line of the frame is skipped: the dock never attaches the panel
+                // it was mid-way through opening, and a REOPENED FILE COMES UP BLANK. Nothing in that
+                // symptom points at a cache of source text.
+                //
+                // Skipped rather than fatal because this cache is best-effort by construction -- `sourceOf`
+                // answering null is a supported state that costs one re-analysis, and it is what a file
+                // nobody has open already returns.
+                continue;
+            }
+            if (text != null) buffers.put(path, text);
+        }
+        bufferSnapshot = buffers;
+        snapshotOver.clear();
+        snapshotOver.addAll(open);
+        buffersDirty = false;
+        // The buffer tier moved, so anything that resolved against the old one is stale -- the same
+        // announcement a landed read makes, for the same reason.
+        projectSourcesMoved = true;
+    }
+
+    /**
+     * Tells every open editor that the world outside its document moved.
+     *
+     * <p>Needed because {@code ProjectSources.sourceOf} answers null for a file nobody has open and
+     * schedules a read — so the first analysis after opening a file that names a sibling resolves nothing.
+     * Without this the error stands until the author types, which reads as the feature being flaky rather
+     * than as one missing signal.</p>
+     *
+     * <p>Broadcast to every editor rather than to the ones that asked. A services object cannot say which
+     * names it failed to resolve, and an analysis is debounced and keyed — so the cost of telling a
+     * document that did not care is one coalesced job that finds nothing changed.</p>
+     */
+    private void announceProjectSourcesMoved() {
+        if (!projectSourcesMoved) return;
+        projectSourcesMoved = false;
+        // AND THE TREE, whose rows resolve against the same thing an editor does. A `.java` row shows
+        // what the file DECLARES, read through `ProjectSources` -- which answers null for a file nobody
+        // has read yet and schedules the read. Without this the row keeps the file-type icon until
+        // something else happens to rebind it, so a package's icons appear one at a time as you click
+        // around, or never. @see ProjectFileTree#requestRefresh
+        fileTree.requestRefresh();
+        // AND EVERY TAB, for the same reason and one more: a tab's icon is pulled when the tab is BUILT
+        // and never re-read, which was correct while it was a function of the file NAME. It is now a
+        // function of what the file declares, and that answer arrives later than the tab does.
+        syncTabDecorations();
+        for (CgPath path : openPaths()) {
+            TextEditor editor = editorFor(path);
+            if (editor == null || editor.languageServices() == null) continue;
+            editor.languageServices().environmentChanged();
+        }
+    }
+
+    /** What the workspace declares. @see ProjectIndex */
+    public com.crystalgui.text.lang.ProjectSources projectSources() {
+        return projectIndex;
+    }
+
     /** How to build a document for a given panel type. Keyed by type id, so a bound editor supplies its
      * own and the text editor is simply the one registered for {@link #FILE_TYPE}. */
     private final Map<String, Function<CgPath, FileDocument>> documentFactories = new HashMap<>();
@@ -396,6 +635,14 @@ public class Workbench extends UIElement {
     @Override
     protected void registerCommands(CommandRegistry registry) {
         ExplorerCommands.register();
+        // THE PROJECT INDEX IS *NOT* CONTRIBUTED HERE, and it was, and that was the whole of S4 being
+        // dead on arrival. This method runs from UIElement's INSTANCE INITIALISER -- before the Workbench
+        // constructor body -- so `projectIndex` was still null, and `contribute` opens with
+        // `if (provider == null) return`. Nothing threw, nothing logged, and every cross-file reference in
+        // the workspace reported "cannot be resolved to a type" with the registry, the name environment
+        // and the project tier all correct and all covered by passing tests. Registration is per INSTANCE
+        // and belongs in the constructor; this hook is per CLASS and may only name statics, which is
+        // exactly what its own javadoc says. @see UIElement#registerCommands
         // Undo comes with a workbench because the file tree IS the workspace's UndoScope -- deleting a
         // file is undoable and reaches the workspace stack. Same ids the editor and the graph use, so
         // there is one Undo in the palette rather than one per widget.
@@ -450,6 +697,30 @@ public class Workbench extends UIElement {
     public Workbench(WorkspaceClient<?> client) {
         if (client == null) throw new IllegalArgumentException("A Workbench needs a workspace client");
         this.client = client;
+        // AFTER `client`, and it has to be: a field initialiser capturing a constructor-assigned final is
+        // a definite-assignment error, not a nullable read.
+        // SNAPSHOTS, not live views. Everything below is read from the ANALYSIS thread, inside a compile,
+        // while the UI thread is mutating the tree's listing maps and the open-document map. @see #refreshProjectIndexInputs
+        this.projectIndex = new ProjectIndex(
+                () -> crawledFiles,
+                id -> projectRoots.getOrDefault(id, com.crystalgui.fs.SourceRoots.CONVENTION),
+                // A LAMBDA, NEVER `bufferSnapshot::get`. A bound method reference captures the object the
+                // field points at WHEN THE REFERENCE IS MADE -- here the empty map, in this constructor --
+                // so every snapshot taken afterwards is invisible to it. It compiles, it reads as an
+                // accessor, and the buffer tier silently never answers: an open document's unsaved text
+                // loses to whatever is on disk, with nothing to see. The two lines above are lambdas for
+                // exactly this reason.
+                path -> bufferSnapshot.get(path),
+                (path, onText) -> client.read(path,
+                        read -> onText.accept(new String(read.content(),
+                                java.nio.charset.StandardCharsets.UTF_8)),
+                        error -> onText.accept(null)),
+                this::onProjectIndexFilled);
+        // REGISTERED HERE, where the field exists. Contributed rather than set, because two workbenches in
+        // one process are two projects rather than a fight over one slot -- which is also why this cannot
+        // live in registerCommands, which runs once per CLASS: the second workbench would never register
+        // its own index and the first would answer from a file tree nobody is looking at.
+        com.crystalgui.text.lang.ProjectSourcesRegistry.contribute(projectIndex);
         this.fileService = new WorkspaceFileService(client, new Copies());
         this.fileTree = new ProjectFileTree(client);
         // At construction, not on the first frame with a window: the registry is global, so there is
@@ -486,7 +757,9 @@ public class Workbench extends UIElement {
         client.onFileChanged(change -> {
             fileTree.source().invalidate(change.path().parent());
             fileTree.treeView().refresh();
+            applyExternalChange(change);
         });
+        fileTree.getDecorations().addProvider(externalChanges);
 
         // A RECONNECT INVALIDATES EVERYTHING AT ONCE, and for a different reason than a change does --
         // CrystalOS W11. The client survives a disconnect and rejoin so that a window retained across one
@@ -605,7 +878,13 @@ public class Workbench extends UIElement {
         // moves when somebody types. The equality guard SURVIVES the move: the announcement means
         // "content changed", which is not the same as "dirtiness flipped", and only the encode can tell
         // the difference. It just runs once per edit now instead of once per frame.
-        open.onDidChangeDirty.connect(path -> refreshDirtyMarkers());
+        open.onDidChangeDirty.connect(path -> {
+            refreshDirtyMarkers();
+            // AND THE INDEX'S VIEW OF IT. This signal means "content moved", which is exactly when a
+            // snapshot of that content stops being true. Marked rather than re-encoded, so a burst of
+            // keystrokes costs one encode on the next frame instead of one each.
+            buffersDirty = true;
+        });
         // EVERY FILE FAILURE IS REPORTED FROM ONE PLACE, and this is the whole of the change that made it
         // so. WorkspaceFileService already announced each one through onDidFail, carrying the operation --
         // and nothing listened, so all eleven call sites wrote their own `failure -> Notifications.show(...)`
@@ -1241,7 +1520,9 @@ public class Workbench extends UIElement {
      * {@code onDone}, which is documented to run during {@code drain()} on the UI thread.</p>
      */
     private void readViewer(Resource resource, TextEditor editor) {
-        ResourceContentProvider provider = ResourceRegistry.providerFor(resource);
+        // CONTENT, not description: a project file's bytes come from the workspace client and from
+        // nowhere else, whatever has registered to describe the scheme. @see ResourceRegistry
+        ResourceContentProvider provider = ResourceRegistry.contentProviderFor(resource);
         if (provider == null) return;
         String key = resource.toString();
         jobs()
@@ -1511,6 +1792,11 @@ public class Workbench extends UIElement {
      */
     private void saved(CgPath target, byte[] written) {
         open.markSaved(target, written);
+        // THE DISAGREEMENT IS OVER, whichever way it was resolved -- a successful write means this
+        // buffer is now what the server holds. Leaving the mark would show a conflict badge on a file
+        // that has none, which teaches people to ignore the badge.
+        externallyChanged.remove(target);
+        externallyDeleted.remove(target);
         refreshTabTitles();
     }
 
@@ -1526,6 +1812,116 @@ public class Workbench extends UIElement {
      * <p>Both resolutions destroy something, which is exactly the case that earns a modal.
      * @see ConflictDialog</p>
      */
+    /**
+     * Phase 6.3 — what to do when a file changes on the server underneath an open editor.
+     *
+     * <p>The notification has crossed the wire since Phase 4 and reached <b>only the file tree</b>: an
+     * open editor was never told. So a clean buffer showed stale content for ever, a deleted file left a
+     * perfectly normal-looking tab, and a change under a dirty buffer was discovered at save time or not
+     * at all.</p>
+     *
+     * <table>
+     *   <tr><th>State</th><th>What happens</th></tr>
+     *   <tr><td>Clean, changed</td><td><b>Reloaded silently.</b> The overwhelmingly common case — a
+     *       git checkout, an external save — and prompting for it is what makes a watcher feel naggy
+     *       rather than helpful. VS Code does the same, and there is nothing to lose: the buffer and the
+     *       file agreed a moment ago</td></tr>
+     *   <tr><td>Dirty, changed</td><td>Marked and <b>left alone</b>. Reloading would destroy unsaved
+     *       work without asking; the decision belongs at save time, where {@code ConflictDialog} already
+     *       makes it with all three answers on the table</td></tr>
+     *   <tr><td>Deleted</td><td>Marked, buffer kept. Closing the tab throws away text the user may well
+     *       want to write back — which is the whole reason the buffer is worth more than the file</td></tr>
+     *   <tr><td>Not open</td><td>Nothing. The tree refresh above is the entire correct response</td></tr>
+     * </table>
+     */
+    private void applyExternalChange(WorkspaceClient.FileChanged change) {
+        CgPath path = change.path();
+        if (open.get(path) == null) return;
+
+        if (change.isDeleted()) {
+            externallyDeleted.add(path);
+            externallyChanged.remove(path);
+            refreshTabTitles();
+            return;
+        }
+
+        externallyDeleted.remove(path);
+        if (open.isDirty(path)) {
+            // MARKED, NOT RELOADED. @see ConflictDialog, which is where this is actually resolved.
+            externallyChanged.add(path);
+            refreshTabTitles();
+            return;
+        }
+
+        // CLEAN: take the new bytes without asking. forget() first, or the conditional read answers
+        // UNCHANGED out of the etag this client is holding -- which is precisely the etag that just
+        // stopped being true.
+        client.forget(path);
+        client.read(path,
+                reloaded -> {
+                    adoptInto(path, reloaded.content());
+                    open.markSaved(path, reloaded.content());
+                    externallyChanged.remove(path);
+                    refreshTabTitles();
+                },
+                failure -> {
+                    // Could not take it after all. Marked rather than silently left stale, because a
+                    // buffer that disagrees with the server and says nothing is the state this whole
+                    // item exists to remove.
+                    externallyChanged.add(path);
+                    refreshTabTitles();
+                });
+    }
+
+    /**
+     * The badge an externally-changed or deleted file carries — Phase 6.3.
+     *
+     * <p>Through {@code FileDecorations} rather than a second marking mechanism, so it reaches the tab
+     * <b>and</b> the file tree from one place, merges with the other providers by weight, and bubbles to
+     * the containing folder like everything else. A decoration written straight onto the tab would have
+     * needed a second one for the tree, and the two would have disagreed.</p>
+     *
+     * <p><b>It bubbles</b>, so a folder says one of its files moved without the user opening it. The
+     * recorded rule applies: the colour climbs and the badge does not — a folder wearing a
+     * {@code ✕} would be claiming the folder itself was deleted.</p>
+     */
+    private final FileDecorationProvider externalChanges = new FileDecorationProvider() {
+        @Override
+        public String label() {
+            return "Changed on the server";
+        }
+
+        @Override
+        @Nullable
+        public FileDecoration decorationFor(CgPath path) {
+            if (externallyDeleted.contains(path)) {
+                return FileDecoration.of(90, "decoration-deleted", "✕", "Deleted on the server")
+                        .withStrikethrough(true).withBubble(true);
+            }
+            if (externallyChanged.contains(path)) {
+                return FileDecoration.of(80, "decoration-conflict", "!",
+                        "Changed on the server since you opened it").withBubble(true);
+            }
+            return null;
+        }
+
+        @Override
+        public java.util.Collection<CgPath> decorated() {
+            if (externallyChanged.isEmpty() && externallyDeleted.isEmpty()) return java.util.List.of();
+            java.util.List<CgPath> all =
+                    new java.util.ArrayList<>(externallyChanged.size() + externallyDeleted.size());
+            all.addAll(externallyChanged);
+            all.addAll(externallyDeleted);
+            return all;
+        }
+    };
+
+    /** Files that moved on the server under a DIRTY buffer, so the tab can say so. @see #applyExternalChange */
+    private final java.util.Set<CgPath> externallyChanged = new java.util.LinkedHashSet<>();
+
+    /** Files deleted on the server while still open here. @see #applyExternalChange */
+    private final java.util.Set<CgPath> externallyDeleted = new java.util.LinkedHashSet<>();
+
     /**
      * Phase 5.6 — who else has this file open, phrased for a human.
      *
@@ -1544,13 +1940,100 @@ public class Workbench extends UIElement {
     }
 
     private void askWhichVersionSurvives(CgPath target, byte[] written) {
+        // CAPTURED BEFORE ANYTHING READS: finishRead overwrites cachedContent with whatever the server
+        // now holds, so a base fetched after the read is the SERVER version wearing the name of the
+        // ancestor -- and a three-way merge against that reports every one of my own edits as a conflict.
+        byte[] base = client.baseContent(target);
         ConflictDialog.ask(this, target, othersEditing(target),
-                () -> client.overwrite(target, written, etag -> saved(target, written),
-                        // A SECOND failure is not another conflict -- overwrite carries no etag, so it
-                        // cannot be refused as stale. Anything arriving here is a real error and belongs
-                        // on the ordinary path rather than reopening the question.
-                        again -> Notifications.show(saveFailed(target, again))),
-                () -> openFile(target));
+                () -> overwrite(target, written),
+                () -> openFile(target),
+                // No base, no merge. A file that was never read has no common ancestor, and offering the
+                // option and then failing is worse than not offering it.
+                base == null ? null : () -> openMerge(target, written, base));
+    }
+
+    /**
+     * Fetches the server's current copy and opens a three-way merge over it.
+     *
+     * <p>The read is what makes this asynchronous: {@code written} and {@code base} are both already in
+     * hand, and only <em>theirs</em> has to come off the wire.</p>
+     */
+    private void openMerge(CgPath target, byte[] written, byte[] base) {
+        client.read(target,
+                document -> showMerge(target, base, written, document.content()),
+                failure -> Notifications.show(saveFailed(target, failure)));
+    }
+
+    private void showMerge(CgPath target, byte[] base, byte[] mine, byte[] theirs) {
+        UIWindow window = getAttachedWindow();
+        if (window == null) return;
+
+        ThreeWayMerge merge = ThreeWayMerge.of(text(base), text(mine), text(theirs));
+        MergeView view = new MergeView(merge);
+
+        Dialog dialog = new Dialog("Merge " + target.name());
+        dialog.getContent().addChild(view);
+
+        UIElement actions = new UIElement();
+        actions.addClass(MergeView.DIALOG_ACTIONS_CLASS);
+        dialog.getContent().addChild(actions);
+
+        Button apply = new Button("Save merged");
+        Button cancel = new Button("Cancel");
+        actions.addChild(apply);
+        actions.addChild(cancel);
+
+        // GATED ON EVERY CONFLICT HAVING BEEN DECIDED, not on there being none. An undecided conflict
+        // still produces text -- it defaults to mine -- so an ungated button would write a merge nobody
+        // read and it would look like it worked.
+        Runnable syncEnabled = () -> {
+            boolean ready = view.isResolved();
+            apply.setEnabled(ready);
+            apply.setHitTest(ready);
+        };
+        view.onChanged.connect(syncEnabled);
+        syncEnabled.run();
+
+        apply.onPressed.connect(() -> {
+            String merged = view.mergedText();
+            dialog.close();
+            overwrite(target, merged.getBytes(StandardCharsets.UTF_8));
+        });
+        cancel.onPressed.connect(dialog::close);
+
+        window.addOverlay(dialog, this);
+        dialog.onClosed.connect(dialog::removeSelf);
+        dialog.showModal();
+        window.getInputHandler().requestFocus(cancel);
+    }
+
+    private static String text(byte[] bytes) {
+        return new String(bytes, StandardCharsets.UTF_8);
+    }
+
+    /**
+     * <b>Keep mine</b> — writes the active file over whatever the server holds.
+     *
+     * <p>Named rather than left inline inside the conflict handler, because it is one of the three
+     * answers {@code ConflictDialog} offers and the only one with no other way to reach it. A branch that
+     * exists only inside a modal's callback cannot be tested without driving the modal, which is how a
+     * resolution path ends up being the one nobody checks.</p>
+     */
+    public boolean overwriteActiveFile() {
+        CgPath target = activeFilePath();
+        if (target == null) return false;
+        FileDocument document = open.get(target);
+        if (document == null || !open.isSaveable(target)) return false;
+        overwrite(target, document.encode());
+        return true;
+    }
+
+    private void overwrite(CgPath target, byte[] written) {
+        client.overwrite(target, written, etag -> saved(target, written),
+                // A SECOND failure is not another conflict -- overwrite carries no etag, so it cannot be
+                // refused as stale. Anything arriving here is a real error and belongs on the ordinary
+                // path rather than reopening the question.
+                again -> Notifications.show(saveFailed(target, again)));
     }
 
     /**
@@ -1911,9 +2394,10 @@ public class Workbench extends UIElement {
     /**
      * Which icon a tab shows — the same one the file's row in the tree shows, from the same theme.
      *
-     * <p>Static, because it depends on nothing but the panel: the icon is a function of the file name,
-     * which is already in the ref. That is the whole reason it can be pulled at build time and never
-     * refreshed, unlike the dirty marker beside it.</p>
+     * <p>Static, because it depends on nothing but the panel. It is no longer pulled once and kept,
+     * though: the icon element beside this one asks what the file DECLARES, and that answer is read
+     * through {@code ProjectSources}, which does not have it until the file has been read. So
+     * {@link #announceProjectSourcesMoved} re-reads every tab's presentation when one lands.</p>
      */
     @Nullable
     private static String tabIconFor(DockPanelRef panel) {
@@ -1938,17 +2422,43 @@ public class Workbench extends UIElement {
      * about what an interface looks like. It also carries the {@code static} and {@code final} marks,
      * which an icon NAME cannot — they are layers stacked over the glyph rather than a picture.</p>
      *
-     * <p>Null for a source-backed tab, deliberately: {@code ArrayList.java} is a FILE and takes the same
-     * icon one in the project would.</p>
+     * <p>Null when nothing can say what the tab holds — see {@link #symbolFor}, which is where both
+     * kinds of tab now ask the same question.</p>
      */
     @Nullable
     private static UIElement viewerIconElement(DockPanelRef panel) {
-        Resource viewed = viewedResource(panel);
-        if (viewed == null) return null;
-        ResourceContentProvider provider = ResourceRegistry.providerFor(viewed);
-        SymbolInfo symbol = provider == null ? null : provider.symbolOf(viewed);
-        if (symbol == null || symbol.kind() == null) return null;
+        SymbolInfo symbol = symbolFor(panel);
+        if (symbol == null) return null;
         return new SymbolIcon().show(symbol.kind(), symbol.modifiers());
+    }
+
+    /**
+     * What the thing behind this tab IS, or null when nothing knows.
+     *
+     * <p><b>Both kinds of tab, through one seam.</b> This used to ask only about a VIEWER panel, so a
+     * decompiled {@code FlexDirection.class} drew an enum glyph and hovered "Final enum" while the
+     * author's own {@code Main.java} in the next tab drew a file icon — the same question, asked of a
+     * resource nobody had registered a provider for. {@code ProjectSourceSymbols} answers
+     * {@code project://} now, and this is where the tab stopped asking.</p>
+     *
+     * <p>Null stays a supported answer at every step: no resource, no provider, no symbol, or a symbol
+     * with no kind all fall through to the file-type icon the tab drew before.</p>
+     */
+    @Nullable
+    private static SymbolInfo symbolFor(DockPanelRef panel) {
+        Resource resource = viewedResource(panel);
+        if (resource == null) {
+            String path = panel.state(PATH_STATE, "");
+            if (path.isEmpty()) return null;
+            try {
+                resource = Resource.of(CgPath.parse(path));
+            } catch (RuntimeException notAPath) {
+                return null;
+            }
+        }
+        ResourceContentProvider provider = ResourceRegistry.providerFor(resource);
+        SymbolInfo symbol = provider == null ? null : provider.symbolOf(resource);
+        return symbol == null || symbol.kind() == null ? null : symbol;
     }
 
     /**
@@ -2041,15 +2551,13 @@ public class Workbench extends UIElement {
      * words. {@link SymbolIcon#describe} is the single source of both, so the picture and the sentence
      * cannot drift apart.</p>
      *
-     * <p>Null for a SOURCE-backed tab, matching {@link #viewerIconElement}: that tab carries a Java
-     * <em>file</em> icon, whose meaning the {@code .java} in the label has already given.</p>
+     * <p>And it is no longer only a library tab that has it: a project {@code .java} row and its tab
+     * both show what the file declares, so the sentence follows them there. A tab whose provider cannot
+     * say keeps the file icon and gets no icon tooltip, which is the honest pair.</p>
      */
     @Nullable
     private static String tabIconTooltipFor(DockPanelRef panel) {
-        Resource viewed = viewedResource(panel);
-        if (viewed == null) return null;
-        ResourceContentProvider provider = ResourceRegistry.providerFor(viewed);
-        SymbolInfo symbol = provider == null ? null : provider.symbolOf(viewed);
+        SymbolInfo symbol = symbolFor(panel);
         return symbol == null ? null : SymbolIcon.describe(symbol.kind(), symbol.modifiers());
     }
 
@@ -2395,6 +2903,13 @@ public class Workbench extends UIElement {
         // to be in flight -- and left it off when a folder appeared later. The step is O(budget) against a
         // queue, so asking every frame costs nothing once the queue is empty.
         fileTree.source().indexStep(WorkspaceTreeSource.DEFAULT_INDEX_BUDGET);
+        // WHAT THE INDEX MAY SEE, re-taken on this thread because the crawl above just grew the list the
+        // analysis thread reads. Before announceProjectSourcesMoved, so a buffer that moved this frame is
+        // announced this frame rather than next. @see #refreshProjectIndexInputs
+        refreshProjectIndexInputs();
+        // A project file's text landed, so anything that resolved without it is stale. Drained here
+        // because the read answers on the client's thread. @see #onProjectIndexFilled
+        announceProjectSourcesMoved();
         // STAYS PER FRAME, and the attempt to move it to onWindowChanged is why this comment exists.
         //
         // It looks like a one-shot dressed as a loop -- ProjectFileTree.loadProjects latches on

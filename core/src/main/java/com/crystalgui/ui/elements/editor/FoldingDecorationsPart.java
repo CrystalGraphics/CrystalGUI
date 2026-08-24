@@ -62,7 +62,11 @@ final class FoldingDecorationsPart extends EditorViewPart {
             return;
         }
         DecorationPool.show(column);
-        final float columnLeft = editor.paddingLeft() + editor.gutterNumberWidth();
+        // OFF THE GUTTER, not off the padding: the two are the same thing only while the gutter is on
+        // the left. Mirrored, anchoring to the padding leaves the fold arrows behind at the far edge of
+        // the pane, a whole viewport away from the numbers they belong beside.
+        final float columnLeft = editor.gutterLeft() + editor.gutterChevronWidth()
+                + editor.gutterNumberWidth();
         final float columnWidth = editor.gutterFoldWidth();
         final float columnHeight = editor.getClientHeight();
         StyleGroup.defaultPipeline(column.getStyle().getLayoutGroup(),

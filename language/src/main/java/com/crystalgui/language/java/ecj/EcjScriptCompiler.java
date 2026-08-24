@@ -51,6 +51,7 @@ public final class EcjScriptCompiler implements ScriptCompiler {
         // A compile that produced no classes is a failure even without a reported error: there is
         // nothing to define, so calling it success would defer the failure to the run, where it arrives
         // as a missing class rather than as a compile problem.
-        return new Result(!output.errored && !output.classes.isEmpty(), output.classes, output.messages);
+        return new Result(!output.errored && !output.classes.isEmpty(), output.classes, output.messages,
+                output.projectSources);
     }
 }

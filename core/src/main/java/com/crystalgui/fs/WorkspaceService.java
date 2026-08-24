@@ -70,6 +70,31 @@ public final class WorkspaceService {
     }
 
     /**
+     * Attaches an OS-level event source — Phase 6.2.
+     *
+     * <p><b>One per project, not one per peer.</b> Every watch costs an OS handle and Linux caps them at
+     * 8,192 per user by default, so N players sharing a workspace must not mean N watchers on the same
+     * directory. It lives here for the same reason presence does: this is the one object every
+     * {@code WorkspaceRpc} already shares.</p>
+     */
+    public void attachEvents(CgFileEventSource source) {
+        this.events = source == null ? CgFileEventSource.NONE : source;
+    }
+
+    /**
+     * Everything the filesystem has done since the last call. <b>Call once per tick, from one place.</b>
+     *
+     * <p>Draining is destructive, so a second caller would silently steal the first one's events — which
+     * is why this is on the shared service and the per-peer watchers are handed the batch rather than
+     * each asking for their own.</p>
+     */
+    public List<CgFileEvent> drainFileEvents() {
+        return events.drain();
+    }
+
+    private CgFileEventSource events = CgFileEventSource.NONE;
+
+    /**
      * Who has what open, across every peer.
      *
      * <p>Lives here because this is the one object every {@link WorkspaceRpc} shares — each has its own

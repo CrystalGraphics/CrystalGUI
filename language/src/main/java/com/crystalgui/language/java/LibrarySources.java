@@ -145,9 +145,11 @@ public final class LibrarySources implements ResourceContentProvider {
         if (resource == null) return null;
         String binaryName = resource.path();
         List<String> classpath = HostClasspath.detect();
-        // SOURCE-BACKED TABS KEEP THE FILE ICON. Only a reconstructed `.class` shows what the type IS.
-        if (AttachedSources.forClasspath(classpath).textOf(binaryName) != null) return null;
-
+        // A SOURCE-BACKED TAB GETS ONE TOO, and it used to be refused here on the ground that
+        // `ArrayList.java` is a FILE and should take the icon one in the project would. That reasoning
+        // inverted the moment a project `.java` started showing what it declares: the two are now the
+        // same statement, so refusing here would make the JDK's own sources the one place in the
+        // application that still says "some Java file".
         synchronized (SYMBOLS) {
             if (SYMBOLS.containsKey(binaryName)) return SYMBOLS.get(binaryName);
         }
