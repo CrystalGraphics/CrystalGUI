@@ -299,6 +299,7 @@ editor scheme's.
 | `--ghost-bg` | `#2F5F9EC0` | crystal-dark.css |
 | `--ghost-label-bg` | `#3C3F41F0` | crystal-dark.css |
 | `--ghost-label-fg` | `var(--fg-on-accent)` | base.css |
+| `--glass-fallback` | `var(--surface-overlay)` | base.css |
 | `--graph-canvas` | `var(--surface-editor)` | base.css |
 | `--graph-collapse-fg` | `var(--fg-secondary)` | base.css |
 | `--graph-collapse-hover-fg` | `var(--fg)` | base.css |
@@ -545,6 +546,7 @@ editor scheme's.
 | `--surface-base` | `#26282B` | crystal-dark.css |
 | `--surface-borrowed` | `#281F1C` | crystal-dark.css |
 | `--surface-editor` | `#191A1C` | crystal-dark.css |
+| `--surface-glass` | `#662B2D30` | crystal-dark.css |
 | `--surface-overlay` | `#2B2D30` | crystal-dark.css |
 | `--surface-panel` | `#191A1C` | crystal-dark.css |
 | `--surface-raised` | `#2B2B2B` | crystal-dark.css |
@@ -652,6 +654,7 @@ editor scheme's.
 | `--taskbar-entry-hover-bg` | `var(--hover-bg)` | base.css |
 | `--taskbar-entry-hover-fg` | `var(--fg)` | base.css |
 | `--taskbar-entry-progress` | `var(--accent-soft)` | base.css |
+| `--taskbar-glass-tint` | `var(--surface-glass)` | base.css |
 | `--tooltip-bg` | `#1E1E1EF0` | crystal-dark.css |
 | `--tooltip-border` | `#00000080` | crystal-dark.css |
 | `--tooltip-fg` | `var(--fg)` | base.css |

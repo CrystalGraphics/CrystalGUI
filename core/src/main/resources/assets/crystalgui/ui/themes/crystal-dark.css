@@ -21,6 +21,9 @@ theme {
     --surface-recessed: #131416;
     --surface-editor: #191A1C;
     --surface-overlay: #2B2D30;
+    /* Glass tint. Translucent BY DESIGN: it is laid over the blurred backdrop, and an opaque tint discards the
+     * very thing the capture went and fetched. */
+    --surface-glass: #662B2D30;
     /* WHAT IS NOT YOURS. A library class opened read-only, and anything else the workspace does not own.
      * A surface rather than a foreground because what it qualifies is the CONTAINER: the point is not
      * that this text is special, it is that this whole pane cannot be edited. Warm, so it separates at a

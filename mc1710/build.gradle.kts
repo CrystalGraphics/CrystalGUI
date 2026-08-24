@@ -385,6 +385,19 @@ tasks.named<JavaExec>(runTask) {
         systemProperty("crystalgui.net.probe", "true")
     }
 
+    // -PcgGlassProbe reports, once every 120 frames, what the backdrop material actually costs: the
+    // frame PERIOD, the CPU time inside the capture and the blur, how many consumers asked, how often
+    // the capture had to be retaken, and the size of the region it covered against the size of the
+    // screen. The region is the whole point -- glass was a frame killer while the capture was sized to
+    // the surface rather than to what asked for it -- so `rect=WxH (N% of ...)` is the line to read.
+    //
+    // CPU-side timing: neither glFinish nor a timer query is on CgGL, so the stage figures are a lower
+    // bound and the frame period is the honest number. If the stages stay small while the period grows,
+    // the cost is GPU-side in the work they enqueue.
+    if (providers.gradleProperty("cgGlassProbe").isPresent) {
+        systemProperty("crystalgui.glass.probe", "true")
+    }
+
     // -PcgSessionProbe runs a real Server/ClientUiSession pair over the connections CgUiConnections
     // opens on player join -- the path that ships. SEPARATE from -PcgNetProbe on purpose: a channel
     // takes one inbound handler, so the raw transport probe owns it and the lifecycle stands down while
