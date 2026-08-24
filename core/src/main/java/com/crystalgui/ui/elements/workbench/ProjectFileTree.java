@@ -122,6 +122,21 @@ public class ProjectFileTree extends UIElement implements UndoScope {
     static final String DECORATION_PREFIX = "decoration-";
 
     /**
+     * What a directory IS in the layout — module, source root, package or plain folder.
+     *
+     * <p>Separate from {@link #FILETYPE_PREFIX} because they answer different questions and only one is
+     * about the file. A type is read off the NAME, which is VS Code's icon-theme model and is why
+     * {@code FileIconTheme} knows nothing about paths; a role is read off the PATH and is a fact about the
+     * project. IntelliJ's tree decides the icon the same way round, with the file-type registry as the
+     * fallback rather than the authority.</p>
+     *
+     * <p>It is also the only part of the icon a test can SEE. A drawable is an SVG document, and asserting
+     * on one means asserting on geometry — the shape of test that breaks on a redesign and proves nothing
+     * in the meantime.</p>
+     */
+    static final String NODEROLE_PREFIX = "noderole-";
+
+    /**
      * The decorations shown on rows. Empty until something registers a provider, which is why a tree with
      * no version control and no diagnostics costs nothing for the feature.
      */

@@ -5,6 +5,7 @@ import com.crystalgui.fs.CgFileError;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.fs.CgPath;
+import com.crystalgui.fs.SourceRoots;
 import com.crystalgui.fs.ProjectInfo;
 import com.crystalgui.fs.WorkspaceClient;
 import com.crystalgui.core.search.SearchMatch;
@@ -235,6 +236,27 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
      * would index those files as declaring nothing, and nothing re-derives them afterwards — the index
      * would be permanently short of whatever arrived early.</p>
      */
+    /**
+     * What {@code path} is in its own project's layout — module, source root, package or folder.
+     *
+     * <h3>Asked here rather than assembled by the caller, and that is about what comes next</h3>
+     *
+     * <p>A renderer could call {@link #sourceRootsOf} and {@link SourceRoots#roleOf} itself; it is two
+     * lines. But the ROLE is a fact about a project, and this is the only class that holds projects.
+     * When a project can depend on another as a library, the answer stops being derivable from the path
+     * and the roots alone — the same directory is a module in the project you opened and a library in the
+     * one that depends on it, and nothing in a {@link CgPath} says which. Then this method learns about
+     * project KIND and no caller changes.</p>
+     *
+     * <p>Which is also the argument against a second {@code Map<String, Kind>} beside
+     * {@link #projectSourceRoots} when that day comes: two parallel maps keyed by project id drift, and a
+     * record per project does not. @see ProjectFileTree#NODEROLE_PREFIX</p>
+     */
+    public SourceRoots.Role roleOf(CgPath path) {
+        if (path == null) return SourceRoots.Role.FOLDER;
+        return SourceRoots.roleOf(path.path(), sourceRootsOf(path.project()));
+    }
+
     public java.util.List<String> sourceRootsOf(String projectId) {
         java.util.List<String> declared = projectSourceRoots.get(projectId);
         return declared == null ? com.crystalgui.fs.SourceRoots.CONVENTION : declared;

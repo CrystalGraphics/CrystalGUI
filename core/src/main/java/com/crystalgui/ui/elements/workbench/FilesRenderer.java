@@ -2,7 +2,9 @@ package com.crystalgui.ui.elements.workbench;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.fs.CgPath;
+import com.crystalgui.fs.SourceRoots;
 import com.crystalgui.render.texture.CgUiDrawable;
+import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
@@ -13,7 +15,11 @@ import com.crystalgui.ui.elements.tree.TreeRow;
 import com.crystalgui.ui.elements.workbench.decoration.FileDecoration;
 import com.crystalgui.ui.input.UIInputHandler;
 
+import javax.annotation.Nullable;
+
+import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -180,9 +186,15 @@ final class FilesRenderer implements TreeRenderer<CgPath> {
         // dead strip down the left of the panel.
         parts.twisty().setHitTest(directory);
         FileIconTheme theme = FileIconTheme.getDefault();
+        // THE ROLE FIRST, and only for a directory. A module, a source root and a package wear one folder
+        // glyph otherwise -- which makes `src/main/java` look like an ordinary directory that happens to
+        // be nested deeply, and that is the one thing a reader scanning a tree is looking for.
+        SourceRoots.Role role = directory ? tree.source().roleOf(item) : null;
         // THE ITEM'S OWN NAME, never the row label: a compacted row reads "main/java/com" and asking
         // the theme about that string would look up an extension of "/com".
-        CgUiDrawable glyph = theme.drawableFor(item.name(), directory, row.expanded());
+        CgUiDrawable glyph = role == null || role == SourceRoots.Role.FOLDER
+                ? theme.drawableFor(item.name(), directory, row.expanded())
+                : roleGlyph(role);
         // EMPTY, never null: null is how the cascade spells "nobody set this", so writing it would
         // leave the previous file's icon in place on a recycled row rather than clearing it.
         //
@@ -193,6 +205,11 @@ final class FilesRenderer implements TreeRenderer<CgPath> {
         StyleGroup.defaultPipeline(parts.icon().getStyle().getGeneralGroup(),
                 g -> g.overlay(glyph == null ? CgUiDrawable.EMPTY : glyph));
         ProjectFileTree.swapPrefixedClass(parts.icon(), ProjectFileTree.FILETYPE_PREFIX, theme.classFor(name, directory));
+        // SWAPPED, never added: a template is a different row every time the view reuses it, so leaving
+        // the previous row's role on the element lets the cascade resolve whichever rule happens to win.
+        ProjectFileTree.swapPrefixedClass(parts.icon(), ProjectFileTree.NODEROLE_PREFIX,
+                role == null ? null : ProjectFileTree.NODEROLE_PREFIX
+                        + role.name().toLowerCase(Locale.ROOT).replace('_', '-'));
 
         FileDecoration decoration = tree.getDecorations().resolve(item, directory);
         ProjectFileTree.swapPrefixedClass(template, ProjectFileTree.DECORATION_PREFIX,
@@ -200,6 +217,30 @@ final class FilesRenderer implements TreeRenderer<CgPath> {
         parts.badge().setText(decoration == null || decoration.letter() == null
                 ? "" : decoration.letter());
     }
+
+    /**
+     * The glyph for a role, built once each.
+     *
+     * <p>Held rather than resolved per bind: {@code ofIcon} allocates a drawable per call, and this runs
+     * for every realised row on every refresh -- a listing arriving, a decoration changing, auto-reveal
+     * following the active tab. There are three of them and they never change.</p>
+     */
+    @Nullable
+    private static CgUiDrawable roleGlyph(SourceRoots.Role role) {
+        CgUiDrawable cached = ROLE_GLYPHS.get(role);
+        if (cached != null) return cached;
+        CgUiDrawable drawn = CgUiSvg.ofIcon(ROLE_ICONS.get(role));
+        if (drawn != null) ROLE_GLYPHS.put(role, drawn);
+        return drawn;
+    }
+
+    private static final Map<SourceRoots.Role, String> ROLE_ICONS = Map.of(
+            SourceRoots.Role.MODULE, "crystalgui:nodes/java/module",
+            SourceRoots.Role.SOURCE_ROOT, "crystalgui:nodes/java/sourceRoot",
+            SourceRoots.Role.PACKAGE, "crystalgui:nodes/java/package");
+
+    private static final Map<SourceRoots.Role, CgUiDrawable> ROLE_GLYPHS =
+            new EnumMap<>(SourceRoots.Role.class);
 
     @Override
     public void unbind(UIElement template) {
