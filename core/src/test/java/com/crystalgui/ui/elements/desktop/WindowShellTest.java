@@ -1,6 +1,9 @@
 package com.crystalgui.ui.elements.desktop;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgraphics.platform.input.CgMouseCodes;
+import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgui.ui.input.UIInputHandler;
 import com.crystalgraphics.platform.service.CgInputService;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
@@ -227,6 +230,61 @@ public class WindowShellTest extends UiTestBase {
         var box = frame.titleBar().getRuntimeCache();
         return window.modalBlockingAt((box.getX() + 4f) * 2f, (box.getY() + 4f) * 2f);
     }
+
+    // ── The desktop's own menu ──────────────────────────────────────────────────────────────────
+
+    /**
+     * <b>A right-click on bare desktop opens the desktop menu; one inside a window does not.</b>
+     *
+     * <p>The second half is the one that breaks silently. {@code ContextMenu.attach} subscribes the
+     * BUBBLE phase, so a press on a window's bare content — anything with no menu of its own to consume
+     * it — walks straight out to the window layer, and the desktop's menu opens on top of the window
+     * that was clicked. The guard is a builder answering null, which makes attach return before it
+     * builds or consumes anything.</p>
+     *
+     * <p>Driven through {@code consumeMouseEvent} rather than {@code sendInputEvent}, because dispatching
+     * at an element skips the phase walk entirely — which is the only thing this is about.</p>
+     */
+    @Test
+    public void theDesktopMenuOpensOnBareDesktopOnly() {
+        first.resizeTo(300, 200).moveTo(60, 60);
+        settle();
+
+        UIElement content = new UIElement().layout(l -> l.width(120).height(60));
+        first.content().addChild(content);
+        settle();
+
+        rightClick(content);
+        assertEquals("a right-click inside a window opened the DESKTOP's menu", 0, openMenus());
+
+        UIElement.RuntimeCache area = desktop().windowLayer().getRuntimeCache();
+        // Below the window, which is at 60,60 and 300x200 — so this is bare layer.
+        rightClickAt(area.getX() + 40f, area.getY() + area.getHeight() - 40f);
+        assertTrue("a right-click on bare desktop opened no menu", openMenus() > 0);
+    }
+
+    private int openMenus() {
+        return window.ui.rootElement.querySelectorAll("menu").size();
+    }
+
+    private void rightClick(UIElement target) {
+        UIElement.RuntimeCache box = target.getRuntimeCache();
+        rightClickAt(box.getX() + box.getWidth() / 2f, box.getY() + box.getHeight() / 2f);
+    }
+
+    private void rightClickAt(float x, float y) {
+        UIInputHandler input = window.getInputHandler();
+        input.beginFrame();
+        input.endFrame();
+        input.consumeMouseEvent(new CgSystemInput.Mouse.Event(
+                Math.round(x * 2f), Math.round(y * 2f), 0, 0,
+                CgMouseCodes.RIGHT_BUTTON, true, 0f, ++menuClock));
+        input.beginFrame();
+        input.endFrame();
+        settle();
+    }
+
+    private long menuClock = 900_000L;
 
     // ── Keyboard Move/Size ──────────────────────────────────────────────────────────────────────
 

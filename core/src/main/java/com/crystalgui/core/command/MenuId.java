@@ -77,6 +77,16 @@ public final class MenuId {
      */
     public static final MenuId TASKBAR_CONTEXT = of("taskbar/context");
 
+    /**
+     * A right-click on <b>bare desktop</b> — the surface itself, not a window on it.
+     *
+     * <p>Every desktop has one, and it is the only affordance a desktop with nothing open still has:
+     * the taskbar's own menu needs the strip, and a window's system menu needs a window. Without this,
+     * a desktop whose windows are all minimised is a rectangle that does nothing when clicked, which
+     * reads as the compositor having stopped rather than as there being nothing to click on.</p>
+     */
+    public static final MenuId DESKTOP_CONTEXT = of("desktop/context");
+
     // ── The main menu bar ───────────────────────────────────────────────────────────────────────
     //
     // SIX, not VS Code's twelve. Terminal, Debug, Go, Selection, Refactor and Build have no subject in

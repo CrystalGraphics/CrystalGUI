@@ -2,6 +2,8 @@ package com.crystalgui.ui.elements.desktop;
 
 import com.crystalgui.fs.ConfigStorage;
 import com.crystalgraphics.platform.input.CgModifiers;
+import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.notify.Notification;
@@ -11,6 +13,7 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.easing.Easing;
 import com.crystalgui.style.easing.ProgressFunctions;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.elements.chrome.ContextMenu;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.input.keymap.KeyChord;
 import com.crystalgui.ui.input.keymap.Keymap;
@@ -153,6 +156,26 @@ public class Desktop extends UIElement implements DataProvider {
         // what remains once the taskbar (W4) shortens the layer.
         onMouseDown.attachListener((element, event) -> deactivate(), false, false);
         windows.onMouseDown.attachListener((element, event) -> deactivate(), false, false);
+
+        // AND A RIGHT-CLICK ON BARE DESKTOP OPENS THE DESKTOP MENU -- the only affordance left once
+        // every window is minimised, since the taskbar's menu needs the strip and a system menu needs a
+        // window. Attached to BOTH for the same reason the deactivate listeners above are: the window
+        // layer covers the desktop entirely, so bare background is nearly always the LAYER's hit, and
+        // the desktop itself is only what remains once the taskbar has shortened the layer.
+        //
+        // GUARDED ON THE TARGET BEING THE SURFACE ITSELF, because ContextMenu.attach subscribes the
+        // BUBBLE phase: without this, a right-click on a window's bare content -- anything inside it with
+        // no menu of its own to consume the press -- would bubble out here and open the DESKTOP's menu
+        // on top of the window. A builder answering null is the seam for exactly that; attach returns
+        // before it builds or consumes anything, so the press carries on as if nothing were attached.
+        // ATTACHED TO THE DESKTOP AND NOT THE LAYER, though the layer is what a press on bare background
+        // usually hits. `present` parents the menu at the attachment site, and WindowLayer refuses any
+        // child that is not a WindowFrame -- so attaching there throws the moment somebody right-clicks.
+        // The bubble phase carries the layer's press out to here anyway, which is why the guard names
+        // both: this fires for a press on either surface and for nothing inside a window.
+        ContextMenu.attach(this, CommandRegistry.global(),
+                pressed -> pressed == this || pressed == windows
+                        ? ContextMenu.of(MenuId.DESKTOP_CONTEXT) : null);
     }
 
     /**

@@ -15,7 +15,7 @@ import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
 
 /**
- * The key that opens the editor, and the translation of one LWJGL2 event into one engine event.
+ * The keys that open the desktop, and the translation of one LWJGL2 event into one engine event.
  *
  * <h3>Where the pump lives, and the false trail that moved it</h3>
  *
@@ -70,6 +70,7 @@ public final class CgUiInput {
     private static final float MOUSE_SCROLL_NORMALIZE = 1 / 120f * NORMALIZE_TOP_LEFT_ORIGIN;
 
     private static KeyBinding openEditor;
+    private static KeyBinding openDesktop;
 
     private CgUiInput() {
     }
@@ -77,6 +78,13 @@ public final class CgUiInput {
     public static void register() {
         openEditor = new KeyBinding("key.crystalgui.open", Keyboard.KEY_F6, "key.categories.crystalgui");
         ClientRegistry.registerKeyBinding(openEditor);
+        // TWO KEYS, TWO DIFFERENT THINGS, and the pair is what makes the compositor a place rather than
+        // a frame around one application. F6 asks for the EDITOR and brings it forward whatever state it
+        // was left in; F7 asks for the DESKTOP and touches no window at all, so a desktop left with
+        // everything minimised comes back that way. Collapsing them would mean either never being able
+        // to reach the desktop without the editor on top of it, or F6 not reliably producing an editor.
+        openDesktop = new KeyBinding("key.crystalgui.desktop", Keyboard.KEY_F7, "key.categories.crystalgui");
+        ClientRegistry.registerKeyBinding(openDesktop);
         // THE FML BUS, not MinecraftForge.EVENT_BUS -- fireKeyInput posts to FMLCommonHandler.bus(), and
         // registering on the wrong one compiles, runs, and never fires.
         FMLCommonHandler.instance().bus().register(new CgUiInput.Handler());
@@ -132,7 +140,12 @@ public final class CgUiInput {
         @SubscribeEvent
         public void onKeyInput(InputEvent.KeyInputEvent event) {
             if (Minecraft.getMinecraft().currentScreen != null) return;
-            if (openEditor != null && openEditor.isPressed()) CgUiScreen.open();
+            // BOTH ASKED, never else-if: isPressed() CONSUMES the press, so a chain that stops at the
+            // first hit leaves the other key's press queued and it fires on the next unrelated keystroke.
+            boolean editor = openEditor != null && openEditor.isPressed();
+            boolean desktop = openDesktop != null && openDesktop.isPressed();
+            if (editor) CgUiScreen.openEditor();
+            else if (desktop) CgUiScreen.openDesktop();
         }
     }
 }
