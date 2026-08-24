@@ -255,6 +255,31 @@ public class JavaMemberCompletionTest {
     // ── Bug fixes ───────────────────────────────────────────────────────────────────────────────
 
     /** Completion at an arbitrary caret, for the cases that are not "straight after System.". */
+    /**
+     * Completion as a TYPED character produces it — analysed before the character, asked after it.
+     *
+     * <p>{@link #completeAt} builds its services on the final text, so the analysis is current: that is
+     * Ctrl+Space, not a keystroke. An analysis is debounced, so a trigger character asks in the same
+     * keystroke that inserted it and the newest analysis describes the document WITHOUT it. Several
+     * failures only exist in that gap, and a fixture that closes it cannot see them.</p>
+     */
+    private List<CompletionItem> completeAfterTyping(String before, String typed, int caret) {
+        TextBuffer buffer = new TextBuffer(before);
+        LanguageServices services = new JavaLanguageServices(
+                buffer, engine, null, "Demo", HostClasspath.detect());
+        try {
+            // THE ANALYSIS IS ALREADY OF `before`; the character lands with nothing re-analysing it.
+            buffer.replace(caret, caret, typed);
+            AtomicReference<CompletionList> answered = new AtomicReference<>(CompletionList.EMPTY);
+            services.completion().complete(
+                    CompletionProvider.Request.character(caret + typed.length(), "", typed),
+                    (Versioned<CompletionList> v) -> answered.set(v.orElse(CompletionList.EMPTY)));
+            return answered.get().items();
+        } finally {
+            services.close();
+        }
+    }
+
     private List<CompletionItem> completeAt(String source, int caret, String prefix, boolean afterDot) {
         TextBuffer buffer = new TextBuffer(source);
         LanguageServices services = new JavaLanguageServices(
@@ -785,5 +810,69 @@ public class JavaMemberCompletionTest {
         } finally {
             ProjectSourcesRegistry.resetForTesting();
         }
+    }
+
+    /**
+     * <b>A trailing dot on a line with NO SEMICOLON still lists members.</b>
+     *
+     * <p>Reported as the dot trigger opening an empty popup where Ctrl+Space at the same caret worked.
+     * It looked like the two triggers disagreeing and they do not \u2014 the provider never reads the trigger
+     * kind, and a probe over both paths answered identically. What differed was the TEXT each was asked
+     * about, and this is the shape that breaks:</p>
+     *
+     * <pre>    System.out.
+     *     System.out.println("fa");</pre>
+     *
+     * <p>The first line has no terminator, so it runs into the second: {@code <expr> <expr>;} is a
+     * declaration whose declarator is a method call, which is a syntax error, so ECJ marks the unit
+     * {@code ignoreFurtherInvestigation} and it resolves nothing at all. Inserting the probe NAME does not
+     * help, because the name is not what is missing.</p>
+     *
+     * <p>Ctrl+Space worked for a reason that had nothing to do with the trigger: by the time a person
+     * presses it, the analysis has caught up to text where the dot is already there \u2014
+     * {@code System.out.System.out.println("fa");} \u2014 which parses as one long field access and binds the
+     * receiver perfectly well.</p>
+     */
+    @Test
+    public void aDotOnALineWithNoSemicolonStillListsMembers() {
+        String before = ""
+                + "public class Demo {\n"
+                + "    static void run() {\n"
+                + "        System.out\n"
+                + "        System.out.println(\"fa\");\n"
+                + "    }\n"
+                + "}\n";
+        int caret = before.indexOf("System.out\n") + "System.out".length();
+
+        List<String> offered = new ArrayList<>();
+        for (CompletionItem item : completeAfterTyping(before, ".", caret)) offered.add(item.filterKey());
+
+        assertTrue("no members behind a dot whose line has no semicolon: " + offered.size(),
+                offered.contains("println"));
+    }
+
+    /**
+     * <b>...and the terminator is not added where it would break the text.</b>
+     *
+     * <p>The retry appends {@code ;} after the probe name, which is right for a statement and wrong inside
+     * an expression: {@code foo(bar.|)} would become {@code foo(bar.$probe$;)}. That is why the bare name
+     * is tried FIRST and this only when it answered nothing \u2014 asserted here so the order cannot be
+     * "simplified" into always terminating.</p>
+     */
+    @Test
+    public void aDotInsideAnExpressionStillListsMembers() {
+        String before = ""
+                + "public class Demo {\n"
+                + "    static void run() {\n"
+                + "        String.valueOf(System.out);\n"
+                + "    }\n"
+                + "}\n";
+        int caret = before.indexOf("System.out)") + "System.out".length();
+
+        List<String> offered = new ArrayList<>();
+        for (CompletionItem item : completeAfterTyping(before, ".", caret)) offered.add(item.filterKey());
+
+        assertTrue("no members behind a dot inside a call: " + offered.size(),
+                offered.contains("println"));
     }
 }

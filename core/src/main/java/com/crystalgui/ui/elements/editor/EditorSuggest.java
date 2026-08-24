@@ -61,20 +61,32 @@ final class EditorSuggest {
      * @return false when nothing opened — no engine, or the caret is somewhere completion has no business
      */
     boolean open(CompletionProvider.TriggerKind trigger, @Nullable String triggerCharacter) {
-        if (editor.languageServices() == null) return false;
-        if (editor.isInCommentOrString(editor.getCaret())) return false;
+        if (TRACE) trace("open trigger=" + trigger + " char=" + triggerCharacter + " caret=" + editor.getCaret());
+        if (editor.languageServices() == null) {
+            if (TRACE) trace("  refused: no language services");
+            return false;
+        }
+        if (editor.isInCommentOrString(editor.getCaret())) {
+            if (TRACE) trace("  refused: the caret is in a comment or a string");
+            return false;
+        }
 
         close();
         CompletionSession opened = CompletionSession.open(editor.buffer(),
                 editor.languageServices().completion(), editor.getCaret(), trigger, triggerCharacter);
-        if (opened == null) return false;
+        if (opened == null) {
+            if (TRACE) trace("  refused: the provider produced no session");
+            return false;
+        }
         completion = opened;
         opened.caretMoved(editor.getCaret());
         opened.onClosed.connect(() -> {
             if (completion == opened) completion = null;
         });
 
+        if (TRACE) trace("  opened rows=" + opened.visibleRows().size() + " closed=" + opened.isClosed());
         UIWindow window = editor.getAttachedWindow();
+        if (TRACE && window == null) trace("  no window, so no popup is shown");
         if (window != null) {
             if (popup == null) {
                 popup = new CompletionPopup();
@@ -113,9 +125,38 @@ final class EditorSuggest {
         open(CompletionProvider.TriggerKind.EXPLICIT, null);
     }
 
+    /**
+     * Traces every step of opening a list, behind {@code -Dcrystalgui.completion.trace=true}.
+     *
+     * <p>The four ways a member list ends up empty are indistinguishable on screen AND in a test, which is
+     * what made one report cost three wrong diagnoses. This prints the chain: which branch the keystroke
+     * took, what the session anchored on, what the provider answered, and what survived the filter.</p>
+     *
+     * <p>Property-gated rather than removed after use: a completion runs on every keystroke, so the cost
+     * of leaving it in is one boolean read, and the cost of taking it out is writing it again next time.</p>
+     */
+    static final boolean TRACE = Boolean.getBoolean("crystalgui.completion.trace");
+
+    /**
+     * <b>Guard at the CALL SITE, always</b> — {@code if (TRACE) trace(...)}.
+     *
+     * <p>The check here is a backstop, not the mechanism. Java evaluates arguments before the call, so a
+     * bare {@code trace("caret=" + caret)} concatenates on every keystroke whether or not anything is
+     * listening — and one of these asks for {@code visibleRows()}, which BUILDS A LIST. Completion runs on
+     * the typing hot path, which is the one place a disabled diagnostic must cost nothing at all.</p>
+     */
+    static void trace(String message) {
+        if (TRACE) System.err.println("[completion] " + message);
+    }
+
     /** The keys a live list owns, and no others. @see EditorSuggest */
     boolean handleKey(int key, int modifiers) {
-        if (completion == null || completion.isClosed()) return false;
+        if (completion == null || completion.isClosed()) {
+            if (key == CgKeyCodes.KEY_ESCAPE) {
+                if (TRACE) trace("escape ignored: session=" + (completion == null ? "null" : "closed"));
+            }
+            return false;
+        }
 
         if (key == CgKeyCodes.KEY_DOWN) {
             completion.moveSelection(1);

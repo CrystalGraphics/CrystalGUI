@@ -27,6 +27,7 @@ import org.eclipse.jdt.core.dom.AbstractTypeDeclaration;
 import org.eclipse.jdt.core.dom.AnonymousClassDeclaration;
 import org.eclipse.jdt.core.dom.Assignment;
 import org.eclipse.jdt.core.dom.Block;
+import org.eclipse.jdt.core.dom.BodyDeclaration;
 import org.eclipse.jdt.core.dom.CatchClause;
 import org.eclipse.jdt.core.dom.ClassInstanceCreation;
 import org.eclipse.jdt.core.dom.CompilationUnit;
@@ -56,6 +57,7 @@ import org.eclipse.jdt.core.dom.SimpleName;
 import org.eclipse.jdt.core.dom.TagElement;
 import org.eclipse.jdt.core.dom.SimpleType;
 import org.eclipse.jdt.core.dom.SingleVariableDeclaration;
+import org.eclipse.jdt.core.dom.Statement;
 import org.eclipse.jdt.core.dom.StructuralPropertyDescriptor;
 import org.eclipse.jdt.core.dom.Type;
 import org.eclipse.jdt.core.dom.VariableDeclarationExpression;
@@ -516,18 +518,51 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
             return JavaQuickFixes.in(unit, source, version, releaseLevel, from, to, context);
         }
 
+        /**
+         * Everything the compiler found here — <b>syntax only, while the file does not parse.</b>
+         *
+         * <h3>A resolution error over a recovered tree is a guess, and it points somewhere innocent</h3>
+         *
+         * <p>Reported as "why is this erroring when it has a semicolon above it". Given</p>
+         *
+         * <pre>    System.out.;
+         *     System.out.println("fa");</pre>
+         *
+         * <p>ECJ reports two errors: the syntax error on the {@code ;}, which is right, and
+         * <em>"System cannot be resolved or is not a field"</em> on the NEXT line, which is not. Recovery
+         * DELETES the offending token, so the two statements join into
+         * {@code System.out.System.out.println("fa")} and the blame lands on a line that is perfectly
+         * correct. Nothing failed: every step did its job on a reading of the text nobody wrote.</p>
+         *
+         * <p>So while a unit carries a syntax problem, only syntax problems are reported. This is the same
+         * judgement ECJ itself already makes one step earlier — it skips {@code analyseCode()} entirely,
+         * which is why {@link #optionalProblemsAnalysed} exists and why no WARNING survives a parse
+         * failure. Extending it to resolution errors is that reasoning finished rather than a new policy:
+         * both are computed from a tree the parser invented.</p>
+         *
+         * <p><b>The cost is real and is the right trade.</b> A genuine semantic error elsewhere in the
+         * file stays hidden until the syntax is fixed. That is what javac does, it is the order people
+         * work in anyway, and it matters most while TYPING — where every half-written line is a syntax
+         * error and every semantic error in the file is therefore both noise and, as here, wrong.</p>
+         *
+         * <p>Our own inspections go with them, for the same reason they are skipped by the compiler: a
+         * finding about code the parser guessed at is a finding about nothing.</p>
+         */
         @Override
         public List<Diagnostic> diagnostics() {
             List<Diagnostic> found = new ArrayList<>();
             CompilationUnit resolved = unit;
             if (resolved == null) return found;
+            boolean parsed = optionalProblemsAnalysed();
             for (IProblem problem : resolved.getProblems()) {
+                // SYNTAX ONLY WHILE IT DOES NOT PARSE. @see #diagnostics
+                if (!parsed && !isSyntax(problem)) continue;
                 DiagnosticSeverity severity = problem.isError() ? DiagnosticSeverity.ERROR
                         : problem.isWarning() ? DiagnosticSeverity.WARNING : DiagnosticSeverity.INFORMATION;
                 // THE SAME ANSWER THE QUICK-FIX ROUTER READS. @see ProblemSpans -- a mark computed apart
                 // from the range a fix is reachable over is how a squiggle ends up somewhere its own fix
                 // cannot be asked for.
-                int[] span = ProblemSpans.marked(resolved, problem);
+                int[] span = ProblemSpans.marked(resolved, source, problem);
                 TextPoint start = pointOf(resolved, span[0]);
                 TextPoint end = pointOf(resolved, span[1]);
                 // TAGGED HERE, from the same table that decided the problem was worth reporting. A tag
@@ -538,8 +573,19 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                         "java", Integer.toString(problem.getID()),
                         EcjProblemPolicy.tagsFor(problem.getID()), java.util.List.of()));
             }
-            found.addAll(inspections(resolved));
+            if (parsed) found.addAll(inspections(resolved));
             return found;
+        }
+
+        /**
+         * ECJ's own category, not an id range — the ranges are internal and the category is published.
+         *
+         * <p>A problem that is not categorized at all is not a syntax error, which is the same reading
+         * {@link #optionalProblemsAnalysed} takes of the same API.</p>
+         */
+        private static boolean isSyntax(IProblem problem) {
+            return problem instanceof CategorizedProblem categorized
+                    && categorized.getCategoryID() == CategorizedProblem.CAT_SYNTAX;
         }
 
         /**
@@ -1099,6 +1145,31 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                 return binding == null ? null : describe(resolved, name, binding);
             }
             return expressionAt(resolved, offset);
+        }
+
+        /**
+         * Whether the statement at {@code offset} carries JDT's {@code RECOVERED} flag. @see Analysis
+         *
+         * <p><b>{@code RECOVERED}, never {@code MALFORMED}</b>, and the two are not interchangeable here.
+         * Measured on the reported file: the invented {@code dsa System} statement is {@code RECOVERED},
+         * while {@code MALFORMED} sits on the whole enclosing {@code MethodDeclaration} — so keying on
+         * malformedness would silence hover for every symbol in a method for as long as any one statement
+         * in it was unfinished, which is most of the time anyone is typing.</p>
+         *
+         * <p>The walk therefore stops at the nearest {@link Statement} or {@link BodyDeclaration}, that
+         * node included: a construct is recovered or it is not, and its neighbours are not implicated.</p>
+         */
+        @Override
+        public boolean recoveredAt(int offset) {
+            CompilationUnit resolved = unit;
+            if (resolved == null) return false;
+            // LENGTH 1 -- a zero-length range is "covered" by any node ENDING at the offset. @see
+            // #expressionAt, which paid for that distinction with a completion bug.
+            for (ASTNode at = NodeFinder.perform(resolved, offset, 1); at != null; at = at.getParent()) {
+                if ((at.getFlags() & ASTNode.RECOVERED) != 0) return true;
+                if (at instanceof Statement || at instanceof BodyDeclaration) return false;
+            }
+            return false;
         }
 
         /**
