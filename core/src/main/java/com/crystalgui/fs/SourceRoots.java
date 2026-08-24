@@ -50,7 +50,7 @@ public final class SourceRoots {
      */
     public enum Role {
 
-        /** The project root. One per project here — see {@link #roleOf}. */
+        /** A directory that directly CONTAINS source roots — {@code src/main}. @see #roleOf */
         MODULE,
 
         /** A declared source root: where package names start counting from. */
@@ -66,33 +66,48 @@ public final class SourceRoots {
     /**
      * Which of the four {@code directory} is, given the project's declared roots.
      *
-     * <h3>One module, and it is the project</h3>
+     * <h3>A module is what CONTAINS source roots</h3>
      *
-     * <p>IntelliJ shows a Gradle source set as a module, so {@code src/main} carries the module icon
-     * there and {@code src/main/java} the source-root one. That modelling needs a project to have several
-     * modules to be worth anything, and ours has one — so the project root is the module, and {@code src}
-     * and {@code src/main} are the ordinary folders they are. The distinction the icons exist to draw is
-     * root / source-root / package, and that survives intact.</p>
+     * <p>Which is IntelliJ's own answer, arrived at from the layout rather than from a module file. With
+     * {@code src/main/java} and {@code src/main/js} declared, the directory holding both is
+     * {@code src/main} — and that is exactly the row IntelliJ draws the module icon on for a Gradle
+     * project, where the source set IS the module. It falls out of the roots with nothing to configure,
+     * and it generalises the way the real thing does: roots under {@code src/test} would make a second
+     * module, which is what a test source set is.</p>
      *
-     * <p>{@code relativePath} is project-relative, as every {@link CgPath} in a workspace is: empty means
-     * the project root itself. The longest matching root wins, for the reason {@link #locate} gives.</p>
+     * <p>So the PROJECT root is not automatically a module — it is one only when a root sits directly
+     * inside it. That is deliberate. A project root already has a row that says it is a project; giving
+     * it the module glyph as well would put two module icons in one tree and tell the reader nothing
+     * about where source actually starts.</p>
+     *
+     * <p>{@code relativePath} is project-relative, as every {@link CgPath} in a workspace is: empty is the
+     * project root itself. Roles are ranked rather than returned first-match, because roots nest — see
+     * the note in the loop.</p>
      */
     public static Role roleOf(@Nullable String relativePath, @Nullable List<String> roots) {
-        String within = relativePath == null ? "" : normalise(relativePath);
-        if (within == null || within.isEmpty()) return Role.MODULE;
+        String normalisedPath = relativePath == null ? null : normalise(relativePath);
+        String within = normalisedPath == null ? "" : normalisedPath;
         if (roots == null || roots.isEmpty()) return Role.FOLDER;
 
         Role role = Role.FOLDER;
         for (String root : roots) {
             String normalised = normalise(root);
-            if (normalised == null || normalised.isEmpty()) continue;
+            if (normalised == null) continue;
+            // EXACT, so it answers immediately -- nothing outranks being a root.
             if (within.equals(normalised)) return Role.SOURCE_ROOT;
-            // NOT `return`, because roots nest: with `src` and `src/main/java` both declared, a path under
-            // the second is under the first as well, and a package is the more specific answer. Only
-            // SOURCE_ROOT is exact enough to answer immediately.
+            // RANKED, NOT FIRST-MATCH, because roots nest: with `src` and `src/main/java` both declared,
+            // a path under the second is under the first as well, and being INSIDE a root is the more
+            // specific fact than merely containing one.
             if (contains(normalised, within)) role = Role.PACKAGE;
+            else if (role != Role.PACKAGE && within.equals(parentOf(normalised))) role = Role.MODULE;
         }
         return role;
+    }
+
+    /** {@code src/main/java} → {@code src/main}; a root with no parent → {@code ""}, the project root. */
+    private static String parentOf(String path) {
+        int lastSlash = path.lastIndexOf('/');
+        return lastSlash < 0 ? "" : path.substring(0, lastSlash);
     }
 
     /**

@@ -19,12 +19,32 @@ public class SourceRootRoleTest {
 
     private static final List<String> ROOTS = SourceRoots.CONVENTION;
 
-    /** <b>The project root is the module.</b> One module per project, so its root is the one that is it. */
+    /**
+     * <b>The module is the directory that CONTAINS the source roots.</b>
+     *
+     * <p>IntelliJ's own answer, arrived at from the layout rather than from a module file: with
+     * {@code src/main/java} and {@code src/main/js} declared, {@code src/main} holds both, and that is
+     * the row IntelliJ draws the module icon on for a Gradle project — where the source set IS the
+     * module. Nothing is configured to make it so.</p>
+     */
     @Test
-    public void theProjectRootIsTheModule() {
-        assertEquals(SourceRoots.Role.MODULE, SourceRoots.roleOf("", ROOTS));
-        assertEquals("a path of separators is still the root", SourceRoots.Role.MODULE,
-                SourceRoots.roleOf("/", ROOTS));
+    public void theDirectoryHoldingTheSourceRootsIsTheModule() {
+        assertEquals(SourceRoots.Role.MODULE, SourceRoots.roleOf("src/main", ROOTS));
+        assertEquals("separators are normalised here too", SourceRoots.Role.MODULE,
+                SourceRoots.roleOf("/src/main/", ROOTS));
+    }
+
+    /**
+     * <b>The project root is NOT a module for free.</b>
+     *
+     * <p>It is one only when a root sits directly inside it. A project root already has a row saying it
+     * is a project; the module glyph there as well would put two of them in one tree and say nothing
+     * about where source starts.</p>
+     */
+    @Test
+    public void theProjectRootIsAModuleOnlyWhenARootIsDirectlyInIt() {
+        assertEquals(SourceRoots.Role.FOLDER, SourceRoots.roleOf("", ROOTS));
+        assertEquals(SourceRoots.Role.MODULE, SourceRoots.roleOf("", List.of("java", "js")));
     }
 
     /** <b>A declared root is a source root, and both of them are.</b> */
@@ -34,19 +54,27 @@ public class SourceRootRoleTest {
         assertEquals(SourceRoots.Role.SOURCE_ROOT, SourceRoots.roleOf("src/main/js", ROOTS));
     }
 
-    /**
-     * <b>What is on the WAY to a source root is an ordinary folder.</b>
-     *
-     * <p>The deliberate divergence from IntelliJ, which shows a Gradle source set as a module and so puts
-     * the module icon on {@code src/main}. That modelling earns its keep when a project has several
-     * modules; ours has one, so {@code src} and {@code src/main} are the folders they are and the
-     * distinction the icons exist to draw — root, source root, package — survives intact.</p>
-     */
+    /** <b>What is merely on the way to a module is an ordinary folder.</b> */
     @Test
     public void theDirectoriesOnTheWayAreOrdinaryFolders() {
         assertEquals(SourceRoots.Role.FOLDER, SourceRoots.roleOf("src", ROOTS));
-        assertEquals(SourceRoots.Role.FOLDER, SourceRoots.roleOf("src/main", ROOTS));
         assertEquals(SourceRoots.Role.FOLDER, SourceRoots.roleOf("build/classes", ROOTS));
+    }
+
+    /**
+     * <b>Two source sets are two modules</b> — which is what the rule generalising correctly looks like.
+     *
+     * <p>Not built for: it falls out of "a module contains roots". A project that later declares
+     * {@code src/test/java} gets a second module row with no code change, exactly as IntelliJ shows a
+     * test source set as its own module.</p>
+     */
+    @Test
+    public void aSecondSourceSetIsASecondModule() {
+        List<String> both = List.of("src/main/java", "src/test/java");
+
+        assertEquals(SourceRoots.Role.MODULE, SourceRoots.roleOf("src/main", both));
+        assertEquals(SourceRoots.Role.MODULE, SourceRoots.roleOf("src/test", both));
+        assertEquals(SourceRoots.Role.FOLDER, SourceRoots.roleOf("src", both));
     }
 
     /** <b>Anything under a source root is a package</b> — at any depth. */
@@ -84,7 +112,7 @@ public class SourceRootRoleTest {
      */
     @Test
     public void aProjectWithNoRootsHasNoPackages() {
-        assertEquals(SourceRoots.Role.MODULE, SourceRoots.roleOf("", List.of()));
+        assertEquals(SourceRoots.Role.FOLDER, SourceRoots.roleOf("", List.of()));
         assertEquals(SourceRoots.Role.FOLDER, SourceRoots.roleOf("src/main/java", List.of()));
         assertEquals(SourceRoots.Role.FOLDER, SourceRoots.roleOf("anything", null));
     }
@@ -94,6 +122,7 @@ public class SourceRootRoleTest {
     public void separatorsAndEdgesAreNormalised() {
         assertEquals(SourceRoots.Role.SOURCE_ROOT, SourceRoots.roleOf("src\\main\\java", ROOTS));
         assertEquals(SourceRoots.Role.SOURCE_ROOT, SourceRoots.roleOf("/src/main/java/", ROOTS));
-        assertEquals(SourceRoots.Role.MODULE, SourceRoots.roleOf(null, ROOTS));
+        assertEquals("a null path is the project root", SourceRoots.Role.FOLDER,
+                SourceRoots.roleOf(null, ROOTS));
     }
 }

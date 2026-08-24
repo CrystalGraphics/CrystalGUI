@@ -549,10 +549,12 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
      * Whether a single-child directory chain renders as one row — VS Code's
      * {@code explorer.compactFolders}, IntelliJ's <i>Compact Empty Middle Packages</i>.
      *
-     * <p><b>On by default</b>, as it is in VS Code, and the reason is arithmetic: {@code src/main/java/
-     * com/crystalgui} is five rows and one useful one. A tree of Java or C# packages is mostly chains.</p>
+     * <p><b>Off for now</b>, and that is a gap rather than a decision. It is on in VS Code and the reason
+     * is arithmetic — {@code src/main/java/com/crystalgui} is five rows and one useful one — but there is
+     * no setting to turn it back on with, so shipping it on means a reader who wants the packages spelled
+     * out cannot have them. It goes back to {@code true} the day it is settable.</p>
      */
-    private boolean compactFolders = true;
+    private boolean compactFolders = false;
 
     /** The displayed label for a compacted row — {@code "main/java/com/crystalgui"}. */
     private final Map<CgPath, String> compactLabels = new HashMap<>();
@@ -633,6 +635,12 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
                 if (inner == null || inner.size() != 1 || !filter.isEmpty()) break;
                 CgPath only = inner.get(0);
                 if (!directories.contains(only)) break;
+                // AND NEVER THROUGH A ROLE BOUNDARY. A source root is not a package, so swallowing it into
+                // the chain below hides where source starts -- `src/main/java/com/example` rendered as one
+                // row called `java/com/example`, wearing the PACKAGE icon of its deepest segment, and the
+                // source root simply gone from the tree. IntelliJ compacts middle PACKAGES and stops at
+                // the root for exactly this reason. @see SourceRoots#roleOf
+                if (roleOf(end) != SourceRoots.Role.PACKAGE && roleOf(end) != SourceRoots.Role.FOLDER) break;
                 swallowed.add(end);
                 end = only;
                 label.append('/').append(only.name());
