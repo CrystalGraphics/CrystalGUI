@@ -8,7 +8,9 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * What a script compiles against: the classpath of the process that is running it.
@@ -94,6 +96,21 @@ public final class HostClasspath {
      * compiler that would otherwise be handed an entry it cannot use and would fail on obscurely.</p>
      */
     private static boolean isUsable(File entry) {
+        // REMEMBERED PER PATH, which is what makes the paragraph above true. It said the archive opens
+        // are "paid once per process" and they were paid once per CALL: `detect` has no cache, and it is
+        // reached from a presentation provider the dock re-reads on every strip rebuild. Measured at
+        // 3-5ms per call over 23 entries -- against an 8.3ms budget at 120Hz -- and a real launch has
+        // hundreds. That is the whole of the frame drop on opening a file.
+        //
+        // THE VERDICT IS CACHED AND THE ENUMERATION IS NOT, deliberately. What a path IS does not change
+        // within a session -- a jar does not become a text file -- while the LIST can still grow, and a
+        // loader that gains a source after startup is exactly what `detect`'s own note describes. Caching
+        // the finished list instead would be faster and would freeze that out.
+        return USABLE.computeIfAbsent(entry.getPath(), ignored -> opens(entry));
+    }
+
+    /** Whether the compiler could read this entry at all. @see #isUsable */
+    private static boolean opens(File entry) {
         Path path = entry.toPath();
         if (!Files.exists(path)) return false;
         if (entry.isDirectory()) return true;
@@ -104,6 +121,19 @@ public final class HostClasspath {
             // ECJ's own answer to being handed one is a null cache and a crash three layers away.
             return false;
         }
+    }
+
+    /**
+     * Whether each path opened, by path — the archive checks, remembered.
+     *
+     * <p>Bounded by the size of the classpath, which is fixed for a process. Concurrent because
+     * {@code detect} is called from the analysis thread, the UI thread and a job worker.</p>
+     */
+    private static final Map<String, Boolean> USABLE = new ConcurrentHashMap<>();
+
+    /** Forgets the archive checks — for a test that writes a classpath entry after one has been made. */
+    public static void forgetProbes() {
+        USABLE.clear();
     }
 
     /** Every {@link URLClassLoader} in the parent chain, which covers the harness and plain JVMs. */

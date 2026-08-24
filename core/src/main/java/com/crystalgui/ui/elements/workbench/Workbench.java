@@ -614,6 +614,13 @@ public class Workbench extends UIElement {
         // static, so a workbench that subscribed from its constructor would stay reachable for ever and
         // keep an entire editor tree alive behind it.
         capabilityWatch.add(LanguageRegistry.onCapabilityChanged.connect(this::attachLateServices));
+        // A LIBRARY TYPE'S KIND ARRIVING LATE is the same event as a project file's declaration arriving
+        // late, so it sets the same flag and is coalesced with it. `symbolOf` is allowed to answer "not
+        // yet" precisely so that working it out cannot land on a frame; this is the other half of that
+        // bargain -- without it a decompiled tab keeps the generic glyph until something unrelated
+        // rebuilds the strip. Same group, because this is a listener on a process-lived static too.
+        capabilityWatch.add(ResourceRegistry.onSymbolResolved.connect(
+                resource -> projectSourcesMoved = true));
         refreshProblemCount();
         current.addDataProvider(this);
         // The rail's buttons, once there is a window to take a registry from.

@@ -1,5 +1,10 @@
 package com.crystalgui.fs;
 
+import com.crystalgui.core.async.UiBudget;
+import com.crystalgui.core.signal.Signal;
+import com.crystalgui.text.TextPoint;
+import com.crystalgui.text.lang.SymbolInfo;
+
 import javax.annotation.Nullable;
 import java.util.Map;
 import java.util.Objects;
@@ -61,7 +66,89 @@ public final class ResourceRegistry {
     /** Null when nothing has registered this scheme — an ordinary answer, not a failure. */
     @Nullable
     public static ResourceContentProvider providerFor(Resource resource) {
-        return resource == null ? null : PROVIDERS.get(resource.scheme());
+        if (resource == null) return null;
+        ResourceContentProvider provider = PROVIDERS.get(resource.scheme());
+        return provider == null ? null : TIMED.computeIfAbsent(provider, Timed::new);
+    }
+
+    /**
+     * The timing wrappers, by the provider they wrap.
+     *
+     * <p>Cached rather than allocated per call: {@link #providerFor} is reached from a row bind and a tab
+     * presentation, which is a hot path, and a wrapper per call would trade one frame cost for another.
+     * Keyed on identity by {@code ConcurrentHashMap}'s default equality for these — a provider is a
+     * singleton per scheme and does not implement {@code equals}.</p>
+     */
+    private static final Map<ResourceContentProvider, ResourceContentProvider> TIMED =
+            new ConcurrentHashMap<>();
+
+    /**
+     * Times every provider call and names the ones that cost a frame. @see UiBudget
+     *
+     * <p><b>Here rather than at the call sites</b>, because the call sites are not where the mistake is
+     * made. {@code symbolOf(Resource)} reads like a property getter from every one of them and was a
+     * 761ms compile; instrumenting callers would mean remembering to, in every widget that ever asks a
+     * provider anything. This is the one door they all go through.</p>
+     */
+    private static final class Timed implements ResourceContentProvider {
+
+        private final ResourceContentProvider delegate;
+
+        Timed(ResourceContentProvider delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public byte[] read(Resource resource) {
+            long started = UiBudget.begin();
+            try {
+                return delegate.read(resource);
+            } finally {
+                UiBudget.end(started, "read " + resource);
+            }
+        }
+
+        @Override
+        public SymbolInfo symbolOf(Resource resource) {
+            long started = UiBudget.begin();
+            try {
+                return delegate.symbolOf(resource);
+            } finally {
+                UiBudget.end(started, "symbolOf " + resource);
+            }
+        }
+
+        @Override
+        public TextPoint locate(Resource resource, String member) {
+            long started = UiBudget.begin();
+            try {
+                return delegate.locate(resource, member);
+            } finally {
+                UiBudget.end(started, "locate " + member + " in " + resource);
+            }
+        }
+
+        @Override
+        public boolean isReadOnly(Resource resource) {
+            return delegate.isReadOnly(resource);
+        }
+
+        /**
+         * Timed like the rest, because a tab TITLE is not obviously cheap either.
+         *
+         * <p>{@code LibrarySources.displayName} decides between {@code .java} and {@code .class} by asking
+         * whether a source archive holds the type — a classpath probe and an archive lookup, behind a
+         * method the dock calls to letter a tab.</p>
+         */
+        @Override
+        public String displayName(Resource resource) {
+            long started = UiBudget.begin();
+            try {
+                return delegate.displayName(resource);
+            } finally {
+                UiBudget.end(started, "displayName " + resource);
+            }
+        }
     }
 
     /**
@@ -78,8 +165,30 @@ public final class ResourceRegistry {
         return provider == null || provider.isReadOnly(resource);
     }
 
+    /**
+     * A provider now knows something about a resource that it did not when it was last asked.
+     *
+     * <h3>Because {@code symbolOf} is allowed to answer "not yet"</h3>
+     *
+     * <p>Working out what a library class IS means compiling against the classpath, which is far too
+     * expensive to do on the thread that draws frames — so a provider may answer null, compute in the
+     * background, and say here when the answer has landed. Whoever drew a glyph from the earlier null is
+     * then the one that has to ask again; nothing else can know it needs to.</p>
+     *
+     * <p>The same shape the workbench already uses for a project file's declaration arriving after its
+     * tab did, and it coalesces the same way: several answers landing in one frame all mean one "ask
+     * again". @see UiThread</p>
+     */
+    public static final Signal.Value<Resource> onSymbolResolved = new Signal.Value<>();
+
+    /** Called by a provider whose deferred answer has arrived. On the UI thread. */
+    public static void symbolResolved(Resource resource) {
+        if (resource != null) onSymbolResolved.emit(resource);
+    }
+
     /** Empties the registry. For tests that need isolation, never for production. */
     public static void resetForTesting() {
         PROVIDERS.clear();
+        TIMED.clear();
     }
 }
