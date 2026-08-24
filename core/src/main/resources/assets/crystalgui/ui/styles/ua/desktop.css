@@ -59,18 +59,24 @@ desktop .__windows__ {
  * subtraction for maximise, drag-clamping or fullscreen to remember. And the corners stay free for
  * whatever a shell later puts in them.
  *
- * There is no conflict with the real hotbar: this strip exists only on the DESKTOP screen, where the
- * game is paused and the cursor is free. In game there is no taskbar at all — the cursor is grabbed
- * for look control, so nothing there could be clicked. What has to respect the hotbar is W14's
- * pinned windows, which do paint over the running game. */
+ * IT COVERS THE HOTBAR, DELIBERATELY, and this used to claim there was no conflict — that the strip
+ * exists only on the desktop screen "where the game is paused". Both halves were wrong. The screen does
+ * not pause the game (a client GUI holding a connection must not, or the integrated server stops
+ * ticking and every call to it times out), and Minecraft draws the in-game HUD BEFORE the screen, so the
+ * hotbar is behind every one of them — chat included.
+ *
+ * The island is therefore sized to hide it rather than to sit beside it: a translucent-looking strip
+ * with a hotbar showing through the gaps is the worst of both, and the hotbar cannot be used while a
+ * screen has the cursor anyway. `min-width` and the entry height below are what make that true for the
+ * common GUI scales rather than only for the one it was tested at. */
 taskbar {
     width: 100%;
     flex-shrink: 0;
     flex-direction: row;
     justify-content: center;
     align-items: center;
-    padding-top: 3px;
-    padding-bottom: 3px;
+    padding-top: 2px;
+    padding-bottom: 2px;
 }
 
 /* THE ISLAND IS BOUNDED BY THE DESKTOP, and both lines are load-bearing rather than tidiness. The
@@ -88,8 +94,17 @@ taskbar {
 taskbar .__entries__ {
     flex-direction: row;
     align-items: center;
-    gap-all: 2px;
-    padding-all: 2px;
+    gap-all: 3px;
+    padding-all: 4px;
+    /* WIDE ENOUGH TO HIDE THE HOTBAR, which is 182x22 at GUI scale 1 and therefore 364x44 at scale 2,
+     * 546x66 at 3 and 728x88 at 4 — in SURFACE pixels, so halve them for this sheet's units at the
+     * default uiScale of 2. 380 covers the widest of those; the height below covers the tallest.
+     *
+     * A minimum rather than a fixed width, because the island still has to grow with the window list —
+     * and it beats `max-width` when a desktop is narrower than this, which is correct: an entry is the
+     * only way back to a minimised window, so the strip may overhang a tiny desktop but must never
+     * shrink below the point where entries stop being readable. */
+    min-width: 380px;
     max-width: 100%;
     overflow: hidden;
     background: var(--taskbar-bg, #2B2D30);
@@ -102,10 +117,13 @@ taskbar .__entries__ {
  * (so the base rule's 14px floor wins whatever height is written here), and dropping the drawable
  * takes `background: none` before `background-color` means anything. */
 taskbar .__entry__ {
-    height: 16px;
+    /* 22 plus the island's 4px top and bottom is a 30px band — 60 surface pixels, which clears a
+     * scale-2 hotbar outright and most of a scale-3 one. 16px was a tooltip's worth of chrome for the
+     * one permanent fixture on the screen; 26 was larger than the window captions below it. */
+    height: 22px;
     min-height: 0px;
-    padding-left: 6px;
-    padding-right: 6px;
+    padding-left: 8px;
+    padding-right: 8px;
     padding-top: 0px;
     padding-bottom: 0px;
     gap-all: 4px;
@@ -147,9 +165,22 @@ taskbar .__entry__.__hidden__ {
 }
 
 taskbar .__entry__ .__icon__ {
-    width: 12px;
-    height: 12px;
+    width: 14px;
+    height: 14px;
     flex-shrink: 0;
+}
+
+/* THE LABEL BY TAG, because `Button` holds an UNCLASSED `UIText` and `font-size` does not effectively
+ * inherit — `ua/core.css` opens with `* { font-size: 10 }`, which is a candidate at STYLESHEET origin on
+ * the label itself, and inheritance only applies where there is no candidate at any origin. A rule on
+ * the entry would compute on the entry and leave the text at 10.
+ *
+ * `taskbar .__entry__ text` is specificity 12 against the universal rule's 0, and `text` is what
+ * `ElementRegistry` registers `UIText` under. */
+taskbar .__entry__ text {
+    /* One step above the 10px everything else runs at, and no more: at 12 the taskbar read LOUDER than
+     * the window titles it refers to, which puts the hierarchy exactly backwards. */
+    font-size: 11px;
 }
 
 /* ── Attention, badge, progress ─────────────────────────────────────────────────────────────────
@@ -218,7 +249,6 @@ window {
     min-height: 48px;
     resize: both;
     background: var(--window-bg, #191A1C);
-    outline: 1px var(--window-border, #5A5D63);
     color: var(--window-fg, #DFE1E5);
 }
 
@@ -248,21 +278,18 @@ window > .__title-bar__ {
     align-items: center;
     flex-shrink: 0;
     padding-left: 6px;
-    /* ONE PIXEL, AND IT IS THE BORDER'S WIDTH -- not a gap, a clearance.
+    /* NO CLEARANCE, because there is no longer a border to clear.
      *
-     * `window`'s `outline` is painted INSET, over the frame's own last pixel. At zero padding the
-     * close block therefore runs underneath it: the block is 20px like its neighbours and renders 19,
-     * so its hover fill is visibly narrower than the other two and the X sits half a pixel right of
-     * the visible middle while minimise and maximise sit dead centre in theirs. Every measurement
-     * says the strip is even -- the three boxes are the same width, the glyph centres are 20px apart,
-     * and the X's centre is exactly the activity rail's -- and it does not LOOK even, because a
-     * pixel of one box is being painted over.
+     * This was `padding-right: 1px`, and it was earned: `window` carried a 1px `outline`, outlines are
+     * painted INSET over the frame's own last pixel, and at zero padding the close block ran underneath
+     * it -- rendering 19px of its 20, so its hover fill was visibly narrower than its neighbours' and the
+     * X sat half a pixel off the visible middle while minimise and maximise sat dead centre. Every
+     * measurement said the strip was even and it did not LOOK even, because a pixel of one box was being
+     * painted over.
      *
-     * Stopping the strip where the border begins is what makes the three fills equal on screen rather
-     * than equal in the layout. It costs the one pixel: the X's centre moves from the rail's centre
-     * line to a pixel inboard of it. That is the smaller error of the two, and it is the direction
-     * that has something to show for it. */
-    padding-right: 1px;
+     * With the border gone the same padding is a plain 1px gap, and it moves the close block off centre
+     * by exactly the pixel it used to put back. A correction outlives its cause silently: nothing fails,
+     * the strip is simply a pixel wrong in the other direction. */
     background: var(--window-title-bg, #26282B);
     color: var(--window-title-fg, #9DA0A8);
 }
