@@ -455,6 +455,18 @@ public class Desktop extends UIElement implements DataProvider {
     private void focusMoved(@Nullable UIElement focused) {
         for (UIElement walk = focused; walk != null; walk = walk.getParent()) {
             if (walk instanceof WindowFrame && ((WindowFrame) walk).desktop() == this) {
+                // ONLY A WINDOW THAT IS ON SCREEN. Focus landing inside a HIDDEN one is never the user
+                // working in it: a hidden window is DETACHED, so it cannot be clicked, cannot be tabbed
+                // into, and matches no selector. What reaches here instead is stale -- input state still
+                // naming an element in the subtree that has just left, or a promoted popover whose DOM
+                // parent is still the frame it was opened from.
+                //
+                // Activating on that UN-HIDES the window the user has just put away, which is what made
+                // minimise, hide and close all read as "the window will not close". Restoring a window IS
+                // activate's job, but through the routes that MEAN it -- a taskbar entry, the switcher, a
+                // command -- each of which calls activate directly. This one is incidental by
+                // construction, so it is the one that must not.
+                if (((WindowFrame) walk).state() != WindowState.VISIBLE) return;
                 activate((WindowFrame) walk);
                 return;
             }

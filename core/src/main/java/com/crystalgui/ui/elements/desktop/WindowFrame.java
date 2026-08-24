@@ -1347,22 +1347,30 @@ public class WindowFrame extends UIElement implements Disposable {
         onDestroyed.emit();
     }
 
-    /**
-     * A window is its own last close watcher, so Escape reaches its {@link #requestClose() policy}
-     * once everything it contains has had a turn.
-     *
-     * <p>Registered from the attach hook rather than from {@code Desktop.addWindow}, because a hidden
-     * window is DETACHED and {@code unregisterElement} pops its watchers on the way out — so showing it
-     * again has to re-register, and this is the one place both routes pass through.</p>
-     *
-     * <p>The frame goes on the stack FIRST, before any dialog it later opens, which is what makes the
-     * cascade come out in the right order: the dropdown, then the modal, then the window itself.</p>
-     */
-    @Override
-    protected void onWindowChanged(@Nullable UIWindow previous, @Nullable UIWindow current) {
-        super.onWindowChanged(previous, current);
-        if (current != null) current.pushCloseWatcher(this);
-    }
+    // ── A WINDOW IS NOT A CLOSE WATCHER, and this is where it used to register as one ────────────
+    //
+    // Escape dismisses what is TRANSIENT. That is what the close-watcher cascade is for and what every
+    // reference does with the key: a menu, a popover, a dialog, a live drag, a rename box. No desktop
+    // closes an application WINDOW on Escape -- Windows and GNOME want Alt+F4, macOS wants Cmd+W, and
+    // IntelliJ spends plain Escape on returning focus to the editor and asks for Shift+Escape before it
+    // will even HIDE a tool window. A window holds work; a key you press to back out of a menu must not
+    // be able to put it away.
+    //
+    // It read as wrong the moment the compositor was somewhere you live rather than a frame around one
+    // application: Escape in the editor put the editor away, and a second Escape left the desktop. Two
+    // presses to leave, and the first one did something nobody asked for.
+    //
+    // In game the two rules agree, which is the strongest argument for this being right rather than
+    // merely conventional: Minecraft's Escape means "give me back the game", and that is exactly what a
+    // key nothing transient wanted should now do -- one press, from anywhere on the desktop.
+    //
+    // Everything Escape SHOULD reach is untouched, because none of it goes through here: a dropdown, a
+    // popover and a modal dialog each push their own watcher, and a live drag eats Escape a rung above
+    // the cascade entirely. Closing a window is still the close button, the system menu and
+    // `window.close` -- and `requestClose()` is still the one policy those routes go through.
+    //
+    // It also un-breaks something: `getTopCloseWatcher` asks the active frame's stack first, so while a
+    // frame registered itself LAST, a desktop-scoped watcher could never be reached at all.
 
     /** Set by {@link Desktop#addWindow}; cleared when the window is destroyed. */
     void setOwner(@Nullable Desktop desktop) {

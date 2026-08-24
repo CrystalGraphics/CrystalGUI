@@ -7,6 +7,7 @@ import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.desktop.Desktop;
 import com.crystalgui.ui.elements.desktop.WindowFrame;
+import com.crystalgui.ui.elements.desktop.WindowState;
 import com.crystalgui.ui.input.UIInputHandler;
 import org.junit.Test;
 
@@ -257,6 +258,36 @@ public class DesktopActivationTest extends UiTestBase {
 
         assertSame("a caption press left focus on the frame rather than in the window",
                 buttonIn(frame), input.getFocusedElement());
+    }
+
+    /**
+     * <b>Activating a hidden window restores it — the route that MEANS it.</b>
+     *
+     * <p>The counter-assertion to {@code Desktop.focusMoved}'s guard, and not a formality: that guard is
+     * one character from "never restore", and restoring a minimised window is the entire job of a taskbar
+     * entry and of the switcher. Both call {@code activate} directly, which is the distinction being
+     * drawn — the focus route is incidental by construction, these are deliberate.</p>
+     *
+     * <p><b>The negative is not testable from here</b>, which is worth stating rather than leaving as a
+     * gap. Focus can only reach a hidden window's subtree in a live client, because
+     * {@code requestFocus} on a detached element throws before it can announce anything
+     * ({@code pathToRoot} yields a null entry) — so the guard is verified by the in-game probe that found
+     * it: five restores, two from the taskbar and three from {@code focusMoved}.</p>
+     */
+    @Test
+    public void activatingAHiddenWindowStillRestoresIt() {
+        build();
+        WindowFrame frame = open("One", 20, 20);
+
+        frame.hide();
+        settle();
+        assertEquals(WindowState.HIDDEN, frame.state());
+
+        desktop.activate(frame);
+        settle();
+
+        assertEquals("a taskbar entry or the switcher can no longer restore a window",
+                WindowState.VISIBLE, frame.state());
     }
 
     // ── The desktop itself ──────────────────────────────────────────────────

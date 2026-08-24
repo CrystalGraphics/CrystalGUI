@@ -556,8 +556,15 @@ public final class CgUiScreen extends GuiScreen {
     @Override
     public void handleKeyboardInput() {
         if (uiWindow == null) return;
-        boolean unconsumed = CgUiInput.pumpKeyboard(uiWindow);
-        if (unconsumed && Keyboard.getEventKeyState() && Keyboard.getEventKey() == Keyboard.KEY_ESCAPE) {
+        // THE SENSE WAS INVERTED, and both halves of the symptom followed from it.
+        //
+        // consumeKeyboardEvent returns TRUE when the UI CONSUMED the key -- that return exists precisely
+        // so a host can act on what is LEFT OVER -- and this read it as "unconsumed". So the screen
+        // closed on an Escape the window had already dealt with, and stayed open on one nobody wanted:
+        // Escape on bare desktop did nothing at all, while Escape in the editor closed a popup AND the
+        // whole screen. Reported exactly that way -- "it only closes when I escape on the editor".
+        boolean consumed = CgUiInput.pumpKeyboard(uiWindow);
+        if (!consumed && Keyboard.getEventKeyState() && Keyboard.getEventKey() == Keyboard.KEY_ESCAPE) {
             closeRequested = true;
         }
     }

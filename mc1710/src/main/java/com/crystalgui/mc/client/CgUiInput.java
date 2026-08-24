@@ -117,8 +117,9 @@ public final class CgUiInput {
     /**
      * One LWJGL2 keyboard event into the window.
      *
-     * @return whether the event was left <b>unconsumed</b>, i.e. it should keep propagating — which is
-     *         what lets the screen close on an Escape nothing else wanted
+     * @return whether the window <b>CONSUMED</b> the key. The host acts on what is left over — which is
+     *         what lets the screen close on an Escape nothing else wanted. This javadoc said the
+     *         opposite, and its one caller believed it
      */
     static boolean pumpKeyboard(UIWindow window) {
         return window.getInputHandler().consumeKeyboardEvent(new CgSystemInput.Keyboard.Event(
