@@ -6,6 +6,7 @@ import com.crystalgraphics.api.text.CgTextLayout;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.search.SearchMatcher;
@@ -5026,7 +5027,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
             pendingReveal = false;
             revealCaretCentred();
         }
+        long profiled = FrameProfile.begin();
         updateWindow();
+        FrameProfile.end(profiled, "ed:updateWindow");
         viewCursorsPart.advanceBlink(deltaSeconds);
         zoomIndicatorPart.tick(deltaSeconds);
         autoScrollDuringDrag(deltaSeconds);
@@ -5121,18 +5124,30 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // replaceOrPutCandidate no-ops on an unchanged value, so a frame that did not scroll writes
         // nothing. It is also the rebinding path, not the recycling one -- recycling every frame is what
         // cleared highlights and made the colours flicker.
+        long profiled = FrameProfile.begin();
         rebindRealisedLines();
+        FrameProfile.end(profiled, "ed:rebind");
         // BEFORE anything reads the scroll extent, and exactly once. getScrollWidth is a pure accessor
         // over the mark this grows; see its note for why it must not do the scan itself.
+        profiled = FrameProfile.begin();
         measureWidestRealisedLine();
+        FrameProfile.end(profiled, "ed:measure");
+        profiled = FrameProfile.begin();
         syncLineFonts();
+        FrameProfile.end(profiled, "ed:fonts");
+        profiled = FrameProfile.begin();
         refreshHighlights(first, last);
+        FrameProfile.end(profiled, "ed:highlights");
+        profiled = FrameProfile.begin();
         layOutTextViewport();
+        FrameProfile.end(profiled, "ed:viewport");
         // Every extracted part, in one pass. Monaco gates each on a dirty flag; this does not, and that is
         // now stated where the flag used to be rather than implied by a field nobody set. See
         // EditorViewPart.
         for (EditorViewPart part : viewParts) {
+            long partStart = FrameProfile.begin();
             part.render(first, last);
+            FrameProfile.end(partStart, "part:" + part.getClass().getSimpleName());
         }
         insetHorizontalBarPastGutter();
         // AFTER the parts have rendered, so a layer built on this frame is moved on this frame rather
