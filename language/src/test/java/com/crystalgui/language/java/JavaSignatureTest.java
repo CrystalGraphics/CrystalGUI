@@ -803,8 +803,10 @@ public class JavaSignatureTest {
                 + "}\n";
 
         Signature argument = signatureAt(source, "Severity.INFO");
+        // `Script.Severity`, not `Severity`: the enum is nested, and a nested type is named by what it is
+        // nested in. @see aNestedTypeIsRenderedWithItsEnclosingType
         assertTrue("the argument was reported as the constructor: <" + argument.text() + ">",
-                argument.text().contains("enum Severity"));
+                argument.text().contains("enum Script.Severity"));
 
         Signature constructor = signatureAt(source, "Message(\"started\"");
         assertTrue("the type name should still reach the constructor: <" + constructor.text() + ">",
@@ -1098,5 +1100,94 @@ public class JavaSignatureTest {
                 signature.text().contains("println(String x)"));
         assertEquals("and it is a parameter, as in any other declaration", "variable.parameter",
                 captureAtOffset(signature, signature.text().indexOf("(String x") + 8));
+    }
+
+    // ── A nested type names the types it is nested in ───────────────────────────────────────────
+
+    /**
+     * <b>A nested type renders as {@code Outer.Inner}, not as {@code Inner}.</b>
+     *
+     * <p>The container band above the declaration carries the <em>package</em>, so with the simple name
+     * alone nothing in the popup said the type was nested at all — {@code Box} and a top-level
+     * {@code Box} in the same package were indistinguishable, and the package shown above was not where
+     * anyone could find it. IntelliJ renders {@code Main.Box} for exactly this.</p>
+     */
+    @Test
+    public void aNestedTypeIsRenderedWithItsEnclosingType() {
+        String source = ""
+                + "public class Script {\n"
+                + "    public static final class Box {\n"
+                + "    }\n"
+                + "    Box held;\n"
+                + "}\n";
+        Signature signature = signatureAt(source, "Box held");
+
+        assertTrue("the enclosing type is missing from <" + signature.text() + ">",
+                signature.text().contains("Script.Box"));
+        assertEquals("the enclosing type lost its colour", "type", captureOf(signature, "Script"));
+        assertEquals("the nested type lost its colour", "type", captureOf(signature, "Box"));
+    }
+
+    /**
+     * <b>...and each segment is coloured as the kind IT is, not as the kind at the end of the name.</b>
+     *
+     * <p>The first version wrote one capture over the whole dotted string, so {@code Main.Shape} — a class
+     * holding a sealed interface — drew {@code Main} in the <em>interface</em> colour. It reads as correct
+     * on any fixture whose segments happen to share a kind, which is most of them, and this one cannot:
+     * a qualified name is a path through several declarations and each is what it is.</p>
+     */
+    @Test
+    public void eachSegmentOfANestedNameIsColouredAsItsOwnKind() {
+        String source = ""
+                + "public class Script {\n"
+                + "    public interface Shape {\n"
+                + "        double area();\n"
+                + "    }\n"
+                + "    Shape held;\n"
+                + "}\n";
+        Signature signature = signatureAt(source, "Shape held");
+
+        assertEquals("the enclosing CLASS was coloured as the interface it contains",
+                "type", captureOf(signature, "Script"));
+        assertEquals("the nested interface lost its own colour",
+                "type.interface", captureOf(signature, "Shape"));
+    }
+
+    /** ...at every depth, because one level of prefix is the shape that looks right and is not. */
+    @Test
+    public void nestingIsRenderedAllTheWayUp() {
+        String source = ""
+                + "public class Script {\n"
+                + "    static class Middle {\n"
+                + "        static class Inner {\n"
+                + "        }\n"
+                + "    }\n"
+                + "    Middle.Inner held;\n"
+                + "}\n";
+        Signature signature = signatureAt(source, "Inner held");
+
+        assertTrue("only part of the chain is in <" + signature.text() + ">",
+                signature.text().contains("Script.Middle.Inner"));
+    }
+
+    /**
+     * The counter-assertion: a TOP-LEVEL type gains no prefix and no stray dot.
+     *
+     * <p>A prefix built by walking declaring classes returns the empty string here, and a fix that
+     * appended a separator before checking would render {@code .Script} — which every one of the tests
+     * above would still pass.</p>
+     */
+    @Test
+    public void aTopLevelTypeIsRenderedWithNoPrefix() {
+        String source = ""
+                + "public class Script {\n"
+                + "    Script self;\n"
+                + "}\n";
+        Signature signature = signatureAt(source, "Script self");
+
+        assertTrue("a top-level type grew a prefix: <" + signature.text() + ">",
+                signature.text().contains("class Script"));
+        assertFalse("a separator was written with nothing before it: <" + signature.text() + ">",
+                signature.text().contains(".Script"));
     }
 }

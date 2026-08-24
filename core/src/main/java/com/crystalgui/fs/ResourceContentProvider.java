@@ -1,6 +1,9 @@
 package com.crystalgui.fs;
 
+import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.lang.SymbolInfo;
+
+import javax.annotation.Nullable;
 
 /**
  * Supplies the bytes behind a {@link Resource} whose scheme is not the workspace.
@@ -24,6 +27,26 @@ public interface ResourceContentProvider {
      * empty; it cannot render a throw.</p>
      */
     byte[] read(Resource resource);
+
+    /**
+     * Where {@code member} is declared inside this resource's content, or null.
+     *
+     * <h3>Asked of the provider because only it knows what it produced</h3>
+     *
+     * <p>A class with no attached source has no line numbers until it has been <b>decompiled</b>, so the
+     * engine that answered "where is this declared" could only name the type — see
+     * {@link com.crystalgui.text.lang.DeclarationSite#member}. The text does not exist at that moment and
+     * does here: this provider generated it, knows whether it prepended a banner, and holds it cached.</p>
+     *
+     * <p><b>Expect it to be expensive and call it off the UI thread.</b> An exact answer means parsing
+     * the generated text, which is the same order of cost as producing it. Defaulting to null is what
+     * every provider whose positions are already right says — the whole point of the field being null
+     * everywhere else.</p>
+     */
+    @Nullable
+    default TextPoint locate(Resource resource, String member) {
+        return null;
+    }
 
     default boolean isReadOnly(Resource resource) {
         return true;

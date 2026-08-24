@@ -8,6 +8,9 @@ import com.crystalgui.language.java.classpath.HostClasspath;
 
 import com.crystalgui.language.engine.JavaEngine;
 import com.crystalgui.language.engine.bridge.Analysis;
+import com.crystalgui.language.engine.bridge.SourceAnalyzer;
+import com.crystalgui.text.TextPoint;
+import com.crystalgui.text.lang.DeclarationSite;
 import com.crystalgui.text.lang.SymbolInfo;
 
 import javax.annotation.Nullable;
@@ -200,6 +203,68 @@ public final class LibrarySources implements ResourceContentProvider {
         // EMPTY, NEVER AN EXCEPTION -- the interface says so, and its reason applies here: a pane can
         // render a banner over empty and cannot render a throw.
         return text == null ? NOTHING : text.getBytes(StandardCharsets.UTF_8);
+    }
+
+    /**
+     * Where a member is declared in this class's reconstructed text. @see ResourceContentProvider#locate
+     *
+     * <h3>Resolved, never searched — and a USE answers as well as the declaration</h3>
+     *
+     * <p>The obvious version scans the text for the name and takes the first hit, which lands on whatever
+     * calls the member before it is declared and cannot tell two overloads apart. This asks the compiler
+     * instead: every occurrence is offered to {@code resolveAt}, and the first that resolves to a member
+     * of this name reports <b>where its binding is declared in this very document</b>. So hitting a call
+     * is not a near miss, it is an equally good answer — the binding is the same either way, and
+     * {@code declarationOf} answers with the declaration's own position. Overloads resolve to the
+     * overload that was called, which is the one a reader following it wants.</p>
+     *
+     * <p>The scan only supplies candidates; correctness comes entirely from the resolve. Whole-word
+     * matching keeps it from offering the middle of a longer identifier, which would cost a resolve
+     * apiece for answers that can never match.</p>
+     *
+     * <p><b>Off the UI thread by contract</b>, because this parses. The text is whatever
+     * {@link #read} would return — attached source or the cached decompile, banner included — so the
+     * offsets are the ones the viewer is showing.</p>
+     */
+    @Override
+    @Nullable
+    public TextPoint locate(Resource resource, String member) {
+        if (resource == null || member == null || member.isEmpty()) return null;
+        List<String> classpath = HostClasspath.detect();
+        String text = AttachedSources.forClasspath(classpath).textOf(resource.path());
+        if (text == null) text = decompiled(resource.path(), classpath);
+        if (text == null) return null;
+        JavaEngine engine = JavaLanguage.engine();
+        if (engine == null) return null;
+
+        String binaryName = resource.path();
+        int lastDot = binaryName.lastIndexOf('.');
+        String simple = lastDot < 0 ? binaryName : binaryName.substring(lastDot + 1);
+        try (SourceAnalyzer.Analysis analysis =
+                     engine.analyzer().analyze(simple, text, classpath, engine.releaseLevel(), 0L)) {
+            for (int at = text.indexOf(member); at >= 0; at = text.indexOf(member, at + 1)) {
+                if (!isWholeWord(text, at, member.length())) continue;
+                SymbolInfo symbol = analysis.resolveAt(at);
+                if (symbol == null || !member.equals(symbol.name())) continue;
+                DeclarationSite site = symbol.declaration();
+                // SAME DOCUMENT is the whole test: a member of THIS class reports a site with no
+                // resource, and anything resolving into another class -- a call to something else that
+                // happens to share the name -- names that one and is skipped.
+                if (site != null && site.isSameDocument()) return site.start();
+            }
+        } catch (RuntimeException unparseable) {
+            // Reconstructed output that will not analyse is not worth failing a navigation over: the
+            // caller falls back to the top of the file, which is where it landed before this existed.
+            return null;
+        }
+        return null;
+    }
+
+    private static boolean isWholeWord(String text, int at, int length) {
+        int end = at + length;
+        boolean before = at == 0 || !Character.isJavaIdentifierPart(text.charAt(at - 1));
+        boolean after = end >= text.length() || !Character.isJavaIdentifierPart(text.charAt(end));
+        return before && after;
     }
 
     /**
