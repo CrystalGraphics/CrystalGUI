@@ -261,7 +261,8 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
                 name, JsKeywords.measuredBy(RhinoSourceAnalyzer::parses), bindings,
                 scanned.imported().keySet());
         return new ParsedScript(version, text, root, scopes, reported, parsed, resolution,
-                new JsQuickFixes(root, scopes, new JsRewrites(text, version), resolution),
+                new JsQuickFixes(root, scopes, new JsRewrites(text, version), resolution,
+                        scanned.statements()),
                 bindings.keySet(), scanned.statements());
     }
 
@@ -380,22 +381,23 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
      * which is NOT free, because it binds to the local — so the import really is unused, and both
      * reference editors say so. A walk looking for the identifier would call it used.</p>
      *
-     * <p>The mark runs from the {@code import} keyword to the end of the qualified name, so the whole
-     * statement fades rather than just the tail of it — which is what the Java engine's own unused-import
-     * mark covers, and the two sit in the same editor.</p>
+     * <p>The mark covers the qualified NAME and not the {@code import} keyword. That is what JDT reports
+     * for its own unused import — {@code ImportReference} carries both a {@code declarationSourceStart},
+     * which includes the keyword, and a {@code sourceStart}, which does not, and the problem is raised on
+     * the second — so the two languages fade the same span in the same editor. Fading the keyword too was
+     * the first version of this, and it reads as the LINE being disabled rather than as the name being
+     * dead weight.</p>
      */
     private static List<Diagnostic> withUnusedImports(List<Diagnostic> problems,
                                                       List<JsImports.Imported> imports,
                                                       RhinoScopes scopes, LineIndex lines) {
         if (imports.isEmpty()) return problems;
-        Set<String> referenced = new HashSet<>();
-        for (Name free : scopes.freeNames()) referenced.add(free.getIdentifier());
+        List<JsImports.Imported> unused = JsImports.unusedIn(imports, scopes.referencedNames());
+        if (unused.isEmpty()) return problems;
 
         List<Diagnostic> out = new ArrayList<>(problems);
-        for (JsImports.Imported each : imports) {
-            String simple = each.simpleName();
-            if (simple.isEmpty() || referenced.contains(simple)) continue;
-            out.add(new Diagnostic(lines.pointAt(each.keywordStart()),
+        for (JsImports.Imported each : unused) {
+            out.add(new Diagnostic(lines.pointAt(each.nameStart()),
                     lines.pointAt(each.nameStart() + each.binaryName().length()),
                     DiagnosticSeverity.WARNING,
                     // THE JAVA ENGINE'S OWN WORDING. The two languages sit in one editor and one Problems
@@ -417,6 +419,7 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
      * reported without it, so the same finding squiggled in one file and faded in the next.</p>
      */
     private static final Set<DiagnosticTag> UNNECESSARY = Set.of(DiagnosticTag.UNNECESSARY);
+
 
     /**
      * {@code if (false)} and {@code while (true)} — a branch whose condition cannot vary.
