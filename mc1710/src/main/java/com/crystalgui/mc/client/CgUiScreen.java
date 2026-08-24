@@ -470,10 +470,6 @@ public final class CgUiScreen extends GuiScreen {
 
         // ONE NETWORK TICK, before anything reads the workspace.
         workspace.pump(delta);
-        // AND THE EDITOR MAY NOT EXIST. F7 opens a desktop without one, and a world joined after that
-        // leaves the workspace connected with nothing yet built to ask it anything.
-        if (editor != null && !projectsAsked && workspace.isConnected()) {
-            projectsAsked = true;
         ProtocolConnection<Object> live = CgUiConnections.client();
         if (live != null && live != projectsAskedOn) {
             projectsAskedOn = live;
