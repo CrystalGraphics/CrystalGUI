@@ -15,6 +15,7 @@ import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.desktop.WindowFrame;
 import com.crystalgui.ui.elements.desktop.WindowPolicy;
+import com.crystalgui.ui.elements.desktop.WindowState;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
@@ -107,6 +108,15 @@ public final class CgUiScreen extends GuiScreen {
      */
     private static final String DESKTOP_ID = "client";
 
+    /**
+     * How much of the screen a first-run editor takes.
+     *
+     * <p>Large enough to work in and small enough that the desktop is visibly underneath it, which is
+     * the entire job of this number: a first run has to show that there IS a desktop. Persistence takes
+     * over from the second run, so it is a first impression rather than a preference.</p>
+     */
+    private static final float FIRST_RUN_FRACTION = 0.86f;
+
     /** Run and Stop for the active file, or null where no engine band opened. @see #initGui */
     private static ScriptWorkbench scripting;
 
@@ -118,9 +128,36 @@ public final class CgUiScreen extends GuiScreen {
     /** Set by the pump when an Escape reached the window and nothing consumed it. @see CgUiInput */
     private boolean closeRequested;
 
-    public static void open() {
+    /**
+     * F6 — the desktop, with the <b>editor brought forward</b> whatever state it was left in.
+     *
+     * <p>Restores it from minimised, un-hides it if it was closed, raises it and gives it the keyboard.
+     * "Open the editor" has to mean that or the key is unreliable: a window that is merely retained is
+     * still a window nobody can see.</p>
+     */
+    public static void openEditor() {
+        open(true);
+    }
+
+    /**
+     * F7 — the desktop, and <b>nothing else touched</b>.
+     *
+     * <p>Whatever is on it is what comes back, minimised windows included. That is the difference from
+     * F6 and the whole reason there are two keys: without this there is no way to reach the desktop
+     * except by putting an application in front of it, which is not a desktop, it is a wallpaper behind
+     * a window.</p>
+     */
+    public static void openDesktop() {
+        open(false);
+    }
+
+    private static void open(boolean bringEditorForward) {
+        showEditorOnOpen = bringEditorForward;
         Minecraft.getMinecraft().displayGuiScreen(new CgUiScreen());
     }
+
+    /** Which key opened this screen. @see #openEditor() */
+    private static boolean showEditorOnOpen = true;
 
     /** Whether the editor has been built — read by the pump before it touches anything. */
     static boolean isReady() {
@@ -172,9 +209,30 @@ public final class CgUiScreen extends GuiScreen {
         if (uiWindow != null) {
             // Reopening: the desktop comes back exactly as it was left. Everything below built it once.
             uiWindow.resumeDesktop();
+            bringEditorForward();
             return;
         }
 
+        buildDesktop();
+        bringEditorForward();
+    }
+
+    /**
+     * Builds the compositor — <b>and nothing that needs a workspace</b>.
+     *
+     * <h3>The desktop does not depend on the editor, and it used to</h3>
+     *
+     * <p>Everything here was once one method that ended by constructing a {@link CrystalEditor}. That
+     * made the desktop unreachable without a server connection, and worse than unreachable: the editor's
+     * constructor throws for a null client, so opening this screen from the main menu <b>crashed the
+     * game</b> — past a log line saying it should be impossible. It was possible the moment a second key
+     * could open the screen, and it was already possible for the unattended capture, which opens from
+     * the main menu by design.</p>
+     *
+     * <p>So the split is not tidying. A desktop is a place; the editor is one application on it, built
+     * when something asks for it and refused with a reason when it cannot be.</p>
+     */
+    private void buildDesktop() {
         trace("begin");
         File dataDir = mc.mcDataDir;
         // NO ROOT. The files live on the SERVER now (Phase 4 B2) -- in single-player that is the
@@ -182,22 +240,49 @@ public final class CgUiScreen extends GuiScreen {
         workspace = new Mc1710Workspace();
         trace("workspace + language registration");
 
+        // BESIDE the workspace, not inside it: a session record is private and must not become part of
+        // a project a resource pack could ship. ONE storage, shared: the editor's preferences and session
+        // records and the desktop's window arrangement all live in the same private directory, and
+        // building two would be two answers to the question of where that is.
+        config = new LocalConfigStorage(new File(dataDir, "config/crystalgui").toPath());
+
+        // A BARE ROOT, and the editor becomes a WINDOW on the desktop the UIWindow already owns.
+        UIElement root = new UIElement();
+        root.addClass(ROOT_CLASS);
+        uiWindow = new UIWindow(Ui.of(root));
+        // NOT INSTALLED FOR YOU. Without this the window matches no selector at all and the editor
+        // renders as an unstyled column of boxes.
+        uiWindow.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
+        uiWindow.getStyleEngine().addStylesheet(StyleSheet.parse(HOST_STYLES));
+
+        // WHERE THE ARRANGEMENT LIVES, and nothing else -- CrystalOS W12. The compositor owns reading it,
+        // applying it to windows as they open, and writing it again when the screen closes; a host has no
+        // business holding a second copy of that policy.
+        uiWindow.desktop().persistTo(config, DESKTOP_ID);
+        trace("UIWindow + stylesheets");
+    }
+
+    /**
+     * Builds the editor window on first demand, or explains why it cannot.
+     *
+     * @return whether there is an editor window to bring forward
+     */
+    private boolean ensureEditorWindow() {
+        if (editorWindow != null) return true;
         if (!workspace.isConnected()) {
-            // Should be impossible -- this screen opens from inside a world, and the connection is opened
-            // on join. Named rather than left to NPE somewhere in the file tree, because "the editor has
-            // no workspace" and "the editor is broken" look identical from the outside.
-            CrystalGuiCore.LOGGER.error("Opening the editor with no server connection: the file tree will "
-                    + "be empty. CgUiConnections.client() is null, which means the join event never fired.");
+            // THE FILES LIVE ON THE SERVER (Phase 4 B2) -- in single-player that is the integrated
+            // server -- so there is genuinely nothing for a workbench to show without one. Named rather
+            // than left to throw out of a constructor, because "the editor needs a world" and "the editor
+            // is broken" look identical from the outside, and the second is what a crash report says.
+            CrystalGuiCore.LOGGER.warn("The editor needs a world: CgUiConnections.client() is null, so the "
+                    + "join event has not fired. The desktop is open and the editor is not on it.");
+            return false;
         }
+        File dataDir = mc.mcDataDir;
         editor = new CrystalEditor(workspace.client());
         trace("CrystalEditor construction");
-        // BESIDE the workspace, not inside it: a session record is private and must not become part of
-        // a project a resource pack could ship. Same reason the trash lives outside.
-        // ONE storage, shared: the editor's preferences and session records and the desktop's window
-        // arrangement all live in the same private directory, and building two would be two answers to
-        // the question of where that is.
-        LocalConfigStorage config =
-                new LocalConfigStorage(new File(dataDir, "config/crystalgui").toPath());
+        // THE SAME storage the desktop's arrangement went into. Two would be two answers to the question
+        // of where a private directory is.
         editor.useConfig(config);
 
         editor.addClass(EDITOR_CLASS);
@@ -218,19 +303,6 @@ public final class CgUiScreen extends GuiScreen {
         if (scripting != null) editor.workbench().revealPanel(RunPanels.RUN_TYPE);
 
         trace("scripting install");
-        // A BARE ROOT, and the editor becomes a WINDOW on the desktop the UIWindow already owns.
-        //
-        // Nothing visibly changes on day one, which is the point of doing it this way: a maximised frame
-        // is the full-screen editor that was here before, and un-maximising is what reveals the desktop
-        // underneath. The compositor is not a mode anybody switches into.
-        UIElement root = new UIElement();
-        root.addClass(ROOT_CLASS);
-        uiWindow = new UIWindow(Ui.of(root));
-        // NOT INSTALLED FOR YOU. Without this the window matches no selector at all and the editor
-        // renders as an unstyled column of boxes.
-        uiWindow.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
-        uiWindow.getStyleEngine().addStylesheet(StyleSheet.parse(HOST_STYLES));
-
         // HIDE_ON_CLOSE, because a workbench is not a dialog: closing it keeps every document, the dock
         // arrangement and the undo history, and its taskbar entry is how it comes back. That is the same
         // promise the static fields above already made, now made by the lifecycle instead of by keeping
@@ -246,17 +318,62 @@ public final class CgUiScreen extends GuiScreen {
         // setContent, not content().addChild -- it is what ADOPTS the editor's menu bar into the
         // caption, so the window has one header rather than two stacked on each other.
         editorWindow.setContent(editor);
-        // MAXIMISED BY DEFAULT, and only as a default: the record below overrides it when there is one.
-        // In game with nothing else on the desktop a maximised frame IS the full-screen editor that was
-        // there before W7, which is what makes the migration invisible on day one.
-        editorWindow.maximize();
+        // A WINDOW ON A DESKTOP, not a full-screen editor — and only as a DEFAULT: the record below
+        // overrides it the moment there is one, so this is what a first run looks like and nothing else.
+        //
+        // It used to maximise here, which was right while the desktop was a migration nobody was meant
+        // to notice: a maximised frame IS the editor that was there before W7. Once the compositor is
+        // the point, that default hides everything it was built for — the taskbar, the caption, snapping,
+        // the fact that there is a desktop at all — behind an application that happens to fill the screen.
+        //
+        // Sized in LOGICAL pixels off the display and DEFAULT_UI_SCALE, which is the scale this host
+        // deliberately never changes. A percentage in the sheet would be tempting and would lose to the
+        // desktop's own cascade, which writes left/top at a higher origin for any window nobody placed.
+        float logicalWidth = mc.displayWidth / UIWindow.DEFAULT_UI_SCALE;
+        float logicalHeight = mc.displayHeight / UIWindow.DEFAULT_UI_SCALE;
+        editorWindow.resizeTo(Math.round(logicalWidth * FIRST_RUN_FRACTION),
+                Math.round(logicalHeight * FIRST_RUN_FRACTION));
+        editorWindow.moveTo(Math.round(logicalWidth * (1f - FIRST_RUN_FRACTION) / 2f),
+                Math.round(logicalHeight * (1f - FIRST_RUN_FRACTION) / 2f));
 
         // WHERE THE ARRANGEMENT LIVES, and nothing else -- CrystalOS W12. The compositor owns reading it,
         // applying it to windows as they open, and writing it again when the screen closes; a host has no
         // business holding a second copy of that policy. AFTER the editor window is open, so the record
         // is applied over the defaults above rather than under them.
-        uiWindow.desktop().persistTo(config, DESKTOP_ID);
-        trace("UIWindow + stylesheets");
+        trace("editor window");
+        return true;
+    }
+
+    /** Where every private record goes — the desktop's arrangement and the editor's session alike. */
+    private static LocalConfigStorage config;
+
+    /**
+     * Brings the editor window forward — what F6 means and F7 deliberately does not.
+     *
+     * <p>Three states to cover and they are not the same: HIDDEN (minimised, or closed under
+     * {@code HIDE_ON_CLOSE}) needs showing, VISIBLE-but-behind needs raising, and already-in-front needs
+     * only the keyboard. {@code show} handles the first two and {@code activate} the last, so asking for
+     * both unconditionally is correct rather than lazy.</p>
+     */
+    private void bringEditorForward() {
+        // THE FLAG IS CHECKED HERE, not at each call site: both paths into the screen end up wanting the
+        // same question asked, and a guard duplicated at two call sites is a guard one of them loses.
+        //
+        // F7 therefore never BUILDS the editor either, which is the half that matters for a first press:
+        // asking for the desktop must not spend three seconds constructing an application to hide.
+        // A DESKTOP WITH NOTHING ON IT IS A BLANK SCREEN, not a desktop. The compositor deliberately
+        // takes up no space at all until a window exists -- an unused one must not swallow clicks meant
+        // for whatever is behind it -- so an empty desktop has no taskbar either, and F7 pressed before
+        // anything was ever opened would show the game and nothing else. The first open therefore builds
+        // the editor whichever key asked for it; from then on the two keys differ as they should.
+        boolean nothingOpen = uiWindow.desktop().registry().size() == 0;
+        if (!showEditorOnOpen && !nothingOpen) return;
+        if (!ensureEditorWindow()) return;
+        // BUILT, and only RAISED for F6. Opening a window already shows it, so an empty desktop now has
+        // something on it and a taskbar to reach it by; what F7 must not do is put it in front.
+        if (!showEditorOnOpen) return;
+        if (editorWindow.state() == WindowState.HIDDEN) editorWindow.show(true);
+        uiWindow.desktop().activate(editorWindow);
     }
 
     @Override
@@ -268,6 +385,12 @@ public final class CgUiScreen extends GuiScreen {
         if (closeRequested) {
             closeRequested = false;
             mc.displayGuiScreen(null);
+            // AND THE GAME TAKES THE MOUSE BACK. displayGuiScreen(null) calls setIngameFocus itself, but
+            // only down a branch that also depends on the player being alive and a world being loaded --
+            // and closing from here happens mid-frame, inside the drawScreen of the screen being closed.
+            // Asking directly is idempotent when it already happened and is the difference between the
+            // world coming back and the cursor still floating over an unresponsive game.
+            if (mc.theWorld != null && mc.thePlayer != null) mc.setIngameFocus();
             return;
         }
 
@@ -304,7 +427,9 @@ public final class CgUiScreen extends GuiScreen {
 
         // ONE NETWORK TICK, before anything reads the workspace.
         workspace.pump(delta);
-        if (!projectsAsked && workspace.isConnected()) {
+        // AND THE EDITOR MAY NOT EXIST. F7 opens a desktop without one, and a world joined after that
+        // leaves the workspace connected with nothing yet built to ask it anything.
+        if (editor != null && !projectsAsked && workspace.isConnected()) {
             projectsAsked = true;
             editor.workbench().fileTree().loadProjects();
             // AFTER loadProjects, never before: the restore parks the folders it wants expanded and
@@ -370,7 +495,7 @@ public final class CgUiScreen extends GuiScreen {
         // describing a context that no longer exists.
         CgGlState.invalidateAllIfPresent();
 
-        editor.giveInitialFocus();
+        if (editor != null) editor.giveInitialFocus();
 
         framesPainted++;
         // UNATTENDED SCRIPT RUN, off unless asked for. On the CLIENT THREAD, which is where the Run
@@ -467,15 +592,26 @@ public final class CgUiScreen extends GuiScreen {
     }
 
     /**
-     * Pauses single-player.
+     * <b>Does NOT pause single-player</b> — the game runs underneath the desktop.
      *
-     * <p>The conservative answer and what every editor-like GUI in 1.7.10 does. Returning {@code false}
-     * invites a class of "the world ticked while a modal was open" questions that Phase 1 has no reason
-     * to answer.</p>
+     * <p>This returned true, on the reasoning that it is "the conservative answer and what every
+     * editor-like GUI in 1.7.10 does", and that returning false "invites a class of 'the world ticked
+     * while a modal was open' questions". Both halves were about an editor. A DESKTOP is not an editor
+     * and not a modal: the whole claim it makes is that it sits over the machine while the machine keeps
+     * working, and one that stops the world is a full-screen application wearing a taskbar.</p>
+     *
+     * <p>It also read as a fault rather than a policy — reported as the desktop <em>freezing</em> the
+     * game, which is exactly what a paused world looks like from inside it. And it is the direction W14
+     * is already going: a pinned HUD over the running game is unbuildable if opening the compositor
+     * stops the game.</p>
+     *
+     * <p>The player still cannot move, and that is unrelated to this: {@code GuiScreen.allowUserInput}
+     * is false, so game input is gated out while any screen is up. What changes here is only whether the
+     * WORLD ticks.</p>
      */
     @Override
     public boolean doesGuiPauseGame() {
-        return true;
+        return false;
     }
 
     /** Frees the editor at game shutdown. Not called on close — see the {@code editor} field. */

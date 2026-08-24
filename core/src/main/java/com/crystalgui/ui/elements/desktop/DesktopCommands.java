@@ -59,6 +59,7 @@ public final class DesktopCommands {
 
         registry.register(Command.of(SWITCH_WINDOW, "Switch Window")
                 .binding("Mod+Tab")
+                .menu(MenuId.DESKTOP_CONTEXT, "2_windows", 10)
                 .run(context -> cycle(context, true))
                 .enabledWhen(DesktopCommands::hasSomethingToSwitchTo));
 
@@ -77,6 +78,9 @@ public final class DesktopCommands {
         // for it would look.
         registry.register(Command.of(SHOW_DESKTOP, "Show Desktop")
                 .menu(MenuId.TASKBAR_CONTEXT, "1_desktop", 10)
+                // AND ON THE DESKTOP ITSELF, which is where Windows also puts it and the only
+                // menu a desktop with every window minimised still has.
+                .menu(MenuId.DESKTOP_CONTEXT, "1_desktop", 10)
                 .run(context -> {
                     Desktop desktop = desktopFor(context);
                     if (desktop != null) desktop.toggleShowDesktop();

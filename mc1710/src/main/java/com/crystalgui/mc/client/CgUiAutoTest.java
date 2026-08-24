@@ -20,6 +20,8 @@ import cpw.mods.fml.common.gameevent.TickEvent;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiMainMenu;
+import net.minecraft.world.WorldSettings;
+import net.minecraft.world.WorldType;
 import net.minecraft.launchwrapper.LaunchClassLoader;
 
 import org.lwjgl.BufferUtils;
@@ -191,8 +193,25 @@ public final class CgUiAutoTest {
                     if (++ticks < OPEN_AFTER_TICKS) return;
                     if (!loadingWorld) {
                         loadingWorld = true;
-                        CrystalGuiCore.LOGGER.info("CGUI AUTOTEST loading world '{}'", WORLD);
-                        mc.launchIntegratedServer(WORLD, WORLD, null);
+                        // CREATED IF IT IS NOT THERE, which is what makes this run self-sufficient.
+                        // launchIntegratedServer's third argument is the settings to CREATE with, and
+                        // null means "load what is already on disk" -- so on a fresh checkout, where
+                        // there are no saves at all, it NPE'd inside Minecraft before the editor was
+                        // ever asked for. An unattended capture that needs somebody to have made a world
+                        // by hand first is not unattended.
+                        //
+                        // Superflat creative: the fastest world to generate, and the one whose content
+                        // has the least to do with what is being photographed.
+                        // level.dat, not the DIRECTORY: a failed launch leaves the folder behind
+                        // with a session.lock in it, and loading that answers null and NPEs inside
+                        // Minecraft -- so the second run of a broken first run fails differently
+                        // from the first, which is the worst kind of flake to read.
+                        boolean exists = new File(mc.mcDataDir, "saves/" + WORLD + "/level.dat").isFile();
+                        CrystalGuiCore.LOGGER.info("CGUI AUTOTEST {} world '{}'",
+                                exists ? "loading" : "creating", WORLD);
+                        mc.launchIntegratedServer(WORLD, WORLD, exists ? null
+                                : new WorldSettings(0L, WorldSettings.GameType.CREATIVE,
+                                        false, false, WorldType.FLAT));
                     }
                     return;
                 }
@@ -200,7 +219,7 @@ public final class CgUiAutoTest {
                 if (++inWorldTicks < IN_WORLD_SETTLE_TICKS) return;
                 opened = true;
                 CrystalGuiCore.LOGGER.info("CGUI AUTOTEST opening the editor (in world)");
-                CgUiScreen.open();
+                CgUiScreen.openEditor();
                 return;
             }
 
@@ -210,7 +229,7 @@ public final class CgUiAutoTest {
             if (++ticks < OPEN_AFTER_TICKS) return;
             opened = true;
             CrystalGuiCore.LOGGER.info("CGUI AUTOTEST opening the editor");
-            CgUiScreen.open();
+            CgUiScreen.openEditor();
         }
     }
 
