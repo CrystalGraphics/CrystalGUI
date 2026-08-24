@@ -656,6 +656,17 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
                 answer.accept(Versioned.<SymbolInfo>none(buffer.version()));
                 return;
             }
+            // NOTHING, RATHER THAN A CONFIDENT ANSWER ABOUT TEXT NOBODY WROTE. @see Analysis#recoveredAt
+            //
+            // Applied HERE and deliberately not inside Analysis.resolveAt, which completion also calls.
+            // The two ask the same question for opposite reasons: completion is asked about text that is
+            // INCOMPLETE BY DEFINITION -- that is its whole job -- and it repairs the answer with a probe
+            // re-parse of its own. Hover and go-to are asked about text the user believes is finished, and
+            // have no such repair, so for them a recovered construct is simply not knowledge.
+            if (analysis.recoveredAt(offset)) {
+                answer.accept(Versioned.<SymbolInfo>none(buffer.version()));
+                return;
+            }
             answer.accept(Versioned.of(analysis.version(), analysis.resolveAt(offset)));
         }
 

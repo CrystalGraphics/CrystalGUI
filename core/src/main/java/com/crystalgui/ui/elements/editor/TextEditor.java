@@ -2547,8 +2547,17 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // ADOPTED HERE AND NOWHERE ELSE. Everything upstream only ever RECORDS that a row's answer has
         // changed; this is the one place a new one replaces what is on screen, and it runs only once
         // typing has settled. See settleSyntaxIfIdle.
+        //
+        // AND THE RECOVERY GUARD APPLIES HERE TOO. It was written on the other way into this cache -- the
+        // else-branch of invalidateRowSyntax, which is the path an announcement takes when the user is NOT
+        // typing -- and settling dropped every stale row unconditionally. That is the path a keystroke
+        // actually takes: the analysis debounce and this settle are both 300ms, so an ordinary pause at
+        // the end of a word lands the parse while `editing` is still true. So the guard was installed on
+        // one of two doors and the traffic came through the other. @see #keepsColoursThroughRecovery
         if (!editing && !staleRows.isEmpty()) {
-            for (int row : staleRows) rowSyntax.remove(row);
+            for (int row : staleRows) {
+                if (!keepsColoursThroughRecovery(row)) rowSyntax.remove(row);
+            }
             staleRows.clear();
         }
         SemanticTokenProvider semantic = languageServices == null

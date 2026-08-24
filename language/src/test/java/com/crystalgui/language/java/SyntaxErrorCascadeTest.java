@@ -98,6 +98,58 @@ public class SyntaxErrorCascadeTest {
     }
 
     /**
+     * <b>A recovery that reached across a line break is marked on the line it started on.</b>
+     *
+     * <p>{@code sfafafas} alone is not a statement — it is half a declaration — so the parser keeps looking
+     * for a name, takes {@code System} off the line below, and reports <em>"Syntax error on token '.', ';'
+     * expected"</em> against the {@code .} of a line nobody touched.</p>
+     *
+     * <p><b>It is the odd-token case, which is why it read as intermittent.</b> Write two words and the
+     * declaration is complete: ECJ reports {@code InsertToComplete} at the end of that line, correctly, and
+     * the line below is untouched. One word and it reaches. Reported as "when it's just one run without
+     * spaces it still breaks the line under it", after the two-word form had been confirmed fixed.</p>
+     */
+    @Test
+    public void anOmissionTheRecoveryReachedAcrossALineForIsMarkedWhereItBelongs() {
+        List<Diagnostic> found = diagnosticsFor(""
+                + "public class Demo {\n"
+                + "    public static void peeposo(){\n"
+                + "        sfafafas\n"
+                + "        System.out.println(\"fa\");\n"
+                + "    }\n"
+                + "}\n");
+
+        assertEquals("more than the one syntax error survived: " + messages(found), 1, found.size());
+        assertEquals("the mark stayed on the line the recovery reached INTO: " + messages(found),
+                2, found.get(0).start().row());
+    }
+
+    /**
+     * <b>...and a statement that genuinely spans lines keeps ECJ's own mark.</b>
+     *
+     * <p>The half that makes the rule safe rather than merely effective. A mark is only ever moved BACK
+     * onto the line an omission is on, never sideways and never off a construct that really does run to
+     * the line it is marked on. Measured against five cross-line shapes — a parenthesised expression, an
+     * argument list, an {@code if} condition, an array initialiser and a generic call — and not one of
+     * them reports {@code ParsingError}, which is what makes the id load-bearing rather than incidental.
+     * This is the nearest miss of the five.</p>
+     */
+    @Test
+    public void aStatementThatGenuinelySpansLinesKeepsItsOwnMark() {
+        List<Diagnostic> found = diagnosticsFor(""
+                + "public class Demo {\n"
+                + "    void m(){\n"
+                + "        int a = foo(1,\n"
+                + "            2 3);\n"
+                + "    }\n"
+                + "}\n");
+
+        assertEquals("the syntax error went missing: " + messages(found), 1, found.size());
+        assertEquals("a mark was dragged off the line it belonged on: " + messages(found),
+                3, found.get(0).start().row());
+    }
+
+    /**
      * <b>A file that parses reports its semantic errors as before.</b>
      *
      * <p>The counter-assertion, and it is not a formality: a suppression written as "report nothing when
