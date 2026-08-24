@@ -1,7 +1,9 @@
 package com.crystalgui.style.property.visual.texture;
 
 import com.crystalgui.render.texture.CgUiDrawable;
+import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.texture.CgUiQuad;
+import com.crystalgui.render.texture.CgUiGlass;
 import com.crystalgui.render.texture.CgUiRepeat;
 import com.crystalgui.render.texture.CgUiShape;
 import com.crystalgui.render.texture.CgUiSprite;
@@ -96,7 +98,81 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
         if (lower.startsWith("icon(") && value.endsWith(")")) {
             return parseIcon(value.substring("icon(".length(), value.length() - 1));
         }
+        if (lower.startsWith("glass(") && value.endsWith(")")) {
+            return parseGlass(value.substring("glass(".length(), value.length() - 1));
+        }
         return null;
+    }
+
+    /**
+     * {@code glass(...)} — a backdrop material. Two spellings, because one is what a theme writes and
+     * the other is what a designer tunes:
+     *
+     * <pre>
+     *   glass(12)                                  blur radius; everything else default
+     *   glass(12, #2B2D3088)                       blur radius, tint
+     *   glass(blur 12, tint #2B2D3088, bezel 8,
+     *         ior 1.5, specular 0.35, noise 0.04,
+     *         saturation 1.35, fallback #2B2D30)   keyword pairs, any order
+     * </pre>
+     *
+     * <p>The short form is positional and the long form is not, distinguished by whether the first
+     * argument parses as a number. Mixing them is not supported and does not need to be.</p>
+     *
+     * <p><b>An unknown key warns and is ignored</b> rather than failing the declaration — the rule every
+     * {@link com.crystalgui.style.property.StyleValue} follows, because a malformed value should degrade
+     * rather than take the cascade with it. A wholly unparseable argument list still returns null, which
+     * is a parse failure: {@code glass(nonsense)} is a typo, and {@code none} already spells "nothing".</p>
+     */
+    private static @Nullable CgUiDrawable parseGlass(String args) {
+        CgUiGlass glass = new CgUiGlass();
+        List<String> parts = CssParsingUtil.splitTopLevelCommas(args);
+        if (parts.isEmpty()) return glass;
+
+        Float leading = parseFloatOrNull(parts.get(0).trim());
+        if (leading != null) {
+            glass.setBlurRadius(leading);
+            if (parts.size() > 1) {
+                Integer tint = ColorValue.parseColor(parts.get(1).trim());
+                if (tint != null) glass.setTint(tint);
+            }
+            return glass;
+        }
+
+        boolean anyRecognised = false;
+        for (String part : parts) {
+            String[] kv = part.trim().split("\s+", 2);
+            if (kv.length != 2) continue;
+            String key = kv[0].toLowerCase(Locale.ROOT);
+            String raw = kv[1].trim();
+            Float number = parseFloatOrNull(raw);
+            switch (key) {
+                case "blur" -> { if (number != null) { glass.setBlurRadius(number); anyRecognised = true; } }
+                case "bezel" -> { if (number != null) { glass.setBezel(number); anyRecognised = true; } }
+                case "ior" -> { if (number != null) { glass.setIor(number); anyRecognised = true; } }
+                case "specular" -> { if (number != null) { glass.setSpecular(number); anyRecognised = true; } }
+                case "noise" -> { if (number != null) { glass.setNoise(number); anyRecognised = true; } }
+                case "saturation" -> { if (number != null) { glass.setSaturation(number); anyRecognised = true; } }
+                case "tint" -> {
+                    Integer c = ColorValue.parseColor(raw);
+                    if (c != null) { glass.setTint(c); anyRecognised = true; }
+                }
+                case "fallback" -> {
+                    Integer c = ColorValue.parseColor(raw);
+                    if (c != null) { glass.setFallbackColor(c); anyRecognised = true; }
+                }
+                default -> CrystalGuiCore.LOGGER.warn("Unknown glass() key '{}' — ignored", key);
+            }
+        }
+        return anyRecognised ? glass : null;
+    }
+
+    private static @Nullable Float parseFloatOrNull(String raw) {
+        try {
+            return Float.parseFloat(raw.endsWith("px") ? raw.substring(0, raw.length() - 2) : raw);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     /**

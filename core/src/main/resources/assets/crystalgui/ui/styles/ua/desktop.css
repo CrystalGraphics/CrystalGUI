@@ -107,7 +107,21 @@ taskbar .__entries__ {
     min-width: 380px;
     max-width: 100%;
     overflow: hidden;
-    background: var(--taskbar-bg, #2B2D30);
+    /* GLASS, not a fill. The strip sits over a live world -- in game the hotbar and the terrain are
+     * directly behind it -- and a flat colour is the one thing on the desktop that cannot acknowledge
+     * that. `border-radius` below still does the shape: glass composes with the box model like any
+     * other background rather than becoming a special kind of element.
+     *
+     * It degrades to `fallback` wherever it cannot be rendered -- headless, no GL, a failed capture --
+     * which is exactly the flat --taskbar-bg this used to be.
+     *
+     * THE COST IS THE REGION, NOT THE EFFECT (plan_glass.md R2): the capture and the blur are sized to
+     * the union of what actually asks for a backdrop, so a strip a fortieth of the screen pays for a
+     * fortieth of the screen. The first version captured the whole surface and took a 120fps desktop to
+     * 50-70 for this one line. */
+    background: glass(blur 12, tint var(--taskbar-glass-tint, #662B2D30),
+                      bezel 10, ior 1.5, specular 0.3, noise 0.035, saturation 1.4,
+                      fallback var(--glass-fallback, #2B2D30));
     outline: 1px var(--taskbar-border, #393B40);
     border-radius: var(--radius-panel, 8px);
 }

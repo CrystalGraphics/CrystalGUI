@@ -35,6 +35,7 @@ import com.crystalgui.ui.UIWindow;
 import lombok.Getter;
 import lombok.Setter;
 import org.joml.Matrix4f;
+import org.jspecify.annotations.Nullable;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -169,14 +170,22 @@ public final class CgUiPaintContext {
      * {@link #boxModelMaterial}'s straight-alpha blend (which is correct for its other, much more
      * common use: painting straight-alpha colors directly onto an already-opaque destination).
      */
-    private final CgMaterial layerBlitMaterial;
+    /** Package-private: {@link CgUiBackdrop} composites the capture with it. */
+    final CgMaterial layerBlitMaterial;
+
+    /** The backdrop primitive — capture, blur, and the region logic that keeps it affordable. */
+    private final CgUiBackdrop backdrop;
+
+    /** One axis of the separable blur per bind. @see #backdropFor */
+    /** Package-private: {@link CgUiBackdrop} owns every use of it. */
+    final CgMaterial blurMaterial;
 
     /** 1×1 fully opaque white ({@code RGBA = 255, 255, 255, 255}). */
     @Getter
     private final CgTexture2D whitePixel;
 
     @Getter
-    private final PoseStack poseStack;
+    final PoseStack poseStack;
 
     /**
      * Basic wrapper over {@link com.crystalgraphics.gl.render.CgQuadRenderer}.
@@ -208,15 +217,15 @@ public final class CgUiPaintContext {
     // Screen-sized, not element-sized: draws inside a layer use the same absolute screen
     // coordinates (runtimeCache.getX()/getY()) as the normal path, so nothing needs translating —
     // matches LDLib2's own "off-target spans the full window" approach for the same reason.
-    private int screenWidth, screenHeight;
-    private long frameId;
+    int screenWidth, screenHeight;
+    long frameId;
     private final List<CgFrameBuffer> layerFboPool = new ArrayList<>();
     /** One saved frame per nested {@link #beginLayerFbo}/{@link #endLayerFbo} pair. */
-    private final Deque<LayerFrame> layerStack = new ArrayDeque<>();
-    private static final CgFrameBufferFormat LAYER_FORMAT =
+    final Deque<LayerFrame> layerStack = new ArrayDeque<>();
+    static final CgFrameBufferFormat LAYER_FORMAT =
             CgFrameBufferFormat.builder("cgui_layer").color(0, CgTextureType.RGBA8).build();
 
-    private record LayerFrame(CgFrameBuffer fbo, CgGlScope glScope, Matrix4f savedProjMatrix,
+    record LayerFrame(CgFrameBuffer fbo, CgGlScope glScope, Matrix4f savedProjMatrix,
                                int savedViewportW, int savedViewportH) {
     }
 
@@ -251,12 +260,12 @@ public final class CgUiPaintContext {
     /** Built once, in the constructor — real dimensions aren't known that early (no frame has run
      * yet), so this starts 1x1 and {@link #beginFrame} resizes it in place, the same way every other
      * screen-sized FBO in this file already tracks the window. */
-    private final CgFrameBuffer msaaFbo = CgFrameBuffer.createOwned("cgui_msaa", 1, 1, MSAA_FORMAT);
+    final CgFrameBuffer msaaFbo = CgFrameBuffer.createOwned("cgui_msaa", 1, 1, MSAA_FORMAT);
     /** What {@link #msaaFbo} resolves into — same shape as {@link #LAYER_FORMAT}, and what {@link
      * #blitLayer} reads from to composite. Kept separate from {@link #layerFboPool}: that pool is
      * indexed by per-element nesting depth, which has nothing to do with this FBO's role as a single
      * fixed whole-frame resolve target. */
-    private final CgFrameBuffer msaaResolveFbo = CgFrameBuffer.createOwned("cgui_msaa_resolve", 1, 1, LAYER_FORMAT);
+    final CgFrameBuffer msaaResolveFbo = CgFrameBuffer.createOwned("cgui_msaa_resolve", 1, 1, LAYER_FORMAT);
 
     // ── Scissor ─────────────────────────────────────────────────────────────
     @Getter
@@ -266,7 +275,7 @@ public final class CgUiPaintContext {
     @Getter
     private CgTexture2D currentTexture;
     @Getter
-    private boolean frameActive;
+    boolean frameActive;
 
     // ── Material switching ──────────────────────────────────────────────────
     @Getter
@@ -320,6 +329,9 @@ public final class CgUiPaintContext {
         this.boxModelMaterial = CgMaterial.load("crystalgui:shaders/gui_quad.shader");
         this.curveMaterial = CgMaterial.load("crystalgui:shaders/gui_curve.shader");
         this.layerBlitMaterial = CgMaterial.load("crystalgui:shaders/gui_layer_blit.shader");
+        this.blurMaterial = CgMaterial.load("crystalgui:shaders/gui_blur.shader");
+        // AFTER the materials: it holds them, and a field initialiser would run before they exist.
+        this.backdrop = new CgUiBackdrop(this);
         this.whitePixel = (CgTexture2D) CgFallbackTextures.WHITE_1x1;
         this.textRenderer = CgTextRenderer.createManualSized().poseStack(this.poseStack)
                                           .restoreStateWith(() -> {
@@ -547,6 +559,9 @@ public final class CgUiPaintContext {
                 CgGlSlot.FBO, CgGlSlot.PROGRAM, CgGlSlot.TEXTURES, CgGlSlot.BLEND,
                 CgGlSlot.DEPTH, CgGlSlot.CULL, CgGlSlot.VIEWPORT);
 
+        // BEFORE the redirect, because the redirect is what hides it. @see #sceneFboId
+        backdrop.captureSceneTarget();
+
         // Whole-frame MSAA redirect — see the class doc above msaaFbo for why this exists and why it
         // has to be the whole tree rather than one material.
         int w = Math.max(1, screenWidth), h = Math.max(1, screenHeight);
@@ -594,6 +609,10 @@ public final class CgUiPaintContext {
             warmUp();
             warmedUp = true;
         }
+        // AFTER frameActive, with the pool's own warm-up, because warming a target SUBMITS A QUAD and
+        // quads are refused outside a frame. Built here rather than on demand: an FBO created mid-draw,
+        // with our own bindings in flight, came back incomplete. @see #blurLevel
+        backdrop.prepareFrame();
     }
 
     private boolean warmedUp = false;
@@ -1275,6 +1294,21 @@ public final class CgUiPaintContext {
      * whoever made it has to say when it dies.</p>
      */
     public CgFrameBuffer beginLayerFbo(CgFrameBuffer fbo) {
+        return beginLayerFbo(fbo, true);
+    }
+
+    /**
+     * As {@link #beginLayerFbo(CgFrameBuffer)}, but able to KEEP what the target already holds.
+     *
+     * <p>Every other caller wants the clear: a layer starts empty and the initial transparent clear is
+     * what makes {@link #blitLayer} safe to run full-screen. The backdrop capture is the one that does
+     * not, because it seeds its target with a framebuffer blit of the scene BEFORE drawing the UI over
+     * it -- and the clear silently threw that blit away. In game that meant the world never reached the
+     * backdrop at all, so a pane of glass over terrain was compositing against transparent black; the
+     * capture then looked plausible everywhere the UI happened to be opaque, which is everywhere anyone
+     * had been testing it.</p>
+     */
+    public CgFrameBuffer beginLayerFbo(CgFrameBuffer fbo, boolean clear) {
         flush();
         CgFrameData fd = CgRenderPipeline.getInstance().getFrameData();
         layerStack.push(new LayerFrame(fbo, CgGlState.save(CgGlSlot.FBO, CgGlSlot.VIEWPORT),
@@ -1282,7 +1316,7 @@ public final class CgUiPaintContext {
 
         fbo.bind();
         CgGL.glViewport(0, 0, fbo.getWidth(), fbo.getHeight());
-        fbo.clearColor(0f, 0f, 0f, 0f);
+        if (clear) fbo.clearColor(0f, 0f, 0f, 0f);
 
         fd.projMatrix.identity().ortho(0, fbo.getWidth(), fbo.getHeight(), 0, -1, 1);
         fd.viewportW = fbo.getWidth();
@@ -1363,6 +1397,32 @@ public final class CgUiPaintContext {
                   .color(getColor()).submit();
             flush();
         });
+    }
+
+    // ── Backdrop capture, for glass ─────────────────────────────────────────
+
+    /**
+     * A rect's backdrop, cropped to it: the sharp crop and the blurred one.
+     *
+     * <p>Both are the size of the element's own rect, so a consumer samples them at plain {@code uv}.</p>
+     */
+    public record Backdrop(CgTexture2D sharp, CgTexture2D blurred,
+                           float u0, float v0, float u1, float v1) {}
+
+    /**
+     * Captures what is behind {@code (x, y, w, h)} and blurs it — the primitive under {@code glass()}.
+     *
+     * <p>The work lives in {@link CgUiBackdrop}; this is the seam a drawable calls, kept here because
+     * everything else a drawable needs is on the paint context too.</p>
+     *
+     * @param blurRadiusPx how far the blur reaches, in surface pixels. Zero hands back the capture
+     *                     itself, so {@code blur 0} costs nothing beyond the grab every consumer shares
+     * @return the two textures, or {@code null} when there is nothing to capture — a caller must fall
+     *         back to a solid colour rather than draw nothing
+     */
+    @Nullable
+    public Backdrop backdropFor(float x, float y, float width, float height, float blurRadiusPx) {
+        return backdrop.forRect(x, y, width, height, blurRadiusPx);
     }
 
     public void blitLayer(CgFrameBuffer fbo, float opacity) {
@@ -1460,6 +1520,9 @@ public final class CgUiPaintContext {
         // with fresh FBOs is what the next getInstance() builds anyway.
         msaaFbo.delete();
         msaaResolveFbo.delete();
+
+        // createOwned, so no registry sweeps these — the same reason the layer pool is freed here.
+        backdrop.delete();
 
         renderer.delete();
         textRenderer.delete();

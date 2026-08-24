@@ -679,6 +679,15 @@ theme {
      * active, each a step lighter — which is how a Windows taskbar reads and why it never needs an
      * accent to say which button is engaged. A minimised window's entry is dimmed to the disabled
      * foreground: present and quiet, because hiding it is the failure the strip exists to prevent. */
+    /* GLASS. The taskbar is the one permanent fixture on the desktop and the only thing that sits over
+     * a live 3D world, so it is the one surface where sampling the backdrop earns its per-frame cost.
+     *
+     * --taskbar-glass-tint is deliberately translucent: it is laid OVER the blurred backdrop, and an
+     * opaque tint would throw away the thing that was just captured. --glass-fallback is Acrylic's
+     * FallbackColor by another name -- what the strip paints when there is no backdrop to sample, and
+     * therefore what it has always looked like. */
+    --taskbar-glass-tint: var(--surface-glass);
+    --glass-fallback: var(--surface-overlay);
     --taskbar-bg: var(--surface-overlay);
     --taskbar-border: var(--border-base);
     --taskbar-entry-fg: var(--fg-secondary);

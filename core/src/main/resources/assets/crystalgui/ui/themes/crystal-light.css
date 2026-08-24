@@ -33,6 +33,9 @@ theme {
      * to separate from neutral surfaces without reading as an error. */
     --surface-borrowed: #FBF3E8;
     --surface-overlay: #FFFFFF;
+    /* Glass tint. The light theme's glass is a white veil rather than a grey one -- same alpha, so it lets the
+     * same amount of backdrop through. */
+    --surface-glass: #66FFFFFF;
     --border-base: #C4C4C8;
     --border-strong: #9A9AA0;
     --border-field: #C0C0C6;
