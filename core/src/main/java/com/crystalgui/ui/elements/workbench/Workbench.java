@@ -444,6 +444,16 @@ public class Workbench extends UIElement {
     private void announceProjectSourcesMoved() {
         if (!projectSourcesMoved) return;
         projectSourcesMoved = false;
+        // AND THE TREE, whose rows resolve against the same thing an editor does. A `.java` row shows
+        // what the file DECLARES, read through `ProjectSources` -- which answers null for a file nobody
+        // has read yet and schedules the read. Without this the row keeps the file-type icon until
+        // something else happens to rebind it, so a package's icons appear one at a time as you click
+        // around, or never. @see ProjectFileTree#requestRefresh
+        fileTree.requestRefresh();
+        // AND EVERY TAB, for the same reason and one more: a tab's icon is pulled when the tab is BUILT
+        // and never re-read, which was correct while it was a function of the file NAME. It is now a
+        // function of what the file declares, and that answer arrives later than the tab does.
+        syncTabDecorations();
         for (CgPath path : openPaths()) {
             TextEditor editor = editorFor(path);
             if (editor == null || editor.languageServices() == null) continue;
@@ -1475,7 +1485,9 @@ public class Workbench extends UIElement {
      * {@code onDone}, which is documented to run during {@code drain()} on the UI thread.</p>
      */
     private void readViewer(Resource resource, TextEditor editor) {
-        ResourceContentProvider provider = ResourceRegistry.providerFor(resource);
+        // CONTENT, not description: a project file's bytes come from the workspace client and from
+        // nowhere else, whatever has registered to describe the scheme. @see ResourceRegistry
+        ResourceContentProvider provider = ResourceRegistry.contentProviderFor(resource);
         if (provider == null) return;
         String key = resource.toString();
         jobs()
@@ -2315,9 +2327,10 @@ public class Workbench extends UIElement {
     /**
      * Which icon a tab shows — the same one the file's row in the tree shows, from the same theme.
      *
-     * <p>Static, because it depends on nothing but the panel: the icon is a function of the file name,
-     * which is already in the ref. That is the whole reason it can be pulled at build time and never
-     * refreshed, unlike the dirty marker beside it.</p>
+     * <p>Static, because it depends on nothing but the panel. It is no longer pulled once and kept,
+     * though: the icon element beside this one asks what the file DECLARES, and that answer is read
+     * through {@code ProjectSources}, which does not have it until the file has been read. So
+     * {@link #announceProjectSourcesMoved} re-reads every tab's presentation when one lands.</p>
      */
     @Nullable
     private static String tabIconFor(DockPanelRef panel) {
@@ -2342,17 +2355,43 @@ public class Workbench extends UIElement {
      * about what an interface looks like. It also carries the {@code static} and {@code final} marks,
      * which an icon NAME cannot — they are layers stacked over the glyph rather than a picture.</p>
      *
-     * <p>Null for a source-backed tab, deliberately: {@code ArrayList.java} is a FILE and takes the same
-     * icon one in the project would.</p>
+     * <p>Null when nothing can say what the tab holds — see {@link #symbolFor}, which is where both
+     * kinds of tab now ask the same question.</p>
      */
     @Nullable
     private static UIElement viewerIconElement(DockPanelRef panel) {
-        Resource viewed = viewedResource(panel);
-        if (viewed == null) return null;
-        ResourceContentProvider provider = ResourceRegistry.providerFor(viewed);
-        SymbolInfo symbol = provider == null ? null : provider.symbolOf(viewed);
-        if (symbol == null || symbol.kind() == null) return null;
+        SymbolInfo symbol = symbolFor(panel);
+        if (symbol == null) return null;
         return new SymbolIcon().show(symbol.kind(), symbol.modifiers());
+    }
+
+    /**
+     * What the thing behind this tab IS, or null when nothing knows.
+     *
+     * <p><b>Both kinds of tab, through one seam.</b> This used to ask only about a VIEWER panel, so a
+     * decompiled {@code FlexDirection.class} drew an enum glyph and hovered "Final enum" while the
+     * author's own {@code Main.java} in the next tab drew a file icon — the same question, asked of a
+     * resource nobody had registered a provider for. {@code ProjectSourceSymbols} answers
+     * {@code project://} now, and this is where the tab stopped asking.</p>
+     *
+     * <p>Null stays a supported answer at every step: no resource, no provider, no symbol, or a symbol
+     * with no kind all fall through to the file-type icon the tab drew before.</p>
+     */
+    @Nullable
+    private static SymbolInfo symbolFor(DockPanelRef panel) {
+        Resource resource = viewedResource(panel);
+        if (resource == null) {
+            String path = panel.state(PATH_STATE, "");
+            if (path.isEmpty()) return null;
+            try {
+                resource = Resource.of(CgPath.parse(path));
+            } catch (RuntimeException notAPath) {
+                return null;
+            }
+        }
+        ResourceContentProvider provider = ResourceRegistry.providerFor(resource);
+        SymbolInfo symbol = provider == null ? null : provider.symbolOf(resource);
+        return symbol == null || symbol.kind() == null ? null : symbol;
     }
 
     /**
@@ -2384,15 +2423,13 @@ public class Workbench extends UIElement {
      * words. {@link SymbolIcon#describe} is the single source of both, so the picture and the sentence
      * cannot drift apart.</p>
      *
-     * <p>Null for a SOURCE-backed tab, matching {@link #viewerIconElement}: that tab carries a Java
-     * <em>file</em> icon, whose meaning the {@code .java} in the label has already given.</p>
+     * <p>And it is no longer only a library tab that has it: a project {@code .java} row and its tab
+     * both show what the file declares, so the sentence follows them there. A tab whose provider cannot
+     * say keeps the file icon and gets no icon tooltip, which is the honest pair.</p>
      */
     @Nullable
     private static String tabIconTooltipFor(DockPanelRef panel) {
-        Resource viewed = viewedResource(panel);
-        if (viewed == null) return null;
-        ResourceContentProvider provider = ResourceRegistry.providerFor(viewed);
-        SymbolInfo symbol = provider == null ? null : provider.symbolOf(viewed);
+        SymbolInfo symbol = symbolFor(panel);
         return symbol == null ? null : SymbolIcon.describe(symbol.kind(), symbol.modifiers());
     }
 

@@ -65,6 +65,22 @@ public final class TestWorkspace implements ProjectSources {
         return "proj:" + root + "/" + qualifiedName.replace('.', '/') + extension;
     }
 
+    /**
+     * The inverse of {@link #pathOf} — what a file at this path must declare.
+     *
+     * <p>Computed by asking {@code pathOf} rather than by parsing the path back, so the two cannot
+     * disagree about the layout convention. A workspace holds tens of files in a test; a real index
+     * answers this from its crawl.</p>
+     */
+    @Override
+    public String nameOf(String workspacePath) {
+        if (workspacePath == null) return null;
+        for (String name : files.keySet()) {
+            if (workspacePath.equals(pathOf(name))) return name;
+        }
+        return null;
+    }
+
     @Override
     public boolean declaresPackage(String packageName) {
         if (packageName == null || packageName.isEmpty()) return false;

@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements;
 
+import com.crystalgui.fs.SourceRoots;
 import com.crystalgui.text.lang.SymbolKind;
 import com.crystalgui.text.lang.SymbolModifier;
 import com.crystalgui.ui.UIElement;
@@ -106,6 +107,35 @@ public class SymbolIcon extends UIElement {
         }
     }
 
+    /**
+     * The same answer for a directory's ROLE — "Module", "Sources root".
+     *
+     * <h3>Here, beside the symbol version, because it is the same question</h3>
+     *
+     * <p>A tree row's icon says what the node IS, and a tooltip over an icon says what the icon means.
+     * That is one answer given twice whichever kind of node it is, and this class exists because there
+     * were two of everything: the ordinary failure is that the glyph gains a case the sentence has never
+     * heard of and reads as nothing over a perfectly good picture.</p>
+     *
+     * <p><b>Null for a package and a plain folder, deliberately.</b> "Module" and "Sources root" are
+     * structural facts the row shows nowhere else — a directory called {@code main} does not look like a
+     * module and {@code java} does not look like where packages start counting from. A package's name IS
+     * its information, so a tooltip reading "Package" over {@code com} restates the row and costs a
+     * hover, which is the same reason {@link #describe(SymbolKind, Set)} answers null rather than
+     * "Unknown".</p>
+     */
+    @Nullable
+    public static String describe(@Nullable SourceRoots.Role role) {
+        if (role == null) return null;
+        switch (role) {
+            case MODULE:      return "Module";
+            // IntelliJ's own wording, plural: a source root is one of possibly several roots OF sources,
+            // not the root of one source.
+            case SOURCE_ROOT: return "Sources root";
+            default:          return null;
+        }
+    }
+
     public static final String STATIC_MARK_CLASS = "__completion-mark-static__";
     public static final String FINAL_MARK_CLASS = "__completion-mark-final__";
 
@@ -155,6 +185,24 @@ public class SymbolIcon extends UIElement {
                 marks.contains(SymbolModifier.ABSTRACT) ? MODIFIER_CLASS_PREFIX + "abstract" : null);
         staticMark.setDisplayed(marks.contains(SymbolModifier.STATIC));
         finalMark.setDisplayed(marks.contains(SymbolModifier.FINAL));
+        return this;
+    }
+
+    /**
+     * Draws NOTHING of its own — for a consumer whose rows are not all declarations.
+     *
+     * <p>Distinct from {@code show(null, …)}, which draws the <b>unknown</b> glyph: that is the right
+     * answer for a completion row, where every row IS a declaration and one whose kind could not be
+     * worked out still needs a picture. A file tree is not like that. Most of its rows are folders and
+     * plain files, and they carry their own icon already — so the kind class has to come off entirely,
+     * or the unknown glyph paints as a BACKGROUND under the file-type icon\'s overlay and every ordinary
+     * row grows a second picture behind the first.</p>
+     */
+    public SymbolIcon showNothing() {
+        swapPrefixed(this, KIND_CLASS_PREFIX, null);
+        swapPrefixed(this, MODIFIER_CLASS_PREFIX, null);
+        staticMark.setDisplayed(false);
+        finalMark.setDisplayed(false);
         return this;
     }
 

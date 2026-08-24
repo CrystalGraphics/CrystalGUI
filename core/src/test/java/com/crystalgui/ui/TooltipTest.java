@@ -1,5 +1,8 @@
 package com.crystalgui.ui;
 
+import dev.vfyjxf.taffy.style.TaffyDisplay;
+import dev.vfyjxf.taffy.style.LengthPercentageAuto;
+import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.style.StyleGroup;
@@ -579,5 +582,96 @@ public class TooltipTest extends UiTestBase {
         movePointerTo(centreOf(onlyAnchor()));
         frame();
         assertTrue("a zero delay made the tooltip wait anyway", tip.isShown());
+    }
+
+    /**
+     * <b>A tooltip points at the REGION that is speaking, not at the whole anchor.</b>
+     *
+     * <p>The text was right and the box was not. A region exists because a sub-area means something of
+     * its own, so anchoring to the parent puts the answer next to something that is not the question: a
+     * dock tab is small enough to hide it, and a full-width tree row put "Final class" at the far left of
+     * the panel, a hundred pixels from the icon it described.</p>
+     */
+    @Test
+    public void aTooltipIsPlacedAgainstTheRegionThatSpeaks() {
+        UIElement[] parts = anchorWithPart();
+        UIElement anchor = parts[0], part = parts[1], filler = parts[2];
+
+        Tooltip tip = tooltipOn(anchor).setText("the whole thing");
+        tip.addRegion(part, "the part");
+        settle();
+        tip.showFor(anchor);
+
+        // THE VERTICAL AXIS, because this fixture stacks its two parts and they share an X -- the part is
+        // the top half of the anchor, so "below the part" and "below the anchor" are twenty pixels apart
+        // and nothing else about the placement differs.
+        movePointerTo(centreOf(filler));
+        frame();
+        float againstAnchor = placedTop(tip);
+
+        movePointerTo(centreOf(part));
+        frame();
+        float againstPart = placedTop(tip);
+
+        assertEquals("the region is not speaking, so this asserts nothing", "the part", tip.getText());
+        assertNotEquals("the box stayed under the whole anchor while a region was speaking",
+                againstAnchor, againstPart, 0.5f);
+        assertTrue("the tooltip should sit ABOVE where it sat for the anchor, since the part it "
+                        + "describes is the anchor's top half: part=" + againstPart
+                        + " anchor=" + againstAnchor,
+                againstPart < againstAnchor);
+    }
+
+    /**
+     * Where placement actually put it — the {@code top} inset {@code AnchoredPlacement} writes.
+     *
+     * <p>Not {@code getWindowX()}: a tooltip is TOP-LAYER promoted, so its layout parent is the root and
+     * the chain reads zero until it has been through a paint. The inset is what placement computes and is
+     * readable the frame it is written.</p>
+     */
+    private static float placedTop(Tooltip tip) {
+        LengthPercentageAuto top = tip.getStyle().getComputed(LayoutProperties.TOP);
+        return top == null ? Float.NaN : top.getValue();
+    }
+
+    /**
+     * <b>A tooltip with nothing to say does not appear.</b>
+     *
+     * <p>An empty one draws a bare rounded rectangle over whatever is underneath \u2014 an answer-shaped
+     * thing with no answer in it, which reads as a rendering fault rather than as silence. The dock
+     * recorded this as a reason NOT to wire a region without a base text; it is really a reason to make
+     * emptiness mean "say nothing".</p>
+     *
+     * <p>Which is what lets a REGION be the only thing a tooltip says: the project tree's icon knows what
+     * a file declares and its row has nothing to add, where a dock tab genuinely does.</p>
+     */
+    @Test
+    public void aTooltipWithNothingToSayStaysHidden() {
+        UIElement[] parts = anchorWithPart();
+        UIElement anchor = parts[0], part = parts[1], filler = parts[2];
+
+        Tooltip tip = tooltipOn(anchor).setText("");
+        tip.addRegion(part, "the part");
+        settle();
+        tip.showFor(anchor);
+
+        movePointerTo(centreOf(filler));
+        frame();
+        assertTrue("a tooltip with no text drew a bare box", isHidden(tip));
+
+        movePointerTo(centreOf(part));
+        frame();
+        assertFalse("the region has something to say and was not shown", isHidden(tip));
+        assertEquals("the part", tip.getText());
+
+        // AND BACK, because the pointer crosses between them without ever leaving the anchor.
+        movePointerTo(centreOf(filler));
+        frame();
+        assertTrue("it kept speaking after the region stopped", isHidden(tip));
+    }
+
+    /** Whether the box is laid out at all \u2014 {@code display: none} is how a tooltip hides. */
+    private static boolean isHidden(Tooltip tip) {
+        return tip.getStyle().getComputed(LayoutProperties.DISPLAY) == TaffyDisplay.NONE;
     }
 }

@@ -13,6 +13,7 @@ import com.crystalgui.ui.ClipboardActions;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.UiDataKeys;
+import com.crystalgui.ui.elements.SymbolIcon;
 import com.crystalgui.ui.elements.TextField;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.elements.chrome.ContextMenu;
@@ -549,7 +550,7 @@ public class ProjectFileTree extends UIElement implements UndoScope {
      */
     /** Package-private, so the parts beside this class can write into a row without reaching for
      * children by index. @see ExplorerEditing */
-    record RowParts(UIElement twisty, UIElement icon, UIText label, UIText badge,
+    record RowParts(UIElement twisty, SymbolIcon icon, UIText label, UIText badge,
                     TextField editor) {
     }
 
@@ -707,7 +708,15 @@ public class ProjectFileTree extends UIElement implements UndoScope {
         return rowItems.get(row);
     }
 
-    /** Defers a refresh to the ticker — never immediate, see {@link #activate}. */
+    /**
+     * Defers a refresh to the ticker — never immediate, see {@link #activate}.
+     *
+     * <p>Also how the workbench says a project READ has landed. A row's icon is what the file declares,
+     * and that is read through {@code ProjectSources} — which answers null for a file nobody has read yet
+     * and schedules the read, because this is asked while painting. So the first paint of a package draws
+     * file-type icons and the real answers arrive afterwards, one at a time, with nothing in the tree
+     * watching for them.</p>
+     */
     void requestRefresh() {
         pendingRefresh = true;
     }

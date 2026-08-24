@@ -43,7 +43,16 @@ theme {
     --hover-bg: #2E3033;
     --pressed-bg: #35373B;
     --selection-bg: #04395E;
-    --selection-inactive-bg: #2E3033;
+    /* A step ABOVE the surfaces rather than between them. At #2E3033 this was three units from
+     * --surface-overlay and five from --surface-raised, which is not a difference a selection can carry:
+     * on a panel it read as a faint smudge rather than as a highlight, and against a raised surface it
+     * nearly vanished.
+     *
+     * THE GREY THIS THEME ALREADY HIGHLIGHTS WITH, rather than a fourth one invented for this: it is
+     * what the activity bar draws a hovered and a checked item in. Not DERIVED from those, though, and
+     * crystal-light is why -- there the three are three different values, so they are independent tokens
+     * that happen to agree here. Tying them together would make a light theme unable to say so. */
+    --selection-inactive-bg: #46484B;
     --focus-ring: #0060DF;
     --error: #F14C4C;
     --warning: #CCA700;
