@@ -256,9 +256,18 @@ public class DesktopMaximiseTest extends UiTestBase {
     }
 
     /**
-     * <b>Dragging a maximised window restores it under the pointer.</b> Windows' restore-drag: the
-     * cursor keeps its fraction across the caption, so a window grabbed near its right-hand edge does
-     * not leap out from under the hand.
+     * <b>Dragging a maximised window restores it under the pointer — anchored, not proportional.</b>
+     *
+     * <p>The cursor keeps its DISTANCE FROM THE NEARER CAPTION EDGE, because that is how the caption's
+     * own content is anchored: an adopted menu bar runs from the left, the window controls sit at the
+     * right, and neither rescales when the window shrinks. A fraction of the caption preserves nothing
+     * you can see — grabbing a menu item a fifth of the way along a wide caption and landing a fifth of
+     * the way along a narrow one puts the cursor over a different item entirely.</p>
+     *
+     * <p>Where the grab is further from either edge than half the restored window is wide, there is
+     * nothing to anchor to — that part of a maximised caption is empty — and the window is centred under
+     * the cursor instead. Half the width is each edge's reach precisely because it makes the three cases
+     * one continuous function.</p>
      */
     @Test
     public void draggingAMaximisedCaptionRestoresUnderThePointer() {
@@ -267,9 +276,47 @@ public class DesktopMaximiseTest extends UiTestBase {
         frame.maximize();
         settle();
 
-        // Grab three quarters of the way along the maximised caption.
+        UIElement bar = frame.titleBar();
+        float grabX = bar.getRuntimeCache().getX() + 20f;
+        assertTrue("the fixture must grab within an edge's reach, or it tests the middle case",
+                20f < 160f / 2f);
+
+        assertEquals("the grabbed point left the cursor", 20f, tearLooseAt(frame, grabX), 6f);
+        assertFalse("the movement restored it", frame.isMaximized());
+        assertEquals("and it is the size it was", 160f, frame.getRuntimeCache().getWidth(), 0.51f);
+    }
+
+    /**
+     * <b>...and a grab in the empty middle centres the window under the cursor.</b>
+     *
+     * <p>The counter-assertion the one above needs: preserving the left offset for every grab is the
+     * obvious fix for the menu-bar case and it drags the window out from under a hand that grabbed
+     * anywhere past the restored width, leaving the whole window hanging off one side of the pointer.</p>
+     */
+    @Test
+    public void aGrabInTheEmptyMiddleCentresTheWindow() {
+        build();
+        WindowFrame frame = open("One");
+        frame.maximize();
+        settle();
+
         UIElement bar = frame.titleBar();
         float grabX = bar.getRuntimeCache().getX() + bar.getRuntimeCache().getWidth() * 0.75f;
+
+        assertEquals("a grab too far from either edge to anchor did not centre the window",
+                160f / 2f, tearLooseAt(frame, grabX), 6f);
+    }
+
+    /**
+     * Presses a maximised caption at {@code grabX}, moves 12 surface px, and answers how far the pointer
+     * then sits from the restored window's left edge.
+     *
+     * <p>The press and the movement are separate on purpose: a maximised window restores on the first
+     * MOVEMENT and never on the press, or the first press of a double-click would restore and the second
+     * re-maximise, which makes double-clicking a maximised caption appear to do nothing.</p>
+     */
+    private float tearLooseAt(WindowFrame frame, float grabX) {
+        UIElement bar = frame.titleBar();
         float grabY = bar.getRuntimeCache().getY() + bar.getRuntimeCache().getHeight() / 2f;
         clock += UIInputHandler.multiClickInterval + 50L;
         input.consumeMouseEvent(new CgSystemInput.Mouse.Event(
@@ -281,21 +328,25 @@ public class DesktopMaximiseTest extends UiTestBase {
         assertTrue("the PRESS alone must not restore — that is what breaks double-click",
                 frame.isMaximized());
 
-        // Now move. This is the gesture that tears it loose.
         input.consumeMouseEvent(new CgSystemInput.Mouse.Event(
                 Math.round(grabX * 2f) + 12, Math.round(grabY * 2f), 0, 0, -1, false, 0f, clock + 10));
         input.beginFrame();
         input.endFrame();
         settle();
 
-        assertFalse("the movement restored it", frame.isMaximized());
-        float restoredWidth = frame.getRuntimeCache().getWidth();
-        assertEquals("and it is the size it was", 160f, restoredWidth, 0.51f);
+        // A SECOND FRAME, because the anchor is re-derived from the width the window HAS and that lags
+        // the width it was just given by one layout pass. On the tear frame the runtime cache still holds
+        // the maximised width, so the first placement is computed against it -- which is not a defect but
+        // the feature: with the shrink animating, re-anchoring every frame is what makes the window close
+        // in AROUND the cursor instead of collapsing toward one edge. It simply means the settled answer
+        // is the second one, and a test that reads the first is reading the start of the shrink.
+        input.consumeMouseEvent(new CgSystemInput.Mouse.Event(
+                Math.round(grabX * 2f) + 24, Math.round(grabY * 2f), 0, 0, -1, false, 0f, clock + 20));
+        input.beginFrame();
+        input.endFrame();
+        settle();
 
-        // The pointer has moved 12 surface px (6 logical) since the grab, and the window went with it.
-        float pointerNow = grabX + 6f;
-        float pointerFraction = (pointerNow - frame.left()) / restoredWidth;
-        assertEquals("the pointer kept its place across the caption", 0.75f, pointerFraction, 0.10f);
+        return (grabX + 12f) - frame.left();
     }
 
     /** Restoring only happens for a window that was maximised — a press on an ordinary caption must

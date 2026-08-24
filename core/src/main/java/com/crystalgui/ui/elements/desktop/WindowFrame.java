@@ -1681,6 +1681,38 @@ public class WindowFrame extends UIElement implements Disposable {
         applyRestoredRect();
     }
 
+    /**
+     * Un-maximises with the SIZE animating and the POSITION left to the caller — a drag tearing a
+     * maximised window loose.
+     *
+     * <p>The window shrinks toward the cursor over {@code SIZE_NANOS} while the drag goes on placing it
+     * every frame, which is what tearing one loose looks like everywhere else. An ordinary
+     * {@link #restore()} cannot be used: it animates the position too and blocks {@link #applyPosition}
+     * while it runs, so the window travelled to its stored rect and ignored the pointer.</p>
+     *
+     * <p>The settle writes the resting SIZE and nothing else. Writing the stored position there would
+     * yank the window out from under the hand at the end of the shrink, which is the same bug arriving
+     * one animation later.</p>
+     */
+    void restoreShrinkingUnderDrag() {
+        if (!maximized) return;
+        maximized = false;
+        removeClass(MAXIMIZED_CLASS);
+        maximizeTooltip.setText(MAXIMIZE_TOOLTIP);
+
+        var self = getRuntimeCache();
+        if (!animator.playShrink(self.getWidth(), self.getHeight(), restoreWidth, restoreHeight,
+                this::applyRestoredSize)) {
+            applyRestoredSize();
+        }
+    }
+
+    /** The resting SIZE, without touching the position. @see #restoreShrinkingUnderDrag */
+    private void applyRestoredSize() {
+        StyleGroup.inlinePipeline(getStyle().getLayoutGroup(),
+                l -> l.width(restoreWidth).height(restoreHeight));
+    }
+
     /** Where a restored window rests. @see #restore */
     private void applyRestoredRect() {
         StyleGroup.inlinePipeline(getStyle().getLayoutGroup(),
@@ -2112,6 +2144,21 @@ public class WindowFrame extends UIElement implements Disposable {
     }
 
     /** Records the intent, then writes it clamped. */
+    /** Whether a move drag is live — see the top clamp in {@link #applyPosition}. */
+    private boolean moving;
+
+    /** @see #moving */
+    void setMoving(boolean moving) {
+        if (this.moving == moving) return;
+        this.moving = moving;
+        // WITHDRAWING THE HEADROOM HAS TO BRING THE WINDOW BACK DOWN, and nothing else will: reclamp()
+        // deliberately declines while a drag is live, so a window released with its caption above the
+        // work area would simply stay there, unreachable -- the exact thing the resting clamp exists to
+        // prevent. A snap commits before this runs and a maximised window is exempt, so neither is
+        // disturbed.
+        if (!moving && placed) applyPosition(wantedLeft, wantedTop);
+    }
+
     private void applyPosition(float left, float top) {
         wantedLeft = left;
         wantedTop = top;
@@ -2135,7 +2182,21 @@ public class WindowFrame extends UIElement implements Disposable {
         // would strand a window here on the one frame that matters, its first.
         if (areaWidth > 0f && areaHeight > 0f && frameWidth > 0f && caption > 0f) {
             clampedLeft = clamp(left, caption - frameWidth, areaWidth - caption);
-            clampedTop = clamp(top, 0f, areaHeight - caption);
+            // THE CAPTION MAY RISE ABOVE THE WORK AREA WHILE BEING DRAGGED, and only while.
+            //
+            // The resting rule is that a title bar stays reachable, so a window cannot park above the
+            // top. During a MOVE that rule makes the top snap zone unreachable: the pointer rides at a
+            // fixed offset INSIDE the caption, so a window clamped at top 0 leaves the pointer that same
+            // offset below the border -- and a zone read from the pointer can then only be entered by
+            // someone who happened to grab the caption's topmost pixels. It is why the band used to be a
+            // whole caption deep, which made the top the one edge triggered by the WINDOW rather than by
+            // the cursor.
+            //
+            // One caption of headroom is exactly enough for any grab to bring the cursor to the border,
+            // and no more. Windows does the same -- drag a window up and its title bar goes off the top
+            // while the cursor reaches the edge. reclamp() on drag end brings back anything that did not
+            // snap. @see WindowMove
+            clampedTop = clamp(top, moving ? -caption : 0f, areaHeight - caption);
         }
 
         placedLeft = clampedLeft;

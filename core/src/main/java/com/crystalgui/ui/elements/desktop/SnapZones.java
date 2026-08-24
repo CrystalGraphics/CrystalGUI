@@ -34,20 +34,22 @@ import javax.annotation.Nullable;
  * would otherwise have made the top band unreachable from either end — and it is wrong the moment a
  * quarter exists, which is what dragging into a corner obviously means.</p>
  *
- * <h3>The top band is the CAPTION's height, and it is derived rather than chosen</h3>
+ * <h3>Every edge is read from the CURSOR, the top included</h3>
  *
- * <p>The top cannot use {@link #EDGE}, and the reason is a real constraint rather than a preference: the
- * pointer sits at a fixed offset <em>inside the caption</em> for the whole of a drag, and the window is
- * clamped so the caption's top never goes above the work area. Grab a title bar ten pixels down and the
- * pointer can never reach {@code y <= 2} however hard it is pushed — top-edge maximise would simply be
- * unreachable for every grab but the shallowest.</p>
+ * <p>The top used to take the frame's CAPTION HEIGHT as its band, and the argument was a real constraint
+ * rather than a preference: the pointer sits at a fixed offset <em>inside the caption</em> for the whole
+ * of a drag, and a window clamped so its caption never leaves the work area holds that pointer a whole
+ * caption below the border. Grab a title bar ten pixels down and it could never reach {@code y <= 2}.</p>
  *
- * <p>Measuring against the caption's own height disposes of that, and it is not a fudge: because the
- * pointer is inside the caption by construction, <b>"the pointer is within one caption of the top" and
- * "the window's top edge has reached the top" are the same statement</b>. The two rules agree because
- * the caption is what bounds them together — which is also why the horizontal case cannot be done this
- * way. A 600px-wide window's left edge arrives at the boundary long before the hand does, so there the
- * pointer is the only honest question.</p>
+ * <p>What that bought was the one edge triggered by the WINDOW rather than by the cursor — it fires the
+ * moment the window's upper lip touches the border, while every other edge waits for the hand. The
+ * inconsistency is what makes it feel wrong rather than merely eager.</p>
+ *
+ * <p>So the constraint is answered where it arises instead: {@code WindowFrame} lets the caption rise one
+ * caption-height ABOVE the work area <b>while a move is live</b>, and withdraws the headroom when the
+ * drag ends. Any grab can then bring the cursor to the border, and this class needs no special case for
+ * the top at all. Windows does the same — drag a window up and its title bar goes off the top while the
+ * cursor reaches the edge.
  *
  * <h3>Pure arithmetic, so it is testable without a desktop</h3>
  *
@@ -167,13 +169,10 @@ public final class SnapZones {
      * <p>A non-positive work area answers null rather than guessing. Every rule that reads the work area
      * is guarded that way, because the layer measures 0x0 before its first layout and a zone chosen
      * against nothing would snap a window to a rect of nothing.</p>
-     *
-     * @param topBand how far down the top edge still counts as the top — the CAPTION's height; see the
-     *                class note for why this one is derived and the sides are not
      */
     @Nullable
     public static Zone forPoint(float pointerX, float pointerY,
-                                float areaWidth, float areaHeight, float topBand) {
+                                float areaWidth, float areaHeight) {
         if (areaWidth <= 0f || areaHeight <= 0f) return null;
         // BOUNDED VERTICALLY AND NOT HORIZONTALLY, which is deliberate rather than an oversight.
         //
@@ -194,7 +193,15 @@ public final class SnapZones {
             return atLeft ? Zone.LEFT : Zone.RIGHT;
         }
 
-        if (pointerY <= topBand) return Zone.MAXIMIZE;
+        // THE SAME THIN EDGE AS THE SIDES, because a snap zone is read from the POINTER.
+        //
+        // This used to take the frame's CAPTION HEIGHT as its band, which quietly turned the top zone
+        // into the one edge that is read from the WINDOW instead: a caption is dragged from somewhere
+        // inside it, so the pointer sits about a caption's height below the window's top edge, and a
+        // band that tall fires exactly when the window's upper lip reaches the border. Every other edge
+        // waits for the cursor itself, and the inconsistency is what makes it feel wrong rather than
+        // merely eager.
+        if (pointerY <= EDGE) return Zone.MAXIMIZE;
         return null;
     }
 
