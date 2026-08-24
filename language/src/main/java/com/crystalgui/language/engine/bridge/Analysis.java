@@ -79,6 +79,32 @@ public interface Analysis extends AutoCloseable {
     SymbolInfo resolveAt(int offset);
 
     /**
+     * Whether the construct at {@code offset} was <b>invented by error recovery</b> rather than written.
+     *
+     * <h3>Why an answer needs this beside it</h3>
+     *
+     * <p>A parser that recovers does not fail — it produces a tree for text nobody wrote, and everything
+     * downstream then answers confidently about that tree. Measured on
+     * {@code sdasdsadassadasdasdaasdfg f gdfdsadas dsa⏎System.out.println(…)}: the recovery reads
+     * {@code dsa System} as a local variable declaration, so hovering {@code System} on the following line
+     * reported a <b>local variable of type {@code dsa}</b>, quoting a declaration that ran across the line
+     * break. Nothing failed; the popup opened, which is what makes it read as the hover being wrong rather
+     * than as the parse being a different reading.</p>
+     *
+     * <p>Per <b>construct</b>, not per document. "Does this file parse" is false for nearly every file
+     * being edited, so a document-wide answer would silence hover for the whole of a file whenever
+     * anything anywhere was unfinished — the same trap {@code SyntaxTokenizer.recoveredAround} records for
+     * colouring, and the reason this is scoped to the enclosing statement. A valid statement in a method
+     * that contains a broken one still answers.</p>
+     *
+     * <p>Defaults to {@code false}: an engine that cannot tell is saying "my answers are all written
+     * down", which costs a refinement rather than correctness.</p>
+     */
+    default boolean recoveredAt(int offset) {
+        return false;
+    }
+
+    /**
      * What a qualified name refers to, or null — the engine side of {@code Resolver.describe}.
      *
      * <p>Default null so an engine that cannot answer stays compiling and answers honestly. The name is

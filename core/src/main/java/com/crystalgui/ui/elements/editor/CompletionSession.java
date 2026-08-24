@@ -134,6 +134,8 @@ public final class CompletionSession {
         // the very first filter ran against an EMPTY prefix and showed the whole list unranked. Visible
         // only as "the popup ignores what I already typed", and only for the first list of each session.
         session.lastKnownCaret = caret;
+        if (EditorSuggest.TRACE) EditorSuggest.trace("  session caret=" + caret + " wordStart=" + start
+                + " prefix=[" + session.prefixAt(caret) + "]");
         session.request(caret, trigger, triggerCharacter);
         return session;
     }
@@ -158,6 +160,7 @@ public final class CompletionSession {
     private void request(int caret, CompletionProvider.TriggerKind trigger, @Nullable String character) {
         final int serial = ++requestSerial;
         String prefix = prefixAt(caret);
+        if (EditorSuggest.TRACE) EditorSuggest.trace("  request #" + serial + " " + trigger + " prefix=[" + prefix + "]");
         queriedPrefix = prefix;
         CompletionProvider.Request ask = new CompletionProvider.Request(caret, prefix, trigger, character);
         provider.complete(ask, answer -> accept(serial, answer));
@@ -165,8 +168,14 @@ public final class CompletionSession {
 
     /** Late or superseded answers are dropped — see the class note on the callback contract. */
     private void accept(int serial, @Nullable Versioned<CompletionList> answer) {
-        if (closed || serial != requestSerial || answer == null) return;
+        if (closed || serial != requestSerial || answer == null) {
+            if (EditorSuggest.TRACE) EditorSuggest.trace("  answer #" + serial + " DROPPED (closed=" + closed
+                    + " current=#" + requestSerial + " null=" + (answer == null) + ")");
+            return;
+        }
         CompletionList list = answer.orElse(CompletionList.EMPTY);
+        if (EditorSuggest.TRACE) EditorSuggest.trace("  answer #" + serial + " items=" + list.items().size()
+                + " incomplete=" + list.incomplete());
         unfiltered = list.items();
         incomplete = list.incomplete();
         answered = true;
@@ -206,6 +215,7 @@ public final class CompletionSession {
         // OUT OF THE REPLACEMENT RANGE, so this is no longer the word the session was about. Before the
         // start is unambiguous; past the end cannot happen without the text growing, which arrives here too.
         if (caret < wordStart) {
+            if (EditorSuggest.TRACE) EditorSuggest.trace("  caretMoved: before wordStart -> CLOSING");
             close();
             return;
         }
@@ -229,6 +239,7 @@ public final class CompletionSession {
         // the same answer. WordClassifier decides, so it stays the one definition of a word.
         int freshStart = wordStartBefore(buffer, caret);
         if (freshStart != wordStart) {
+            if (EditorSuggest.TRACE) EditorSuggest.trace("  caretMoved: re-anchoring " + wordStart + " -> " + freshStart);
             wordStart = freshStart;
             request(caret, CompletionProvider.TriggerKind.RETRIGGER, null);
             return;
@@ -236,6 +247,8 @@ public final class CompletionSession {
         // NARROWING ONLY. See queriedPrefix: a list fetched for a longer query cannot answer a shorter one,
         // so a backspace has to go back to the provider however complete the list claimed to be.
         if (!prefix().startsWith(queriedPrefix)) {
+            if (EditorSuggest.TRACE) EditorSuggest.trace("  caretMoved: prefix [" + prefix() + "] no longer narrows ["
+                    + queriedPrefix + "]");
             request(caret, CompletionProvider.TriggerKind.RETRIGGER, null);
             return;
         }
@@ -297,6 +310,8 @@ public final class CompletionSession {
         // typed is aimed at a widget showing nothing, and Enter -- which the popup would still be eating --
         // does nothing at all rather than inserting a newline.
         if (rows.isEmpty() && !incomplete) close();
+        if (EditorSuggest.TRACE) EditorSuggest.trace("  refilter prefix=[" + prefix() + "] " + unfiltered.size()
+                + " -> " + rows.size() + " rows");
     }
 
     // ── Selection ───────────────────────────────────────────────────────────────────────────────
