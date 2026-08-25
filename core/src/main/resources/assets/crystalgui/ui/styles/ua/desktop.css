@@ -427,6 +427,7 @@ window .__controls__ {
  * `min-height`/`min-width` are cleared because `button` carries `min-height: 14px` in the base sheet,
  * and a minimum is a DIFFERENT PROPERTY from a height: it wins at any specificity without appearing
  * to compete, which is how three rounds of shrinking a height once changed nothing at all. */
+window .__title-bar__ .__pin__,
 window .__title-bar__ .__minimize__,
 window .__title-bar__ .__maximize__,
 window .__title-bar__ .__close__ {
@@ -457,6 +458,38 @@ window .__title-bar__ .__minimize__ { overlay: icon("crystalgui:window-minimize"
 window .__title-bar__ .__maximize__ { overlay: icon("crystalgui:window-maximize"); }
 window .__title-bar__ .__close__    { overlay: icon("crystalgui:x"); }
 
+/* THE PIN, in IntelliJ's three states -- W14. The artwork already draws the difference between "you
+ * could pin this", "you are about to" and "it is pinned", so the rule is three overlays rather than a
+ * tint on one: a pinned window shows a PUSHED pin, not a brighter unpushed one.
+ *
+ * `pinSelected` is keyed off the FRAME's state class rather than off the button, because pinned-ness
+ * belongs to the window -- the button is only where it is toggled. The same class is what a theme
+ * restyles the whole frame from.
+ *
+ * SIZE AND PADDING COME FROM THE TRIPLET'S OWN RULE, which the pin is now listed in rather than
+ * restating. That rule names its subjects one by one, so a fourth control added beside them falls
+ * through to the base `button` sheet instead -- `min-height: 14px`, no `overlay-origin`, no padding
+ * split -- and the glyph came out a quarter of the size with none of the gap. The controls read as one
+ * flow or they read as a mistake. */
+window .__title-bar__ .__pin__          { overlay: icon("crystalgui:general/action/pin"); }
+window .__title-bar__ .__pin__:hover    { overlay: icon("crystalgui:general/action/pinHovered"); }
+window.__pinned__ .__title-bar__ .__pin__ { overlay: icon("crystalgui:general/action/pinSelected"); }
+
+/* THE CONTROLS STAY ON THE HUD, and the first version hid them -- worth recording, because the
+ * argument for hiding them is a good one that does not apply here.
+ *
+ * It runs: in game the cursor is grabbed and the keyboard is the game's, so nothing on the HUD can be
+ * clicked, and a control that cannot be clicked but looks clickable is the lie the disabled-control
+ * rule already forbids. Every clause is true. What it misses is that the rule is about an AFFORDANCE
+ * OFFERED TO A POINTER -- a disabled button lies because you can aim at it and it declines. With the
+ * cursor grabbed there is no pointer to aim, so nothing is being offered and nothing is refused. What
+ * the player actually sees is a window, and a window with its top-right corner cut off does not read
+ * as "these are unavailable", it reads as broken.
+ *
+ * So the HUD paints the frame it would paint on the desktop, which is also the thing that makes a
+ * pinned window pixel-identical on and off the screen -- the property the paint-only entry goes out of
+ * its way to preserve by seeding the same rootTransform. */
+
 /* THE GLYPH SAYS WHAT THE BUTTON WILL DO, not what the window is — so on a maximised window it turns
  * into "restore". Every window manager swaps it; a control whose mark never changes leaves the user
  * guessing which of two states a press will produce. */
@@ -468,6 +501,7 @@ window.__maximized__ .__title-bar__ .__maximize__ {
  * whole button, which is the half that was missing: minimise and maximise had no hover state at all
  * and close had a small rounded one, so two of the three gave no feedback and the third looked like a
  * different kind of control. */
+window .__title-bar__ .__pin__:hover,
 window .__title-bar__ .__minimize__:hover,
 window .__title-bar__ .__maximize__:hover {
     color: var(--window-control-hover-fg, #DFE1E5);

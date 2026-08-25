@@ -122,6 +122,30 @@ public class WindowFrame extends UIElement implements Disposable {
     public static final String MINIMIZE_CLASS = "__minimize__";
 
     /**
+     * The pin affordance, and the class the frame itself carries while pinned.
+     *
+     * <p>Two names because they mark different things: the button is a control in the caption, and
+     * {@link #PINNED_CLASS} is state on the window — which is what a theme keys off to restyle the
+     * whole frame, and what {@code :checked} would be if a frame were a checkbox.</p>
+     */
+    public static final String PIN_CLASS = "__pin__";
+    /** @see #isPinned() */
+    public static final String PINNED_CLASS = "__pinned__";
+
+    /**
+     * On a frame while it is painting on the HUD rather than on the desktop.
+     *
+     * <p>What it turns off is the caption controls, and that is a rule rather than a preference: in
+     * game the cursor is grabbed and the keyboard is the game's, so nothing on the HUD can be clicked.
+     * A control that cannot be clicked but still looks clickable is exactly the lie the disabled-control
+     * rule already forbids. Pinning, unpinning, moving and sizing all happen from the desktop.</p>
+     */
+    public static final String HUD_CLASS = "__hud__";
+
+    public static final String PIN_TOOLTIP = "Pin";
+    public static final String UNPIN_TOOLTIP = "Unpin";
+
+    /**
      * What the caption buttons say when the pointer rests on them.
      *
      * <p>Windows' own wording, including the one that reads like a slip: a maximised window's button
@@ -346,6 +370,12 @@ public class WindowFrame extends UIElement implements Disposable {
 
     /** This window's place in the stack, as last assigned. @see Desktop#raise */
     private int stackOrder;
+    /** @see #isPinned() */
+    private boolean pinned;
+
+    private final Button pinButton;
+    /** Retained: its text follows the state, and Tooltip.attach ADDS a pair rather than replacing one. */
+    private final Tooltip pinTooltip;
 
     private WindowState state = WindowState.VISIBLE;
     private WindowPolicy policy = WindowPolicy.DESTROY_ON_CLOSE;
@@ -408,7 +438,16 @@ public class WindowFrame extends UIElement implements Disposable {
         controls = new UIElement();
         controls.addClass(CONTROLS_CLASS);
 
-        // MINIMISE FIRST, so the strip reads minimise-then-close left to right as every window manager
+        // PIN FIRST, left of minimise. It is the only control here that is not about this window's
+        // presence on the desktop, so it sits outside the minimise/maximise/close triplet every window
+        // manager draws as a unit -- the same reason a tool window's Dock button sits there.
+        pinButton = new Button("");
+        pinButton.addClass(PIN_CLASS);
+        pinButton.attachListener(() -> setPinned(!isPinned()));
+        pinTooltip = Tooltip.attach(pinButton, PIN_TOOLTIP);
+        controls.addChild(pinButton);
+
+        // MINIMISE, so the strip reads minimise-then-close left to right as every window manager
         // draws it, and so the destructive control is the one furthest from the rest.
         minimizeButton = new Button("");
         minimizeButton.addClass(MINIMIZE_CLASS);
@@ -1134,6 +1173,40 @@ public class WindowFrame extends UIElement implements Disposable {
      * compositor would silently stop stacking. Everything else about a window's appearance stays in the
      * sheet; this one number is the engine's.</p>
      */
+    /**
+     * Whether this window sits in the always-on-top band and survives the desktop closing.
+     *
+     * <p>One toggle, two effects — Win32's {@code WS_EX_TOPMOST} and EWMH's
+     * {@code _NET_WM_STATE_ABOVE}, plus the thing those cannot express because they have no desktop to
+     * close: a pinned window keeps rendering on the HUD after the screen is put away. @see
+     * UIWindow#enterHudMode</p>
+     *
+     * <p>The band itself is one line in {@link Desktop#raise} — an offset on the same monotonic
+     * counter — which is exactly what the band model predicted when always-on-top was refused for
+     * having no consumer.</p>
+     */
+    public boolean isPinned() {
+        return pinned;
+    }
+
+    /**
+     * Pins or unpins, moving the frame between bands.
+     *
+     * <p><b>Re-raises through the desktop rather than writing z itself.</b> The band is an offset on
+     * the raise counter, so the only thing that can put a frame in the right place is the thing that
+     * hands out stacking order — and re-raising also keeps the owner group together, which a bare
+     * z-write would silently break.</p>
+     */
+    public WindowFrame setPinned(boolean pinned) {
+        if (this.pinned == pinned) return this;
+        this.pinned = pinned;
+        if (pinned) addClass(PINNED_CLASS); else removeClass(PINNED_CLASS);
+        pinTooltip.setText(pinned ? UNPIN_TOOLTIP : PIN_TOOLTIP);
+        Desktop desktop = desktop();
+        if (desktop != null) desktop.raise(this);
+        return this;
+    }
+
     void setStackOrder(int order) {
         this.stackOrder = order;
         StyleGroup.importantPipeline(getStyle().getGeneralGroup(), g -> g.zIndex(order));
