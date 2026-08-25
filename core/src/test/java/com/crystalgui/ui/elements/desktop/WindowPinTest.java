@@ -259,6 +259,44 @@ public class WindowPinTest extends UiTestBase {
                 plain.isPinned());
     }
 
+    // ── what the overlay accepts input for ──────────────────────────────────────────────────────
+
+    /**
+     * <b>A press on bare desktop is NOT ours, and this is the assertion that would have caught the
+     * worst regression in this feature.</b>
+     *
+     * <p>The window layer is full-size — its box <em>is</em> the work area — and nothing turns its
+     * hit-testing off, so a hit test from the root answers with the LAYER itself for any point not over
+     * a window. A version of {@code overlayHitTest} that asked "is the hit under the window layer"
+     * therefore claimed the entire screen: every click anywhere was consumed before it could be
+     * forwarded, and Minecraft's own menu buttons stopped responding while anything was pinned.</p>
+     *
+     * <p>"Inside a window" is the question, not "under the layer".</p>
+     */
+    @Test
+    public void aPressOnBareDesktopIsNotOurs() {
+        pinned.setPinned(true);
+        window.enterHudMode();
+        settle();
+
+        // SURFACE PIXELS, because that is what the hit test takes -- UIInputHandler feeds it raw event
+        // coordinates. getRuntimeCache() answers in LOGICAL units, so every point derived from a box has
+        // to be scaled. The two spaces are a factor of uiScale apart, which is exactly the size of error
+        // that looks like a wrong constant rather than a wrong frame of reference.
+        float scale = window.getUiScale();
+        var box = pinned.getRuntimeCache();
+        float insideX = (box.getX() + box.getWidth() / 2f) * scale;
+        float insideY = (box.getY() + box.getHeight() / 2f) * scale;
+        assertNotNull("a press inside a pinned window must be ours",
+                window.overlayHitTest(insideX, insideY));
+
+        // Clear of the window on both axes, and clear of the taskbar strip at the bottom.
+        float outsideX = (box.getX() + box.getWidth()) * scale + 80f;
+        float outsideY = (box.getY() + box.getHeight()) * scale + 40f;
+        assertNull("a press on bare desktop must be forwarded, or the game stops responding",
+                window.overlayHitTest(outsideX, outsideY));
+    }
+
     /**
      * <b>{@code NONE} paints nothing, and that guard is reached before any GL is touched.</b>
      *
