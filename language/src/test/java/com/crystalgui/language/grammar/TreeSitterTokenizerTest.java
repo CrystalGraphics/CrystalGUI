@@ -430,6 +430,80 @@ public class TreeSitterTokenizerTest {
         }
     }
 
+    /**
+     * <b>Replacing the whole document must colour the NEW document</b>, not go on describing the old one.
+     *
+     * <h3>The fixture has to start with a tree over the EMPTY string</h3>
+     *
+     * <p>Which is not contrived — it is the ordinary way a file opens. {@code Workbench.viewerFor} builds
+     * the editor empty and fills it from a job, so the tokenizer is queried once against an empty buffer,
+     * parses it, and only then receives the text as one change spanning the whole document.</p>
+     *
+     * <p>That path skips phase 1 (there is nothing to interpolate when no node survives), and skipping
+     * phase 1 skips {@code tree.edit()} — so the tree handed to the incremental parse as its base had
+     * never been told anything changed. tree-sitter reads an unedited base as "this document is
+     * unchanged" and reuses it wholesale, so the parse of a 74KB file returned the empty tree it started
+     * from and every query answered nothing.</p>
+     *
+     * <p>Asserted on TOKENS rather than on the tree, because the tree was not null and not stale and had
+     * every field a healthy one has — the only thing wrong with it was its extent. And it must assert a
+     * KEYWORD: the engine's semantic tokens replace grammar tokens where they overlap, so types and
+     * methods stayed correct throughout and the file looked half-highlighted rather than unparsed.</p>
+     */
+    @Test
+    public void replacingTheWholeDocumentParsesTheNewTextRatherThanReusingTheOldTree() {
+        List<Runnable> pending = new ArrayList<>();
+        JobScheduler scheduler = new JobScheduler(pending::add, () -> 0L, 2);
+        TreeSitterTokenizer tokenizer;
+        try {
+            tokenizer = Grammar.JAVA.newTokenizer(scheduler);
+        } catch (Throwable nativeUnavailable) {
+            Assume.assumeNoException(nativeUnavailable);
+            return;
+        }
+
+        // A tree over the empty document, exactly as a viewer's first paint produces one.
+        Rope empty = Rope.of("");
+        tokenizer.tokenize(empty, 0, 0);
+        settle(scheduler, pending);
+        assertTrue("the fixture needs a tree over the empty document before the load",
+                tokenizer.tokenize(empty, 0, 0).isEmpty());
+
+        String loaded = "package p;\n\nclass A { int x = 1; }\n";
+        ChangeSet change = ChangeSet.of(0, Change.insert(0, loaded));
+        Rope after = change.apply(empty);
+        tokenizer.edited(after, change);
+        settle(scheduler, pending);
+
+        List<SyntaxToken> tokens = tokenizer.tokenize(after, 0, loaded.length());
+        assertFalse("a document that was loaded in one change produced no tokens at all", tokens.isEmpty());
+        assertTrue("the keywords of the loaded text were not captured, got "
+                        + textsCaptured(loaded, tokens, "keyword"),
+                textsCaptured(loaded, tokens, "keyword").contains("package"));
+        // THE POSITIVE CONTROL'S OTHER HALF: every token must be inside the text it describes. A tree
+        // left over from a different document can satisfy "not empty" while pointing anywhere.
+        for (SyntaxToken token : tokens) {
+            assertTrue(token + " is outside the loaded document", token.end() <= loaded.length());
+        }
+
+        tokenizer.close();
+    }
+
+    /**
+     * Runs a scheduled parse to completion.
+     *
+     * <p>Three steps and the order is not obvious: {@code drain()} is what DISPATCHES a debounced job to
+     * the executor, running it is what parses, and a second {@code drain()} is what delivers {@code
+     * onDone} on the calling thread. Draining once and running once leaves the work queued.</p>
+     */
+    private static void settle(JobScheduler scheduler, List<Runnable> pending) {
+        scheduler.drain();
+        List<Runnable> ready = new ArrayList<>(pending);
+        pending.clear();
+        ready.forEach(Runnable::run);
+        scheduler.drain();
+    }
+
     /** Closing twice must be safe — the tree is dropped on close and a second call must not chase it. */
     @Test
     public void closingIsIdempotent() {

@@ -771,6 +771,34 @@ public final class TreeSitterTokenizer
         // is what said the work itself was not the problem: DOING it was.
         if (tree != null && replacesWholeDocument(change)) {
             FrameProfile.note("ts.interpolate skipped -- whole document replaced");
+            // AND THE TREE IS DROPPED, not merely left uninterpolated.
+            //
+            // Skipping phase 1 skips `tree.edit()`, and an unedited tree is exactly what tree-sitter
+            // reads as "this document did not change". `ts_parser_parse` takes the old tree as the
+            // description of what the text used to be and reuses every node the edits did not touch --
+            // so handing it one that was never told about the edit does not merely lose the speed-up,
+            // it makes the parser REUSE THE WHOLE OLD TREE. The result parses as the previous document,
+            // however different the text is.
+            //
+            // It is the same fact from both ends: the reason there was nothing to interpolate is the
+            // reason there is nothing to parse incrementally from. Phase 1 and the snapshot are two
+            // halves of one mechanism and either both apply or neither does.
+            //
+            // What that looked like: a viewer whose grammar colours never arrived. Keywords, comments
+            // and primitive types plain, while types, methods and fields were correct -- because those
+            // come from the ENGINE, and semantic tokens replace grammar tokens where they overlap
+            // rather than depending on them. So the file looked half-highlighted rather than unparsed,
+            // which reads as a colour-scheme fault. Trace: `ts.firstParse deferred to a worker, 0 chars`
+            // (the tokenizer was queried while the buffer was still empty), then
+            // `ts.interpolate skipped -- whole document replaced` when the text arrived, and `ed:tokenize`
+            // never called again -- the reparse landed a tree identical to the empty one it was given, so
+            // `announceChanged` found nothing to announce and nothing re-queried.
+            //
+            // Nulling it rather than passing a flag also fixes the announcement: `announceChanged` diffs
+            // against the tree that was replaced, and two unrelated trees have no meaningful
+            // `changed_ranges`. A null one is documented to report the whole document, which is the truth
+            // here.
+            tree = null;
             stale = true;
             if (scheduler != null) scheduleReparse(after);
             return;
@@ -912,6 +940,13 @@ public final class TreeSitterTokenizer
             if (result == null) return;
             TSTree replaced = this.tree;
             this.tree = result.tree();
+            // WHAT THE PARSE ACTUALLY COVERED, against what it was asked about. A tree whose root ends
+            // well short of the document is the signature of an incremental parse handed a base tree
+            // that was never edited -- it reuses the old nodes and reports the OLD extent, silently.
+            // One line, and it is the difference between seeing that and inferring it from missing
+            // colour. @see #edited
+            FrameProfile.note("ts.parsed root 0.." + result.tree().getRootNode().getEndByte()
+                    + " bytes (incremental base: " + (replaced == null ? "none" : "a tree") + ")");
             // A new tree means new scopes -- ALREADY COMPUTED, on the worker that built the tree. Null
             // only when the grammar ships no locals.scm or the pass failed, and localsForTree then falls
             // back to computing it here exactly as it always did.
