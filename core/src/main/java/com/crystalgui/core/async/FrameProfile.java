@@ -2,6 +2,9 @@ package com.crystalgui.core.async;
 
 import com.crystalgui.core.CrystalGuiCore;
 
+import java.lang.management.GarbageCollectorMXBean;
+import java.lang.management.ManagementFactory;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -69,7 +72,34 @@ public final class FrameProfile {
         // blame covers is the same window whose drain is being reported.
         frameStart = System.nanoTime();
         lastMark = frameStart;
+        gcAtFrameStart = gcMillis();
     }
+
+    /**
+     * Total time this JVM has spent collecting, in milliseconds.
+     *
+     * <h3>Why a frame profiler has to know about the collector</h3>
+     *
+     * <p>A GC pause stops every thread, so it is charged to whatever call happened to be executing --
+     * and the longest-running phase absorbs it. That makes it indistinguishable from that phase being
+     * slow. Measured in a client while a decompiler ran on a worker: {@code gl:draw 11594us} and
+     * {@code gl:end 9814us} slow in the SAME frame with every CPU phase under 600us, which is not a
+     * shape any single expensive operation can produce -- but is exactly what a pause looks like.</p>
+     *
+     * <p>Without this the next hours go into the GL path, which is where the numbers point and not
+     * necessarily where the cost is. A background job that allocates heavily can take the frame rate
+     * down without appearing anywhere in the frame's own accounting.</p>
+     */
+    private static long gcMillis() {
+        long total = 0;
+        for (GarbageCollectorMXBean collector : ManagementFactory.getGarbageCollectorMXBeans()) {
+            long spent = collector.getCollectionTime();
+            if (spent > 0) total += spent;
+        }
+        return total;
+    }
+
+    private static long gcAtFrameStart;
 
     /** Attributes everything since the previous mark (or the frame start) to {@code phase}. */
     public static void mark(String phase) {
@@ -284,6 +314,9 @@ public final class FrameProfile {
         phases.sort((a, b) -> Long.compare(b.getValue(), a.getValue()));
         StringBuilder line = new StringBuilder();
         line.append("[frame] ").append(total / 1_000_000L).append("ms ").append(census()).append("  ");
+        // THE COLLECTOR'S SHARE OF THIS FRAME, when it took one. @see #gcMillis
+        long collected = gcMillis() - gcAtFrameStart;
+        if (collected > 0) line.append("GC ").append(collected).append("ms  ");
         for (Map.Entry<String, Long> phase : phases) {
             if (phase.getValue() < 200_000L) continue;
             line.append(phase.getKey()).append(' ')

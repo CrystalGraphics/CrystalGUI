@@ -25,6 +25,7 @@ import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.gl.lifecycle.CgGraphicsLifecycle;
 import com.crystalgraphics.text.cache.CgFontRegistry;
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.render.texture.svg.SvgDocument;
@@ -559,8 +560,12 @@ public final class CgUiPaintContext {
         // and harmless against MC, which sets glClearColor immediately before each of its own clears.
         // Clear DEPTH is never touched: clearColor() passes GL_COLOR_BUFFER_BIT alone, and that one
         // WOULD matter — MC writes glClearDepth once at startup, like the glDepthFunc it sets there.
+        // THE FULL-SCREEN CLEAR, timed apart from the rest of beginFrame. gl:begin was measured at 33ms
+        // in a client, and this is the only thing in it that touches every pixel of the surface.
+        long cleared = FrameProfile.begin();
         msaaFbo.bind();
         msaaFbo.clearColor(0f, 0f, 0f, 0f);
+        FrameProfile.end(cleared, "glbegin:msaaClear");
 
         // Overwritten and deliberately NOT restored — the javadoc used to claim otherwise and was
         // corrected rather than implemented. CgFrameData is per-frame scratch that every consumer
@@ -632,8 +637,15 @@ public final class CgUiPaintContext {
         // of it anyway, since the pose was baked at submit() time.
         // Text first: it owns a separate renderer whose batch, if a caller left one open, would otherwise
         // flush after the frame's GL scope is torn down. Lenient when no batch is active.
+        // SPLIT, because gl:end is three unrelated things and one of them was measured at 48ms in a
+        // client while every CPU phase in that frame was under 2ms. Draining our own queued draws, the
+        // MSAA resolve blit, and the composite back onto the real target fail for completely different
+        // reasons -- and a resolve that blocks is the GPU being behind, which no amount of tuning our
+        // traversal would ever touch.
+        long timed = FrameProfile.begin();
         textRenderer.endBatch();
         renderer.flush();
+        FrameProfile.end(timed, "glend:flush");
 
         // Resolve the MSAA redirect (see beginFrame/msaaFbo) and composite it back onto whatever the
         // real target was. blitFrom binds its own explicit source/destination ids and needs no
@@ -642,7 +654,9 @@ public final class CgUiPaintContext {
         // beginFrame): blitLayer() right after draws a real quad through the normal quad() path, which
         // needs the real target actually bound, and needs an active frame the same as any other draw
         // call in this class, which is why this whole block still runs before frameActive is cleared.
+        long resolved = FrameProfile.begin();
         msaaResolveFbo.blitFrom(msaaFbo, CgGL.GL_COLOR_BUFFER_BIT, CgGL.GL_NEAREST);
+        FrameProfile.end(resolved, "glend:msaaResolve");
         if (glScope != null) {
             glScope.close();
             glScope = null;
