@@ -104,9 +104,19 @@ public final class UiThemeManager {
      */
     public void installInto(StyleEngine engine) {
         List<StyleSheet> present = engine.getSheets();
+        boolean addedTheme = !present.contains(themeSheet);
         if (!present.contains(StyleSheet.DEFAULT)) engine.addStylesheet(StyleSheet.DEFAULT);
-        if (!present.contains(themeSheet)) engine.addStylesheet(themeSheet);
+        if (addedTheme) engine.addStylesheet(themeSheet);
         if (!present.contains(schemeSheet)) engine.addStylesheet(schemeSheet);
+        // SAID ONCE PER ENGINE, because an engine that never had this called on it is the one state a
+        // swap cannot recover from and cannot report: `apply()` would re-substitute every sheet, refill
+        // the user-agent sheet and restyle every window, all correctly, and this window would still show
+        // none of it -- its engine simply does not hold the theme sheet. `WorkbenchSettings.apply` only
+        // calls this when the workbench HAS a window, and nothing re-runs it when one arrives.
+        if (addedTheme) {
+            CrystalGuiCore.LOGGER.info("theme stack installed into a style engine (sheets now {})",
+                    engine.getSheets().size());
+        }
     }
 
     /**
@@ -225,7 +235,27 @@ public final class UiThemeManager {
         themeSheet.refillFrom(StyleSheet.parse(themeCss.toString()));
         schemeSheet.refillFrom(StyleSheet.parse(activeScheme == null ? "" : activeScheme.source()));
 
-        StyleEngine.restyleAllWindows();
+        int restyled = StyleEngine.restyleAllWindows();
+
+        // ONE LINE PER SWAP, AND IT IS NOT DEBUG NOISE.
+        //
+        // A theme swap has five things that can each be individually fine while the screen does not
+        // change, and from outside they are indistinguishable: the theme resolved to nothing, the
+        // variable table came out empty, the sheet re-parsed to no rules, the user-agent sheet was not
+        // refilled (it is a rules-COPY of the cached one, and the refill is skipped when the cache has
+        // no entry -- `StyleSheetRegistry.of` does not cache a MISS), or there was no live engine to
+        // restyle. "Nothing happened" is the report for all five.
+        //
+        // Reported because this is the shape that only appears across the loader seam: theme switching
+        // works in the harness, which resolves sheets from source directories, and does nothing in a
+        // client, which resolves them through the resource manager. A swap happens when a person picks
+        // one, so this costs a line an hour at worst.
+        CrystalGuiCore.LOGGER.info(
+                "theme swap: theme={} scheme={} vars={} themeRules={} schemeRules={} uaRules={} engines={}",
+                activeThemeId(), activeSchemeId(), merged.size(),
+                themeSheet.getRules().size(), schemeSheet.getRules().size(),
+                StyleSheet.DEFAULT.getRules().size(), restyled);
+
         onChanged.emit();
     }
 
