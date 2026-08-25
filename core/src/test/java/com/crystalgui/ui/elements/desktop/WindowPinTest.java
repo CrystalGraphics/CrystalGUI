@@ -151,25 +151,123 @@ public class WindowPinTest extends UiTestBase {
         assertFalse("the HUD restyle must come off", pinned.hasClass(WindowFrame.HUD_CLASS));
     }
 
+    // ── the presentation ────────────────────────────────────────────────────────────────────────
+
     /**
-     * <b>The paint-only entry paints nothing when the HUD is not up.</b>
+     * <b>The decision, which is the thing that stopped the close flicker.</b>
      *
-     * <p>Which is as much of that entry as a unit test can reach, and the reason is worth stating rather
-     * than working around: {@code paintHudFrame} asks {@code CgUiPaintContext.getInstance()}, which
-     * builds framebuffers — so the moment it paints at all it needs a GL context, and no test source set
-     * has one. What the guard pins is the half that is pure control flow, and it is the half that would
-     * bite: without it a host whose overlay hook fires before anything is pinned would build the paint
-     * context on a frame nobody asked to draw. On a test JVM that is observable precisely because asking
-     * would throw.</p>
+     * <p>Before M16 the paint path was chosen by which hook fired, and each hook tested a Minecraft
+     * condition for itself — so on the frame the desktop closed, both concluded it was the other's turn
+     * and the pinned window was painted by nobody. Moving the decision here is what makes that
+     * impossible, and this is the test of it: one input, one answer, no caller consulted.</p>
      *
-     * <p><b>The no-input claim is covered by the harness's game mode</b> ({@code cgui-desktop}, F6),
-     * not here. It is not a visual property and it would be worth a unit test — but every way of
-     * observing it has to run the paint path first. What is structural is that {@code paintHudFrame}
-     * never touches {@code inputHandler} at all; what is observable needs a surface.</p>
+     * <p>Asserted rather than the painting, because painting needs a GL context no test source set has.
+     * What can be reached is every arm of the mapping, and the mapping is where the bug was.</p>
      */
     @Test
-    public void theHudEntryPaintsNothingWhenTheHudIsNotUp() {
-        assertFalse("precondition: this test never enters the HUD", window.isHudMode());
-        window.paintHudFrame(800, 600);
+    public void thePresentationIsDecidedInOnePlace() {
+        // Our own screen wins outright -- it shows the whole compositor whatever else is true.
+        assertEquals(DesktopPresentation.DESKTOP, window.presentation(true, true));
+
+        // Nothing pinned: there is nothing to put over a game, whoever's screen is up.
+        assertEquals(DesktopPresentation.NONE, window.presentation(false, false));
+        assertEquals(DesktopPresentation.NONE, window.presentation(false, true));
+
+        pinned.setPinned(true);
+        settle();
+
+        // A CURSOR EXISTS EXACTLY WHEN A SCREEN IS UP, and that -- not whose screen it is -- is what
+        // decides whether a pinned window can be interacted with.
+        assertEquals(DesktopPresentation.HUD, window.presentation(false, false));
+        assertEquals(DesktopPresentation.OVERLAY, window.presentation(false, true));
+    }
+
+    /**
+     * <b>Only the interactive arms dispatch input or paint the top layer.</b>
+     *
+     * <p>Three properties vary across the arms and nothing else does. Pinning them here is what lets the
+     * paint method be one method: a new situation becomes a new arm rather than a new path, and the
+     * things a path used to get to decide for itself are read off the value instead.</p>
+     */
+    @Test
+    public void eachArmAgreesAboutInputAndTheTopLayer() {
+        assertTrue(DesktopPresentation.DESKTOP.isInteractive());
+        assertTrue(DesktopPresentation.OVERLAY.isInteractive());
+        // The one that matters: a grabbed cursor's position is stale, so running the hover pipeline
+        // against it would fire boundary events at a screen nobody is looking at.
+        assertFalse(DesktopPresentation.HUD.isInteractive());
+        assertFalse(DesktopPresentation.NONE.isInteractive());
+
+        // A menu or a tooltip cannot be summoned by a grabbed cursor, so the HUD has nothing on the top
+        // layer that belongs on it -- and painting it would draw whatever the desktop left there.
+        assertFalse(DesktopPresentation.HUD.paintsTopLayer());
+        assertTrue(DesktopPresentation.OVERLAY.paintsTopLayer());
+
+        // Only our own screen shows the taskbar and the desktop's own chrome.
+        assertTrue(DesktopPresentation.DESKTOP.paintsWholeDesktop());
+        assertFalse(DesktopPresentation.OVERLAY.paintsWholeDesktop());
+        assertFalse(DesktopPresentation.HUD.paintsWholeDesktop());
+    }
+
+    /**
+     * <b>A window brought to the front while off-desktop pins itself.</b>
+     *
+     * <p>The window switcher is what found this: the registry keeps HIDDEN windows, so cycling could
+     * show one the HUD had put away. It then painted — the overlay draws the whole window layer — while
+     * every click fell straight through onto the game, because input accepted only PINNED frames. Two
+     * definitions of "what is on the overlay" that agreed until something could become visible without
+     * being pinned.</p>
+     */
+    @Test
+    public void aWindowShownWhileOffDesktopPinsItself() {
+        pinned.setPinned(true);
+        window.enterHudMode();
+        settle();
+        assertEquals("precondition: the HUD put the unpinned window away",
+                WindowState.HIDDEN, plain.state());
+
+        // What Ctrl+Tab does: bring a hidden window back while the desktop is not on screen.
+        plain.show(true);
+        settle();
+
+        assertEquals(WindowState.VISIBLE, plain.state());
+        assertTrue("shown over the game means pinned, or it paints and cannot be clicked",
+                plain.isPinned());
+        assertTrue("and it belongs to the band like anything else pinned",
+                plain.stackOrder() >= Desktop.PINNED_BAND);
+    }
+
+    /**
+     * <b>...and restoring the desktop does NOT pin everything it put away.</b>
+     *
+     * <p>The counter-assertion, and it is the one that makes the rule above safe: {@code exitHudMode}
+     * shows every window it hid, so a naive "pin on show" would pin the entire desktop the first time
+     * anybody closed and reopened it. It is avoided by ordering — {@code hudMode} is cleared before the
+     * restores — which is invisible at the call site and would be silently undone by a refactor that
+     * moved one line.</p>
+     */
+    @Test
+    public void leavingTheHudPinsNothing() {
+        pinned.setPinned(true);
+        window.enterHudMode();
+        settle();
+        window.exitHudMode();
+        settle();
+
+        assertEquals("the restored window must come back", WindowState.VISIBLE, plain.state());
+        assertFalse("restoring is not the same request as bringing to the front over a game",
+                plain.isPinned());
+    }
+
+    /**
+     * <b>{@code NONE} paints nothing, and that guard is reached before any GL is touched.</b>
+     *
+     * <p>Observable on a test JVM precisely because asking for the paint context would throw: there is no
+     * GL here, so a guard that let this through would fail loudly. Without it, a host whose overlay hook
+     * fires before anything is pinned would build the paint context on a frame nobody asked to draw.</p>
+     */
+    @Test
+    public void nothingToShowPaintsNothing() {
+        window.paint(DesktopPresentation.NONE, 800, 600);
     }
 }
