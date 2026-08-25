@@ -196,7 +196,25 @@ public final class UiThemeManager {
         return Map.copyOf(overrides);
     }
 
-    /** Deactivates both axes, drops the overrides, and unbinds the table — the pristine sheets. */
+    /**
+     * Deactivates both axes, drops the overrides, and unbinds the table — the pristine sheets.
+     *
+     * <h3>A theme swap is process-wide, and nothing calls this by itself</h3>
+     *
+     * <p>This is a singleton, and {@link StyleSheetRegistry#bindVariables} re-substitutes every cached
+     * sheet <em>in place</em> — {@link StyleSheet#DEFAULT} included, which is a {@code static final}
+     * refilled rather than replaced, precisely so existing registrations stay valid. So one test that
+     * builds anything applying settings ({@code WorkbenchSettings.install} calls {@code setTheme} and
+     * {@code setScheme}) permanently changes what every LATER test in that JVM resolves
+     * {@code var(--x, fallback)} to.</p>
+     *
+     * <p>Which made the editor suite flaky at about one run in four, because class order is not stable:
+     * {@code theResetLinkIsStyledAsALink} asserts {@code #4A9EFF}, the unthemed fallback of
+     * {@code --editor-zoom-link}, and got {@code #548AF7} — islands-dark's value for that same token —
+     * whenever a theming test happened to run first.</p>
+     *
+     * <p>The method is not new; <b>calling it from a fixture that asserts on style is</b>.</p>
+     */
     public void resetForTesting() {
         activeTheme = null;
         activeScheme = null;

@@ -53,6 +53,10 @@ public abstract class EditorTestBase extends UiTestBase {
 
     @Before
     public void installInputStub() {
+        // PRISTINE SHEETS FIRST. A theme swap is process-wide and refills StyleSheet.DEFAULT in place, so
+        // any earlier test that built something applying settings leaves every var() in this JVM resolving
+        // to that theme's value instead of its fallback. @see UiThemeManager#resetForTesting
+        com.crystalgui.style.theme.UiThemeManager.getInstance().resetForTesting();
         modifiers = 0;
         clipboard = "";
         // Clipboard and modifiers live on the same service, so one stub covers both.
@@ -98,8 +102,41 @@ public abstract class EditorTestBase extends UiTestBase {
      * begin/endFrame pair here every key is silently dropped before dispatch and the widget looks
      * completely dead while being perfectly correct.</p>
      */
+    /**
+     * Steps frames until nothing is left in flight — <b>including work on a worker</b>.
+     *
+     * <h3>Three frames is not "settled" once anything is scheduled</h3>
+     *
+     * <p>This used to be three {@code updateWithoutPainting()} calls. Those do drain the shared scheduler
+     * ({@code advanceFrame} drains before the passes that read the results), but draining only delivers
+     * jobs that have <em>finished</em> — and three headless frames take microseconds, so whether a worker
+     * has got there is a coin flip on thread scheduling and machine load.</p>
+     *
+     * <p>Folding is the one that made this visible. {@code EditorFolding} sends a whole-document pass to
+     * a worker when the provider allows it AND {@code JobScheduler.hasShared()} — and that second
+     * condition is itself decided by test ORDER, since the shared scheduler is created lazily by whatever
+     * ran first. So the same folding test was synchronous in one run and racing in the next, and failed
+     * about one run in four with a different assertion each time: "some arrows are on screen", "no child
+     * with class __fold-placeholder__", "the fold must actually have hidden something".</p>
+     *
+     * <p>Bounded rather than open-ended: a test that genuinely never settles must fail on its own
+     * assertion, not hang here.</p>
+     */
     protected void settle() {
         for (int i = 0; i < 3; i++) window.updateWithoutPainting();
+        if (com.crystalgui.core.async.JobScheduler.hasShared()) {
+            com.crystalgui.core.async.JobScheduler shared =
+                    com.crystalgui.core.async.JobScheduler.shared();
+            for (int spin = 0; spin < 200; spin++) {
+                if (shared.waitingCount() == 0 && shared.runningCount() == 0) break;
+                // Yield rather than sleep: the work is on another thread and this one has nothing to do
+                // but let it run, and a sleep would put a fixed cost on every settle in the suite.
+                Thread.yield();
+                window.updateWithoutPainting();
+            }
+            // One more, so a result delivered by the last drain is acted on by a frame that sees it.
+            window.updateWithoutPainting();
+        }
         if (input != null) {
             input.beginFrame();
             input.endFrame();
