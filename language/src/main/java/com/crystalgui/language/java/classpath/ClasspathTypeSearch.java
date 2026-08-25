@@ -1,6 +1,7 @@
 package com.crystalgui.language.java.classpath;
 
 import com.crystalgui.language.java.JavaLanguageServices;
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.text.lang.TypeSearch;
 import com.crystalgui.text.lang.TypeSearchRegistry;
 
@@ -50,24 +51,34 @@ public final class ClasspathTypeSearch implements TypeSearch {
 
         TypeIndex index;
         try {
-            index = JavaLanguageServices.typeIndexFor(HostClasspath.detect());
+            long timed = FrameProfile.begin();
+            List<String> classpath = HostClasspath.detect();
+            FrameProfile.step(timed, "HostClasspath.detect");
+            timed = FrameProfile.begin();
+            index = JavaLanguageServices.typeIndexFor(classpath);
+            FrameProfile.step(timed, "typeIndexFor (SCANS THE CLASSPATH if cold)");
         } catch (RuntimeException unavailable) {
             // A classpath that cannot be detected is a host we cannot answer for. Empty, not an exception
             // out of a keystroke handler.
             return Results.EMPTY;
         }
 
+        long timed = FrameProfile.begin();
         TypeIndex.Match matched = index.matching(query);
+        FrameProfile.step(timed, "index.matching -> " + matched.entries().size());
+        timed = FrameProfile.begin();
         List<Result> out = new ArrayList<>(Math.min(limit, matched.entries().size()));
         for (TypeIndex.Entry entry : matched.entries()) {
             if (out.size() >= limit) {
                 // Our own cap truncated the index's answer, so say so even where the index did not.
+                FrameProfile.step(timed, "kindOf x" + out.size());
                 return new Results(out, true);
             }
             TypeIndex.Kind kind = index.kindOf(entry);
             out.add(new Result(entry.simpleName(), entry.packageName(), entry.container(),
                     kind == null ? null : kind.kind(), kind != null && kind.isAbstract()));
         }
+        FrameProfile.step(timed, "kindOf x" + out.size());
         return new Results(out, matched.truncated());
     }
 }

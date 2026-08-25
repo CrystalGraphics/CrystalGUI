@@ -174,6 +174,63 @@ public final class StyleEngine {
      * <p>Yes for anything at all when a sheet carries a rule whose subject cannot be keyed, which is the
      * conservative answer and the pre-existing behaviour.</p>
      */
+    /**
+     * What a state change on {@code ancestor} can reach — the keys, or null for <b>nothing at all</b>.
+     *
+     * <h3>Resolved once per invalidation, not once per descendant</h3>
+     *
+     * <p>{@link #stateReaches} asks the flat question — "could any state rule reach an element carrying
+     * this key" — and the answer is the same for every ancestor, so a hover anywhere marked every element
+     * whose tag or class appeared in any such rule. {@code text} is one of those, so every label in the
+     * window re-matched on every mouse move.</p>
+     *
+     * <p>This asks the narrow one, and it is answered <em>before</em> the walk starts: a null return means
+     * the subtree is not walked at all, which is the second half of the win — the old walk visited every
+     * descendant unconditionally and only narrowed what it MARKED.</p>
+     *
+     * @return the reachable descendant keys, or null when a state change here can reach nothing
+     */
+    @Nullable
+    public Set<String> stateDescendantKeysFrom(UIElement ancestor) {
+        Set<String> reachable = null;
+        for (int i = 0; i < sheets.size(); i++) {
+            StyleSheet sheet = sheets.get(i);
+            // An unkeyable subject (`foo:hover *`) means anything could match, so nothing can be narrowed.
+            if (sheet.hasUnboundedStateDescendants()) return EVERYTHING;
+            reachable = addAll(reachable, sheet.stateDescendantsFromAnyAncestor());
+            reachable = addAll(reachable, sheet.stateDescendantsFrom(ancestor.tagName()));
+            for (String cls : ancestor.getClasses()) {
+                reachable = addAll(reachable, sheet.stateDescendantsFrom(cls));
+            }
+            if (!ancestor.getId().isEmpty()) {
+                reachable = addAll(reachable, sheet.stateDescendantsFrom(ancestor.getId()));
+            }
+        }
+        return reachable;
+    }
+
+    /** Allocates only when there is something to add — the common answer is "nothing". */
+    @Nullable
+    private static Set<String> addAll(@Nullable Set<String> into, Set<String> more) {
+        if (more.isEmpty()) return into;
+        if (into == null) into = new HashSet<>(more.size() * 2);
+        into.addAll(more);
+        return into;
+    }
+
+    /** The sentinel for "narrowing is off" — an unkeyable subject somewhere in a sheet. */
+    public static final Set<String> EVERYTHING = Collections.unmodifiableSet(new HashSet<>());
+
+    /** Whether {@code descendant} carries any of {@code reachable}. @see #stateDescendantKeysFrom */
+    public static boolean carriesAny(UIElement descendant, Set<String> reachable) {
+        if (reachable == EVERYTHING) return true;
+        if (reachable.contains(descendant.tagName())) return true;
+        for (String cls : descendant.getClasses()) {
+            if (reachable.contains(cls)) return true;
+        }
+        return !descendant.getId().isEmpty() && reachable.contains(descendant.getId());
+    }
+
     public boolean stateReaches(UIElement descendant) {
         for (int i = 0; i < sheets.size(); i++) {
             StyleSheet sheet = sheets.get(i);

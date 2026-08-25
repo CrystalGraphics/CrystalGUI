@@ -1,5 +1,6 @@
 package com.crystalgui.text;
 
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.undo.Edit;
 import com.crystalgui.core.undo.UndoStack;
@@ -115,10 +116,69 @@ public final class TextBuffer {
     }
 
     /** Replaces the whole document, re-detecting the line ending — i.e. loading a file. */
+    /**
+     * A document's text with everything that can be computed from it alone already computed.
+     *
+     * @param document   the rope, built
+     * @param normalised the text with every ending collapsed to {@code \n}
+     * @param ending     what the file came with, so a save writes it back
+     */
+    public record Prepared(Rope document, String normalised, LineEnding ending) {
+    }
+
+    /**
+     * Does the whole of {@link #load}'s arithmetic — <b>off the frame thread</b>.
+     *
+     * <h3>All of this is a pure function of the bytes</h3>
+     *
+     * <p>Detecting the ending is a scan, normalising allocates a second copy, and building the rope is a
+     * chunk-and-build over the result. None of it touches the buffer, the editor or the tree, and all of
+     * it ran on the frame that published a newly opened file. Measured in a client opening a 108KB
+     * decompiled class: <b>detect 6.9ms, normalise 0.4ms, rope 2.7ms</b> of a 34ms frame — which is the
+     * reported "Enter on Minecraft.class takes 120fps to 50".</p>
+     *
+     * <p>The caller reads the bytes on a worker already; this is that worker finishing the job rather
+     * than handing a String to the frame and letting it do the work there.</p>
+     */
+    public static Prepared prepare(CharSequence text) {
+        String incoming = text == null ? "" : text.toString();
+        LineEnding ending = LineEnding.detect(incoming);
+        String normalised = LineEnding.normalise(incoming);
+        return new Prepared(Rope.of(normalised), normalised, ending);
+    }
+
+    /**
+     * {@link #load}, given work {@link #prepare} already did.
+     *
+     * <p>Equivalent by construction: a full-document replace applies to exactly {@code Rope.of(normalised)},
+     * so handing that rope in rather than recomputing it changes the cost and not the result. Both halves
+     * come from one {@code prepare} call, so the rope and the change that describes it cannot disagree.</p>
+     */
+    public void load(Prepared prepared) {
+        this.lineEnding = prepared.ending();
+        ChangeSet change = ChangeSet.replace(document.length(), 0, document.length(),
+                prepared.normalised());
+        if (!change.isEmpty()) {
+            ChangeSet inverse = change.invert(document);
+            // THE PREPARED ROPE, instead of change.apply(document) -- the one line this exists for.
+            document = prepared.document();
+            history.push(new ChangeSetEdit(this, change, inverse, null));
+            applied(change);
+        }
+        breakUndoCoalescing();
+    }
+
     public void load(CharSequence text) {
         String incoming = text == null ? "" : text.toString();
+        long timed = FrameProfile.begin();
         this.lineEnding = LineEnding.detect(incoming);
-        replace(0, length(), LineEnding.normalise(incoming));
+        FrameProfile.step(timed, "buf.detectEnding " + incoming.length() + " chars");
+        timed = FrameProfile.begin();
+        String normalised = LineEnding.normalise(incoming);
+        FrameProfile.step(timed, "buf.normalise");
+        timed = FrameProfile.begin();
+        replace(0, length(), normalised);
+        FrameProfile.step(timed, "buf.replace");
         breakUndoCoalescing();
     }
 
@@ -200,15 +260,23 @@ public final class TextBuffer {
                     + change.lengthBefore() + ", but this one is " + document.length());
         }
 
+        long timed = FrameProfile.begin();
         ChangeSet inverse = change.invert(document);
+        FrameProfile.step(timed, "buf.invert");
+        timed = FrameProfile.begin();
         document = change.apply(document);
+        FrameProfile.step(timed, "buf.applyToRope");
         // Applied here, then recorded — which is what UndoStack.push is for. Handing the stack an
         // unapplied edit would mean applying it twice. Push also clears the redo branch: keeping it
         // would let redo replay a change against a document it was never described against, which the
         // length check above would then reject at some arbitrary later point rather than here.
+        timed = FrameProfile.begin();
         history.push(new ChangeSetEdit(this, change, inverse,
                 carets == null ? null : List.copyOf(carets)));
+        FrameProfile.step(timed, "buf.historyPush");
+        timed = FrameProfile.begin();
         applied(change);
+        FrameProfile.step(timed, "buf.applied (decorations + onChanged)");
     }
 
     /**

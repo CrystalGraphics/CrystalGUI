@@ -704,11 +704,15 @@ public class TextEditor extends ScrollerView implements UndoScope {
         addInternalChild(gutter);
 
         buffer.onChanged.connect(change -> {
+            long changed = FrameProfile.enter("buffer.onChanged");
             // The tokenizer hears about the edit BEFORE the next query, so an incremental one can update
             // what it holds. Applying the edit is cheap and must be synchronous; the expensive reparse is
             // the implementation's business. See SyntaxTokenizer#edited.
+            long timed = FrameProfile.begin();
             tokenizer.edited(buffer.document(), change);
+            FrameProfile.step(timed, "tokenizer.edited");
             highlightsDirty = true;
+            FrameProfile.leave(changed, "buffer.onChanged head");
             // BEFORE reprojectAfterEdit, which is what advances previousLineCount -- this needs the count
             // as it was in order to tell a same-row edit from one that shifted every row below it.
             invalidateMeasuredRows(change);
@@ -736,9 +740,13 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // recycled every line, and recycling clears highlights that are only republished after the
             // frame's style pass.
             forgetWidestLine();
+            long reprojected = FrameProfile.begin();
             reprojectAfterEdit(change);
+            FrameProfile.step(reprojected, "reprojectAfterEdit");
             folds.markDirty();
+            long rebound = FrameProfile.begin();
             rebindRealisedLines();
+            FrameProfile.step(rebound, "rebindRealisedLines");
             // A document that shrank can leave a selection pointing past its end, and the caret then
             // indexes a row that is not there. Clamped HERE rather than at the keystroke that caused it,
             // because undo is no longer the only way in: edit.undo from a menu or the palette, a
@@ -856,8 +864,34 @@ public class TextEditor extends ScrollerView implements UndoScope {
         }
         // `load`, not `replace`: it normalises AND remembers the ending, so a save writes back what the
         // file came with. It breaks undo coalescing itself.
+        long timed = FrameProfile.begin();
         buffer.load(text == null ? "" : text);
+        FrameProfile.step(timed, "buffer.load (rope build, " + buffer.lineCount() + " lines)");
+        timed = FrameProfile.begin();
         setSelection(0, 0);
+        FrameProfile.step(timed, "setSelection");
+        return this;
+    }
+
+    /**
+     * {@link #setText(String)} for text a worker has already normalised and roped.
+     *
+     * <p>Same early-out, against the prepared text rather than a freshly normalised copy — which is also
+     * one fewer 100KB pass on the frame. @see TextBuffer#prepare</p>
+     */
+    public TextEditor setText(TextBuffer.Prepared prepared) {
+        if (prepared == null) return setText("");
+        String next = prepared.normalised();
+        if (buffer.length() == next.length() && next.contentEquals(getText())
+                && buffer.lineEnding() == prepared.ending()) {
+            return this;
+        }
+        long timed = FrameProfile.begin();
+        buffer.load(prepared);
+        FrameProfile.step(timed, "buffer.load (PREPARED, " + buffer.lineCount() + " lines)");
+        timed = FrameProfile.begin();
+        setSelection(0, 0);
+        FrameProfile.step(timed, "setSelection");
         return this;
     }
 
@@ -2234,7 +2268,10 @@ public class TextEditor extends ScrollerView implements UndoScope {
         highlightedTo = to;
         highlightsDirty = false;
 
+        long syntaxTimed = FrameProfile.begin();
         ensureRowSyntax(firstViewLine, lastViewLine);
+        FrameProfile.end(syntaxTimed, "ed:ensureRowSyntax");
+        long bandsTimed = FrameProfile.begin();
         for (Map.Entry<Integer, UIElement> entry : realisedLines.entrySet()) {
             int viewLine = entry.getKey();
             if (viewLine < 0 || viewLine >= viewLineCount()) continue;
@@ -2363,6 +2400,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
                 highlights.set(named.getKey(), named.getValue());
             }
         }
+        FrameProfile.end(bandsTimed, "ed:highlightBands x" + realisedLines.size());
     }
 
     /**
@@ -2602,7 +2640,13 @@ public class TextEditor extends ScrollerView implements UndoScope {
         }
         if (filling.isEmpty()) return;
 
-        for (SyntaxToken token : tokenizer.tokenize(buffer.document(), spanStart, spanEnd)) {
+        long grammarTimed = FrameProfile.begin();
+        List<SyntaxToken> grammarTokens = tokenizer.tokenize(buffer.document(), spanStart, spanEnd);
+        FrameProfile.end(grammarTimed, "ed:tokenize");
+        FrameProfile.step(grammarTimed, "ed:tokenize rows " + firstMissing + ".." + lastMissing
+                + " (" + (lastMissing - firstMissing + 1) + " of " + lineCount + "), span "
+                + (spanEnd - spanStart) + " chars -> " + grammarTokens.size() + " tokens");
+        for (SyntaxToken token : grammarTokens) {
             distributeToRows(token, firstMissing, lastMissing, filling);
         }
 
@@ -2621,7 +2665,11 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // token would make each semantic token displace the previous one, and they are deliberately
         // allowed to overlap each other: `count` being a field and `count` being deprecated are two
         // true things about one range, drawn as a colour and a strike-through by two different rules.
+        long semanticTimed = FrameProfile.begin();
         List<SyntaxToken> semanticTokens = semantic.tokensIn(spanStart, spanEnd);
+        FrameProfile.end(semanticTimed, "ed:semanticTokens");
+        FrameProfile.step(semanticTimed, "ed:semanticTokens span " + (spanEnd - spanStart)
+                + " chars -> " + semanticTokens.size() + " tokens");
         for (SyntaxToken token : semanticTokens) {
             clearGrammarUnder(token, firstMissing, lastMissing, filling);
         }
