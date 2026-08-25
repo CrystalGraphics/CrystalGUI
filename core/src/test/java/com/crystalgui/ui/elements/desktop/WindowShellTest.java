@@ -11,6 +11,7 @@ import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuEntry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.command.MenuSection;
+import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.TestPlatformService;
 import com.crystalgui.testsupport.UiTestBase;
@@ -465,5 +466,63 @@ public class WindowShellTest extends UiTestBase {
         assertNotNull(move);
         assertFalse("the menu offered Move on a maximised window",
                 move.isEnabled(CommandContext.of(first)));
+    }
+
+    // ── Under the taskbar ──────────────────────────────────────────────────────────
+
+    /**
+     * <b>The work area must not clip, or a window dragged downwards is CUT OFF at the strip instead of
+     * sliding under it.</b>
+     *
+     * <p>The clamp always allowed the position — see the pair below — so the only thing standing between
+     * a window and the taskbar was one {@code overflow} declaration on the layer. The two outcomes look
+     * nothing alike: a window that slides beneath the strip has been put out of the way, and a window
+     * sheared off along a horizontal line has been broken.</p>
+     *
+     * <p>Asserted on the computed value because that is what the paint scissor and the hit test both
+     * read, and because the sheet genuinely writes it — an unwritten property answers null here rather
+     * than its initial value, so this fails honestly if the declaration is ever deleted as well as if it
+     * is changed back.</p>
+     */
+    @Test
+    public void theWorkAreaDoesNotClip() {
+        assertEquals("the window layer must not clip, or nothing can go under the taskbar",
+                Overflow.VISIBLE, desktop().windowLayer().getStyle().generalGroup.overflow());
+    }
+
+    /**
+     * <b>A window travels down until its caption reaches the bottom of the work area, and stops there.</b>
+     *
+     * <p><b>This one passes against the UNFIXED build</b>, and saying so is the point: the clamp was
+     * never what stopped a window reaching the taskbar, so a test written around the geometry proves
+     * nothing about the bug that was reported. {@link #theWorkAreaDoesNotClip} is the regression guard;
+     * this is the guarantee that guard is in service of.</p>
+     *
+     * <p>Both halves matter and the second is the one worth having. Windows' rule is that the title bar
+     * stays reachable: the body may go anywhere, so the window can be pushed almost entirely under the
+     * strip, but a window whose caption went under it too could never be dragged back out and would be
+     * recoverable only through the taskbar. The clamp's upper bound is the whole of that guarantee.</p>
+     */
+    @Test
+    public void aWindowSlidesUnderTheStripButKeepsItsCaption() {
+        UIElement layer = desktop().windowLayer();
+        float areaTop = layer.getRuntimeCache().getY();
+        float areaBottom = areaTop + layer.getRuntimeCache().getHeight();
+        assertTrue("fixture is broken: the work area has no height", areaBottom > areaTop);
+
+        first.moveTo(40, 10_000);   // shoved far past the bottom, as a drag would
+        settle();
+
+        float top = first.getRuntimeCache().getY();
+        float bottom = top + first.getRuntimeCache().getHeight();
+
+        assertTrue("the window's body must be allowed BELOW the work area -- that is what going under "
+                        + "the taskbar means (bottom=" + bottom + ", areaBottom=" + areaBottom + ")",
+                bottom > areaBottom);
+        assertTrue("but its caption must stay inside, or it can never be dragged back out "
+                        + "(top=" + top + ", areaBottom=" + areaBottom + ")",
+                top < areaBottom);
+        assertEquals("the caption should come to rest exactly at the bottom of the work area",
+                areaBottom - first.captionHeight(), top, 0.75f);
     }
 }

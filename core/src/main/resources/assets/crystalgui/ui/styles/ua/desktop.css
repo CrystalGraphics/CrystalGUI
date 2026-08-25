@@ -37,15 +37,39 @@
  * load-bearing: this engine's flex-shrink defaults to 0, so a grow-only child keeps its content size
  * and overhangs its parent. It has cost a session on the dock, a RegionHost and a ViewContainer.
  *
- * `clip`, NOT `hidden`: both clip, and only `hidden` also makes this a scroll container. A desktop
- * with a scrollTop is a desktop something can silently scroll — and a window dragged half off the
- * right edge (which the clamp deliberately allows) is exactly the content that would make it
- * scrollable. `clip` is CSS's value for "clipped and genuinely not scrollable". */
+ * IT DOES NOT CLIP, and that is what lets a window be dragged UNDER the taskbar.
+ *
+ * The clamp has always allowed the position — `applyPosition` lets a window travel down until only
+ * its caption is left in the work area, which is Windows' rule and the same rule that lets a window
+ * hang off the left and right edges. A clip on this box turned that into the window being CUT OFF at
+ * the strip's top edge instead of sliding beneath it, and the two read completely differently: one is
+ * a window you have pushed out of the way, the other is a window that has been damaged. Reported as
+ * "window frames can't go under the taskbar", which is what it looks like from the outside.
+ *
+ * Nothing is lost by letting it paint out, because there is only one direction with anything in it.
+ * The layer spans the whole desktop, so off the left, right and top is off the SCREEN. Down is the
+ * taskbar, and the taskbar is a LATER SIBLING — so it paints over whatever slides under it and
+ * hit-tests ahead of it, both for free, with no z-index and no special case. @see Desktop's
+ * constructor, which adds the layer first and says so.
+ *
+ * The strip claims its whole row, band and all, even where only the island draws. That is deliberate
+ * and it is Windows': the taskbar's row belongs to the taskbar, so a window slid under it is not
+ * clickable there. Making the band pointer-transparent is NOT available — hit-testing off takes the
+ * whole SUBTREE with it, so it would take the island's own entries down too — and content-sizing the
+ * band is worse than it looks: `taskbar .__entries__` bounds itself with `max-width: 100%`, a
+ * percentage that needs a DEFINITE parent to resolve against, and that bound is the one that stopped
+ * twenty windows making a 1232px island on a 400px desktop.
+ *
+ * It used to be `clip`, NOT `hidden`, and the distinction is worth keeping should this ever clip
+ * again: both clip, and only `hidden` also makes this a scroll container. A desktop with a scrollTop
+ * is a desktop something can silently scroll, and a window dragged half off an edge is exactly the
+ * content that would make it scrollable. `clip` is CSS's value for "clipped and genuinely not
+ * scrollable". */
 desktop .__windows__ {
     width: 100%;
     height: 0;
     flex-grow: 1;
-    overflow: clip;
+    overflow: visible;
 }
 
 /* ── The taskbar ────────────────────────────────────────────────────────────────────────────────
