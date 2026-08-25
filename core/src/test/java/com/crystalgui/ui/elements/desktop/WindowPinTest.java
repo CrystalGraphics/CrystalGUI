@@ -1,6 +1,8 @@
 package com.crystalgui.ui.elements.desktop;
 
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.render.texture.CgUiDrawable;
+import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.ui.UIElement;
@@ -16,6 +18,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -307,5 +310,65 @@ public class WindowPinTest extends UiTestBase {
     @Test
     public void nothingToShowPaintsNothing() {
         window.paint(DesktopPresentation.NONE, 800, 600);
+    }
+
+    // ── the three-state overlay ─────────────────────────────────────────────────────
+
+    /**
+     * <b>A missing icon file is SILENT: the pin keeps drawing, one state behind.</b>
+     *
+     * <p>{@code TextureValue.parseIcon} returns null when {@code CgUiSvg.ofIcon} cannot resolve, a
+     * {@code StyleValue} that computes to null degrades rather than propagating, and the cascade then
+     * falls through to the next candidate — which for {@code .__pin__:hover} is the base
+     * {@code .__pin__} rule. So a renamed or dropped file does not throw, does not warn, and does not
+     * leave a gap where the glyph was: it shows the RESTING icon while hovered, which is
+     * indistinguishable from the hover rule never having been written.</p>
+     *
+     * <p>Asserting the resolution and the cascade separately is what tells those two apart. It cost a
+     * round of diagnosis to establish that the wiring was correct and the artwork was the problem.</p>
+     */
+    @Test
+    public void allThreePinIconsResolve() {
+        for (String name : new String[] {
+                "crystalgui:general/action/pin",
+                "crystalgui:general/action/pinHovered",
+                "crystalgui:general/action/pinSelected" }) {
+            assertNotNull(name + " did not resolve -- the pin would silently fall back a state",
+                    CgUiSvg.ofIcon(name));
+        }
+    }
+
+    /**
+     * <b>Rest, hover and pinned each reach the button as a different drawable.</b>
+     *
+     * <p>By DOCUMENT IDENTITY rather than by colour: {@code SvgDocument.of} shares the parsed document,
+     * so the same icon name is the same reference. Asserting on what the icon looks like would be
+     * asserting on artwork, which is the harness's job — this asserts the wiring, which is what was
+     * doubted.</p>
+     */
+    @Test
+    public void hoverAndPinnedEachSwapTheOverlay() {
+        assertSameIcon("crystalgui:general/action/pin", plain.pinButton);
+
+        plain.pinButton.setHovered(true);
+        settle();
+        assertSameIcon("crystalgui:general/action/pinHovered", plain.pinButton);
+
+        // Pinned outranks hover -- same specificity, later rule. A window's state is what the caption
+        // reports, not what the pointer happens to be over.
+        plain.setPinned(true);
+        settle();
+        assertSameIcon("crystalgui:general/action/pinSelected", plain.pinButton);
+    }
+
+    private static void assertSameIcon(String expected, UIElement button) {
+        CgUiDrawable overlay = button.getStyle().generalGroup.overlay();
+        assertNotNull("no overlay on the pin at all", overlay);
+        assertTrue("overlay is " + overlay.getClass().getSimpleName() + ", not an icon",
+                overlay instanceof CgUiSvg);
+        CgUiSvg want = CgUiSvg.ofIcon(expected);
+        assertNotNull(expected + " does not resolve", want);
+        assertSame("the pin is not showing " + expected,
+                want.getDocument(), ((CgUiSvg) overlay).getDocument());
     }
 }
