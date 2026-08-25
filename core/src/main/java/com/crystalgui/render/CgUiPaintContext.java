@@ -991,9 +991,32 @@ public final class CgUiPaintContext {
     }
 
     /**
-     * Flushes renderer queue and draws all submitted quads
+     * Draws everything submitted and not yet drawn — <b>on every path, text included</b>.
+     *
+     * <h3>The text batch is pending work, and this method is what "pending" is measured against</h3>
+     *
+     * <p>Every caller of this uses it to mean "the GPU has what I gave it, I am about to change
+     * something it would otherwise be drawn under". {@link #pushScissor} and {@link #popScissor} change
+     * the clip rectangle; {@link #withMaterial} binds a different shader; {@link #endLayerFbo} closes a
+     * GL scope and puts the previous render TARGET back. All four flushed the quad renderer and left an
+     * open text batch behind, so its glyphs were drawn later, under whatever state was current then.</p>
+     *
+     * <p>That was invisible until this class started holding a batch open across labels. Before it did,
+     * {@code Draw.submit()} auto-wrapped each label in its own begin/flush/end, so text was never pending
+     * across anything and {@code renderer.flush()} really was the whole of it. Opening one batch for the
+     * text path is what made this method a lie.</p>
+     *
+     * <p>The symptom is not a wrong colour, it is a <b>missing label</b>: a tree row's glyphs queued
+     * inside the list's scissor and flushed after {@code popScissor}, clipped to a rectangle they are no
+     * longer inside. Which rows vanish depends on where the batch happened to end, so it reads as
+     * intermittent — the project tree lost its root one run and a child the next.</p>
+     *
+     * <p>Ending the batch runs the restore hook, which lands in {@link #bindQuadPath} and puts
+     * {@code activePath} back to QUAD; the next {@link #text()} reopens one. Consecutive labels with
+     * nothing between them still coalesce, which is the whole of what the batch was for.</p>
      */
     public void flush() {
+        endTextPath();
         renderer.flush();
     }
 
