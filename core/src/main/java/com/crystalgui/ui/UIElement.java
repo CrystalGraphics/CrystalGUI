@@ -1,5 +1,6 @@
 package com.crystalgui.ui;
 
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
 import com.crystalgraphics.gl.texture.CgTexture2D;
@@ -2417,6 +2418,14 @@ public class UIElement implements SettingsScope, DataProvider {
     public final void drawSubtree(CgUiPaintContext ctx) {
         if (style.taffyBridge.style.display == TaffyDisplay.NONE || style.generalGroup.opacity() == 0)
             return;
+        // HOW MANY ELEMENTS THE FRAME ACTUALLY PAINTED.
+        //
+        // `gl:draw` wraps this whole traversal, so a large number there is either our own walking and
+        // submitting or the driver blocking inside a draw call because the GPU is behind -- and those
+        // need opposite fixes. Cost per element separates them: a traversal scales with the count, a
+        // stalled queue does not. Measured in a client at 45-62ms for this phase while the entire rest
+        // of the frame was under 2ms, which is the one number left that nothing explains.
+        FrameProfile.count("painted", 1);
         // Pushed BEFORE the localToWorld snapshot below, so that snapshot includes this element's own
         // transform — which is what the RuntimeCache calculator produces too. Get this order wrong and
         // hit-testing silently disagrees with rendering by exactly the transform.
