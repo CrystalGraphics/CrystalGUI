@@ -1,6 +1,7 @@
 package com.crystalgui.ui;
 
 import com.crystalgui.core.data.DataKey;
+import com.crystalgui.core.settings.Settings;
 import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.ui.elements.chrome.MenuBarView;
 
@@ -84,4 +85,28 @@ public final class UiDataKeys {
 
     public static final DataKey<UIWindow> WINDOW =
             DataKey.create("window", UIWindow.class);
+
+    /**
+     * The store a <b>preference</b> is written to — the outermost scope this application resolves
+     * through, which is not always the window's root element.
+     *
+     * <h3>Asked rather than derived, because "outermost" has two answers</h3>
+     *
+     * <p>Settings resolve outward, so a preference has to be written at the top or it reaches only one
+     * subtree. The obvious way to find the top is {@code window.ui.rootElement.settings()}, and it was
+     * right for exactly as long as the application WAS the root element.</p>
+     *
+     * <p>It stopped being right when a window compositor arrived: an application that opens itself as a
+     * window sits inside a {@code WindowFrame} inside the desktop, so the window's root is the
+     * compositor's root and the application's own store is several levels below it. The writer and
+     * whatever listens for the change then compute "the top" separately and get different objects — the
+     * value is stored, resolves correctly on the way out, and <b>nothing is ever told it changed</b>.</p>
+     *
+     * <p>Which reads as the preference not working at all, and is invisible to any host that still puts
+     * its application at the root — a test, or a harness scene, has one store and cannot tell the two
+     * apart. Whoever owns persistence answers this; the window root is the fallback for a host that has
+     * nobody to ask.</p>
+     */
+    public static final DataKey<Settings> SETTINGS_HOST =
+            DataKey.create("settingsHost", Settings.class);
 }
