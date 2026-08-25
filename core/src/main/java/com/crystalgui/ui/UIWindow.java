@@ -992,7 +992,13 @@ public final class UIWindow {
     /** Everything that wants a per-frame callback: smooth scrolls plus registered tickers. Driven
      * from {@link #paintFrame()}; call it directly if you drive frames yourself. */
     public void tickAnimations(float deltaSeconds) {
+        // SMOOTH SCROLLING, APART FROM THE TICKERS. A wheel notch does not move the view directly -- it
+        // retargets an animation that then writes a new scrollTop every frame until it arrives, and every
+        // one of those writes is what makes the editor re-place its rows. So a scroll's cost is spread
+        // over the frames AFTER the notch, and this is the only bucket that says how many.
+        long scrolled = FrameProfile.begin();
         tickScrollAnimations(deltaSeconds);
+        FrameProfile.end(scrolled, "anim:scroll");
         if (!tickers.isEmpty()) {
             // Snapshot: a ticker may register another (or itself) while running.
             for (UIFrameTicker ticker : new ArrayList<>(tickers)) {

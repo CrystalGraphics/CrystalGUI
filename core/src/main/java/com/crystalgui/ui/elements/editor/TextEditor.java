@@ -314,6 +314,12 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private boolean highlightsDirty = true;
 
     /**
+     * The viewport moved, so {@link #refreshHighlights} must run — but every row it still shows keeps the
+     * bands it has. Distinct from {@link #highlightsDirty}, which means the bands themselves are wrong.
+     */
+    private boolean highlightWindowMoved = true;
+
+    /**
      * Says the published {@code ::highlight()} ranges no longer describe the document.
      *
      * <p>For the subsystems that own a range set of their own — find, occurrences — since the flag itself
@@ -2286,7 +2292,24 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
         int from = viewLineStartOffset(Math.max(0, firstViewLine));
         int to = viewLineEndOffset(Math.max(0, Math.min(lastViewLine, viewLineCount() - 1)));
-        if (!highlightsDirty && from == highlightedFrom && to == highlightedTo) return;
+        if (!highlightsDirty && !highlightWindowMoved && from == highlightedFrom && to == highlightedTo) {
+            return;
+        }
+        highlightWindowMoved = false;
+        // WHY WE ARE HERE, captured before the flag is cleared.
+        //
+        // The early-out above is all-or-nothing on the visible OFFSET RANGE, and a scroll changes that
+        // range every single frame -- so scrolling rebuilt every realised row's bands, every frame, from
+        // scratch. Measured on a 2,020-line class: `ed:highlightBands x34` at 3.3ms typical and 14ms
+        // worst, inside an `ed:updateWindow` of which it was 57-90%, with 61 of 107 frames over budget
+        // for the length of the scroll.
+        //
+        // But scrolling does not change what any row's bands ARE. It changes which rows are on screen,
+        // and moving the viewport by one line leaves 33 of 34 rows showing exactly the view line they
+        // were already showing. So a pure range change rebuilds only what genuinely moved, and anything
+        // that changes the CONTENT of a row's bands -- a reparse, a new selection, a search, a fold, an
+        // edit -- goes on setting `highlightsDirty` and rebuilds the lot, exactly as before.
+        boolean rebuildEveryRow = highlightsDirty;
         highlightedFrom = from;
         highlightedTo = to;
         highlightsDirty = false;
@@ -2295,9 +2318,15 @@ public class TextEditor extends ScrollerView implements UndoScope {
         ensureRowSyntax(firstViewLine, lastViewLine);
         FrameProfile.end(syntaxTimed, "ed:ensureRowSyntax");
         long bandsTimed = FrameProfile.begin();
+        int rebuilt = 0;
         for (Map.Entry<Integer, UIElement> entry : realisedLines.entrySet()) {
             int viewLine = entry.getKey();
             if (viewLine < 0 || viewLine >= viewLineCount()) continue;
+            // ALREADY SHOWING THIS VIEW LINE, and nothing about its content changed. @see #bandsShownFor
+            if (!rebuildEveryRow && Integer.valueOf(viewLine).equals(bandsShownFor.get(entry.getValue()))) {
+                continue;
+            }
+            rebuilt++;
             // Ranges are offsets into the UIText this line owns, and that text is one VIEW line -- so a
             // wrapped row's second half must publish ranges relative to where IT starts. Using the row's
             // start would push every colour on a continuation line left by the width of everything above
@@ -2422,8 +2451,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
             for (Map.Entry<String, List<TextRange>> named : byName.entrySet()) {
                 highlights.set(named.getKey(), named.getValue());
             }
+            bandsShownFor.put(entry.getValue(), viewLine);
         }
-        FrameProfile.end(bandsTimed, "ed:highlightBands x" + realisedLines.size());
+        FrameProfile.end(bandsTimed, "ed:highlightBands " + rebuilt + "/" + realisedLines.size());
     }
 
     /**
@@ -5056,14 +5086,23 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     /** Re-reads the text of every realised line without recycling it, so highlights survive the edit. */
     private void rebindRealisedLines() {
+        // THE PER-LINE SPLIT, because this runs over every realised row on every frame and the two things
+        // it does are unrelated: placing a row is style writes that no-op when nothing moved, while
+        // re-reading its text is a rope read plus a UIText that may re-shape. A scroll changes both for
+        // every row at once, which is why this is the shape of frame the wheel produces.
+        long placed = 0L;
+        int rows = 0;
         for (Map.Entry<Integer, UIElement> entry : realisedLines.entrySet()) {
             int viewLine = entry.getKey();
             if (viewLine < 0 || viewLine >= viewLineCount()) continue;
+            rows++;
             // The FULL layout, not just the text. An edit or a reflow can turn a continuation line into a
             // first line or the reverse, which moves its carried indent and its width -- and after a
             // resize it moves every one of them.
             String before = textOf(entry.getValue()).getText();
+            long t0 = FrameProfile.begin();
             layOutLine(viewLine, entry.getValue());
+            if (t0 != 0L) placed += System.nanoTime() - t0;
             // A ROW WHOSE TEXT CHANGED HAS STALE HIGHLIGHTS, and nothing else says so.
             //
             // refreshHighlights below early-outs on `!highlightsDirty && from == highlightedFrom && to ==
@@ -5081,6 +5120,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // nothing writes nothing: setText no-ops on an unchanged string, and so does this.
             if (!before.equals(textOf(entry.getValue()).getText())) highlightsDirty = true;
         }
+        FrameProfile.report(placed, "ed:rebind.layOutLine x" + rows);
         // NO markTreeDirty() HERE, and its absence is the point.
         //
         // This method's own contract, three lines up in updateWindow, is that it is safe to call every
@@ -5249,7 +5289,17 @@ public class TextEditor extends ScrollerView implements UndoScope {
             FrameProfile.step(realised, "ed:realiseLines x" + created);
             firstRealised = first;
             lastRealised = last;
-            highlightsDirty = true;
+            // THE WINDOW MOVED, WHICH IS NOT THE SAME AS THE CONTENT CHANGING.
+            //
+            // This set `highlightsDirty`, and that flag means "every row's bands are wrong" -- so a
+            // scroll, which moves the window on every frame, forced a full rebuild of every realised
+            // row's bands on every frame. It is the reason the per-row skip in refreshHighlights could
+            // never fire: the counter read 34/34 throughout.
+            //
+            // What the realise loop actually knows is that the VIEWPORT moved, so refreshHighlights must
+            // run rather than early-out on an unchanged range. Which rows within it still hold good bands
+            // is a per-row question, and `bandsShownFor` is what answers it.
+            highlightWindowMoved = true;
             long announced = FrameProfile.begin();
             onWindowChanged.emit();
             FrameProfile.step(announced, "ed:onWindowChanged -> "
@@ -5399,7 +5449,25 @@ public class TextEditor extends ScrollerView implements UndoScope {
         ((UIText) line.getChildren().get(0)).setText(viewLineDisplayText(viewLine));
     }
 
+    /**
+     * Which view line each realised element last published highlight bands for.
+     *
+     * <p>The memo behind {@link #refreshHighlights}'s per-row skip. Keyed by ELEMENT rather than by view
+     * line, because a scroll is exactly the case where the same view line is shown by a different element
+     * and the same element shows a different view line -- so the question worth asking is "is this element
+     * still showing what it published for", and the view line alone cannot answer it.</p>
+     *
+     * <p>Identity-keyed and weak, so a line element that is dropped for good takes its entry with it. It
+     * never needs invalidating by content: anything that changes what a row's bands ARE sets
+     * {@code highlightsDirty}, and that rebuilds every row regardless of what is recorded here.</p>
+     */
+    private final Map<UIElement, Integer> bandsShownFor =
+            java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
+
     private void recycleLine(UIElement line) {
+        // IT IS ABOUT TO SHOW SOMETHING ELSE. The highlights are cleared just below, so the record of what
+        // they were must go with them or the next row to land on this element is skipped as up to date.
+        bandsShownFor.remove(line);
         // A pooled line reused for a different row would otherwise keep the old row's highlights, which
         // is worse than none: the ranges are offsets into a string that has been replaced.
         textOf(line).highlights().clear();
