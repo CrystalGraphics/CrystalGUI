@@ -1526,10 +1526,15 @@ texteditor.__file-editor__ {
      *
      * THIS IS THE FIRST ROUNDED CLIPPER WITH A TRANSPARENT SURFACE, and it found a latent hole in the
      * engine on the way in. A radius on a clipping element promotes it to OverflowClip.MASK, whose
-     * default mask is the element's own BACKGROUND — and four of the five shipped schemes paint a
-     * deliberately transparent paper (dark-plus.css records why), so the mask was zero everywhere and
-     * would have multiplied the whole document away. Fixed where it belongs, in UIElement.maskFill:
-     * a mask that reveals nothing is never what a clip meant. Nothing is needed here but the radius.
+     * default mask is the element's own BACKGROUND — and four of the five shipped schemes then painted a
+     * deliberately transparent paper, so the mask was zero everywhere and would have multiplied the whole
+     * document away. Fixed where it belongs, in UIElement.maskFill: a mask that reveals nothing is never
+     * what a clip meant. Nothing is needed here but the radius.
+     *
+     * ALL FIVE NOW PAINT AN OPAQUE PAPER, and the guard stays regardless — it is about what a clip means,
+     * not about which colours happen to ship. The two that were transparent were so in order to avoid
+     * squaring off the island, which THIS radius is what removed: the corners are the editor's own now,
+     * so a fill is drawn inside them. See dark-plus.css for the other half of why they changed.
      *
      * The layer pass is free at this size — 799 frames against a 785-frame baseline over ten seconds
      * of cgui-dock, i.e. inside the run-to-run noise, and in the wrong direction. */
