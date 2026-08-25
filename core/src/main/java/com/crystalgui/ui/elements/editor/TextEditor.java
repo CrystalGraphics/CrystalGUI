@@ -2240,19 +2240,25 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * plausibly arrive from both ends.</p>
      */
     public void disposeLanguage() {
+        long timed = FrameProfile.begin();
         tokenizer.setInvalidationListener(null);
         tokenizer.close();
         tokenizer = SyntaxTokenizer.NONE;
+        FrameProfile.step(timed, "close.tokenizer.close (frees the native trees)");
         if (languageDiagnostics != null) {
             languageDiagnostics.disconnect();
             languageDiagnostics = null;
         }
         if (languageServices != null) {
+            timed = FrameProfile.begin();
             languageServices.semanticTokens().setInvalidationListener(null);
             languageServices.close();
             languageServices = null;
+            FrameProfile.step(timed, "close.languageServices.close");
         }
+        timed = FrameProfile.begin();
         rowSyntax.clear();
+        FrameProfile.step(timed, "close.rowSyntax.clear");
     }
 
     /**

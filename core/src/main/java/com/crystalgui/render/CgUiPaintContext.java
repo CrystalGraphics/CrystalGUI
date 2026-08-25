@@ -581,15 +581,28 @@ public final class CgUiPaintContext {
         fd.projMatrix.identity().ortho(0, screenWidth, screenHeight, 0, -1, 1);
         fd.viewportW = screenWidth;
         fd.viewportH = screenHeight;
+        // EACH STEP OF beginFrame TIMED SEPARATELY. `gl:begin` was measured at 19.9ms on the frame after
+        // a tab closes, with `glbegin:msaaClear` -- the only thing in here that touches every pixel --
+        // never even reaching the report threshold. So the cost is one of the four below, and they have
+        // nothing in common: a UBO upload, a projection write plus an atlas tick, a buffer rewind, and a
+        // material bind that compiles on its first use.
+        long timed = FrameProfile.begin();
         pipeline.prepareFrame();
+        FrameProfile.end(timed, "glbegin:prepareFrame");
 
         // Text: projection + atlas LRU frame tick. No beginBatch() here — drawText()
         // deliberately stays standalone-per-call, see docs/CRYSTALGUI_TEXT_RENDERING_PLAN.md §2.3.
+        timed = FrameProfile.begin();
         textRenderer.context().updateOrtho(screenWidth, screenHeight);
+        FrameProfile.end(timed, "glbegin:textOrtho");
 
         poseStack.pushPose();
+        timed = FrameProfile.begin();
         renderer.begin();
+        FrameProfile.end(timed, "glbegin:renderer.begin");
+        timed = FrameProfile.begin();
         bindQuadPath(boxModelMaterial);
+        FrameProfile.end(timed, "glbegin:bindQuadPath");
         currentMaterial = boxModelMaterial;
         currentTexture = null;
         scissorStack.reset();
