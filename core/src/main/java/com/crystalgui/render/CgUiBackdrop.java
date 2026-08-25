@@ -264,6 +264,42 @@ final class CgUiBackdrop {
                 capX0, glY0, capX0 + capW, glY1,
                 0, h - capH, capW, h, CgGL.GL_COLOR_BUFFER_BIT, CgGL.GL_NEAREST);
 
+        // 1b. THE SCENE IS OPAQUE, AND SAYING SO IS WHAT MAKES THE REST OF THIS PIPELINE TRUE.
+        //
+        // Everything downstream is premultiplied: gui_blur carries alpha through its taps ("PREMULTIPLIED
+        // ALPHA IS CARRIED THROUGH, NOT DISCARDED"), and gui_glass's cg_backdrop un-premultiplies with
+        // `rgb /= max(a, 1/255)`. That contract is right for the LAYERS composited below, which really
+        // are premultiplied. It is not right for the blit above, which is a raw glBlitFramebuffer of the
+        // HOST's colour buffer -- and a host's alpha channel holds whatever its own rendering left there.
+        // Minecraft's is not 1: its GUI layer draws blended, so an item sprite lands in the framebuffer
+        // carrying a fractional alpha next to slot art carrying another.
+        //
+        // DIVIDE A BRIGHT PIXEL BY A FRACTIONAL ALPHA AND IT SATURATES. A gold nugget in the hotbar at
+        // rgb(0.80, 0.65, 0.15) with a = 0.25 comes back (3.2, 2.6, 0.6), clips to near-white, and the
+        // blur then spreads that over its neighbours -- so the item wears a white halo while the dark
+        // slots beside it do not, because small numbers divided by the same alpha stay small. On screen
+        // it reads as bloom, or as an HDR or a saturation fault, and it is none of them: a Gaussian
+        // cannot brighten anything, so ANY local amplification in this path is arithmetic, and the only
+        // division in the path is the un-premultiply.
+        //
+        // ONE ALPHA-ONLY CLEAR fixes it at the source instead of special-casing the consumer. An opaque
+        // image is trivially premultiplied (rgb * 1 == rgb), so cg_backdrop's divide becomes a no-op that
+        // still guards genuinely premultiplied content, and the layers composited below -- premultiplied
+        // `over` onto an opaque destination -- leave alpha at 1 rather than at src_a^2 + (1 - src_a),
+        // which is what straight-alpha blending would have left. Every stage's assumption is then true,
+        // rather than one of them being true by luck about the host.
+        //
+        // IT CANNOT BE SEEN IN THE HARNESS, which is why it shipped. There the "scene" is our own clear
+        // colour, so the capture's alpha is whatever we chose it to be and the divide is near enough to
+        // harmless; gui_blur's own note about a dark fringe is the same channel read the other way. The
+        // capture is the one place in the engine that samples a buffer we did not write.
+        withoutScissor(() -> {
+            try (CgGlScope ignored = CgGlState.save(CgGlSlot.COLOR_MASK)) {
+                CgGL.glColorMask(false, false, false, true);
+                captureFbo.clearColor(0f, 0f, 0f, 1f);
+            }
+        });
+
         // 2. ctx.msaaFbo, resolved - it is a multisampled RENDERBUFFER and cannot be sampled, which is the
         // same reason endFrame resolves it and the reason this feature is possible at all. RESOLVED IN
         // PLACE and region-only: on a multisampled surface this is the single most expensive thing the
