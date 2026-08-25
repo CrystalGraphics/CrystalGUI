@@ -48,6 +48,7 @@ import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.text.HighlightRegistry;
 import com.crystalgui.ui.text.SyntaxHighlighting;
 import com.crystalgui.ui.text.TextRange;
+import dev.vfyjxf.taffy.style.TaffyDisplay;
 import dev.vfyjxf.taffy.style.LengthPercentageAuto;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 import lombok.Getter;
@@ -5356,6 +5357,10 @@ public class TextEditor extends ScrollerView implements UndoScope {
         }
         layOutLine(viewLine, line);
         if (line.getParent() == null) linesLayer().addInternalChild(line);
+        // AND SHOWN, by the same route and for the same reason. @see #recycleLine
+        StyleGroup.importantPipeline(line.getStyle().getLayoutGroup(),
+                l -> l.display(TaffyDisplay.FLEX));
+        line.getStyle().taffyBridge.setDisplay(TaffyDisplay.FLEX);
         return line;
     }
 
@@ -5398,7 +5403,44 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // A pooled line reused for a different row would otherwise keep the old row's highlights, which
         // is worse than none: the ranges are offsets into a string that has been replaced.
         textOf(line).highlights().clear();
-        linesLayer().removeInternalChild(line);
+        // HIDDEN, NOT DETACHED -- the pool/hide idiom `DecorationPool` already uses one layer up.
+        //
+        // This pooled the Java objects and threw away their tree membership, which is the expensive half:
+        // `removeInternalChild` unregisters the whole subtree, destroying a Taffy node for the line and
+        // one for its UIText, and the matching `addInternalChild` on the way back registers them again --
+        // and a registration invalidates the style match, so the cascade re-runs over every line that
+        // came back.
+        //
+        // It is paid on every SCROLL, and in bulk whenever a viewport's worth turns over at once. The
+        // case that made it visible is a tab switch: an unselected pane is `display: none`, a hidden box
+        // measures zero, and the windowing above reads zero as "one line is on screen" -- so switching
+        // away recycles the whole viewport and switching back realises it again. Measured on the frame
+        // after closing one of two open tabs, which is a switch to the survivor:
+        // `UIWindow.registerElement x181`, `style:drainDirtyMatch 6,607us`, `layout 7,282us`.
+        //
+        // Hiding costs one IMPORTANT-origin display write, and `replaceOrPutCandidate` no-ops when the
+        // value is unchanged. A hidden element takes no layout and paints nothing, so a pool of them is
+        // bounded by the largest viewport this editor has ever shown -- which is what it would hold
+        // detached anyway.
+        // THROUGH THE CASCADE, at IMPORTANT origin -- NOT `taffyBridge.setDisplay`, which is immediate
+        // and was tried first. A direct Taffy write leaves no candidate behind, so the next thing to
+        // re-match this element resolves `display` to its INITIAL value and pops the pooled line back
+        // into layout. Re-matching a line is ordinary: `invalidateStyleMatch` recurses, so any class
+        // change on the editor reaches every line under it, pool included.
+        //
+        // Immediate in practice all the same. `display` is transitionable and its DISPLAY_ALLOW_DISCRETE
+        // interpolator holds the visible end until the very end -- but only while a transition is
+        // RUNNING, and nothing declares one on a line.
+        StyleGroup.importantPipeline(line.getStyle().getLayoutGroup(),
+                l -> l.display(TaffyDisplay.NONE));
+        // AND STRAIGHT AT TAFFY TOO, which is not belt-and-braces -- the two do different halves. The
+        // candidate is what SURVIVES: without it the next re-match resolves `display` to its initial
+        // value and pops the pooled line back into layout, and re-matching a line is ordinary, since
+        // `invalidateStyleMatch` recurses and any class change on the editor reaches the whole pool. The
+        // direct write is what makes it take effect NOW: this runs from a ticker, after the frame's
+        // cascade has already drained, so a candidate alone leaves the line laid out and painted for one
+        // more frame -- a ghost row wherever the viewport just turned over.
+        line.getStyle().taffyBridge.setDisplay(TaffyDisplay.NONE);
         linePool.addLast(line);
     }
 
