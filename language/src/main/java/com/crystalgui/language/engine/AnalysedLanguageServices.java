@@ -1,5 +1,6 @@
 package com.crystalgui.language.engine;
 
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.async.JobKey;
 import com.crystalgui.core.async.JobLane;
 import com.crystalgui.core.async.JobScheduler;
@@ -176,6 +177,15 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
         // from another thread. `start()` is the subclass's last line, by contract.
         if (file != null) ATTACHED.put(file, this);
         bufferSubscription = buffer.onChanged.connect(change -> schedule());
+        // SYNCHRONOUS, AND MEASURED AT 55ms ON THE FRAME THREAD when a library viewer is opened -- the
+        // compiler's environment being built, not the empty buffer being analysed.
+        //
+        // Left synchronous deliberately. "A document is analysed when the services are created" is a
+        // contract with a test named for it and seven more resting on it, and scheduling instead defers
+        // the first answer by a debounce window. That is defensible -- the grammar colours the document
+        // meanwhile, which is what an engineless host shows -- but it is a change to what this class
+        // PROMISES, and it was worth a sixth of one slow open. The 250ms beside it in that same open was
+        // source discovery, which is now warmed off-thread and needed no contract to move.
         analyzeNow();
     }
 
@@ -285,7 +295,7 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
         bufferSubscription.disconnect();
         if (scheduler != null) scheduler.cancel(analysisKey);
         diagnosticListeners.clear();
-        tokens.adopt(null);
+        tokens.adopt(null, null);
         if (current != null) {
             current.close();
             current = null;
@@ -303,7 +313,21 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
      * stamp exists to measure — reading it here would make every list look fresh and the gate a no-op.</p>
      */
     private Versioned<List<Diagnostic>> announcement(Analysis analysis) {
-        if (analysis.optionalProblemsAnalysed()) remember(analysis.diagnostics());
+        // NOTHING TO RETAIN FOR A DOCUMENT THAT REPORTS NOTHING, and retaining it anyway was measured at
+        // 12ms on the frame that opens a decompiled class.
+        //
+        // The retained lane exists for one purpose: keep the optional warnings alive across a syntax
+        // error so they are not withdrawn and re-announced every time the file stops parsing. That is a
+        // statement about REPORTING, and a library document reports nothing -- compose() returns an empty
+        // list on its very first line for exactly that reason. So this materialised every diagnostic
+        // across the classloader bridge, wrote a tracked range into the buffer for each one, and handed
+        // the result to a method that had already decided to discard it.
+        //
+        // Nothing observable changes: the lane is only ever read back by compose(), down a branch this
+        // document cannot reach. @see #reportsDiagnostics
+        if (reportsDiagnostics() && analysis.optionalProblemsAnalysed()) {
+            remember(analysis.diagnostics());
+        }
         return compose(analysis);
     }
 
@@ -549,10 +573,24 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
         }
         final String source = buffer.document().toString();
         final long version = buffer.version();
-        scheduler.job(analysisKey, JobLane.LATENCY, context -> analyse(source, version))
+        scheduler.job(analysisKey, JobLane.LATENCY, context -> {
+                    Analysis analysed = analyse(source, version);
+                    // AND ITS TOKENS, while this thread still owns it exclusively. @see #semanticTokensOf
+                    return new Analysed(analysed, semanticTokensOf(analysed));
+                })
                 .debounce(DEBOUNCE_MILLIS)
-                .onDone(this::install)
+                .onDone(done -> {
+                    if (done != null) install(done.analysis(), done.tokens());
+                })
                 .submit();
+    }
+
+    /**
+     * An analysis and the work that was done on it before it was published.
+     *
+     * @param tokens every semantic token in the document, or null if the pull failed
+     */
+    private record Analysed(@Nullable Analysis analysis, @Nullable List<SyntaxToken> tokens) {
     }
 
     /** Analyses on the calling thread — construction, and any caller with no scheduler. */
@@ -563,7 +601,51 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
 
     /** UI thread. Swaps in the new analysis, releases the old, and tells everyone watching. */
     private void install(Analysis analysis) {
+        install(analysis, null);
+    }
+
+    private void install(Analysis analysis, @Nullable List<SyntaxToken> materialisedTokens) {
         if (analysis == null) return;
+        long profiled = FrameProfile.enter("install analysis v" + analysis.version() + " (" + id + ")");
+        try {
+            installInternal(analysis, materialisedTokens);
+        } finally {
+            FrameProfile.leave(profiled, "install analysis");
+        }
+    }
+
+    /**
+     * Every semantic token in the document, pulled across the bridge.
+     *
+     * <h3>Called from the WORKER that built the analysis, never from the install</h3>
+     *
+     * <p>It is a pure function of the analysis and it is not small: the engine lives behind a
+     * classloader boundary, so this materialises tens of thousands of tokens for a 2,000-line class,
+     * one crossing at a time. Doing it in {@code install} put all of it on the frame that publishes the
+     * result — measured at <b>18.8ms of a 34ms install</b> on a decompiled class, which is the same
+     * shape as the tree-sitter locals pass one layer down.</p>
+     *
+     * <p><b>Safe for exactly the reason that one is.</b> The analysis has just been built by this worker
+     * and nothing else holds a reference to it yet; it is handed over only after this returns. That is
+     * the whole safety argument, and it is why this belongs here rather than in a second reader thread —
+     * an {@code Analysis} resolves its bindings lazily, so two threads reading one is a native race that
+     * surfaces as a JVM crash rather than an exception.</p>
+     *
+     * <p>Null on failure rather than throwing: {@code adopt} then pulls them on the frame thread exactly
+     * as it always did, which is slow rather than wrong. Colour must not be able to take an analysis
+     * down with it.</p>
+     */
+    @Nullable
+    private static List<SyntaxToken> semanticTokensOf(@Nullable Analysis analysis) {
+        if (analysis == null) return null;
+        try {
+            return analysis.semanticTokens();
+        } catch (RuntimeException failed) {
+            return null;
+        }
+    }
+
+    private void installInternal(Analysis analysis, @Nullable List<SyntaxToken> materialisedTokens) {
         if (closed) {
             // The document closed while this was in flight. Releasing it here rather than leaking is
             // the whole reason close() cannot simply drop the reference and walk away.
@@ -574,16 +656,28 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
         current = analysis;
         if (previous != null) previous.close();
 
-        tokens.adopt(analysis);
+        long timed = FrameProfile.begin();
+        // THE WHOLE DOCUMENT'S TOKENS, MATERIALISED ACROSS THE BRIDGE -- on the WORKER now, handed in.
+        // Cheap for a script; a 2000-line decompiled class is tens of thousands of them, and pulling
+        // them here spent 18.8ms of a 34ms install on the frame thread. @see #semanticTokensOf
+        tokens.adopt(analysis, materialisedTokens);
+        FrameProfile.step(timed, "tokens.adopt (materialised on worker: "
+                + (materialisedTokens != null) + ")");
         // COMPUTED ONCE PER ANALYSIS, not once per listener. announcement() has a side effect -- it
         // replaces the retained-warning lane -- and its inputs are row/column positions that are only
         // meaningful against the document the analysis saw. Recomputing it later, when a listener happens
         // to attach, would map those positions against a buffer that has since been edited and overwrite
         // correctly-tracked ranges with wrong offsets. @see #announcement
+        timed = FrameProfile.begin();
         lastAnnouncement = announcement(analysis);
+        FrameProfile.step(timed, "announcement (retained lane + tracking)");
+        timed = FrameProfile.begin();
         for (Consumer<Versioned<List<Diagnostic>>> listener : new ArrayList<>(diagnosticListeners)) {
             listener.accept(lastAnnouncement);
         }
+        FrameProfile.step(timed, "diagnostics -> "
+                + (lastAnnouncement.value() == null ? 0 : lastAnnouncement.value().size())
+                + " problems, " + diagnosticListeners.size() + " listeners");
     }
 
     // ── Semantic tokens: push, with an invalidation range ───────────────────────────────────────
@@ -622,9 +716,13 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
             this.listener = newListener;
         }
 
-        void adopt(@Nullable Analysis analysis) {
+        /**
+         * @param materialised the analysis's tokens, already pulled across the bridge by whoever built
+         *                     the analysis, or null to pull them here. @see #semanticTokensOf
+         */
+        void adopt(@Nullable Analysis analysis, @Nullable List<SyntaxToken> materialised) {
             this.all = analysis == null ? Collections.<SyntaxToken>emptyList()
-                    : analysis.semanticTokens();
+                    : materialised != null ? materialised : analysis.semanticTokens();
             this.version = analysis == null ? 0 : analysis.version();
             // EVERYTHING, not a computed range. A compile can change any line's colours -- adding a
             // field renames nothing and yet re-colours every use of that name in the file -- so a

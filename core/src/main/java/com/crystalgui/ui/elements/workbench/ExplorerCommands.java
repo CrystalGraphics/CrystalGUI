@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.workbench;
 
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
 
@@ -231,7 +232,10 @@ public final class ExplorerCommands {
                 .run(context -> {
                     Workbench workbench = workbenchFor(context);
                     UIWindow window = workbench == null ? null : workbench.getAttachedWindow();
-                    if (window != null) GoToFile.open(window, workbench);
+                    if (window == null) return;
+                    long profiled = FrameProfile.enter("Ctrl+P explorer.goToFile");
+                    GoToFile.open(window, workbench);
+                    FrameProfile.leave(profiled, "Ctrl+P explorer.goToFile");
                 })
                 // Enabled whenever there is a project, not whenever something is selected: it is how you
                 // reach a file you have NOT got selected, which is the whole point of it.

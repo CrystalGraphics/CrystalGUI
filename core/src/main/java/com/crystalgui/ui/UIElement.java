@@ -469,11 +469,29 @@ public class UIElement implements SettingsScope, DataProvider {
         if (attachedWindow == null) return;
         StyleEngine engine = attachedWindow.getStyleEngine();
         UIElement topmost = null;
+        // THE UNION OVER THE CHAIN, then ONE walk from the top.
+        //
+        // :focus-within changed for every ancestor, so each of them is a stateful subject and each has
+        // its own reachable set. Asking only the topmost -- the root -- would miss every rule keyed on
+        // something in between, which is most of them: `.__quick-pick__:focus-within .__qp-key__` is keyed
+        // on the quick-pick, not on the root. The union is conservative (a descendant of one ancestor can
+        // be marked for another's rules) and is still bounded by the chain that actually changed, which is
+        // the whole difference from marking every `text` in the window.
+        Set<String> reachable = null;
         for (UIElement ancestor = getParent(); ancestor != null; ancestor = ancestor.getParent()) {
             engine.markDirty(ancestor);
             topmost = ancestor;
+            Set<String> here = engine.stateDescendantKeysFrom(ancestor);
+            if (here == StyleEngine.EVERYTHING) {
+                reachable = here;
+            } else if (here != null && reachable != StyleEngine.EVERYTHING) {
+                if (reachable == null) reachable = new HashSet<>(here);
+                else reachable.addAll(here);
+            }
         }
-        if (topmost != null) topmost.invalidateStateDescendants(engine);
+        if (topmost != null && reachable != null) {
+            topmost.invalidateStateDescendants(engine, reachable);
+        }
     }
 
     /**
@@ -2320,9 +2338,18 @@ public class UIElement implements SettingsScope, DataProvider {
 
     /** Marks only the descendants an ancestor's state can reach. @see #invalidateStateMatch */
     private void invalidateStateDescendants(StyleEngine engine) {
+        // ASKED ONCE, BEFORE THE WALK. The old version asked per descendant and, worse, recursed
+        // unconditionally -- so it VISITED the whole subtree however little it marked. Nearly every state
+        // change reaches nothing, and that case is now a single map lookup rather than a tree walk.
+        Set<String> reachable = engine.stateDescendantKeysFrom(this);
+        if (reachable == null) return;
+        invalidateStateDescendants(engine, reachable);
+    }
+
+    private void invalidateStateDescendants(StyleEngine engine, Set<String> reachable) {
         for (UIElement child : children) {
-            if (engine.stateReaches(child)) engine.markDirty(child);
-            child.invalidateStateDescendants(engine);
+            if (StyleEngine.carriesAny(child, reachable)) engine.markDirty(child);
+            child.invalidateStateDescendants(engine, reachable);
         }
     }
 

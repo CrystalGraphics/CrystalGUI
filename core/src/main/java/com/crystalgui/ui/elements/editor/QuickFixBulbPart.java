@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.editor;
 
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
 import dev.vfyjxf.taffy.style.TaffyPosition;
@@ -44,7 +45,10 @@ final class QuickFixBulbPart extends EditorViewPart {
 
     @Override
     void render(int firstViewLine, int lastViewLine) {
-        if (!editor.isGutterVisible() || !somethingToOffer()) {
+        long timed = FrameProfile.begin();
+        boolean offer = editor.isGutterVisible() && somethingToOffer();
+        FrameProfile.step(timed, "bulb.somethingToOffer -> " + offer);
+        if (!offer) {
             hide();
             return;
         }
@@ -56,6 +60,7 @@ final class QuickFixBulbPart extends EditorViewPart {
             hide();
             return;
         }
+        long placed = FrameProfile.begin();
         bulbElement().setDisplayed(true);
 
         float height = editor.lineHeight();
@@ -66,6 +71,7 @@ final class QuickFixBulbPart extends EditorViewPart {
         StyleGroup.defaultPipeline(bulbElement().getStyle().getLayoutGroup(),
                 l -> l.positionType(TaffyPosition.ABSOLUTE)
                         .left(0f).top(top).width(width).height(height));
+        FrameProfile.step(placed, "bulb.place");
     }
 
     /**
@@ -91,6 +97,19 @@ final class QuickFixBulbPart extends EditorViewPart {
      * only survive an edit that leaves the caret where it was, which the next move corrects.</p>
      */
     private boolean somethingToOffer() {
+        // NOTHING TO OFFER A DOCUMENT NOBODY CAN EDIT, and asking anyway was measured at 24.8ms on a
+        // frame -- `bulb.somethingToOffer -> false 24793us` on the frame that opens a 1,980-line
+        // decompiled class, to reach a conclusion that was available from a boolean.
+        //
+        // The intention half below runs the whole quick-fix catalog over the unit (JavaQuickFixes.in),
+        // synchronously, from a PAINT. Every action it can find is unusable here by construction: the
+        // edit path refuses a read-only buffer, so a bulb lit on one would open a menu whose every row
+        // does nothing. IntelliJ does not run intention availability in a read-only file either.
+        //
+        // The DIAGNOSTIC half is skipped with it and that is right rather than incidental: a viewer
+        // suppresses diagnostics outright (@see JavaLanguageServices#forLibrary), so there is nothing
+        // for it to find. This is a bulb, and a bulb is an offer to change something.
+        if (editor.isReadOnly()) return false;
         int caret = editor.getCaret();
         if (!editor.diagnosticsAt(caret).isEmpty()) {
             // Asked again when the caret comes back to a clean position, rather than trusting an answer

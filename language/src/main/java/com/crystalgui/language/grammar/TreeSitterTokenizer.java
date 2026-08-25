@@ -1,5 +1,6 @@
 package com.crystalgui.language.grammar;
 
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.async.JobKey;
 import com.crystalgui.core.async.JobLane;
 import com.crystalgui.core.async.JobScheduler;
@@ -257,6 +258,7 @@ public final class TreeSitterTokenizer
     public FoldingRegions compute(Rope document, int tabSize) {
         TSQuery folds = foldQuery();
         if (folds == null) return FoldingRegions.empty();
+        if (deferInitialParse(document)) return FoldingRegions.empty();
         if (tree == null || (stale && scheduler == null)) reparse(forParser(document.toString()));
         if (tree == null) return FoldingRegions.empty();
 
@@ -391,6 +393,7 @@ public final class TreeSitterTokenizer
         // it is structurally behind but positionally correct, which is exactly what every editor shows for
         // the handful of frames a parse takes. Blocking here instead would put the whole ~17ms back on the
         // frame and defeat the point of having somewhere else to run it.
+        if (deferInitialParse(document)) return List.of();
         if (tree == null || (stale && scheduler == null)) reparse(forParser(document.toString()));
         if (tree == null) return List.of();
 
@@ -740,7 +743,65 @@ public final class TreeSitterTokenizer
      * burst of keystrokes collapse to one parse: each new edit replaces the queued job and asks the
      * running one to stop.</p>
      */
+    /**
+     * Sends the <b>first</b> parse of a document to the worker, and answers nothing until it lands.
+     *
+     * <h3>The one parse that never went off-thread was the largest one</h3>
+     *
+     * <p>{@link #edited} has moved reparses to a worker since this class was written, and the query
+     * paths read {@code if (tree == null || (stale && scheduler == null)) reparse(...)} — so a
+     * <em>stale</em> tree is answered from while a worker catches up, and <b>no</b> tree parsed
+     * synchronously on the caller. That is backwards with respect to cost. A reparse interpolates from an
+     * existing tree and was measured at ~17ms; a first parse has nothing to interpolate from and is the
+     * whole file.</p>
+     *
+     * <p>Measured on a 1,980-line decompiled class, on the frame that first draws it:
+     * <b>{@code ed:tokenize rows 0..25 (26 of 1980), span 1100 chars -> 221 tokens 214996us}</b> — 215ms
+     * to answer a <em>1,100-character</em> query, because the parse behind it was 73KB. The next call on
+     * the identical span cost 4,975us and a later one 260us, which is what says the span was never the
+     * expense. That single frame is the reported "opening a big class takes 120fps to 55".</p>
+     *
+     * <p>It hid behind the shape of the condition. Every reading of that line says the synchronous branch
+     * is the fallback for having no scheduler, and for the stale half it is; the {@code tree == null} half
+     * is unconditional and sits in front of it, so a tokenizer built <em>with</em> a scheduler still
+     * blocks exactly once per document — and once per document is once per file opened, which is the only
+     * moment anybody is watching.</p>
+     *
+     * <p><b>Returning no tokens for a few frames is the correct answer, not a compromise.</b> The class
+     * already ships uncoloured text whenever a grammar is absent, and every consumer handles it; the
+     * document then colours in when {@code announceChanged} reports — with no old tree to diff against it
+     * falls back to the whole document, which is precisely right here. VS Code does the same thing and
+     * calls it background tokenization.</p>
+     *
+     * @return whether the caller should answer with nothing this time
+     */
+    private boolean deferInitialParse(Rope document) {
+        if (tree != null || scheduler == null) return false;
+        // SINGLE-FLIGHT IS WHY THIS NEEDS A FLAG. scheduleReparse keys on JobKey.of(this, "reparse"), and
+        // that key's contract is that a new submission REPLACES the queued job and asks the running one to
+        // stop -- which is exactly right for a burst of keystrokes and fatal here, because this runs from
+        // a paint. Re-submitting every frame would cancel the parse every frame and it would never finish:
+        // a document that stays uncoloured forever, with a worker busy the whole time.
+        if (!parsePending) {
+            // ONCE PER SCHEDULING, not once per call: this runs from a paint and returns true every
+            // frame until the tree lands, so noting it unconditionally is a log line per frame.
+            FrameProfile.note("ts.firstParse deferred to a worker, " + document.length() + " chars");
+            scheduleReparse(document);
+        }
+        return true;
+    }
+
+    /**
+     * Whether a parse is in flight. @see #deferInitialParse for why a paint-driven caller needs this.
+     *
+     * <p>Set for every scheduled parse rather than only the first, because "is one running" is a fact
+     * about this tokenizer and not about which caller asked. Only the no-tree path reads it — a stale
+     * tree is answered from regardless.</p>
+     */
+    private boolean parsePending;
+
     private void scheduleReparse(Rope document) {
+        parsePending = true;
         // The ROPE is handed over, not its text. Flattening a 200KB document is a 200KB copy, and doing it
         // here would put one on the UI thread per keystroke -- the exact cost this method exists to move.
         // Safe because a Rope is persistent: applying a change returns a new one rather than mutating this
@@ -757,12 +818,22 @@ public final class TreeSitterTokenizer
             TSTree parsed = workerParser.parseString(snapshot, text);
             // Built here rather than on delivery: it is an O(n) pass over the document and belongs on the
             // thread that already has the document in hand, not on the frame that receives the answer.
-            return new Parsed(parsed, Utf8Offsets.of(text));
+            Utf8Offsets parsedOffsets = Utf8Offsets.of(text);
+            context.throwIfCancelled();
+            // AND THE LOCALS PASS FOR THE SAME REASON, which is the larger of the two. @see #localsOnWorker
+            return new Parsed(parsed, parsedOffsets, localsOnWorker(parsed, parsedOffsets));
         }).onDone(result -> {
+            // CLEARED BEFORE THE NULL CHECK. A cancelled or failed job delivers null, and leaving the flag
+            // set on that path would mean no parse is ever scheduled again -- a document uncoloured for
+            // the rest of the session, from the one code path that produces no error to look at.
+            parsePending = false;
             if (result == null) return;
             TSTree replaced = this.tree;
             this.tree = result.tree();
-            this.localsTokens = null;   // a new tree means new scopes
+            // A new tree means new scopes -- ALREADY COMPUTED, on the worker that built the tree. Null
+            // only when the grammar ships no locals.scm or the pass failed, and localsForTree then falls
+            // back to computing it here exactly as it always did.
+            this.localsTokens = result.locals();
             this.offsets = result.offsets();
             this.stale = false;
             // Nothing about the DOCUMENT changed, so no existing signal would tell the view to re-query --
@@ -834,8 +905,69 @@ public final class TreeSitterTokenizer
     }
 
     /** A finished parse and the offset index over the text it describes — swapped in together. */
-    private record Parsed(TSTree tree, Utf8Offsets offsets) {
+    private record Parsed(TSTree tree, Utf8Offsets offsets, List<SyntaxToken> locals) {
     }
+
+    /**
+     * The whole-document locals pass, run on the worker beside the parse it belongs to.
+     *
+     * <h3>Why this was the 225ms, and why it did not look like it</h3>
+     *
+     * <p>{@link #localsForTree} is cached per tree and its javadoc already explains why it must scan the
+     * whole file: a reference in the viewport is declared somewhere that usually is not. What the cache
+     * settles is that the pass runs <em>once per parse</em> rather than once per paint. It does not
+     * settle <em>where</em>, and once per parse on the frame thread is still a whole-document query on a
+     * frame.</p>
+     *
+     * <p>Measured on a 1,980-line decompiled class: the first {@code tokenize} after a parse cost
+     * <b>225ms</b> for a 1,100-character viewport query, and the next call on the identical tree and span
+     * cost <b>4.8ms</b>. That ratio is the whole diagnosis — the span was never the expense, and the one
+     * thing that happens on the first call and not the second is this.</p>
+     *
+     * <p>It also survived the first fix aimed at it. Moving the initial <em>parse</em> off-thread was
+     * correct and changed the number by nothing, because by the time the expensive {@code tokenize} ran
+     * the tree was already there: the cost sat one step past where the evidence pointed.</p>
+     *
+     * <h3>Its own query object, like {@link #workerParser}</h3>
+     *
+     * <p>Same rule this class already applies to the parser: two threads, two natives. The tree being
+     * queried here has just been built by this worker and nothing else holds a reference to it yet, which
+     * is what makes querying it off-thread safe at all — and it is handed over only after this returns.
+     * Sharing {@link #localsQuery} instead would put the frame thread's fallback and this on one native
+     * object, which is the shape that surfaces as a JVM crash rather than an exception.</p>
+     */
+    private List<SyntaxToken> localsOnWorker(TSTree parsed, Utf8Offsets parsedOffsets) {
+        if (!workerLocalsBuilt) {
+            workerLocalsBuilt = true;
+            workerLocalsQuery = compileFamily("locals");
+            if (workerLocalsQuery != null) {
+                workerLocalsCaptureNames = new String[workerLocalsQuery.getCaptureCount()];
+                for (int i = 0; i < workerLocalsCaptureNames.length; i++) {
+                    String name = workerLocalsQuery.getCaptureNameForId(i);
+                    workerLocalsCaptureNames[i] = name == null ? null : name.intern();
+                }
+            }
+        }
+        // A grammar that ships no locals.scm is the ordinary case for several of them, and null here
+        // means the frame thread's appendLocals will find its own query null too and return early.
+        if (workerLocalsQuery == null) return null;
+        try {
+            return LocalScopes.tokensIn(parsed, workerLocalsQuery, workerLocalsCaptureNames,
+                    new TSQueryCursor(), parsedOffsets, 0, Integer.MAX_VALUE);
+        } catch (RuntimeException failed) {
+            // Answering null leaves localsForTree to compute it on the frame thread, which is the old
+            // behaviour: slow rather than wrong. A locals pass is a refinement of colour, never
+            // load-bearing, so it must not be able to take the parse down with it.
+            return null;
+        }
+    }
+
+    /** The worker's own locals query. @see #localsOnWorker */
+    private TSQuery workerLocalsQuery;
+
+    private String[] workerLocalsCaptureNames;
+
+    private boolean workerLocalsBuilt;
 
     /**
      * Text a grammar cannot parse, neutralised before it sees it — <b>length-preserving, always</b>.
@@ -951,6 +1083,15 @@ public final class TreeSitterTokenizer
         closeQuietly(cursor);
         closeQuietly(query);
         closeQuietly(parser);
+        // THE OPTIONAL FAMILIES AND THE WORKER'S HALF. The comment above says "the query" as though there
+        // were one; there are five, each compiled lazily and each per document, plus the worker's own
+        // parser and locals query. Releasing only the highlight query leaves the rest to accumulate one
+        // set per file ever opened -- the leak this method was extended to fix, from the same distance.
+        closeQuietly(localsQuery);
+        closeQuietly(foldQuery);
+        closeQuietly(indentQuery);
+        closeQuietly(workerLocalsQuery);
+        closeQuietly(workerParser);
     }
 
     /**

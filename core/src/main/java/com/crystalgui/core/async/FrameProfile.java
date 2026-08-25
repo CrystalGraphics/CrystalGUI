@@ -96,6 +96,61 @@ public final class FrameProfile {
         add(bucket, System.nanoTime() - started);
     }
 
+    /**
+     * Logs ONE step of a flow as it happens, rather than aggregating it into a frame.
+     *
+     * <h3>Why a second shape</h3>
+     *
+     * <p>{@link #mark} answers "where did this frame go", which is the right question for a sustained
+     * cost and the wrong one for a sequence. Opening a file is a chain — a command, a picker, a search
+     * per keystroke, an accept, a dock open, a read, a parse — and what matters is the ORDER and where
+     * the chain stalls. Aggregating that into per-frame buckets loses exactly the part being asked
+     * about, and several of these steps do not happen during a frame at all.</p>
+     *
+     * <p>Logged immediately, in sequence, with a depth indent so nesting reads. Everything over
+     * {@link #STEP_FLOOR} — deliberately low, because a step that is fast is itself a finding when the
+     * next one is not.</p>
+     */
+    public static void step(long started, String what) {
+        if (!ENABLED || started == 0L) return;
+        long took = System.nanoTime() - started;
+        if (took < STEP_FLOOR) return;
+        CrystalGuiCore.LOGGER.info("[step] {}{} {}us", indent(), what, took / 1_000L);
+    }
+
+    /** Notes a step that has no duration worth timing — an entry point, a decision, a count. */
+    public static void note(String what) {
+        if (!ENABLED) return;
+        CrystalGuiCore.LOGGER.info("[step] {}. {}", indent(), what);
+    }
+
+    /** Opens a nesting level, so a chain reads as a chain. Always paired with {@link #leave}. */
+    public static long enter(String what) {
+        if (!ENABLED) return 0L;
+        CrystalGuiCore.LOGGER.info("[step] {}> {}", indent(), what);
+        depth++;
+        return System.nanoTime();
+    }
+
+    /** Closes a {@link #enter} and reports what the whole of it cost. */
+    public static void leave(long started, String what) {
+        if (!ENABLED || started == 0L) return;
+        depth = Math.max(0, depth - 1);
+        CrystalGuiCore.LOGGER.info("[step] {}< {} {}us",
+                indent(), what, (System.nanoTime() - started) / 1_000L);
+    }
+
+    private static String indent() {
+        StringBuilder out = new StringBuilder(depth * 2);
+        for (int i = 0; i < depth; i++) out.append("  ");
+        return out.toString();
+    }
+
+    /** 100µs. Low on purpose: a step that is FAST is a finding when the one after it is not. */
+    private static final long STEP_FLOOR = 100_000L;
+
+    private static int depth;
+
     /** Records a count worth seeing beside the times — how many elements, rows, marks. */
     public static void count(String what, int howMany) {
         if (!ENABLED) return;
@@ -138,22 +193,84 @@ public final class FrameProfile {
     private static final Map<String, Integer> SITES = new LinkedHashMap<>();
 
     /** Called at the very end of a frame; reports if the frame was slow and the rate limit allows. */
+    /**
+     * Whether this frame gets past the rate limit.
+     *
+     * <h3>The limit was hiding the one frame worth reporting</h3>
+     *
+     * <p>A flat "at most one report a second" is right for a sustained cost — a stretch of 12ms frames
+     * needs one line, not sixty. It is exactly wrong for a <b>stall</b>, which is what this probe exists
+     * for: the frames around a stall are also slow, so whichever mildly-slow frame happens to arrive
+     * first claims the second and the 237ms one that follows is discarded without a word. Measured: an
+     * automated run whose own summary reported a worst frame of <b>236.6ms</b> contained no report of any
+     * frame over 50ms, so the log described the wrong frame entirely and read as if the stall had been
+     * fixed.</p>
+     *
+     * <p>So a frame also reports when it is <b>substantially worse than the last one reported</b>. The
+     * limit still holds against a plateau — a run of equally slow frames is not each other's escalation
+     * — while the peak, which is the whole finding, always gets through.</p>
+     */
+    private static boolean worthReporting(long total, long now) {
+        // Comfortably past the limit: an ordinary periodic report.
+        if (now - lastReport >= REPORT_EVERY_NANOS) return true;
+        // Otherwise only an ESCALATION, so a plateau still reports once. Twice as expensive is the
+        // threshold because at 8ms it takes 16ms to qualify, which is already the next budget down.
+        return total >= lastReportedTotal * 2;
+    }
+
+    /** What the last reported frame cost, so {@link #worthReporting} can tell an escalation from a plateau. */
+    private static long lastReportedTotal = SLOW_NANOS;
+
+    private static int framesSinceReport;
+    private static int slowFramesSinceReport;
+    private static long worstSinceReport;
+
+    /**
+     * How many frames since the last report missed the budget — <b>"a spike" or "a plateau"</b>.
+     *
+     * <h3>Without it, one line cannot tell those apart, and they need opposite fixes</h3>
+     *
+     * <p>The rate limit means one printed line stands for every frame in that second. So {@code [frame]
+     * 25ms} is equally a single hiccup nobody would notice and forty consecutive 25ms frames, which is a
+     * steady <b>40fps</b> — and 120-to-40 is exactly the report this probe exists to serve. Reading a
+     * plateau as a spike sends the next round after whatever happened to be biggest in that one frame,
+     * which is how a stall gets chased through code that was only ever slow once.</p>
+     *
+     * <p>Cheap enough to be unconditional: three counters, incremented before the rate limit is even
+     * consulted, so the census covers frames that are never printed. That is the whole point — the
+     * printed frame is a sample, and this says what it is a sample OF.</p>
+     */
+    private static String census() {
+        String out = "(" + slowFramesSinceReport + "/" + framesSinceReport + " over budget, worst "
+                + worstSinceReport / 1_000_000L + "ms)";
+        framesSinceReport = 0;
+        slowFramesSinceReport = 0;
+        worstSinceReport = 0;
+        return out;
+    }
+
     public static void frameEnd() {
         if (!ENABLED || frameStart == 0L) return;
         long now = System.nanoTime();
         long total = now - frameStart;
-        if (total < SLOW_NANOS || now - lastReport < REPORT_EVERY_NANOS) {
+        // COUNTED BEFORE ANYTHING IS DECIDED, so the census covers every frame rather than the reported
+        // ones. @see #census
+        framesSinceReport++;
+        if (total >= SLOW_NANOS) slowFramesSinceReport++;
+        if (total > worstSinceReport) worstSinceReport = total;
+        if (total < SLOW_NANOS || !worthReporting(total, now)) {
             // STILL CLEARED. @see #frameBegin -- the blame window has to advance every frame, or a quiet
             // stretch accumulates into the next report and blames it for work it never did.
             SITES.clear();
             return;
         }
         lastReport = now;
+        lastReportedTotal = total;
 
         List<Map.Entry<String, Long>> phases = new ArrayList<>(PHASES.entrySet());
         phases.sort((a, b) -> Long.compare(b.getValue(), a.getValue()));
         StringBuilder line = new StringBuilder();
-        line.append("[frame] ").append(total / 1_000_000L).append("ms   ");
+        line.append("[frame] ").append(total / 1_000_000L).append("ms ").append(census()).append("  ");
         for (Map.Entry<String, Long> phase : phases) {
             if (phase.getValue() < 200_000L) continue;
             line.append(phase.getKey()).append(' ')
