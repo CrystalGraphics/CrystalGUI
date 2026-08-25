@@ -803,6 +803,15 @@ public final class UIText extends UIElement {
         // label across ~130 labels a frame, with 73 renderer switches -- and a material bind is exactly
         // that order of cost, so which half this is decides whether the answer is batching or the glyph
         // pipeline. They have nothing in common.
+        // WHAT IS ACTUALLY BEING SUBMITTED, in characters and labels.
+        //
+        // text:submit is 93% of paint time, and the two explanations for that need opposite fixes: a
+        // renderer that is slow per glyph, or a caller handing it far more glyphs than are on screen.
+        // The editor virtualises to ~26 realised lines, so a viewport is a couple of thousand
+        // characters -- if this counts far more than that, the submission is the fault and no amount of
+        // renderer work would have helped.
+        FrameProfile.count("text-labels", 1);
+        FrameProfile.count("text-chars", text.get().length());
         long switched = FrameProfile.begin();
         CgTextRenderer renderer = ctx.text();
         FrameProfile.end(switched, "text:switchRenderer");
