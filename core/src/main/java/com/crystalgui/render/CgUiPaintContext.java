@@ -794,6 +794,11 @@ public final class CgUiPaintContext {
      */
     private void beginTextPath() {
         if (activePath == InstancePath.TEXT) return;
+        // A REAL PATH SWITCH, as opposed to a call to text(). The two are wildly different numbers and
+        // only this one costs anything: a frame with 67 labels reports 67 text() calls whether they were
+        // consecutive (one switch, one upload) or interleaved with boxes (67 switches, 67 uploads). The
+        // batch below is worth exactly as much as the gap between them, so the gap has to be visible.
+        FrameProfile.count("textpath-switches", 1);
         renderer.flush();
         activePath = InstancePath.TEXT;
         currentTexture = null;

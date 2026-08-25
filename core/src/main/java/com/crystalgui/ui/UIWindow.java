@@ -676,7 +676,18 @@ public final class UIWindow {
         // hasShared() rather than shared(): asking whether there is work must never be the thing that
         // spawns a thread pool. A window in a headless test that schedules nothing creates nothing —
         // the same guard, for the same reason, as CgUiPaintContext.hasInstance().
-        if (JobScheduler.hasShared()) JobScheduler.shared().drain();
+        if (JobScheduler.hasShared()) {
+            // HOW MANY WORKERS WERE BUSY THIS FRAME.
+            //
+            // The reported drop is TRANSIENT -- 120 to 50 on the frame a class opens, then straight back
+            // to 120 -- and that rules out every per-frame cost by construction: a constant cannot cause
+            // a transient. What has exactly the right lifetime is the decompiler, which runs ~1,500ms on
+            // a worker, and during that window a quarter of frames miss budget with the frame thread's
+            // own work at ~578us and the time landing in gl:*. Counting the busy workers per frame is
+            // what turns that correlation into evidence or kills it.
+            FrameProfile.count("jobs-busy", JobScheduler.shared().runningCount());
+            JobScheduler.shared().drain();
+        }
         FrameProfile.mark("drain");
 
         tracePhase("begin");
