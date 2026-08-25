@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.dock;
 
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIFrameTicker;
@@ -738,8 +739,28 @@ public class DockArea extends UIElement implements UIFrameTicker {
      * whatever the guard was protecting, and that should be uncomfortable to type by accident.</p>
      */
     public void closePanelDiscarding(DockPanelRef panel) {
+        long profiled = FrameProfile.enter("closePanel " + panel.state(DockPanelRef.PATH, "?"));
+        try {
+            closePanelDiscardingImpl(panel);
+        } finally {
+            FrameProfile.leave(profiled, "closePanel");
+        }
+    }
+
+    private void closePanelDiscardingImpl(DockPanelRef panel) {
+        long timed = FrameProfile.begin();
         captureDividerPositions();
-        if (!layout.closePanel(panel)) return;
+        FrameProfile.step(timed, "close.captureDividers");
+        timed = FrameProfile.begin();
+        // WHICH LEAF, CAPTURED BEFORE THE CLOSE, so we can tell afterwards whether the TREE changed or
+        // only one strip did. `closePanel` answers true either way -- it removes the leaf only when that
+        // leaf empties and is not the central one -- and that difference is the whole cost of a close.
+        DockLeaf held = layout.leafContaining(panel);
+        boolean removed = layout.closePanel(panel);
+        boolean shapeChanged = held == null || !layout.leaves().contains(held);
+        FrameProfile.step(timed, "close.layout.closePanel"
+                + (shapeChanged ? " (the leaf went too)" : " (the leaf stands)"));
+        if (!removed) return;
         // AND THE BUILT WIDGET GOES WITH IT.
         //
         // `DockGroup.contentFor` memoises per DockPanelRef, and a ref is a VALUE -- reopening the same
@@ -752,23 +773,51 @@ public class DockArea extends UIElement implements UIFrameTicker {
         // -- and this is not optional bookkeeping, it is part of what closing MEANS. Deliberately not in
         // the drag path either: a move removes and re-adds the same panel, and forgetting there would
         // rebuild the widget being dragged mid-gesture.
-        for (DockGroup group : groups.values()) group.forgetContent(panel);
-        requestRebuild();
         // AND EVERY GROUP FORGETS ITS CACHED ELEMENT. contentFor memoises by DockPanelRef, which is a
         // VALUE -- so reopening the same file produced an equal ref and got back the editor built for the
-        // document that had just been disposed. @see DockGroup#forgetContent
+        // document that had just been disposed: a live-looking editor over a closed tokenizer, which
+        // threw `IllegalStateException: Parser is closed` out of a frame tick the moment folding asked it
+        // to parse. @see DockGroup#forgetContent
+        //
+        // Here rather than on `onDidClosePanel`, because a listener is something a caller can be without
+        // -- and this is not optional bookkeeping, it is part of what closing MEANS. Deliberately not in
+        // the drag path either: a move removes and re-adds the same panel, and forgetting there would
+        // rebuild the widget being dragged mid-gesture.
         //
         // RESTORED after being lost once already: merge 36c56d21 resolved DockGroup's hunk against
-        // forgetContent, the call site here then failed to compile, and d121d460 deleted THESE FOUR LINES
+        // forgetContent, the call site here then failed to compile, and d121d460 deleted these lines
         // instead of restoring the method -- so the fix from 407f7193 was silently unwound while its own
         // test (reopeningAClosedFileShowsTheLiveEditor) sat red. If this ever conflicts again, the method
-        // is the half to keep.
+        // is the half to keep. The restore then left the loop written TWICE, one above the rebuild and
+        // one below, each with its own half of this comment; they are the same loop and one is enough.
+        timed = FrameProfile.begin();
         for (DockGroup group : groups.values()) group.forgetContent(panel);
+        FrameProfile.step(timed, "close.forgetContent x" + groups.size());
+        // A STRIP RESYNC WHEN ONLY A STRIP CHANGED, and the full rebuild only when the tree did.
+        //
+        // The distinction is already the rule here -- the split path says "requestRebuild, not
+        // syncGroups: the TREE changed, not just a selection" -- and closing was on the wrong side of it.
+        // Closing a tab out of a leaf that still has tabs, or out of the central leaf, leaves every branch,
+        // every leaf and every group exactly where it was: one strip has one fewer button.
+        //
+        // Rebuilding anyway tears down the whole built tree and constructs it again, and the cost is not
+        // the construction. Measured on a close with two tabs open: `UIWindow.registerElement:890 x181`,
+        // 176 elements re-matched at 5,977us, `style:drainDirtyMatch 7,925us`, `tick:DockArea 4,340us`,
+        // `layout 2,566us` -- a 21ms frame to remove one button. And it lands on the SURVIVORS: the other
+        // pane's editor is rebuilt from its ref, so it re-realises its rows and re-runs folding over the
+        // whole document (`ed:refreshFolding (2020 view lines)`, twice, on the two frames after). That is
+        // what makes closing scale with a file that is not even the one being closed.
+        //
+        // `DockGroup.sync` already rebuilds its strip when the panel LIST changes rather than only on a
+        // selection, so it is exactly the operation this case wants.
+        requestRebuild();
         // ANNOUNCED, because until now closing a tab told nobody. Its document stayed open, its editor
         // stayed reachable, and anything it owned -- a preview pool, a renderer -- lived until the
         // process did. `Disposer` could not help, because the thing that knew the panel was gone had no
         // way to say so. This is that way.
+        timed = FrameProfile.begin();
         onDidClosePanel.emit(panel);
+        FrameProfile.step(timed, "close.onDidClosePanel (releases the document)");
     }
 
     /**
