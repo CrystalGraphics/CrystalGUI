@@ -1443,6 +1443,25 @@ public class WindowFrame extends UIElement implements Disposable {
         // AFTER this window is back, so they stack above it rather than being raised against a window
         // that is not on the layer yet. @see #hiddenWithOwner
         showOwnedToolWindows();
+
+        // SHOWN WHILE THE DESKTOP IS OFF SCREEN MEANS PINNED. The switcher is the path that found this:
+        // Ctrl+Tab reaches a pinned window's keyboard, and the registry keeps HIDDEN windows, so cycling
+        // could show a window the HUD had put away. It then painted -- the overlay draws the whole window
+        // layer -- while every click fell through it, because a window that is merely visible was never
+        // what the overlay accepted input for.
+        //
+        // Auto-pinning is the honest reading rather than a patch: with no desktop on screen, "bring this
+        // window to the front" and "put this window over the game" are the same request, and pinning is
+        // what that means here. It also keeps the state truthful -- the caption's pin shows pressed, the
+        // band puts it above, and it can be unpinned like anything else.
+        //
+        // exitHudMode clears hudMode BEFORE it restores what it hid, so a restore never lands here.
+        UIWindow attached = getAttachedWindow();
+        if (attached != null && attached.isHudMode() && !isPinned()) {
+            setPinned(true);
+            addClass(HUD_CLASS);
+        }
+
         onShown.emit(persisted);
     }
 
