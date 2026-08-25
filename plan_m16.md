@@ -16,17 +16,17 @@ fourth path bolted on beside the three.
 
 | § | Item | State |
 |---|---|---|
-| 26.1 | Diagnose the flicker — a frame-numbered probe on both paths | **planned** — one run; the structural gap is ≥1 frame and the report is 2–4, so something else is adding to it |
-| 26.2 | `DesktopPresentation` — one answer to "what is on screen, and is it live" | **planned** — the seam everything below plugs into, and what makes the flicker stop existing rather than get papered over |
-| 26.3 | Paint over a foreign GUI — `GuiScreenEvent.DrawScreenEvent.Post` | **planned** — the free half; the event exists in 1.7.10 and needs no mixin |
-| 26.4 | **The loader seam** — `CgScreenOverlay`, one SPI, one implementation per version | **planned** — the constraint that shapes everything below: this must be replicable on 1.7.10, 1.12.2 and 1.20.1 |
-| 26.4a | Input over a foreign GUI — a mixin on `GuiScreen.handleInput`, **on 1.7.10 only** | **planned** — **there is no Forge event for this in 1.7.10**, verified. Every later version has one |
-| 26.5 | Mouse arbitration | **planned** — a press is ours iff it lands in a pinned window, and an active pointer capture outranks the hit test |
-| 26.6 | Keyboard ownership | **planned** — the hard one. Focus-follows-click across two UIs that do not know about each other |
-| 26.7 | The top layer comes back | **planned** — display-only skips it deliberately; interactive cannot |
-| 26.8 | Coordinates | **planned** — `Mouse.getEventX/Y` is raw and bottom-up; `CgUiInput` already converts, so this is reuse |
-| 26.9 | Pause, and what it does to a pinned window | **planned** — a decision to record, not code to write |
-| 26.10 | Which screens get windows over them | **planned** — all of them to start; the exclusions are policy and can wait for evidence |
+| 26.1 | The flicker | **done** — and the probe was never needed: the fix is structural and the result was observed directly (pin, Escape, no dropped frames). It took TWO changes, not one — see R1 |
+| 26.2 | `DesktopPresentation` — one answer to "what is on screen, and is it live" | **done** — four arms, three properties (whole desktop / top layer / input) read off the value. `paintFrame` is the `DESKTOP` arm by its old name, kept for hosts with no screens |
+| 26.3 | Paint over a foreign GUI | **done** — `GuiScreenEvent.DrawScreenEvent.Post`, guarded against our own screen |
+| 26.4 | **The loader seam** — `ScreenOverlay`, arbitration in `core/` | **done** — a concrete class rather than an interface, since there is one implementation and loaders call in. Every parameter a primitive; no Minecraft type crosses |
+| 26.4a | Input over a foreign GUI — the mixin | **done** — and it turned out to be TWO halves rather than one, which the plan had not seen. See R2 |
+| 26.5 | Mouse arbitration | **done** — capture outranks the hit test, moves always delivered and never consumed. One bug found in the wild, R3 |
+| 26.6 | Keyboard ownership | **done** — focus-follows-click, released on a press outside and on the foreign screen closing. One bug found in the wild, R3 |
+| 26.7 | The top layer comes back | **done** — `paintsTopLayer()` on the presentation |
+| 26.8 | Coordinates | **done** — the same bottom-up-to-top-down conversion `CgUiInput.pumpMouse` uses |
+| 26.9 | Pause | **recorded, not code** — a screen that pauses the game stops server ticks, so a pinned Run console over an inventory keeps its caret and receives no output. Not ours to fix |
+| 26.10 | Which screens | **all of them** — no exclusions written, and none wanted yet |
 
 ---
 
@@ -421,3 +421,94 @@ harness's job in this milestone is steps 1–3; the rest is a `runClient` featur
   be sampled at tick rate — and the same answer applies: drain on the render path, not the tick path. This
   is the one place where §26.4's "do as little as possible in the mixin" is in tension with correctness, and
   it should be resolved deliberately rather than discovered.
+
+
+---
+
+## Revisions, recorded — what building it changed
+
+### R1 — the flicker was two problems, and unifying the decision only fixed one
+
+**Verified fixed in game: pin a window, Escape out of the desktop, and not a frame is dropped.**
+
+The plan said the gap was "at least one frame by construction" and that the rest had to be measured.
+Both halves turned out to matter, and the second is the one the plan did not name:
+
+1. **Two hooks each deciding whether it was their turn.** Fixed by {@code DesktopPresentation}, as
+   designed — there is now one belief rather than two.
+2. **Minecraft renders the overlay BEFORE it draws the current screen.** So on the frame `CgUiScreen`
+   closes itself, that frame's overlay hook has *already* run and stood down — and the close branch
+   returned without painting, leaving the frame to nobody. No amount of unifying the decision reaches
+   that, because by then the only caller left for that frame is the one that is returning.
+
+So the close branch now paints the HUD presentation directly, in the frame that would have dropped it:
+by that point `displayGuiScreen` has run `onGuiClosed` (which entered HUD mode) and nulled the current
+screen, so the presentation is already `HUD` and the windows can simply be drawn.
+
+**The probe in step 1 was never run**, and that is the right outcome rather than a skipped step: it
+existed to tell us how much of the flicker the unification removed, and the answer arrived from the
+thing the probe was a proxy for. Had the seam still stuttered, it would have been the next move.
+
+### R2 — the mixin cancels and drains NOTHING
+
+The plan had the mixin drain the queue and forward what the desktop declined. That works and is wrong,
+for a reason `CgUiScreen` had already written down about itself: **`handleInput` is called from
+`Minecraft.runTick`, which is driven by `new Timer(20.0F)`** — so a screen's input is pumped at 20 Hz
+while the game renders at 60+. A drag would update three times in twelve frames of motion, which reads
+as the window being slow to paint rather than as input being sampled coarsely.
+
+The plan flagged this in "Things that will bite" and said it should be resolved deliberately rather than
+discovered. It was: **the mixin cancels and nothing more**, and `CgUiOverlayInput` drains on the render
+tick instead. Both UIs then get per-frame input — the foreign screen included, since it is handed
+whatever the desktop declined from that same loop. Cancelling without replacing would take the screen's
+input away entirely; replacing without cancelling would never see an event.
+
+### R3 — two bugs the plan's rules were right about and the code was not
+
+Both were found by playing, both were in `ScreenOverlay`, and **both had a comment next to them
+asserting the thing was handled.**
+
+**A move is not a button release.** `deliver` clamped the button with `Math.max(0, button)`. A move
+carries `-1`, so every single move became a left-button event with `pressed == false` — a RELEASE. The
+drag was being cancelled by the very events that should have driven it. It presented as "dragging and
+resizing do not work in overlay mode", which sounds like capture or coordinates and is neither; presses
+and clicks were fine throughout. `CgUiInput.pumpMouse` passes the button through and gives a move a
+`-1` timestamp so the multi-click counter cannot drift, and this now does both.
+
+**Keyboard ownership was one-way.** The early return for a press outside a pinned window fired *before*
+the line that gives the keyboard back — and the comment beside it read "the outside case never reaches
+here", which was true of the code and wrong about what the code had to do. Click into a pinned window
+once and every keystroke for the rest of the session went there: a chat box you can click, that shows a
+caret, and that will not take a character. Now a press outside releases the keyboard, **blurs our
+focused element** (or the editor goes on drawing itself focused while somebody else has the keys — the
+"looks focused, is cold" state `WindowFrame.restoreFocus` exists to prevent one level down), and light
+dismisses any open popover, since light dismiss otherwise only ever sees presses we consumed.
+
+
+### R4 — "whatever is painted is clickable" had to be written once, not three times
+
+The arbitration's hit test was wrong three times, each time for the same reason and each time fixed only
+for the instance in front of me:
+
+1. **Pinned frames.** The window switcher shows a window the HUD had hidden — painted, because the
+   overlay draws the whole window layer, and dead, because input accepted only pinned frames.
+2. **Any visible frame.** Better, and still half the picture: a Preferences dialog, a menu, a dropdown
+   and the command palette are all **promoted into the top layer** and are not `WindowFrame`s at all.
+   The overlay paints the top layer too, so all of them painted and none of them could be clicked.
+3. **`UIWindow.overlayHitTest`** — the question the paint answers: is this point on the window layer, or
+   on the top layer. One method, on the class where both are visible.
+
+**The lesson is not the bug, it is that the invariant was already stated.** After (1) the comment said
+"whatever is painted is clickable" and the code went on asking a narrower question — because the fix was
+written where the symptom was rather than where the rule belongs. A rule stated in a comment beside code
+that does something else is not a rule.
+
+Built on `getHoveredElement`, which brings the modal case for free: it answers `null` when a modal blocks
+the hit, so a dialog over a pinned window swallows clicks aimed past it rather than letting them fall
+through into the game.
+
+**And a dropped minus sign.** `CgUiOverlayInput` normalised the wheel with `1/120f`, copying the
+magnitude from `CgUiInput.MOUSE_SCROLL_NORMALIZE` and not the `NORMALIZE_TOP_LEFT_ORIGIN` factor beside
+it — so scrolling in an overlay window ran backwards. The engine's convention (a positive notch means
+DOWN) is written down on `ScrollerView` and nowhere else, which is exactly how a constant gets copied
+without it.
