@@ -812,7 +812,23 @@ public final class CgUiPaintContext {
         // Measured on the icon grid: 59 flushes per frame for 57 labels, 1.21ms in quadRenderer.upload of
         // which 0.88ms was streamBuffer.ssbo.map, plus 1.35ms across 58 glFlush calls -- about 2.5ms/frame,
         // more than every icon's geometry put together.
-        //textRenderer.beginBatch();
+        //
+        // ENABLED, and the counters explain why the disabled version looked pointless. A frame drawing 59
+        // labels reported 59 textpath-switches and only 2 quadpath-switches -- which cannot both be true
+        // of a path that alternates, and is not: Draw.submit() auto-wraps each label in its own
+        // begin/flush/END, and endBatch runs the restoreStateWith hook this class registers, which calls
+        // bindQuadPath and puts activePath back to QUAD. So the switches were 1:1 with labels BECAUSE
+        // there was no batch, and "batching wins nothing because every label switches anyway" had the
+        // causation backwards.
+        //
+        // With one batch open for the whole text path, the auto-wrap stops, the restore runs once per
+        // real switch instead of once per label, and consecutive labels coalesce into one upload.
+        // endTextPath() closes it, and endFrame() closes any that survives a frame.
+        //
+        // UIText must NOT open its own batch underneath this one -- beginBatch throws on a batch that is
+        // already open, which is what made enabling this line unusable before. Its shadow pass wanted a
+        // batch so the two draws coalesce; this batch already gives it that, and more.
+        textRenderer.beginBatch();
     }
 
     public void bindTexture(CgTexture2D texture) {
@@ -907,6 +923,12 @@ public final class CgUiPaintContext {
      */
     private void beginQuadPath() {
         if (activePath == InstancePath.QUAD) return;
+        // ALL THREE SWITCHES COUNTED, because knowing there are 59 text switches for 59 labels says
+        // every label is preceded by something non-text and NOT what. The editor's lines carry no
+        // background (`.__line__` sets none), so consecutive lines ought to batch -- and measurably do
+        // not. Whatever takes the path away between them is the thing to move, and only the counts can
+        // name it: quads (a fill, an image) and curves (every SVG icon) are different problems.
+        FrameProfile.count("quadpath-switches", 1);
         endTextPath();
         renderer.flushCurves();
         // bindQuadPath sets activePath itself — the one place it is assigned for this path.
@@ -917,6 +939,9 @@ public final class CgUiPaintContext {
     /** Makes the curve path current, flushing and unbinding the quad path if it was. */
     private void beginCurvePath() {
         if (activePath == InstancePath.CURVE) return;
+        // @see #beginQuadPath -- every SVG icon draws through here, and an icon beside a label is one
+        // alternation per row in any list.
+        FrameProfile.count("curvepath-switches", 1);
         endTextPath();
         renderer.flushQuads();
         activePath = InstancePath.CURVE;
@@ -948,6 +973,19 @@ public final class CgUiPaintContext {
      * the wrong shader, which renders something rather than failing.</p>
      */
     private void bindQuadPath(CgMaterial material) {
+        // THE TEXT BATCH DIES HERE TOO, not only in endTextPath.
+        //
+        // This method is the one place activePath becomes QUAD, and several callers reach it WITHOUT
+        // going through beginQuadPath: beginFrame, withMaterial, blitLayer, and the restoreStateWith
+        // hook. Each of those left activePath at QUAD while a text batch was still open, so the next
+        // text() saw "not TEXT", opened a second batch, and CgTextRenderer threw
+        // "beginBatch() called without a matching endBatch()". Guarding only the tidy path is guarding
+        // the route nothing takes.
+        //
+        // Re-entrant by construction and safe: endBatch runs the restore hook, which lands back here.
+        // endBatch clears batchActive BEFORE invoking the hook and is documented lenient, so the inner
+        // call returns immediately.
+        if (activePath == InstancePath.TEXT) textRenderer.endBatch();
         renderer.useMaterial(material);
         activePath = InstancePath.QUAD;
     }

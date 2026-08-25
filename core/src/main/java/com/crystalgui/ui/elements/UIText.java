@@ -828,7 +828,11 @@ public final class UIText extends UIElement {
         CgTextRenderer renderer = ctx.text();
         FrameProfile.end(switched, "text:switchRenderer");
         long drawn = FrameProfile.begin();
-        if (shadow) renderer.beginBatch();
+        // NO BATCH OF ITS OWN ANY MORE. This used to open one so the shadow pass and the main pass
+        // coalesced instead of paying two material binds for the same atlas and shader -- a real saving
+        // when each label was on its own. CgUiPaintContext now holds ONE batch open for the whole text
+        // path, which subsumes it and coalesces across LABELS as well; opening a second inside it throws,
+        // which is exactly what kept that batch disabled. @see CgUiPaintContext#beginTextPath
         try {
             if (shadow) {
                 // A span's own colour BEATS the draw colour downstream
@@ -850,7 +854,10 @@ public final class UIText extends UIElement {
                     .pose(ctx.getPoseStack())
                     .submit();
         } finally {
-            if (shadow) renderer.endBatch();
+            // AND NO endBatch EITHER -- closing the path-level batch here would end it for every label
+            // after this one, restoring the quad path and reintroducing the per-label switching this
+            // change exists to remove. The batch is closed by endTextPath, which is the only place that
+            // knows the text path is being left. @see CgUiPaintContext#beginTextPath
             FrameProfile.end(drawn, "text:submit");
         }
     }
