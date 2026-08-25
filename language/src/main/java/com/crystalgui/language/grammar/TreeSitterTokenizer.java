@@ -716,18 +716,25 @@ public final class TreeSitterTokenizer
         // Applied against the offsets of the text the tree currently describes, and in the order the
         // changes were made, because each edit's coordinates are relative to the document the previous
         // one left behind.
+        long interpolated = FrameProfile.begin();
         if (tree != null) {
             for (Change one : change.changes()) {
                 tree.edit(inputEditFor(one));
             }
         }
+        FrameProfile.step(interpolated, "ts.interpolate x" + change.changes().size()
+                + (tree == null ? " (no tree)" : ""));
 
         // PHASE 2 -- reparse. The expensive half: measured at ~17ms average and ~26ms worst per keystroke
         // on a 5,000-line file, against a budget of 2ms. It goes to a worker when there is one, and is
         // otherwise deferred to the next query so that a burst of keystrokes still costs one parse rather
         // than one per key.
         stale = true;
+        long scheduled = FrameProfile.begin();
         if (scheduler != null) scheduleReparse(after);
+        // SUBMITTING should be nothing, and this is here to prove it rather than assume it: tree.copy()
+        // is native and the job carries a Rope, so "handing the work over" is itself work, on the frame.
+        FrameProfile.step(scheduled, "ts.scheduleReparse");
     }
 
     /**

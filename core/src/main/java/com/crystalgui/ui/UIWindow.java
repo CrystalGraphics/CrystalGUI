@@ -496,19 +496,33 @@ public final class UIWindow {
                 break;
             }
             if (taffyTree.isDirty(ui.rootElement.taffyNodeId)) {
+                long computed = FrameProfile.begin();
                 taffyTree.computeLayout(ui.rootElement.taffyNodeId, availableSpace);
+                // TAFFY ITSELF, apart from the callbacks it triggers. A slow `layout` phase is either the
+                // solver or what the solver wakes up, and those have nothing to do with each other: one is
+                // a third-party constraint pass over the node tree, the other is our own onLayoutChanged
+                // hooks -- UIText re-wrapping and pushing a height back is the standing example, and it
+                // dirties the tree again, which is what makes this loop run more than once.
+                FrameProfile.end(computed, "layout:taffy");
+                FrameProfile.count("layout-nodes-changed", nodesWithNewLayout.size());
 
+                long notified = FrameProfile.begin();
                 for (var nodeId : nodesWithNewLayout) {
                     var element = elementByNode.get(nodeId);
                     if (element != null) {
                         element.onLayoutChanged(nodesWithNewGeometry.contains(nodeId));
                     }
                 }
+                FrameProfile.end(notified, "layout:onLayoutChanged");
                 nodesWithNewLayout.clear();
                 nodesWithNewGeometry.clear();
             }
 
         }
+        // HOW MANY TIMES THE TREE HAD TO SETTLE. A frame that ran eight passes and one that ran one are
+        // completely different findings and report as the same `layout` number; the pass count is the
+        // only thing that separates "the tree is big" from "something re-dirties it after every pass".
+        if (passes > 1) FrameProfile.count("layout-passes", passes);
 
         resolveRootPlacement();
     }

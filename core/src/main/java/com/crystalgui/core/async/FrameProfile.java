@@ -118,6 +118,19 @@ public final class FrameProfile {
         CrystalGuiCore.LOGGER.info("[step] {}{} {}us", indent(), what, took / 1_000L);
     }
 
+    /**
+     * Logs a duration that was <b>accumulated</b> rather than measured from a single start.
+     *
+     * <p>{@link #step} takes a start stamp, which cannot express a total summed across a loop — and
+     * {@link #add} can, but a bucket only ever surfaces inside a reported {@code [frame]} line, and the
+     * frame that opens a document is routinely suppressed by the rate limit. The first attempt at
+     * splitting a per-row cost that way printed nothing at all and read as the code not having run.</p>
+     */
+    public static void report(long nanos, String what) {
+        if (!ENABLED || nanos < STEP_FLOOR) return;
+        CrystalGuiCore.LOGGER.info("[step] {}{} {}us", indent(), what, nanos / 1_000L);
+    }
+
     /** Notes a step that has no duration worth timing — an entry point, a decision, a count. */
     public static void note(String what) {
         if (!ENABLED) return;
