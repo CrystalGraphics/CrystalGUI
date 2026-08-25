@@ -5194,7 +5194,15 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // exist, so asking first would realise rows against a count that is about to move -- and a
         // reprojection resets visibility whenever the row count changed, so the hidden rows have to be
         // reapplied on the far side of it rather than the near side.
-        if (folds.refreshFolding()) {
+        // THE TOP OF THE METHOD, and the last thing in it with no bucket. Folding is computed over the
+        // WHOLE document rather than the viewport -- a fold can start above the screen and end below it,
+        // which is stated on FoldingRegions itself -- so it is the one call in here whose cost scales
+        // with the file rather than with what is visible. ed:updateWindow reports 33.6ms on the frame
+        // that opens a 2,000-line class while everything named inside it sums to 8ms.
+        long folded = FrameProfile.begin();
+        boolean foldingChanged = folds.refreshFolding();
+        FrameProfile.step(folded, "ed:refreshFolding (" + viewLineCount() + " view lines)");
+        if (foldingChanged) {
             firstRealised = -1;
             lastRealised = -1;
             rebindRealisedLines();
@@ -5274,13 +5282,22 @@ public class TextEditor extends ScrollerView implements UndoScope {
             part.render(first, last);
             FrameProfile.end(partStart, "part:" + part.getClass().getSimpleName());
         }
+        // THE TAIL WAS NEVER TIMED, and ed:updateWindow reports 40ms while everything named inside it
+        // sums to 22. Four calls sat past the parts loop with no bucket of their own, which is exactly
+        // how a cost stays invisible while the number above it is read over and over.
+        profiled = FrameProfile.begin();
         insetHorizontalBarPastGutter();
+        FrameProfile.end(profiled, "ed:insetBar");
         // AFTER the parts have rendered, so a layer built on this frame is moved on this frame rather
         // than drawing once at the unscrolled origin. It is a transform, so nothing below it re-lays out.
+        profiled = FrameProfile.begin();
         syncScrollLayers();
+        FrameProfile.end(profiled, "ed:syncScrollLayers");
         // The pause that finishes a word, checked once a frame -- there is no other timer in the editor
         // and adding one for this would be a thread to keep in step with the frame it reports to.
+        profiled = FrameProfile.begin();
         settleSyntaxIfIdle();
+        FrameProfile.end(profiled, "ed:settleSyntax");
         // THE POPUP RE-ANCHORS HERE, once a frame, and not only when the caret moves.
         //
         // The anchor is derived from measured row widths, and those are computed in this very method --
@@ -5289,7 +5306,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // origin, and it drew neatly over the editor's top-left corner: plausible enough to look like a
         // placement policy rather than an unmeasured read. Re-anchoring per frame also keeps it correct
         // through a scroll, which no caret-driven update would have caught either.
+        profiled = FrameProfile.begin();
         suggest.updateAnchor();
+        FrameProfile.end(profiled, "ed:suggestAnchor");
     }
 
     /**

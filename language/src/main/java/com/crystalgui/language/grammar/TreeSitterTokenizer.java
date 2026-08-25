@@ -262,10 +262,20 @@ public final class TreeSitterTokenizer
         if (tree == null || (stale && scheduler == null)) reparse(forParser(document.toString()));
         if (tree == null) return FoldingRegions.empty();
 
-        // THE WHOLE DOCUMENT, unlike highlighting. A fold arrow is drawn in the gutter for a region that
-        // may start above the viewport and end below it, and the outline a reader folds against is the
-        // file's rather than the screen's -- so the byte cap that bounds a per-viewport highlight query
-        // would silently truncate the outline of any file longer than 16KB.
+        // ALREADY COMPUTED, on the worker that built this tree. @see #foldsOnWorker
+        if (foldRanges != null) return foldingRegionsOf(foldRanges, document.lineCount());
+        return foldingRegionsOf(foldRangesOf(folds, tree, cursor), document.lineCount());
+    }
+
+    /**
+     * The fold query over the whole tree — the expensive half, extracted so a worker can run it.
+     *
+     * <p><b>The whole document, unlike highlighting.</b> A fold arrow is drawn in the gutter for a region
+     * that may start above the viewport and end below it, and the outline a reader folds against is the
+     * file's rather than the screen's — so the byte cap that bounds a per-viewport highlight query would
+     * silently truncate the outline of any file longer than 16KB.</p>
+     */
+    private static List<int[]> foldRangesOf(TSQuery folds, TSTree tree, TSQueryCursor cursor) {
         cursor.setByteRange(0, Integer.MAX_VALUE);
         cursor.exec(folds, tree.getRootNode());
 
@@ -283,8 +293,39 @@ public final class TreeSitterTokenizer
                 ranges.add(new int[]{startRow, endRow});
             }
         }
-        return foldingRegionsOf(ranges, document.lineCount());
+        return ranges;
     }
+
+    /**
+     * The fold query, run on the worker that just built the tree — the third pass to move here.
+     *
+     * <h3>Why it is safe, and why it was worth moving</h3>
+     *
+     * <p>Same argument as {@link #localsOnWorker}: the tree has just been parsed by this worker, nothing
+     * else holds a reference, and it is handed over only afterwards. That is what makes an off-thread
+     * query of a native tree safe at all — and it is why folding could NOT simply be scheduled from
+     * {@code EditorFolding}, where the provider may be this tokenizer and the frame thread is querying
+     * the same tree.</p>
+     *
+     * <p>Measured on the frame that opens a 2,020-line class: {@code ed:refreshFolding} at <b>12.4ms</b>,
+     * the largest unattributed part of {@code ed:updateWindow}. It is a pure function of the tree —
+     * {@code tabSize} appears in {@code compute}'s signature and nowhere in its body, so the result
+     * cannot depend on anything the worker does not have.</p>
+     */
+    private List<int[]> foldsOnWorker(TSTree parsed) {
+        TSQuery folds = foldQuery();
+        if (folds == null) return null;
+        try {
+            return foldRangesOf(folds, parsed, new TSQueryCursor());
+        } catch (RuntimeException failed) {
+            // Null means "ask on the frame thread as before" -- slow rather than wrong. An outline is a
+            // decoration and must not be able to take a parse down with it.
+            return null;
+        }
+    }
+
+    /** Fold ranges for the current tree, or null to query on demand. @see #foldsOnWorker */
+    private List<int[]> foldRanges;
 
     /**
      * The captured ranges as {@link FoldingRegions} wants them: sorted by start row and strictly nested.
@@ -860,7 +901,9 @@ public final class TreeSitterTokenizer
             Utf8Offsets parsedOffsets = Utf8Offsets.of(text);
             context.throwIfCancelled();
             // AND THE LOCALS PASS FOR THE SAME REASON, which is the larger of the two. @see #localsOnWorker
-            return new Parsed(parsed, parsedOffsets, localsOnWorker(parsed, parsedOffsets));
+            // AND THE FOLD QUERY, third pass on the worker that owns this tree. @see #foldsOnWorker
+            return new Parsed(parsed, parsedOffsets, localsOnWorker(parsed, parsedOffsets),
+                    foldsOnWorker(parsed));
         }).onDone(result -> {
             // CLEARED BEFORE THE NULL CHECK. A cancelled or failed job delivers null, and leaving the flag
             // set on that path would mean no parse is ever scheduled again -- a document uncoloured for
@@ -873,6 +916,9 @@ public final class TreeSitterTokenizer
             // only when the grammar ships no locals.scm or the pass failed, and localsForTree then falls
             // back to computing it here exactly as it always did.
             this.localsTokens = result.locals();
+            // Fold ranges for THIS tree, computed beside it. Null falls back to querying on demand,
+            // exactly as before. @see #foldsOnWorker
+            this.foldRanges = result.folds();
             this.offsets = result.offsets();
             this.stale = false;
             // Nothing about the DOCUMENT changed, so no existing signal would tell the view to re-query --
@@ -944,7 +990,7 @@ public final class TreeSitterTokenizer
     }
 
     /** A finished parse and the offset index over the text it describes — swapped in together. */
-    private record Parsed(TSTree tree, Utf8Offsets offsets, List<SyntaxToken> locals) {
+    private record Parsed(TSTree tree, Utf8Offsets offsets, List<SyntaxToken> locals, List<int[]> folds) {
     }
 
     /**
@@ -1058,6 +1104,10 @@ public final class TreeSitterTokenizer
 
     private void reparse(String text) {
         this.localsTokens = null;   // @see #localsForTree -- the cache belongs to one tree
+        // AND THE FOLDS WITH THEM, for the same reason and it is the sharper one: locals only tint a
+        // token, while a fold range decides which ROWS are on screen. Carrying a previous tree's ranges
+        // into a new one hides rows that no longer correspond to anything. @see #foldsOnWorker
+        this.foldRanges = null;
         TSTree previous = tree;
         this.tree = previous == null
                 ? parser.parseString(null, text)
