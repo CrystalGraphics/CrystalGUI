@@ -707,6 +707,11 @@ public final class CgUiPaintContext {
 
     /** Solid-color fill, tint already includes opacity. */
     public void fillRect(float x, float y, float width, float height, int argb) {
+        // ONE FLUSH PER RECTANGLE, and a flush is a draw call. Counted because `gl:draw` measures at
+        // 21-30us per painted element -- far too much for a tree walk, and exactly the shape of
+        // per-element driver overhead. 271 elements after a file is opened (up from 130 with none) at
+        // one or more draw calls each is the whole 8.33ms budget spent submitting.
+        FrameProfile.count("drawcalls", 1);
         bindTexture(whitePixel);
         quad().at(x, y).size(width, height).color(argb).submit();
         flush();
@@ -721,6 +726,7 @@ public final class CgUiPaintContext {
         // texture looking like the recognisable "missing texture" it is, at whatever size it was
         // asked to draw. Was previously enforced centrally in submitQuad; it now lives at the two
         // sites that can actually be handed a fallback (here and CgUiSprite).
+        FrameProfile.count("drawcalls", 1);
         boolean missing = texture == CgTextureManager.get().getFallback();
         CgQuadRenderer.Quad q = quad().at(x, y).size(width, height).color(argb);
         (missing ? q : q.uv(u0, v0, u1, v1)).submit();
@@ -760,6 +766,10 @@ public final class CgUiPaintContext {
      * }</pre>
      */
     public CgTextRenderer text() {
+        // TEXT OWNS A SECOND RENDERER with its own material, so switching to it flushes the quad path
+        // and switching back flushes text -- meaning every alternation between a box and a label is two
+        // draw calls. An editor row is exactly that alternation, repeated per line.
+        FrameProfile.count("textswitches", 1);
         beginTextPath();
         return textRenderer;
     }
@@ -1074,6 +1084,10 @@ public final class CgUiPaintContext {
      * rendering has no effect on the separate scissor-test raster stage.</p>
      */
     public void pushScissor(float x, float y, float w, float h) {
+        // A SCISSOR IS A FLUSH TOO, and every element with overflow pushes one. Counted beside the
+        // fills because they add up in the same place: a clipped container costs a draw call to enter
+        // and another to leave, whatever it contains.
+        FrameProfile.count("scissors", 1);
         flush();
         Matrix4f m = poseStack.last().pose();
         float physX0 = m.m00() * x + m.m10() * y + m.m30();

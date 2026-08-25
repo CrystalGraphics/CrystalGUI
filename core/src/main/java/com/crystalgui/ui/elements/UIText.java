@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements;
 
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgraphics.api.text.CgShapedRun;
 import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.api.font.CgFontFamilyGroup;
@@ -747,7 +748,13 @@ public final class UIText extends UIElement {
         float contentY = getRuntimeCache().getY() + layout.border().top + layout.padding().top
                 + general.textOffsetY().resolve(getRuntimeCache().getHeight());
 
+        // EVERY FRAME, PER LABEL, and `paint:overlay` -- which is where a UIText draws -- measured at
+        // 6.5ms of a 9ms client frame across ~130 of them. That is ~50us each for something whose
+        // javadoc says calling it again at the same width "re-runs no real line-breaking work", so the
+        // split below is what says whether that is true.
+        long timed = FrameProfile.begin();
         CgFontFamily family = resolveFamily();
+        FrameProfile.end(timed, "text:resolveFamily");
         // Deliberately 0f (unbounded) maxHeight, matching recompute()'s call — NOT
         // layout.contentBoxHeight(). UIText has no max-height/max-lines feature yet, so there's no
         // legitimate bounded height to constrain against; passing the measured content height back in
@@ -759,9 +766,11 @@ public final class UIText extends UIElement {
         // the trailing line at all — not clipped, just silently dropped. Known upstream CrystalGraphics
         // issue; revisit once UIText actually needs a bounded maxHeight (max-lines/ellipsis support).
         boolean wraps = general.whiteSpace().wraps();
+        timed = FrameProfile.begin();
         CgTextLayout textLayout = wraps
                 ? ensureShaped().layout(contentWidth, 0f)
                 : truncatedIfNeeded(family, contentWidth);
+        FrameProfile.end(timed, wraps ? "text:layout(wrap)" : "text:layout(truncate)");
 
         // `text-align`: distribute the leftover width. Clamped at zero so overflowing text always
         // starts at the leading edge rather than being pushed negative — centring something wider than
@@ -784,10 +793,20 @@ public final class UIText extends UIElement {
         // per-instance data. Batched, the two passes coalesce into a single draw call. The `try` matters:
         // an unclosed batch makes the *next* beginBatch throw, so one bad frame would take down all
         // subsequent text rather than just this label.
+        timed = FrameProfile.begin();
         paintHighlightBands(ctx, textLayout, contentX, contentY);
+        FrameProfile.end(timed, "text:highlightBands");
 
         boolean shadow = general.textShadow();
+        // THE SWITCH AND THE SUBMIT, apart. ctx.text() flushes the quad path and binds the text
+        // material; the submit is glyph work. text:draw measured at 93% of paint:overlay and ~61us per
+        // label across ~130 labels a frame, with 73 renderer switches -- and a material bind is exactly
+        // that order of cost, so which half this is decides whether the answer is batching or the glyph
+        // pipeline. They have nothing in common.
+        long switched = FrameProfile.begin();
         CgTextRenderer renderer = ctx.text();
+        FrameProfile.end(switched, "text:switchRenderer");
+        long drawn = FrameProfile.begin();
         if (shadow) renderer.beginBatch();
         try {
             if (shadow) {
@@ -811,6 +830,7 @@ public final class UIText extends UIElement {
                     .submit();
         } finally {
             if (shadow) renderer.endBatch();
+            FrameProfile.end(drawn, "text:submit");
         }
     }
 

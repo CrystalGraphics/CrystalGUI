@@ -2458,12 +2458,28 @@ public class UIElement implements SettingsScope, DataProvider {
         boolean needsLayer = opacity < 1f || overflow.isMask();
 
         if (!needsLayer) {
+            // THE FOUR HALVES OF PAINTING AN ELEMENT, each attributed. `gl:draw` wraps the whole
+            // recursive walk, so it can say a frame spent 8ms drawing and nothing about WHAT -- and the
+            // four do completely unrelated work: a background resolves and draws a drawable, children
+            // recurse, an overlay is a second drawable, an outline is four strokes. Excluding the
+            // recursion from the self/overlay/outline buckets is what makes them comparable across
+            // elements; children lands in the same buckets one level down.
+            long timed = FrameProfile.begin();
             paintSelf(ctx);
+            FrameProfile.end(timed, "paint:self");
             paintChildren(ctx, overflow);
+            timed = FrameProfile.begin();
             paintOverlay(ctx);
+            FrameProfile.end(timed, "paint:overlay");
+            timed = FrameProfile.begin();
             paintOutline(ctx);
+            FrameProfile.end(timed, "paint:outline");
             return;
         }
+        // A LAYER PASS, counted separately -- it acquires an FBO, redirects the whole subtree into it
+        // and composites it back, which is a different order of cost from an ordinary element and is
+        // invisible inside one `gl:draw` number.
+        FrameProfile.count("paint-layers", 1);
 
         CgFrameBuffer subtreeFbo = ctx.beginLayerFbo();
         paintSelf(ctx); // background (fill + border) — must NOT go through the mask below
