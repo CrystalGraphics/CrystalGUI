@@ -180,8 +180,29 @@ public abstract class EditorTestBase extends UiTestBase {
         return out.toString().trim();
     }
 
+    /**
+     * The line elements currently ON SCREEN — <b>pooled ones excluded</b>.
+     *
+     * <p>{@code recycleLine} keeps a line attached and hides it with {@code display: none} rather than
+     * detaching it, so the editor's line pool is now part of the tree. Selecting by class alone therefore
+     * answers "every line element that has ever existed", and the topmost of those is whichever one the
+     * pool happens to hold — which is what {@code assertRowsAlign} was comparing a gutter number against.
+     * The production code never had this question: it reads its {@code realisedLines} map.</p>
+     */
     protected java.util.List<UIElement> linesOf() {
-        return allWithClass(TextEditor.LINE_CLASS);
+        java.util.List<UIElement> out = new java.util.ArrayList<>();
+        for (UIElement line : allWithClass(TextEditor.LINE_CLASS)) {
+            if (line.getStyle().taffyBridge.style.display != dev.vfyjxf.taffy.style.TaffyDisplay.NONE) {
+                out.add(line);
+            }
+        }
+        // IN ROW ORDER, which is no longer tree order. A recycled line keeps its place in the children
+        // list now, so a reused element shows whatever row it was next handed — where detaching and
+        // re-adding used to append it and leave tree order tracking realisation order by accident. The
+        // editor never relied on that: every line is absolutely positioned by `top`, and that is the only
+        // thing that says which row an element is showing.
+        out.sort(java.util.Comparator.comparingDouble(line -> line.getRuntimeCache().getY()));
+        return out;
     }
 
     /**
