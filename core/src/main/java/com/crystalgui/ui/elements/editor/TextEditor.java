@@ -5210,6 +5210,11 @@ public class TextEditor extends ScrollerView implements UndoScope {
                 : Math.min(count - 1, (int) ((getScrollTop() + viewport) / height) + OVERSCAN);
 
         if (first != firstRealised || last != lastRealised) {
+            // THE REALISE LOOP, which nothing has ever timed. ed:updateWindow measured at 33.2ms on the
+            // frame that opens a class while every named sub-item inside it summed to 9.8ms -- so 23ms
+            // was landing here, in creating and placing the viewport's line elements and in whatever
+            // onWindowChanged wakes up.
+            long recycled = FrameProfile.begin();
             for (var iterator = realisedLines.entrySet().iterator(); iterator.hasNext(); ) {
                 var entry = iterator.next();
                 if (entry.getKey() < first || entry.getKey() > last) {
@@ -5217,15 +5222,23 @@ public class TextEditor extends ScrollerView implements UndoScope {
                     iterator.remove();
                 }
             }
+            FrameProfile.step(recycled, "ed:recycleLines");
+            long realised = FrameProfile.begin();
+            int created = 0;
             for (int viewLine = first; viewLine <= last; viewLine++) {
                 if (!realisedLines.containsKey(viewLine)) {
                     realisedLines.put(viewLine, realiseLine(viewLine));
+                    created++;
                 }
             }
+            FrameProfile.step(realised, "ed:realiseLines x" + created);
             firstRealised = first;
             lastRealised = last;
             highlightsDirty = true;
+            long announced = FrameProfile.begin();
             onWindowChanged.emit();
+            FrameProfile.step(announced, "ed:onWindowChanged -> "
+                    + onWindowChanged.connectionCount() + " listeners");
         }
         // EVERY FRAME, not only when the realised set changes. The lines live in a scroll-exempt viewport
         // now, so they no longer get the scroll translate for free -- their `top` is baked in by
