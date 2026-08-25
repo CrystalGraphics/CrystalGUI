@@ -797,6 +797,18 @@ public final class UIText extends UIElement {
         paintHighlightBands(ctx, textLayout, contentX, contentY);
         FrameProfile.end(timed, "text:highlightBands");
 
+        // NOTHING TO DRAW MUST NOT COST A PATH SWITCH.
+        //
+        // ctx.text() flushes whatever the quad path has queued and binds the text material, and the
+        // return to quads flushes again -- so an EMPTY label costs two flushes and two buffer maps to
+        // draw no glyphs at all. A blank line in a document is a UIText with an empty string, and a
+        // viewport full of them (the tail of any file, every gap between methods) pays for every one.
+        //
+        // It matters more than the count suggests because the stream buffer's ring advances per SUBMIT
+        // over three slots: every avoidable submit is one fewer chance to wait on a fence that has not
+        // been signalled. @see MapAndSyncStreamBuffer
+        if (textLayout.lines().isEmpty() || text.get().isEmpty()) return;
+
         boolean shadow = general.textShadow();
         // THE SWITCH AND THE SUBMIT, apart. ctx.text() flushes the quad path and binds the text
         // material; the submit is glyph work. text:draw measured at 93% of paint:overlay and ~61us per
