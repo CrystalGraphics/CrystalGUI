@@ -4021,12 +4021,45 @@ public class TextEditor extends ScrollerView implements UndoScope {
      *
      * <p>At {@code IMPORTANT}, because the sheet's own rule for these classes would otherwise win and the
      * decoration would size itself independently of the text it is describing.</p>
+     *
+     * <h3>"It is cheap" was measured and is not true</h3>
+     *
+     * <p>Five callers reach this per element per frame — every realised line, every line number, every
+     * whitespace marker, every fold glyph — so an editor viewport is ~100 calls a frame. Measured on the
+     * frame that opens a class: <b>{@code ed:fonts} 13.3ms and {@code ln:pushFont} 4.5ms</b>, and on an
+     * earlier build {@code ln:pushFont} alone reached 30ms. {@code replaceOrPutCandidate} does no-op on an
+     * unchanged value, but reaching it costs a pipeline, two {@code StyleSlot}s and two candidate-list
+     * walks — and on the one frame that matters the value has genuinely changed (the gutter pushes a new
+     * size), so every write resolves, fires the {@code FONT_SIZE} listener and drops each label's shaped
+     * paragraph.</p>
+     *
+     * <p>So the guard is here rather than in each caller: the value is the same for every element, so
+     * "has this element already got the current font" is one membership test. The set is cleared when
+     * the editor's own font moves, which is the only thing that can invalidate it, and it is weakly held
+     * so a pooled line that goes away does not pin it.</p>
      */
     void pushEditorFontTo(UIElement element) {
         var general = getStyle().getGeneralGroup();
+        float size = general.fontSize();
+        List<String> family = general.fontFamily();
+        if (size != pushedFontSize || !family.equals(pushedFontFamily)) {
+            pushedFontSize = size;
+            pushedFontFamily = family;
+            fontUpToDate.clear();
+        }
+        // add() answers false when it was already there -- one hash lookup instead of two style writes.
+        if (!fontUpToDate.add(element)) return;
         StyleGroup.importantPipeline(element.getStyle().getGeneralGroup(),
-                g -> g.fontSize(general.fontSize()).fontFamily(general.fontFamily()));
+                g -> g.fontSize(size).fontFamily(family));
     }
+
+    /** Elements already carrying {@link #pushedFontSize}/{@link #pushedFontFamily}. @see #pushEditorFontTo */
+    private final Set<UIElement> fontUpToDate =
+            Collections.newSetFromMap(new WeakHashMap<UIElement, Boolean>());
+
+    private float pushedFontSize = Float.NaN;
+
+    private List<String> pushedFontFamily;
 
     /**
      * Starts the horizontal scrollbar after the gutter rather than under it.
