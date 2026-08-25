@@ -367,6 +367,30 @@ public class DockArea extends UIElement implements UIFrameTicker {
     }
 
     /**
+     * Asks for a strip resync on the next frame — {@link #syncGroups()} with the deferral of a rebuild.
+     *
+     * <h3>Both halves are needed, and each has a reason the other does not cover</h3>
+     *
+     * <p><b>Cheap</b>, because {@link #rebuild()} opens with {@code content.clearAllChildren()}: the whole
+     * built tree is detached and constructed again, which re-registers every element under it. Measured
+     * on closing one of two tabs, a change that removes a single button from a single strip:
+     * {@code UIWindow.registerElement x181} and a 21ms frame.</p>
+     *
+     * <p><b>Deferred</b>, because a close arrives from a click on the very tab it removes, and this
+     * widget's standing rule is that it must never rebuild the elements it is being clicked on — the rule
+     * the whole rebuild deferral exists for. Calling {@code syncGroups()} inline is the cheap half
+     * without the safe one; it was measured, and it moved the cost into the gesture rather than removing
+     * it.</p>
+     *
+     * <p>A pending rebuild wins: it does everything this does and more.</p>
+     */
+    public void requestSync() {
+        syncPending = true;
+    }
+
+    private boolean syncPending;
+
+    /**
      * Brings every strip into line with its leaf, <b>without</b> rebuilding the tree.
      *
      * <p>For the case where only the <em>selection</em> changed — activating a panel that is already open.
@@ -386,7 +410,14 @@ public class DockArea extends UIElement implements UIFrameTicker {
     public boolean tickFrame(float deltaSeconds) {
         if (rebuildPending) {
             rebuildPending = false;
+            // A rebuild subsumes a sync — it builds every strip from its leaf on the way past.
+            syncPending = false;
             rebuild();
+        } else if (syncPending) {
+            syncPending = false;
+            long timed = FrameProfile.begin();
+            syncGroups();
+            FrameProfile.step(timed, "dock.syncGroups (deferred)");
         }
         applyPendingFocus();
         return true;
@@ -810,7 +841,11 @@ public class DockArea extends UIElement implements UIFrameTicker {
         //
         // `DockGroup.sync` already rebuilds its strip when the panel LIST changes rather than only on a
         // selection, so it is exactly the operation this case wants.
-        requestRebuild();
+        if (shapeChanged) {
+            requestRebuild();
+        } else {
+            requestSync();
+        }
         // ANNOUNCED, because until now closing a tab told nobody. Its document stayed open, its editor
         // stayed reachable, and anything it owned -- a preview pool, a renderer -- lived until the
         // process did. `Disposer` could not help, because the thing that knew the panel was gone had no
