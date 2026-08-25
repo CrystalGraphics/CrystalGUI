@@ -9,6 +9,7 @@ import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UITransform;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Button;
+import com.crystalgui.ui.elements.ScrollerView;
 import com.crystalgui.ui.elements.ColorSelector;
 import com.crystalgui.ui.elements.Slider;
 import com.crystalgui.ui.elements.UIText;
@@ -116,10 +117,21 @@ public final class TaskbarDesigner {
         UIElement content = new UIElement();
         content.addClass("__designer__");
 
-        // A PLAIN ELEMENT WITH overflow, not a ScrollerView. Scrolling is an ordinary element
-        // capability here, driven by `overflow` -- a ScrollerView only adds visible bars on top of it,
-        // and a tuning panel in a resizable window does not need them.
-        UIElement body = new UIElement();
+        // A ScrollerView, FOR THE BARS. This was a plain element on the argument that scrolling is an
+        // ordinary element capability driven by `overflow`, and that a tuning panel does not need
+        // visible bars. Both halves are true and the conclusion was wrong: the wheel worked the whole
+        // time, and what was missing was any indication that there was more panel below the fold.
+        //
+        // A scrollable region with no bar does not read as scrollable -- it reads as ENDING where it is
+        // cut off, so every control past the frame's height was undiscoverable rather than merely out
+        // of view. This window is the case that exposes it, because it opens clamped to the work area
+        // (see open()), so on any short desktop it is scrolled from the moment it appears and there has
+        // never been a first frame that showed the whole panel.
+        //
+        // ScrollerView is a drop-in here: it IS the viewport, children are direct children, and the
+        // `overflow: auto` already on `.__designer-body__` is what decides that a bar appears only on
+        // an axis that actually overflows.
+        ScrollerView body = new ScrollerView();
         body.addClass("__designer-body__");
 
         body.addChild(heading("Shape"));
