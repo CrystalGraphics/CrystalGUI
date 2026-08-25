@@ -1185,17 +1185,28 @@ public final class UIWindow {
         UIElement hit = getHoveredElement(x, y);
         if (hit == null) return null;
 
-        // Promoted into the top layer -- a dialog, a menu, a tooltip, the switcher.
+        // Promoted into the top layer -- a dialog, a menu, a tooltip, the switcher. The promoted
+        // element ITSELF is a legitimate hit, so this matches at depth zero.
         for (UIElement promoted : topLayer.elements()) {
             for (UIElement walk = hit; walk != null; walk = walk.getParent()) {
                 if (walk == promoted) return hit;
             }
         }
-        // Or inside a window on the layer the overlay draws.
+
+        // Or INSIDE A WINDOW -- and "inside a window" is not the same as "somewhere under the window
+        // layer", which is what the previous version asked and is why it swallowed every click on the
+        // screen. The layer is full-size (its box IS the work area) and nothing turns its hit-testing
+        // off, so getHoveredElement answers with the LAYER for any point not over a window. Matching
+        // that made the whole screen ours: Minecraft's own Game Menu buttons stopped responding, because
+        // every press was being consumed before it could be forwarded.
+        //
+        // Asking for a WindowFrame in the chain is the precise question. It excludes the bare layer, and
+        // it excludes the taskbar for free -- which is desktop chrome this presentation does not paint,
+        // so a click at the bottom of the screen belongs to the game.
         UIElement layer = desktop == null ? null : desktop.windowLayer();
-        if (layer == null) return null;
         for (UIElement walk = hit; walk != null; walk = walk.getParent()) {
-            if (walk == layer) return hit;
+            if (walk instanceof WindowFrame) return hit;
+            if (walk == layer) return null;
         }
         return null;
     }

@@ -495,13 +495,25 @@ for the instance in front of me:
 2. **Any visible frame.** Better, and still half the picture: a Preferences dialog, a menu, a dropdown
    and the command palette are all **promoted into the top layer** and are not `WindowFrame`s at all.
    The overlay paints the top layer too, so all of them painted and none of them could be clicked.
-3. **`UIWindow.overlayHitTest`** — the question the paint answers: is this point on the window layer, or
-   on the top layer. One method, on the class where both are visible.
+3. **Under the window layer.** Correct about the top layer at last, and it SHIPPED BROKEN: the layer is
+   full-size — its box *is* the work area — and nothing turns its hit-testing off, so `getHoveredElement`
+   answers with the LAYER for any point not over a window. Matching that claimed the entire screen, and
+   Minecraft's own Game Menu buttons stopped responding while anything was pinned. Every press was being
+   consumed before it could be forwarded.
+4. **Inside a `WindowFrame`, or inside a promoted top-layer element.** The precise question. It excludes
+   the bare layer, and excludes the taskbar for free — desktop chrome this presentation does not paint,
+   so a click at the bottom of the screen belongs to the game.
 
 **The lesson is not the bug, it is that the invariant was already stated.** After (1) the comment said
-"whatever is painted is clickable" and the code went on asking a narrower question — because the fix was
-written where the symptom was rather than where the rule belongs. A rule stated in a comment beside code
-that does something else is not a rule.
+"whatever is painted is clickable" and the code went on asking a different question three more times —
+because each fix was written where the symptom was rather than where the rule belongs. A rule stated in a
+comment beside code that does something else is not a rule.
+
+**And the test that would have caught (3) did not exist until after it shipped.** Every version had a test
+for what the overlay SHOULD accept and none for what it should REFUSE, so a hit test that said yes to the
+whole screen passed everything. `aPressOnBareDesktopIsNotOurs` is that missing counter-assertion; it is
+the same shape as `leavingTheHudPinsNothing`, and both exist because the positive case alone cannot tell
+a correct answer from an indiscriminate one.
 
 Built on `getHoveredElement`, which brings the modal case for free: it answers `null` when a modal blocks
 the hit, so a dialog over a pinned window swallows clicks aimed past it rather than letting them fall
