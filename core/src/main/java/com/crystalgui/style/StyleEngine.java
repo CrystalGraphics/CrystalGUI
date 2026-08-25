@@ -114,9 +114,12 @@ public final class StyleEngine {
      * {@code bindVariables()} both change what the sheets say without changing any engine's sheet
      * list, so no per-window hook fires; whoever mutated the sheets calls this next.
      */
-    public static void restyleAllWindows() {
+    public static int restyleAllWindows() {
         synchronized (LIVE) {
             for (StyleEngine engine : LIVE) engine.invalidateAllMatches();
+            // COUNTED, because zero is a real answer and looks exactly like success from the caller.
+            // A sheet mutation that restyles nothing has done everything right and changed no pixel.
+            return LIVE.size();
         }
     }
 

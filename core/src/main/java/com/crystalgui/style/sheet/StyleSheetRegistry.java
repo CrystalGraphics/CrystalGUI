@@ -88,7 +88,26 @@ public final class StyleSheetRegistry {
         StyleSheet cachedDefault = CACHE.get(DEFAULT_SHEET);
         if (cachedDefault != null && !cachedDefault.getRules().isEmpty()) {
             StyleSheet.DEFAULT.refillFrom(cachedDefault);
+            return;
         }
+        // THE ONE FAILURE THAT LOOKS EXACTLY LIKE SUCCESS.
+        //
+        // Nearly every colour a theme changes is a `var(--token, #fallback)` in the USER-AGENT sheet --
+        // a theme carries variables and, in the shipped pair, no override rules at all. So this refill
+        // is not a special case, it IS how a theme reaches the screen. Skip it and every other step
+        // still runs perfectly: the table binds, every registered sheet re-substitutes, every window
+        // re-matches, and the screen does not change.
+        //
+        // It is skipped when the cache has no entry under `DEFAULT_SHEET`, and `of()` reaches that state
+        // by design -- `computeIfAbsent` does not store a null, so a sheet that could not be READ is
+        // retried next time rather than being cached empty. Which makes this reachable exactly where
+        // resource resolution differs: a host that resolves from source directories caches it on the
+        // first call, and one whose resource manager was not up yet when `StyleSheet.DEFAULT` class-
+        // initialised does not -- and `DEFAULT` is `static final`, so it never asks again.
+        CrystalGuiCore.LOGGER.warn("theme: the user-agent sheet was NOT re-substituted -- '{}' is {} in "
+                        + "the sheet cache, so every var() in it keeps the value it was parsed with and "
+                        + "a theme swap will change nothing visible",
+                DEFAULT_SHEET, cachedDefault == null ? "absent" : "cached but empty");
     }
 
     /** Returns the parsed stylesheet for {@code namespacedPath}, or an empty (no-op) stylesheet if
