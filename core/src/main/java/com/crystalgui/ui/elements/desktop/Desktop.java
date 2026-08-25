@@ -304,8 +304,18 @@ public class Desktop extends UIElement implements DataProvider {
         if (frame != root && group.remove(frame)) group.add(frame);
 
         if (raiseCounter >= PINNED_BAND - 2 - group.size()) renormaliseStack();
-        root.setStackOrder(++raiseCounter);
-        for (WindowFrame owned : group) owned.setStackOrder(++raiseCounter);
+
+        // THE BAND IS AN OFFSET ON THE SAME COUNTER, and that is the entire implementation of
+        // always-on-top -- exactly what was predicted when the feature was refused for having no
+        // consumer. `sortedChildren` then keeps paint order and hit-testing agreeing with no new
+        // machinery, which is the invariant that must never be re-implemented.
+        //
+        // Asked of the ROOT of the owner group, not of each frame: an owner group moves as a unit, so a
+        // pinned window's owned palette must ride into the band with it rather than being left below
+        // every unpinned window on the desktop.
+        int band = root.isPinned() ? PINNED_BAND : 0;
+        root.setStackOrder(band + ++raiseCounter);
+        for (WindowFrame owned : group) owned.setStackOrder(band + ++raiseCounter);
     }
 
     /** Whether {@code frame} is owned by {@code root}, directly or through a chain of owners. */

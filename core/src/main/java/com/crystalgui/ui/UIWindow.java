@@ -32,6 +32,7 @@ import java.util.*;
 import com.crystalgui.ui.elements.Popover;
 import com.crystalgui.ui.elements.desktop.Desktop;
 import com.crystalgui.ui.elements.desktop.WindowFrame;
+import com.crystalgui.ui.elements.desktop.WindowState;
 
 /**
  * Runtime engine. Owns the paint context, the live
@@ -379,6 +380,112 @@ public final class UIWindow {
 
     public boolean isDesktopSuspended() {
         return desktopSuspended;
+    }
+
+    // ── HUD: pinned windows over the running game ───────────────────────────────────────
+
+    /** What {@link #enterHudMode} put away, so {@link #exitHudMode} can put it back. */
+    private final List<WindowFrame> hiddenForHud = new ArrayList<>();
+    private boolean hudMode;
+
+    /**
+     * Puts the desktop on the HUD: every unpinned window goes away, pinned ones keep running.
+     *
+     * <p>What a host calls instead of {@link #suspendDesktop()} when something is pinned — Discord's and
+     * Steam's in-game overlays are the precedent, and live debugging is the use case: pin the Run
+     * console, close the screen, play, and watch it stream.</p>
+     *
+     * <p><b>Unpinned windows are HIDDEN, not merely unpainted</b>, which is what makes the freeze
+     * contract hold unchanged: hiding is detaching, so nothing matches a selector, nothing lays out, a
+     * ticker returns false and the input handler forgets every element in the subtree. That is the same
+     * mechanism {@link #suspendDesktop()} applies to the whole compositor, one level down — and it is
+     * why the set has to be REMEMBERED here rather than inferred on the way out. A window the user had
+     * already minimised must stay minimised when the screen comes back.</p>
+     *
+     * <p><b>Visible stays live.</b> The freeze contract keys on <em>hidden</em>, not on the screen being
+     * closed, so a pinned window keeps its tickers, transitions and connections. Watching live data is
+     * the entire point; a frozen HUD would be a screenshot.</p>
+     */
+    public void enterHudMode() {
+        if (hudMode) return;
+        hudMode = true;
+        // The desktop stays ATTACHED, unlike a suspend: a detached subtree lays out and paints nothing,
+        // and a pinned window has to do both.
+        desktop();
+        hiddenForHud.clear();
+        for (WindowFrame frame : new ArrayList<>(desktop.registry().windows())) {
+            if (frame.isPinned() || frame.state() != WindowState.VISIBLE) continue;
+            hiddenForHud.add(frame);
+            frame.hide();
+        }
+        for (WindowFrame frame : desktop.registry().windows()) {
+            if (frame.isPinned()) frame.addClass(WindowFrame.HUD_CLASS);
+        }
+    }
+
+    /** Takes the desktop off the HUD, restoring exactly what {@link #enterHudMode} put away. */
+    public void exitHudMode() {
+        if (!hudMode) return;
+        hudMode = false;
+        for (WindowFrame frame : desktop.registry().windows()) {
+            frame.removeClass(WindowFrame.HUD_CLASS);
+        }
+        // persisted: a restore of a window that WAS on screen, never a first show.
+        for (WindowFrame frame : hiddenForHud) frame.show(true);
+        hiddenForHud.clear();
+    }
+
+    public boolean isHudMode() {
+        return hudMode;
+    }
+
+    /** Whether anything is pinned — what a host asks to choose between a suspend and a HUD. */
+    public boolean hasPinnedWindows() {
+        if (desktop == null) return false;
+        for (WindowFrame frame : desktop.registry().windows()) {
+            if (frame.isPinned()) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Paints the HUD: <b>layout and draw, and no input at all</b>.
+     *
+     * <p>The mirror of {@link #updateWithoutPainting()}, which advances without painting; this paints
+     * without advancing input. That asymmetry is the whole design. In game the cursor is GRABBED, so
+     * its reported position is wherever the player last had a menu open — running the hover pipeline
+     * against it would enter and leave elements under a pointer that is not there, fire boundary events
+     * at a screen nobody is looking at, and leave {@code :hover} pinned on whatever it last crossed.</p>
+     *
+     * <p>It still runs the full {@link #advanceFrame()} — styles, transitions, layout and the
+     * {@code JobScheduler} drain — which is precisely what keeps a pinned Run console's async output
+     * flowing. And it seeds the same {@code rootTransform}, so a pinned window is pixel-identical on the
+     * HUD and on the desktop.</p>
+     *
+     * <p>Only the WINDOW LAYER is painted — not the application's own root content, and not the
+     * desktop's own chrome. The screen is closed, so the editor behind it is not on the HUD; and the
+     * TASKBAR is not on it either, which is the distinction the first version got wrong. A strip
+     * listing windows that cannot be clicked, most of them hidden, is chrome for a desktop that is not
+     * up. Everything unpinned inside the layer is already detached by {@link #enterHudMode}, so what is
+     * left to draw is exactly what was pinned — the per-game-frame cost scales with what the player
+     * pinned, never with the desktop.</p>
+     */
+    public void paintHudFrame(int screenWidth, int screenHeight) {
+        if (!hudMode || desktop == null || desktop.getParent() == null) return;
+        init(screenWidth, screenHeight);
+        advanceFrame();
+
+        CgUiPaintContext paintContext = CgUiPaintContext.getInstance();
+        paintContext.beginFrame(actualScreenWidth, actualScreenHeight);
+        PoseStack pose = paintContext.getPoseStack();
+        pose.pushPose();
+        pose.mulPoseMatrix(rootTransform);
+        desktop.windowLayer().drawSubtree(paintContext);
+        pose.popPose();
+        // NO topLayer, and no inputHandler frames. A tooltip, a menu or a drag ghost cannot be summoned
+        // by a grabbed cursor, so the top layer has nothing on it that belongs on a HUD -- and painting
+        // it would draw whatever the desktop happened to leave there when the screen closed.
+        paintContext.endFrame();
     }
 
     /**

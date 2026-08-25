@@ -63,6 +63,7 @@ public final class WindowCommands {
     public static final String FULLSCREEN = "window.fullscreen";
     public static final String MOVE = "window.move";
     public static final String SIZE = "window.size";
+    public static final String PIN = "window.pin";
     public static final String SYSTEM_MENU = "window.systemMenu";
 
     /**
@@ -138,6 +139,40 @@ public final class WindowCommands {
                     // pointer can reach. @see WindowFrame#isToolWindow()
                     return frame != null && !frame.isMaximized() && !frame.isToolWindow()
                             && frame.state() == WindowState.VISIBLE;
+                }));
+
+        // PIN -- W14. Always-on-top on the desktop, and the thing Win32's WS_EX_TOPMOST has no way to
+        // express because it has no desktop to close: a pinned window keeps painting on the HUD over the
+        // running game after the screen is put away. Discord's and Steam's overlays are the precedent.
+        //
+        // NO CHORD, deliberately. Every unclaimed function key here is worth more to something a player
+        // reaches for mid-game, and pinning is a thing done once from the desktop and then lived with.
+        // The system menu is where it belongs, alongside the other state toggles.
+        registry.register(Command.of(PIN, "Pin")
+                .menu(MenuId.WINDOW_SYSTEM, GROUP_STATE, 70)
+                .run(context -> withFrame(context, frame -> frame.setPinned(!frame.isPinned())))
+                .toggledWhen(context -> {
+                    WindowFrame frame = frameFor(context);
+                    return frame != null && frame.isPinned();
+                })
+                .enabledWhen(context -> {
+                    WindowFrame frame = frameFor(context);
+                    // A DESKTOP CITIZEN ONLY, and the refusal is the honest half of "pin implies
+                    // top-level". An OWNED window -- a floating tool window, a window's own modal -- is
+                    // parented into its owner's overlay slot rather than into the window layer, so it
+                    // hides with its owner by definition. That contract and a pin's ("survives the whole
+                    // desktop going away") cannot both hold.
+                    //
+                    // The plan's answer is to PROMOTE such a window to top-level first, IntelliJ's
+                    // Window mode, and that is not reachable from here: promoting a tool window runs
+                    // through ToolWindowManager.setType, which DESTROYS the frame and builds a new one,
+                    // so the pin cannot be carried on the frame at all -- it would have to live on the
+                    // placement record beside the mode. Left undone rather than half-done; a WINDOWED
+                    // tool window is already top-level and pins like any other window, so the route
+                    // exists, it just takes two steps. @see plan_windowing.md W14
+                    return frame != null && frame.state() == WindowState.VISIBLE
+                            && frame.desktop() != null
+                            && frame.desktop().registry().windows().contains(frame);
                 }));
 
         // FULLSCREEN IS MAXIMISE'S SIBLING and sits with it in the state group -- W13b. F11 is
