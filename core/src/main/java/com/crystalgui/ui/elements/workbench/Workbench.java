@@ -2775,8 +2775,13 @@ public class Workbench extends UIElement {
                 if (path.toString().equals(panel.state(DockPanelRef.PATH, ""))) return;
             }
         }
+        long timed = FrameProfile.begin();
         open.close(path);
+        FrameProfile.step(timed, "close.open.close (dispose the document)");
+        timed = FrameProfile.begin();
         onDidCloseDocument.emit(path);
+        FrameProfile.step(timed, "close.onDidCloseDocument -> "
+                + onDidCloseDocument.connectionCount() + " listeners");
     }
 
     /**
