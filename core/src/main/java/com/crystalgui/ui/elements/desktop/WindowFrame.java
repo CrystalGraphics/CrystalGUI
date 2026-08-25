@@ -373,7 +373,8 @@ public class WindowFrame extends UIElement implements Disposable {
     /** @see #isPinned() */
     private boolean pinned;
 
-    private final Button pinButton;
+    /** Package-private for {@code WindowPinTest}, which asserts the three-state overlay. */
+    final Button pinButton;
     /** Retained: its text follows the state, and Tooltip.attach ADDS a pair rather than replacing one. */
     private final Tooltip pinTooltip;
 
