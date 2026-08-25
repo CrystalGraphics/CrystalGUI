@@ -1157,10 +1157,18 @@ public class Workbench extends UIElement {
             // The selection is captured and PUT BACK when the caller asked not to activate. DockLeaf.add
             // activates what it inserts, which is right for a file and wrong for a companion panel.
             DockPanelRef wasActive = target.activePanel();
+            long timed = FrameProfile.begin();
             target.add(ref);
+            FrameProfile.step(timed, "dock.leaf.add");
             if (!options.activates() && wasActive != null) target.activate(wasActive);
+            timed = FrameProfile.begin();
             dock.syncGroups();
-            if (options.activates()) dock.setActiveGroup(dock.groupFor(target));
+            FrameProfile.step(timed, "dock.syncGroups");
+            if (options.activates()) {
+                timed = FrameProfile.begin();
+                dock.setActiveGroup(dock.groupFor(target));
+                FrameProfile.step(timed, "dock.setActiveGroup");
+            }
             return target;
         }
 
@@ -1658,9 +1666,31 @@ public class Workbench extends UIElement {
         LanguageRegistry.Entry entry = LanguageRegistry.forFileName(viewerFileNameOf(resource));
         FrameProfile.step(timed, "LanguageRegistry.forFileName");
         created.setLanguage(entry.language());
-        timed = FrameProfile.begin();
-        created.setTokenizer(DocComments.refining(entry.newTokenizer()));
-        FrameProfile.step(timed, "entry.newTokenizer (grammar + query)");
+        // THE TOKENIZER IS BUILT ON A WORKER, and arrives beside the text rather than before it.
+        //
+        // A tree-sitter tokenizer compiles its grammar's whole `highlights.scm` natively, per document,
+        // and Java's is large: measured at 17ms on the frame thread for the SECOND one in a process --
+        // so it is not a cold start, it is what opening any Java document costs. It was a third of the
+        // keystroke that opens a viewer.
+        //
+        // Off-thread is safe here in a way sharing one compiled query would not be. `close()` frees the
+        // query, so a cache handing the same TSQuery to two documents would free it under whichever
+        // outlives the other -- a use-after-free, which is a JVM crash rather than an exception. Building
+        // a fresh one on a worker keeps every native object owned by exactly one document, and asks
+        // nothing about whether tree-sitter's query type is safe to read from two threads at once.
+        //
+        // And nothing is missing meanwhile: this editor is EMPTY until `readViewer` lands, so there is no
+        // window in which text is on screen uncoloured. `setTokenizer` clears the row cache and marks the
+        // highlights dirty, so it re-colours whatever arrived first regardless of which job wins.
+        jobs().job(JobKey.of(created, "viewer-tokenizer"), JobLane.LATENCY,
+                        context -> DocComments.refining(entry.newTokenizer()))
+                .onDone(tokenizer -> {
+                    // STILL THE EDITOR FOR THIS RESOURCE. A tab opened and closed inside the build would
+                    // otherwise be handed a tokenizer nothing will ever close -- one leaked native set.
+                    if (viewers.get(key) != created) return;
+                    created.setTokenizer(tokenizer);
+                })
+                .submit();
         // AND SERVICES, HANDED THE RESOURCE -- which is what lets the engine recognise a borrowed
         // document and configure itself for one: no diagnostics, because its problems are ours and
         // nobody reading it can act on them, and a compliance chosen by where the text came from,

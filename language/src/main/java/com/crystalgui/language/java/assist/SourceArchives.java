@@ -155,6 +155,31 @@ public final class SourceArchives {
         return found;
     }
 
+    /**
+     * Index every archive, so the first {@link #find} that misses does not.
+     *
+     * <h3>A LOOKUP CANNOT WARM THIS, however well chosen the name</h3>
+     *
+     * <p>{@link #find} walks the archives in precedence order and <b>breaks on the first hit</b>, and
+     * each {@link ZipArchive} builds its index on its own first read. So warming with a type every
+     * classpath has — {@code java.lang.Object} was the choice, and the reasoning written beside it was
+     * that a name which <em>misses</em> would not do real work — indexes exactly one archive: the JDK's
+     * {@code src.zip}, which is first precisely because it answers most hovers. Every other archive on
+     * the classpath stays cold until something asks for a name none of them has.</p>
+     *
+     * <p>That name arrives the moment a class with no attached source is opened, which is the ordinary
+     * case for a mod's own code: the miss walks the whole list, indexing each archive as it goes.
+     * Measured on the frame thread, inside the keystroke that opens the viewer:
+     * <b>{@code isPlatformSource} 63ms</b> — over half of a 117ms open, for a question whose answer is
+     * "no".</p>
+     *
+     * <p>Hence a warm that names no type at all. It is the same work, moved: ~360 central directories on
+     * a modded classpath, on whatever thread asks, once per classpath.</p>
+     */
+    synchronized void warm() {
+        for (Archive archive : archives) archive.warm();
+    }
+
     // ── Finding the archives ────────────────────────────────────────────────────────────────────
 
     /** Visible for testing — which archives a classpath resolves to, in search order. */
@@ -366,6 +391,17 @@ public final class SourceArchives {
 
         /** The decoded text at {@code packagePath} ({@code java/util/List.java}), or null. */
         String read(String packagePath);
+
+        /**
+         * Build whatever index {@link #read} would otherwise build on its first miss.
+         *
+         * <p>Default no-op, because only {@link ZipArchive} has an index to build — {@link
+         * ResourceArchive} borrows the classloader's. Exists so a warm-up can force <em>every</em>
+         * archive rather than relying on a lookup to reach them, which a lookup cannot do: {@link
+         * #find} stops at the first archive that answers.</p>
+         */
+        default void warm() {
+        }
     }
 
     /**
@@ -478,6 +514,11 @@ public final class SourceArchives {
             }
             entries = index;
             return entries;
+        }
+
+        @Override
+        public void warm() {
+            entries();
         }
 
         @Override

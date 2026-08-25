@@ -123,7 +123,7 @@ public final class JavaLanguageServices extends AnalysedLanguageServices {
         FrameProfile.step(timed, "new JavaCodeActions");
         timed = FrameProfile.begin();
         start();
-        FrameProfile.step(timed, "start() -- INLINE ANALYSIS when there is no scheduler");
+        FrameProfile.step(timed, "start() -- first analysis (inline only when there is no scheduler)");
     }
 
     /**

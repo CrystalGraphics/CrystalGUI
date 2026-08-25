@@ -177,16 +177,30 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
         // from another thread. `start()` is the subclass's last line, by contract.
         if (file != null) ATTACHED.put(file, this);
         bufferSubscription = buffer.onChanged.connect(change -> schedule());
-        // SYNCHRONOUS, AND MEASURED AT 55ms ON THE FRAME THREAD when a library viewer is opened -- the
-        // compiler's environment being built, not the empty buffer being analysed.
+        // SYNCHRONOUS FOR A DOCUMENT THAT HAS TEXT, SCHEDULED FOR ONE THAT DOES NOT.
         //
-        // Left synchronous deliberately. "A document is analysed when the services are created" is a
-        // contract with a test named for it and seven more resting on it, and scheduling instead defers
-        // the first answer by a debounce window. That is defensible -- the grammar colours the document
-        // meanwhile, which is what an engineless host shows -- but it is a change to what this class
-        // PROMISES, and it was worth a sixth of one slow open. The 250ms beside it in that same open was
-        // source discovery, which is now warmed off-thread and needed no contract to move.
-        analyzeNow();
+        // "A document is analysed when the services are created" is a contract with a test named for it
+        // and eight more resting on it, and it is a real one -- those tests hand this class a scheduler
+        // and assert before draining it, so "analysed" means before the constructor returns. Turning the
+        // whole thing into a `schedule()` fails nine of them, which is the contract doing its job.
+        //
+        // The discriminator is not the scheduler, it is whether there is anything to analyse. An EMPTY
+        // buffer's analysis has no tokens and no diagnostics in it; the entire cost is ECJ building a
+        // name environment over the classpath, and that environment travels with the analysis and is
+        // released when the next one replaces it. Measured at 15ms on the frame thread, inside the
+        // keystroke that opens a library viewer -- 15ms whose whole output is discarded.
+        //
+        // And a viewer is exactly that case by construction: `Workbench.viewerFor` builds the editor
+        // empty and `readViewer` fills it from a job, so the text arriving fires `onChanged` and
+        // schedules the analysis that matters. Deferring here does not lose an answer, it coalesces the
+        // empty v0 into the v1 that has the document in it. A document created WITH text -- every test
+        // above, and every path that opens a file whose bytes are already in hand -- still analyses
+        // before this returns, because for it the eager pass is the only one there will be.
+        if (buffer.length() > 0) {
+            analyzeNow();
+        } else {
+            schedule();
+        }
     }
 
     // ── What the engine fills in ────────────────────────────────────────────────────────────────

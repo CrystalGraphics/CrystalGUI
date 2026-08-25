@@ -298,8 +298,15 @@ public final class JavaLanguage {
                 // of `src.zip`. Neither is reachable from analysing a snippet that mentions no library
                 // type, so neither was ever warmed.
                 AttachedSources attached = AttachedSources.forClasspath(classpath);
-                // A TYPE EVERY CLASSPATH HAS, so the lookup does real work rather than missing early.
-                attached.isPlatformSource("java.lang.Object");
+                // EVERY ARCHIVE, NAMING NO TYPE. This used to ask about `java.lang.Object` -- "a type
+                // every classpath has, so the lookup does real work rather than missing early" -- and the
+                // reasoning is exactly inverted. `SourceArchives.find` BREAKS on the first archive that
+                // answers, and `java.lang.Object` is answered by the JDK's `src.zip`, which is first in
+                // precedence order precisely because it answers most hovers. So the warm indexed one
+                // archive and left the other ~360 cold, and the first name none of them has -- a mod's
+                // own class, opened from the picker -- walked and indexed the whole list on the frame
+                // thread: `isPlatformSource` 63ms of a 117ms open, to answer "no".
+                attached.warm();
 
                 // AND THE TYPE INDEX'S SCAN, which is LAZY INSIDE `matching` rather than in the
                 // constructor -- so `typeIndexFor` returning an instance proves nothing about it being
