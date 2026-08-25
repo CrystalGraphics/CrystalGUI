@@ -302,6 +302,32 @@ public class UIElement implements SettingsScope, DataProvider {
     }
 
     /**
+     * Removes a class <b>without re-matching the subtree</b> — legal only when the subtree is about to
+     * stop being displayed.
+     *
+     * <h3>Why this exists and when it is safe</h3>
+     *
+     * <p>{@link #removeClass} recurses, because a descendant selector can key on the class being removed
+     * and every descendant's match may change. That is right, and it is pure waste in one case: hiding a
+     * container whose class is the thing being removed. Measured on the Go to File picker closing —
+     * {@code Popover.applyOpenState x345}, 443 elements re-matched and 566 layout nodes touched, for a
+     * panel that is {@code display: none} by the end of the same method.</p>
+     *
+     * <p>Safe because a hidden subtree's computed style is unobservable — it does not paint, hit-test or
+     * lay out — and whatever shows it again re-adds the class through the recursing {@link #addClass},
+     * which re-matches every descendant before anything can look at them. <b>The caller owes that
+     * pairing</b>: use this only where the element is being hidden in the same breath, and only where the
+     * showing path adds the class back.</p>
+     */
+    protected UIElement removeClassWithoutRematchingSubtree(String cls) {
+        if (classes.remove(cls)) {
+            if (attachedWindow != null) attachedWindow.getStyleEngine().markDirty(this);
+            notifyIdentityChanged();
+        }
+        return this;
+    }
+
+    /**
      * What this element knows — {@link UiDataKeys#ELEMENT}, and nothing else by default.
      *
      * <p>Every element is a {@link DataProvider} so that a walk always terminates with an answer for
