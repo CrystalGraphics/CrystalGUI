@@ -274,8 +274,15 @@ public final class StyleEngine {
     /** Called from {@link UIWindow#paintFrame()}, before layout is recomputed — and again afterwards for
      * as long as {@link #hasPendingMatches()} reports work that layout itself created. */
     public void calculateStyle(float deltaSeconds) {
+        // THE TWO HALVES REPORTED APART. They cost differently and for unrelated reasons -- the drain is
+        // proportional to how many elements were invalidated, the tick to how many transitions are in
+        // flight -- so one `style` bucket cannot say which of them a slow frame is.
+        long timed = FrameProfile.begin();
         drainDirtyMatch();
+        FrameProfile.end(timed, "style:drainDirtyMatch");
+        timed = FrameProfile.begin();
         transitionEngine.tick(deltaSeconds);
+        FrameProfile.end(timed, "style:transitions");
     }
 
     /**
@@ -335,9 +342,14 @@ public final class StyleEngine {
         // re-matched, 2,000 of them .__error-stripe__" is a fix. Off unless asked for. @see FrameProfile
         if (FrameProfile.ENABLED) profileBatch(batch);
         if (recordRematches) rematchedForTesting.addAll(batch);
+        long timed = FrameProfile.begin();
         for (var element : batch) {
             rematch(element);
         }
+        // THE PER-ELEMENT COST, stated rather than assumed. Everything about narrowing invalidation rests
+        // on "a rematch costs ~20-25us", which was a comment in this file and never a measurement -- and
+        // the trade between marking fewer elements and walking a smaller tree is decided by that number.
+        FrameProfile.step(timed, "style:rematch x" + batch.size());
     }
 
     /** Counts the batch by the most specific class each element carries, for the frame report. */

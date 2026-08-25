@@ -715,12 +715,16 @@ public class TextEditor extends ScrollerView implements UndoScope {
             FrameProfile.leave(changed, "buffer.onChanged head");
             // BEFORE reprojectAfterEdit, which is what advances previousLineCount -- this needs the count
             // as it was in order to tell a same-row edit from one that shifted every row below it.
+            long piece = FrameProfile.begin();
             invalidateMeasuredRows(change);
+            FrameProfile.step(piece, "ed:invalidateMeasuredRows");
             // Same rule, same reason, and it must read previousLineCount while it still says what it said
             // before this edit -- so it belongs beside the call above rather than anywhere later.
             //
             // MAPPED, not dropped -- see settleSyntaxIfIdle for why those are different things.
+            piece = FrameProfile.begin();
             mapRowSyntaxThroughEdit(change);
+            FrameProfile.step(piece, "ed:mapRowSyntaxThroughEdit");
             // NOT invalidateWindow() unless the line COUNT changed.
             //
             // Recycling every line on every keystroke clears each one's highlights -- recycleLine has to,
@@ -743,7 +747,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
             long reprojected = FrameProfile.begin();
             reprojectAfterEdit(change);
             FrameProfile.step(reprojected, "reprojectAfterEdit");
+            piece = FrameProfile.begin();
             folds.markDirty();
+            FrameProfile.step(piece, "ed:folds.markDirty");
             long rebound = FrameProfile.begin();
             rebindRealisedLines();
             FrameProfile.step(rebound, "rebindRealisedLines");
@@ -758,13 +764,23 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // undo and redo -- and offsets found against the old text describe the new one wrongly: the
             // count went stale and the highlights sat over whatever had moved into their place. Re-running
             // from this one signal is what makes undo correct without the undo path knowing about search.
+            piece = FrameProfile.begin();
             find.refreshAfterEdit();
+            FrameProfile.step(piece, "ed:find.refreshAfterEdit");
             // A HOVER BOX DESCRIBES AN OFFSET, and typing moves it. Dismissed rather than re-resolved,
             // because what is on screen is now about a position that has shifted underneath it and the
             // pointer has not asked about wherever the text ended up. A Ctrl+Q popup is left alone: it was
             // asked for deliberately, and hideHoverDocumentation is what tells the two apart.
             langFeatures.hover().hide();
-            onChanged.emit(buffer.toString());
+            // THE WHOLE DOCUMENT AS A STRING, on every edit -- flattening a 108KB rope to hand to
+            // listeners that may not want it. Named so the log says whether anybody is paying for it.
+            // FLATTENED ONLY IF SOMEBODY IS LISTENING. `buffer.toString()` materialises the whole rope --
+            // 73KB for an ordinary class, 108KB for Minecraft.class -- and it was built unconditionally,
+            // as the argument to an emit with, measured, ZERO connections on every path that opens a file.
+            // A signal with no listeners costs nothing; the argument handed to it does not.
+            piece = FrameProfile.begin();
+            if (onChanged.connectionCount() > 0) onChanged.emit(buffer.toString());
+            FrameProfile.step(piece, "ed:onChanged.emit -> " + onChanged.connectionCount() + " listeners");
         });
 
         // AN UNDO THAT MOVES THE TEXT BACK AND NOT THE CARET has moved the text out from under your
@@ -4760,7 +4776,12 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
         List<Change> changes = change.changes();
         if (changes.size() != 1) {
+            long whole = FrameProfile.begin();
             projections.rebuild(buffer.document());
+            // THE WHOLE-DOCUMENT PATH, named apart from the incremental one. Which of the two ran is the
+            // first question about any reprojection cost, and both used to report as one number.
+            FrameProfile.step(whole, "ed:projections.rebuild (WHOLE DOC, " + lineCount + " lines, "
+                    + changes.size() + " changes)");
             return;
         }
         Change edit = changes.get(0);
@@ -4792,10 +4813,20 @@ public class TextEditor extends ScrollerView implements UndoScope {
         int removed = added - delta;
         if (removed < 1) {
             // Not a shape rowsChanged can express. Rebuilding is always correct, only slower.
+            long whole = FrameProfile.begin();
             projections.rebuild(buffer.document());
+            FrameProfile.step(whole, "ed:projections.rebuild (WHOLE DOC, unexpressible shape, "
+                    + lineCount + " lines)");
             return;
         }
+        long some = FrameProfile.begin();
         projections.rowsChanged(buffer.document(), row, removed, added);
+        // A FULL LOAD LANDS HERE, not on the rebuild branch: TextBuffer.load is ONE change that replaces
+        // everything, so `added` is the whole new document and this is a whole-document reprojection
+        // wearing the incremental path's name. Worth reporting the row count, or a 2,208-row reprojection
+        // reads as an ordinary keystroke.
+        FrameProfile.step(some, "ed:projections.rowsChanged at " + row
+                + " (-" + removed + " +" + added + " of " + lineCount + ")");
     }
 
     private CgFontFamily resolveFamily() {

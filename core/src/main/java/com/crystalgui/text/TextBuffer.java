@@ -297,8 +297,12 @@ public final class TextBuffer {
      */
     private void applied(ChangeSet change) {
         version++;
+        long timed = FrameProfile.begin();
         decorations.adjust(change);
+        FrameProfile.step(timed, "buf.decorations.adjust");
+        timed = FrameProfile.begin();
         onChanged.emit(change);
+        FrameProfile.step(timed, "buf.onChanged.emit -> " + onChanged.connectionCount() + " listeners");
     }
 
     /**
