@@ -108,7 +108,9 @@ public final class ScriptPrelude {
      * which is the worst kind of report.</p>
      */
     public static Wrapped compilationUnit(String className, String source) {
-        return new Wrapped(className, "", source == null ? "" : source, "");
+        // NOTHING HOISTED: a real compilation unit keeps its imports where the author put them, which is
+        // why this path never had the mapping problem the wrapped one did.
+        return new Wrapped(className, "", source == null ? "" : source, "", List.of());
     }
 
     /**
@@ -143,11 +145,19 @@ public final class ScriptPrelude {
 
     /** Wraps {@code script} into a compilation unit and returns the mapping with it. */
     public Wrapped wrap(String script) {
-        List<String> hoisted = new ArrayList<>();
+        List<Hoisted> hoisted = new ArrayList<>();
         String body = blankImports(script, hoisted);
 
         StringBuilder prefix = new StringBuilder();
-        for (String statement : hoisted) prefix.append(statement).append('\n');
+        for (int at = 0; at < hoisted.size(); at++) {
+            Hoisted each = hoisted.get(at);
+            each.prefixOffset = prefix.length();
+            // One import per prefix row, in order, and they are the first thing written -- so the row is
+            // the index. Stated rather than counted, because anything written before them would break
+            // this quietly.
+            each.prefixRow = at;
+            prefix.append(each.text).append('\n');
+        }
         prefix.append("public class ").append(className).append(" {\n");
         for (Map.Entry<String, String> binding : bindings.entrySet()) {
             prefix.append("    public ").append(binding.getValue()).append(' ')
@@ -156,7 +166,7 @@ public final class ScriptPrelude {
         prefix.append("    public void run() throws Throwable {\n");
 
         String suffix = "\n    }\n}\n";
-        return new Wrapped(className, prefix.toString(), body, suffix);
+        return new Wrapped(className, prefix.toString(), body, suffix, hoisted);
     }
 
     /**
@@ -165,15 +175,65 @@ public final class ScriptPrelude {
      * <p>Same length, not removal — that is the entire trick. Length-preserving means every offset
      * after the import is unchanged and the mapping stays a constant.</p>
      */
-    private static String blankImports(String script, List<String> collected) {
+    private static String blankImports(String script, List<Hoisted> collected) {
         Matcher matcher = IMPORT.matcher(script);
         StringBuilder blanked = new StringBuilder(script);
+        int row = 0;
+        int rowStart = 0;
+        int scanned = 0;
         while (matcher.find()) {
             String statement = matcher.group(1);
-            collected.add(statement);
-            for (int i = matcher.start(1); i < matcher.end(1); i++) blanked.setCharAt(i, ' ');
+            int at = matcher.start(1);
+            // The author's row and column, counted forward from where the last search stopped rather than
+            // from the top: the matches arrive in order, so this stays one pass over the text.
+            for (; scanned < at; scanned++) {
+                if (script.charAt(scanned) == '\n') {
+                    row++;
+                    rowStart = scanned + 1;
+                }
+            }
+            collected.add(new Hoisted(statement, at, row, at - rowStart));
+            for (int i = at; i < matcher.end(1); i++) blanked.setCharAt(i, ' ');
         }
         return blanked.toString();
+    }
+
+    /**
+     * An import statement the author wrote, and where they wrote it.
+     *
+     * <h3>Hoisted text is not SYNTHESIZED text, and the mapping has to know the difference</h3>
+     *
+     * <p>Everything else in the prelude is invented — a class header, a method signature, a closing brace
+     * — and a compiler's opinion about it is correctly dropped, because the author cannot act on a problem
+     * in code they never wrote. An import is the one part of the prefix they DID write; it was moved, not
+     * invented, and the text is identical.</p>
+     *
+     * <p>Without this the whole prefix was opaque, so every answer about an import was thrown away on the
+     * way back: no semantic colour, so an imported enum painted like any other type; no unused-import
+     * fade; no quick fix. All of it read as separate missing features, and all of it was one mapping —
+     * the same file WITH a class declaration got every one of them, because then nothing was hoisted.</p>
+     */
+    private static final class Hoisted {
+
+        private final String text;
+        private final int scriptOffset;
+        private final int scriptRow;
+        private final int scriptColumn;
+        /** Filled while the prefix is assembled, which is the only place the destination is known. */
+        private int prefixOffset;
+        private int prefixRow;
+
+        Hoisted(String text, int scriptOffset, int scriptRow, int scriptColumn) {
+            this.text = text;
+            this.scriptOffset = scriptOffset;
+            this.scriptRow = scriptRow;
+            this.scriptColumn = scriptColumn;
+        }
+
+        /** Whether it sits on one line, which is what makes the row mapping a single addition. */
+        boolean isSingleLine() {
+            return text.indexOf('\n') < 0;
+        }
     }
 
     /**
@@ -189,12 +249,15 @@ public final class ScriptPrelude {
         private final String body;
         private final String suffix;
         private final int prefixRows;
+        /** The author's own imports, moved into the prefix. @see Hoisted */
+        private final List<Hoisted> hoisted;
 
-        Wrapped(String className, String prefix, String body, String suffix) {
+        Wrapped(String className, String prefix, String body, String suffix, List<Hoisted> hoisted) {
             this.className = className;
             this.prefix = prefix;
             this.body = body;
             this.suffix = suffix;
+            this.hoisted = hoisted == null ? List.of() : List.copyOf(hoisted);
             int rows = 0;
             for (int i = 0; i < prefix.length(); i++) {
                 if (prefix.charAt(i) == '\n') rows++;
@@ -249,6 +312,12 @@ public final class ScriptPrelude {
          * better than a lie.</p>
          */
         public int toScriptOffset(int unitOffset) {
+            for (Hoisted each : hoisted) {
+                if (unitOffset >= each.prefixOffset
+                        && unitOffset <= each.prefixOffset + each.text.length()) {
+                    return each.scriptOffset + (unitOffset - each.prefixOffset);
+                }
+            }
             int mapped = unitOffset - prefix.length();
             return mapped < 0 || mapped > body.length() ? -1 : mapped;
         }
@@ -256,6 +325,13 @@ public final class ScriptPrelude {
         /** A compiler row/column, as the author sees it — or null when it is in synthesized text. */
         public TextPoint toScriptPoint(TextPoint unitPoint) {
             if (unitPoint == null) return null;
+            if (unitPoint.row() < prefixRows) {
+                for (Hoisted each : hoisted) {
+                    if (each.prefixRow != unitPoint.row() || !each.isSingleLine()) continue;
+                    if (unitPoint.column() > each.text.length()) break;
+                    return new TextPoint(each.scriptRow, each.scriptColumn + unitPoint.column());
+                }
+            }
             int row = unitPoint.row() - prefixRows;
             return row < 0 ? null : new TextPoint(row, unitPoint.column());
         }
