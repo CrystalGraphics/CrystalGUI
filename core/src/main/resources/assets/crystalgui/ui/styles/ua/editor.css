@@ -1127,7 +1127,8 @@ completionpopup {
     font-size: 10px;
     font-weight: bold;
     color: var(--completion-label, #D4D4D4);
-    flex-shrink: 1;
+    /* SECOND. @see .__completion-params__ */
+    flex-shrink: 100;
     min-width: 0;
     white-space: nowrap;
     text-overflow: ellipsis;
@@ -1138,7 +1139,10 @@ completionpopup {
 .__completion-params__ {
     font-size: 10px;
     color: var(--completion-params, #808080);
-    flex-shrink: 1;
+    /* GIVES FIRST, and the number says so. flex-shrink is a RATIO, not an order -- every shrinkable item
+     * gives at once, in proportion -- so "params, then the label, then the type" is spelled as three
+     * factors an order of magnitude apart rather than as three booleans. @see .__completion-detail__ */
+    flex-shrink: 1000;
     min-width: 0;
     white-space: nowrap;
     text-overflow: ellipsis;
@@ -1165,7 +1169,35 @@ completionpopup {
 .__completion-detail__ {
     font-size: 10px;
     color: var(--completion-detail, #808080);
-    flex-shrink: 0;
+    /* LAST, NOT NEVER -- and that one word is the fix.
+     *
+     * `flex-shrink: 0` was chosen so the type could never be shaved to a stub, and the reasoning above
+     * still holds: `String` must not come out as `Str`. But "never gives" is not the same claim as
+     * "gives last", and the difference only shows once the row cannot fit at all. With the label already
+     * at zero there was nothing left to give, so the row simply exceeded the popup and the type column
+     * was PAINTED OUTSIDE IT, over the editor behind -- past the scrollbar, on rows whose details were
+     * short enough to have fit anywhere.
+     *
+     * A factor a thousandth of the params' means it is untouched while anything else can still give,
+     * which preserves every case the rigid version was protecting: a squeeze is spent on the tail and
+     * then on the name, and the type only starts to ellipsise once the row has run out of everything
+     * else. `min-width: 0` is what lets the ellipsis happen at all -- without it the box cannot go below
+     * its content and the shrink factor is inert. */
+    flex-shrink: 1;
+    min-width: 0;
+    /* AND IT MAY NEVER TAKE MORE THAN ITS SHARE OF THE ROW.
+     *
+     * The shrink ORDER above decides who gives when a row is over-full; this decides how much of the row
+     * the type may claim in the first place. They are different questions, and only the second bounds the
+     * case where the type is the long part: `Map<String,String>` beside a two-character name has no
+     * reason to give under the ratios -- everything else has already given -- so it took the row and the
+     * name was ellipsised to nothing beside it.
+     *
+     * A percentage rather than a pixel count, because the popup is resizable: a fixed cap is either
+     * pointless at 620px or crippling at 260. Half is the split IntelliJ's own list settles at, and it
+     * leaves the name -- the thing being typed towards, and the only part that is not recoverable from
+     * the documentation panel -- the larger share whenever the two compete. */
+    max-width: 50%;
     white-space: nowrap;
     text-overflow: ellipsis;
 }
