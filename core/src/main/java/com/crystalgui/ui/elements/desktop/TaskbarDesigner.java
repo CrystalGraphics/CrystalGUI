@@ -395,12 +395,23 @@ public final class TaskbarDesigner {
      * immediately before it draws and three elements sharing one would be fine today and a trap later.
      */
     private void applyTone() {
-        for (UIElement glow : glows) {
-            CgUiGradient wash = new CgUiGradient(90f, List.of(
-                    new CgUiGradient.Stop(0.18f, 0x00000000),
-                    new CgUiGradient.Stop(0.50f, tone),
-                    new CgUiGradient.Stop(0.82f, 0x00000000)));
-            StyleGroup.importantPipeline(glow.getStyle().getGeneralGroup(), g -> g.background(wash));
+        for (int i = 0; i < glows.size(); i++) {
+            // ONE TONE, TWO AXES -- and the tuner has to draw both or it shows a look the sheet does not,
+            // the same fault the luminosity seed had. The BAR washes across, because a strip's centre of
+            // gravity is the cluster of entries in the middle of it. A PANEL is a header with a picture
+            // under it and washes DOWN from its top edge, so the tint lands on the chrome and never on the
+            // thumbnail; across, it was a blue hotspot in the middle of both. @see ua/desktop.css
+            boolean isBar = i == 0;
+            CgUiGradient wash = isBar
+                    ? new CgUiGradient(90f, List.of(
+                            new CgUiGradient.Stop(0.18f, 0x00000000),
+                            new CgUiGradient.Stop(0.50f, tone),
+                            new CgUiGradient.Stop(0.82f, 0x00000000)))
+                    : new CgUiGradient(180f, List.of(
+                            new CgUiGradient.Stop(0f, tone),
+                            new CgUiGradient.Stop(1f, 0x00000000)));
+            StyleGroup.importantPipeline(glows.get(i).getStyle().getGeneralGroup(),
+                    g -> g.background(wash));
         }
         refreshReadout();
     }
