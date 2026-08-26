@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.editor;
 
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.lang.Signature;
 import com.crystalgui.fs.Resource;
@@ -872,8 +873,16 @@ public final class DocumentationPopup extends Popover {
         // ever stuck. That is what made it look like a warm-up problem rather than an ordering one.
         //
         // Below the token's LINE rather than its top, or the box covers the word it is describing.
+        long timed = FrameProfile.begin();
         showAt(x, y + lineHeight, null);
+        FrameProfile.step(timed, "doc.showAt");
+        // THE BUILD, TIMED. Moving the RESOLVE to a worker left this behind: the frame that receives the
+        // answer was measured at `done:java-resolve 68,117us`, and everything in that number is here --
+        // creating the signature lines, rendering the javadoc, and the first paint of a box full of text
+        // that follows it -- `gl:toplayer` 36ms, `paint:overlay` 34ms, `text:submit` 30ms on the same frame.
+        timed = FrameProfile.begin();
         fill(symbol);
+        FrameProfile.step(timed, "doc.fill");
     }
 
     /**
@@ -1005,7 +1014,9 @@ public final class DocumentationPopup extends Popover {
         ownerText.setText(container == null ? "" : container);
         markOwnerPath(container == null ? "" : container, symbol.containerKind());
 
+        long timed = FrameProfile.begin();
         renderDefinition(symbol);
+        FrameProfile.step(timed, "doc.renderDefinition");
 
         String docs = symbol.documentation();
         // HIDDEN, not empty. An empty band is a gap under the definition that looks like a rendering
@@ -1013,7 +1024,16 @@ public final class DocumentationPopup extends Popover {
         // PARSED FIRST, and emptiness is asked of the DOCUMENT rather than the string. A comment that is
         // all markup and no words -- an empty `<p>`, a stray tag -- is a non-blank string that renders to
         // nothing, and testing the string would leave the separator drawn above an empty band.
-        body.setDocument(docs == null ? MarkupDocument.EMPTY : MarkupParser.parse(docs));
+        // SPLIT, because the two halves have opposite answers. Parsing markup is a pure function of a
+        // STRING -- it could be done on the worker that resolved the symbol, where the string already is.
+        // Building the elements for it cannot leave the frame thread at all. Only one of them is worth
+        // moving, and `doc.fill` at 41ms says nothing about which.
+        timed = FrameProfile.begin();
+        MarkupDocument parsed = docs == null ? MarkupDocument.EMPTY : MarkupParser.parse(docs);
+        FrameProfile.step(timed, "doc.parseMarkup " + (docs == null ? 0 : docs.length()) + " chars");
+        timed = FrameProfile.begin();
+        body.setDocument(parsed);
+        FrameProfile.step(timed, "doc.setDocument");
         bodyShown = !body.isEmpty();
         // THE RULE FOLLOWS THE BAND IT DIVIDES. Left visible with no body under it, it draws a line
         // across the bottom of the popup that reads as a band which failed to load -- the same reason

@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements;
 
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.text.markup.MarkupBlock;
 import com.crystalgui.text.markup.MarkupDocument;
 import com.crystalgui.text.markup.MarkupSpan;
@@ -275,11 +276,29 @@ public class MarkupView extends UIElement implements UIFrameTicker {
         hovered.clear();
         terms.clear();
         tables.clear();
+        // TORN DOWN AND REBUILT, EVERY TIME. `doc.setDocument` measured at 40,086us on the frame that
+        // shows a hover popup, for about 1,700 characters of javadoc -- while parsing that markup cost
+        // 3.3ms and rendering the signature 500us. So the cost is here, and the split below says whether
+        // it is the teardown, the number of elements, or what each one costs to build.
+        long timed = FrameProfile.begin();
         clearAllChildren();
+        FrameProfile.step(timed, "markup.clearAllChildren");
+        timed = FrameProfile.begin();
+        int built = 0;
         for (MarkupBlock block : this.document.blocks()) {
-            UIElement built = build(block);
-            if (built != null) addChild(built);
+            // PER BLOCK, AND BY KIND. Seven blocks cost 21,567us -- about 3ms each, which is far past
+            // what registering an element costs, so the expense is inside building ONE of them and the
+            // kinds do completely different work.
+            long one = FrameProfile.begin();
+            UIElement element = build(block);
+            FrameProfile.step(one, "markup.block " + block.kind() + " spans=" + block.spans().size()
+                    + " kids=" + block.children().size());
+            if (element != null) {
+                addChild(element);
+                built++;
+            }
         }
+        FrameProfile.step(timed, "markup.build " + built + " blocks");
         return this;
     }
 

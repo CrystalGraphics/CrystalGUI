@@ -2575,20 +2575,39 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * Moves a row's tokens through an edit instead of discarding them.
      *
      * <p>Row-relative, so only the edited row's own tokens move — and a token <b>touching</b> the edit
-     * point is dropped rather than moved, because it is the one being written. That is what draws the
+     * is dropped rather than moved, because it is the one being written. That is what draws the
      * identifier under the caret in the plain foreground: typing at the end of {@code value} extends that
      * token rather than following it, so keeping it would colour a name that no longer exists.</p>
+     *
+     * <h3>An edit is a RANGE, and treating it as a point crashed the editor</h3>
+     *
+     * <p>This took only {@code column} and the net {@code delta}, and asked whether each token was before
+     * or after that one offset. For an insertion the two are the same thing — nothing is consumed, so the
+     * point IS the range. For a REPLACEMENT they are not, and typing a character while text is selected is
+     * a replacement: {@code delta} is {@code 1 - selectionLength} and hugely negative, while every token
+     * that lived <em>inside</em> the selection still answers {@code start() > column} and gets shifted by
+     * it. {@code SyntaxToken} then refuses the result — {@code bad token range -2..1}, out of a keystroke,
+     * on the frame thread, taking the game down with it.</p>
+     *
+     * <p>So the extent is passed rather than folded into the delta, and anything overlapping the consumed
+     * range goes with it. A kept token is then provably in range: it starts past {@code column + replaced},
+     * so its new start is at least {@code column + inserted + 1}. With {@code replaced == 0} this is
+     * exactly the old behaviour, which is why plain typing was never affected and why the bug needed a
+     * selection to show at all.</p>
      */
-    private void shiftRowSyntax(int row, int column, int delta) {
+    private void shiftRowSyntax(int row, int column, int replaced, int inserted) {
         List<SyntaxToken> tokens = rowSyntax.get(row);
         if (tokens == null || tokens.isEmpty()) return;
+        int consumedTo = column + replaced;
+        int delta = inserted - replaced;
         List<SyntaxToken> moved = new ArrayList<>(tokens.size());
         for (SyntaxToken token : tokens) {
             if (token.end() < column) moved.add(token);
-            else if (token.start() > column) {
+            else if (token.start() > consumedTo) {
                 moved.add(new SyntaxToken(token.start() + delta, token.end() + delta, token.name()));
             }
-            // Touching the edit -- it is being written, so it has no colour until the text settles.
+            // Touching or inside the edited range -- it is being written, so it has no colour until the
+            // text settles.
         }
         rowSyntax.put(row, moved);
     }
@@ -2865,7 +2884,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             staleRows.clear();
             return;
         }
-        shiftRowSyntax(firstRow, start - rowStart, inserted - replaced);
+        shiftRowSyntax(firstRow, start - rowStart, replaced, inserted);
         staleRows.add(firstRow);
     }
 
