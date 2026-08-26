@@ -10,6 +10,8 @@ import com.crystalgui.language.java.assist.AttachedSources;
 import com.crystalgui.language.java.classpath.HostClasspath;
 
 import com.crystalgui.language.engine.JavaEngine;
+import com.crystalgui.language.map.MappingSet;
+import com.crystalgui.language.map.PlatformMappings;
 import com.crystalgui.language.engine.bridge.Analysis;
 import com.crystalgui.language.engine.bridge.SourceAnalyzer;
 import com.crystalgui.text.TextPoint;
@@ -322,16 +324,60 @@ public final class LibrarySources implements ResourceContentProvider {
     @Nullable
     private static String decompiled(String binaryName, List<String> classpath) {
         synchronized (DECOMPILED) {
+            forgetIfMappingChanged();
             String cached = DECOMPILED.get(binaryName);
             if (cached != null) return REFUSED.equals(cached) ? null : cached;
         }
         JavaEngine engine = JavaLanguage.engine();
         if (engine == null) return null;
+
+        // THE MAPPING THIS RENDERING IS AGAINST, captured rather than re-read afterwards. A decompile
+        // takes a second or so and the mapping can land inside it, and text rendered through the old one
+        // must not be stored under the new one.
+        MappingSet used = PlatformMappings.current();
         String java = engine.decompile(binaryName, classpath);
         String stored = java == null ? REFUSED : DECOMPILED_BANNER + java;
         synchronized (DECOMPILED) {
-            DECOMPILED.put(binaryName, stored);
+            forgetIfMappingChanged();
+            // STORED ONLY IF IT IS STILL WHAT WE RENDERED THROUGH. Discarding costs one decompile the next
+            // time this class is opened; storing costs runtime names for the life of the process. The
+            // caller still gets this rendering -- one tab showing SRG names is recoverable by reopening it,
+            // and the alternative is showing nothing at all for a race that needs a download to land inside
+            // a single decompile.
+            if (used == decompiledFor) DECOMPILED.put(binaryName, stored);
         }
         return java == null ? null : stored;
+    }
+
+    /** The mapping the cached text above was rendered through. @see #forgetIfMappingChanged */
+    private static MappingSet decompiledFor = MappingSet.IDENTITY;
+
+    /**
+     * Drops the decompiled text when the mapping underneath it has changed.
+     *
+     * <h3>A cache of remapped text keyed only by class name</h3>
+     *
+     * <p>Decompiling goes through {@code JavaEngine.decompile}, which reads {@code types.readable(...)} —
+     * so the text is rendered through whatever {@link PlatformMappings#current} answered at the time, and
+     * on a 1.7.10 client that is the difference between {@code getMinecraft()} and {@code func_71410_x()}.
+     * The key had no mapping component, so the first rendering won for the life of the process.</p>
+     *
+     * <p><b>Only a FIRST launch can reach it, which is what makes it worth a guard rather than a
+     * comment.</b> A cached mapping is applied on the claiming thread during mod init, long before any
+     * viewer opens, so the identity is never current by the time anything is decompiled. A mapping that
+     * must be DOWNLOADED lands whenever the network says — and anything opened before then is cached with
+     * runtime names and stays wrong until the game restarts, at which point the cache is warm and it comes
+     * out right. {@code PlatformTypeBytes.view} carries the same warning about its own captured reference,
+     * in the same words: the symptom is "mappings work on the second launch and never on the first", which
+     * reads as a caching bug rather than as a late arrival.</p>
+     *
+     * <p>One reference comparison per lookup, like {@code view()}'s, and at most one clear per process —
+     * the mapping goes from identity to real once and never moves again.</p>
+     */
+    private static void forgetIfMappingChanged() {
+        MappingSet now = PlatformMappings.current();
+        if (now == decompiledFor) return;
+        DECOMPILED.clear();
+        decompiledFor = now;
     }
 }
