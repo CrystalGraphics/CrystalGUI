@@ -1521,6 +1521,23 @@ public final class CgUiPaintContext {
             // implementation, because every native draw needs it and the symptom points nowhere near
             // the cause. A host with shaders of its own binds them; 0 is the only correct hand-over.
             CgGL.glUseProgram(0);
+            // THE PROFILE'S CONTRACT, ESTABLISHED HERE RATHER THAN BY EACH HOST. A UI paints in
+            // painter's order over whatever the world left behind, so it runs with the depth function
+            // at GL_ALWAYS on purpose -- gui_curve.shader says so in its own RenderState. A host
+            // renderer inherits that and every fragment passes, which turns a depth-tested model into
+            // submission order: the far face wins and a block item comes out inside-out. It does not
+            // error, and the target is complete with 24 real depth bits the whole time, so nothing
+            // about it reads as a depth problem.
+            //
+            // No host should have to know CrystalGUI left the function at ALWAYS, so MODEL means the
+            // engine hands over a genuinely depth-tested context. LEQUAL rather than LESS because that
+            // is what Minecraft's own GUI item path expects and what CgDepthState.TEST_WRITE spells.
+            if (profile == NativeProfile.MODEL) {
+                CgGL.glEnable(CgGL.GL_DEPTH_TEST);
+                CgGL.glDepthFunc(CgGL.GL_LEQUAL);
+            } else {
+                CgGL.glDisable(CgGL.GL_DEPTH_TEST);
+            }
             body.accept(surface);
         }
         // Foreign GL is invisible to the shadow by construction, so anything it wrote that hostForeign

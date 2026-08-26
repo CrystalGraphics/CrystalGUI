@@ -71,14 +71,15 @@ Answered by the user via a decision prompt:
 | Slot state model | Follow LDLib2 — a *binding*, not stored item data (see §4) |
 
 The user also pre-authorised a fallback: *"We can add a depth buffer to the UI buffer if it is really
-needed, and just only enable it for items."* Not used yet; still available (see §7).
+needed, and just only enable it for items."* **Not needed** — depth is resolved (§6) without touching
+the shared targets.
 
 ---
 
 ## 2. Current git state
 
 - Branch **`native-content-slots`**, created off `master` at **`71033332`**.
-- **Nothing is committed.** All work is uncommitted in the working tree.
+- **Committed** as `21395a62` on this branch; the harness submodule commit is `35f84d7`.
 - **CrystalGraphics was not touched** — its working tree is clean. No second branch was needed.
 - `git status` shows `M CrystalGraphics` and `M gl-debug-harness`. The **CrystalGraphics one is
   pre-existing gitlink drift** (checked-out `3881e60`, 3 commits ahead of what master records) and
@@ -257,37 +258,35 @@ verification checklist.
 
 ---
 
-## 6. OPEN — depth testing does not work
+## 6. RESOLVED — depth testing
 
-**This is the one unfinished item.** In the harness, row 1 renders **orange** when it must render
-**teal**: the stand-in draws a NEAR quad first and a FAR quad second, and the far one is not being
-rejected. **Consequence: 3D block items will render inside-out in game.** Flat sprite items are
-unaffected, which is exactly why this class of bug survives casual testing — test with a *block*.
+**Fixed.** The cause was `GL_DEPTH_FUNC`, not the depth buffer.
 
-### Already tried and eliminated — do not repeat
+The UI runs with the depth function at `GL_ALWAYS` on purpose -- it paints in painter's order over
+whatever the world left behind, and `gui_curve.shader` says so in its own `RenderState`. A host
+renderer inherits that, so enabling depth testing on top of it still lets every fragment pass, and a
+depth-tested model silently degrades to submission order: the far face wins and a block item is drawn
+inside-out.
+
+**Nothing about it read as a depth problem.** At draw time `glIsEnabled(GL_DEPTH_TEST)` was true,
+`GL_DEPTH_BITS` was 24, the write mask was on, and the framebuffer was complete. The only wrong value
+in the entire state was the function, reading `0x0207`.
+
+`NativeProfile.MODEL` now means *the engine establishes a depth-tested context* -- enabled and
+`LEQUAL` (what Minecraft's GUI item path expects, and what `CgDepthState.TEST_WRITE` spells) -- set in
+`nativeContent` rather than by each host, since no host should have to know what CrystalGUI left the
+function at.
+
+### Eliminated on the way, worth not repeating
 
 | Hypothesis | Result |
 |---|---|
-| Wrong depth format — `DEPTH24_STENCIL8` | still broken |
-| Wrong depth format — plain `DEPTH24` | still broken |
-| `glClear(GL_DEPTH_BUFFER_BIT)` gated by the write mask | **real bug, fixed** (`glDepthMask(true)` before `clearAll`) — but not sufficient on its own |
-| Test fixture sign convention | **was** wrong and is now fixed: in this GUI ortho (`glOrtho(…,1000,3000)` + `glTranslatef(0,0,-2000)`) **higher z is NEARER**, matching `RenderItem.zLevel`. Fixture now draws teal at z=400 first, orange at z=0 second |
-| Harness scene declared `needsDepthBuffer(false)` | flipped to `true` → still broken; reverted. The FBO carries its own attachment, so the window config is irrelevant |
+| Wrong depth format -- `DEPTH24_STENCIL8` vs plain `DEPTH24` | neither; not the format |
+| Lazy mid-frame FBO creation | pre-creating in `warmUp()` changed nothing |
+| Harness scene declared `needsDepthBuffer(false)` | flipping it changed nothing -- the FBO carries its own attachment |
+| Test fixture sign convention | **was** wrong: in this GUI ortho higher z is NEARER, matching `RenderItem.zLevel`. Fixed |
+| `glClear(GL_DEPTH_BUFFER_BIT)` gated by the write mask | **a real bug, fixed** (`glDepthMask(true)` before the clear) -- but not the cause |
 
-### Not yet tried — start here
-
-1. Query **FBO completeness** after the depth attachment
-   (`glCheckFramebufferStatus`), and `glGetFramebufferAttachmentParameteriv` to confirm a depth
-   attachment actually exists on `nativeFbo` at draw time.
-2. Verify `CgFrameBuffer` attaches `DEPTH24_STENCIL8` to `GL_DEPTH_STENCIL_ATTACHMENT` (not
-   `GL_DEPTH_ATTACHMENT`) — `CgTextureType.java:129` claims it does; confirm against the code.
-3. Check whether `fbo.resize()` preserves the depth renderbuffer (the target is screen-sized and
-   resizes with the window).
-4. Read back the **depth buffer** inside the body with `glReadPixels(GL_DEPTH_COMPONENT)` to see
-   whether the clear-to-1.0 actually landed.
-5. **Fallback, already authorised by the user:** add a depth attachment to the UI's own targets
-   (`MSAA_FORMAT` / `LAYER_FORMAT`) and enable depth only for items. Cost measured at ~33MB
-   multisampled depth at 1080p/4×, plus ~8MB per pooled screen-sized layer.
 
 ---
 
@@ -402,7 +401,7 @@ included-build tasks otherwise get separate workers and RFG throws
 - **Do not** add theme tokens for slots. The user was explicit: only the box is styled, and the box is
   an ordinary `UIElement` that already has everything.
 - **Do not** re-bisect the black-composite bug. §7a has the full log; the workaround is in place.
-- **Do not** re-try the eliminated depth hypotheses in §6.
+- **Do not** re-try the eliminated depth hypotheses in §6. Depth is fixed; the cause was `GL_DEPTH_FUNC`.
 - **Do not** hand-roll target binding in `nativeContent`. It was tried; use the engine's primitives.
 - **Do not** put `CgPlatform.provide` in a per-test `@Before` (§8).
 - **Do not** port code from LDLib2. LGPL-3.0, shape only.
