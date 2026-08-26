@@ -779,7 +779,22 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
                 answer.accept(Versioned.<SymbolInfo>none(buffer.version()));
                 return;
             }
-            answer.accept(Versioned.of(analysis.version(), analysis.resolveAt(offset)));
+            // SYNCHRONOUS, ON WHATEVER THREAD ASKED -- and hover asks from the frame thread. Measured on a
+            // live hover: 186ms in one frame, 42ms and 37ms in others. The Resolver contract is a
+            // CALLBACK, so answering later is already allowed and the editor already handles a late
+            // answer (it gates on a serial and on buffer freshness); what is not yet decided is whether
+            // this Analysis can be read from a worker while completion may be reading the same one, since
+            // JDT resolves bindings LAZILY and therefore mutates as it answers.
+            //
+            // Split so the next reader knows which half to move: the walk and the ANSWER are one call,
+            // and for Java the answer includes quoting a declaration out of attached sources -- which is
+            // archive I/O and a parse, and is the half that would be cacheable rather than moved.
+            long timed = FrameProfile.begin();
+            SymbolInfo resolved = analysis.resolveAt(offset);
+            FrameProfile.step(timed, "engine.resolveAt -> "
+                    + (resolved == null ? "nothing"
+                            : resolved.kind() + " " + resolved.container() + "." + resolved.name()));
+            answer.accept(Versioned.of(analysis.version(), resolved));
         }
 
         @Override

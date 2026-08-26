@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.editor;
 
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.text.ChangeSet;
 import com.crystalgui.text.decoration.TrackedRange;
@@ -299,13 +300,26 @@ final class EditorLanguageFeatures {
         float[] anchor = editor.anchorInWindow(offset);
         if (anchor == null) return false;
 
+        // EACH STEP TIMED. This runs from the hover REST TIMER, on the frame thread, and a live run
+        // measured `ed:hoverTick 36,087us` -- 36ms in a frame, while scrolling with the pointer parked
+        // over the text. The rest timer is the one thing in the editor tick that fires from the pointer
+        // NOT moving, which a scroll is, so it lands in the middle of exactly the gesture being measured.
+        long timed = FrameProfile.begin();
         List<Diagnostic> problems = editor.diagnosticsAt(offset);
+        FrameProfile.step(timed, "doc.diagnosticsAt -> " + problems.size());
         if (!problems.isEmpty()) {
+            timed = FrameProfile.begin();
             ensureDocPopup();
+            FrameProfile.step(timed, "doc.ensurePopup");
+            timed = FrameProfile.begin();
             docPopup.showProblemsAt(window, problems, anchor[0], anchor[1], anchor[2]);
+            FrameProfile.step(timed, "doc.showProblemsAt");
+            timed = FrameProfile.begin();
             fillProblemSection(offset);
+            FrameProfile.step(timed, "doc.fillProblemSection");
         }
 
+        long asking = FrameProfile.begin();
         boolean asked = resolveAt(LANE_DOC, offset, symbol -> {
             UIWindow live = editor.getAttachedWindow();
             if (live == null) return;
@@ -315,6 +329,7 @@ final class EditorLanguageFeatures {
             docPopup.show(live, symbol, at[0], at[1], at[2]);
             fillProblemSection(offset);
         });
+        FrameProfile.step(asking, "doc.resolveAt (asked=" + asked + ")");
         return asked || !problems.isEmpty();
     }
 

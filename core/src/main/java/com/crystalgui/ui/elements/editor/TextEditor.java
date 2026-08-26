@@ -5189,12 +5189,22 @@ public class TextEditor extends ScrollerView implements UndoScope {
         long profiled = FrameProfile.begin();
         updateWindow();
         FrameProfile.end(profiled, "ed:updateWindow");
+        // THE REST OF THE TICK, named. A frame measured `tick:TextEditor 35,010us` with `ed:updateWindow`
+        // absent from the same line -- so 35ms was in one of the four calls below and nothing said which.
+        profiled = FrameProfile.begin();
         viewCursorsPart.advanceBlink(deltaSeconds);
+        FrameProfile.end(profiled, "ed:blink");
+        profiled = FrameProfile.begin();
         zoomIndicatorPart.tick(deltaSeconds);
+        FrameProfile.end(profiled, "ed:zoomIndicator");
+        profiled = FrameProfile.begin();
         autoScrollDuringDrag(deltaSeconds);
+        FrameProfile.end(profiled, "ed:autoScrollDuringDrag");
         // A REST TIMER, so it belongs on the heartbeat rather than on the move event: what it measures is
         // the pointer NOT moving, and the last move is the one event that will not be followed by another.
+        profiled = FrameProfile.begin();
         langFeatures.hover().tick(deltaSeconds);
+        FrameProfile.end(profiled, "ed:hoverTick");
         return true;
     }
 
