@@ -34,6 +34,76 @@ public class ScriptPreludeTest {
         return ScriptPrelude.forClass("Script").build().wrap(script);
     }
 
+    /**
+     * <b>A hoisted import maps back to where the author wrote it.</b>
+     *
+     * <h3>Moved text is not synthesized text</h3>
+     *
+     * <p>The rest of the prefix is invented — a class header, a method signature, a closing brace — and a
+     * compiler's opinion about it is correctly dropped, because the author cannot act on a problem in code
+     * they never wrote. An import is the one part they DID write: it was moved, not invented, and the text
+     * is identical.</p>
+     *
+     * <p>Treating the whole prefix as opaque threw away every answer about an import on the way back. It
+     * surfaced as a list of unrelated missing features — an imported enum painting like an ordinary type,
+     * no unused-import fade, no quick fix — and the giveaway was that the SAME file with a class
+     * declaration around it got all of them, because then nothing is hoisted and nothing needs mapping.
+     * One conversion, not one fix per feature.</p>
+     */
+    @Test
+    public void aHoistedImportMapsBackToWhereItWasWritten() {
+        String script = "import java.util.List;\nimport java.util.Map;\nint x = 1;\n";
+        ScriptPrelude.Wrapped wrapped = wrap(script);
+        String unit = wrapped.unitSource();
+
+        // The word `List` as the COMPILER sees it, mapped back to the author's text.
+        int inUnit = unit.indexOf("java.util.List");
+        assertTrue("the import was not hoisted into the prefix", inUnit >= 0);
+        assertEquals("an offset inside a hoisted import must map to the author's own text",
+                script.indexOf("java.util.List"), wrapped.toScriptOffset(inUnit));
+
+        // ...and the second one, so this is a mapping rather than a lucky first entry.
+        int secondInUnit = unit.indexOf("java.util.Map");
+        assertEquals(script.indexOf("java.util.Map"), wrapped.toScriptOffset(secondInUnit));
+    }
+
+    /**
+     * The row and column too, which is the half that diagnostics use.
+     *
+     * <p>{@code toScriptPoint} answered null for anything in the prefix, so an unused-import warning was
+     * dropped rather than shown faded. Each import occupies one prefix row in order, so the conversion is
+     * an addition on the column and a substitution on the row.</p>
+     */
+    @Test
+    public void aHoistedImportsRowAndColumnMapBackToo() {
+        ScriptPrelude.Wrapped wrapped =
+                wrap("import java.util.List;\nimport java.util.Map;\nint x = 1;\n");
+
+        assertEquals("the first import belongs on the author's first row",
+                new TextPoint(0, 7), wrapped.toScriptPoint(new TextPoint(0, 7)));
+        assertEquals("the second import belongs on the author's second row",
+                new TextPoint(1, 7), wrapped.toScriptPoint(new TextPoint(1, 7)));
+    }
+
+    /**
+     * <b>The rest of the prelude stays opaque</b>, which is the counter-assertion that matters.
+     *
+     * <p>A mapping written as "anything in the prefix is really at row 0" would satisfy the two above and
+     * put a squiggle on the author's first character for every problem in a synthesized class header —
+     * blaming them for code they never wrote, which is exactly what returning null exists to prevent.</p>
+     */
+    @Test
+    public void synthesizedPreludeTextStillMapsToNothing() {
+        ScriptPrelude.Wrapped wrapped = wrap("import java.util.List;\nint x = 1;\n");
+        String unit = wrapped.unitSource();
+
+        int classHeader = unit.indexOf("public class");
+        assertTrue(classHeader >= 0);
+        assertEquals("the synthesized class header must not be attributed to the author",
+                -1, wrapped.toScriptOffset(classHeader));
+        assertNull("nor its row", wrapped.toScriptPoint(new TextPoint(1, 0)));
+    }
+
     @Test
     public void theScriptBodyAppearsVerbatimAfterAFixedPrefix() {
         ScriptPrelude.Wrapped wrapped = wrap("int x = 1;\n");
