@@ -1,5 +1,6 @@
 package com.crystalgui.render;
 
+import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
 import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.platform.gl.CgGL;
@@ -26,7 +27,8 @@ import java.util.List;
  * <h3>What it does, in order</h3>
  * <pre>
  *   capture   scene blit -&gt; MSAA resolve -&gt; composite msaaFbo and every enclosing layer
- *   blur      separable Gaussian, horizontal then vertical, at 1/BLUR_SCALE resolution
+ *   blur      scale down until sigma is small, box-prefiltered; separable Gaussian, horizontal then
+ *             vertical, with the tap count derived from sigma -- Skia's scale-then-blur, see blurredBackdrop
  *   hand out  the sharp texture, the blurred one, and the element's UVs into both
  * </pre>
  *
@@ -59,8 +61,14 @@ final class CgUiBackdrop {
 
     void prepareFrame() {
         if (PROBE) probeFrame();
-        int w = Math.max(1, Math.max(1, ctx.screenWidth) / BLUR_SCALE);
-        int h = Math.max(1, Math.max(1, ctx.screenHeight) / BLUR_SCALE);
+        // THE WORKING SCALE IS DECIDED HERE, from the radius the previous frame asked for, because this
+        // is the one moment a target may be resized -- mid-paint is the incomplete-framebuffer hazard
+        // this method exists to avoid. The first frame a new radius appears therefore runs at the scale
+        // the old one chose, which is a correct blur at a slightly different quality for one frame;
+        // the radius comes from a stylesheet, so that frame is the one it changed on.
+        blurScale = scaleFor(blurRadiusPx);
+        int w = Math.max(1, Math.max(1, ctx.screenWidth) / blurScale);
+        int h = Math.max(1, Math.max(1, ctx.screenHeight) / blurScale);
         for (CgFrameBuffer fbo : new CgFrameBuffer[] { blurA, blurB }) {
             if (fbo.getWidth() != w || fbo.getHeight() != h) {
                 fbo.resize(w, h);
@@ -125,19 +133,51 @@ final class CgUiBackdrop {
     private long reqFrame = -1L;
 
     /**
-     * The two targets of the separable blur: horizontal into {@code blurA}, vertical into {@code blurB}.
+     * The two targets of the separable blur, ping-ponged: the box prefilter, then one axis, then the
+     * other, so which of the two holds the result depends on how many passes ran (see
+     * {@link #blurredBackdrop}, which records it in {@link #blurResult}).
      *
-     * <p>Both are the surface divided by {@link #BLUR_SCALE}. Blurring at reduced resolution is not only
-     * cheaper, it is what keeps the kernel well sampled: nine taps spread over a large radius leave
-     * visible gaps at full resolution, and the same nine taps over a quarter-size source land barely
-     * more than a texel apart. The reduction is free quality here rather than a compromise, because the
-     * output is by definition an image with no high frequencies left in it.</p>
+     * <p>Both are the surface divided by {@link #blurScale}. Blurring at reduced resolution is not only
+     * cheaper, it is what keeps the kernel well sampled — provided the source was REDUCED rather than
+     * merely read at a stride, which is what the prefilter is for. The reduction is free quality here
+     * rather than a compromise, because the output is by definition an image with no high frequencies
+     * left in it.</p>
      */
-    private final CgFrameBuffer blurA = CgFrameBuffer.createOwned("cgui_blur_h", 1, 1, CgUiPaintContext.LAYER_FORMAT);
-    private final CgFrameBuffer blurB = CgFrameBuffer.createOwned("cgui_blur_v", 1, 1, CgUiPaintContext.LAYER_FORMAT);
+    private final CgFrameBuffer blurA = CgFrameBuffer.createOwned("cgui_blur_a", 1, 1, CgUiPaintContext.LAYER_FORMAT);
+    private final CgFrameBuffer blurB = CgFrameBuffer.createOwned("cgui_blur_b", 1, 1, CgUiPaintContext.LAYER_FORMAT);
 
-    /** How much smaller than the surface the blur runs at. */
-    private static final int BLUR_SCALE = 4;
+    /**
+     * How much smaller than the surface the blur runs at this frame: 1, 2 or 4.
+     *
+     * <p><b>Chosen from sigma, which is Skia's rule and the whole of what makes a large blur affordable
+     * and a small one sharp.</b> A Gaussian is only well sampled while its taps sit about a texel apart,
+     * so a big sigma at full resolution means a big kernel; Skia ({@code GrBlurUtils}) instead scales
+     * the input down by powers of two until sigma is at most {@link #MAX_WORKING_SIGMA}, blurs there,
+     * and scales back up. A small sigma stays at full resolution, where a quarter-res path would have
+     * blurred it more than was asked by the reduction alone.</p>
+     */
+    private int blurScale = 4;
+
+    /** The largest sigma, in working-resolution texels, a pass is asked to blur. Skia's is 4. */
+    private static final float MAX_WORKING_SIGMA = 4f;
+
+    /** Taps either side of the centre, at most — bounds the shader's loop. {@code 3 * MAX_WORKING_SIGMA} rounded up, with headroom. */
+    static final int MAX_KERNEL_RADIUS = 16;
+
+    /** The blur's REACH is three sigma: a tap beyond that carries under half a percent of the weight. */
+    private static final float REACH_PER_SIGMA = 3f;
+
+    /** The scale a radius wants, capped at the largest the 4-tap box prefilter reduces cleanly. */
+    private static int scaleFor(float radiusPx) {
+        float sigma = radiusPx / REACH_PER_SIGMA;
+        int scale = 1;
+        while (sigma / scale > MAX_WORKING_SIGMA && scale < 4) scale *= 2;
+        return scale;
+    }
+
+    /** Which of {@link #blurA}/{@link #blurB} holds the finished blur for {@link #blurFrame}. */
+    @Nullable
+    private CgFrameBuffer blurResult;
 
     private long blurFrame = -1L;
     private float blurRadiusPx = Float.NaN;
@@ -399,35 +439,45 @@ final class CgUiBackdrop {
      * missing call rather than a failing one.</p>
      */
     /**
-     * Blurs the whole captured backdrop, once per frame, and hands back the result.
+     * Blurs the captured backdrop, once per frame, and hands back the result.
      *
      * <p><b>The blur is SHARED, like the capture.</b> Every consumer samples its own region out of one
      * blurred surface, so this runs once however many glass elements there are rather than once each.
      * The trade is that they share a radius - exactly right while the parameters come from a
      * stylesheet, and it would need a pass per distinct radius if that stops being true.</p>
      *
-     * <p>Two passes, horizontal then vertical, which is the whole of it. This deliberately replaced a
-     * dual-Kawase pyramid; {@code gui_blur.shader} records why at length, and the short version is that
-     * a pyramid's correctness is spread across every level's viewport, texel size and quad, and when
-     * those disagreed the symptom was darkness bleeding inward from outside the capture - which reads
-     * as a sampling bug anywhere except where it was.</p>
+     * <h4>Scale, then blur — Skia's Gaussian, and why the previous version was not one</h4>
+     *
+     * <p>{@code radiusPx} is the REACH the sheet asks for; sigma is a third of it. The working scale
+     * ({@link #blurScale}, decided in {@link #prepareFrame}) is the power of two that brings sigma to at
+     * most {@link #MAX_WORKING_SIGMA} texels, and the kernel's radius in taps is {@code ceil(3 * sigma)}
+     * at that scale with the taps ONE TEXEL APART — the two things that together define a well-sampled
+     * Gaussian. The weights are the Gaussian evaluated at each tap and normalised over the taps
+     * actually used, computed in the shader by the incremental recurrence (GPU Gems 3, ch. 40), so no
+     * table is uploaded and a truncated tail cannot darken the result.</p>
+     *
+     * <p>The version this replaced had nine fixed taps and stretched the STEP to reach the radius —
+     * six pixels apart at the taskbar's radius of 24, over a full-resolution source. Nine taps that skip
+     * five pixels between them are a comb, not a kernel: a glyph stem survives wherever a tap happens to
+     * land on it, so the horizontal pass let text through nearly intact and the vertical pass — which
+     * happened to read the quarter-res intermediate and so WAS well sampled — smeared the survivors into
+     * vertical streaks. Reported as "smudgy, not a proper blur" over the one backdrop with text in it.
+     * The shader's own note said the taps were meant to land a texel apart over a reduced source; the
+     * first pass had simply never been given one. {@code gui_downsample.shader} is the prefilter that
+     * gives it one, and the kernel no longer stretches to compensate for anything.</p>
+     *
+     * <p>Three passes at a reduced scale (box prefilter, horizontal, vertical) and two at full scale,
+     * where a prefilter would be a copy. All of them touch only the captured sub-rect — a 34px bar at
+     * scale 4 is a few thousand texels per pass.</p>
      */
     @Nullable
     private CgTexture2D blurredBackdrop(float radiusPx) {
         if (radiusPx < 0.5f) return (CgTexture2D) captureFbo.getColorTexture(0);
-        if (blurFrame == ctx.frameId && blurRadiusPx == radiusPx) {
+        if (blurFrame == ctx.frameId && blurRadiusPx == radiusPx && blurResult != null) {
             if (PROBE) probeBlurSkipped++;
-            return (CgTexture2D) blurB.getColorTexture(0);
+            return (CgTexture2D) blurResult.getColorTexture(0);
         }
         long probeB0 = PROBE ? System.nanoTime() : 0L;
-
-        // The kernel reaches four steps either side, so a step is a quarter of the asked-for radius.
-        // In UV, and therefore independent of what resolution the passes actually run at - which is what
-        // lets BLUR_SCALE change without retuning anything, and what lets the capture be a REGION
-        // without retuning anything either: every target is screen-scaled, so a normalised step means
-        // the same number of surface pixels in all of them.
-        float stepU = radiusPx / 4f / Math.max(1, ctx.screenWidth);
-        float stepV = radiusPx / 4f / Math.max(1, ctx.screenHeight);
 
         // The fraction of each target the capture actually occupies. Identical in all of them, because
         // they are all the same fraction of the screen. @see #capX0
@@ -436,29 +486,70 @@ final class CgUiBackdrop {
 
         CgTexture2D captured = (CgTexture2D) captureFbo.getColorTexture(0);
         if (captured == null) return null;
-        blurPass(captured, blurA, stepU, 0f, fracW, fracH);
-        CgTexture2D horizontal = (CgTexture2D) blurA.getColorTexture(0);
-        if (horizontal == null) return null;
-        blurPass(horizontal, blurB, 0f, stepV, fracW, fracH);
+
+        // Sigma at the working scale, and the taps that reach three of it. The radius is CLAMPED rather
+        // than the scale raised past 4 (the box prefilter reduces 4x cleanly and no further), so a blur
+        // asked to reach beyond 3 * MAX_KERNEL_RADIUS * 4 surface pixels comes back slightly narrower
+        // than asked and still correctly normalised -- never broken, merely saturated.
+        int scale = blurScale;
+        float sigma = radiusPx / REACH_PER_SIGMA / scale;
+        int taps = Math.max(1, Math.min(MAX_KERNEL_RADIUS, (int) Math.ceil(REACH_PER_SIGMA * sigma)));
+
+        CgFrameBuffer result;
+        if (scale > 1) {
+            downsamplePass(captured, blurA, scale, fracW, fracH);
+            CgTexture2D reduced = (CgTexture2D) blurA.getColorTexture(0);
+            if (reduced == null) return null;
+            blurPass(reduced, blurB, 1f, 0f, sigma, taps, fracW, fracH);
+            CgTexture2D horizontal = (CgTexture2D) blurB.getColorTexture(0);
+            if (horizontal == null) return null;
+            blurPass(horizontal, blurA, 0f, 1f, sigma, taps, fracW, fracH);
+            result = blurA;
+        } else {
+            blurPass(captured, blurA, 1f, 0f, sigma, taps, fracW, fracH);
+            CgTexture2D horizontal = (CgTexture2D) blurA.getColorTexture(0);
+            if (horizontal == null) return null;
+            blurPass(horizontal, blurB, 0f, 1f, sigma, taps, fracW, fracH);
+            result = blurB;
+        }
 
         blurFrame = ctx.frameId;
         blurRadiusPx = radiusPx;
+        blurResult = result;
         if (PROBE) pBlur += System.nanoTime() - probeB0;
-        return (CgTexture2D) blurB.getColorTexture(0);
+        return (CgTexture2D) result.getColorTexture(0);
     }
 
     /**
-     * One axis of the separable blur, {@code source} to {@code target}.
+     * The box prefilter: the captured sub-rect reduced {@code scale} times into {@code target}.
      *
-     * <p>The quad is drawn {@code uv(0, 1, 1, 0)} - the SAME flip {@link #drawOver} uses, and the
-     * agreement is load-bearing rather than incidental. A layer FBO is bottom-left origin while the UI
-     * is top-left, so every full-surface blit into one carries the flip. The pyramid this replaced drew
-     * its passes unflipped and got away with it only because an equal number of down and up passes
-     * cancelled: correct output from two errors, which is the kind of thing that stays true right up
-     * until somebody changes the level count.</p>
+     * <p>Four bilinear taps at {@code +-scale/4} source texels from the output texel's centre. Each
+     * bilinear fetch already averages a 2x2 block, so at scale 4 the four together average the whole
+     * 4x4 block behind the output texel; at scale 2 they land on the four texel centres of its 2x2
+     * block. A source decimated without this aliases, and an aliased source blurred is what a comb looks
+     * like. @see gui_downsample.shader</p>
      */
-    private void blurPass(CgTexture2D source, CgFrameBuffer target,
-                          float stepU, float stepV, float fracW, float fracH) {
+    private void downsamplePass(CgTexture2D source, CgFrameBuffer target, int scale, float fracW, float fracH) {
+        float halfU = 0.5f / Math.max(1, source.getWidth());
+        float halfV = 0.5f / Math.max(1, source.getHeight());
+        float offset = scale / 4f;
+        ctx.downsampleMaterial.applyProperties(b -> {
+            b.sampler("_MainTex", 0, source);
+            b.vec2("_TexelSize", offset / Math.max(1, source.getWidth()), offset / Math.max(1, source.getHeight()));
+            b.vec4("_Bounds", halfU, 1f - fracH + halfV, fracW - halfU, 1f - halfV);
+        });
+        runFilter(ctx.downsampleMaterial, target, fracW, fracH);
+    }
+
+    /**
+     * One axis of the separable Gaussian, {@code source} to {@code target}, taps one source texel apart.
+     *
+     * <p>{@code dirU}/{@code dirV} pick the axis (one of them is 1, the other 0); the step is that many
+     * SOURCE texels in UV, which is what "one texel apart" means whatever resolution the pass runs at.
+     * {@code sigma} and {@code taps} are in the same texels. @see gui_blur.shader</p>
+     */
+    private void blurPass(CgTexture2D source, CgFrameBuffer target, float dirU, float dirV,
+                          float sigma, int taps, float fracW, float fracH) {
         // PROPERTIES BEFORE THE BIND, and this is not style. withMaterial binds the material, and
         // binding VALIDATES the samplers it currently holds - which, on the frame after a resize, are
         // the textures the resize deleted. Maximising the window crashed with "CgTexture2D has been
@@ -470,7 +561,9 @@ final class CgUiBackdrop {
         float halfV = 0.5f / Math.max(1, source.getHeight());
         ctx.blurMaterial.applyProperties(b -> {
             b.sampler("_MainTex", 0, source);
-            b.vec2("_Step", stepU, stepV);
+            b.vec2("_Step", dirU / Math.max(1, source.getWidth()), dirV / Math.max(1, source.getHeight()));
+            b.set1f("_Sigma", Math.max(0.25f, sigma));
+            b.set1f("_Radius", taps);
             // The CAPTURED SUB-RECT, half a texel in. A tap landing outside it reads whatever the
             // sampler's clamp gives back, and outside the sub-rect that is the target's clear -
             // transparent black. Which is precisely how darkness gets dragged into a panel that had
@@ -478,11 +571,25 @@ final class CgUiBackdrop {
             // the sub-rect rather than the whole texture now that the capture is a region.
             b.vec4("_Bounds", halfU, 1f - fracH + halfV, fracW - halfU, 1f - halfV);
         });
+        runFilter(ctx.blurMaterial, target, fracW, fracH);
+    }
+
+    /**
+     * Draws one full-sub-rect filter pass with {@code material} into {@code target}.
+     *
+     * <p>The quad is drawn {@code uv(0, 1, fracW, 1 - fracH)} - the SAME flip {@link #drawOver} uses, and
+     * the agreement is load-bearing rather than incidental. A layer FBO is bottom-left origin while the
+     * UI is top-left, so every full-surface blit into one carries the flip. The pyramid this replaced
+     * drew its passes unflipped and got away with it only because an equal number of down and up passes
+     * cancelled: correct output from two errors, which is the kind of thing that stays true right up
+     * until somebody changes the level count.</p>
+     */
+    private void runFilter(CgMaterial material, CgFrameBuffer target, float fracW, float fracH) {
         int qw = Math.max(1, Math.round(target.getWidth() * fracW));
         int qh = Math.max(1, Math.round(target.getHeight() * fracH));
         ctx.beginLayerFbo(target);
         try {
-            withoutScissor(() -> ctx.withMaterial(ctx.blurMaterial, () -> {
+            withoutScissor(() -> ctx.withMaterial(material, () -> {
                 ctx.poseStack.pushPose();
                 ctx.poseStack.setIdentity();
                 ctx.quad().at(0, 0).size(qw, qh)

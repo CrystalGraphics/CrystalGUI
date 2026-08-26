@@ -124,6 +124,7 @@ rendering from everything else. What it cannot see is anything that crosses the 
 | `cgui-ore-theme` | `CgUiOreThemeScene` | `ore.css` + sprite registry end-to-end |
 | `cgui-visual-layers` | `CgUiVisualLayersScene` | FBO layer opacity + masking |
 | `cgui-desktop` | `CgUiDesktopScene` | **CrystalOS** — stacking windows, drag, resize, clamp, cascade, taskbar, per-window modality, maximise, **the editor running as a window**, and **a tool window torn out into an owned float** (F3, or drag a rail button into the editor area). *Grows with `plan_windowing.md`: every W with something visible adds its demonstration here in the same commit* |
+| `cgui-snapshot-probe` | `CgUiSnapshotProbeScene` | **DIAGNOSTIC, exits on its own** — photographs a window (`WindowSnapshot`, the real minimise path) and draws the photograph 1:1 beside the live window; writes `live` and `snapshot` PNGs to `harness-output/cgui-snapshot-probe/`. The window holds every path a photograph has to survive: rounded islands with `overflow: hidden` (mask layer), `overflow: clip`, an `opacity` layer, a scroller (scissor), text. **Any difference between the two PNGs is the render target's, since one subtree drew both** — it found three target-size assumptions in one run that six screenshots had not |
 
 Harness scenes live in `gl-debug-harness/src/main/java/.../harness/scene/ui/`; register new ones in
 `SceneRegistry`. Harness authoring rules are in `gl-debug-harness/AGENTS.md` — never call raw GL.
@@ -1762,7 +1763,8 @@ three-phase event types are in `ui/event/` — there is no `core/event/` package
 | `shaders/gui_rounded_rect.shader` | SDF rounded rects. |
 | `shaders/gui_layer_blit.shader` | Visual-layer FBO composite. |
 | `shaders/gui_curve.shader` | Bézier strokes, via `ctx.curve()`. Declares `#pragma cg_use curve`, not `quad`. |
-| `shaders/gui_blur.shader` | One axis of the separable Gaussian behind `glass()`. Run twice per frame by `CgUiBackdrop`. **Helpers go ABOVE `void vertex`** or they never reach the fragment stage. |
+| `shaders/gui_downsample.shader` | The box prefilter behind `glass()`: reduces the captured sub-rect 2x or 4x before it is blurred (four bilinear taps cover the block behind each output texel). Without it the Gaussian read a full-resolution source at a stride and was a comb — text came through as vertical streaks. |
+| `shaders/gui_blur.shader` | One axis of the separable Gaussian behind `glass()`, **kernel derived from sigma**: taps one source texel apart, `ceil(3σ)` of them per side, weights by the incremental recurrence and renormalised. `CgUiBackdrop` picks the working scale (1/2/4) from σ — Skia's scale-then-blur — so the loop stays short. **Helpers go ABOVE `void vertex`** or they never reach the fragment stage. |
 | `shaders/gui_glass.shader` | Liquid glass: refract → pick blurred/sharp → saturate → tint → specular → noise → SDF mask. Every optional layer is a `#pragma cg_feature`. |
 
 > **`gui_curve.shader` holds no stroke maths** — it `#include`s `crystalgraphics:shaders/lib/stroke.glsl`,

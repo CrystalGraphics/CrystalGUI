@@ -1,41 +1,51 @@
 // crystalgui:shaders/gui_blur.shader
 //
-// A SEPARABLE GAUSSIAN, run once horizontally and once vertically over the captured backdrop.
+// ONE AXIS OF A SEPARABLE GAUSSIAN, with the kernel derived from sigma rather than fixed.
 //
-// This replaced a dual-Kawase down/up chain (Bjorge, SIGGRAPH 2015), which is the faster algorithm and
-// the one the plan specifies. It is worth recording why it is not what ships, because the reason is not
-// that dual Kawase is wrong:
+// The taps sit ONE SOURCE TEXEL apart (`_Step` is a texel along the axis), there are `_Radius` of them
+// either side of the centre, and `_Radius` is ceil(3 * sigma) -- the point past which a tap carries less
+// than half a percent of the weight. That pair of facts is what makes a discrete Gaussian correct: the
+// weights are the continuous curve sampled at unit spacing, and every sample that matters is present.
+// The caller keeps sigma small by SCALING THE INPUT DOWN first (CgUiBackdrop.blurredBackdrop, Skia's
+// rule), so the loop stays short whatever reach the sheet asks for.
 //
-//   The chain's correctness depends on every level's viewport, texel size and quad agreeing, across a
-//   pyramid whose sizes are derived by integer halving. When it disagreed the symptom was not "slightly
-//   wrong blur" -- it was darkness bleeding in from outside the captured region with a HARD boundary,
-//   which reads as a sampling bug anywhere except where it actually was. Five rounds of instrumented
-//   guessing did not close it, and a one-iteration chain -- which should reach about four pixels --
-//   was visibly darkening a hundred.
+// The version this replaced had nine fixed taps with sigma ~2 in TAP units, and stretched the distance
+// between taps to reach the asked-for radius. Over a full-resolution source that put the taps six
+// pixels apart: a comb, not a kernel. Text survived it as the stems the taps happened to land on, and
+// the vertical pass smeared those into streaks. "Not a proper blur" was exactly right.
 //
-// A separable pass has one texel size, one direction, and one radius. It can be checked by reading it.
-// The pyramid is the right optimisation to return to WITH A TEST that can see a single level in
-// isolation; it is the wrong thing to keep while the effect it serves has never once looked right.
+// WEIGHTS ARE COMPUTED INCREMENTALLY (GPU Gems 3, ch. 40 "Incremental Computation of the Gaussian"):
+// three multiplies per tap instead of an exp(), and no table to upload. They are normalised over the
+// taps actually used, so a kernel cut short by `_Radius` never darkens the result -- a truncated
+// Gaussian that is not renormalised loses energy, which reads as a tint.
 //
 // PREMULTIPLIED ALPHA IS CARRIED THROUGH, NOT DISCARDED -- see the note on the alpha write below; it
 // is the single thing this pass most easily gets wrong, and the symptom does not look like alpha.
 //
 // EDGE CLAMPING IS THE OTHER HALF. Taps that fall outside the captured region must not drag its clear
-// colour inward -- that is precisely the darkness above. `_Bounds` is the sub-rect of the source that
-// holds real content, and every tap is clamped into it, so a tap that would leave simply re-reads the
-// nearest real pixel. That is what CLAMP_TO_EDGE would do if the content filled the texture, and the
-// content never does.
+// colour inward. `_Bounds` is the sub-rect of the source that holds real content, and every tap is
+// clamped into it, so a tap that would leave simply re-reads the nearest real pixel. That is what
+// CLAMP_TO_EDGE would do if the content filled the texture, and the content never does.
 
 #type pos2_uv2_col4ub
 #pragma cg_use quad
+// The loop's bound is a CONSTANT and the radius breaks out of it: a uniform loop bound is legal
+// GLSL 3.30 but some drivers unroll nothing they cannot see the end of, and a constant bound with an
+// early break is the spelling every one of them handles. Material scope, so the compiler hoists it
+// into both stages. Keep in step with CgUiBackdrop.MAX_KERNEL_RADIUS.
+#define CG_BLUR_MAX_RADIUS 16
 
 Tags { "RenderType" = "Transparent" }
 Queue = "Overlay"
 
 Properties {
     _MainTex   ("Source",                    sampler2D) = "white"
-    // Texels to step per tap, in UV. Zero on one axis: this pass is one dimension of a separable blur.
+    // ONE source texel along the axis of this pass, in UV; zero on the other axis.
     _Step      ("Per-tap UV step",           vec2)      = (0.0, 0.0)
+    // Sigma in source texels. The caller keeps it small by scaling the source down first.
+    _Sigma     ("Sigma (texels)",            float)     = 2.0
+    // Taps either side of the centre: ceil(3 * sigma), at most CG_BLUR_MAX_RADIUS.
+    _Radius    ("Taps per side",             float)     = 6.0
     // The region of the source holding real content, as (u0, v0, u1, v1). Taps clamp into it.
     _Bounds    ("Valid source rect",         vec4)      = (0.0, 0.0, 1.0, 1.0)
 }
@@ -77,18 +87,23 @@ Pass {
     }
 
     void fragment(in v2f i, out vec4 fragColor) {
-        // Nine taps, Gaussian-weighted (sigma ~ 2). Symmetric, so the centre is counted once.
-        const float w0 = 0.2270270270;
-        const float w1 = 0.1945945946;
-        const float w2 = 0.1216216216;
-        const float w3 = 0.0540540541;
-        const float w4 = 0.0162162162;
+        float sigma = max(_Sigma, 0.25);
+        // Incremental Gaussian: g.x is the weight at the current tap, g.y the ratio to the next, g.z the
+        // ratio's own growth. Starting from the centre, each step multiplies the pair through.
+        vec3 g;
+        g.x = 1.0 / (sqrt(2.0 * 3.14159265) * sigma);
+        g.y = exp(-0.5 / (sigma * sigma));
+        g.z = g.y * g.y;
 
-        vec4 sum = cg_tap(i.uv) * w0;
-        sum += (cg_tap(i.uv + _Step) + cg_tap(i.uv - _Step)) * w1;
-        sum += (cg_tap(i.uv + _Step * 2.0) + cg_tap(i.uv - _Step * 2.0)) * w2;
-        sum += (cg_tap(i.uv + _Step * 3.0) + cg_tap(i.uv - _Step * 3.0)) * w3;
-        sum += (cg_tap(i.uv + _Step * 4.0) + cg_tap(i.uv - _Step * 4.0)) * w4;
+        vec4 sum = cg_tap(i.uv) * g.x;
+        float weight = g.x;
+        for (int k = 1; k <= CG_BLUR_MAX_RADIUS; k++) {
+            if (float(k) > _Radius) break;
+            g.xy *= g.yz;
+            vec2 d = _Step * float(k);
+            sum += (cg_tap(i.uv + d) + cg_tap(i.uv - d)) * g.x;
+            weight += 2.0 * g.x;
+        }
 
         // ALPHA IS AVERAGED WITH THE COLOUR, and that is the whole correctness of this pass.
         //
@@ -107,6 +122,6 @@ Pass {
         // throughout, since sampling a single pixel never reaches one.
         //
         // The consumer un-premultiplies. @see gui_glass.shader#cg_backdrop
-        fragColor = sum;
+        fragColor = sum / weight;
     }
 }
