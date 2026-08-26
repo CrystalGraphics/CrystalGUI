@@ -56,6 +56,7 @@ Properties {
     _Glow       ("Broad glow along the light axis", float) = 0.10
     _EdgeHighlight ("Thin rim band strength",       float) = 0.25
     _EdgeWidth  ("Rim band width (px)",             float) = 3.0
+    _RimAmbient ("Rim ambient (0 directional, 1 even)", float) = 0.5
     _Chromatic  ("Chromatic aberration",            float) = 0.20
     _Noise      ("Grain amount",           float) = 0.0
     _LightDir   ("Light direction",        vec2)  = (-0.55, -0.83)
@@ -237,7 +238,28 @@ Pass {
         // `dist` is negative inside, so this is 1 at the boundary and 0 one band-width in. In PIXELS,
         // not in bezel fractions: a rim is a fixed hairline whatever the bezel is doing behind it.
         float band = clamp(1.0 + dist / max(0.5, _EdgeWidth), 0.0, 1.0);
-        float rim  = _EdgeHighlight * band * pow(proj, 1.5);
+
+        // THE RIM IS AN EDGE, AND AN EDGE IS LIT FROM EVERYWHERE.
+        //
+        // Driving the hairline by `pow(proj, 1.5)` alone makes it purely directional, and proj is
+        // exactly ZERO at the two corners perpendicular to the light axis -- so on a rounded rect the
+        // outline did not merely dim at the top-right and bottom-left, it VANISHED, while all four
+        // straight edges (every one of them at proj = 0.707) stayed lit. Only the corners diverge,
+        // which is why it reads as two bad corners rather than as a lighting model. A stroke that
+        // disappears at opposite corners looks like broken artwork, not like a lit surface, and that
+        // is how it was reported.
+        //
+        // The directional pair is right for the GLOW -- that IS the reference's opposed inset shadows,
+        // a broad quadrant highlight. But in every recreation those shadows sit OVER a uniform border,
+        // and that border is the term missing here. A real edge picks up the whole environment
+        // (Fresnel at a grazing angle is near-total whichever way the light happens to be), so a rim is
+        // an ambient floor PLUS a directional pair, never the pair alone.
+        //
+        // _RimAmbient is that split, and it is a parameter rather than a constant because it is the
+        // knob between "lit glass edge" and "even hairline": 0 restores the old fully-directional
+        // behaviour exactly, 1 is a perfectly even rim.
+        float rimLight = mix(pow(proj, 1.5), 1.0, clamp(_RimAmbient, 0.0, 1.0));
+        float rim  = _EdgeHighlight * band * rimLight;
 
         c.rgb += vec3(glow + rim) * _Specular;
 #endif
