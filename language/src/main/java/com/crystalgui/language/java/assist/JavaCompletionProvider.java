@@ -419,9 +419,15 @@ public final class JavaCompletionProvider implements CompletionProvider {
         String row = buffer.line(caret.row());
         String line = row.substring(0, Math.min(Math.max(caret.column(), 0), row.length()));
 
-        String trimmed = line.trim();
-        if (!trimmed.startsWith("import")) return null;
-        String tail = trimmed.substring("import".length());
+        // LEADING whitespace only. `trim()` takes the TRAILING space too, and that space is the whole
+        // signal: at `import |` the line trimmed to "import", the tail was empty, and this answered "not
+        // an import" -- so the popup fell through to open code and offered the KEYWORD list at a caret
+        // where no keyword is legal. It worked the moment one character was typed, which is what made it
+        // read as the package list being slow to arrive rather than as the context being missed.
+        int at = 0;
+        while (at < line.length() && Character.isWhitespace(line.charAt(at))) at++;
+        if (!line.startsWith("import", at)) return null;
+        String tail = line.substring(at + "import".length());
         if (tail.isEmpty() || !Character.isWhitespace(tail.charAt(0))) return null;
         tail = tail.trim();
         // A finished import is not a context any more, and `import static` completes members.
@@ -444,8 +450,10 @@ public final class JavaCompletionProvider implements CompletionProvider {
      */
     private List<CompletionItem> importItems(String typedPrefix) {
         List<CompletionItem> items = new ArrayList<>();
-        if (typedPrefix.isEmpty()) return items;
-
+        // NO EMPTY-PREFIX BAIL. `import ` with nothing typed is the most useful moment there is -- the
+        // answer is every package root, which `childrenOf("", "")` gives -- and returning an empty list
+        // here was the second half of the keyword bug above: even once the context was recognised, an
+        // empty list is still nothing to show.
         int lastDot = typedPrefix.lastIndexOf('.');
         String parent = lastDot < 0 ? "" : typedPrefix.substring(0, lastDot);
         String partial = lastDot < 0 ? typedPrefix : typedPrefix.substring(lastDot + 1);
