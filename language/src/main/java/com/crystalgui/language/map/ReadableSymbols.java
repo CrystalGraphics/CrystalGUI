@@ -64,17 +64,30 @@ public final class ReadableSymbols {
         if (container == null || container.isEmpty()) return symbol;
         String internal = container.replace('.', '/');
 
-        // OWNER-KEYED ONLY. The unqualified tier renames a name wherever it appears, and here the owner is
-        // a RECEIVER rather than a declaring class -- so a JavaScript chain ending in `list.get(0)`, which
-        // infers java.lang.Object, had `field_71075_bZ` renamed on it anyway and hovered as a member
-        // called `capabilities` belonging to Object. The name was right and the type it was attributed to
-        // was invented, which is worse than saying nothing.
+        // OWNER-KEYED FIRST, THEN THE UNQUALIFIED TIER -- and the second half is not optional.
+        //
+        // MCP's CSVs carry no owner at all, because an SRG name is globally unique, so essentially every
+        // real mapping lives in the unqualified tier. An owner-keyed-only lookup therefore renames
+        // NOTHING on a Minecraft host: `func_71276_C` stayed itself, and the popup and the Ctrl+B jump
+        // both went back to runtime names. That was this method's own regression, introduced fixing the
+        // case below.
+        //
+        // WHAT THE GUARD HAD TO BE INSTEAD is a statement about the OWNER rather than about the tier. The
+        // case that went wrong was a JavaScript chain ending in `list.get(0)`, which infers
+        // java.lang.Object: `field_71075_bZ` was renamed there too and hovered as a member called
+        // `capabilities` belonging to Object, which declares nothing of the sort. The name was right and
+        // the type it was attributed to was invented. A JDK type never declares an SRG member, so
+        // refusing the unqualified tier for one costs nothing and removes exactly that answer.
         //
         // Method first, then field. Asked this way rather than off SymbolKind because a kind vocabulary is
         // a thing to keep in step with two engines, and a name is a method's or a field's -- never both.
         String readable = mappings.readableMethodOfOwner(internal, symbol.name());
         if (readable.equals(symbol.name())) {
             readable = mappings.readableFieldOfOwner(internal, symbol.name());
+        }
+        if (readable.equals(symbol.name()) && !declaresNoMappedMembers(container)) {
+            readable = mappings.readableMethod(internal, symbol.name());
+            if (readable.equals(symbol.name())) readable = mappings.readableField(internal, symbol.name());
         }
         if (readable.equals(symbol.name())) return symbol;
 
@@ -90,6 +103,19 @@ public final class ReadableSymbols {
         if (site == null || site.member() == null || !site.member().equals(symbol.name())) return shown;
         return shown.withDeclaration(new DeclarationSite(site.resource(), site.start(), site.end(),
                 readable));
+    }
+
+    /**
+     * Whether {@code container} is a type no mapping could ever name a member of.
+     *
+     * <p>The platform's own classes only. A JDK type cannot declare {@code func_71276_C}, so an
+     * unqualified entry matching one is a name that has escaped its namespace — which is what happens
+     * when a receiver's type was INFERRED rather than declared and the inference landed on
+     * {@code java.lang.Object}.</p>
+     */
+    private static boolean declaresNoMappedMembers(String container) {
+        return container.startsWith("java.") || container.startsWith("javax.")
+                || container.startsWith("jdk.") || container.startsWith("sun.");
     }
 
     /**
