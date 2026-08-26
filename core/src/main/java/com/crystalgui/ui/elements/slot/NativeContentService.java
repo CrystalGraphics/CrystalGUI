@@ -59,7 +59,7 @@ public interface NativeContentService {
         @Override public boolean isAvailable() { return false; }
         @Override public NativeContent resolve(String descriptor) { return NativeContent.EMPTY; }
         @Override public void draw(NativeSurface surface, NativeContent content) { }
-        @Override public void drawTooltip(NativeContent content, float x, float y, int w, int h) { }
+        @Override public void drawTooltip(NativeContent c, float x, float y, int w, int h) { }
         @Override public String toString() { return "NativeContentService.UNSUPPORTED"; }
     };
 
@@ -77,7 +77,7 @@ public interface NativeContentService {
                 @Override public boolean isAvailable() { return false; }
                 @Override public NativeContent resolve(String descriptor) { return NativeContent.EMPTY; }
                 @Override public void draw(NativeSurface surface, NativeContent content) { }
-                @Override public void drawTooltip(NativeContent content, float x, float y, int w, int h) { }
+                @Override public void drawTooltip(NativeContent c, float x, float y, int w, int h) { }
                 @Override public String toString() { return "NativeContentService(absent)"; }
             });
 
@@ -153,9 +153,21 @@ public interface NativeContentService {
      * which any widget of ours can reconstruct.</p>
      *
      * <p>Called after the whole UI tree and the top layer have painted, so an immediate-mode tooltip is
-     * not painted over by elements drawn later. Coordinates are in the same logical space as the rest of
-     * the UI; the implementation is responsible for keeping the box on screen, which the host's own
-     * tooltip renderer already does.</p>
+     * not painted over by elements drawn later. The implementation is responsible for keeping the box on
+     * screen, which the host's own tooltip renderer already does.</p>
+     *
+     * <h3>Everything here is CrystalGUI's LOGICAL space, not the host's</h3>
+     *
+     * <p>The position and the two dimensions are all post-{@code uiScale} logical units, and an
+     * implementation should set up a projection for that box rather than reaching for the host's own GUI
+     * scale. This is the one native draw with no offscreen target to isolate it — a tooltip's size is
+     * decided by its content, so there is nothing to size a target from — which makes it the one place
+     * the host draws into our frame and therefore the one place the scale has to be stated.</p>
+     *
+     * <p>Rendering at the host's scale instead is the failure worth naming: on Minecraft the GUI scale is
+     * a user setting that {@code CgUiScreen} deliberately ignores, so a tooltip drawn at it comes out a
+     * different size from the UI it is labelling, by however far apart the two happen to be — correct on
+     * the machine it was written on and wrong on the next one.</p>
      */
-    void drawTooltip(NativeContent content, float x, float y, int screenWidth, int screenHeight);
+    void drawTooltip(NativeContent content, float x, float y, int logicalWidth, int logicalHeight);
 }

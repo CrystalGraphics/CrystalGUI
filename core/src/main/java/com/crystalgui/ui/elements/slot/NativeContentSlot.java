@@ -277,9 +277,8 @@ public abstract class NativeContentSlot extends UIElement {
                 if (hoverElapsed < delay) return true;
             }
             // RAW SURFACE pixels, which is what pointerPosition() answers and what containsScreenPoint
-            // takes -- deliberately not logical coordinates. The host draws its tooltip in its own GUI
-            // space, so it has a conversion to do either way, and handing it the most primitive of the
-            // three spaces is the one choice that cannot be silently wrong by a factor of uiScale.
+            // takes. UIWindow converts to LOGICAL before handing it to the service, because that is where
+            // uiScale lives -- see requestNativeTooltip.
             ReadOnlyVec2f pointer = window.getInputHandler().pointerPosition();
             window.requestNativeTooltip(current, pointer.x(), pointer.y());
             return true;

@@ -794,7 +794,19 @@ public final class UIWindow {
         // Flushed so the tooltip is drawn over finished pixels rather than over a batch that has not been
         // submitted yet -- the same painter's-order rule nativeContent() opens with.
         paintContext.flush();
-        service.drawTooltip(request.content(), request.x(), request.y(), screenWidth, screenHeight);
+
+        // CONVERTED HERE, WHERE uiScale LIVES, and handed over in LOGICAL units to match the logical
+        // screen size beside it. The request arrives in raw surface pixels because that is what
+        // pointerPosition answers; passing that through with logical dimensions would hand the service
+        // two coordinates in two different spaces, which is the shape of mistake that draws a tooltip
+        // neatly in the wrong place.
+        //
+        // Logical rather than raw is the whole point: the host must render the tooltip at the scale THIS
+        // UI is drawn at, not at Minecraft's GUI scale. Those differ by however far apart the two
+        // settings are, and CgUiScreen deliberately ignores Minecraft's.
+        float scale = uiScale <= 0f ? 1f : uiScale;
+        service.drawTooltip(request.content(), request.x() / scale, request.y() / scale,
+                screenWidth, screenHeight);
     }
 
 
