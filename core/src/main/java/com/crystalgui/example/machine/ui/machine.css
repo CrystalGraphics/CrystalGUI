@@ -1,0 +1,66 @@
+/*
+ * The machine panel's theme -- step 3 of the example. See MachineStyles.java, which loads this file
+ * and hands it to the client as a SheetRef.
+ *
+ * It sits beside the Java it styles rather than under src/main/resources, so the panel is one
+ * directory: model, tree, theme, both session halves. core/build.gradle.kts adds src/main/java as a
+ * resource root (excluding *.java) to make that work -- see the comment there.
+ *
+ * Deliberately small. The engine's user-agent sheet already gives every widget functional geometry,
+ * so an author's sheet is a diff against something that works rather than a description from
+ * nothing. That is what MachineServer's setUseUserAgentSheet(true) is for: with it off, the client
+ * applies this and nothing else, and the panel is a stack of unstyled boxes.
+ *
+ * Note what is NOT here: no rule sets a colour by a literal in a widget's Java. Anything written
+ * from Java arrives at INLINE origin, which outranks every stylesheet rule at any specificity -- so
+ * a rule competing with one is not overridden, it never applies at all, and nothing reports that.
+ */
+
+.machine-panel {
+    padding: 12px;
+    flex-direction: column;
+    gap-all: 8px;
+    width: 320px;
+}
+
+.machine-row {
+    flex-direction: row;
+    align-items: center;
+    gap-all: 8px;
+}
+
+.machine-title {
+    font-size: 14;
+    color: #E8E8E8;
+}
+
+/*
+ * font-size does not effectively inherit -- the user-agent sheet opens with `* { font-size: 10 }`,
+ * which is a candidate at STYLESHEET origin on EVERY element, and inheritance only applies where a
+ * property has no candidate at any origin. So this has to sit on the text element itself; on the row
+ * around it, it would resolve correctly on the row and change nothing about the label inside.
+ */
+.machine-label {
+    color: #AAAAAA;
+}
+
+.machine-status {
+    color: #7FB8FF;
+}
+
+/* Matched by setId(...) in MachinePanel. Unrelated to the network ids the protocol addresses by. */
+#throughput {
+    width: 160px;
+}
+
+#progress {
+    width: 160px;
+}
+
+#label {
+    width: 160px;
+}
+
+#purge {
+    width: 90px;
+}

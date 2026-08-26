@@ -147,6 +147,28 @@ dependencies {
 // NodeId, TaffyStyle), and field descriptors resolve at class load — unlike method-body references,
 // which don't. A server deployment therefore needs both on its classpath even though it never lays
 // anything out. Non-obvious, and someone will eventually try to strip them.
+// A second resource root, so a non-Java file may sit beside the code it belongs to.
+//
+// Gradle copies src/main/resources and nothing else, so a .css next to a .java compiles, ships, and
+// is absent from the jar -- which fails at runtime as a missing file rather than at build time as a
+// missing rule. com/crystalgui/example/machine/ui/machine.css is the one file relying on this today:
+// the example panel is meant to be read as a single directory (model, tree, theme, both session
+// halves), and splitting its theme into the assets tree would mean opening two source roots to read
+// one panel.
+//
+// This is NOT the way to ship an engine asset. Anything a resource pack is expected to override
+// belongs under assets/crystalgui/ where CgIO and the resource manager can find it; this root is
+// read with plain getResourceAsStream and a pack cannot reach it.
+//
+// The exclude is what keeps processResources from copying every .java file in the module into the
+// jar alongside the classes.
+sourceSets.main {
+    resources {
+        srcDir("src/main/java")
+        exclude("**/*.java")
+    }
+}
+
 val headlessTest: SourceSet by sourceSets.creating {
     compileClasspath += sourceSets["main"].output
     runtimeClasspath += sourceSets["main"].output
@@ -262,4 +284,24 @@ tasks.named<JavaCompile>("compileJava") {
 // which takes every entry including these.
 tasks.jar {
     from(sourceSets.main.get().allJava) { into("assets/crystalgui/sources") }
+}
+
+// Runs the worked example in com.crystalgui.example.machine end to end, printing every envelope
+// the loopback wire. It is documentation you can execute:
+//
+//     ./gradlew :core:runExample
+//
+// ON THE HEADLESS CLASSPATH ON PURPOSE. That source set has CrystalGraphics deliberately absent, so
+// the demo running at all is evidence the whole session layer is server-safe -- rather than a claim
+// in a javadoc that nothing checks. Run it on main's runtime classpath instead and it would prove
+// only that it works where everything is present, which is the case nobody doubts.
+tasks.register<JavaExec>("runExample") {
+    group = "documentation"
+    description = "Runs com.crystalgui.example.machine.session.MachineDemo -- a server-built UI over a loopback wire."
+    mainClass.set("com.crystalgui.example.machine.session.MachineDemo")
+    classpath = headlessTest.runtimeClasspath
+    // log4j2 with no configuration file defaults its root level to ERROR, so MachineTrace's INFO
+    // lines -- the ones naming the thread each step ran on -- are dropped and the demo looks like it
+    // has no logging at all. In game Minecraft configures log4j and they appear; here nothing does.
+    systemProperty("org.apache.logging.log4j.level", "INFO")
 }
