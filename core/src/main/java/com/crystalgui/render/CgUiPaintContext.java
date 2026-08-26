@@ -1618,14 +1618,44 @@ public final class CgUiPaintContext {
         int h = Math.max(Math.max(1, height), screenHeight);
         if (nativeFbo == null) {
             nativeFbo = CgFrameBuffer.createOwned("cgui_native", w, h, NATIVE_FORMAT);
+            useNearestFiltering(nativeFbo);
             warmUpLayer(nativeFbo);
             return nativeFbo;
         }
         if (nativeFbo.getWidth() < w || nativeFbo.getHeight() < h) {
             nativeFbo.resize(Math.max(nativeFbo.getWidth(), w), Math.max(nativeFbo.getHeight(), h));
+            // A resize reallocates the texture, so the filter goes with it.
+            useNearestFiltering(nativeFbo);
             warmUpLayer(nativeFbo);
         }
         return nativeFbo;
+    }
+
+    /**
+     * Switches the native target to {@code GL_NEAREST}, so item art composites crisp.
+     *
+     * <p><b>This target only.</b> Every other framebuffer here keeps {@code GL_LINEAR}, which is right
+     * for the UI: rounded rects, SVG icons and glyph atlases are all resolution-independent art that
+     * wants smooth resampling. Minecraft's is the opposite — item and block textures are 16x16 pixel art
+     * whose whole appearance is its hard pixel edges, and the moment the composite is not exactly
+     * texel-aligned, linear filtering turns them to mush.</p>
+     *
+     * <p>It cannot be exactly aligned in general, which is why the filter has to change rather than the
+     * geometry: the source is sized with {@code ceil} in physical pixels while the destination is a
+     * logical rect through the live pose, so a slot at a fractional position or a non-integer
+     * {@code uiScale} resamples by construction.</p>
+     *
+     * <p>Set on the texture rather than through {@link CgFrameBufferFormat}, which has no filter option —
+     * {@code CgTextureType.toTextureSpec()} hardcodes linear for every attachment. Adding one would mean
+     * changing CrystalGraphics for a preference exactly one framebuffer in this engine has.</p>
+     */
+    private void useNearestFiltering(CgFrameBuffer fbo) {
+        CgTexture2D colorTex = (CgTexture2D) fbo.getColorTexture(0);
+        if (colorTex == null) return;
+        colorTex.bind(0);
+        CgGL.glTexParameteri(CgGL.GL_TEXTURE_2D, CgGL.GL_TEXTURE_MIN_FILTER, CgGL.GL_NEAREST);
+        CgGL.glTexParameteri(CgGL.GL_TEXTURE_2D, CgGL.GL_TEXTURE_MAG_FILTER, CgGL.GL_NEAREST);
+        currentTexture = null;
     }
 
     private record ScratchSurface(int width, int height, float logicalWidth, float logicalHeight,

@@ -10,7 +10,6 @@ import com.crystalgui.ui.elements.slot.NativeContentService;
 import com.crystalgui.ui.elements.slot.NativeProfile;
 import com.crystalgui.ui.elements.slot.NativeSurface;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.ScaledResolution;
 import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.client.renderer.RenderHelper;
 import net.minecraft.client.renderer.entity.RenderItem;
@@ -260,14 +259,11 @@ public final class Mc1710NativeContentService implements NativeContentService {
      * {@code endFrame}, so the state it disturbs is state the composite still depends on.</p>
      */
     @Override
-    public void drawTooltip(NativeContent content, float x, float y, int screenWidth, int screenHeight) {
+    public void drawTooltip(NativeContent content, float x, float y, int logicalWidth, int logicalHeight) {
         ItemStack stack = stackOf(content);
         if (stack == null) return;
         Minecraft mc = Minecraft.getMinecraft();
         if (mc == null) return;
-
-        ScaledResolution resolution = new ScaledResolution(mc, mc.displayWidth, mc.displayHeight);
-        int factor = Math.max(1, resolution.getScaleFactor());
 
         try (CgGlScope scope = CgGlState.hostForeign(
                 CgGlSlot.PROGRAM, CgGlSlot.TEXTURES, CgGlSlot.BLEND, CgGlSlot.DEPTH,
@@ -275,7 +271,11 @@ public final class Mc1710NativeContentService implements NativeContentService {
             // No shader program: vanilla's tooltip is fixed-function, and whatever material CrystalGUI
             // last bound would otherwise still be active and consume the draw.
             GL20.glUseProgram(0);
-            pushProjection(0d, resolution.getScaledWidth_double(), resolution.getScaledHeight_double(), 0d);
+            // OUR SPACE, NOT MINECRAFT'S. The ortho is CrystalGUI's logical screen, so the tooltip is
+            // drawn at the scale the UI around it is drawn at. Using ScaledResolution here -- which is
+            // what this did first -- renders it at Minecraft's GUI scale instead, so it comes out a
+            // different size from everything it is labelling, by however far apart the two settings are.
+            pushProjection(0d, logicalWidth, logicalHeight, 0d);
             try {
                 GL11.glDisable(GL11.GL_DEPTH_TEST);
                 GL11.glDepthMask(false);
@@ -287,7 +287,7 @@ public final class Mc1710NativeContentService implements NativeContentService {
                 // GuiScreen and reproducing it would mean copying Minecraft's code into this repository.
                 // It also gets the real thing -- rarity colouring, enchantments, lore, and every line
                 // another mod contributes -- which is the entire reason this is delegated at all.
-                NativeTooltipHost.draw(stack, Math.round(x) / factor, Math.round(y) / factor);
+                NativeTooltipHost.draw(stack, Math.round(x), Math.round(y));
             } finally {
                 popProjection();
             }
