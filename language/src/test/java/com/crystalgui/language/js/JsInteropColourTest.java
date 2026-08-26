@@ -194,6 +194,38 @@ public class JsInteropColourTest {
                 .resolveAt(source.indexOf("." + member) + 1);
     }
 
+    /**
+     * <b>An imported ENUM is coloured as one, on the import line and where it is used.</b>
+     *
+     * <p>Every imported name was painted a flat {@code type}, so an enum, an interface and a class were
+     * one colour — while the same import in a {@code .java} file was coloured by kind, from the same
+     * scheme, in the same session. The kind is the engine's to report and nothing was asking it.</p>
+     *
+     * <p>Both places are asserted because different passes mark them: the import line by
+     * {@code markImports}, the use by the free-identifier walk. Fixing either alone leaves one word two
+     * colours in a six-line file, which is the defect that branch was written to prevent.</p>
+     */
+    @Test
+    public void anImportedEnumIsColouredAsAnEnum() {
+        String source = "import java.time.DayOfWeek;\n"
+                + "var d = DayOfWeek;\n";
+
+        assertTrue("the import line painted a flat type, got " + capturesOver(source, "DayOfWeek", 0),
+                capturesOver(source, "DayOfWeek", 0).stream().anyMatch(name -> name.contains("enum")));
+        assertTrue("the use painted a flat type, got " + capturesOver(source, "DayOfWeek", 1),
+                capturesOver(source, "DayOfWeek", 1).stream().anyMatch(name -> name.contains("enum")));
+    }
+
+    /** An imported CLASS stays a type, so the lookup is REPORTING a kind rather than relabelling. */
+    @Test
+    public void anImportedClassIsStillAType() {
+        String source = "import java.util.ArrayList;\n"
+                + "var a = ArrayList;\n";
+
+        assertTrue("an ordinary class lost its type colour, got " + capturesOver(source, "ArrayList", 1),
+                capturesOver(source, "ArrayList", 1).stream().anyMatch(name -> name.startsWith("type")));
+    }
+
     /** And an ordinary object's property keeps the grammar's answer, which is already right for it. */
     @Test
     public void aPlainObjectPropertyIsLeftToTheGrammar() {
