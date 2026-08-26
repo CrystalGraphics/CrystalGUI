@@ -432,7 +432,8 @@ editor scheme's.
 | `--preview-close-hover-bg` | `var(--error)` | base.css |
 | `--preview-close-hover-fg` | `var(--fg-on-accent)` | base.css |
 | `--preview-fg` | `var(--fg)` | base.css |
-| `--preview-glass-tint` | `#C71F2023` | crystal-dark.css |
+| `--preview-glass-tint` | `#1F202313` | crystal-dark.css |
+| `--preview-glow` | `#3574F033` | crystal-dark.css |
 | `--preview-surface-bg` | `var(--surface-editor)` | base.css |
 | `--preview-thumbnail-bg` | `var(--surface-base)` | base.css |
 | `--problems-bg` | `#00000000` | base.css |
@@ -546,7 +547,7 @@ editor scheme's.
 | `--surface-base` | `#26282B` | crystal-dark.css |
 | `--surface-borrowed` | `#281F1C` | crystal-dark.css |
 | `--surface-editor` | `#191A1C` | crystal-dark.css |
-| `--surface-glass` | `#662B2D30` | crystal-dark.css |
+| `--surface-glass` | `#2B2D3066` | crystal-dark.css |
 | `--surface-overlay` | `#2B2D30` | crystal-dark.css |
 | `--surface-panel` | `#191A1C` | crystal-dark.css |
 | `--surface-raised` | `#2B2B2B` | crystal-dark.css |
@@ -560,10 +561,10 @@ editor scheme's.
 | `--switcher-close-hover-bg` | `var(--error)` | base.css |
 | `--switcher-close-hover-fg` | `var(--fg-on-accent)` | base.css |
 | `--switcher-entry-border` | `#00000000` | base.css |
-| `--switcher-entry-hover-bg` | `var(--hover-bg)` | base.css |
+| `--switcher-entry-hover-bg` | `#FFFFFF0F` | crystal-dark.css |
 | `--switcher-fg` | `var(--fg)` | base.css |
-| `--switcher-glass-tint` | `#C71F2023` | crystal-dark.css |
-| `--switcher-selected-bg` | `var(--pressed-bg)` | base.css |
+| `--switcher-glass-tint` | `#1F202313` | crystal-dark.css |
+| `--switcher-glow` | `#3574F033` | crystal-dark.css |
 | `--switcher-selected-ring` | `var(--fg)` | base.css |
 | `--syntax-attribute` | `#9CDCFE` | dark-plus.css |
 | `--syntax-boolean` | `#569CD6` | dark-plus.css |
@@ -657,7 +658,8 @@ editor scheme's.
 | `--taskbar-entry-hover-bg` | `var(--hover-bg)` | base.css |
 | `--taskbar-entry-hover-fg` | `var(--fg)` | base.css |
 | `--taskbar-entry-progress` | `var(--accent-soft)` | base.css |
-| `--taskbar-glass-tint` | `#E01F2023` | crystal-dark.css |
+| `--taskbar-glass-tint` | `#1C1D21CC` | crystal-dark.css |
+| `--taskbar-glow` | `#3574F033` | crystal-dark.css |
 | `--taskbar-indicator` | `var(--fg-secondary)` | base.css |
 | `--taskbar-indicator-active` | `var(--accent)` | base.css |
 | `--taskbar-indicator-hidden` | `var(--fg-disabled)` | base.css |

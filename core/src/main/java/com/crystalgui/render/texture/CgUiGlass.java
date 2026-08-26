@@ -43,6 +43,8 @@ public final class CgUiGlass implements CgUiDrawable, CornerRadiusAware {
     private float blurRadius = 12f;
     private int tintArgb = 0x662B2D30;
     private float saturation = 1.35f;
+    /** How much of the backdrop's brightness the tint's replaces (W3C luminosity blend); 0 is off. */
+    private float luminosity = 0f;
     private float bezel = 8f;
     private float ior = 1.5f;
     // 1.0 because `specular` is a MASTER MULTIPLIER over the glow and the rim, not a highlight in its
@@ -86,6 +88,16 @@ public final class CgUiGlass implements CgUiDrawable, CornerRadiusAware {
      */
     public CgUiGlass setSaturation(float saturation) {
         this.saturation = Math.max(0f, saturation);
+        return this;
+    }
+
+    /**
+     * The luminosity blend, 0..1: the backdrop keeps its hue and saturation and takes the tint's
+     * brightness by this much, before the tint's own alpha mixes its colour in. WinUI's acrylic is
+     * 0.96 and Mica 1.0 — it is most of what makes those materials read as a temperature.
+     */
+    public CgUiGlass setLuminosity(float luminosity) {
+        this.luminosity = Math.max(0f, Math.min(1f, luminosity));
         return this;
     }
 
@@ -165,6 +177,7 @@ public final class CgUiGlass implements CgUiDrawable, CornerRadiusAware {
     public float getBlurRadius() { return blurRadius; }
     public int getTint() { return tintArgb; }
     public float getSaturation() { return saturation; }
+    public float getLuminosity() { return luminosity; }
     public float getBezel() { return bezel; }
     public float getIor() { return ior; }
     public float getSpecular() { return specular; }
@@ -220,6 +233,7 @@ public final class CgUiGlass implements CgUiDrawable, CornerRadiusAware {
                         backdrop.u1(), backdrop.v1());
                 b.colorARGB("_Tint", tintArgb);
                 b.set1f("_Saturation", saturation);
+                b.set1f("_Luminosity", luminosity);
                 b.set1f("_Bezel", bezel);
                 b.set1f("_Ior", ior);
                 b.set1f("_Specular", specular);

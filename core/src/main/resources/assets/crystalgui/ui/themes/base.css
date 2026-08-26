@@ -783,10 +783,11 @@ theme {
     --switcher-bg: var(--surface-overlay);
     --switcher-border: var(--border-base);
     --switcher-fg: var(--fg);
-    /* A tile's fill under the pointer and under the selection ring: the same two steps a taskbar entry
-     * climbs, which is what makes the switcher and the strip read as one family. */
-    --switcher-entry-hover-bg: var(--hover-bg);
-    --switcher-selected-bg: var(--pressed-bg);
+    /* A tile's fill under the POINTER is a THEME PIN, not --hover-bg: the tile sits on acrylic, and an
+     * opaque grey from the panel ladder is a slab that hides the very backdrop the switcher floats
+     * over. Fluent's fills on a material are translucent white (SubtleFillColorSecondary, #0FFFFFFF),
+     * which lifts the tile and lets the backdrop through -- an alpha no system role carries, so the
+     * themes name it. The selection is a ring with no fill, see below. */
 
     /* TRANSPARENT, not absent: a tile's border must exist unselected so that selecting one changes its
      * COLOUR and never its width. A border that appears on selection re-lays the grid out by two pixels

@@ -50,6 +50,9 @@ Properties {
 
     _Tint       ("Tint (over the blur)", color) = (0.0, 0.0, 0.0, 0.0)
     _Saturation ("Saturation of backdrop", float) = 1.0
+    // How much of the backdrop's BRIGHTNESS is replaced by the tint's (its hue and saturation stay).
+    // 0 leaves the alpha tint alone; WinUI's acrylic runs this at 0.96 and Mica at 1.0.
+    _Luminosity ("Luminosity blend toward the tint", float) = 0.0
     _Bezel      ("Bezel width (px)",       float) = 8.0
     _Ior        ("Index of refraction",    float) = 1.5
     _Specular   ("Specular strength",      float) = 0.0
@@ -77,6 +80,24 @@ Pass {
         DepthWrite OFF
         Cull OFF
     }
+
+    // W3C compositing's non-separable LUMINOSITY blend -- the layer Windows' acrylic and Mica are
+    // mostly made of: the backdrop keeps its hue and saturation and takes the tint's brightness, so
+    // what a colourful scene contributes is a temperature and never a colour. Lum and ClipColor are the
+    // spec's own, with its 0.3 / 0.59 / 0.11 weights. @see docs/CGUI_MODERN_UI_RENDERING_RESEARCH.md §1.2
+    //
+    // ABOVE `void vertex`, with every other helper, because the compiler hoists this region into BOTH
+    // generated stages -- and safe there because none of it names a fragment-only builtin.
+    float cg_lum(vec3 c) { return dot(c, vec3(0.3, 0.59, 0.11)); }
+    vec3 cg_clipColor(vec3 c) {
+        float l = cg_lum(c);
+        float n = min(c.r, min(c.g, c.b));
+        float x = max(c.r, max(c.g, c.b));
+        if (n < 0.0) c = l + (c - l) * l / max(l - n, 1e-5);
+        if (x > 1.0) c = l + (c - l) * (1.0 - l) / max(x - l, 1e-5);
+        return c;
+    }
+    vec3 cg_setLum(vec3 c, float l) { return cg_clipColor(c + vec3(l - cg_lum(c))); }
 
     // The glass's height across the bezel, as a function of normalised distance inward from the
     // edge. x = 0 at the outer boundary, x = 1 where the surface becomes flat.
@@ -147,7 +168,16 @@ Pass {
         vec2 halfSize = _BoxSize * 0.5;
         vec2 localPos = (i.uv - 0.5) * _BoxSize;
         float dist = sdf_rounded_box(localPos, halfSize, _CornerRadiusX, _CornerRadiusY);
-        float coverage = sdf_coverage(dist);
+        // PIXEL-EXACT COVERAGE, not the shared sdf_coverage ramp. That one is a smoothstep two
+        // pixels wide centred on the boundary, so the last pixel row INSIDE an axis-aligned edge is only
+        // ~84% covered -- which for an opaque fill over its own background is invisible anti-aliasing,
+        // and for a material that REPLACES what is behind it is a 16% bleed of the unblurred backdrop
+        // along every straight edge. On the taskbar the top edge hides under the hairline and the sides
+        // are the screen's; the bottom lip showed a row of sharp pixels under the bar. `dist / fwidth`
+        // is the distance in SURFACE pixels along the edge's own gradient, so the ramp is exactly one
+        // pixel wide whatever uiScale is: a straight edge that lies on a pixel boundary covers its last
+        // row fully, and a rounded corner still gets one pixel of anti-aliasing.
+        float coverage = clamp(0.5 - dist / max(fwidth(dist), 1e-4), 0.0, 1.0);
 
         // How far inside the bezel this pixel is: 0 at the boundary, 1 where the glass goes flat.
         float bezel = max(1.0, _Bezel);
@@ -213,7 +243,12 @@ Pass {
         float lum = luminance(c.rgb);
         c.rgb = mix(vec3(lum), c.rgb, _Saturation);
 
-        // Tint over the backdrop, straight alpha.
+        // LUMINOSITY, then TINT -- WinUI's acrylic effect graph in that order (blur, saturation,
+        // luminosity layer, tint layer, noise). The luminosity layer replaces the backdrop's brightness
+        // with the tint's and keeps its hue, which is why a Windows surface over a red wallpaper is
+        // WARM rather than red; the tint layer then mixes the tint's colour in by its alpha. With
+        // _Luminosity at 0 this is the plain alpha tint it always was.
+        c.rgb = mix(c.rgb, cg_setLum(c.rgb, cg_lum(_Tint.rgb)), _Luminosity);
         c.rgb = mix(c.rgb, _Tint.rgb, _Tint.a);
 
 #ifdef WITH_SPECULAR

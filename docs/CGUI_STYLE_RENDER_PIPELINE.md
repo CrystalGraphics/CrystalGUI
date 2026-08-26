@@ -362,6 +362,8 @@ returns `null`, same as any malformed CSS value).
 | `image("path")` | `CgUiSprite`, unsliced | Optional trailing args, type-sniffed, order-independent: quoted `"x y w h"` crop rect, quoted `"refW refH"` texture-size-reference override, or a color literal (tint) |
 | `sprite("path", "sx sy sw sh", "bl bt br bb")` | `CgUiSprite`, 9-slice | Optional 4th `"refW refH"` arg, same override as `image(...)` |
 | `asset("ns:path", "element")` | `CgUiSprite`, fresh instance per lookup | Named 9-slice element from a pack at `assets/{ns}/ui/sprites/{path}.json`, via `CgUiSpriteRegistry`. The parsed pack JSON is cached, but each `get()` call rebuilds a new `CgUiSprite` from it (not a `.copy()` of a cached template) — safer against cross-call mutation. One pack file holds multiple named elements; each may override the pack's own `texture`/`textureSize`. On a missing pack/element, returns a visible fallback drawable rather than silently rendering nothing |
+| `linear-gradient(direction?, stop, stop, …)` | `CgUiGradient` | CSS's: an `<angle>` in any unit, `to <side>` or `to <corner>` (resolved per box); a stop is a colour with an optional `%` position, and missing positions spread evenly. One draw per eight stops, **premultiplied** interpolation, dithered, and it masks itself under `border-radius` (`CornerRadiusAware`, so no `border-width` stroke). No colour hints, no `repeating-` |
+| `glass(blur, tint)` / `glass(blur 12, tint …, saturation …, …)` | `CgUiGlass` | A backdrop material: captures what is behind the element, blurs, saturates and tints it. Keyword form takes any subset; the keys are in `TextureValue.parseGlass`. `CornerRadiusAware`, same gap |
 
 `CssParsingUtil.splitTopLevelCommas` (paren-aware comma split) backs every multi-arg form here.
 

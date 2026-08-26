@@ -83,8 +83,16 @@ public class Taskbar extends UIElement {
      * documented trap — and a single edge is how {@code statusbarview} spells its separators too.
      */
     public static final String EDGE_CLASS = "__edge__";
+    /**
+     * The accent glow under the entries — IntelliJ's New UI header gradient, translated: a soft wash of
+     * the accent centred where the entries cluster, fading to the bar at either side. Paint over the
+     * glass, as a separate absolute child, so glass stays the material and the glow stays a gradient.
+     */
+    public static final String GLOW_CLASS = "__glow__";
 
     private final UIElement entries;
+    /** The glow, kept so the designer can retone it. @see #GLOW_CLASS */
+    private final UIElement glow;
 
     /** Window → its entry. Insertion-ordered so a rebuild of the child list keeps open order. */
     private final Map<WindowFrame, Button> entryOf = new LinkedHashMap<>();
@@ -107,6 +115,13 @@ public class Taskbar extends UIElement {
         edge.setHitTest(false);
         addInternalChild(edge);
 
+        // THE GLOW, after the hairline and before the entries: it paints over the glass and under the
+        // buttons, and being absolute it takes no part in centring the row. @see #GLOW_CLASS
+        glow = new UIElement();
+        glow.addClass(GLOW_CLASS);
+        glow.setHitTest(false);
+        addInternalChild(glow);
+
         entries = new UIElement();
         entries.addClass(ENTRIES_CLASS);
         addInternalChild(entries);
@@ -128,6 +143,20 @@ public class Taskbar extends UIElement {
 
     /** The hover previews. One panel that moves between entries. @see TaskbarPreviews */
     private final TaskbarPreviews previews;
+
+    /**
+     * The accent wash under the entries — the element, so {@link TaskbarDesigner} can write its
+     * gradient. Package-private: a theme retones this through {@code --taskbar-glow}, and the element
+     * itself is only reachable because the designer writes at IMPORTANT origin while it runs.
+     */
+    UIElement glow() {
+        return glow;
+    }
+
+    /** The hover preview panel, for the designer: it carries the same tone as the bar. */
+    WindowPreview previewPanel() {
+        return previews.panel();
+    }
 
     /**
      * Turns hover previews off while something else owns the space above an entry — a jump list.

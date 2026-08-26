@@ -22,8 +22,9 @@ theme {
     --surface-editor: #191A1C;
     --surface-overlay: #2B2D30;
     /* Glass tint. Translucent BY DESIGN: it is laid over the blurred backdrop, and an opaque tint discards the
-     * very thing the capture went and fetched. */
-    --surface-glass: #662B2D30;
+     * very thing the capture went and fetched. CSS ORDER, alpha LAST: #RRGGBBAA. This was #662B2D30 -- the
+     * engine's own AARRGGBB int order -- which the sheet parser reads as a 19% wash of (102,43,45), a red. */
+    --surface-glass: #2B2D3066;
     /* WHAT IS NOT YOURS. A library class opened read-only, and anything else the workspace does not own.
      * A surface rather than a foreground because what it qualifies is the CONTAINER: the point is not
      * that this text is special, it is that this whole pane cannot be edited. Warm, so it separates at a
@@ -112,21 +113,38 @@ theme {
     --snap-preview-bg: #9AA0A640;
     --snap-preview-border: #C8CDD2AA;
 
-    /* THE TASKBAR'S MICA TINT: the bar's own dark laid over the blurred world at ~88%, so what comes
-     * through is a tone rather than a picture. A pin because no system role carries this alpha —
-     * --surface-glass is a 40% veil for a panel that floats, and a bar that let 60% of a hotbar
-     * through was the whole reason the bar was redesigned. Slightly darker than --surface-overlay so
-     * the fallback (flat, headless) and the live bar sit within a shade of each other. */
-    --taskbar-glass-tint: #E01F2023;
+    /* THE TASKBAR'S MICA TINT: the bar's own dark, (28,29,33), at Mica's tint opacity of 0.8 -- the
+     * rest of the bar's colour is the blurred world's HUE at the tint's brightness, since the rule
+     * runs `luminosity 1`. What comes through is a temperature, never a picture. A pin because no
+     * system role carries this alpha. Slightly darker than --surface-overlay so the fallback (flat,
+     * headless) and the live bar sit within a shade of each other.
+     *
+     * #RRGGBBAA, ALPHA LAST. In the engine's int order this pin is a RED, and it was written that way
+     * twice: the shipped #E01F2023 parses as (224,31,32) at 14%, and #EB1C1D21 -- the value the Mica
+     * rewrite replaced it with -- as (235,28,29) at 13%. The bar was maroon throughout, and two comments
+     * blamed saturation and the harness's clear colour for it before anyone read the parser.
+     * @see AGENTS.md, load-bearing invariants. */
+    --taskbar-glass-tint: #1C1D21CC;
+    /* THE GLOW under the entries: the accent at 20%, which the gradient fades to nothing either side.
+     * A pin because it is the accent WITH an alpha, which no system role carries and var() cannot add. */
+    --taskbar-glow: #3574F033;
+    /* THE SAME TONE on the hover preview and the switcher: they are the bar's material, and the wash is
+     * part of it. Separate pins with one value, because a component token never chains off another
+     * component's -- the Taskbar Designer's Tone picker writes all three. */
+    --preview-glow: #3574F033;
+    --switcher-glow: #3574F033;
     /* THE ACTIVE ENTRY: Windows' #5D5D5D in this theme's cool cast -- a step of sixty above the bar,
      * where --pressed-bg was a step of twenty and read as nothing. @see base.css */
     --taskbar-entry-active-bg: #5A5D63;
-    /* THE FLOATING PANELS' ACRYLIC: the same dark as the bar's Mica at ~78% rather than 88%, so a
-     * preview or the switcher shows the windows behind it as shapes and reads as floating. Two pins
-     * with one value, because a component token never chains off another component's -- restyling the
-     * preview must not move the switcher. */
-    --preview-glass-tint: #C71F2023;
-    --switcher-glass-tint: #C71F2023;
+    /* THE FLOATING PANELS' ACRYLIC: WinUI's SystemControlTransientBackgroundBrush, dark, at HALF its
+     * strength -- tint #2C2C2C-class at 0.07 where Windows runs 0.15, with the rule's `luminosity 0.48`
+     * (Windows: 0.96) doing the rest. At Windows' numbers the panels read as opaque slabs over this
+     * desktop's dark windows, @see ua/desktop.css. A shade darker than Windows' so it sits between the
+     * bar and a window. Two pins with one value, because a component token never chains off another
+     * component's -- restyling the preview must not move the switcher. #RRGGBBAA; was #C71F2023,
+     * which is a red at 14%. */
+    --preview-glass-tint: #1F202313;
+    --switcher-glass-tint: #1F202313;
 
     /* THE WINDOW ICON TILES. Six hues, keyed on the icon name by WindowIcon; a filled rounded square
      * with a white glyph on it, so each is tuned to carry white at 14–18px on a dark bar — saturated
@@ -201,6 +219,9 @@ theme {
      * arbitrary window pictures, so it has to read against a screenshot of anything at all rather than
      * merely against a panel. Windows' switcher uses the same. */
     --switcher-selected-ring: #FFFFFF;
+    /* THE HOVER FILL ON A TILE: Fluent's SubtleFillColorSecondary, dark -- white at 6%. Translucent so
+     * the acrylic shows through it; an opaque grey here was a slab over the backdrop. @see base.css */
+    --switcher-entry-hover-bg: #FFFFFF0F;
     --activitybar-item-checked-bg: #46484b;
 
     /* -- Differences -----------------------------------------------------------

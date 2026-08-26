@@ -75,6 +75,11 @@ final class TaskbarPreviews {
     private final Taskbar taskbar;
     private final WindowPreview preview = new WindowPreview();
 
+    /** The one panel. */
+    WindowPreview panel() {
+        return preview;
+    }
+
     /** The entry the pointer is currently resting on, and since when. */
     @Nullable
     private WindowFrame hovered;
