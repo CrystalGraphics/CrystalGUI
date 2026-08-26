@@ -577,6 +577,27 @@ public final class CgUiPaintContext {
                 CgGlSlot.FBO, CgGlSlot.PROGRAM, CgGlSlot.TEXTURES, CgGlSlot.BLEND,
                 CgGlSlot.DEPTH, CgGlSlot.CULL, CgGlSlot.VIEWPORT);
 
+        // FIXED-FUNCTION TEXTURE UNIT 1 OFF, ONCE PER FRAME. This engine draws through shaders and uses
+        // no fixed-function multi-texturing at all, so the units above 0 are ours to turn off and are
+        // never turned back on by anything here.
+        //
+        // It matters because of who we hand GL to. On Minecraft that unit holds the LIGHTMAP, and its
+        // item and block rendering is fixed-function multi-texturing -- so a native draw made while it
+        // is still enabled comes out modulated by whatever is bound there. It does not fail; it shades
+        // wrong, which reads as broken lighting rather than as a stray texture unit. Vanilla disables
+        // it before every GUI it draws (EntityRenderer.disableLightmap) for exactly this reason.
+        //
+        // Here rather than per native draw: it is a property of the whole frame, it costs two calls
+        // instead of two per slot, and an inventory's worth of slots should not each be re-establishing
+        // something none of them changed. Not restored at endFrame -- disabled is the state a GUI wants,
+        // and Minecraft re-enables it itself when it next renders the world.
+        //
+        // GL_TEXTURE_2D is not a tracked capability, so these are issued rather than deduplicated; the
+        // shadow cannot wrongly elide the unit-0 restore below.
+        CgGL.glActiveTexture(CgGL.GL_TEXTURE1);
+        CgGL.glDisable(CgGL.GL_TEXTURE_2D);
+        CgGL.glActiveTexture(CgGL.GL_TEXTURE0);
+
         // Whole-frame MSAA redirect — see the class doc above msaaFbo for why this exists and why it
         // has to be the whole tree rather than one material.
         int w = Math.max(1, screenWidth), h = Math.max(1, screenHeight);
