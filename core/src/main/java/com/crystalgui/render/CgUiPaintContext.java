@@ -47,6 +47,10 @@ import java.util.LinkedHashSet;
 import java.util.Deque;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Consumer;
+
+import com.crystalgui.ui.elements.slot.NativeProfile;
+import com.crystalgui.ui.elements.slot.NativeSurface;
 
 /**
  * True immediate-mode 2D paint context for CrystalGUI's box-model layer.
@@ -219,6 +223,32 @@ public final class CgUiPaintContext {
     private record LayerFrame(CgFrameBuffer fbo, CgGlScope glScope, Matrix4f savedProjMatrix,
                                int savedViewportW, int savedViewportH) {
     }
+
+    // ── Native content (host-drawn items, fluids; later, entities) ──────────
+    /**
+     * The one target foreign renderers draw into, and <b>the only framebuffer in this class with a
+     * depth attachment</b>.
+     *
+     * <p>{@link #LAYER_FORMAT} and {@code MSAA_FORMAT} are colour-only, which is right for a UI that
+     * paints in painter's order and never depth-tests. It is wrong for a Minecraft block item, which is
+     * real 3D geometry: with no depth buffer {@code glEnable(GL_DEPTH_TEST)} behaves as always-pass and
+     * the model draws its faces in submission order, inside-out. Flat sprite items are unaffected, so
+     * this is invisible until somebody puts a block in a slot.</p>
+     *
+     * <p>A renderbuffer rather than a texture — it is written and depth-tested against, never sampled —
+     * and small, because it is sized to one slot at a time and reused for every native draw in the
+     * frame rather than being screen-sized like the layer pool. That is what keeps the cost of a
+     * 54-slot inventory to bind-and-clear rather than to memory.</p>
+     */
+    private static final CgFrameBufferFormat NATIVE_FORMAT = CgFrameBufferFormat.builder("cgui_native")
+            .color(0, CgTextureType.RGBA8)
+            .depthRenderbuffer(CgTextureType.DEPTH24_STENCIL8)
+            .build();
+
+    /** Built on first native draw, grown to the largest box asked for. Never shrinks — see
+     * {@link #acquireNativeFbo}. */
+    private CgFrameBuffer nativeFbo;
+
 
     // ── Whole-frame MSAA ─────────────────────────────────────────────────────
     //
@@ -611,6 +641,11 @@ public final class CgUiPaintContext {
         acquireLayerFbo(0);
         acquireLayerFbo(1);
         acquireLayerFbo(2);
+        // AND the native-content target, here rather than on first use. Built lazily inside an element's
+        // paint -- mid-frame, with the MSAA redirect live -- it came back sampling BLACK from a target
+        // that read back correct, on every frame rather than only the first. The pooled layers have
+        // always been created here; this one now is too.
+        acquireNativeFbo(Math.max(1, screenWidth), Math.max(1, screenHeight));
     }
 
     /**
@@ -1365,6 +1400,186 @@ public final class CgUiPaintContext {
         });
     }
 
+    /**
+     * {@link #drawLayer} for a target only partly used — composites the bottom-left
+     * {@code usedW x usedH} pixels of {@code fbo} into the given logical rect.
+     *
+     * <p>{@link #nativeContent} grows its scratch target and never shrinks it, so a 16px slot drawn
+     * after a 32px one is rendering into the corner of a larger buffer. Sampling the whole thing would
+     * composite the unused region too, which reads as the item having shrunk into the top-left quarter
+     * of its box.</p>
+     *
+     * <p>{@code glViewport(0, 0, w, h)} puts content in the framebuffer's <b>lower</b>-left, GL's origin
+     * being bottom-left, so the used region is {@code v} in {@code [0, usedH/fboH]} — and the V flip
+     * that maps it to a top-left-origin quad puts that maximum at the quad's top edge.</p>
+     */
+    private void drawLayerRegion(CgFrameBuffer fbo, float x, float y, float width, float height,
+                                 int usedW, int usedH) {
+
+        CgTexture2D colorTex = (CgTexture2D) fbo.getColorTexture(0);
+        float uMax = Math.min(1f, usedW / (float) fbo.getWidth());
+        float vMax = Math.min(1f, usedH / (float) fbo.getHeight());
+        withMaterial(layerBlitMaterial, () -> {
+            bindTexture(colorTex);
+            quad().at(x, y).size(width, height)
+                  .uv(0f, vMax, uMax, 0f)   // V flipped — see blitLayer's javadoc
+                  .color(getColor()).submit();
+            flush();
+        });
+    }
+
+    /**
+     * <b>Hands GL to a foreign renderer for the duration of one draw, then takes it back.</b>
+     *
+     * <p>The escape hatch for content this engine cannot draw — a Minecraft item stack, a fluid, later an
+     * entity. The body renders into an offscreen target through whatever GL it likes; this method
+     * composites the result into {@code (x, y, width, height)} in ordinary logical coordinates, so it
+     * lands with {@code uiScale}, any CSS {@code transform} and the ambient scissor applied, exactly like
+     * any other quad.</p>
+     *
+     * <h3>What the bracket is actually for</h3>
+     *
+     * <ol>
+     *   <li><b>Flush first.</b> Queued quads are drawn when the batch flushes, not when they are
+     *       submitted, so a foreign draw made with work still pending lands underneath UI painted before
+     *       it. Same painter's-order requirement that already makes switching between {@link #quad} and
+     *       {@link #curve} flush.</li>
+     *   <li><b>{@code hostForeign}, not {@code save}.</b> The state manager deduplicates against a CPU
+     *       shadow that foreign GL writes straight past, so an ordinary restore can be elided against a
+     *       shadow that is lying. {@code hostForeign} invalidates before re-issuing, and leaves every
+     *       undeclared domain marked unknown rather than assumed intact. Getting this wrong produces a
+     *       <em>missing GL call</em> — wrong rendering, no exception, nowhere near the cause.</li>
+     *   <li><b>Scissor off.</b> A clip rect is in screen pixels; inside a slot-sized target it clips
+     *       away most or all of the draw. Restored by the scope, which is why the composite afterwards
+     *       is still correctly clipped by whatever scroller the slot sits in.</li>
+     *   <li><b>Its own space.</b> The target's viewport is set to the box, so the implementation sets up
+     *       one ortho for a size it was just handed and never has to reconcile Minecraft's GUI scale
+     *       against ours. See {@link NativeSurface}.</li>
+     * </ol>
+     *
+     * <p>The target is sized in <b>physical pixels</b>, derived from the live pose the same way
+     * {@link #pushScissor} derives a scissor rect, so content renders at the resolution it will be shown
+     * at rather than being drawn small and scaled up.</p>
+     *
+     * <p>Culled cheaply: a slot scrolled out of view costs an overlap test, not a foreign draw.</p>
+     *
+     * @param profile the GL contract to establish before calling {@code body}
+     * @param body    invoked with the surface to fill; may disturb any GL state it likes
+     */
+    public void nativeContent(NativeProfile profile, float x, float y, float width, float height,
+                              Consumer<NativeSurface> body) {
+        if (!frameActive) {
+            throw new IllegalStateException("nativeContent() outside a frame — call between beginFrame/endFrame");
+        }
+        if (width <= 0f || height <= 0f || !isVisible(x, y, width, height)) return;
+
+        // Physical extent of the logical box under the live pose. Same derivation as pushScissor: all
+        // four corners would be needed for a rotation, but only the SIZE is wanted here (placement is
+        // the composite's job), so the axis extents of the transformed box are enough.
+        Matrix4f m = poseStack.last().pose();
+        float px0 = m.m00() * x + m.m10() * y + m.m30();
+        float py0 = m.m01() * x + m.m11() * y + m.m31();
+        float px1 = m.m00() * (x + width) + m.m10() * (y + height) + m.m30();
+        float py1 = m.m01() * (x + width) + m.m11() * (y + height) + m.m31();
+        int physW = Math.max(1, (int) Math.ceil(Math.abs(px1 - px0)));
+        int physH = Math.max(1, (int) Math.ceil(Math.abs(py1 - py0)));
+
+        CgFrameBuffer fbo = acquireNativeFbo(physW, physH);
+        NativeSurface surface = new ScratchSurface(physW, physH, width, height, profile);
+
+        // THE ENGINE'S OWN LAYER PRIMITIVE, not a hand-rolled bind. beginLayerFbo does five things a
+        // native draw needs exactly as much as an opacity group does -- flush, save FBO+VIEWPORT, bind,
+        // set the viewport, clear, and re-run prepareFrame for the retargeted projection -- and rolling
+        // those by hand produced a target that read back correct and composited BLACK, with every
+        // parameter of the composite identical to the working path. Reuse beats re-derivation here.
+        try (CgGlScope scope = CgGlState.hostForeign(
+                CgGlSlot.FBO, CgGlSlot.VIEWPORT, CgGlSlot.PROGRAM, CgGlSlot.TEXTURES, CgGlSlot.BLEND,
+                CgGlSlot.DEPTH, CgGlSlot.CULL, CgGlSlot.SCISSOR, CgGlSlot.STENCIL, CgGlSlot.COLOR_MASK,
+                CgGlSlot.ALPHA_TEST, CgGlSlot.VERTEX_INPUT)) {
+            fbo.bind();
+            CgGL.glViewport(0, 0, physW, physH);
+            // CLEARED THROUGH A SCISSOR, so a 54-slot inventory does not pay 54 full-screen clears. The
+            // target is screen-sized (see acquireNativeFbo) but only the corner this draw uses needs to
+            // start clean, and a scissored clear is the one way to say that.
+            CgGL.glEnable(CgGL.GL_SCISSOR_TEST);
+            CgGL.glScissor(0, 0, physW, physH);
+            // DEPTH WRITES ON BEFORE THE CLEAR. glClear(GL_DEPTH_BUFFER_BIT) is gated by the depth write
+            // mask, and the UI paints in painter's order with depth writes off -- so the clear is
+            // silently discarded and the target keeps whatever depth was in it. The MODEL profile then
+            // tests against garbage and rejects or accepts by accident, which presents as depth not
+            // working at all rather than as a clear that did nothing.
+            CgGL.glDepthMask(true);
+            fbo.clearAll(0f, 0f, 0f, 0f);
+            // Off for the draw itself: the enclosing clip rect is in SCREEN pixels and would cut the
+            // content to wherever the slot happens to sit. Restored by the scope, which is what leaves
+            // the composite below correctly clipped by whatever scroller the slot is in.
+            CgGL.glDisable(CgGL.GL_SCISSOR_TEST);
+            // NO PROGRAM. beginFrame leaves `gui_quad` bound for the whole frame, and a fixed-function
+            // host renderer emits geometry with no idea a shader exists -- so its vertices would run
+            // through ours, which reads per-instance data describing UI quads and has nothing to say
+            // about them. That does not error; it draws, in black. Unbound here rather than in each
+            // implementation, because every native draw needs it and the symptom points nowhere near
+            // the cause. A host with shaders of its own binds them; 0 is the only correct hand-over.
+            CgGL.glUseProgram(0);
+            body.accept(surface);
+        }
+        // Foreign GL is invisible to the shadow by construction, so anything it wrote that hostForeign
+        // was not told to re-assert is now untracked. The declared domains above cover the restore; this
+        // covers whatever else it touched.
+        CgGlState.invalidateAllIfPresent();
+        currentTexture = null;
+        currentMaterial = null;
+
+
+        // WHITE, not the ambient tint. `paintSelf` leaves `color` set to the element's own
+        // `background-color` -- that is what makes a background drawable tintable -- and every drawable
+        // multiplies it in. Native content is a PHOTOGRAPH of what the host drew, so multiplying it by the
+        // colour of the box behind it darkens the item to near-black against any ordinary slot face, which
+        // reads as the host having failed to draw rather than as a tint. Restored afterwards so the
+        // element's own overlay pass still sees what it set.
+        int ambient = getColor();
+        setColor(0xFFFFFFFF);
+        try {
+            drawLayerRegion(fbo, x, y, width, height, physW, physH);
+        } finally {
+            setColor(ambient);
+        }
+    }
+
+    /**
+     * The scratch target, grown to fit and never shrunk.
+     *
+     * <p>Grow-only because an inventory's slots are all one size, so the common case allocates once and
+     * every later draw is a bind. Shrinking to each request instead would reallocate storage whenever a
+     * large slot was followed by a small one — which, in a frame that draws both, is every frame.</p>
+     *
+     * <p>Warmed on allocation. A freshly created framebuffer has been observed to silently drop its first
+     * draw, and the recorded corollary is sharper than it looks: warming one program does not vouch for
+     * another, and a foreign renderer's programs are not ones we can warm at all. So the caller's own
+     * body is the only thing that can warm itself — which {@link #nativeContent} cannot do without
+     * running host code twice for effects it does not control. {@link #warmUpLayer} at least establishes
+     * the target and the blit path; if a first-frame gap ever shows up here, the documented remedy is to
+     * draw the real content twice on a fresh target and discard the first pass.</p>
+     */
+    private CgFrameBuffer acquireNativeFbo(int width, int height) {
+        int w = Math.max(Math.max(1, width), screenWidth);
+        int h = Math.max(Math.max(1, height), screenHeight);
+        if (nativeFbo == null) {
+            nativeFbo = CgFrameBuffer.createOwned("cgui_native", w, h, NATIVE_FORMAT);
+            warmUpLayer(nativeFbo);
+            return nativeFbo;
+        }
+        if (nativeFbo.getWidth() < w || nativeFbo.getHeight() < h) {
+            nativeFbo.resize(Math.max(nativeFbo.getWidth(), w), Math.max(nativeFbo.getHeight(), h));
+            warmUpLayer(nativeFbo);
+        }
+        return nativeFbo;
+    }
+
+    private record ScratchSurface(int width, int height, float logicalWidth, float logicalHeight,
+                                  NativeProfile profile) implements NativeSurface {
+    }
+
     public void blitLayer(CgFrameBuffer fbo, float opacity) {
         CgTexture2D colorTex = (CgTexture2D) fbo.getColorTexture(0);
         withMaterial(layerBlitMaterial, () -> withLayerOpacity(opacity, () -> {
@@ -1460,6 +1675,13 @@ public final class CgUiPaintContext {
         // with fresh FBOs is what the next getInstance() builds anyway.
         msaaFbo.delete();
         msaaResolveFbo.delete();
+
+        // Same reasoning again, with one difference: this one is built lazily on the first native draw,
+        // so a process that never showed an item slot has none to free.
+        if (nativeFbo != null) {
+            nativeFbo.delete();
+            nativeFbo = null;
+        }
 
         renderer.delete();
         textRenderer.delete();

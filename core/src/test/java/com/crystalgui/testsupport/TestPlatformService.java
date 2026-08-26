@@ -12,6 +12,7 @@ import com.crystalgraphics.platform.service.CgReloadService;
 import com.crystalgraphics.platform.service.CgRenderingService;
 import com.crystalgraphics.platform.service.CgResourceService;
 import com.crystalgraphics.platform.service.CgSoundService;
+import com.crystalgui.ui.elements.slot.NativeContentService;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -64,6 +65,9 @@ public final class TestPlatformService implements CgPlatformService {
 
     private static String clipboard = "";
 
+    /** @see #install() */
+    private static boolean contentServiceDeclared = false;
+
     private static final TestPlatformService INSTANCE = new TestPlatformService();
 
     private CgInputService input = STUB_INPUT;
@@ -78,6 +82,21 @@ public final class TestPlatformService implements CgPlatformService {
         INSTANCE.sound = SILENT_SOUND;
         INSTANCE.cursor = NO_CURSOR;
         CgPlatform.register(INSTANCE);
+        // DECLARED, not merely absent. A slot throws on a platform that never said either way, which is
+        // the whole point of that check -- so a test fixture has to answer, and the honest answer here is
+        // that this source set has no Minecraft and renders no items. Saying so is what separates it from
+        // a loader that forgot, and it is what lets a slot be painted in a test at all.
+        //
+        // ONCE PER JVM, unlike the three services above. `CgService.provide` announces every install on
+        // stderr, deliberately -- a platform service being swapped under a running application is worth
+        // seeing in a log. From a per-test @Before that is one line per test method, and at ~2,250 tests
+        // it wrote enough to kill the Gradle worker outright: the build failed while every single test
+        // passed, reporting a broken socket rather than anything about a test. A slot test that wants a
+        // different service installs one itself and restores this in @After.
+        if (!contentServiceDeclared) {
+            contentServiceDeclared = true;
+            CgPlatform.provide(NativeContentService.SERVICE, NativeContentService.UNSUPPORTED);
+        }
         return INSTANCE;
     }
 

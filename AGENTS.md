@@ -123,6 +123,7 @@ rendering from everything else. What it cannot see is anything that crosses the 
 | `cgui-nineslice` | `CgUiNineSliceScene` | `CgUiSprite` 9-slice |
 | `cgui-ore-theme` | `CgUiOreThemeScene` | `ore.css` + sprite registry end-to-end |
 | `cgui-visual-layers` | `CgUiVisualLayersScene` | FBO layer opacity + masking |
+| `cgui-slot` | `CgUiSlotScene` | `ItemSlot`, `FluidSlot` and the **native-content seam**, driven by a stand-in fixed-function renderer so the whole hand-off is exercised without Minecraft: scratch target, depth, composite orientation, fill geometry, clipping, the layer-FBO path, and the `UNSUPPORTED` face (press **U** to swap the platform's declaration) |
 | `cgui-desktop` | `CgUiDesktopScene` | **CrystalOS** — stacking windows, drag, resize, clamp, cascade, taskbar, per-window modality, maximise, **the editor running as a window**, and **a tool window torn out into an owned float** (F3, or drag a rail button into the editor area). *Grows with `plan_windowing.md`: every W with something visible adds its demonstration here in the same commit* |
 
 Harness scenes live in `gl-debug-harness/src/main/java/.../harness/scene/ui/`; register new ones in
@@ -298,12 +299,19 @@ state. The declarative description layer it seeded now lives in `serialization/U
 
 ## `ElementRegistry`
 
-Bidirectional `tag ↔ class` map with a factory per tag; `bootstrapBuiltins()` registers twenty-three:
+Bidirectional `tag ↔ class` map with a factory per tag; `bootstrapBuiltins()` registers twenty-five:
 `element`, `button`, `checkbox`, `scroller`, `scrollerview`, `progressbar`, `slider`, `splitview`,
 `switch`, `tab`, `tabview`, `textfield`, `text`, `tooltip`, `dialog`, `popover`, `menu`, `menuitem`,
-`dropdown`, `colorselector`, `desktop`, `window`, `taskbar`.
+`dropdown`, `colorselector`, `desktop`, `window`, `taskbar`, `itemslot`, `fluidslot`.
 Unknown tags **throw** on decode — a typo must not silently become a
 styleless div.
+
+> **Registration is BIJECTIVE — one class ↔ one tag, enforced in both directions with a rollback** — so a
+> loader cannot supply its own subclass under an existing tag; the second registration throws. That is
+> what decides where a platform-dependent element lives: `itemslot` and `fluidslot` are registered here,
+> in `core`, on every platform including a dedicated server with no GL, and what varies is only whether
+> anything filled `NativeContentService.SERVICE`. The alternative — a loader registering the real class
+> and `core` a mock — is not merely worse, it does not compile.
 
 > This list goes stale the same way `StylePropertyRegistry`'s does, and had already: `progressbar`
 > and `colorselector` shipped while it still said eighteen. `ElementStateCoverageTest` is the guard
@@ -890,6 +898,8 @@ int value types.
 | `TextField` | `textfield` | `cgui-textfield` |
 | `UIText` | `text` | `cgui-text`, `cgui-text-stress` |
 | `Tooltip` | `tooltip` | `cgui-gallery` (Tooltip page) |
+| `ItemSlot` | `itemslot` | `cgui-slot` — a styled box; the item is drawn by the **host** through `NativeContentService` |
+| `FluidSlot` | `fluidslot` | `cgui-slot` — same seam, `FLAT` profile, box narrowed to the fill |
 | `Dialog` | `dialog` | `cgui-gallery` (Dialog page, modal page) |
 | `Popover` | `popover` | `cgui-gallery` (menus page) |
 | `Menu` | `menu` | `cgui-gallery` (menus page) |
@@ -1036,6 +1046,11 @@ The things that are invisible from any single class and expensive to rediscover.
 | **The desktop's window layer is the WORK AREA, and it only means anything once it is `.__windows__`** | Its whole geometry is one CSS rule; without the class the layer sizes to content, its children are all absolutely positioned, and it measures 0x0. Nothing then fails — every rule that reads the work area is guarded against a zero box on purpose, so the clamp and the cascade both quietly stand down and windows land wherever they were asked to go. Cost a full test run to see, and the fix was one `addClass` |
 | **Drawing a subtree a SECOND time corrupts hit-testing unless the pass says it is a copy** — `CgUiPaintContext.mirrored` | Every element reconciles its cached `localToWorld` against the pose it was drawn with, and hit-testing walks exactly that cache — the engine's own rule being that the two must agree or clicks land somewhere other than what the user sees. A taskbar preview re-draws a whole window at thumbnail size and is drawn LATER (it is in the top layer), so without the mirror flag the copy wins and the real window stops being clickable where it is. A counter rather than a boolean, because a mirror can contain another and a boolean would be cleared by the inner one on the way out |
 | **A freshly allocated FBO loses the first draw made into it — and warming ONE program does not vouch for another** | `CgUiPaintContext.warmUpLayerFbo` has documented this since the layer pool existed, with the symptom stated exactly: content simply missing on frame 1, permanently correct from frame 2. What its one transparent quad warms is the BLIT material, which is all a pooled layer ever needs. A window snapshot draws a whole window's worth of programs into its own target, and text is not one of them — `CgTextRenderer` owns its own renderer, instance buffer and material — so the first photograph of a window came back complete **except for the editor's text**, which reads as a race in the editor rather than in the surface it was drawn onto. Enumerating programs is the wrong shape of fix: draw the real content twice on a fresh target and discard the first pass |
+| **THE UI HAS NO DEPTH BUFFER — every one of its render targets is colour-only, and a 3D draw into one fails SILENTLY** | `MSAA_FORMAT` is `colorRenderbuffer(0, RGBA8).maxSamples()` and `LAYER_FORMAT` is `color(0, RGBA8)`. That is right for an engine that paints in painter's order and never depth-tests, and it is the reason a Minecraft **block** item cannot simply be drawn into the frame: with no depth attachment `glEnable(GL_DEPTH_TEST)` behaves as always-pass, so the model draws its faces in submission order and comes out inside-out. **A flat sprite item is unaffected**, which is what makes this survive casual testing — the commonest thing to put in a test slot is a stick, and a stick looks perfect. `CgUiPaintContext.nativeContent` therefore renders `MODEL`-profile content into a small depth-capable scratch target and composites it back as a quad. Adding depth to the shared targets instead is defensible and was measured: a multisampled depth renderbuffer is ~33MB at 1080p/4x and every pooled screen-sized layer would need one too, against ~64KB for a target sized to one slot |
+| **THE HOST IS NEVER GIVEN CRYSTALGUI'S COORDINATE SPACE — the fix for a foreign renderer is its OWN box, not a synced viewport** | The instinct is to make the fixed-function matrices match ours, and it cannot be done cheaply: our ortho lives in a **shader uniform** (`CgFrameData.projMatrix`) and our `uiScale` lives in the **`PoseStack`**, neither of which a fixed-function renderer can see, while `GL_PROJECTION` holds whatever Minecraft left — and `CgUiScreen` deliberately ignores MC's GUI scale, so the two spaces differ by a factor nobody has written down. Repo-wide there is **no `glMatrixMode`, `glOrtho` or `glFrustum` at all**, and `CgGLBackend` offers only push/pop/load, on purpose. Handing the host a small target and its size dissolves the whole question: it sets up one ortho for a box it was just told the dimensions of, and placement — `uiScale`, CSS `transform`, the ambient scissor — comes from compositing the result through the same pose every other quad uses. **The viewport was never the problem; the matrices were, and the answer is to not share them** |
+| **A native draw must disable the SCISSOR and re-enable it for the composite** | A clip rect is in screen physical pixels. Inside a slot-sized target it clips away most or all of the draw, so an item inside a scroller renders blank — and only inside a scroller, which reads as a scrolling bug. `hostForeign` is asked to re-assert `SCISSOR` on the way out, so the composite that follows *is* still clipped, which is what makes an item scroll out of view correctly |
+| **`hostForeign` is not `save`, and using the wrong one produces a MISSING GL CALL** | `CgGlState.hostForeign` exists for exactly this — its javadoc cites `minecraft.getItemRenderer().renderStatic(stack, …)` and calls hosting Minecraft's renderers *"a designed, frequent thing this engine does"* — and it differs from `save` in one way that matters: it invalidates the shadow **before** re-issuing, so the restore actually reaches the driver instead of being deduplicated against a shadow foreign GL has silently falsified. Nothing called it until `nativeContent` did. The half it **cannot** fix is Minecraft's own state mirror, which is blind to every `CgGL` write — so MC-relevant state must be set through MC's API, which is why the implementation lives in the loader and not in `core` |
+| **A NATIVE TOOLTIP MUST BE DEFERRED PAST THE TOP LAYER — it has no element to be promoted** | Our own `Tooltip` is a top-layer element and is painted last for free. A host tooltip is an immediate GL draw with nothing behind it, so drawn where it is asked for it is painted over by every element after it — for a slot in a scroller, most of the UI. `UIWindow` therefore holds **one** pending request (one pointer, one tooltip) and drains it after `drawSubtree` and the top layer, before `endFrame`. Re-asked every frame and cleared as it is drawn, so it needs no hide path: the moment the slot stops asking — pointer left, drag started, slot emptied — it simply is not drawn. What is **not** duplicated is the trigger: `tooltip-delay`, the regions and `Tooltip.dragIsLive` are the tooltip's rules and stay one definition, which is why `dragIsLive` is now public |
 | **`AnchoredPlacement.resolve` LEFT-ALIGNS on the cross axis; it does not centre** | Correct for what it was written for — a dropdown hangs from its button's left edge — and wrong for anything that is a label for the thing beneath it. A taskbar preview sits over the MIDDLE of its entry, as Windows' does, so it centres itself after resolving and re-clamps, because an entry near either end of a centred strip would otherwise push the panel off screen. Centre it in the consumer, never in `AnchoredPlacement`, which every menu in the engine depends on |
 | **An `overlay` paints into its OWN element's box, so an icon on a fresh child of a sized slot shows nothing** | The sheet sizes the slot (`__pre-icon__`); a new child inside it has no size of its own, so it is a 0x0 box with an icon in it. Nothing appears and nothing in the tree says why — no error, no warning, a correct-looking element with a correct-looking overlay. `Taskbar.applyIcon` puts it on the slot itself and that is the pattern; a preview panel got it wrong in the obvious way |
 | **A floating panel that animates ACROSS its own anchor steals the hover from it** | A taskbar preview rises from below its resting place and is promoted to the top layer, so for the first part of every entrance it covers the entry it belongs to and wins the hit test. The entry's `:hover` blinks off and back on as the panel passes, the panel's own hover rules churn with it, and — worse — the leave logic runs against a pointer that never went anywhere. Unhittable for the duration of any motion, restored when it settles: a control you cannot aim at yet is not a control |
@@ -1619,6 +1634,20 @@ com.crystalgui.ui              UIElement, UIWindow, Ui, UITransform, EventListen
                                WorkspaceTreeSource is the MODEL (explorerModel.ts) — listings, sorting,
                                compact folders, what matches. The parts sit BESIDE the view and reach it
                                through package-private accessors, as TextEditor's ten view parts do
+    .slot                      NATIVE CONTENT — the one place the host draws inside a CrystalGUI element.
+                               ItemSlot and FluidSlot are ordinary styled boxes; what sits in the middle is
+                               drawn by NativeContentService, a CgService slot a loader fills (mc1710's
+                               Mc1710NativeContentService) and a platform without one declares UNSUPPORTED
+                               against. Absence of BOTH throws at first paint, which is the whole
+                               fast-failure: a silently blank slot is indistinguishable from an empty one.
+                               NativeProfile is the GL contract — FLAT (blended, no depth: fluids) vs MODEL
+                               (depth + lighting: items, later entities) — because an item and a fluid are
+                               rendered completely differently and one bracket would be wrong for one of
+                               them. NativeContent is a BINDING and never a value: it names where to look,
+                               so a container UI rides Minecraft's own synchronisation and nothing about an
+                               inventory crosses CrystalGUI's wire. NativeSurface is the offscreen box the
+                               host fills — see CgUiPaintContext.nativeContent for why the host is never
+                               given our coordinate space
     .desktop                   CrystalOS — Desktop (the compositor host), WindowFrame (one window),
                                WindowRegistry (every LIVE window, visible or hidden, in two orders: open
                                order for the taskbar, MRU for the switcher — and neither is derivable

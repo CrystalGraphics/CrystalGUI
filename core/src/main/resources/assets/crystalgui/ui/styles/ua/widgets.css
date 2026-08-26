@@ -877,3 +877,28 @@ markupview .__markup-header-cell__ {
 markupview .__markup-table__ {
     border-color: var(--markup-table-rule, #3A3D42);
 }
+
+/* ── Native content slots ────────────────────────────────────────────────────────────────────────
+ *
+ * GEOMETRY ONLY, and that is the whole rule rather than an omission. What a slot styles is the BOX;
+ * what sits inside it is drawn by the host's own renderer and is not ours to theme — an item's model,
+ * glint, count and durability bar all come from Minecraft, and no declaration here can reach them.
+ *
+ * 18x18 with 1px of padding leaves a 16x16 content box, which is the size an item is drawn at and the
+ * dimension every Minecraft inventory has used since 2009. `CgUiPaintContext.nativeContent` fills that
+ * content box, so padding is what insets the item inside its well -- change the padding and the item
+ * follows it, with no Java involved.
+ *
+ * No background and no colour: this is the user-agent sheet, so it gives a slot the shape it cannot
+ * function without and leaves appearance to a theme. An unthemed slot therefore looks like an unthemed
+ * button -- a plain box -- which is the correct amount of opinion for a sheet whose job is geometry. */
+itemslot,
+fluidslot {
+    width: 18px;
+    height: 18px;
+    padding-all: 1px;
+    /* Content is drawn to the box and must not be squeezed out of it by a packed row. Same reasoning
+     * as every other fixed-size control here: flex-shrink defaults to 0, so this is a statement that
+     * the default is deliberate rather than inherited by accident. */
+    flex-shrink: 0;
+}

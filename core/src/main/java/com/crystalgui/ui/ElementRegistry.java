@@ -20,6 +20,8 @@ import com.crystalgui.ui.elements.TextField;
 import com.crystalgui.ui.elements.Tooltip;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.elements.desktop.Desktop;
+import com.crystalgui.ui.elements.slot.FluidSlot;
+import com.crystalgui.ui.elements.slot.ItemSlot;
 import com.crystalgui.ui.elements.desktop.Taskbar;
 import com.crystalgui.ui.elements.desktop.WindowFrame;
 
@@ -109,6 +111,18 @@ public final class ElementRegistry {
         register("desktop", Desktop.class, Desktop::new);
         register("window", WindowFrame.class, () -> new WindowFrame(""));
         register("taskbar", Taskbar.class, Taskbar::new);
+
+        // Native content. Registered HERE, in core, on every platform -- including a dedicated server
+        // with no GL and no item renderer -- because ElementRegistry is bijective: one class to one tag,
+        // enforced both ways. A loader therefore cannot supply its own subclass under `itemslot`, and
+        // trying to would throw at whichever registration ran second.
+        //
+        // That is the right shape anyway. Layout, cascade, hit-testing and UIDescriptionCodec are
+        // identical everywhere, so a server can describe an inventory it has no way to draw; what varies
+        // is only whether anything fills NativeContentService.SERVICE, which is a platform question and
+        // lives where this codebase already puts platform questions.
+        register("itemslot", ItemSlot.class, ItemSlot::new);
+        register("fluidslot", FluidSlot.class, FluidSlot::new);
     }
 
     /**

@@ -757,3 +757,29 @@ colorselector .__side__ dropdown:focus-visible {
     outline: 1px #C1C2C2;
     outline-offset: 0px;
 }
+
+/* ── Native content slots ────────────────────────────────────────────────────────────────────────
+ *
+ * A slot is a sunken well, which the atlas already has: `textfield` is the theme's inset 9-slice and
+ * is exactly the shape an inventory slot wants -- a recessed panel with the bevel running the right
+ * way. Reusing it rather than adding a `slot` sprite keeps the atlas honest: two names for one drawing
+ * drift apart the first time somebody retouches one of them.
+ *
+ * Only the BOX is themed. What sits in it belongs to Minecraft's own renderer, so there is nothing
+ * here about items or fluids -- and nothing here could reach them if there were. */
+itemslot,
+fluidslot {
+    background: asset("crystalgui:ore", "textfield");
+}
+
+/* Where the platform has said it renders no native content -- a harness, a test, any host that filled
+ * the service slot with UNSUPPORTED. The well is still drawn, so layout and theming stay honest and a
+ * scene full of slots looks like a scene full of slots; the disabled face is what says the contents
+ * are missing on purpose rather than by accident.
+ *
+ * This is deliberately visible. A platform that has NOT declared a position throws instead, so an
+ * unstyled-looking slot can only ever mean "declared unsupported" and never "somebody forgot". */
+itemslot.__unsupported__,
+fluidslot.__unsupported__ {
+    background: asset("crystalgui:ore", "button-disabled");
+}

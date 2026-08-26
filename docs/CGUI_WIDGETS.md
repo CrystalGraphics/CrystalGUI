@@ -745,6 +745,67 @@ instead. Stroke width is clamped against the canvas's zoom so a pose-scaled 2px 
 
 ---
 
+## 12d. Native content — `ItemSlot`, `FluidSlot`
+
+**The one place a host draws inside a CrystalGUI element.** Everything else in this engine paints
+through `CgUiPaintContext`; an item stack cannot, because on 1.7.10 it is fixed-function GL, on
+1.20.1+ it is Minecraft's own core shaders, and on any version a mod may have replaced the renderer
+for its own items. So the host draws it and we hand GL over.
+
+### The element is ordinary; only the middle is not
+
+```
+super.paintSelf   → the styled box: background, border, radius, from the stylesheet
+nativeContent(…)  → the host's renderer, inside the CONTENT box
+paintOverlay      → CSS `overlay`, plus whatever the subclass adds as internal children
+```
+
+Nothing about `drawSubtree` changes to make that work — the three layers are hooks that already
+existed. A slot is not a special kind of element; it is an element with an unusual middle.
+
+Geometry is `ua/widgets.css` (18×18, 1px padding → the classic 16×16 content box) and appearance is a
+theme's (`ore.css` reuses the atlas's inset `textfield` sprite). **Nothing about what the host draws
+is styleable**, which is why the UA rule carries no colour at all and no theme token was added.
+
+### `NativeProfile` — two contracts, not one escape
+
+| Profile | Contract | Consumer |
+|---|---|---|
+| `FLAT` | blended, depth **off** | fluids: tiled atlas quads |
+| `MODEL` | depth + lighting, isolated target | items: real 3D models. Later, entities |
+
+They are genuinely different renderers — LDLib2's own fluid path explicitly *disables* depth while its
+item path enables depth test and write — so one bracket would either overcharge the fluid or leave the
+item without the depth buffer it cannot be correct without.
+
+### `NativeContent` is a BINDING, never a value
+
+`ItemSlot` holds a handle and re-reads it every frame; it never stores a stack. For a container UI
+that means Minecraft's own synchronisation keeps it current and **no item data crosses CrystalGUI's
+wire**. What serialises is the `descriptor()` — a location (`slot:12`), not its contents — so a
+dedicated server can describe an inventory it has no way to draw.
+
+This is the shape LDLib2 arrived at (`private Slot slot`; `getValue()` is `slot.getItem()`), and it is
+read for shape only: LDLib2 is **LGPL-3.0** and nothing is ported from it.
+
+> **Interaction is not built.** A slot renders and describes; it does not yet move items. LDLib2
+> reaches that with a mixin, but only because it lets *vanilla* own the hit-test. `UIInputHandler`
+> already has three-phase dispatch, pointer capture and a drag protocol, so the follow-up takes its own
+> press and asks the platform to perform a slot action — no mixin, at the cost of owing vanilla's
+> slot-click *semantics*. The binding handle is the seam that keeps it a follow-up.
+
+### Three platform states, and the middle one is the point
+
+| State | How | Result |
+|---|---|---|
+| Available | `CgPlatform.provide(SERVICE, impl)` | native draw |
+| Declared unneeded | `CgPlatform.provide(SERVICE, UNSUPPORTED)` | `__unsupported__` face, no crash |
+| Nobody said anything | — | **throws at first paint** |
+
+At paint rather than construction, because a dedicated server legitimately builds a slot to describe
+and has no renderer to want. The harness and `TestPlatformService` both declare `UNSUPPORTED`
+explicitly — that is the feature working, not a workaround.
+
 ## 13. Harness scenes
 
 ```bash

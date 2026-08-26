@@ -7,6 +7,7 @@ import com.crystalgui.mc.net.CgUiNetProbe;
 import com.crystalgui.mc.net.CgUiRemoteWorkspaceProbe;
 import com.crystalgui.mc.net.CgUiWireProbe;
 import com.crystalgui.mc.net.CgUiSessionProbe;
+import com.crystalgui.mc.platform.service.content.Mc1710NativeContentService;
 
 /**
  * The client half: register the key binding and the input pump.
@@ -26,6 +27,11 @@ public class ClientProxy extends CommonProxy {
         CgUiLifecycle.register();
         CgUiInput.register();
         CgUiAutoTest.register();
+        // Item and fluid slots. CLIENT SIDE ONLY, and this is the reason it is here rather than in
+        // CommonProxy: the service names RenderItem in a field descriptor, so a dedicated server that
+        // merely constructed one would fail to link it -- which is exactly what serverSmoke asserts
+        // against. A server builds slots and describes them; it never draws one.
+        Mc1710NativeContentService.register();
         // Off unless -Dcrystalgui.net.probe=true. @see CgUiNetProbe
         CgUiNetProbe.register();
         // The layer above it: the same flag, a later start, its own multiplexers. @see CgUiSessionProbe

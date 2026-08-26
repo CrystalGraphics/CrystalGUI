@@ -332,13 +332,23 @@ shaping is pure CPU, so it works here; only atlas upload and drawing stay harnes
 **Still open, deliberately:**
 - **No show delay.** A delay is a timing value and timing values belong in the cascade — doing it
   properly means a real CSS property, which is its own task.
-- ~~**Platform-delegated tooltips not started.**~~ — **struck 2026-08-21.** The reasoning below
-  is still correct about *what* it is (an item's real MC tooltip — rarity, enchantments, lore, and other
-  mods' `ItemTooltipEvent` lines — which no widget of ours reproduces), and two of its premises have
-  since expired: `UIClipboard`/`UISoundSystem` no longer exist, and mc1710 **is** in the build now, so
-  P3.2 no longer gates it. It is struck for a different reason — **there is no consumer.** Item slots
-  are platform-unique and we have none: zero `ItemStack` references in `core/src/main` or `mc1710/src`.
-  Revive it when something renders an item. See [`plan_prephase4.md`](plan_prephase4.md).
+- **Platform-delegated tooltips — REVIVED and shipped.** Struck 2026-08-21 for want of a consumer
+  (*"revive it when something renders an item"*); `ItemSlot`/`FluidSlot` are that consumer, so it is
+  back and built. The seam is **`NativeContentService.drawTooltip`**, on the same `CgService` slot the
+  drawing goes through rather than a second one — an item's real tooltip and its real appearance are
+  the same platform's business.
+
+  What is deliberately **not** duplicated is the trigger. `tooltip-delay`, the region logic and
+  `Tooltip.dragIsLive` are the tooltip's rules and stay one definition — `dragIsLive` became public for
+  exactly this. Only the *rendering* differs, which is the whole of what "platform-delegated" needed to
+  mean. The ordering constraint is the part that was not obvious: a native tooltip is an immediate GL
+  draw with no element to promote, so `UIWindow` holds one pending request and drains it **after the top
+  layer, before `endFrame`**, or it is painted over by everything drawn later.
+
+  > *Original text, kept because its premises are a useful record:* an item's real MC tooltip — rarity,
+  > enchantments, lore, and other mods' `ItemTooltipEvent` lines — is not reproducible by any widget of
+  > ours. Two of its stated blockers had already expired: `UIClipboard`/`UISoundSystem` no longer exist,
+  > and mc1710 is in the build, so P3.2 stopped gating it. See [`plan_prephase4.md`](plan_prephase4.md).
 
   > *Original text:* Item slots are platform-unique, so an item's real MC tooltip must be drawn by the
   > loader — a new SPI alongside `UIClipboard`/`UISoundSystem`. Deferred rather than designed blind:

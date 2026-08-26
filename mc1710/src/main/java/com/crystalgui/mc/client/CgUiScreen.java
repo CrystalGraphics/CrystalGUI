@@ -23,6 +23,7 @@ import javax.annotation.Nullable;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
+import net.minecraft.item.ItemStack;
 
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
@@ -661,6 +662,30 @@ public final class CgUiScreen extends GuiScreen {
     @Override
     public boolean doesGuiPauseGame() {
         return false;
+    }
+
+    /**
+     * Draws a stack's real Minecraft tooltip, at coordinates in <b>Minecraft's own GUI-scaled space</b>.
+     *
+     * <p>Exists because {@code GuiScreen.renderToolTip} is {@code protected}: a subclass may call it, and
+     * nothing else may. Reproducing it instead would mean copying Minecraft's own decompiled code into
+     * this repository, and what it produces is not reproducible anyway — rarity colouring, enchantment
+     * lines, lore, and every line another mod contributes through its tooltip event.</p>
+     *
+     * <p>Answers whether it drew, so the caller can tell "no screen of ours is up" from "drawn": those
+     * are different situations and a void return makes them the same one.</p>
+     *
+     * <p>Sets up no GL of its own — the caller owns that bracket, because the caller is the one that
+     * knows it is mid-frame inside a foreign-GL scope.</p>
+     */
+    public static boolean drawNativeItemTooltip(ItemStack stack, int scaledX, int scaledY) {
+        if (stack == null) return false;
+        GuiScreen current = Minecraft.getMinecraft().currentScreen;
+        if (!(current instanceof CgUiScreen)) return false;
+        // Legal despite `renderToolTip` being protected and this being a different package: the
+        // qualifying type is this class itself, which is what the protected-access rule turns on.
+        ((CgUiScreen) current).renderToolTip(stack, scaledX, scaledY);
+        return true;
     }
 
     /** Frees the editor at game shutdown. Not called on close — see the {@code editor} field. */
