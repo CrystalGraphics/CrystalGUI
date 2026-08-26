@@ -206,6 +206,19 @@ final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
                     return answer;
                 }
             }
+            // A NESTED TYPE IS SPELLED WITH A DOLLAR, and ECJ cannot know which dot is the package
+            // boundary -- it hands over every segment alike and expects the environment to know. So a
+            // miss on `a/b/Outer/Inner` is asked again as `a/b/Outer$Inner`, right-hand dot first, which
+            // is the common shape. @see #nestedSpellings
+            for (String nested : nestedSpellings(internalName)) {
+                byte[] inner = types.forCompiling(nested);
+                if (inner == null) continue;
+                NameEnvironmentAnswer answer = answerFor(nested, inner);
+                if (answer != null) {
+                    remember(internalName, answer);
+                    return answer;
+                }
+            }
             misses.put(internalName, Boolean.TRUE);
         }
 
@@ -459,6 +472,26 @@ final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
         boolean isPackage = types.readable(name) == null;
         packages.put(name, isPackage);
         return isPackage;
+    }
+
+    /**
+     * The same qualified name spelled as a NESTED type, innermost boundary first.
+     *
+     * <p>A class file names a member type {@code a/b/Outer$Inner} while ECJ asks for
+     * {@code a.b.Outer.Inner}; every dot after the package is a candidate boundary, so the spellings are
+     * produced from the right inwards — one level of nesting under a real package is much the commonest
+     * shape, and it is tried first. The list is one entry per dot and is only reached after the plain
+     * spelling has already missed.</p>
+     */
+    private static java.util.List<String> nestedSpellings(String internalName) {
+        if (internalName == null || internalName.indexOf('/') < 0) return java.util.List.of();
+        java.util.List<String> spellings = new java.util.ArrayList<>(2);
+        StringBuilder name = new StringBuilder(internalName);
+        for (int at = name.lastIndexOf("/"); at > 0; at = name.lastIndexOf("/", at - 1)) {
+            name.setCharAt(at, '$');
+            spellings.add(name.toString());
+        }
+        return spellings;
     }
 
     @Override
