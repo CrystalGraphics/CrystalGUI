@@ -336,6 +336,82 @@ public class JsCompletionTest {
         assertTrue(offered.contains("Packages"));
     }
 
+    /**
+     * <b>A package offers every type in it here too</b>, not the first forty alphabetically.
+     *
+     * <p>Both engines read one index and asked it different questions. Java asks {@code childrenOf};
+     * JavaScript asked {@code allUnder} — everything RECURSIVELY under the prefix, capped — and then
+     * sliced the answer by hand into types and sub-package segments. So {@code java.util.} stopped
+     * inside the {@code F}s: no {@code List}, no {@code Map}, and the sub-package list was whatever
+     * those forty entries happened to mention. That is the alphabet truncation {@code childrenOf} was
+     * written to end, still running on the side that never switched over.</p>
+     *
+     * <p>{@code AbstractCollection} is the counter-assertion: it is first alphabetically, so a list
+     * capped at one still holds it and a test naming only it passes against every truncation.</p>
+     */
+    @Test
+    public void aJavaPackageOffersEveryTypeInIt() {
+        List<String> offered = names(completeAt("var x = java.util.|\n"));
+        assertTrue("java.util. offered nothing -- the query itself is broken",
+                offered.contains("AbstractCollection"));
+        for (String late : List.of("List", "Map", "Set")) {
+            assertTrue(late + " was not offered under java.util (" + offered.size() + " rows)",
+                    offered.contains(late));
+        }
+        assertTrue("the sub-packages must survive too", offered.contains("concurrent"));
+    }
+
+    /**
+     * <b>An import offers package ROOTS before the first dot</b>, not the JavaScript scope.
+     *
+     * <p>Nothing declared in the file and none of Rhino's globals can follow {@code import }, and with no
+     * context of its own the popup fell through to open code: {@code import j} offered a local named
+     * {@code jj} beside {@code JSON}, {@code Java} and {@code Object}. It came right only after the first
+     * dot, because the package query hung off a dot and a bare {@code j} has none.</p>
+     *
+     * <p>The negative half is the point -- a list that merely CONTAINS {@code java} was already true of
+     * the broken build, since the roots were in there mixed with everything else.</p>
+     */
+    @Test
+    public void anImportOffersPackageRootsAndNothingElse() {
+        List<String> offered = names(completeAt("var jj = 1;\nimport j|\n"));
+        assertTrue("no package root offered under `import j`, got " + offered, offered.contains("java"));
+        assertFalse("a local variable is not importable: " + offered, offered.contains("jj"));
+        assertFalse("a Rhino global is not importable: " + offered, offered.contains("JSON"));
+        assertFalse("a Rhino global is not importable: " + offered, offered.contains("Java"));
+    }
+
+    /** ...and the segments after a dot are filtered by what has been typed, not offered whole. */
+    @Test
+    public void anImportNarrowsOnEachSegment() {
+        List<String> offered = names(completeAt("import java.util.Li|\n"));
+        assertTrue("List was not offered for `java.util.Li`, got " + offered, offered.contains("List"));
+        assertFalse("an unrelated type survived the segment filter: " + offered,
+                offered.contains("ArrayDeque"));
+    }
+
+    /**
+     * A FINISHED import is open code again, which is the counter-assertion.
+     *
+     * <p>A context test written as "does this line start with import" swallows the rest of that line
+     * forever: the caret past the semicolon goes on being treated as a qualified name, the package query
+     * matches nothing, and an EMPTY list is returned -- which is not a fallthrough, so open code never
+     * gets asked and the popup is simply blank there.</p>
+     *
+     * <p>The caret is put immediately after the {@code ;}, with no space, deliberately. A fixture with a
+     * space in it is caught by the "one qualified name has no whitespace in it" test instead, so it
+     * passes with the semicolon check deleted -- which is exactly what the first version of this test
+     * did.</p>
+     */
+    @Test
+    public void aFinishedImportIsNotAnImportContext() {
+        List<String> offered = names(completeAt("import java.util.List;|\n"));
+        assertFalse("a caret past the semicolon is open code, and was offered nothing at all",
+                offered.isEmpty());
+        assertTrue("open code past a finished import lost its keywords: " + offered,
+                offered.contains("var") || offered.contains("const") || offered.contains("function"));
+    }
+
     // ── Java.type("…") ──────────────────────────────────────────────────────────────────────────
 
     /**
