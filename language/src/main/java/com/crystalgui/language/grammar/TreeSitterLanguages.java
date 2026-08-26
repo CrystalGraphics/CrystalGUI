@@ -4,6 +4,7 @@ package com.crystalgui.language.grammar;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.text.syntax.Language;
 import com.crystalgui.text.syntax.LanguageRegistry;
+import com.crystalgui.ui.text.SyntaxHighlighting;
 
 /**
  * Puts this module's real parsers in front of {@code core}'s built-in lexers.
@@ -78,9 +79,30 @@ public final class TreeSitterLanguages {
             LanguageRegistry.Entry current = LanguageRegistry.forFileName(probeName);
             LanguageRegistry.registerExtensions(
                     new LanguageRegistry.Entry(grammar.language(),
-                            () -> grammar.newTokenizer(scheduler), current.services()),
+                            () -> grammar.newTokenizer(scheduler), current.services(),
+                            // AND A SYNCHRONOUS ONE, for text that is not a document. A NULL scheduler is
+                            // the whole difference: it makes the first tokenize parse here and now rather
+                            // than deferring to a worker and answering nothing.
+                            // @see LanguageRegistry.Entry#newStaticTokenizer
+                            () -> grammar.newTokenizer(null)),
                     grammar.extensions().toArray(new String[0]));
         }
+        // AND THE STATIC TOKENIZERS BUILT NOW, off the frame thread, for the languages a doc comment
+        // actually shows samples in. The compile is paid once per language per process either way; this
+        // only decides who pays it, and without it that is the first hover over a class whose javadoc has
+        // a <pre> block in it. @see SyntaxHighlighting#warm
+        Thread warm = new Thread(() -> {
+            try {
+                SyntaxHighlighting.warm(Language.JAVA);
+                SyntaxHighlighting.warm(Language.GLSL);
+            } catch (Throwable ignored) {
+                // An optimisation that fails is silent -- the first sample simply pays for itself, which
+                // is what happened before this existed.
+            }
+        }, "crystalgui-static-highlight-warm");
+        warm.setDaemon(true);
+        warm.setPriority(Thread.MIN_PRIORITY);
+        warm.start();
         return true;
     }
 }

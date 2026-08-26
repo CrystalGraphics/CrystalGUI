@@ -82,11 +82,18 @@ public final class LanguageRegistry {
      * feature flag.</p>
      */
     public record Entry(Language language, Supplier<SyntaxTokenizer> tokenizer,
-                        @Nullable LanguageServices.Factory services) {
+                        @Nullable LanguageServices.Factory services,
+                        @Nullable Supplier<SyntaxTokenizer> staticTokenizer) {
 
         /** A language with colouring but no engine — every entry until M5 lands one. */
         public Entry(Language language, Supplier<SyntaxTokenizer> tokenizer) {
-            this(language, tokenizer, null);
+            this(language, tokenizer, null, null);
+        }
+
+        /** The pair every registration used before a static tokenizer could be named. */
+        public Entry(Language language, Supplier<SyntaxTokenizer> tokenizer,
+                     @Nullable LanguageServices.Factory services) {
+            this(language, tokenizer, services, null);
         }
 
         /**
@@ -102,6 +109,34 @@ public final class LanguageRegistry {
             return tokenizer.get();
         }
 
+        /**
+         * A tokenizer for text that is <b>not a document</b> — a code sample in a doc comment, a snippet
+         * in a tooltip — which must answer on the calling thread.
+         *
+         * <h3>Why the ordinary one cannot serve</h3>
+         *
+         * <p>{@link #newTokenizer} hands back what a DOCUMENT wants, and for a tree-sitter backend that
+         * means a scheduler: the first parse of a real file is far past a frame budget, so it goes to a
+         * worker and the query answers nothing until it lands. That is right for a file, whose view is
+         * told to ask again — and wrong for a caller with one string and no second chance, which gets an
+         * empty list and colours nothing.</p>
+         *
+         * <p>It was exactly that: {@code static.tokenize 527 chars -> 0 tokens}. Every {@code <pre>} block
+         * in every doc comment was drawn as plain text, and cost ~19ms per block to arrive at it, because
+         * building the tokenizer compiles the grammar's whole {@code highlights.scm} natively.</p>
+         *
+         * <p>Defaults to {@link #newTokenizer} for a registration that names no static one — which is
+         * correct for a synchronous backend, where the two are the same thing.</p>
+         */
+        public SyntaxTokenizer newStaticTokenizer() {
+            return staticTokenizer == null ? tokenizer.get() : staticTokenizer.get();
+        }
+
+        /** The same entry with a synchronous tokenizer named. @see #newStaticTokenizer */
+        public Entry withStaticTokenizer(@Nullable Supplier<SyntaxTokenizer> factory) {
+            return new Entry(language, tokenizer, services, factory);
+        }
+
         /** Services for one document, or null when this language has no engine. */
         @Nullable
         public LanguageServices newServices(TextBuffer buffer, @Nullable Resource resource) {
@@ -110,7 +145,7 @@ public final class LanguageRegistry {
 
         /** The same entry with an engine behind it — how a language module upgrades a registration. */
         public Entry withServices(@Nullable LanguageServices.Factory factory) {
-            return new Entry(language, tokenizer, factory);
+            return new Entry(language, tokenizer, factory, staticTokenizer);
         }
     }
 

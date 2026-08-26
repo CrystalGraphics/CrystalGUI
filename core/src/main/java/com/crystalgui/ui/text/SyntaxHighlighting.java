@@ -1,11 +1,14 @@
 package com.crystalgui.ui.text;
 
 import com.crystalgui.core.async.FrameProfile;
+import com.crystalgui.text.Change;
+import com.crystalgui.text.ChangeSet;
 import com.crystalgui.text.Rope;
 import com.crystalgui.text.syntax.DocComments;
 import com.crystalgui.text.syntax.Language;
 import com.crystalgui.text.syntax.LanguageRegistry;
 import com.crystalgui.text.syntax.SyntaxToken;
+import com.crystalgui.text.syntax.KeywordTokenizer;
 import com.crystalgui.text.syntax.SyntaxTokenizer;
 import com.crystalgui.ui.elements.UIText;
 
@@ -72,20 +75,108 @@ public final class SyntaxHighlighting {
      */
     public static List<SyntaxToken> tokenize(String source, @Nullable Language language) {
         if (source == null || source.isEmpty() || language == null) return List.of();
-        // REFINED, exactly as the editor's is: a `<pre>` sample containing a doc comment should read
-        // the same in a popup as it does in the file it came from, and the alternative is a second
-        // vocabulary that drifts.
-        SyntaxTokenizer tokenizer =
-                DocComments.refining(LanguageRegistry.forLanguage(language).newTokenizer());
-        try {
-            long timed = FrameProfile.begin();
-            List<SyntaxToken> got = tokenizer.tokenize(Rope.of(source), 0, source.length());
-            FrameProfile.step(timed, "static.tokenize " + source.length() + " chars -> "
-                    + got.size() + " tokens");
-            return got;
-        } finally {
-            tokenizer.close();
+        long timed = FrameProfile.begin();
+        List<SyntaxToken> got = fromGrammar(source, language);
+        String tier = "grammar";
+        // TIER TWO. An empty answer here is not "this text has nothing in it" -- a grammar always finds
+        // SOMETHING in a code sample -- it is a backend that could not answer on this thread. Falling back
+        // costs a lexer pass and is the difference between a coloured sample and a plain one.
+        if (got.isEmpty()) {
+            got = fromKeywords(source, language);
+            tier = "keywords";
         }
+        FrameProfile.step(timed, "static.tokenize " + source.length() + " chars -> "
+                + got.size() + " tokens (" + tier + ")");
+        return got;
+    }
+
+    /**
+     * The grammar's answer, from a tokenizer <b>kept per language</b>.
+     *
+     * <h3>Built once per language per process, not once per sample</h3>
+     *
+     * <p>This constructed a tokenizer per call and closed it again. For a tree-sitter backend that is a
+     * parser plus a native compile of the grammar's whole {@code highlights.scm} — measured at
+     * {@code grammar.compileQuery java 17,210us}, which is the whole of the 18,966us one {@code <pre>}
+     * block cost. A doc comment with three samples paid it three times.</p>
+     *
+     * <p>Kept and never closed, so the compile is paid once. The tokenizer is stateful — it holds the tree
+     * for the last text it saw — so each sample is announced as a whole-document replacement before it is
+     * asked about, which is what makes the answer this sample's rather than the previous one's.</p>
+     *
+     * <p>Synchronised because it is one object with one tree, and nothing about a static highlight
+     * promises a thread. Uncontended in practice: samples are coloured while a popup is being built.</p>
+     */
+    private static List<SyntaxToken> fromGrammar(String source, Language language) {
+        Rope rope = Rope.of(source);
+        synchronized (STATIC_TOKENIZERS) {
+            StaticTokenizer held = STATIC_TOKENIZERS.computeIfAbsent(language,
+                    key -> new StaticTokenizer(
+                            // REFINED, exactly as the editor's is: a `<pre>` sample containing a doc
+                            // comment should read the same in a popup as it does in the file it came
+                            // from, and the alternative is a second vocabulary that drifts.
+                            DocComments.refining(LanguageRegistry.forLanguage(key).newStaticTokenizer())));
+            return held.tokenize(rope, source);
+        }
+    }
+
+    /**
+     * The lexer's answer — <b>tier three</b>, and an honest one.
+     *
+     * <p>{@link KeywordTokenizer} knows a keyword from a string from a number and nothing else, which for
+     * an illustration in a comment is most of what colour is carrying. It is what the engine already falls
+     * back to for a whole DOCUMENT when no grammar module is present, so this is the same rule one scope
+     * down rather than a new policy.</p>
+     */
+    private static List<SyntaxToken> fromKeywords(String source, Language language) {
+        SyntaxTokenizer lexer = KEYWORD_TOKENIZERS.get(language);
+        return lexer == null ? List.of() : lexer.tokenize(Rope.of(source), 0, source.length());
+    }
+
+    /** One per language, built on first use and kept. @see #fromGrammar */
+    private static final Map<Language, StaticTokenizer> STATIC_TOKENIZERS = new java.util.HashMap<>();
+
+    /** The lexers tier three uses. Stateless, so one each is enough and no reset is needed. */
+    private static final Map<Language, SyntaxTokenizer> KEYWORD_TOKENIZERS = Map.of(
+            Language.JAVA, KeywordTokenizer.java(),
+            Language.GLSL, KeywordTokenizer.glsl());
+
+    /**
+     * A kept tokenizer and the text it last answered about.
+     *
+     * <p>The pairing is the point: a stateful tokenizer reused across samples would answer the previous
+     * one's tokens, because it re-parses only when told the text changed.</p>
+     */
+    private static final class StaticTokenizer {
+
+        private final SyntaxTokenizer tokenizer;
+        private String last = "";
+
+        StaticTokenizer(SyntaxTokenizer tokenizer) {
+            this.tokenizer = tokenizer;
+        }
+
+        List<SyntaxToken> tokenize(Rope rope, String source) {
+            if (!source.equals(last)) {
+                // A WHOLE-DOCUMENT REPLACEMENT, which is what this is: nothing of the previous sample
+                // survives into this one. An incremental backend drops its tree on that and parses afresh.
+                tokenizer.edited(rope, ChangeSet.of(last.length(),
+                        new Change(0, last.length(), source)));
+                last = source;
+            }
+            return tokenizer.tokenize(rope, 0, source.length());
+        }
+    }
+
+    /**
+     * Builds the grammar tokenizer for {@code language} now, off whatever thread calls this.
+     *
+     * <p>The compile is paid once per language per process either way; this only decides <b>who</b> pays
+     * it. Without it that is the first doc comment with a code sample in it, on the frame thread.</p>
+     */
+    public static void warm(@Nullable Language language) {
+        if (language == null) return;
+        fromGrammar("class W {}", language);
     }
 
     /**
