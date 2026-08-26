@@ -1020,12 +1020,21 @@ menu.__jump-list__.__rising__ {
     z-index: 100;
 }
 
-/* THE SAME TONE AS THE BAR. The floating surfaces are one material with the bar (see the block above),
- * and the accent wash is part of that material's look -- the same stops, centred under the content,
- * from a pin of its own: --preview-glow is pinned to --taskbar-glow's value in both themes, as a
- * separate token because a component token never chains off another component's. The child carries
- * the panel's radius so the gradient masks itself to the corners (CgUiGradient is CornerRadiusAware);
- * without it the wash squares them off. */
+/* THE SAME TONE AS THE BAR, RUN DOWN THE PANEL RATHER THAN ACROSS IT.
+ *
+ * The bar's wash is horizontal because a bar's centre of gravity is the cluster of entries in the middle
+ * of a very wide strip. A panel is neither wide nor centred on anything: it is a header with a picture
+ * under it, and the horizontal version put a blue hotspot in the middle of both — measured at +26 of blue
+ * over the panel's own edges, a ramp seven times steeper than the bar's because a gradient's softness is
+ * its alpha change PER PIXEL and this one spends the bar's 0.2 over ~90px instead of ~640.
+ *
+ * Down the panel it is a HEADER TINT, which is what IntelliJ's New UI gradient — the thing this was
+ * translated from — actually is: strongest along the top edge behind the icon and the title, gone by the
+ * time it reaches the thumbnail, so the picture is never washed. Same accent, same alpha as the bar; only
+ * the axis differs, and the axis is what was wrong.
+ *
+ * The child carries the panel's radius so the gradient masks itself to the corners (CgUiGradient is
+ * CornerRadiusAware); without it the wash squares them off. */
 .__window-preview__ > .__glow__ {
     position: absolute;
     left: 0;
@@ -1033,7 +1042,7 @@ menu.__jump-list__.__rising__ {
     width: 100%;
     height: 100%;
     border-radius: var(--radius-panel, 8px);
-    background: linear-gradient(90deg, transparent 18%, var(--preview-glow, #3574F033) 50%, transparent 82%);
+    background: linear-gradient(180deg, var(--preview-glow, #3574F033), transparent);
 }
 
 /* The header is a ROW that fills the panel's width, and the title is the part that gives. `width: 0`
@@ -1232,7 +1241,7 @@ menu.__jump-list__.__rising__ {
     width: 100%;
     height: 100%;
     border-radius: var(--radius-panel, 8px);
-    background: linear-gradient(90deg, transparent 18%, var(--switcher-glow, #3574F033) 50%, transparent 82%);
+    background: linear-gradient(180deg, var(--switcher-glow, #3574F033), transparent);
 }
 
 /* One window. A COLUMN -- icon and title above, picture below, which is Windows' arrangement and not the

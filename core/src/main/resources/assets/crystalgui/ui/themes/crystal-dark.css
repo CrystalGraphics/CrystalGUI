@@ -129,8 +129,9 @@ theme {
      * A pin because it is the accent WITH an alpha, which no system role carries and var() cannot add. */
     --taskbar-glow: #3574F033;
     /* THE SAME TONE on the hover preview and the switcher: they are the bar's material, and the wash is
-     * part of it. Separate pins with one value, because a component token never chains off another
-     * component's -- the Taskbar Designer's Tone picker writes all three. */
+     * part of it. The same ALPHA too -- what differs is the AXIS, which is the sheet's to say: a panel
+     * runs it down from the top edge as a header tint rather than across the middle. @see ua/desktop.css.
+     * Separate pins because a component token never chains off another component's. */
     --preview-glow: #3574F033;
     --switcher-glow: #3574F033;
     /* THE ACTIVE ENTRY: Windows' #5D5D5D in this theme's cool cast -- a step of sixty above the bar,
