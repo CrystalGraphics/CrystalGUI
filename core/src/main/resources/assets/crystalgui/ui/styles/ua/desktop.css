@@ -205,6 +205,18 @@ taskbar .__entry__ {
     transition: background-color 120ms ease-out, color 120ms ease-out;
 }
 
+/* AN ENTRY MID-RAMP, arriving or leaving. TaskbarEntryMotion narrows it below its own label's width, so
+ * without this the label spills over its neighbour for most of the motion. CLIP, never HIDDEN: hidden
+ * would make a taskbar button a scroll container.
+ *
+ * IN THE SHEET rather than written from Java, and that is load-bearing rather than tidy: nothing else here
+ * sets `overflow` on an entry, so an inline write would be the property's ONLY candidate — and withdrawing
+ * it when the ramp finished left the property with no value at any origin, which resolves to null and is
+ * handed straight to the overflow listener's switch. @see Taskbar#ANIMATING_CLASS */
+taskbar .__entry__.__animating__ {
+    overflow: clip;
+}
+
 taskbar .__entry__:hover {
     color: var(--taskbar-entry-hover-fg, #DFE1E5);
     background: none;
@@ -368,14 +380,30 @@ taskbar .__entry__.__busy__ .__progress__ {
     color: var(--window-icon-glyph, #FFFFFF);
 }
 
-/* NO ICON: the title's initial on a neutral tile, which is what every modern shell does for a missing
- * icon (Android, Teams, GNOME's app grid). A blank slot reads as a window somebody forgot to finish;
- * a letter reads as a window. */
-.__window-icon__ .__monogram__ {
-    color: var(--window-icon-mono-fg, #DFE1E5);
+/* BRANDED ARTWORK IS ITS OWN TILE. A file that names every colour it uses — no currentColor anywhere in
+ * it, which is how WindowIcon tells a brand mark from a Feather chrome mark — already ships as the
+ * filled rounded square the tile exists to supply. So it wears this class INSTEAD of a palette class
+ * (nothing paints behind it) and draws into the slot's whole box: the context's padding is the inset a
+ * knocked-out glyph needs from the tile's edge, and artwork carries its own. `crystalgui:logo` is the
+ * first of these; a pack that drops in its own gets the same treatment from the file alone. */
+.__window-icon__.__branded__ {
+    overlay-origin: border-box;
 }
 
-.__window-icon__.__tile-mono__ { background-color: var(--window-icon-mono-bg, #5A5D63); }
+/* NO ICON: the title's initial on a tile, which is what every modern shell does for a missing icon
+ * (Android, Teams, GNOME's app grid). A blank slot reads as a window somebody forgot to finish; a
+ * letter reads as a window.
+ *
+ * A COLOURED tile, not a neutral one. It was --border-strong, and the whole of this chrome is greys:
+ * that put the tile within three levels of --taskbar-entry-active-bg, so a window with no icon was
+ * legible everywhere except on the entry that was active. A neutral that clears the bar, the hover
+ * fill, the active fill, the preview's acrylic and the switcher's is a needle no grey threads — the
+ * seventh hue does, and the letter goes on-accent with it. */
+.__window-icon__ .__monogram__ {
+    color: var(--window-icon-mono-fg, #FFFFFF);
+}
+
+.__window-icon__.__tile-mono__ { background-color: var(--window-icon-mono-bg, #DE2A4D); }
 .__window-icon__.__tile-1__ { background-color: var(--window-icon-tile-1, #4A7CE0); }
 .__window-icon__.__tile-2__ { background-color: var(--window-icon-tile-2, #3FA36B); }
 .__window-icon__.__tile-3__ { background-color: var(--window-icon-tile-3, #D98A3A); }
@@ -507,11 +535,21 @@ window > .__title-bar__ > .__caption-chrome__ {
  *
  * Named `__title__` rather than `__label__` precisely so this rule cannot reach the close button's
  * own label — see WindowFrame.TITLE_CLASS. */
-/* The window's own icon, beside its title. Hidden until setIcon gives it something to draw — the
- * title bar has no `gap-all`, so a hidden slot occupies nothing at all. */
+/* The window's own icon, beside its title — a WindowIcon, the same drawing the taskbar entry, the hover
+ * preview and the switcher tile show, so one window cannot have two appearances. Hidden until setIcon
+ * gives it something to draw; the title bar has no `gap-all`, so a hidden slot occupies nothing at all.
+ *
+ * THE SIZE IS THIS CONTEXT'S and only the size: what a tile IS lives on `.__window-icon__` above. The
+ * padding is the inset the glyph sits at from the tile's edge (it is what the overlay's `content-box`
+ * origin measures against), and 2 and 3 against a 12px slot are the strip's 3 and 5 against its 18,
+ * scaled — so the caption reads as the same object at caption size. The FOOTPRINT is unchanged at 12px,
+ * which is why the glyph inside it is now 8: a tile needs its inset, and growing the slot instead would
+ * move every title in the application. */
 window > .__title-bar__ > .__icon__ {
     width: 12px;
     height: 12px;
+    padding-all: 2px;
+    border-radius: 3px;
     flex-shrink: 0;
     margin-right: 4px;
 }
