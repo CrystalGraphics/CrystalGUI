@@ -125,7 +125,7 @@ public final class CgUiSlotScreen extends GuiScreen implements NativeTooltipHost
         UIElement items = row();
         items.addChild(itemSlot(stack("minecraft:stone", 1, 0)));
         items.addChild(itemSlot(stack("minecraft:stick", 1, 0)));
-        items.addChild(itemSlot(enchant(stack("minecraft:stick", 1, 0))));
+        items.addChild(itemSlot(stack("minecraft:stick", 1, 0)));
         items.addChild(itemSlot(damagedSword()));
         items.addChild(itemSlot(stack("minecraft:cobblestone", 64, 0)));
         items.addChild(new ItemSlot());
@@ -196,8 +196,13 @@ public final class CgUiSlotScreen extends GuiScreen implements NativeTooltipHost
     }
 
     private static ItemSlot itemSlot(ItemStack stack) {
+        return itemSlot(stack, false);
+    }
+
+    private static ItemSlot itemSlot(ItemStack stack, boolean enchant) {
         ItemSlot slot = new ItemSlot();
         if (stack != null) slot.bind(new Mc1710Content.DisplayItem(stack));
+        if (enchant) enchant(stack);
         return slot;
     }
 

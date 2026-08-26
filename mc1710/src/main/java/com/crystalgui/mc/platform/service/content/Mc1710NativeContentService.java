@@ -288,10 +288,23 @@ public final class Mc1710NativeContentService implements NativeContentService {
      * foreign-GL bracket means restoring state the shadow cannot see.</p>
      */
     private static void addTile(Tessellator tessellator, IIcon icon, float x, float y, float w, float h) {
+        // THE TWO AXES SHRINK FROM OPPOSITE ENDS, because the tile grid is anchored at opposite ends.
+        //
+        // Horizontally the tiles run left to right, so the cut one is the RIGHTMOST and its LEFT edge is
+        // the one that lands on the grid: keep uMin, shrink uMax. That was always right.
+        //
+        // Vertically they stack bottom-up -- a tank fills from the bottom -- so the cut one is the
+        // TOPMOST and its BOTTOM edge is the one on the grid. It therefore shows the texture's BOTTOM
+        // slice, which means anchoring vMax and raising vMin.
+        //
+        // Doing it the other way (keeping vMin, as this did) gives the partial tile the texture's TOP
+        // slice, so the pattern restarts at the waterline instead of continuing into it. Full tiles are
+        // unaffected, which is why it survived: it is only visible once a tank is deep enough to need a
+        // second row AND is filled to something that is not a multiple of a tile.
         double uMin = icon.getMinU();
-        double vMin = icon.getMinV();
         double uMax = uMin + (icon.getMaxU() - uMin) * (w / TILE);
-        double vMax = vMin + (icon.getMaxV() - vMin) * (h / TILE);
+        double vMax = icon.getMaxV();
+        double vMin = vMax - (vMax - icon.getMinV()) * (h / TILE);
         tessellator.addVertexWithUV(x, y + h, 0d, uMin, vMax);
         tessellator.addVertexWithUV(x + w, y + h, 0d, uMax, vMax);
         tessellator.addVertexWithUV(x + w, y, 0d, uMax, vMin);
