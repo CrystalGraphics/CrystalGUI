@@ -96,6 +96,21 @@ public class RemapRoundTripTest {
                 .materialiseTemporary(List.of(RuntimeWorld.class.getName().replace('.', '/')));
     }
 
+    /**
+     * The same class as {@link #readableViewOf}, in the view a COMPILER gets — readable names plus every
+     * member under the name the runtime knows it by. @see ReadableView#compilableBytesOf
+     */
+    private static Path compileViewOf(MappingSet mappings) throws IOException {
+        ReadableView view = new ReadableView(mappings,
+                ReadableView.ByteSource.ofClassLoader(RemapRoundTripTest.class.getClassLoader()));
+        String internal = RuntimeWorld.class.getName().replace('.', '/');
+        Path into = Files.createTempDirectory("cgui-compile-view");
+        Path target = into.resolve(mappings.readableClass(internal) + ".class");
+        Files.createDirectories(target.getParent());
+        Files.write(target, view.compilableBytesOf(internal));
+        return into;
+    }
+
     private static void deleteTree(Path root) {
         if (root == null) return;
         try (var walk = Files.walk(root)) {
@@ -153,10 +168,21 @@ public class RemapRoundTripTest {
         }
     }
 
+    /**
+     * <b>The plain view is ONE namespace</b>, and it is the one everything that READS a class gets.
+     *
+     * <p>This used to be half of a flat rule — a script naming {@code m_1234} must not compile, or authors
+     * write runtime names by accident and those break on the next environment. That reasoning is still
+     * true and is now a caveat rather than a prohibition: {@code compilableBytesOf} does accept both
+     * spellings, so a legacy script written against SRG names builds, and it builds <b>only where the
+     * runtime speaks them</b>. On a development client the mapping is the identity, nothing is renamed,
+     * there is no second name to offer, and the same script does not compile at all.</p>
+     *
+     * <p>What this pins is the view that did not change: {@link ReadableView#readableBytesOf}, which the
+     * decompiler reads. Aliases there would show every mapped member of every library class twice.</p>
+     */
     @Test
     public void theCompilerDoesNotSeeTheRuntimeNames() throws Exception {
-        // The other half of "one authoring namespace". A script naming `m_1234` must NOT compile, or
-        // authors would write runtime names by accident and those break on the next environment.
         MappingSet mappings = mappings();
         Path view = readableViewOf(mappings);
         JavaEngine engine = openEngine();
@@ -291,6 +317,59 @@ public class RemapRoundTripTest {
                     .invoke(null, new RuntimeWorld());
 
             // Linked against m_1234 and f_5678, which is the only reason this returns anything at all.
+            assertEquals("runtime-value/42", answer);
+        } finally {
+            engine.close();
+            deleteTree(view);
+        }
+    }
+
+    /**
+     * <b>A script written in RUNTIME names compiles, links and runs.</b>
+     *
+     * <h3>Why this needs the whole round trip and not a compile</h3>
+     *
+     * <p>Accepting the name is the easy half. The hard half is that the output is remapped readable →
+     * runtime on the way out, and {@code classpathWith}'s own comment gave that as the reason not to offer
+     * both spellings at all: <i>"a script could name either and only one of them would survive the
+     * remap"</i>. So the question is not whether {@code m_1234} resolves, it is whether a call to it is
+     * still a call to it after the rewrite — and the only way to know is to load the result and invoke
+     * it.</p>
+     *
+     * <p>It survives because the reverse lookup is owner-keyed and asks about READABLE names:
+     * {@code m_1234} is not one, so nothing claims it and it passes through untouched. The same script in
+     * readable names is covered by {@link #aScriptWrittenInReadableNamesCompilesLinksAndRuns}, and both
+     * must keep working — a fix that swapped one namespace for the other rather than adding to it would
+     * pass one of these two and fail the other.</p>
+     */
+    @Test
+    public void aScriptWrittenInRuntimeNamesCompilesLinksAndRuns() throws Exception {
+        MappingSet mappings = mappings();
+        Path view = compileViewOf(mappings);
+        JavaEngine engine = openEngine();
+        try {
+            String script = ""
+                    + "public class Script {\n"
+                    + "    public static String run(" + RuntimeWorld.class.getCanonicalName() + " world) {\n"
+                    + "        return world.m_1234() + \"/\" + world.f_5678;\n"
+                    + "    }\n"
+                    + "}\n";
+
+            ScriptCompiler.Result compiled = engine.compiler().compile(
+                    "Script", script, classpathWith(view), engine.releaseLevel());
+            assertTrue("a runtime-spelled script did not compile: " + compiled.messages(),
+                    compiled.successful());
+
+            Map<String, byte[]> runtimeReady = new InheritanceAwareRemapper(mappings,
+                    InheritanceAwareRemapper.fromClassLoader(getClass().getClassLoader()))
+                    .remap(compiled.classes());
+
+            ScriptClassLoader loader =
+                    new ScriptClassLoader(runtimeReady, getClass().getClassLoader());
+            Class<?> loaded = Class.forName("Script", true, loader);
+            Object answer = loaded.getMethod("run", RuntimeWorld.class)
+                    .invoke(null, new RuntimeWorld());
+
             assertEquals("runtime-value/42", answer);
         } finally {
             engine.close();
