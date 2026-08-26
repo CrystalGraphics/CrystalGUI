@@ -18,6 +18,7 @@ import com.crystalgraphics.gl.render.CgQuadRenderer;
 import com.crystalgraphics.gl.texture.CgFallbackTextures;
 import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.gl.texture.CgTextureManager;
+import com.crystalgraphics.platform.gl.CgCapabilities;
 import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.text.render.CgTextRenderer;
 import com.crystalgraphics.util.io.CgIO;
@@ -561,7 +562,10 @@ public final class CgUiPaintContext {
         // glScope.close() (see its own note) is what puts the real target back before compositing.
         glScope = CgGlState.save(
                 CgGlSlot.FBO, CgGlSlot.PROGRAM, CgGlSlot.TEXTURES, CgGlSlot.BLEND,
-                CgGlSlot.DEPTH, CgGlSlot.CULL, CgGlSlot.VIEWPORT);
+                CgGlSlot.DEPTH, CgGlSlot.CULL, CgGlSlot.VIEWPORT, CgGlSlot.ALPHA_TEST);
+        // ALPHA_TEST is saved above only so the host gets it back; this is what turns it off, before
+        // anything of ours draws. @see #disableFixedFunctionAlphaTest
+        disableFixedFunctionAlphaTest();
 
         // BEFORE the redirect, because the redirect is what hides it. @see #sceneFboId
         backdrop.captureSceneTarget();
@@ -634,6 +638,54 @@ public final class CgUiPaintContext {
         // quads are refused outside a frame. Built here rather than on demand: an FBO created mid-draw,
         // with our own bindings in flight, came back incomplete. @see #blurLevel
         backdrop.prepareFrame();
+    }
+
+    /**
+     * Turns off the host's fixed-function alpha test for the duration of a UI pass.
+     *
+     * <p><b>Minecraft 1.7.10 enables {@code GL_ALPHA_TEST} with {@code glAlphaFunc(GL_GREATER, 0.1)} in
+     * {@code Minecraft.startGame()} and leaves it on through GUI rendering</b>, and a compatibility
+     * profile applies that test to programmable-pipeline draws exactly as it does to fixed-function
+     * ones. Nothing on our side models alpha testing — {@code CgRenderState} carries blend, depth, cull
+     * and stencil and no alpha — so a material's {@code RenderState} neither sets it nor clears it, and
+     * whatever the host left on is what every quad, glyph, gradient and glass surface is drawn under.
+     * The result is that <b>every fragment the UI draws at 10% alpha or less is discarded</b>: not
+     * dimmed, not faded — cut, with a hard edge exactly where the alpha crosses the reference.</p>
+     *
+     * <p>Measured on the taskbar's accent glow, which is
+     * {@code linear-gradient(90deg, transparent 18%, #3574F033 50%, transparent 82%)} across a
+     * 1999px bar. It should be a wash covering the middle two thirds; in a client it was a hard-edged
+     * band from x=642 to x=1347 — the ramp <em>inside</em> the band exactly the right one, both ends
+     * cut where the gradient's alpha passed 0.105. So the geometry, the axis, the stop positions and
+     * the premultiplied interpolation were all correct and the picture was still wrong, which is why
+     * six of the seven things one would check first are the gradient's.</p>
+     *
+     * <p><b>The harness cannot see any of this, by construction.</b> It runs an LWJGL3 context with no
+     * fixed-function alpha test to leave on, so the identical CSS is correct there and there is no
+     * scene, no probe and no readback that can be written to reproduce it. It is the loader-seam class
+     * of defect, one layer below the ones {@code serverSmoke} exists for.</p>
+     *
+     * <p><b>What it reaches is decided by a fragment's OUTPUT alpha, not by any alpha in the CSS.</b>
+     * A {@code glass()} tint at 7.5% is an input to a mix inside the shader and the surface still
+     * writes its coverage, so the acrylic panels were never affected — the ones that are: a
+     * {@code background-color} at or under 10% (Fluent's subtle fills, 6% and 3.5%, were discarded
+     * whole), the transparent shoulder of any gradient, the outermost sliver of every anti-aliased SDF
+     * edge, and the opening frames of any layer composited at a low opacity. All of those read as "the
+     * translucent parts are missing" or "the soft edges are hard", never as one GL flag.</p>
+     *
+     * <p><b>Called twice per frame</b>, because {@link #endFrame} closes the frame's own scope early —
+     * before the composite that puts the finished picture on the host's target — so the host's alpha
+     * test is live again for that one draw. That draw clips by the picture's <em>accumulated</em>
+     * alpha, which would take a 7% panel away whole rather than merely cutting its shoulders.</p>
+     *
+     * <p>Guarded on the profile rather than left to the state manager's deduplication: on a core
+     * profile {@code glDisable(GL_ALPHA_TEST)} is {@code GL_INVALID_ENUM}, and while
+     * {@code CgGlGetProvider.readAlpha} already reports the slot as disabled there — so the call would
+     * be eliminated today — that is a property of when the shadow was last trusted, not a guarantee.</p>
+     */
+    private static void disableFixedFunctionAlphaTest() {
+        if (CgCapabilities.detect().isCoreProfile()) return;
+        CgGL.glDisable(CgGL.GL_ALPHA_TEST);
     }
 
     private boolean warmedUp = false;
@@ -722,9 +774,17 @@ public final class CgUiPaintContext {
         // with depthTest on, depthWriteMask false and blend on — a world drawn with no depth
         // arbitration, so terrain stops occluding its own caves. Listed as the full set CgRenderState
         // can write, so the next material to declare Stencil or ColorMask does not start it again.
+        //
+        // ALPHA_TEST IS IN THE LIST AND IS DISABLED AGAIN INSIDE, because glScope.close() six lines up
+        // has just handed the host's alpha test back and this is a real draw of the whole finished
+        // picture. Where the frame's own disable protects each element's fragments, this one protects
+        // the COMPOSITE, which is clipped by the accumulated alpha instead — so a panel drawn correctly
+        // at 7% would arrive complete in the layer and then be discarded whole on the way to the
+        // screen. @see #disableFixedFunctionAlphaTest
         try (CgGlScope blitScope = CgGlState.save(CgGlSlot.PROGRAM, CgGlSlot.TEXTURES,
                 CgGlSlot.BLEND, CgGlSlot.DEPTH, CgGlSlot.CULL,
-                CgGlSlot.STENCIL, CgGlSlot.COLOR_MASK)) {
+                CgGlSlot.STENCIL, CgGlSlot.COLOR_MASK, CgGlSlot.ALPHA_TEST)) {
+            disableFixedFunctionAlphaTest();
             blitLayer(msaaResolveFbo, 1f);
         }
 
