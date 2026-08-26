@@ -117,6 +117,17 @@ public final class PlatformTypeBytes implements TypeBytes {
     }
 
     @Override
+    public byte[] forCompiling(String internalName) {
+        try {
+            return view().compilableBytesOf(internalName);
+        } catch (Exception unavailable) {
+            // Same answer as `readable` gives, for the same reason: a type the live loader cannot produce
+            // is one the classpath may still have.
+            return null;
+        }
+    }
+
+    @Override
     public byte[] synthesized(String internalName) {
         try {
             // initialize = false: resolving a NAME must never run a static initializer. On a Minecraft

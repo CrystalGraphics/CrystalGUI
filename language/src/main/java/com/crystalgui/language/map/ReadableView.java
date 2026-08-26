@@ -120,6 +120,136 @@ public final class ReadableView {
         return writer.toByteArray();
     }
 
+    /**
+     * The readable view <b>plus every member under the name the runtime knows it by</b>.
+     *
+     * <h3>A script written against SRG names is a viable script</h3>
+     *
+     * <p>{@link #readableBytesOf} renames each member and the old name is gone, so a {@code .java} script
+     * that spells {@code Minecraft.func_71410_x()} does not fail to be understood — it fails to
+     * <b>compile</b>: <i>"The method func_71410_x() is undefined for the type Minecraft"</i>. The
+     * JavaScript side has no such problem, because Rhino looks a member up on the live object and the
+     * runtime does have it under that name. Legacy scripts are written against those names, and the ask is
+     * that they read and build like any other.</p>
+     *
+     * <p>So the compile view declares both. The alias carries the same access flags, the same descriptor
+     * and the same signature, and no body — nothing loads these bytes into a JVM, and the compiler reads a
+     * binary type by its declarations rather than its code.</p>
+     *
+     * <h3>Collected from the ORIGINAL, never derived in reverse</h3>
+     *
+     * <p>The obvious implementation asks {@link MappingSet#runtimeMethodOfOwner} for the name each member
+     * was renamed from, and it is wrong for OVERLOADS: MCP maps many SRG methods onto one readable name,
+     * so the reverse index holds one entry per {@code (owner, name)} and every overload would be aliased
+     * to whichever one was stored last. One SRG name would go missing and another would appear against a
+     * descriptor it never had — which compiles and then fails at run time with {@code NoSuchMethodError},
+     * the exact failure this exists to remove.</p>
+     *
+     * <p>Reading the original class file has no such ambiguity: each member is sitting there under its
+     * runtime name, beside its own descriptor. Only the descriptor needs mapping, since the TYPES in it
+     * are renamed even when the member is not.</p>
+     *
+     * <p><b>Not what the decompiler sees.</b> {@code JavaEngine.decompile} reads {@link #readableBytesOf},
+     * and it must keep doing so — aliases there would show every mapped member twice in a library viewer,
+     * which is a worse answer than the one being fixed.</p>
+     */
+    public byte[] compilableBytesOf(String internalName) throws IOException {
+        byte[] bytes = source.bytesOf(internalName);
+        if (bytes == null) return null;
+        Remapper readable = toReadable();
+        RuntimeAliases aliases = new RuntimeAliases(mappings, readable);
+        // SKIP_CODE: this pass only wants declarations, and a class file's bodies are most of its bytes.
+        new ClassReader(bytes).accept(aliases, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG);
+        if (aliases.isEmpty()) return readableBytesOf(internalName);
+
+        ClassReader reader = new ClassReader(bytes);
+        ClassWriter writer = new ClassWriter(reader, 0);
+        reader.accept(new ClassRemapper(aliases.appending(writer), readable), 0);
+        return writer.toByteArray();
+    }
+
+    /**
+     * Collects each member's runtime name from the original class, then writes them back as aliases.
+     *
+     * <p>Two roles in one object because they are two halves of one fact: what it collected on the way in
+     * is exactly what it emits on the way out. @see #compilableBytesOf
+     */
+    private static final class RuntimeAliases extends org.objectweb.asm.ClassVisitor {
+
+        /** access, name, descriptor, signature, exceptions-or-null, constant-or-null. */
+        private final List<Object[]> members = new ArrayList<>();
+        private final MappingSet mappings;
+        private final Remapper readable;
+        private String owner;
+
+        RuntimeAliases(MappingSet mappings, Remapper readable) {
+            super(org.objectweb.asm.Opcodes.ASM9);
+            this.mappings = mappings;
+            this.readable = readable;
+        }
+
+        boolean isEmpty() {
+            return members.isEmpty();
+        }
+
+        @Override
+        public void visit(int version, int access, String name, String signature, String superName,
+                          String[] interfaces) {
+            this.owner = name;
+        }
+
+        @Override
+        public org.objectweb.asm.MethodVisitor visitMethod(int access, String name, String descriptor,
+                                                           String signature, String[] exceptions) {
+            if (!mappings.readableMethod(owner, name).equals(name)) {
+                members.add(new Object[]{access, name, readable.mapMethodDesc(descriptor),
+                        signature == null ? null : readable.mapSignature(signature, false),
+                        exceptions, null, Boolean.TRUE});
+            }
+            return null;
+        }
+
+        @Override
+        public org.objectweb.asm.FieldVisitor visitField(int access, String name, String descriptor,
+                                                         String signature, Object value) {
+            if (!mappings.readableField(owner, name).equals(name)) {
+                members.add(new Object[]{access, name, readable.mapDesc(descriptor),
+                        signature == null ? null : readable.mapSignature(signature, true),
+                        null, value, Boolean.FALSE});
+            }
+            return null;
+        }
+
+        /** The remapped class, with the collected aliases appended once it has been written out. */
+        org.objectweb.asm.ClassVisitor appending(org.objectweb.asm.ClassVisitor next) {
+            return new org.objectweb.asm.ClassVisitor(org.objectweb.asm.Opcodes.ASM9, next) {
+                @Override
+                public void visitEnd() {
+                    // AT THE END, never beside the member being visited: a ClassWriter is fed one member
+                    // at a time, and opening a second visitor while the first is still being written
+                    // interleaves two of them into one stream.
+                    for (Object[] member : members) {
+                        int access = (Integer) member[0];
+                        String name = (String) member[1];
+                        String descriptor = (String) member[2];
+                        String signature = (String) member[3];
+                        if (Boolean.TRUE.equals(member[6])) {
+                            org.objectweb.asm.MethodVisitor alias =
+                                    cv.visitMethod(access, name, descriptor, signature,
+                                            (String[]) member[4]);
+                            if (alias != null) alias.visitEnd();
+                        } else {
+                            org.objectweb.asm.FieldVisitor alias =
+                                    cv.visitField(access, name, descriptor, signature, member[5]);
+                            if (alias != null) alias.visitEnd();
+                        }
+                    }
+                    super.visitEnd();
+                }
+            };
+        }
+    }
+
     /** Runtime → readable, for every name a class file carries. */
     private Remapper toReadable() {
         return new Remapper() {

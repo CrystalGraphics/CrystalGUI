@@ -196,7 +196,9 @@ final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
         NameEnvironmentAnswer cached = cache.get(internalName);
         if (cached != null) return cached;
         if (!misses.containsKey(internalName)) {
-            byte[] bytes = types.readable(internalName);
+            // FOR COMPILING, so a member spelled the way the runtime spells it resolves too. This is the
+            // one consumer that wants both names; the decompiler deliberately keeps the plain view.
+            byte[] bytes = types.forCompiling(internalName);
             if (bytes != null) {
                 NameEnvironmentAnswer answer = answerFor(internalName, bytes);
                 if (answer != null) {
