@@ -2,6 +2,7 @@ package com.crystalgui.style.property.visual.texture;
 
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.render.texture.CgUiGradient;
 import com.crystalgui.render.texture.CgUiQuad;
 import com.crystalgui.render.texture.CgUiGlass;
 import com.crystalgui.render.texture.CgUiRepeat;
@@ -10,11 +11,13 @@ import com.crystalgui.render.texture.CgUiSprite;
 import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.render.texture.asset.CgUiSpriteRegistry;
 import com.crystalgui.render.texture.asset.FileIconTheme;
+import com.crystalgui.style.CssAngle;
 import com.crystalgui.style.CssParsingUtil;
 import com.crystalgui.style.property.StyleValue;
 import com.crystalgui.style.property.visual.color.ColorValue;
 
 import javax.annotation.Nullable;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -101,7 +104,86 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
         if (lower.startsWith("glass(") && value.endsWith(")")) {
             return parseGlass(value.substring("glass(".length(), value.length() - 1));
         }
+        if (lower.startsWith("linear-gradient(") && value.endsWith(")")) {
+            return parseLinearGradient(value.substring("linear-gradient(".length(), value.length() - 1));
+        }
         return null;
+    }
+
+    /**
+     * {@code linear-gradient(...)} — CSS's, at any angle:
+     *
+     * <pre>
+     *   linear-gradient(#000, #FFF)                            to bottom, evenly spread
+     *   linear-gradient(90deg, transparent, #3574F033 50%, transparent)
+     *   linear-gradient(0.25turn, red 20%, blue 80%)
+     *   linear-gradient(to right, red, blue)
+     *   linear-gradient(to bottom right, red, blue)            resolved per box, @see CgUiGradient
+     * </pre>
+     *
+     * <p>A leading angle ({@code deg}/{@code grad}/{@code rad}/{@code turn}), {@code to <side>} or
+     * {@code to <corner>} is the direction; everything after it is a stop —
+     * a colour with an optional {@code <n>%}. Fewer than two stops, or a colour that does not parse, is a
+     * parse failure (null), exactly as an unknown {@code glass()} argument list is. The position is read
+     * off the END of the stop rather than by splitting on whitespace, because an {@code rgba(...)} colour
+     * may carry spaces of its own.</p>
+     */
+    private static @Nullable CgUiDrawable parseLinearGradient(String args) {
+        List<String> parts = CssParsingUtil.splitTopLevelCommas(args);
+        if (parts.isEmpty()) return null;
+        float angle = 180f;   // CSS's default: to bottom
+        CgUiGradient.Corner corner = null;
+        int first = 0;
+        String head = parts.get(0).trim().toLowerCase(Locale.ROOT);
+        if (head.startsWith("to ")) {
+            // `to <side>`, or `to <corner>` as two words in either order. A corner is kept as one
+            // rather than resolved to an angle here, because its angle depends on the box it is drawn on.
+            String[] words = head.substring(3).trim().split("\\s+");
+            boolean top = false, bottom = false, left = false, right = false;
+            for (String word : words) {
+                switch (word) {
+                    case "top" -> top = true;
+                    case "bottom" -> bottom = true;
+                    case "left" -> left = true;
+                    case "right" -> right = true;
+                    default -> { return null; }
+                }
+            }
+            if (words.length > 2 || (top && bottom) || (left && right)) return null;
+            if (words.length == 2) {
+                if (!(top || bottom) || !(left || right)) return null;
+                corner = top ? (left ? CgUiGradient.Corner.TOP_LEFT : CgUiGradient.Corner.TOP_RIGHT)
+                             : (left ? CgUiGradient.Corner.BOTTOM_LEFT : CgUiGradient.Corner.BOTTOM_RIGHT);
+            } else {
+                angle = top ? 0f : right ? 90f : bottom ? 180f : 270f;
+            }
+            first = 1;
+        } else {
+            // deg, grad, rad, turn -- the same parser `rotate()` uses. A colour is not an angle and
+            // falls through as the first stop.
+            Float radians = CssAngle.parse(head);
+            if (radians != null) {
+                angle = (float) Math.toDegrees(radians);
+                first = 1;
+            }
+        }
+        List<CgUiGradient.Stop> stops = new ArrayList<>();
+        for (int i = first; i < parts.size(); i++) {
+            String stop = parts.get(i).trim();
+            float position = Float.NaN;
+            int lastSpace = stop.lastIndexOf(' ');
+            if (lastSpace > 0 && stop.endsWith("%")) {
+                Float pct = parseFloatOrNull(stop.substring(lastSpace + 1, stop.length() - 1).trim());
+                if (pct == null) return null;
+                position = pct / 100f;
+                stop = stop.substring(0, lastSpace).trim();
+            }
+            Integer color = ColorValue.parseColor(stop);
+            if (color == null) return null;
+            stops.add(new CgUiGradient.Stop(position, color));
+        }
+        if (stops.size() < 2) return null;
+        return corner != null ? new CgUiGradient(corner, stops) : new CgUiGradient(angle, stops);
     }
 
     /**
@@ -113,7 +195,8 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
      *   glass(12, #2B2D3088)                       blur radius, tint
      *   glass(blur 12, tint #2B2D3088, bezel 8,
      *         ior 1.5, specular 0.35, noise 0.04,
-     *         saturation 1.35, fallback #2B2D30)   keyword pairs, any order
+     *         saturation 1.35, luminosity 0.96,
+     *         fallback #2B2D30)                    keyword pairs, any order
      * </pre>
      *
      * <p>The short form is positional and the long form is not, distinguished by whether the first
@@ -158,6 +241,7 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
                 case "chromatic" -> { if (number != null) { glass.setChromatic(number); anyRecognised = true; } }
                 case "noise" -> { if (number != null) { glass.setNoise(number); anyRecognised = true; } }
                 case "saturation" -> { if (number != null) { glass.setSaturation(number); anyRecognised = true; } }
+                case "luminosity" -> { if (number != null) { glass.setLuminosity(number); anyRecognised = true; } }
                 case "tint" -> {
                     Integer c = ColorValue.parseColor(raw);
                     if (c != null) { glass.setTint(c); anyRecognised = true; }

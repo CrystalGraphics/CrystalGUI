@@ -3,9 +3,12 @@ package com.crystalgui.ui.elements.desktop;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.texture.CgUiGlass;
+import com.crystalgui.render.texture.CgUiGradient;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.layout.LayoutProperties;
+import com.crystalgui.style.property.visual.border.BorderRadiusProperties;
+import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UITransform;
 import com.crystalgui.ui.UIWindow;
@@ -62,6 +65,17 @@ public final class TaskbarDesigner {
     private final UIElement island;
     private final CgUiGlass glass = new CgUiGlass();
 
+    /**
+     * The tone: the accent wash's colour, alpha included, seeded from the bar's glow.
+     *
+     * <p>ONE VALUE FOR THE FAMILY. The bar, its hover preview and the switcher each carry the wash from
+     * a pin of their own (a component token never chains off another component's), and they ship equal
+     * -- so the picker writes all three glows live and the pasted CSS carries all three pins, or the
+     * first hover after picking a tone would show a preview in the old one.</p>
+     */
+    private int tone = 0x333574F0;
+    private final List<UIElement> glows;
+
     // Geometry, in logical px. Seeded from the sheet on the first frame the island has a box.
     private float islandWidth, islandHeight, radius = 8f, padding = 4f, gap = 4f;
     private float offsetX, offsetY;
@@ -85,8 +99,11 @@ public final class TaskbarDesigner {
     private final List<Runnable> resets = new ArrayList<>();
     private @Nullable UIText readout;
 
-    private TaskbarDesigner(Taskbar taskbar) {
+    private TaskbarDesigner(Taskbar taskbar, Desktop desktop) {
         this.taskbar = taskbar;
+        // Every one of these is a final field of a live widget, so none can be absent — a desktop always
+        // has a switcher and a taskbar always has its one preview panel. @see #tone
+        this.glows = List.of(taskbar.glow(), taskbar.previewPanel().glow(), desktop.switcher().glow());
         // THE BAR, not the entries row. Since the strip became a full-width bar the glass, the height, the
         // padding and the radius are all the bar's own, and the entries row is a transparent flex row
         // inside it with nothing to tune; a designer aimed at the row would move sliders and change
@@ -108,7 +125,7 @@ public final class TaskbarDesigner {
         Taskbar taskbar = desktop.taskbar();
         if (taskbar == null) return null;
 
-        TaskbarDesigner designer = new TaskbarDesigner(taskbar);
+        TaskbarDesigner designer = new TaskbarDesigner(taskbar, desktop);
         WindowFrame frame = new WindowFrame("Taskbar Designer");
         frame.addClass(WINDOW_CLASS);
         frame.setContent(designer.build());
@@ -241,11 +258,26 @@ public final class TaskbarDesigner {
             glass.setSaturation(v);
             refreshReadout();
         }));
+        // THE ONE THAT WAS MISSING. The seed copied every other parameter and not this, so the designer
+        // opened with the bar at luminosity 0 -- a plain alpha tint -- while the sheet ran it at 1, and
+        // a tint alpha tuned here was tuned against a material the sheet does not draw.
+        body.addChild(note("Luminosity is the Windows layer: how much of the backdrop's BRIGHTNESS the "
+                + "tint's replaces, hue kept. 1 is Mica \u2014 a temperature, never a picture; 0 is a "
+                + "plain alpha tint, where the tint's alpha alone decides what shows through."));
+        body.addChild(slider("Luminosity", 0f, 1f, glass.getLuminosity(), "%.2f", v -> {
+            glass.setLuminosity(v);
+            refreshReadout();
+        }));
 
         body.addChild(heading("Tint"));
         body.addChild(note("The colour laid over the blur. ALPHA IS THE ONE THAT MATTERS \u2014 it is how "
                 + "much of the tint sits over the backdrop, and the easiest thing here to overdo."));
         body.addChild(tintPicker());
+
+        body.addChild(heading("Tone"));
+        body.addChild(note("The accent wash under the entries \u2014 and under the hover preview and the "
+                + "switcher, which take the same tone. Alpha is how loud it is; the sheet ships 20%."));
+        body.addChild(tonePicker());
 
         // THE READOUT SCROLLS WITH THE CONTROLS; only the buttons are pinned. It is eight lines of CSS
         // and it grows, so below the scroll region it simply fell off the bottom of the window, taking
@@ -298,7 +330,12 @@ public final class TaskbarDesigner {
                  .setNoise(live.getNoise()).setFallbackColor(live.getFallbackColor())
                  .setGlow(live.getGlow()).setEdgeHighlight(live.getEdgeHighlight())
                  .setEdgeWidth(live.getEdgeWidth()).setChromatic(live.getChromatic())
-                 .setRimAmbient(live.getRimAmbient());
+                 .setRimAmbient(live.getRimAmbient()).setLuminosity(live.getLuminosity());
+        }
+        // The tone is the glow's middle stop -- the sheet's gradient is transparent / tone / transparent.
+        Object wash = taskbar.glow().getStyle().getComputed(StylePropertyRegistry.BACKGROUND);
+        if (wash instanceof CgUiGradient gradient && gradient.stops().size() >= 2) {
+            tone = gradient.stops().get(gradient.stops().size() / 2).argb();
         }
         // BEFORE the IMPORTANT writes below, or this reads back the designer's own value.
         if (island.getStyle().getComputed(LayoutProperties.MIN_WIDTH) instanceof TaffyDimension floor) {
@@ -306,6 +343,26 @@ public final class TaskbarDesigner {
         }
         islandWidth = Math.max(80f, island.getRuntimeCache().getWidth());
         islandHeight = Math.max(12f, island.getRuntimeCache().getHeight());
+        // THE RADIUS IS THE SHEET'S, NEVER THE FIELD'S DEFAULT. applyGeometry() below writes every
+        // geometry value at IMPORTANT, so anything this method does not seed is imposed on the bar the
+        // moment the tuner opens -- the exact failure the javadoc above warns about, reached without
+        // touching a slider. The bar ships SQUARE and the field defaulted to 8, so merely opening the
+        // designer rounded the corners of a full-width bar: at each end the glass's arc cut away from
+        // the screen edge and the raw, unblurred world showed through the notch, with the __edge__
+        // hairline -- square and full width -- running straight over the top of it.
+        //
+        // NULL MEANS ZERO, never "keep the default": getComputed answers null for a property nothing
+        // has written, and for a radius that is the sheet saying there is none. Reading it back also
+        // makes a SECOND open honest, since the first one's IMPORTANT write is what it now finds.
+        //
+        // PADDING AND GAP ARE KNOWINGLY STILL UNSEEDED, and are the same gap one step quieter: the bar
+        // ships 3px top/bottom and 8px left/right while this panel has ONE padding slider, so no single
+        // seeded number can be the sheet's -- opening the tuner moves the bar's height by 2px whichever
+        // value is chosen. Gap is harmless (the taskbar's only in-flow child is the entries row, and the
+        // 2px the entries use is that row's own). Both want a per-edge control, not a better seed.
+        radius = island.getStyle().getComputed(BorderRadiusProperties.TOP_LEFT_X) instanceof LengthPercent r
+                ? r.resolve(islandWidth)
+                : 0f;
         StyleGroup.importantPipeline(island.getStyle().getGeneralGroup(), g -> g.background(glass));
         applyGeometry();
     }
@@ -329,6 +386,22 @@ public final class TaskbarDesigner {
         });
         StyleGroup.importantPipeline(island.getStyle().getGeneralGroup(),
                 g -> g.borderRadius(radius));
+        refreshReadout();
+    }
+
+    /**
+     * Writes the tone into every glow at IMPORTANT origin -- the sheet's own stops, the picked colour
+     * in the middle. A fresh gradient per element, since a drawable is handed its element's radii
+     * immediately before it draws and three elements sharing one would be fine today and a trap later.
+     */
+    private void applyTone() {
+        for (UIElement glow : glows) {
+            CgUiGradient wash = new CgUiGradient(90f, List.of(
+                    new CgUiGradient.Stop(0.18f, 0x00000000),
+                    new CgUiGradient.Stop(0.50f, tone),
+                    new CgUiGradient.Stop(0.82f, 0x00000000)));
+            StyleGroup.importantPipeline(glow.getStyle().getGeneralGroup(), g -> g.background(wash));
+        }
         refreshReadout();
     }
 
@@ -382,13 +455,18 @@ public final class TaskbarDesigner {
         sb.append(String.format(Locale.ROOT,
                 "    background: glass(blur %.0f, tint %s,%n"
                 + "                      bezel %.0f, ior %.2f, specular %.2f, noise %.3f,%n"
-                + "                      saturation %.2f, glow %.2f, edge %.2f, edge-width %.1f,%n"
+                + "                      saturation %.2f, luminosity %.2f, glow %.2f, edge %.2f, edge-width %.1f,%n"
                 + "                      rim-ambient %.2f, chromatic %.2f, fallback %s);%n",
                 glass.getBlurRadius(), hex(glass.getTint()), glass.getBezel(), glass.getIor(),
-                glass.getSpecular(), glass.getNoise(), glass.getSaturation(),
+                glass.getSpecular(), glass.getNoise(), glass.getSaturation(), glass.getLuminosity(),
                 glass.getGlow(), glass.getEdgeHighlight(), glass.getEdgeWidth(),
                 glass.getRimAmbient(), glass.getChromatic(), hex(glass.getFallbackColor())));
         sb.append("}\n");
+        // THE TONE IS A THEME PIN, not a rule: it goes in crystal-dark.css / crystal-light.css, one value
+        // for the three surfaces that share the bar's material.
+        sb.append(String.format(Locale.ROOT,
+                "theme {%n    --taskbar-glow: %1$s;%n    --preview-glow: %1$s;%n    --switcher-glow: %1$s;%n}%n",
+                hex(tone)));
         if (offsetX != 0f || offsetY != 0f) {
             sb.append(String.format(Locale.ROOT,
                     "/* dragged to %.0f, %.0f — a transform, NOT a position. A real move means "
@@ -425,6 +503,20 @@ public final class TaskbarDesigner {
         picker.onColorChanged.connect(argb -> {
             glass.setTint(argb);
             refreshReadout();
+        });
+        resets.add(() -> picker.setColor(initial));
+        return picker;
+    }
+
+    /** The tone, the same picker as the tint: alpha is most of what is being chosen. */
+    private UIElement tonePicker() {
+        int initial = tone;
+        ColorSelector picker = new ColorSelector();
+        picker.addClass("__designer-tint__");
+        picker.setColor(initial);
+        picker.onColorChanged.connect(argb -> {
+            tone = argb;
+            applyTone();
         });
         resets.add(() -> picker.setColor(initial));
         return picker;

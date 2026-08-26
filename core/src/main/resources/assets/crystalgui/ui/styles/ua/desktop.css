@@ -121,8 +121,15 @@ taskbar {
      * THE COST IS THE REGION (plan_glass.md R2): the capture and the blur are sized to what asks for a
      * backdrop, so a 34px bar on a 1080p surface is about 6% of it. The first glass captured the whole
      * screen and took a 120fps desktop to 50–70 for one line of CSS. */
-    background: glass(blur 24, tint var(--taskbar-glass-tint, #E01F2023),
-                      bezel 1, ior 1, specular 0, noise 0.02, saturation 0.7,
+    /* A TEMPERATURE, NEVER A COLOUR -- and the mechanism is the LUMINOSITY blend, not desaturation.
+     * Mica replaces the wallpaper's brightness with the tint's (`luminosity 1`) and keeps its hue, then
+     * lays the tint colour over at 0.8; what survives of a red wallpaper is a warmth at the bar's own
+     * darkness. Saturation stays at 1: the hue is the only thing the backdrop is being asked for, and
+     * the blur has already averaged most of it away. (An earlier comment here blamed `saturation 0.7`
+     * for the bar going maroon and cut it to 0.4; the maroon was the tint pin written alpha-first,
+     * which the CSS parser read as pure red at 13% -- @see crystal-dark.css.) */
+    background: glass(blur 24, tint var(--taskbar-glass-tint, #1C1D21CC),
+                      bezel 1, ior 1, specular 0, noise 0.02, saturation 1, luminosity 1,
                       glow 0, edge 0, edge-width 1, rim-ambient 1, chromatic 0,
                       fallback var(--taskbar-bg, #2B2D30));
 }
@@ -138,6 +145,21 @@ taskbar .__edge__ {
     width: 100%;
     height: 1px;
     background-color: var(--taskbar-border, #393B40);
+}
+
+/* THE GLOW: IntelliJ's New UI header gradient, translated. Theirs washes the project's colour across the
+ * toolbar from one end; a taskbar's centre of gravity is the cluster of entries, so the wash sits under
+ * them — the accent at a whisper in the middle, gone by the third of the width either side — and ties
+ * the accent pills to the strip. Over the glass and under the entries, as paint rather than material:
+ * glass is the surface, this is light on it. The colour is a theme PIN because it needs an alpha no
+ * system role carries. */
+taskbar .__glow__ {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent 18%, var(--taskbar-glow, #3574F033) 50%, transparent 82%);
 }
 
 /* THE ENTRIES ARE BOUNDED BY THE BAR. `max-width` bounds the box and `overflow` bounds what paints —
@@ -901,8 +923,15 @@ menu.__jump-list__ {
      * says why every lens term is off; the fallback is the flat --preview-bg this used to be. Glass
      * is one capture region shared by everything that asks, so a panel above the bar widens it by its
      * own height for exactly as long as it is up. */
-    background: glass(blur 24, tint var(--preview-glass-tint, #C71F2023),
-                      bezel 1, ior 1, specular 0, noise 0.02, saturation 0.7,
+    /* ACRYLIC, by WinUI's effect graph -- blur, saturation 1.25, a luminosity layer, the tint, noise
+     * 0.02 -- at HALF of WinUI's strengths: luminosity 0.48 where Windows runs 0.96, tint 0x13 where
+     * it runs 0.15. At Windows' numbers the panel's brightness was entirely the tint's, and over this
+     * desktop's dark windows it read as an opaque slab; at half, half of what is behind it comes
+     * through as blurred shapes, which is what "floating" looks like here. In this model a panel's
+     * opacity IS the luminosity layer, so "halve the alpha" halves both.
+     * @see docs/CGUI_MODERN_UI_RENDERING_RESEARCH.md §1.2 */
+    background: glass(blur 24, tint var(--preview-glass-tint, #1F202313),
+                      bezel 1, ior 1, specular 0, noise 0.02, saturation 1.25, luminosity 0.48,
                       glow 0, edge 0, edge-width 1, rim-ambient 1, chromatic 0,
                       fallback var(--preview-bg, #2B2D30));
     /* NO background-color BESIDE A GLASS. In this engine background-color is the ambient TINT a
@@ -941,15 +970,32 @@ menu.__jump-list__.__rising__ {
 .__window-preview__ {
     position: absolute;
     flex-direction: column;
-    /* Acrylic -- @see menu.__jump-list__ above, which is the same object. */
-    background: glass(blur 24, tint var(--preview-glass-tint, #C71F2023),
-                      bezel 1, ior 1, specular 0, noise 0.02, saturation 0.7,
+    /* Acrylic -- @see menu.__jump-list__ above, which is the same object, for the whole recipe and why
+     * it runs at half of WinUI's strengths. */
+    background: glass(blur 24, tint var(--preview-glass-tint, #1F202313),
+                      bezel 1, ior 1, specular 0, noise 0.02, saturation 1.25, luminosity 0.48,
                       glow 0, edge 0, edge-width 1, rim-ambient 1, chromatic 0,
                       fallback var(--preview-bg, #2B2D30));
     outline: 1px var(--preview-border, #393B40);
     border-radius: var(--radius-panel, 8px);
     padding-all: 6px;
     z-index: 100;
+}
+
+/* THE SAME TONE AS THE BAR. The floating surfaces are one material with the bar (see the block above),
+ * and the accent wash is part of that material's look -- the same stops, centred under the content,
+ * from a pin of its own: --preview-glow is pinned to --taskbar-glow's value in both themes, as a
+ * separate token because a component token never chains off another component's. The child carries
+ * the panel's radius so the gradient masks itself to the corners (CgUiGradient is CornerRadiusAware);
+ * without it the wash squares them off. */
+.__window-preview__ > .__glow__ {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: var(--radius-panel, 8px);
+    background: linear-gradient(90deg, transparent 18%, var(--preview-glow, #3574F033) 50%, transparent 82%);
 }
 
 /* The header is a ROW that fills the panel's width, and the title is the part that gives. `width: 0`
@@ -1130,12 +1176,25 @@ menu.__jump-list__.__rising__ {
      * ask for most of the screen -- the capture region is the union of what asks, and a panel at 80%
      * of the width is most of it -- and it is affordable for the same reason Windows' is: it exists for
      * the second or two a modifier is held, never for a settled frame. */
-    background: glass(blur 24, tint var(--switcher-glass-tint, #C71F2023),
-                      bezel 1, ior 1, specular 0, noise 0.02, saturation 0.7,
+    /* ACRYLIC -- the preview's recipe at the same half strength, @see .__window-preview__ above. */
+    background: glass(blur 24, tint var(--switcher-glass-tint, #1F202313),
+                      bezel 1, ior 1, specular 0, noise 0.02, saturation 1.25, luminosity 0.48,
                       glow 0, edge 0, edge-width 1, rim-ambient 1, chromatic 0,
                       fallback var(--switcher-bg, #2B2D30));
     outline: 1px var(--switcher-border, #393B40);
     border-radius: var(--radius-panel, 8px);
+}
+
+/* The bar's tone under the tiles -- @see .__window-preview__ > .__glow__ for why it is the same wash
+ * from a separate pin. */
+.__switcher-panel__ > .__glow__ {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: var(--radius-panel, 8px);
+    background: linear-gradient(90deg, transparent 18%, var(--switcher-glow, #3574F033) 50%, transparent 82%);
 }
 
 /* One window. A COLUMN -- icon and title above, picture below, which is Windows' arrangement and not the
@@ -1159,14 +1218,22 @@ menu.__jump-list__.__rising__ {
 /* Hover gives the tile the same quiet fill a taskbar entry takes, which is what makes the two read as
  * one family. Selection keeps its RING as well: Windows marks the selected thumbnail with a bright
  * outline and leaves the picture alone, because a fill has to compete with whatever the thumbnail
- * happens to be showing while an outline never does. The fill under the ring is a step lighter than
- * hover, the same ladder the bar's entries climb. */
+ * happens to be showing while an outline never does.
+ *
+ * TRANSLUCENT WHITE, never the panel ladder's grey: a tile on acrylic that goes opaque under the
+ * pointer hides the very backdrop the switcher floats over. Fluent's subtle fill, at an alpha no
+ * system role carries -- which is why both fills are theme pins. */
 .__switcher-entry__:hover {
-    background-color: var(--switcher-entry-hover-bg, #2E3033);
+    background-color: var(--switcher-entry-hover-bg, #FFFFFF0F);
 }
 
+/* NO FILL UNDER THE RING: a grey slab behind the selected tile hid the backdrop for the same reason,
+ * and the ring alone is what Windows draws. TRANSPARENT rather than absent, so the hover fill cannot
+ * grey the selected tile either -- the two rules tie on specificity and this one is later. The token
+ * that used to fill it (--switcher-selected-bg) is gone; base.css had said all along that there was
+ * deliberately none. */
 .__switcher-entry__.__selected__ {
-    background-color: var(--switcher-selected-bg, #35373B);
+    background-color: transparent;
     border-color: var(--switcher-selected-ring, #FFFFFF);
 }
 

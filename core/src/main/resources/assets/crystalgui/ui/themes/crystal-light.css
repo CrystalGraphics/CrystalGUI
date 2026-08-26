@@ -34,8 +34,8 @@ theme {
     --surface-borrowed: #FBF3E8;
     --surface-overlay: #FFFFFF;
     /* Glass tint. The light theme's glass is a white veil rather than a grey one -- same alpha, so it lets the
-     * same amount of backdrop through. */
-    --surface-glass: #66FFFFFF;
+     * same amount of backdrop through. #RRGGBBAA, alpha last; was #66FFFFFF, an opaque cyan-white. */
+    --surface-glass: #FFFFFF66;
     --border-base: #C4C4C8;
     --border-strong: #9A9AA0;
     --border-field: #C0C0C6;
@@ -102,15 +102,24 @@ theme {
     --snap-preview-bg: #5A5F6640;
     --snap-preview-border: #3C4046AA;
 
-    /* The taskbar's Mica tint — @see crystal-dark.css. A white veil at the same ~90%, a shade off the
-     * pure white the overlay surface is so the bar still separates from a white window slid under it. */
-    --taskbar-glass-tint: #E6F4F4F7;
+    /* The taskbar's Mica tint — @see crystal-dark.css. Mica light is #F3F3F3 at 0.5 with luminosity 1;
+     * a shade off the pure white the overlay surface is, so the bar still separates from a white window
+     * slid under it. #RRGGBBAA, alpha last. */
+    --taskbar-glass-tint: #F4F4F780;
+    /* The glow under the entries -- @see crystal-dark.css. Lighter on white: IntelliJ Light's header does
+     * the same wash at a lower strength, because an accent over white reads twice as loud. */
+    --taskbar-glow: #3574F024;
+    /* The same tone on the preview and the switcher -- @see crystal-dark.css. */
+    --preview-glow: #3574F024;
+    --switcher-glow: #3574F024;
     /* The active entry -- @see crystal-dark.css. A clear step BELOW the hover fill (#E0E4EA) on a white
      * bar; the dark theme's mid grey would be a slab here. */
     --taskbar-entry-active-bg: #CDD1D8;
-    /* The floating panels' acrylic -- @see crystal-dark.css. */
-    --preview-glass-tint: #CCF4F4F7;
-    --switcher-glass-tint: #CCF4F4F7;
+    /* The floating panels' acrylic -- @see crystal-dark.css. WinUI's light transient brush carries NO
+     * colour tint at all (#FCFCFC at 0.0) and lets the luminosity layer at 0.85 do everything, so the
+     * alpha here is zero on purpose: the colour still names the brightness the backdrop is pulled to. */
+    --preview-glass-tint: #F4F4F700;
+    --switcher-glass-tint: #F4F4F700;
 
     /* The window icon tiles — @see crystal-dark.css. A step deeper than the dark theme's, because the
      * glyph on them is still white and a pastel tile on a white bar would carry it at nothing. */
@@ -184,6 +193,8 @@ theme {
      * where dark-theme white disappears. Near-black is the readable answer, and it is the reason this is
      * a theme decision rather than a derivation from the system vocabulary. */
     --switcher-selected-ring: #1E1F22;
+    /* Fluent's light SubtleFillColorSecondary: black at 3.5%. @see crystal-dark.css */
+    --switcher-entry-hover-bg: #00000009;
 
     /* -- Differences -----------------------------------------------------------
      *

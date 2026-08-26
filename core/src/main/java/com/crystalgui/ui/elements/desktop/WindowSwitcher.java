@@ -131,6 +131,9 @@ public class WindowSwitcher extends UIElement {
      */
     private int holdingMask;
 
+    /** The accent wash under the tiles. @see Taskbar#GLOW_CLASS */
+    private final UIElement glow = new UIElement();
+
     private long openedAt;
     private long lastInteraction;
     private boolean shown;
@@ -140,12 +143,27 @@ public class WindowSwitcher extends UIElement {
         this.desktop = desktop;
         addClass(SWITCHER_CLASS);
         panel.addClass(PANEL_CLASS);
+        // THE GLOW under the tiles: the bar's accent wash, so the switcher is the bar's material and
+        // not a second one. An INTERNAL child of the panel, added before any tile, so buildEntries --
+        // which adds and removes tiles by reference -- never sees it and it always paints first.
+        glow.addClass(Taskbar.GLOW_CLASS);
+        glow.setHitTest(false);
+        panel.addInternalChild(glow);
         addInternalChild(panel);
         setPanelShown(false);
 
         // A PRESS ON THE BACKDROP CANCELS. Target-only, so a press on a tile -- which is a descendant --
         // never reaches this and activates instead.
         onMouseDown.attachListener((element, event) -> cancel(), false, false);
+    }
+
+    /**
+     * The accent wash under the tiles, for {@link TaskbarDesigner} to retone the whole family at once.
+     * Package-private: a theme retones this through {@code --switcher-glow}, and the element itself is
+     * only reachable because the designer writes at IMPORTANT origin while it runs.
+     */
+    UIElement glow() {
+        return glow;
     }
 
     /** Whether the switcher is cycling — true for the invisible part of the gesture as well. */
