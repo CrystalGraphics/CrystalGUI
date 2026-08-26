@@ -179,6 +179,8 @@ public final class CgUiPaintContext {
     /** One axis of the separable blur per bind. @see #backdropFor */
     /** Package-private: {@link CgUiBackdrop} owns every use of it. */
     final CgMaterial blurMaterial;
+    /** The box prefilter that reduces the capture before it is blurred. Package-private, as above. */
+    final CgMaterial downsampleMaterial;
 
     /** 1×1 fully opaque white ({@code RGBA = 255, 255, 255, 255}). */
     @Getter
@@ -330,6 +332,7 @@ public final class CgUiPaintContext {
         this.curveMaterial = CgMaterial.load("crystalgui:shaders/gui_curve.shader");
         this.layerBlitMaterial = CgMaterial.load("crystalgui:shaders/gui_layer_blit.shader");
         this.blurMaterial = CgMaterial.load("crystalgui:shaders/gui_blur.shader");
+        this.downsampleMaterial = CgMaterial.load("crystalgui:shaders/gui_downsample.shader");
         // AFTER the materials: it holds them, and a field initialiser would run before they exist.
         this.backdrop = new CgUiBackdrop(this);
         this.whitePixel = (CgTexture2D) CgFallbackTextures.WHITE_1x1;
@@ -1054,16 +1057,39 @@ public final class CgUiPaintContext {
             maxY = Math.max(maxY, py);
         }
 
-        float clipX0 = 0f, clipY0 = 0f, clipX1 = screenWidth, clipY1 = screenHeight;
+        float clipX0 = 0f, clipY0 = 0f, clipX1 = targetWidth(), clipY1 = targetHeight();
         if (scissorStack.hasScissor()) {
-            // ScissorStack holds GL's bottom-left-origin pixels; flip back to the top-left-origin space
-            // the pose just produced. Getting this backwards culls exactly the rows that ARE visible.
+            // ScissorStack holds TOP-LEFT rects in the target's pixels -- the same space the pose just
+            // produced, so no flip. @see ScissorStack#applyScissorIfNeeded
             clipX0 = scissorStack.currentX();
             clipX1 = clipX0 + scissorStack.currentW();
-            clipY1 = screenHeight - scissorStack.currentY();
-            clipY0 = clipY1 - scissorStack.currentH();
+            clipY0 = scissorStack.currentY();
+            clipY1 = clipY0 + scissorStack.currentH();
         }
         return maxX >= clipX0 && minX <= clipX1 && maxY >= clipY0 && minY <= clipY1;
+    }
+
+    /**
+     * The width of whatever is being drawn into right now — the screen, or the innermost layer FBO.
+     *
+     * <p><b>A scissor rect and a cull bound are in the TARGET's pixels, and the target is not always the
+     * screen.</b> Every pooled layer is screen-sized, so flipping against {@code screenHeight} was right
+     * for all of them and nothing said otherwise. A window's snapshot is the first target sized to
+     * something else — the window — and inside it the flip landed every clip {@code screen - window}
+     * pixels too high: the editor's own {@code > .__content__} clip then scissored the bottom of the
+     * photograph away, so a minimised window's preview showed its top half over flat panel colour while
+     * the live preview of the same window, drawn straight to the screen, was whole. Invisible while the
+     * photographed window was near screen height, which a maximised editor is; a floating one is not.
+     * The standing scissor rule covers the INHERITED rect, which the snapshot already clears — this is
+     * the rect pushed during the render, which has to be flipped against the buffer it lands in.</p>
+     */
+    private int targetWidth() {
+        return layerStack.isEmpty() ? screenWidth : layerStack.peek().fbo().getWidth();
+    }
+
+    /** @see #targetWidth() */
+    private int targetHeight() {
+        return layerStack.isEmpty() ? screenHeight : layerStack.peek().fbo().getHeight();
     }
 
     /**
@@ -1091,10 +1117,20 @@ public final class CgUiPaintContext {
         int physY = (int) Math.floor(Math.min(physY0, physY1));
         int physW = (int) Math.ceil(Math.max(physX0, physX1)) - physX;
         int physH = (int) Math.ceil(Math.max(physY0, physY1)) - physY;
-        // Top-left-origin logical space -> GL's bottom-left-origin glScissor space.
-        int glY = screenHeight - (physY + physH);
-        scissorStack.pushScissor(physX, glY, Math.max(0, physW), Math.max(0, physH));
-        scissorStack.applyScissorIfNeeded();
+        // Stored TOP-LEFT, in the target's physical pixels; the flip to GL's bottom-left happens when the
+        // rect is APPLIED, against whichever buffer is bound at that moment. @see ScissorStack#applyScissorIfNeeded
+        scissorStack.pushScissor(physX, physY, Math.max(0, physW), Math.max(0, physH));
+        scissorStack.applyScissorIfNeeded(targetHeight());
+    }
+
+    /**
+     * Re-applies the current clip to whatever buffer is bound now. For a caller that has changed the
+     * target or the stack itself and needs GL to agree with it — a window snapshot restoring the clip it
+     * set aside, for instance.
+     */
+    public void reapplyScissor() {
+        if (scissorStack.hasScissor()) scissorStack.applyScissorIfNeeded(targetHeight());
+        else scissorStack.clearScissorIfNeeded();
     }
 
     /**
@@ -1105,7 +1141,7 @@ public final class CgUiPaintContext {
         flush();
         scissorStack.popScissor();
         if (scissorStack.hasScissor()) {
-            scissorStack.applyScissorIfNeeded();
+            scissorStack.applyScissorIfNeeded(targetHeight());
         } else {
             scissorStack.clearScissorIfNeeded();
         }
@@ -1316,12 +1352,26 @@ public final class CgUiPaintContext {
 
         fbo.bind();
         CgGL.glViewport(0, 0, fbo.getWidth(), fbo.getHeight());
+        // THE INHERITED CLIP, RE-EXPRESSED FOR THIS BUFFER. A GL scissor rect is bottom-left pixels of
+        // one particular target; the rect the enclosing element pushed is kept top-left and flipped
+        // against whatever is bound, so a layer of another height than its parent -- a pool layer
+        // inside a window's snapshot -- clips the same region rather than a band at its bottom. The
+        // clear below honours the scissor too, which is what makes doing this BEFORE it matter.
+        if (scissorStack.hasScissor()) scissorStack.applyScissorIfNeeded(fbo.getHeight());
         if (clear) fbo.clearColor(0f, 0f, 0f, 0f);
 
         fd.projMatrix.identity().ortho(0, fbo.getWidth(), fbo.getHeight(), 0, -1, 1);
         fd.viewportW = fbo.getWidth();
         fd.viewportH = fbo.getHeight();
         CgRenderPipeline.getInstance().prepareFrame();
+        // TEXT HAS ITS OWN PROJECTION, and it has to follow the target too. CgTextRenderer does not
+        // read cg_ProjMatrix; it carries a matrix of its own that beginFrame sets for the screen. Every
+        // pooled layer is screen-sized, so the two agreed for as long as those were the only layers --
+        // and inside a window's snapshot, sized to the window, glyphs were placed through a screen
+        // ortho into a window-sized viewport: every string in a photograph drawn at a third of its size
+        // in the top-left corner. updateOrtho is a no-op when the size is unchanged, so this costs a
+        // pool layer nothing.
+        textRenderer.context().updateOrtho(fbo.getWidth(), fbo.getHeight());
         currentTexture = null;
         return fbo;
     }
@@ -1338,7 +1388,12 @@ public final class CgUiPaintContext {
         fd.viewportW = frame.savedViewportW();
         fd.viewportH = frame.savedViewportH();
         CgRenderPipeline.getInstance().prepareFrame();
+        // Back to the enclosing target's size for text as well -- @see beginLayerFbo.
+        textRenderer.context().updateOrtho(frame.savedViewportW(), frame.savedViewportH());
         frame.glScope().close();
+        // And the clip, against the enclosing target's height -- the scope above restores the FBO and
+        // the viewport but not the scissor rect, which was last applied for the layer just ended.
+        reapplyScissor();
         currentTexture = null;
     }
 
@@ -1452,20 +1507,47 @@ public final class CgUiPaintContext {
         try (CgGlScope scope = CgGlState.save(CgGlSlot.FBO, CgGlSlot.VIEWPORT, CgGlSlot.BLEND)) {
             subtreeFbo.bind();
             CgGL.glViewport(0, 0, subtreeFbo.getWidth(), subtreeFbo.getHeight());
-            CgTexture2D maskTex = (CgTexture2D) maskFbo.getColorTexture(0);
-            bindTexture(maskTex);
-            CgBlendState.MASK_ALPHA_MULTIPLY.apply();
-            // Same v-flip as blitLayer — maskTex is another FBO color attachment, same OpenGL
-            // bottom-left-origin storage vs. our top-left screen-space convention. Same
-            // identity-pose bypass as blitLayer too — this quad is already physical-pixel-sized.
-            poseStack.pushPose();
-            poseStack.setIdentity();
-            quad().at(0, 0).size(subtreeFbo.getWidth(), subtreeFbo.getHeight())
-                  .uv(0f, 1f, 1f, 0f)   // V flipped, same reason as blitLayer
-                  .color(0xFFFFFFFF).submit();
-            flush();
-            poseStack.popPose();
+            // The clip, for THIS buffer's height -- @see beginLayerFbo. Restored in the finally below.
+            if (scissorStack.hasScissor()) scissorStack.applyScissorIfNeeded(subtreeFbo.getHeight());
+            // AND THE PROJECTION, which the viewport alone does not cover. This runs after the
+            // subtree's layer has been ended, so the frame's ortho is the ENCLOSING target's -- and
+            // that is only the same size as the layer when the enclosing target is the screen. Inside a
+            // window's snapshot it is the window's size, so a mask quad the size of the (screen-sized)
+            // layer was drawn into a window-sized ortho: stretched by screen/window on each axis and
+            // shifted with it. The multiply then zeroed the subtree everywhere the DISPLACED mask did
+            // not reach, and the window's lighter base surface showed through the hole -- a minimised
+            // editor's photograph with a pale block across its islands and a strip of content
+            // surviving inside it. Same shape as the scissor flip, found from the same picture.
+            CgFrameData fd = CgRenderPipeline.getInstance().getFrameData();
+            Matrix4f enclosingProj = new Matrix4f(fd.projMatrix);
+            int enclosingW = fd.viewportW, enclosingH = fd.viewportH;
+            fd.projMatrix.identity().ortho(0, subtreeFbo.getWidth(), subtreeFbo.getHeight(), 0, -1, 1);
+            fd.viewportW = subtreeFbo.getWidth();
+            fd.viewportH = subtreeFbo.getHeight();
+            CgRenderPipeline.getInstance().prepareFrame();
+            try {
+                CgTexture2D maskTex = (CgTexture2D) maskFbo.getColorTexture(0);
+                bindTexture(maskTex);
+                CgBlendState.MASK_ALPHA_MULTIPLY.apply();
+                // Same v-flip as blitLayer — maskTex is another FBO color attachment, same OpenGL
+                // bottom-left-origin storage vs. our top-left screen-space convention. Same
+                // identity-pose bypass as blitLayer too — this quad is already physical-pixel-sized.
+                poseStack.pushPose();
+                poseStack.setIdentity();
+                quad().at(0, 0).size(subtreeFbo.getWidth(), subtreeFbo.getHeight())
+                      .uv(0f, 1f, 1f, 0f)   // V flipped, same reason as blitLayer
+                      .color(0xFFFFFFFF).submit();
+                flush();
+                poseStack.popPose();
+            } finally {
+                fd.projMatrix.set(enclosingProj);
+                fd.viewportW = enclosingW;
+                fd.viewportH = enclosingH;
+                CgRenderPipeline.getInstance().prepareFrame();
+            }
         }
+        // The scope put the enclosing target back; the clip has to follow it.
+        reapplyScissor();
         currentTexture = null;
     }
 
