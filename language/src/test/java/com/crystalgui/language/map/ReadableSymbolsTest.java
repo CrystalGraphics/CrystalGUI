@@ -130,6 +130,46 @@ public class ReadableSymbolsTest {
                 "getConfigurationManager", shown.declaration().member());
     }
 
+    /**
+     * <b>An UNQUALIFIED mapping still renames — which is nearly all of them.</b>
+     *
+     * <p>MCP's CSVs carry no owner, because an SRG name is globally unique. So an owner-keyed-only lookup
+     * renames nothing at all on a Minecraft host, and both the documentation popup and the Ctrl+B jump go
+     * back to runtime names. That was a real regression here, introduced while fixing the case below —
+     * and the two are asserted together because a rule satisfying either alone has broken the other.</p>
+     */
+    @Test
+    public void anUnqualifiedMappingRenamesOnItsOwnPlatform() {
+        MappingSet mappings = MappingSet.builder()
+                .method("func_71276_C", "getServer")
+                .build();
+        SymbolInfo resolved = SymbolInfo.of("func_71276_C", SymbolKind.METHOD)
+                .withContainer("net.minecraft.server.MinecraftServer");
+
+        assertEquals("an unqualified mapping did not rename, so nothing on a real host would",
+                "getServer", ReadableSymbols.in(mappings, resolved).name());
+    }
+
+    /**
+     * <b>...and never onto a JDK type, which cannot declare one.</b>
+     *
+     * <p>A JavaScript chain ending in {@code list.get(0)} infers {@code java.lang.Object}, and the
+     * unqualified tier renamed {@code field_71075_bZ} there too — so a hover reported a member called
+     * {@code capabilities} belonging to {@code Object}, which declares nothing of the sort. The name was
+     * right and the type it was attributed to was invented, which is worse than saying nothing.</p>
+     */
+    @Test
+    public void anUnqualifiedMappingDoesNotEscapeOntoAJdkType() {
+        MappingSet mappings = MappingSet.builder()
+                .field("field_71075_bZ", "capabilities")
+                .build();
+        SymbolInfo resolved = SymbolInfo.of("field_71075_bZ", SymbolKind.FIELD)
+                .withContainer("java.lang.Object");
+
+        assertSame("a mapped name escaped onto a type that cannot declare it",
+                resolved, ReadableSymbols.in(mappings, resolved));
+    }
+
     /** An unmapped member keeps the site it was given, object and all. */
     @Test
     public void anUnmappedMemberIsHandedBackUntouched() {
