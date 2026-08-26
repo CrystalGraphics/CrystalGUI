@@ -307,6 +307,11 @@ public final class JavaLanguage {
                 // own class, opened from the picker -- walked and indexed the whole list on the frame
                 // thread: `isPlatformSource` 63ms of a 117ms open, to answer "no".
                 attached.warm();
+                // AND ONE ATTACHED PARSE, which is a different cost from indexing the archives above.
+                // Discovery finds WHERE sources are; this builds what JDT needs to read one -- measured
+                // at ~70ms on top of the per-class parse, paid by whichever hover happens to be first.
+                // @see AttachedSources#warmParser
+                attached.warmParser();
 
                 // AND THE TYPE INDEX'S SCAN, which is LAZY INSIDE `matching` rather than in the
                 // constructor -- so `typeIndexFor` returning an instance proves nothing about it being
