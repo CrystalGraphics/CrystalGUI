@@ -355,6 +355,11 @@ public final class CgUiScreen extends GuiScreen {
         // setContent, not content().addChild -- it is what ADOPTS the editor's menu bar into the
         // caption, so the window has one header rather than two stacked on each other.
         editorWindow.setContent(editor);
+
+        // FLAG-GATED, and the only thing that ever exercises the 1.7.10 item and fluid renderer: nothing
+        // in the shipped UI constructs a slot, so that service compiled and had never run. Off unless
+        // -PcgSlotProbe.  CgUiSlotProbe
+        CgUiSlotProbe.contribute(uiWindow);
         // A WINDOW ON A DESKTOP, not a full-screen editor — and only as a DEFAULT: the record below
         // overrides it the moment there is one, so this is what a first run looks like and nothing else.
         //

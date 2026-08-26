@@ -369,9 +369,9 @@ updating the test that asserts the old behaviour.
 ./gradlew :gl-debug-harness:runHarness --max-workers=1 --args="--mode=cgui-slot --seconds=6"
 # artifact: gl-debug-harness/harness-output/cgui-slot/cgui-slot-startup.png
 
-# in-game — the ONLY way to test the real renderer; not yet run
-./gradlew :mc1710:runClient --max-workers=1
-./gradlew :mc1710:serverSmoke --max-workers=1                    # not yet run on this branch
+# in-game -- the ONLY way to test the real renderer
+./gradlew :mc1710:runClient --max-workers=1 -PcgSlotProbe    # opens a window of real slots
+./gradlew :mc1710:serverSmoke --max-workers=1   # BLOCKED: needs eula=true in mc1710/run/eula.txt
 ```
 
 `--max-workers=1` matters for anything touching `:mc1710` — the root `gradle.properties` warns that
