@@ -6,6 +6,7 @@ import com.crystalgui.language.engine.bridge.Analysis;
 import com.crystalgui.language.java.JavaLanguage;
 import com.crystalgui.language.js.host.JsHost;
 import com.crystalgui.language.js.rhino.resolve.JsTypeRef;
+import com.crystalgui.text.syntax.SyntaxToken;
 import com.crystalgui.language.map.MappingSet;
 import com.crystalgui.text.lang.SymbolInfo;
 
@@ -158,6 +159,71 @@ public class JsRemapTest {
                     String.valueOf(expected.getMessage()).contains("getBlock"));
         }
         assertEquals(List.of(), ObfuscatedWorld.CALLS);
+    }
+
+    /**
+     * <b>A script that spells a member the way the RUNTIME does is still understood.</b>
+     *
+     * <h3>It ran perfectly and the editor could say nothing about it</h3>
+     *
+     * <p>Members are renamed on the way out of {@code InteropResolver}, so the list offers
+     * {@code getBlock} and a script written against {@code func_147439_a} matched nothing in it. Nothing
+     * failed: the runtime has that member under that name, so the call needed no translation and simply
+     * worked. What was lost was everything the editor knows — no signature, no javadoc, no semantic
+     * colour, and a documentation popup containing a bare word.</p>
+     *
+     * <p><b>Not inherited from the Java side, and that was measured.</b> Teaching the compile view both
+     * spellings does not reach here: everything the Java engine reports comes back through
+     * {@code asReadable} and collapses onto the readable name, so both spellings arrive as
+     * {@code getBlock} and the typed identifier matches neither. This test was deleted once on the theory
+     * that the Java fix covered it, and reverting the change failed it immediately.</p>
+     *
+     * <p>Both halves are asserted because they are one question asked twice: {@code memberCaptureAt} and
+     * the popup both go through {@code resolveMember}, so a fix to one that missed the other would leave
+     * the two disagreeing about whether the member exists.</p>
+     */
+    @Test
+    public void aRuntimeSpelledMemberResolvesToItsReadableSelf() {
+        JsLanguage.useMemberNames(mappings());
+        String source = "var w = new " + ObfuscatedWorld.class.getName() + "();' + NL + '"
+                + "w.func_147439_a(1);' + NL + '";
+
+        SymbolInfo found = JsLanguage.analyzer().analyze("Probe.js", source, 1L)
+                .resolveAt(source.indexOf(".func_147439_a") + 1);
+        assertNotNull("a runtime-spelled member resolved to nothing at all", found);
+        assertEquals("the popup must show the member as the mapping names it",
+                "getBlock", found.name());
+
+        assertTrue("a runtime-spelled member was left uncoloured, got " + capturesOver(source),
+                capturesOver(source).stream().anyMatch(name -> name.startsWith("function")));
+    }
+
+    /**
+     * The readable spelling keeps working — the counter-assertion that matters here.
+     *
+     * <p>A match written as "try the runtime name" rather than "try either" would answer for the
+     * obfuscated script and silently stop answering for every ordinary one.</p>
+     */
+    @Test
+    public void theReadableSpellingStillResolves() {
+        JsLanguage.useMemberNames(mappings());
+        String source = "var w = new " + ObfuscatedWorld.class.getName() + "();' + NL + '"
+                + "w.getBlock(1);' + NL + '";
+
+        SymbolInfo found = JsLanguage.analyzer().analyze("Probe.js", source, 1L)
+                .resolveAt(source.indexOf(".getBlock") + 1);
+        assertNotNull("the ordinary spelling stopped resolving", found);
+        assertEquals("getBlock", found.name());
+    }
+
+    /** Every capture over the {@code func_147439_a} in {@code source}. */
+    private static List<String> capturesOver(String source) {
+        int at = source.indexOf("func_147439_a");
+        List<String> found = new ArrayList<>();
+        for (SyntaxToken token : JsLanguage.analyzer().analyze("Probe.js", source, 1L).semanticTokens()) {
+            if (token.start() == at) found.add(token.name());
+        }
+        return found;
     }
 
     /** An unmapped class is unaffected, which is what keeps the cost off every JDK call. */

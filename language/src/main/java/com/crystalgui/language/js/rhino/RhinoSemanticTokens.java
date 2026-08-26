@@ -94,17 +94,35 @@ final class RhinoSemanticTokens {
     static List<SyntaxToken> of(@Nullable AstRoot root, RhinoScopes scopes, Set<String> hostBindings,
                                 List<JsImports.Imported> imports,
                                 @Nullable java.util.function.Function<PropertyGet, String> members) {
+        return of(root, scopes, hostBindings, imports, members, null);
+    }
+
+    /**
+     * @param types asked what KIND an imported type is, so an enum does not paint like a class — null to
+     *              leave every one of them the flat {@code type}.
+     *              @see com.crystalgui.language.js.rhino.resolve.RhinoResolution#typeCaptureFor
+     */
+    static List<SyntaxToken> of(@Nullable AstRoot root, RhinoScopes scopes, Set<String> hostBindings,
+                                List<JsImports.Imported> imports,
+                                @Nullable java.util.function.Function<PropertyGet, String> members,
+                                @Nullable java.util.function.Function<String, String> types) {
         // THE IMPORTED SIMPLE NAMES, because the free-name pass has to tell them from a host binding.
         // Both are names the file never declared, and `RhinoSourceAnalyzer` merges the two lists on
         // purpose so resolution and completion treat them alike -- but they are not alike to COLOUR.
         Set<String> importedNames = new LinkedHashSet<>();
+        // AND WHAT KIND EACH ONE IS, resolved once per import rather than once per use: a name appears as
+        // often as the author wrote it, and the answer cannot differ between occurrences.
+        java.util.Map<String, String> importedKinds = new java.util.HashMap<>();
         for (JsImports.Imported each : imports) {
-            if (!each.simpleName().isEmpty()) importedNames.add(each.simpleName());
+            if (each.simpleName().isEmpty()) continue;
+            importedNames.add(each.simpleName());
+            String capture = types == null ? null : types.apply(each.binaryName());
+            if (capture != null) importedKinds.put(each.simpleName(), capture);
         }
         // MARKED EVEN WHEN THE TREE IS NULL. A file that fails to parse still has imports the author
         // can read, and colouring them is the one thing still possible for it.
-        List<SyntaxToken> all = tokensFor(root, scopes, hostBindings, importedNames);
-        markImports(imports, all);
+        List<SyntaxToken> all = tokensFor(root, scopes, hostBindings, importedNames, importedKinds);
+        markImports(imports, all, importedKinds);
         markJavaMembers(root, members, all);
         all.sort(Comparator.comparingInt(SyntaxToken::start));
         return all;
@@ -163,7 +181,8 @@ final class RhinoSemanticTokens {
         });
     }
 
-    private static void markImports(List<JsImports.Imported> imports, List<SyntaxToken> tokens) {
+    private static void markImports(List<JsImports.Imported> imports, List<SyntaxToken> tokens,
+                                    java.util.Map<String, String> kinds) {
         for (JsImports.Imported each : imports) {
             // THE KEYWORD FIRST, because nothing else marks it: the statement is blanked before the
             // parser sees it, and the grammar gives the word nothing once the line stops parsing as an
@@ -182,14 +201,20 @@ final class RhinoSemanticTokens {
             }
             int typeAt = lastDot < 0 ? 0 : lastDot + 1;
             if (typeAt < name.length()) {
-                add(tokens, at + typeAt, name.length() - typeAt, "type");
+                // BY KIND, not a flat `type`. An imported enum painted like an imported class, which is
+                // the one thing an import line is in a position to say.
+                // BY KIND, not a flat `type`. An imported enum painted like an imported class, which is
+                // the one thing an import line is in a position to say.
+                String capture = kinds.get(name.substring(typeAt));
+                add(tokens, at + typeAt, name.length() - typeAt, capture == null ? "type" : capture);
             }
         }
     }
 
     private static List<SyntaxToken> tokensFor(@Nullable AstRoot root, RhinoScopes scopes,
                                                Set<String> hostBindings,
-                                               Set<String> importedNames) {
+                                               Set<String> importedNames,
+                                               java.util.Map<String, String> importedKinds) {
         if (root == null) return new ArrayList<>();
         List<SyntaxToken> tokens = new ArrayList<>();
 
@@ -232,7 +257,9 @@ final class RhinoSemanticTokens {
             // was a type on the import line, where `markImports` marks it, and a local two rows below
             // where it is used. One name, two colours, in a file six lines long.
             if (importedNames.contains(name)) {
-                capture = "type";
+                // BY KIND where the engine knows one, so a use of an imported enum matches its import.
+                String byKind = importedKinds.get(name);
+                capture = byKind == null ? "type" : byKind;
             } else if (hostBindings.contains(name)) {
                 capture = "variable.global";
             } else if (known.contains(name)) {
