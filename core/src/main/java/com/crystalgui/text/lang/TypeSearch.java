@@ -44,22 +44,86 @@ public interface TypeSearch {
      */
     Results search(String query, int limit);
 
-    /** One type: enough to draw a row and to open it. */
+    /**
+     * One type: enough to draw a row and to open it.
+     *
+     * @param packageName for a NESTED type this is the enclosing type rather than a package, so
+     *                    {@link #qualifiedName} spells the name an author writes
+     * @param binaryName  what the class file is called — {@code Outer$Inner}, and equal to
+     *                    {@link #qualifiedName} for everything else
+     */
     record Result(String simpleName, String packageName, @Nullable String container,
-                  @Nullable SymbolKind kind, boolean isAbstract) {
+                  @Nullable SymbolKind kind, boolean isAbstract, String binaryName) {
 
         public Result {
             if (simpleName == null) throw new IllegalArgumentException("simpleName");
             packageName = packageName == null ? "" : packageName;
+            if (binaryName == null || binaryName.isEmpty()) {
+                binaryName = packageName.isEmpty() ? simpleName : packageName + "." + simpleName;
+            }
+        }
+
+        /** A top-level type, whose two spellings are the same. */
+        public Result(String simpleName, String packageName, @Nullable String container,
+                      @Nullable SymbolKind kind, boolean isAbstract) {
+            this(simpleName, packageName, container, kind, isAbstract, null);
         }
 
         /**
-         * The binary name, which is <b>also the identity</b> — what a picker hands back and what a
-         * {@code library:} resource is addressed by. Derived rather than stored: two spellings of one
-         * name is how they come to disagree.
+         * The name an author writes — {@code java.util.Map.Entry}.
+         *
+         * <h3>Why this is no longer the identity too</h3>
+         *
+         * <p>It used to be both, deliberately: <i>"two spellings of one name is how they come to
+         * disagree"</i>. That holds while every type is top-level and stops holding the moment a nested
+         * one is indexed — no class file is called {@code WorldSettings.GameType}, so addressing a
+         * {@code library:} resource by this name opened an empty document. The spellings are now both
+         * carried rather than one being derived from the other, which is the only way to stop them
+         * disagreeing when they genuinely differ. @see #binaryName
          */
         public String qualifiedName() {
             return packageName.isEmpty() ? simpleName : packageName + "." + simpleName;
+        }
+
+        /**
+         * The TOP-LEVEL class holding this type — itself, unless it is nested.
+         *
+         * <p>What a {@code library:} resource must be addressed by: a member type has no class file and
+         * no document of its own, so opening one means opening the file it lives in.</p>
+         */
+        public String topLevelName() {
+            int nested = binaryName.indexOf('$');
+            return nested < 0 ? binaryName : binaryName.substring(0, nested);
+        }
+
+        /** Whether this type is declared inside another. */
+        public boolean isNested() {
+            return binaryName.indexOf('$') >= 0;
+        }
+
+        /**
+         * The package alone.
+         *
+         * <p>Not {@link #packageName}, which for a nested type names the ENCLOSING TYPE so that
+         * {@code qualifiedName} spells something importable. A row that wants to say "in Outer of
+         * package" needs the two apart.</p>
+         */
+        public String packageOnly() {
+            String top = topLevelName();
+            int dot = top.lastIndexOf('.');
+            return dot < 0 ? "" : top.substring(0, dot);
+        }
+
+        /**
+         * The enclosing type chain in source form — {@code WorldSettings}, or {@code Outer.Inner} for one
+         * nested two deep. Empty for a top-level type.
+         */
+        public String enclosingName() {
+            int nested = binaryName.lastIndexOf('$');
+            if (nested < 0) return "";
+            String chain = binaryName.substring(0, nested);
+            int dot = topLevelName().lastIndexOf('.');
+            return (dot < 0 ? chain : chain.substring(dot + 1)).replace('$', '.');
         }
     }
 
