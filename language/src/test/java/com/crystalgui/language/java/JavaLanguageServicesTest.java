@@ -196,6 +196,10 @@ public class JavaLanguageServicesTest {
         try {
             AtomicReference<Versioned<SymbolInfo>> answer = new AtomicReference<>();
             services.resolver().resolveAt(text.indexOf("label.length") + 2, answer::set);
+            // A RESOLVE IS SCHEDULED NOW, because answering can mean parsing an attached source file --
+            // measured at 159ms for one class, which is not a thing to do on a frame. The Resolver
+            // contract always said the callback may fire later; this fixture simply never had to wait.
+            settle();
 
             assertNotNull("resolveAt never called back", answer.get());
             SymbolInfo symbol = answer.get().value();
@@ -226,6 +230,9 @@ public class JavaLanguageServicesTest {
 
             AtomicReference<Versioned<SymbolInfo>> answer = new AtomicReference<>();
             services.resolver().resolveAt(text.indexOf("label") + 2, answer::set);
+            // Drains the RESOLVE without advancing the clock, so the debounced analysis above stays
+            // queued -- which is the whole point of this test. @see #settle
+            for (int i = 0; i < 4; i++) scheduler.drain();
 
             assertNotNull(answer.get());
             assertEquals("the held analysis describes the version before the edit",

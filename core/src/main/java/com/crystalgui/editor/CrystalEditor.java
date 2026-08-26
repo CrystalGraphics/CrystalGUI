@@ -22,6 +22,7 @@ import com.crystalgui.ui.elements.workbench.WorkbenchSettings;
 import com.crystalgui.ui.elements.inspector.Inspector;
 import com.crystalgui.ui.elements.inspector.InspectorRegistry;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.UiDataKeys;
 import com.crystalgui.ui.elements.desktop.WindowChrome;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.chrome.ChromeCommands;
@@ -133,6 +134,12 @@ public class CrystalEditor extends UIElement implements Disposable, WindowChrome
     @Override
     public Object getData(DataKey<?> key) {
         if (key == CRYSTAL_EDITOR) return this;
+        // THE STORE PREFERENCES ARE WRITTEN TO, which is this element's and not the window root's.
+        //
+        // `loadPreferences` reads the user layer into this store, `savePreferences` writes that layer
+        // back out, and `WorkbenchSettings.install` subscribes to its `onChanged` -- so this is the one
+        // store a preference has to land in to be heard, applied, or kept. @see UiDataKeys#SETTINGS_HOST
+        if (key == UiDataKeys.SETTINGS_HOST) return settingsHost();
         return super.getData(key);
     }
 

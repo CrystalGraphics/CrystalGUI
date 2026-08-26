@@ -1,5 +1,6 @@
 package com.crystalgui.language.java.fix;
 
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.language.engine.bridge.Analysis;
 import com.crystalgui.language.java.classpath.TypeIndex;
 import com.crystalgui.text.lang.CodeAction;
@@ -82,7 +83,13 @@ public final class JavaCodeActions implements CodeActionProvider,
             answer.accept(Versioned.of(request.version(), List.of()));
             return;
         }
-        answer.accept(Versioned.of(current.version(),
-                current.codeActionsIn(request.from(), request.to(), this)));
+        // ON THE CALLING THREAD, which for the gutter bulb is a PAINT. Measured at 24.8ms for the first
+        // ask against a freshly opened 1,980-line unit and ~200us for every ask after it, which is the
+        // signature of forcing work the analysis had left lazy rather than of the catalog itself.
+        long timed = FrameProfile.begin();
+        List<CodeAction> found = current.codeActionsIn(request.from(), request.to(), this);
+        FrameProfile.step(timed, "java.codeActionsIn " + request.from() + ".." + request.to()
+                + " -> " + found.size());
+        answer.accept(Versioned.of(current.version(), found));
     }
 }

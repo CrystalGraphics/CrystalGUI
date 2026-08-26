@@ -4,11 +4,14 @@ import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.style.StyleEngine;
 import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.selector.Selector;
+import com.crystalgui.style.selector.SelectorType;
 import com.crystalgui.ui.UIElement;
 import lombok.Getter;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -70,6 +73,48 @@ public final class StyleSheet {
     private final Map<String, List<StyleRule>> byClass = new HashMap<>();
     private final Map<String, List<StyleRule>> byType = new HashMap<>();
     private final List<StyleRule> universal = new ArrayList<>();
+
+    /**
+     * Every class, id or tag that some rule reaches <b>through an ancestor's state</b>.
+     *
+     * <p>What a descendant must carry for an ancestor's {@code :hover}, {@code :checked} or
+     * {@code :focus} change to be able to alter its match. @see #indexStateDescendants</p>
+     */
+    private final Set<String> stateDescendantKeys = new HashSet<>();
+
+    /** Whether some such rule's subject cannot be keyed at all, so every descendant must be assumed. */
+    private boolean stateDescendantsUnbounded;
+
+    /**
+     * Descendant keys reachable through an ancestor carrying {@code ancestorKey}. @see #indexStateDescendants
+     */
+    private final Map<String, Set<String>> stateDescendantsByAncestor = new HashMap<>();
+
+    /**
+     * Descendant keys reachable through a stateful ancestor that could be <b>anything</b> — the
+     * {@code :hover .__icon__} shape, where the ancestor compound carries no tag, class or id.
+     */
+    private final Set<String> stateDescendantsFromAnyAncestor = new HashSet<>();
+
+    /** @see #indexStateDescendants */
+    public Set<String> stateDescendantKeys() {
+        return stateDescendantKeys;
+    }
+
+    /** @see #indexStateDescendants */
+    public Set<String> stateDescendantsFrom(String ancestorKey) {
+        return stateDescendantsByAncestor.getOrDefault(ancestorKey, Collections.emptySet());
+    }
+
+    /** @see #stateDescendantsFromAnyAncestor */
+    public Set<String> stateDescendantsFromAnyAncestor() {
+        return stateDescendantsFromAnyAncestor;
+    }
+
+    /** @see #indexStateDescendants */
+    public boolean hasUnboundedStateDescendants() {
+        return stateDescendantsUnbounded;
+    }
 
     /**
      * The CSS text this sheet was parsed from — retained so the sheet can be <b>re-substituted
@@ -176,6 +221,107 @@ public final class StyleSheet {
             }
         }
         if (!indexed) universal.add(rule);
+        indexStateDescendants(rule);
+    }
+
+    /**
+     * Records what a descendant needs re-matching for when an ANCESTOR's state changes.
+     *
+     * <h3>The cost this exists to remove</h3>
+     *
+     * <p>{@code UIElement.invalidateStyleMatch()} recurses into every descendant, and it has to: a
+     * descendant selector can key off this element's state, so {@code checkbox:checked .__mark__} means
+     * the mark's match depends on the checkbox's. Doing it for the <em>whole subtree</em> is what made
+     * hovering expensive — measured in a running client, one hover change re-matched <b>291</b> elements
+     * and a focus change <b>402 to 713</b>, at 20-25µs each, which is most of a frame per mouse move.</p>
+     *
+     * <p>But almost nothing is actually keyed that way. Across every sheet this project ships, the
+     * complete set of subjects reachable from an ancestor's state is thirteen — {@code __mark__},
+     * {@code __thumb__}, {@code __knob__}, {@code __fill__}, {@code __spacer__} and a few more. So the
+     * question "which of my descendants could this change?" has a small answer, and asking it turns a
+     * subtree re-match into a subtree WALK with a set lookup per node.</p>
+     *
+     * <p>This is Blink's {@code RuleFeatureSet} descendant invalidation set, in the one shape this engine
+     * needs: keys taken from the <b>subject</b> compound of any rule whose ancestor part carries a
+     * pseudo-class. @see #stateDescendantKeys</p>
+     */
+    private void indexStateDescendants(StyleRule rule) {
+        var compounds = rule.selector().compounds();
+        if (compounds.size() < 2) return;
+        boolean ancestorHasState = false;
+        for (int i = 0; i < compounds.size() - 1 && !ancestorHasState; i++) {
+            for (var part : compounds.get(i).parts()) {
+                if (part.type() == SelectorType.PSEUDO_CLASS) {
+                    ancestorHasState = true;
+                    break;
+                }
+            }
+        }
+        if (!ancestorHasState) return;
+
+        // WHICH ANCESTORS CAN REACH IT, not merely that some ancestor can.
+        //
+        // The descendant keys alone are a set the whole sheet shares, so ANY state change anywhere marked
+        // every element carrying any of them. `text` is one such key -- several rules read
+        // `something:hover text` -- so every label in the window re-matched on every hover, and hover
+        // changes as fast as the mouse moves. Measured in a client: `rematched=578 ~text=123
+        // ~__qp-key__=60 ~__qp-key-sep__=45` on a frame with `style 13526us`, sustained across a third of
+        // frames, with the Go to File popup CLOSED and focus in the editor. 300-600 elements at ~20-25us
+        // each is the whole 120-to-40.
+        //
+        // Keying by the stateful ancestor is Blink's RuleFeatureSet: a descendant invalidation set hangs
+        // off the thing whose state changed, so `.__quick-pick__:focus-within .__qp-key__` contributes
+        // nothing at all unless the element that changed IS a quick-pick.
+        Set<String> ancestorKeys = new HashSet<>();
+        boolean ancestorKeyed = false;
+        for (int i = 0; i < compounds.size() - 1; i++) {
+            boolean statefulHere = false;
+            for (var part : compounds.get(i).parts()) {
+                if (part.type() == SelectorType.PSEUDO_CLASS) statefulHere = true;
+            }
+            if (!statefulHere) continue;
+            for (var part : compounds.get(i).parts()) {
+                switch (part.type()) {
+                    case ID, CLASS, TYPE -> {
+                        ancestorKeys.add(part.identity());
+                        ancestorKeyed = true;
+                    }
+                    default -> { /* a bare pseudo-class ancestor -- see below */ }
+                }
+            }
+        }
+
+        boolean keyed = false;
+        Set<String> descendantKeys = new HashSet<>();
+        for (var part : compounds.get(compounds.size() - 1).parts()) {
+            switch (part.type()) {
+                case ID, CLASS, TYPE -> {
+                    stateDescendantKeys.add(part.identity());
+                    descendantKeys.add(part.identity());
+                    keyed = true;
+                }
+                default -> { /* not a key we can narrow on */ }
+            }
+        }
+        if (keyed) {
+            if (ancestorKeyed) {
+                for (String ancestorKey : ancestorKeys) {
+                    stateDescendantsByAncestor
+                            .computeIfAbsent(ancestorKey, k -> new HashSet<>())
+                            .addAll(descendantKeys);
+                }
+            } else {
+                // `:hover .__icon__` -- a stateful ancestor nothing can be keyed on, so any element could
+                // be that ancestor. These stay in the always-consulted set rather than turning the whole
+                // narrowing off, which is the difference between one imprecise RULE and an imprecise SHEET.
+                stateDescendantsFromAnyAncestor.addAll(descendantKeys);
+            }
+        }
+        // A SUBJECT NOTHING CAN BE KEYED ON -- `foo:hover *`, or a bare pseudo-class -- means any
+        // descendant could match, so the narrowing is off for the whole sheet rather than quietly
+        // wrong for that one rule. None of the shipped sheets contains such a rule; the flag is what
+        // makes adding one safe rather than a silent stale-style bug.
+        if (!keyed) stateDescendantsUnbounded = true;
     }
 
     /**
@@ -239,6 +385,15 @@ public final class StyleSheet {
         byClass.clear();
         byType.clear();
         universal.clear();
+        // REBUILT WITH THE REST. A hot-reload that dropped a `:hover .__mark__` rule and left its key
+        // behind would merely cost a little; one that ADDED such a rule and did not gain the key would
+        // leave that mark permanently stale, which is the failure this whole mechanism must not create.
+        stateDescendantKeys.clear();
+        // CLEARED WITH THEIR SIBLING, or a hot reload leaves the old sheet's ancestor keys behind and the
+        // narrowing quietly widens to whatever any previously-loaded sheet said. @see #indexStateDescendants
+        stateDescendantsByAncestor.clear();
+        stateDescendantsFromAnyAncestor.clear();
+        stateDescendantsUnbounded = false;
         for (var rule : rules) index(rule);
     }
 

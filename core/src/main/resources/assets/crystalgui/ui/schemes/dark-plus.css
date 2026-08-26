@@ -21,13 +21,27 @@
 
 theme {
     /* ── The editor's surfaces ──
-     * TRANSPARENT, not #191A1C, though they resolve to the same pixels: an opaque document fill is
-     * a SQUARE that paints over the rounded island beneath it, which is how the editor lost its
-     * corners the moment the ring that used to trace them was removed. The same trap the file tree
-     * hit. A scheme whose document genuinely differs from the panel sets a colour here and accepts
-     * square corners (or a theme matches it); a scheme that agrees with the panel says so by
-     * staying out of the way. */
-    --editor-bg: #00000000;
+     * OPAQUE. This was #00000000, on the reasoning that it resolves to the same pixels anyway and that
+     * an opaque document fill is a SQUARE painted over the rounded island beneath it -- which is how the
+     * editor lost its corners the moment the ring that used to trace them was removed.
+     *
+     * BOTH HALVES HAVE SINCE STOPPED BEING TRUE, and each one alone is enough.
+     *
+     * The corners are no longer a cost: `texteditor.__file-editor__` carries the bottom radius ITSELF
+     * now (ua/editor.css records why, and its own note says the corners "ARE the island's"), so a fill on
+     * it is drawn inside that radius rather than over it. Verified in the harness -- the editor's bottom
+     * corners are identical opaque and transparent. The three schemes that already ship an opaque paper
+     * (light-plus, islands-light, eclipse-dark) were the standing evidence and nobody had reported a
+     * square editor.
+     *
+     * And "the same pixels" was only ever true of a DARK theme. The two axes are independent by design,
+     * so a dark scheme is expected to run on a light one -- and there a transparent paper is not the
+     * panel's colour, it IS the panel: this scheme's #D4D4D4 ink landed on Crystal Light's white paper,
+     * which is very nearly invisible. The gutter, which sets its own opaque fill, was the only part that
+     * followed the scheme, so it read as the gutter being the thing that was wrong.
+     *
+     * Pixel-identical on a dark theme, which is the whole of what the old value bought. */
+    --editor-bg: #191A1C;
     --editor-fg: #D4D4D4;
     --editor-caret: #FF0000;
     --editor-current-line: #1F2124;

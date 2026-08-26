@@ -2,9 +2,13 @@ package com.crystalgui.ui;
 
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
+import com.crystalgui.text.TextPoint;
+import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.view.RenderWhitespace;
 import com.crystalgui.ui.elements.editor.TextEditor;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -375,5 +379,46 @@ public class EditorFrameCostTest extends UiTestBase {
                         + (small / 1000) + "us/frame for 40 rows: per-frame work is scaling with the "
                         + "document, not the viewport",
                 large < small * 8L + 200_000L);
+    }
+
+    /**
+     * <b>...and nor does it cost what is in the PROBLEMS list.</b>
+     *
+     * <h3>The one part that is honestly O(document), and what that cost</h3>
+     *
+     * <p>{@code ErrorStripePart} shows every problem in the file rather than the ones on screen — that is
+     * what the groove is for, and it is the single place virtualisation cannot apply. It was placing every
+     * mark on every frame, and {@code applySeverity} called {@code removeClass} three times and
+     * {@code addClass} once on each: four {@code invalidateStyleMatch()} calls per problem per frame, so
+     * the cascade re-ran selector matching over the whole list sixty times a second to arrive at the
+     * classes those marks already had.</p>
+     *
+     * <p>Measured on a 2000-row document: <b>524µs a frame with no problems, 9.6ms with 500 and 33.7ms
+     * with 2000</b> — about 18µs per problem per frame. Reported as a decompiled Minecraft class taking
+     * 120fps to 55, which is what a few hundred unresolvable references in reconstructed code buys. With
+     * each slot remembering what it already shows it is 1.8ms at 500 and 5.0ms at 2000, and the marginal
+     * cost is 2.5µs.</p>
+     *
+     * <p>Generous for the reason the test above is: this is here to catch the class of defect — per-frame
+     * work proportional to the problem count — and not to police a marginal cost. Before the fix this
+     * ratio was 18x.</p>
+     */
+    @Test
+    public void aFrameDoesNotCostWhatIsInTheProblemsList() {
+        build(2000);
+        long clean = nanosPerFrame(300);
+
+        List<Diagnostic> problems = new ArrayList<>();
+        for (int i = 0; i < 500; i++) {
+            int row = i % 2000;
+            problems.add(Diagnostic.error(new TextPoint(row, 0), new TextPoint(row, 3), "e" + i));
+        }
+        editor.diagnostics().setAll(problems);
+        settleFrames(10);
+        long marked = nanosPerFrame(300);
+
+        assertTrue("500 problems cost " + (marked / 1000) + "us/frame against " + (clean / 1000)
+                        + "us/frame with none: the error stripe is re-placing every mark every frame",
+                marked < clean * 6L + 200_000L);
     }
 }
