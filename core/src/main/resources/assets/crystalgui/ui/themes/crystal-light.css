@@ -101,6 +101,25 @@ theme {
      * something laid over it. */
     --snap-preview-bg: #5A5F6640;
     --snap-preview-border: #3C4046AA;
+
+    /* The taskbar's Mica tint — @see crystal-dark.css. A white veil at the same ~90%, a shade off the
+     * pure white the overlay surface is so the bar still separates from a white window slid under it. */
+    --taskbar-glass-tint: #E6F4F4F7;
+    /* The active entry -- @see crystal-dark.css. A clear step BELOW the hover fill (#E0E4EA) on a white
+     * bar; the dark theme's mid grey would be a slab here. */
+    --taskbar-entry-active-bg: #CDD1D8;
+    /* The floating panels' acrylic -- @see crystal-dark.css. */
+    --preview-glass-tint: #CCF4F4F7;
+    --switcher-glass-tint: #CCF4F4F7;
+
+    /* The window icon tiles — @see crystal-dark.css. A step deeper than the dark theme's, because the
+     * glyph on them is still white and a pastel tile on a white bar would carry it at nothing. */
+    --window-icon-tile-1: #3568C8;
+    --window-icon-tile-2: #2E8C58;
+    --window-icon-tile-3: #C2762A;
+    --window-icon-tile-4: #7550C4;
+    --window-icon-tile-5: #2490A0;
+    --window-icon-tile-6: #C24A68;
     --colorpicker-bg: #FFFFFFEE;
     --colorpicker-handle-shadow: #00000040;
 
