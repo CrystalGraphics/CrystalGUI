@@ -71,6 +71,8 @@ public final class CgUiInput {
 
     private static KeyBinding openEditor;
     private static KeyBinding openDesktop;
+    /** F8, and only when the probe is armed. @see CgUiSlotScreen */
+    private static KeyBinding openSlotProbe;
 
     private CgUiInput() {
     }
@@ -85,6 +87,13 @@ public final class CgUiInput {
         // to reach the desktop without the editor on top of it, or F6 not reliably producing an editor.
         openDesktop = new KeyBinding("key.crystalgui.desktop", Keyboard.KEY_F7, "key.categories.crystalgui");
         ClientRegistry.registerKeyBinding(openDesktop);
+        // ONLY WHEN ARMED. A key nobody asked for is a key that collides with somebody else's, so the
+        // probe does not take F8 from every install -- it takes it from the one run that set the flag.
+        if (CgUiSlotScreen.ENABLED) {
+            openSlotProbe = new KeyBinding("key.crystalgui.slotprobe", Keyboard.KEY_F8,
+                    "key.categories.crystalgui");
+            ClientRegistry.registerKeyBinding(openSlotProbe);
+        }
         // THE FML BUS, not MinecraftForge.EVENT_BUS -- fireKeyInput posts to FMLCommonHandler.bus(), and
         // registering on the wrong one compiles, runs, and never fires.
         FMLCommonHandler.instance().bus().register(new CgUiInput.Handler());
@@ -145,8 +154,10 @@ public final class CgUiInput {
             // first hit leaves the other key's press queued and it fires on the next unrelated keystroke.
             boolean editor = openEditor != null && openEditor.isPressed();
             boolean desktop = openDesktop != null && openDesktop.isPressed();
+            boolean slotProbe = openSlotProbe != null && openSlotProbe.isPressed();
             if (editor) CgUiScreen.openEditor();
             else if (desktop) CgUiScreen.openDesktop();
+            else if (slotProbe) CgUiSlotScreen.open();
         }
     }
 }
