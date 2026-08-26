@@ -1,6 +1,7 @@
 package com.crystalgui.ui;
 
 import com.crystalgraphics.api.PoseStack;
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.core.CrystalGuiCore;
