@@ -472,8 +472,13 @@ public class Tooltip extends UIElement {
      * <p>Checked at all three moments a tip can reach the screen: both entry points, and every frame of
      * {@link PlacementTicker} — a drag can begin while one is already up, which neither entry point
      * would ever be called again for.</p>
+     *
+     * <p><b>Public because it is the rule, not this class's implementation of it.</b> A slot that
+     * delegates its tooltip to the host draws through the platform rather than through this element, and
+     * would otherwise need its own copy — which is exactly the "rediscovered once per widget" failure the
+     * paragraph above describes. One definition, consulted by both renderers.</p>
      */
-    private static boolean dragIsLive(UIElement anchor) {
+    public static boolean dragIsLive(UIElement anchor) {
         if (anchor == null) return false;
         UIWindow window = anchor.getAttachedWindow();
         return window != null && window.getInputHandler().getDragController().isDragging();

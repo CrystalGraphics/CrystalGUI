@@ -741,11 +741,60 @@ public final class UIWindow {
 
         topLayer.paint(paintContext, pose, rootTransform);
 
+        // AFTER the top layer, and that ordering is the whole reason this is deferred rather than drawn
+        // where it was asked for. A native tooltip is an immediate GL draw with no element behind it, so
+        // it cannot be promoted the way our own Tooltip is -- drawn during an element's paint it would be
+        // covered by every element painted after it, which for a slot in a scroller is most of the UI.
+        drainNativeTooltip(paintContext, pose);
+
         paintContext.endFrame();
         inputHandler.beginFrame();
         inputHandler.endFrame();
         tracePhase("top layer + endFrame");
         tracedFirstFrame = true;
+    }
+
+    // ── Native tooltips ─────────────────────────────────────────────────────
+    /**
+     * The one native tooltip to draw this frame, or null.
+     *
+     * <p>One, not a queue: a tooltip answers "what is under the pointer", and there is one pointer. A
+     * list would let two slots both believe they are hovered — which is exactly what happens for a frame
+     * or two while hover moves between them, and the visible result would be two boxes stacked.</p>
+     */
+    @Nullable
+    private NativeTooltipRequest pendingNativeTooltip;
+
+    private record NativeTooltipRequest(com.crystalgui.ui.elements.slot.NativeContent content,
+                                        float x, float y) {
+    }
+
+    /**
+     * Asks for {@code content}'s tooltip to be drawn by the platform at the end of this frame.
+     *
+     * <p>Re-asked every frame the pointer is over the slot, and cleared once drawn — so a slot that stops
+     * asking (the pointer left, a drag started, the contents emptied) simply stops appearing, with no
+     * hide call and nothing to leak. Last asker wins, which for a pointer that can only be over one thing
+     * is not a contest.</p>
+     */
+    public void requestNativeTooltip(com.crystalgui.ui.elements.slot.NativeContent content, float x, float y) {
+        if (content == null || content.isEmpty()) return;
+        pendingNativeTooltip = new NativeTooltipRequest(content, x, y);
+    }
+
+    private void drainNativeTooltip(CgUiPaintContext paintContext, PoseStack pose) {
+        NativeTooltipRequest request = pendingNativeTooltip;
+        pendingNativeTooltip = null;
+        if (request == null) return;
+
+        com.crystalgui.ui.elements.slot.NativeContentService service =
+                com.crystalgui.ui.elements.slot.NativeContentService.require();
+        if (!service.isAvailable()) return;
+
+        // Flushed so the tooltip is drawn over finished pixels rather than over a batch that has not been
+        // submitted yet -- the same painter's-order rule nativeContent() opens with.
+        paintContext.flush();
+        service.drawTooltip(request.content(), request.x(), request.y(), screenWidth, screenHeight);
     }
 
 

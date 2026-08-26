@@ -79,6 +79,12 @@ public class ElementStateCoverageTest {
         // The taskbar is the registry RENDERED -- every entry it draws is derived from windows that are
         // themselves structure, so it has nothing of its own to carry.
         STATEFUL.put("taskbar", false);
+        // Native content slots carry their BINDING and never their contents: a descriptor names where to
+        // look, and what is there is the host container's business and travels by the host's own
+        // synchronisation. So this is true -- there is real state -- while being a much smaller claim
+        // than "an inventory serialises through CrystalGUI".
+        STATEFUL.put("itemslot", true);        // the content descriptor
+        STATEFUL.put("fluidslot", true);       // ditto
     }
 
     /**
@@ -118,6 +124,31 @@ public class ElementStateCoverageTest {
         MUTATORS.put("tabview", e -> { });
         MUTATORS.put("text", e -> ((com.crystalgui.ui.elements.UIText) e).setText("hello"));
         MUTATORS.put("textfield", e -> ((com.crystalgui.ui.elements.TextField) e).setText("typed"));
+        // Bound to a handle that is nothing but a descriptor. That is the whole of what a slot writes,
+        // and it is deliberately reachable with no platform present: this source set has no renderer by
+        // construction, and a slot must still describe and re-describe itself there -- which is exactly
+        // the dedicated-server case the elements exist in core for.
+        MUTATORS.put("itemslot",
+                e -> ((com.crystalgui.ui.elements.slot.ItemSlot) e).bind(descriptorOnly("slot:12")));
+        MUTATORS.put("fluidslot",
+                e -> ((com.crystalgui.ui.elements.slot.FluidSlot) e).bind(descriptorOnly("tank:0")));
+    }
+
+    /**
+     * A {@link com.crystalgui.ui.elements.slot.NativeContent} carrying nothing but its descriptor.
+     *
+     * <p>What a slot round-trips is the descriptor and only the descriptor, so a handle that can answer
+     * that one question is a complete fixture. Anything richer would be testing a platform this source
+     * set does not have.</p>
+     */
+    private static com.crystalgui.ui.elements.slot.NativeContent descriptorOnly(String descriptor) {
+        return new com.crystalgui.ui.elements.slot.NativeContent() {
+            @Override public String descriptor() { return descriptor; }
+            @Override public com.crystalgui.ui.elements.slot.NativeProfile profile() {
+                return com.crystalgui.ui.elements.slot.NativeProfile.FLAT;
+            }
+            @Override public boolean isEmpty() { return false; }
+        };
     }
 
     @BeforeClass
