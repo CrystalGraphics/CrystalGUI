@@ -376,6 +376,15 @@ tasks.named<JavaExec>(runTask) {
         systemProperty("crystalgui.startup.trace", "true")
     }
 
+    // -PcgSlotProbe opens a window of item and fluid slots. The ONLY thing that exercises the 1.7.10
+    // native-content renderer: nothing in the shipped UI constructs a slot, so that service compiled
+    // and had never run. Everything engine-side is covered by the cgui-slot harness scene; what only a
+    // client has is RenderItem, the block atlas, GUI item lighting and vanilla's tooltip renderer.
+    // Look for the BLOCK -- a flat sprite renders identically with a broken depth buffer.
+    if (providers.gradleProperty("cgSlotProbe").isPresent) {
+        systemProperty("crystalgui.slot.probe", "true")
+    }
+
     // -PcgNetProbe runs BOTH in-game network probes, in order. CgUiNetProbe echoes raw frames
     // client->server->client over the Forge channel; CgUiSessionProbe then runs a real
     // Server/ClientUiSession pair over the same wire and checks the description handshake, a state
