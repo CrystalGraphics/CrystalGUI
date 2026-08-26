@@ -46,7 +46,12 @@ import org.lwjgl.input.Mouse;
  *   <li><b>A flat sprite</b> — the control, and the common case.</li>
  *   <li><b>A damaged tool</b> and <b>a stack of 64</b> — {@code renderItemOverlayIntoGUI}, the
  *       durability bar and count the host draws and we deliberately do not reproduce.</li>
- *   <li><b>Water at three fills</b> — the {@code FLAT} profile, the block atlas, and tiling.</li>
+ *   <li><b>Water and lava in ordinary slots</b> — the {@code FLAT} profile and the block atlas. Lava
+ *       because its correct appearance is the one everybody already knows by heart.</li>
+ *   <li><b>Tall tanks</b> — the only thing here that makes the fluid TILE. A 16x16 content box runs
+ *       the tiling loop exactly once, so seams, the cut tile at the waterline and the UV shrink that
+ *       draws it are all unproven until a tank is four rows deep. One fill is deliberately not a
+ *       multiple of a tile.</li>
  *   <li><b>An empty slot</b> — the well with nothing in it, which must stay distinguishable from the
  *       {@code __unsupported__} face.</li>
  * </ul>
@@ -69,7 +74,14 @@ public final class CgUiSlotScreen extends GuiScreen implements NativeTooltipHost
     private static final String HOST_STYLES =
             "." + ROOT_CLASS + " { width: 100%; height: 100%; padding-all: 16px; gap-all: 10px;"
             + " background-color: #E0101014; }"
-            + ".slot-row { flex-direction: row; gap-all: 4px; }";
+            + ".slot-row { flex-direction: row; gap-all: 4px; align-items: flex-end; }"
+            // A TINKERS-SHAPED TANK. 18x66 leaves a 16x64 content box -- FOUR tile rows -- which is the
+            // first thing in this branch that makes the tiling loop iterate more than once: an ordinary
+            // 18x18 slot has a 16x16 content box and runs it exactly once, so every seam, every partial
+            // tile and every UV shrink has been dead code until now.
+            + ".tank-tall { width: 18px; height: 66px; }"
+            // And the same sideways, for the inner loop.
+            + ".tank-wide { width: 66px; height: 18px; }";
 
     private UIWindow uiWindow;
     private boolean closeRequested;
@@ -127,6 +139,26 @@ public final class CgUiSlotScreen extends GuiScreen implements NativeTooltipHost
         fluids.addChild(fluidSlot("lava", 1f));
         root.addChild(fluids);
 
+        // THE TILING TEST, and the only one in this branch. A tall tank is four tile rows, so this is
+        // where seams, the cut tile at the waterline and the UV shrink that draws it are exercised at
+        // all -- a 16x16 content box runs that loop once and proves none of it.
+        //
+        // 62% is deliberately not a multiple of a tile: it puts the waterline three quarters of the way
+        // through a row, so a partial tile MUST be drawn and drawn in the right place. The tiles anchor
+        // to the tank's bottom, so the seams should stay put between the four fills and only the top one
+        // should ever be cut.
+        root.addChild(new UIText("Tall tanks (4 tiles): water 100%, 62%, 25%, then lava 45%"));
+        UIElement tanks = row();
+        tanks.addChild(tank("water", 1f));
+        tanks.addChild(tank("water", 0.62f));
+        tanks.addChild(tank("water", 0.25f));
+        tanks.addChild(tank("lava", 0.45f));
+        // Sideways, for the inner loop: the same four tiles across instead of up.
+        UIElement wide = fluidSlot("water", 1f);
+        wide.addClass("tank-wide");
+        tanks.addChild(wide);
+        root.addChild(tanks);
+
         root.addChild(new UIText("Hover any slot for the host's own tooltip"));
     }
 
@@ -134,6 +166,13 @@ public final class CgUiSlotScreen extends GuiScreen implements NativeTooltipHost
         UIElement row = new UIElement().layout(l -> l.flexDirection(FlexDirection.ROW));
         row.addClass("slot-row");
         return row;
+    }
+
+    /** A Tinkers-shaped tank: tall enough that the fluid genuinely tiles. @see #build */
+    private static FluidSlot tank(String fluid, float fill) {
+        FluidSlot slot = fluidSlot(fluid, fill);
+        slot.addClass("tank-tall");
+        return slot;
     }
 
     private static ItemSlot itemSlot(ItemStack stack) {
