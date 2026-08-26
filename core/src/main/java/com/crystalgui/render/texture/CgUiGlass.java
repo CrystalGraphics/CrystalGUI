@@ -52,6 +52,16 @@ public final class CgUiGlass implements CgUiDrawable, CornerRadiusAware {
     private float specular = 1.0f;
     private float glow = 0.10f;
     private float edgeHighlight = 0.25f;
+
+    /**
+     * How much of the rim is EVEN rather than lit from the light axis. 0 is fully directional, 1 flat.
+     *
+     * <p>Defaults to a half. The old behaviour is exactly {@code 0}, and it was a defect rather than a
+     * default: {@code proj} is zero at the two corners perpendicular to the light, so the hairline
+     * vanished at the top-right and bottom-left of every rounded rect while all four straight edges
+     * stayed lit. @see gui_glass.shader</p>
+     */
+    private float rimAmbient = 0.5f;
     private float edgeWidth = 3f;
     private float chromatic = 0.20f;
     private float noise = 0.04f;
@@ -109,6 +119,12 @@ public final class CgUiGlass implements CgUiDrawable, CornerRadiusAware {
     }
 
     /** The THIN band at the boundary — what actually reads as "this has an edge". @see #setGlow */
+    /** @see #rimAmbient */
+    public CgUiGlass setRimAmbient(float rimAmbient) {
+        this.rimAmbient = Math.min(1f, Math.max(0f, rimAmbient));
+        return this;
+    }
+
     public CgUiGlass setEdgeHighlight(float edgeHighlight) {
         this.edgeHighlight = Math.max(0f, edgeHighlight);
         return this;
@@ -154,6 +170,7 @@ public final class CgUiGlass implements CgUiDrawable, CornerRadiusAware {
     public float getSpecular() { return specular; }
     public float getGlow() { return glow; }
     public float getEdgeHighlight() { return edgeHighlight; }
+    public float getRimAmbient() { return rimAmbient; }
     public float getEdgeWidth() { return edgeWidth; }
     public float getChromatic() { return chromatic; }
     public float getNoise() { return noise; }
@@ -209,6 +226,7 @@ public final class CgUiGlass implements CgUiDrawable, CornerRadiusAware {
                 b.set1f("_Glow", glow);
                 b.set1f("_EdgeHighlight", edgeHighlight);
                 b.set1f("_EdgeWidth", edgeWidth);
+                b.set1f("_RimAmbient", rimAmbient);
                 b.set1f("_Chromatic", chromatic);
                 b.set1f("_Noise", noise);
                 // Fixed in ELEMENT space, not screen space, so the highlight does not swim across the
