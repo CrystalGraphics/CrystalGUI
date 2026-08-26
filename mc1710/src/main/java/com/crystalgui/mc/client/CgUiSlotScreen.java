@@ -121,11 +121,11 @@ public final class CgUiSlotScreen extends GuiScreen implements NativeTooltipHost
     private static void build(UIElement root) {
         root.addChild(new UIText("CrystalGUI slot probe -- Escape to close"));
 
-        root.addChild(new UIText("Items: block, sprite, damaged tool, stack of 64, empty"));
+        root.addChild(new UIText("Items: block, sprite, GLINT (empty ench tag), damaged+enchanted sword, stack of 64, empty"));
         UIElement items = row();
         items.addChild(itemSlot(stack("minecraft:stone", 1, 0)));
         items.addChild(itemSlot(stack("minecraft:stick", 1, 0)));
-        items.addChild(itemSlot(stack("minecraft:stick", 1, 0)));
+        items.addChild(itemSlot(stack("minecraft:stick", 1, 0), true));
         items.addChild(itemSlot(damagedSword()));
         items.addChild(itemSlot(stack("minecraft:cobblestone", 64, 0)));
         items.addChild(new ItemSlot());
@@ -229,10 +229,19 @@ public final class CgUiSlotScreen extends GuiScreen implements NativeTooltipHost
         return new ItemStack(item, count, damage);
     }
 
+    /**
+     * Half-damaged AND enchanted -- the durability bar and the glint in one slot.
+     *
+     * <p>The enchantment was missing, and its absence is why the glint was reported as broken three
+     * times. { ItemStack.hasEffect} is what gates the whole glint path in RenderItem, and it is
+     * true only for a real enchantment; damage does not set it. So the probe had been claiming to cover
+     * the glint while giving RenderItem nothing to draw one for, and every screenshot of it was correct.</p>
+     */
     private static ItemStack damagedSword() {
         ItemStack sword = stack("minecraft:iron_sword", 1, 0);
         if (sword == null) return null;
         sword.setItemDamage(sword.getMaxDamage() / 2);
+        sword.addEnchantment(net.minecraft.enchantment.Enchantment.sharpness, 3);
         return sword;
     }
 
