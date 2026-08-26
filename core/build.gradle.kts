@@ -261,5 +261,5 @@ tasks.named<JavaCompile>("compileJava") {
 // It reaches the mod jar for free: `:mc1710`'s shadowJar copies `core.jar` with `from(zipTree(...))`,
 // which takes every entry including these.
 tasks.jar {
-    //from(sourceSets.main.get().allJava) { into("assets/crystalgui/sources") }
+    from(sourceSets.main.get().allJava) { into("assets/crystalgui/sources") }
 }

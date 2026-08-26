@@ -1198,18 +1198,35 @@ workbench .__workbench-content__ {
  * "setPaneSizeLimits gives a real minimum in pixels, which is what 'the sidebar is at least 150px wide'
  * means and what a flex weight is structurally unable to say".
  *
- * Without one a divider drags a region down to nothing in particular: names truncate to a single letter,
- * a container's header wraps, and the panel is still nominally open while showing no information at all.
- * The floor is what makes "narrow" bottom out at "narrow" instead of at "useless".
+ * SMALL, THOUGH. This was 120px on the argument that a floor should make "narrow" bottom out at "narrow"
+ * rather than at "useless" -- names truncated to a letter, a header wrapped, a panel nominally open and
+ * showing nothing. That reasoning decides what is USEFUL, and it is not the floor's job: the reference
+ * lets a tool window go down to a sliver and trusts you meant it. Measured against IntelliJ, ours stopped
+ * roughly twice as wide as its does, which reads as the panel refusing to move.
+ *
+ * So the floor now only stops a region reaching ZERO, where it would be an open panel with no box at all
+ * -- the state a region host is documented to make trouble out of. Everything above that is the user's.
  *
  * On the CROSS axis of each region -- width for the columns, height for the strip -- because that is the
  * axis its divider moves along. */
 workbench .__region-sidebar__, workbench .__region-auxiliary__ {
-    min-width: 120px;
+    min-width: 24px;
 }
 
 workbench .__region-panel__ {
-    min-height: 60px;
+    min-height: 24px;
+}
+
+/* AND THE EDITOR KEEPS ONE, which it never needed while the percentage clamp was doing this job.
+ *
+ * A divider bounds the pane AFTER it by the complement of the one before, so the editor's floor used to
+ * come free from SplitView's 5% -- and dropping that to let the region floors above mean anything takes
+ * the editor's away with it. Nothing else declares one: `__dock__` is the region that is always present
+ * and always fills, so it has never had to say how small it may get. Without this, dragging the sidebar
+ * hard RIGHT squeezes the editor to nothing, which no reference permits and which leaves the divider
+ * against the far edge with no content to aim at. */
+workbench .__dock__ {
+    min-width: 120px;
 }
 
 /* ── The gutters between islands ───────────────────────────────────────────────────────────────

@@ -144,22 +144,36 @@ public class ResourceTest {
         ResourceRegistry.register("greeting", provider);
 
         Resource resource = Resource.of("greeting", "x");
-        assertSame(provider, ResourceRegistry.providerFor(resource));
+        // WHAT IT ANSWERS, not which object -- `providerFor` hands back a timing wrapper around the
+        // registered provider, so an identity assertion here is really an assertion that the frame guard
+        // does not exist. @see ResourceRegistry.Timed
         assertEquals("hello", new String(ResourceRegistry.providerFor(resource).read(resource)));
         assertTrue("providers are read-only unless they say otherwise",
                 ResourceRegistry.isReadOnly(resource));
     }
 
     /**
-     * The project scheme cannot be registered.
+     * The project scheme takes a provider and is still never READ through one.
      *
-     * <p>It is read through the workspace client, which needs a session and a round trip. A provider is a
-     * synchronous byte-returning method, so accepting one here would put a blocking read in front of the
-     * network — and it would be reached from a paint path.</p>
+     * <p>The refusal used to be at registration and moved to the read, because a provider answers two
+     * questions and only one of them is about bytes: {@code symbolOf} says what a resource IS, which is
+     * how a tab draws its glyph, and the author's own files need that answered as much as a library's.
+     * Refusing at registration refused both.</p>
+     *
+     * <p>So this asserts the invariant that actually matters -- a project file's content comes from the
+     * workspace client and from nowhere else -- rather than the mechanism that used to enforce it.</p>
      */
-    @Test(expected = IllegalArgumentException.class)
-    public void theProjectSchemeRefusesAProvider() {
-        ResourceRegistry.register(Resource.SCHEME_PROJECT, resource -> new byte[0]);
+    @Test
+    public void theProjectSchemeIsNeverReadThroughAProvider() {
+        ResourceRegistry.register(Resource.SCHEME_PROJECT, resource -> "leaked".getBytes());
+
+        Resource mine = Resource.parse("mymod.proj:src/Main.java");
+        assertEquals(Resource.SCHEME_PROJECT, mine.scheme());
+        assertNull("a project file's bytes come from the workspace client, never a provider",
+                ResourceRegistry.contentProviderFor(mine));
+        // AND THE OTHER HALF still resolves, which is the whole reason the guard moved.
+        assertNotNull("what a project resource IS is still a question somebody can answer",
+                ResourceRegistry.providerFor(mine));
     }
 
     @Test(expected = IllegalArgumentException.class)

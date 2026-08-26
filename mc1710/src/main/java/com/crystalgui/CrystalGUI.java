@@ -6,6 +6,7 @@ import com.crystalgui.core.async.JobLane;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.language.LanguageStack;
 import com.crystalgui.language.map.PlatformMappings;
+import com.crystalgui.language.platform.ScriptService;
 import com.crystalgui.language.platform.ScriptServices;
 import com.crystalgui.mc.ClientProxy;
 import com.crystalgui.mc.CommonProxy;
@@ -137,17 +138,34 @@ public class CrystalGUI {
         // What is still client-shaped is BELOW, not above: the mappings fetch is submitted as a job
         // so it reports into a status bar. A server wanting mappings would acquire them without one.
 
-        // MAPPINGS ACQUIRED INSIDE A JOB, so the fetch reports into the status bar instead of being a
-        // silent stall on first launch. Threading is the caller's decision, and this caller has a UI.
-        // CLAIMED NOW, DONE LATER, and the order is the whole point.
-        // Safe to defer because a claim made here is always honoured: the job is already submitted, and a
-        // client that never opens the editor never needs a mapping.
+        // DECIDED HERE, FETCHED LATER -- and the split is the whole point.
+        //
+        // This used to put BOTH halves in the job, on the reasoning that a claim made here is always
+        // honoured because the job is already submitted. The second half of that sentence is the part that
+        // was not true: a job only starts when something calls `JobScheduler.shared().drain()`, and the
+        // only thing that does is `UIWindow.advanceFrame`. So the acquisition was owed to a frame, which is
+        // a promise a mod's init has no business making -- a dedicated server never paints one, and even a
+        // client owes it to a window that may not exist yet.
+        //
+        // What made it costly is that `decide()` needs no frame and no network. It reads an already
+        // downloaded mapping off disk, which is a parse. On `runObfClient` with mcp_stable/12 complete in
+        // the config directory, the claim was taken, the job was submitted, and nothing ever ran: no
+        // mapping line in any log of any run, every compiled script cached under a key ending
+        // `-identity-8`, and `Minecraft.getMinecraft()` reaching a runtime that has only `func_71410_x`.
+        // The data was on the disk the whole time.
+        //
+        // So the cache is applied on this thread, and only a genuine download is handed to a job -- which
+        // is what gives it a progress bar, and is the one half worth deferring.
         if (PlatformMappings.claim()) {
-            JobScheduler.shared().job(JobKey.of(PlatformMappings.class, "mappings"), JobLane.BACKGROUND,
-                    context -> {
-                        PlatformMappings.acquireClaimed(context.progress(), context::isCancelled);
-                        return null;
-                    }).submit();
+            ScriptService needsFetch = PlatformMappings.decideClaimed();
+            if (needsFetch != null) {
+                JobScheduler.shared().job(JobKey.of(PlatformMappings.class, "mappings"),
+                        JobLane.BACKGROUND, context -> {
+                            PlatformMappings.fetchClaimed(needsFetch, context.progress(),
+                                    context::isCancelled);
+                            return null;
+                        }).submit();
+            }
         }
     }
 }
