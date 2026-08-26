@@ -1,5 +1,6 @@
 package com.crystalgui.ui.text;
 
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.text.Rope;
 import com.crystalgui.text.syntax.DocComments;
 import com.crystalgui.text.syntax.Language;
@@ -77,7 +78,11 @@ public final class SyntaxHighlighting {
         SyntaxTokenizer tokenizer =
                 DocComments.refining(LanguageRegistry.forLanguage(language).newTokenizer());
         try {
-            return tokenizer.tokenize(Rope.of(source), 0, source.length());
+            long timed = FrameProfile.begin();
+            List<SyntaxToken> got = tokenizer.tokenize(Rope.of(source), 0, source.length());
+            FrameProfile.step(timed, "static.tokenize " + source.length() + " chars -> "
+                    + got.size() + " tokens");
+            return got;
         } finally {
             tokenizer.close();
         }

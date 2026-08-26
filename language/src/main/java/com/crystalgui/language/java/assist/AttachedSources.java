@@ -1,5 +1,6 @@
 package com.crystalgui.language.java.assist;
 
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.language.java.classpath.ClassFileParameterNames;
 
 import javax.annotation.Nullable;
@@ -238,6 +239,39 @@ public final class AttachedSources {
     }
 
     /**
+     * Parses one attached unit now, so the FIRST hover does not pay for the machinery.
+     *
+     * <h3>There is a one-time cost under the per-class one, and it is most of a first hover</h3>
+     *
+     * <p>Measured by hovering five CrystalGraphics classes in a row, whose sources are bundled in their
+     * jar:</p>
+     *
+     * <pre>
+     *   CgFrameBufferFormat  18,786 chars  125,713us   6.7us/char   &lt;- first
+     *   CgRenderPipeline     19,691 chars   53,689us   2.7us/char
+     *   CgShaderBindings     12,665 chars   29,475us   2.3us/char
+     *   CgFrameData           6,903 chars   24,378us   3.5us/char
+     *   CgBlendState          5,755 chars   17,743us   3.1us/char
+     * </pre>
+     *
+     * <p>Two files of nearly identical size, 125.7ms against 53.7ms. The difference is not the file: it is
+     * everything JDT builds on its first attached parse — the AST parser, the name environment over this
+     * classpath, and its internal caches — and it is about 70ms that the first hover of a session pays and
+     * no later one does.</p>
+     *
+     * <p>Warmed with a type every classpath has and whose source is small, so the warm builds the
+     * machinery rather than re-parsing something large. A classpath with no attached sources finds
+     * nothing and warms nothing, which is correct: there is no cost there to move.</p>
+     *
+     * <p><b>Off the frame thread, by its caller.</b> {@code JavaLanguage} already runs a MIN_PRIORITY
+     * daemon for exactly this kind of speculation and states the trade there — work that is free if
+     * nobody ever hovers.</p>
+     */
+    public void warmParser() {
+        unitFor("java.lang.Object");
+    }
+
+    /**
      * A workspace file, parsed the way an attached library source is.
      *
      * <p>At the band's ceiling rather than at 8: the platform exception below exists for {@code src.zip}
@@ -255,7 +289,15 @@ public final class AttachedSources {
 
     private Attached parse(String topLevelName, SourceArchives.Found found) {
         try {
+            // THE PARSE, PER CLASS. Quoting a declaration means parsing the whole compilation unit it
+            // lives in, and the first hover on a class with attached source was measured at 150-167ms.
+            // Reported per class so the SHARED setup and the per-class parse can be told apart: if the
+            // first is dear and later ones are cheap, a warm-up fixes the first hover; if every one is
+            // dear, nothing can be warmed and the answer has to be that the popup does not wait for it.
+            long timed = FrameProfile.begin();
             CompilationUnit unit = parseAttached(topLevelName, found);
+            FrameProfile.step(timed, "attached.parse " + topLevelName
+                    + " (" + found.text.length() + " chars)");
             return unit == null ? null : new Attached(unit, found.text, null);
         } catch (RuntimeException | LinkageError refused) {
             // A source archive this band cannot read -- a JDK 21 src.zip under band 8's JDT is the
