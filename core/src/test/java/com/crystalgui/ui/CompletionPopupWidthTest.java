@@ -111,6 +111,109 @@ public class CompletionPopupWidthTest extends UiTestBase {
         assertTrue("no rows carried a type, so nothing was measured", measured >= 4);
     }
 
+    /**
+     * <b>Nothing in a row is ever painted outside the popup.</b>
+     *
+     * <h3>"Never gives" is not the same claim as "gives last"</h3>
+     *
+     * <p>The type column was made {@code flex-shrink: 0} so it could not be shaved to a stub, and the
+     * test above is what pins that. The cost only shows once a row cannot fit at all: with the label
+     * already shrunk to nothing there was nothing left to give, so the row exceeded the popup and the
+     * type was drawn OUTSIDE it, over the editor behind — past the scrollbar, on rows whose own detail
+     * was short enough to have fit anywhere.</p>
+     *
+     * <p>Asserted as a geometric containment rather than as a width, because the failure is not that the
+     * column is the wrong size: it is that it is in the wrong place. A width assertion passes against a
+     * row that is correctly proportioned and sitting half a popup to the right.</p>
+     *
+     * <p>The long details are the point of the fixture — a list of short ones fits whatever the shrink
+     * factors say, and passes against no fix at all.</p>
+     */
+    @Test
+    public void nothingInARowIsPaintedOutsideThePopup() {
+        UIElement root = new UIElement().layout(l -> l.width(320).height(600));
+        UIWindow window = new UIWindow(Ui.of(root));
+        window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
+        window.init(320, 600);
+
+        List<CompletionItem> items = new ArrayList<>();
+        items.add(constant("META-INF", "META-INF"));
+        items.add(constant("com", "com"));
+        items.add(constant("getPropertyWithAVeryLongName", "java.util.concurrent.ConcurrentHashMap"));
+        items.add(constant("x", "java.util.concurrent.atomic.AtomicIntegerFieldUpdater"));
+
+        TextBuffer buffer = new TextBuffer("");
+        CompletionSession session = CompletionSession.open(
+                buffer, offering(items), 0, CompletionProvider.TriggerKind.EXPLICIT, null);
+        assertTrue("the stub provider must have produced a session", session != null);
+
+        CompletionPopup popup = new CompletionPopup();
+        popup.attach(window, session);
+        for (int i = 0; i < 8; i++) window.updateWithoutPainting();
+
+        float popupRight = popup.getRuntimeCache().getX() + popup.getRuntimeCache().getWidth();
+        int checked = 0;
+        for (UIElement row : rowsIn(popup)) {
+            UIText detail = detailOf(row);
+            if (detail == null || detail.getText().isEmpty()) continue;
+            checked++;
+            float right = detail.getRuntimeCache().getX() + detail.getRuntimeCache().getWidth();
+            assertTrue("'" + detail.getText() + "' is painted outside the popup: ends at "
+                    + right + ", popup ends at " + popupRight, right <= popupRight + 0.5f);
+        }
+        assertTrue("no rows carried a type, so nothing was checked", checked >= 3);
+    }
+
+    /**
+     * <b>The type may never take more than half the row</b>, however long it is.
+     *
+     * <h3>A shrink ORDER does not bound the case where the type is the long part</h3>
+     *
+     * <p>The factors decide who gives when a row is over-full, and by then everything else has already
+     * given — so a two-character name beside {@code java.util.concurrent.atomic.AtomicIntegerFieldUpdater}
+     * had no reason to shrink the type at all. It took the row and the name was ellipsised away beside it,
+     * which is the opposite of what a completion list is for: the name is the thing being typed towards,
+     * and the type is recoverable from the documentation panel.</p>
+     *
+     * <p>A percentage rather than a pixel count, because the popup is resizable — a fixed cap is either
+     * pointless at its widest or crippling at its narrowest.</p>
+     */
+    @Test
+    public void theTypeNeverTakesMoreThanHalfTheRow() {
+        UIElement root = new UIElement().layout(l -> l.width(340).height(600));
+        UIWindow window = new UIWindow(Ui.of(root));
+        window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
+        window.init(340, 600);
+
+        List<CompletionItem> items = new ArrayList<>();
+        // A SHORT name against a very long type -- the shape the shrink order cannot bound.
+        items.add(constant("x", "java.util.concurrent.atomic.AtomicIntegerFieldUpdater"));
+        items.add(constant("getenv", "Map<String,String>"));
+        items.add(constant("someReasonablyLongMethodName", "void"));
+
+        TextBuffer buffer = new TextBuffer("");
+        CompletionSession session = CompletionSession.open(
+                buffer, offering(items), 0, CompletionProvider.TriggerKind.EXPLICIT, null);
+        assertTrue("the stub provider must have produced a session", session != null);
+
+        CompletionPopup popup = new CompletionPopup();
+        popup.attach(window, session);
+        for (int i = 0; i < 8; i++) window.updateWithoutPainting();
+
+        int checked = 0;
+        for (UIElement row : rowsIn(popup)) {
+            UIText detail = detailOf(row);
+            if (detail == null || detail.getText().isEmpty()) continue;
+            float rowWidth = row.getRuntimeCache().getWidth();
+            if (rowWidth <= 0f) continue;
+            checked++;
+            float share = detail.getRuntimeCache().getWidth() / rowWidth;
+            assertTrue("'" + detail.getText() + "' took " + Math.round(share * 100)
+                    + "% of the row, crowding out the name", share <= 0.55f);
+        }
+        assertTrue("no rows carried a type, so nothing was checked", checked >= 3);
+    }
+
     /** The type column — the last child of a row, after the growing spacer. */
     private static UIText detailOf(UIElement row) {
         for (UIElement child : row.getChildren()) {
