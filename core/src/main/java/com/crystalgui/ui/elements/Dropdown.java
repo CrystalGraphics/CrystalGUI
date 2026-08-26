@@ -80,6 +80,11 @@ public class Dropdown extends Button {
         int index = options.size();
         options.add(label);
         menu.addItem(label).attachListener(() -> select(index));
+        // The option list is state -- writeState says so -- so adding to it has to be announced.
+        // Nothing else on this path would: applyLabel() is not called (the shown label does not
+        // change when an option is appended to a non-empty list), so an option added after the
+        // window opened simply never reached the far side.
+        notifyStateChanged();
         return this;
     }
 
@@ -93,6 +98,7 @@ public class Dropdown extends Button {
         menu.clearItems();
         selectedIndex = -1;
         applyLabel();
+        notifyStateChanged();
     }
 
     /** The options in order. Unmodifiable. */
@@ -113,6 +119,10 @@ public class Dropdown extends Button {
         selectedIndex = index;
         menu.getItems().get(selectedIndex).setSelected(true);
         applyLabel();
+        // Explicit rather than relying on applyLabel: that reaches notifyStateChanged only through
+        // the LABEL changing, so two options spelled the same way would move the selection and
+        // announce nothing.
+        notifyStateChanged();
         onSelectionChanged.emit(index);
         return this;
     }

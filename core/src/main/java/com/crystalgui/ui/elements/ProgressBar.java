@@ -91,6 +91,14 @@ public class ProgressBar extends UIElement implements UIFrameTicker {
                     l -> l.widthPercent(percent).marginLeft(0f));
         }
         invalidateStyleMatch();
+        // A SERVER-DRIVEN BAR IS THE WHOLE POINT OF writeState BELOW, AND THIS IS WHAT DELIVERS IT.
+        // Without it the fraction travels in the opening description and never again: the bar arrives
+        // at whatever it was when the window opened and freezes there, with the server's own value
+        // advancing correctly and nothing anywhere reporting a problem. It reads as the bar being
+        // broken rather than as an update that was never announced, because the FIRST value is right.
+        // Slider, Switch, Checkbox, TextField and UIText all notify from their setters; this and
+        // Dropdown were given writeState without it.
+        notifyStateChanged();
     }
 
     /** What was last set — negative when indeterminate. */
