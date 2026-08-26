@@ -1034,13 +1034,24 @@ public final class JavaSignatures {
     /**
      * The member to look for in reconstructed output — null when the binding <b>is</b> the type.
      *
-     * <p>A type needs no member: the reader is going to the class and the top of the file is where the
-     * class declaration is. A constructor is named after its type and would find the type's own
-     * declaration, which is the same place a reader wants for it anyway.</p>
+     * <p>A TOP-LEVEL type needs no member: the reader is going to the class and the top of the file is
+     * where the class declaration is. A MEMBER type is the opposite — it is declared inside the file its
+     * enclosing class owns, so naming it is the only way to land on it rather than at the top. A
+     * constructor is named after its type and would find the type's own declaration, which is the same
+     * place a reader wants for it anyway.</p>
      */
     @Nullable
     private static String memberNameOf(IBinding binding) {
-        if (binding instanceof ITypeBinding) return null;
+        if (binding instanceof ITypeBinding) {
+            // A NESTED TYPE IS A MEMBER, and this is where saying otherwise costs a jump. A top-level
+            // class really is at the top of its file, so naming no member is right for one -- but
+            // `WorldSettings.GameType` is declared partway down `WorldSettings`, and the file it lives
+            // in is not the same question as where in it. Ctrl+B opened the class and stopped, while the
+            // same key on one of that enum's CONSTANTS landed correctly, because a field is a member and
+            // took the branch below.
+            ITypeBinding type = (ITypeBinding) binding;
+            return type.isMember() ? type.getName() : null;
+        }
         if (binding instanceof IMethodBinding && ((IMethodBinding) binding).isConstructor()) return null;
         String name = binding.getName();
         return name == null || name.isEmpty() ? null : name;
