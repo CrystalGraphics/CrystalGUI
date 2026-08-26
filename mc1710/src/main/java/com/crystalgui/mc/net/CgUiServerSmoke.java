@@ -120,7 +120,13 @@ public final class CgUiServerSmoke {
             // CrystalGraphics'. The paint context is the entry point to every GL resource CrystalGUI
             // owns, and it registers CgUiLifecycle from a static initialiser -- so if it is loaded on a
             // server, something asked a headless process to paint.
-            "com.crystalgui.render.CgUiPaintContext");
+            "com.crystalgui.render.CgUiPaintContext",
+            // The native-content renderer. It holds a RenderItem in a FIELD, and a field descriptor
+            // resolves at class definition rather than at first use -- so merely constructing one on a
+            // server is a NoClassDefFoundError in production. The elements it serves live in core and
+            // ARE loaded here, which is the whole point of them; only the thing that draws must not be.
+            // That separation is a one-line decision in ClientProxy, so this is the check that keeps it.
+            "com.crystalgui.mc.platform.service.content.Mc1710NativeContentService");
 
     private CgUiServerSmoke() {
     }
@@ -216,6 +222,16 @@ public final class CgUiServerSmoke {
             child.setId("smoke-child");
             root.addChild(child);
 
+            // AN ITEM SLOT, ON A SERVER, which is the whole claim the slot design rests on: a slot binds
+            // to a LOCATION rather than holding item data, so a dedicated server can describe an
+            // inventory it has no renderer for and no way to draw. Nothing here touches
+            // NativeContentService -- there is none on a server, by construction, because whatever would
+            // provide one names RenderItem. If this ever throws, the elements have stopped being
+            // headless and the server half is gone.
+            com.crystalgui.ui.elements.slot.ItemSlot slot = new com.crystalgui.ui.elements.slot.ItemSlot();
+            slot.setDescriptor("slot:12");
+            root.addChild(slot);
+
             Object encoded = UIDescriptionCodec.CODEC.encode(PlainOps.INSTANCE, root);
             String hashA = ContentHash.of(PlainOps.INSTANCE, encoded);
             String hashB = ContentHash.of(PlainOps.INSTANCE,
@@ -226,11 +242,22 @@ public final class CgUiServerSmoke {
             boolean stable = hashA.equals(hashB);
             boolean shape = decoded != null
                     && "smoke-root".equals(decoded.getId())
-                    && decoded.getChildren().size() == 1;
+                    && decoded.getChildren().size() == 2;
 
-            ok = stable && shape;
+            // The slot's own state, checked by VALUE rather than by the tag surviving: a tag that decoded
+            // to the right class while losing what it points at would be the more plausible failure and
+            // the harder one to see.
+            boolean slotOk = false;
+            if (decoded != null && decoded.getChildren().size() == 2) {
+                UIElement back = decoded.getChildren().get(1);
+                slotOk = back instanceof com.crystalgui.ui.elements.slot.ItemSlot
+                        && "slot:12".equals(((com.crystalgui.ui.elements.slot.ItemSlot) back).descriptor());
+            }
+
+            ok = stable && shape && slotOk;
             detail = "hash=" + hashA + (stable ? "" : " UNSTABLE across two encodes")
-                    + (shape ? "" : " decoded shape wrong");
+                    + (shape ? "" : " decoded shape wrong")
+                    + (slotOk ? "" : " itemslot did not survive with its descriptor");
         } catch (Throwable failed) {
             detail = String.valueOf(failed);
         }

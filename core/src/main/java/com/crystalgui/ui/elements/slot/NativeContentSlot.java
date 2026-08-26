@@ -102,6 +102,35 @@ public abstract class NativeContentSlot extends UIElement {
     }
 
     /**
+     * Points this slot at a descriptor directly, with no handle and no service.
+     *
+     * <p><b>This is how a dedicated server authors a slot</b>, and without it the server half of this
+     * design is unreachable. {@link #bind} needs a {@link NativeContent}, which only a platform can
+     * mint — and a server has no {@link NativeContentService} by construction, because the thing that
+     * would provide one names a renderer. So a server would have been able to put a slot in a tree and
+     * had no way to say what it shows.</p>
+     *
+     * <p>Costs nothing to allow: a descriptor names a <em>location</em> rather than a value, so writing
+     * one requires knowing nothing about items. Resolution happens on the client, lazily, the first time
+     * {@link #content()} is asked and a service exists.</p>
+     */
+    public NativeContentSlot setDescriptor(@Nullable String descriptor) {
+        String next = descriptor == null ? "" : descriptor;
+        if (next.equals(this.descriptor)) return this;
+        this.descriptor = next;
+        this.content = NativeContent.EMPTY;
+        // Empty resolves to nothing by definition; anything else waits for a service. Same rule
+        // readState follows, and for the same reason -- resolving eagerly would discard it for good.
+        this.descriptorResolved = next.isEmpty();
+        return this;
+    }
+
+    /** What this slot will re-encode as. @see #setDescriptor */
+    public String descriptor() {
+        return descriptor;
+    }
+
+    /**
      * The live handle, resolving a descriptor that arrived before any service could interpret it.
      *
      * <p>The deferral is not hypothetical: a description can be decoded before a loader has finished
