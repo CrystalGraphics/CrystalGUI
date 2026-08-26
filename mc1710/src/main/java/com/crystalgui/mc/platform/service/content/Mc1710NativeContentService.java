@@ -22,6 +22,7 @@ import net.minecraftforge.fluids.Fluid;
 import net.minecraftforge.fluids.FluidRegistry;
 import net.minecraftforge.fluids.FluidStack;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL12;
 import org.lwjgl.opengl.GL20;
 
 /**
@@ -177,15 +178,42 @@ public final class Mc1710NativeContentService implements NativeContentService {
             GL11.glDepthMask(true);
             GL11.glEnable(GL11.GL_BLEND);
             GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+
+            // VANILLA'S OWN PREAMBLE, reproduced rather than guessed at. This is the exact sequence
+            // GuiContainer.drawScreen runs before it draws a single slot, and every line of it earns its
+            // place -- picking a subset is what produced three rounds of "the lighting is still wrong".
+            //
+            //   RenderHelper.enableGUIStandardItemLighting()
+            //   glColor4f(1,1,1,1)
+            //   glEnable(GL_RESCALE_NORMAL)
+            //   OpenGlHelper.setLightmapTextureCoords(lightmapTexUnit, 240, 240)
+            //   glColor4f(1,1,1,1)
+            //
+            // The two that were missing are the two that matter here:
+            //
+            // RESCALE_NORMAL, because renderItemIntoGUI scales a block model by 10 and a scaled normal is
+            // no longer unit length -- so without it the diffuse term is wrong on every 3D item and the
+            // block comes out flat and dark.
+            //
+            // setLightmapTextureCoords, because turning the lightmap UNIT off is not the same as saying
+            // how bright the item is. The item's vertices still carry a lightmap coordinate, and left at
+            // whatever the world render happened to leave it that is usually near-black. Vanilla pins it
+            // to 240/240 -- full brightness -- for exactly this reason, and it is why a slot's contents
+            // look the same in a bright cave mouth as at midnight.
+            RenderHelper.enableGUIStandardItemLighting();
+            GL11.glColor4f(1f, 1f, 1f, 1f);
+            GL11.glEnable(GL12.GL_RESCALE_NORMAL);
+            OpenGlHelper.setLightmapTextureCoords(OpenGlHelper.lightmapTexUnit, 240f, 240f);
             GL11.glColor4f(1f, 1f, 1f, 1f);
 
-            RenderHelper.enableGUIStandardItemLighting();
             itemRenderer.zLevel = 0f;
             itemRenderer.renderItemAndEffectIntoGUI(mc.fontRenderer, mc.getTextureManager(), stack, 0, 0);
             // The host's own decorations -- stack size, durability bar, and whatever another mod has
             // hooked into item rendering. Reproducing them here would be a worse copy that drifts.
             itemRenderer.renderItemOverlayIntoGUI(mc.fontRenderer, mc.getTextureManager(), stack, 0, 0);
             RenderHelper.disableStandardItemLighting();
+            // Paired with the enable above -- vanilla drops it on the way out too (GuiContainer line 7).
+            GL11.glDisable(GL12.GL_RESCALE_NORMAL);
         } finally {
             popProjection();
         }

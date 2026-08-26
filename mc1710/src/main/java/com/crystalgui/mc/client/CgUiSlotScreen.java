@@ -17,6 +17,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
+import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.nbt.NBTTagList;
 import net.minecraftforge.fluids.FluidRegistry;
 import net.minecraftforge.fluids.FluidStack;
 import org.lwjgl.input.Keyboard;
@@ -123,6 +125,7 @@ public final class CgUiSlotScreen extends GuiScreen implements NativeTooltipHost
         UIElement items = row();
         items.addChild(itemSlot(stack("minecraft:stone", 1, 0)));
         items.addChild(itemSlot(stack("minecraft:stick", 1, 0)));
+        items.addChild(itemSlot(enchant(stack("minecraft:stick", 1, 0))));
         items.addChild(itemSlot(damagedSword()));
         items.addChild(itemSlot(stack("minecraft:cobblestone", 64, 0)));
         items.addChild(new ItemSlot());
@@ -165,6 +168,18 @@ public final class CgUiSlotScreen extends GuiScreen implements NativeTooltipHost
         root.addChild(tanks);
 
         root.addChild(new UIText("Hover any slot for the host's own tooltip"));
+    }
+
+    private static ItemStack enchant(ItemStack stack) {
+        if (stack == null) return null;
+
+        NBTTagCompound compound = stack.getTagCompound();
+        if (compound == null) {
+            compound = new NBTTagCompound();
+            stack.setTagCompound(compound);
+        }
+        compound.setTag("ench", new NBTTagList());
+        return stack;
     }
 
     private static UIElement row() {
