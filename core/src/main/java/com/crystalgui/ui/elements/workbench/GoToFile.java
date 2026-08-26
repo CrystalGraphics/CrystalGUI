@@ -121,6 +121,12 @@ public final class GoToFile {
         pick.onAccepted.connect(id -> {
             long accepted = FrameProfile.enter("ENTER accepted " + id);
             try {
+            String member = null;
+            int carried = id.indexOf(MEMBER_SEPARATOR);
+            if (carried >= 0) {
+                member = id.substring(carried + 1);
+                id = id.substring(0, carried);
+            }
             // THE LOCATION COMES FROM THE QUERY, NOT THE ROW. `Main.java:42` narrows to `Main.java` for
             // matching, so every row is a match for the name and none of them carries the line — which
             // belongs to what was typed rather than to what was found. Read live at accept time rather
@@ -128,7 +134,7 @@ public final class GoToFile {
             TextPoint at = QueryLocation.parse(pick.searchField().getText()).point();
             Resource resource = Resource.parse(id);
             if (resource.isProject()) workbench.openFileAt(resource.asPath(), at);
-            else workbench.openResourceAt(resource, at);
+            else workbench.openResourceAt(resource, at, member);
             } finally {
                 FrameProfile.leave(accepted, "ENTER accepted");
             }
@@ -220,15 +226,46 @@ public final class GoToFile {
         return true;
     }
 
+    /**
+     * Separates a resource id from the MEMBER to land on — {@code library://…WorldSettings#GameType}.
+     *
+     * <p>A {@code #} because it cannot occur in a binary name and reads as a fragment does everywhere
+     * else. {@code Resource.parse} never sees it: the split happens before the parse.</p>
+     */
+    private static final String MEMBER_SEPARATOR = "#";
+
+    /**
+     * The row's second line — {@code in WorldSettings of net.minecraft.world} for a nested type.
+     *
+     * <p>IntelliJ's phrasing, and it says the thing that matters: for a member type the package alone is
+     * misleading, because the name a reader has to write goes through the enclosing class. A flat
+     * {@code net.minecraft.world.WorldSettings} reads as a package with an odd last segment.</p>
+     */
+    private static String describe(TypeSearch.Result result) {
+        if (!result.isNested()) return result.packageName();
+        String enclosing = result.enclosingName();
+        String pkg = result.packageOnly();
+        return pkg.isEmpty() ? "in " + enclosing : "in " + enclosing + " of " + pkg;
+    }
+
     private static void collectTypes(String name, SearchQuery effective, List<Scored> out) {
         // THE CLASSPATH INDEX -- tens of thousands of types, asked on every keystroke.
         long searched = FrameProfile.begin();
         TypeSearch.Results found = TypeSearchRegistry.search(name, TYPE_LIMIT);
         FrameProfile.step(searched, "TypeSearchRegistry.search");
         for (TypeSearch.Result result : found.results()) {
-            QuickPickItem item = new QuickPickItem(
-                    Resource.of(Resource.SCHEME_LIBRARY, result.qualifiedName()).toString(),
-                    result.simpleName(), result.packageName(), null, null, true,
+            // THE FILE THE TYPE LIVES IN, which for a nested type is not the type. A member has no class
+            // file of its own, so addressing a `library:` resource by `WorldSettings.GameType` asked the
+            // decompiler for a class nothing is called and opened an empty tab. Nested types were absent
+            // from the index until recently, which is why one spelling served for both until now.
+            //
+            // THE MEMBER RIDES ON THE ID after a `#`, because the picker hands back an id and nothing
+            // else. Splitting it at accept time keeps the whole round trip inside this class rather than
+            // widening QuickPickItem with a field only one of its callers would ever set.
+            String id = Resource.of(Resource.SCHEME_LIBRARY, result.topLevelName()).toString()
+                    + (result.isNested() ? MEMBER_SEPARATOR + result.simpleName() : "");
+            QuickPickItem item = new QuickPickItem(id,
+                    result.simpleName(), describe(result), null, null, true,
                     result.kind(), result.isAbstract(), null);
             // OUR MATCHER HAS THE LAST WORD, and the first version did not let it.
             //
