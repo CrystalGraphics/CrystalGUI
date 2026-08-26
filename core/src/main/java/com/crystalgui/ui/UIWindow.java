@@ -656,19 +656,33 @@ public final class UIWindow {
                 break;
             }
             if (taffyTree.isDirty(ui.rootElement.taffyNodeId)) {
+                long computed = FrameProfile.begin();
                 taffyTree.computeLayout(ui.rootElement.taffyNodeId, availableSpace);
+                // TAFFY ITSELF, apart from the callbacks it triggers. A slow `layout` phase is either the
+                // solver or what the solver wakes up, and those have nothing to do with each other: one is
+                // a third-party constraint pass over the node tree, the other is our own onLayoutChanged
+                // hooks -- UIText re-wrapping and pushing a height back is the standing example, and it
+                // dirties the tree again, which is what makes this loop run more than once.
+                FrameProfile.end(computed, "layout:taffy");
+                FrameProfile.count("layout-nodes-changed", nodesWithNewLayout.size());
 
+                long notified = FrameProfile.begin();
                 for (var nodeId : nodesWithNewLayout) {
                     var element = elementByNode.get(nodeId);
                     if (element != null) {
                         element.onLayoutChanged(nodesWithNewGeometry.contains(nodeId));
                     }
                 }
+                FrameProfile.end(notified, "layout:onLayoutChanged");
                 nodesWithNewLayout.clear();
                 nodesWithNewGeometry.clear();
             }
 
         }
+        // HOW MANY TIMES THE TREE HAD TO SETTLE. A frame that ran eight passes and one that ran one are
+        // completely different findings and report as the same `layout` number; the pass count is the
+        // only thing that separates "the tree is big" from "something re-dirties it after every pass".
+        if (passes > 1) FrameProfile.count("layout-passes", passes);
 
         resolveRootPlacement();
     }
@@ -776,6 +790,8 @@ public final class UIWindow {
      */
     public void updateWithoutPainting() {
         advanceFrame();
+        // A HEADLESS FRAME IS OVER HERE, because there is no paint to follow it. @see #paintFrame
+        FrameProfile.frameEnd();
     }
 
     /** Shared prologue of {@link #paintFrame()} and {@link #updateWithoutPainting()}. */
@@ -807,6 +823,7 @@ public final class UIWindow {
         // named rather than merely felt. Marked from the frame itself so it is right whatever drives one
         // -- a real window, the harness, or a test stepping frames by hand. @see UiThread
         UiThread.markCurrent();
+        FrameProfile.frameBegin();
         long now = System.nanoTime();
         float deltaSeconds = (now - lastFrameNanos) / 1_000_000_000f;
         lastFrameNanos = now;
@@ -819,12 +836,26 @@ public final class UIWindow {
         // hasShared() rather than shared(): asking whether there is work must never be the thing that
         // spawns a thread pool. A window in a headless test that schedules nothing creates nothing —
         // the same guard, for the same reason, as CgUiPaintContext.hasInstance().
-        if (JobScheduler.hasShared()) JobScheduler.shared().drain();
+        if (JobScheduler.hasShared()) {
+            // HOW MANY WORKERS WERE BUSY THIS FRAME.
+            //
+            // The reported drop is TRANSIENT -- 120 to 50 on the frame a class opens, then straight back
+            // to 120 -- and that rules out every per-frame cost by construction: a constant cannot cause
+            // a transient. What has exactly the right lifetime is the decompiler, which runs ~1,500ms on
+            // a worker, and during that window a quarter of frames miss budget with the frame thread's
+            // own work at ~578us and the time landing in gl:*. Counting the busy workers per frame is
+            // what turns that correlation into evidence or kills it.
+            FrameProfile.count("jobs-busy", JobScheduler.shared().runningCount());
+            JobScheduler.shared().drain();
+        }
+        FrameProfile.mark("drain");
 
         tracePhase("begin");
         styleEngine.calculateStyle(deltaSeconds);
+        FrameProfile.mark("style");
         tracePhase("style cascade");
         tickAnimations(deltaSeconds);
+        FrameProfile.mark("tickers");
         tracePhase("animations");
         // A TICKER MAY HAVE BUILT A SUBTREE, not merely set a class on one — and an element that has
         // never matched a selector must not reach Taffy at all, because the FIRST layout pass is where
@@ -845,7 +876,9 @@ public final class UIWindow {
         // the CSS, the widget or the text; the rows had simply been measured once before they had a
         // style, and one bit of that measurement was permanent.
         if (styleEngine.hasPendingMatches()) styleEngine.calculateStyle(0f);
+        FrameProfile.mark("style");
         calculateLayout();
+        FrameProfile.mark("layout");
 
         // STYLE AND LAYOUT INTERLEAVE UNTIL CLEAN — they are not one pass each in a fixed order.
         //
@@ -872,7 +905,10 @@ public final class UIWindow {
         // inside calculateLayout rather than here.
         for (int pass = 0; pass < MAX_RESTYLE_PASSES && styleEngine.hasPendingMatches(); pass++) {
             styleEngine.calculateStyle(0f);
+            FrameProfile.mark("style");
             calculateLayout();
+            FrameProfile.mark("layout");
+            FrameProfile.count("restyle-passes", 1);
         }
         return deltaSeconds;
     }
@@ -1085,12 +1121,22 @@ public final class UIWindow {
     /** Everything that wants a per-frame callback: smooth scrolls plus registered tickers. Driven
      * from {@link #paintFrame()}; call it directly if you drive frames yourself. */
     public void tickAnimations(float deltaSeconds) {
+        // SMOOTH SCROLLING, APART FROM THE TICKERS. A wheel notch does not move the view directly -- it
+        // retargets an animation that then writes a new scrollTop every frame until it arrives, and every
+        // one of those writes is what makes the editor re-place its rows. So a scroll's cost is spread
+        // over the frames AFTER the notch, and this is the only bucket that says how many.
+        long scrolled = FrameProfile.begin();
         tickScrollAnimations(deltaSeconds);
+        FrameProfile.end(scrolled, "anim:scroll");
         if (!tickers.isEmpty()) {
             // Snapshot: a ticker may register another (or itself) while running.
             for (UIFrameTicker ticker : new ArrayList<>(tickers)) {
                 long tickerStart = TRACE_FIRST_FRAME && !tracedFirstFrame ? System.nanoTime() : 0L;
+                // PER TICKER, because "tickers" as one bucket can hide anything: the workbench, an
+                // editor and a dozen widgets all tick from here. @see FrameProfile
+                long profiled = FrameProfile.begin();
                 if (!ticker.tickFrame(deltaSeconds)) tickers.remove(ticker);
+                FrameProfile.end(profiled, "tick:" + ticker.getClass().getSimpleName());
                 if (tickerStart != 0L) {
                     long cost = (System.nanoTime() - tickerStart) / 1_000_000;
                     // ONLY THE ONES WORTH LOOKING AT. A first frame runs dozens of tickers and almost all

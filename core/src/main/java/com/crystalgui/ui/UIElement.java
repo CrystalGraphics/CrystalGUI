@@ -1,5 +1,6 @@
 package com.crystalgui.ui;
 
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
 import com.crystalgraphics.gl.texture.CgTexture2D;
@@ -17,6 +18,7 @@ import com.crystalgui.render.texture.CgUiRoundedRect;
 import com.crystalgui.render.texture.CornerRadiusAware;
 import com.crystalgui.render.texture.CgUiSprite;
 import com.crystalgui.style.ElementStyle;
+import com.crystalgui.style.StyleEngine;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.property.layout.LayoutProperties;
@@ -301,6 +303,32 @@ public class UIElement implements SettingsScope, DataProvider {
     }
 
     /**
+     * Removes a class <b>without re-matching the subtree</b> — legal only when the subtree is about to
+     * stop being displayed.
+     *
+     * <h3>Why this exists and when it is safe</h3>
+     *
+     * <p>{@link #removeClass} recurses, because a descendant selector can key on the class being removed
+     * and every descendant's match may change. That is right, and it is pure waste in one case: hiding a
+     * container whose class is the thing being removed. Measured on the Go to File picker closing —
+     * {@code Popover.applyOpenState x345}, 443 elements re-matched and 566 layout nodes touched, for a
+     * panel that is {@code display: none} by the end of the same method.</p>
+     *
+     * <p>Safe because a hidden subtree's computed style is unobservable — it does not paint, hit-test or
+     * lay out — and whatever shows it again re-adds the class through the recursing {@link #addClass},
+     * which re-matches every descendant before anything can look at them. <b>The caller owes that
+     * pairing</b>: use this only where the element is being hidden in the same breath, and only where the
+     * showing path adds the class back.</p>
+     */
+    protected UIElement removeClassWithoutRematchingSubtree(String cls) {
+        if (classes.remove(cls)) {
+            if (attachedWindow != null) attachedWindow.getStyleEngine().markDirty(this);
+            notifyIdentityChanged();
+        }
+        return this;
+    }
+
+    /**
      * What this element knows — {@link UiDataKeys#ELEMENT}, and nothing else by default.
      *
      * <p>Every element is a {@link DataProvider} so that a walk always terminates with an answer for
@@ -417,7 +445,7 @@ public class UIElement implements SettingsScope, DataProvider {
             }
         }
         onStyleChanged();
-        invalidateStyleMatch();
+        invalidateStateMatch();
     }
 
     public void setPressed(boolean pressed) {
@@ -425,7 +453,7 @@ public class UIElement implements SettingsScope, DataProvider {
         if (this.isPressed == pressed) return;
         this.isPressed = pressed;
         onStyleChanged();
-        invalidateStyleMatch();
+        invalidateStateMatch();
     }
 
     /**
@@ -454,13 +482,43 @@ public class UIElement implements SettingsScope, DataProvider {
         this.isFocused = focused;
         this.isFocusVisible = nextVisible;
         onStyleChanged();
-        invalidateStyleMatch();
+        invalidateStateMatch();
         // :focus-within is an ANCESTOR'S state, so this element alone re-matching is not enough --
-        // the whole chain above it changed too. Cheap and bounded: focus moves rarely and a path is
-        // a few dozen links, where the alternative (invalidating everything) is the whole tree.
-        // Both the losing and the gaining element run this, which is what covers both chains.
+        // the whole chain above it changed too. Both the losing and the gaining element run this,
+        // which is what covers both chains.
+        //
+        // THE ANCESTOR ITSELF, and the keyed descendants ONCE FROM THE ROOT. This used to call
+        // invalidateStyleMatch() on each ancestor, whose own note called the walk "cheap and bounded"
+        // -- the walk UP is bounded and every step of it recursed DOWN over an entire subtree, so the
+        // outermost ancestor re-matched the whole window. Measured at 713 elements for one click. A
+        // subject keyed on :focus-within can be anywhere under any ancestor, so one narrowed walk from
+        // the root covers every chain at the cost of one, and the redundancy of doing it per ancestor
+        // goes with it. @see #invalidateStateMatch
+        if (attachedWindow == null) return;
+        StyleEngine engine = attachedWindow.getStyleEngine();
+        UIElement topmost = null;
+        // THE UNION OVER THE CHAIN, then ONE walk from the top.
+        //
+        // :focus-within changed for every ancestor, so each of them is a stateful subject and each has
+        // its own reachable set. Asking only the topmost -- the root -- would miss every rule keyed on
+        // something in between, which is most of them: `.__quick-pick__:focus-within .__qp-key__` is keyed
+        // on the quick-pick, not on the root. The union is conservative (a descendant of one ancestor can
+        // be marked for another's rules) and is still bounded by the chain that actually changed, which is
+        // the whole difference from marking every `text` in the window.
+        Set<String> reachable = null;
         for (UIElement ancestor = getParent(); ancestor != null; ancestor = ancestor.getParent()) {
-            ancestor.invalidateStyleMatch();
+            engine.markDirty(ancestor);
+            topmost = ancestor;
+            Set<String> here = engine.stateDescendantKeysFrom(ancestor);
+            if (here == StyleEngine.EVERYTHING) {
+                reachable = here;
+            } else if (here != null && reachable != StyleEngine.EVERYTHING) {
+                if (reachable == null) reachable = new HashSet<>(here);
+                else reachable.addAll(here);
+            }
+        }
+        if (topmost != null && reachable != null) {
+            topmost.invalidateStateDescendants(engine, reachable);
         }
     }
 
@@ -484,7 +542,7 @@ public class UIElement implements SettingsScope, DataProvider {
         if (this.isHovered == hovered) return;
         this.isHovered = hovered;
         onStyleChanged();
-        invalidateStyleMatch();
+        invalidateStateMatch();
     }
 
     /**
@@ -2283,6 +2341,46 @@ public class UIElement implements SettingsScope, DataProvider {
      * every candidate-value push (including the ones a re-match itself produces), so folding this
      * into it would re-trigger selector matching on every single style write.
      */
+    /**
+     * A <b>state</b> change — {@code :hover}, {@code :focus}, {@code :active}, {@code :disabled}.
+     *
+     * <h3>Why this is not {@link #invalidateStyleMatch()}</h3>
+     *
+     * <p>Both have to reach descendants, because a descendant selector can key off this element
+     * ({@code checkbox:checked .__mark__}). They differ in <em>how many</em> descendants can possibly
+     * care. An identity change alters which of {@code .__panel__ .__row__}-shaped rules apply and the
+     * answer is broad; a STATE change can only reach subjects some rule places after a pseudo-class, and
+     * across every sheet this project ships that set is thirteen entries.</p>
+     *
+     * <p>Measured in a running client before this split: one hover change re-matched <b>291</b> elements
+     * and a single focus change <b>713</b>, at 20-25µs each — most of a frame per mouse move, and the
+     * whole of a sustained drop from 120fps to 55 with a file open. The subtree still has to be walked;
+     * what it no longer does is re-match every node in it. @see StyleEngine#stateReaches</p>
+     */
+    protected void invalidateStateMatch() {
+        if (attachedWindow == null) return;
+        StyleEngine engine = attachedWindow.getStyleEngine();
+        engine.markDirty(this);
+        invalidateStateDescendants(engine);
+    }
+
+    /** Marks only the descendants an ancestor's state can reach. @see #invalidateStateMatch */
+    private void invalidateStateDescendants(StyleEngine engine) {
+        // ASKED ONCE, BEFORE THE WALK. The old version asked per descendant and, worse, recursed
+        // unconditionally -- so it VISITED the whole subtree however little it marked. Nearly every state
+        // change reaches nothing, and that case is now a single map lookup rather than a tree walk.
+        Set<String> reachable = engine.stateDescendantKeysFrom(this);
+        if (reachable == null) return;
+        invalidateStateDescendants(engine, reachable);
+    }
+
+    private void invalidateStateDescendants(StyleEngine engine, Set<String> reachable) {
+        for (UIElement child : children) {
+            if (StyleEngine.carriesAny(child, reachable)) engine.markDirty(child);
+            child.invalidateStateDescendants(engine, reachable);
+        }
+    }
+
     protected void invalidateStyleMatch() {
         if (attachedWindow == null) return;
         attachedWindow.getStyleEngine().markDirty(this);
@@ -2347,6 +2445,14 @@ public class UIElement implements SettingsScope, DataProvider {
     public final void drawSubtree(CgUiPaintContext ctx) {
         if (style.taffyBridge.style.display == TaffyDisplay.NONE || style.generalGroup.opacity() == 0)
             return;
+        // HOW MANY ELEMENTS THE FRAME ACTUALLY PAINTED.
+        //
+        // `gl:draw` wraps this whole traversal, so a large number there is either our own walking and
+        // submitting or the driver blocking inside a draw call because the GPU is behind -- and those
+        // need opposite fixes. Cost per element separates them: a traversal scales with the count, a
+        // stalled queue does not. Measured in a client at 45-62ms for this phase while the entire rest
+        // of the frame was under 2ms, which is the one number left that nothing explains.
+        FrameProfile.count("painted", 1);
         // Pushed BEFORE the localToWorld snapshot below, so that snapshot includes this element's own
         // transform — which is what the RuntimeCache calculator produces too. Get this order wrong and
         // hit-testing silently disagrees with rendering by exactly the transform.
@@ -2379,12 +2485,28 @@ public class UIElement implements SettingsScope, DataProvider {
         boolean needsLayer = opacity < 1f || overflow.isMask();
 
         if (!needsLayer) {
+            // THE FOUR HALVES OF PAINTING AN ELEMENT, each attributed. `gl:draw` wraps the whole
+            // recursive walk, so it can say a frame spent 8ms drawing and nothing about WHAT -- and the
+            // four do completely unrelated work: a background resolves and draws a drawable, children
+            // recurse, an overlay is a second drawable, an outline is four strokes. Excluding the
+            // recursion from the self/overlay/outline buckets is what makes them comparable across
+            // elements; children lands in the same buckets one level down.
+            long timed = FrameProfile.begin();
             paintSelf(ctx);
+            FrameProfile.end(timed, "paint:self");
             paintChildren(ctx, overflow);
+            timed = FrameProfile.begin();
             paintOverlay(ctx);
+            FrameProfile.end(timed, "paint:overlay");
+            timed = FrameProfile.begin();
             paintOutline(ctx);
+            FrameProfile.end(timed, "paint:outline");
             return;
         }
+        // A LAYER PASS, counted separately -- it acquires an FBO, redirects the whole subtree into it
+        // and composites it back, which is a different order of cost from an ordinary element and is
+        // invisible inside one `gl:draw` number.
+        FrameProfile.count("paint-layers", 1);
 
         CgFrameBuffer subtreeFbo = ctx.beginLayerFbo();
         paintSelf(ctx); // background (fill + border) — must NOT go through the mask below

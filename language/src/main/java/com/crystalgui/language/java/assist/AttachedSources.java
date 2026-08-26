@@ -187,6 +187,16 @@ public final class AttachedSources {
     }
 
     /**
+     * Index every archive now, so the first lookup that misses does not pay for all of them.
+     *
+     * <p>For a warm-up thread, and the only honest way to warm this — see {@link SourceArchives#warm}
+     * for why asking about a type cannot do it.</p>
+     */
+    public void warm() {
+        archives.warm();
+    }
+
+    /**
      * The attached unit declaring {@code topLevelName}, or null when there is no source for it.
      *
      * <p>Synchronized because the cache is a plain map and analysis runs off the UI thread: two hovers

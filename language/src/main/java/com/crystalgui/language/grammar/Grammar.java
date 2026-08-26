@@ -1,5 +1,6 @@
 package com.crystalgui.language.grammar;
 
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.text.syntax.Language;
 
@@ -141,8 +142,15 @@ public enum Grammar {
      * @param scheduler where reparses run, or null to parse on the calling thread
      */
     public TreeSitterTokenizer newTokenizer(JobScheduler scheduler) {
-        TreeSitterTokenizer tokenizer = new TreeSitterTokenizer(newParser(),
-                Queries.loadForHighlighting(queryPath("highlights.scm")), scheduler);
+        long timed = FrameProfile.begin();
+        TSLanguage parser = newParser();
+        FrameProfile.step(timed, "grammar.newParser " + directory);
+        timed = FrameProfile.begin();
+        Queries.Prepared highlights = Queries.loadForHighlighting(queryPath("highlights.scm"));
+        FrameProfile.step(timed, "grammar.loadHighlights " + directory);
+        timed = FrameProfile.begin();
+        TreeSitterTokenizer tokenizer = new TreeSitterTokenizer(parser, highlights, scheduler);
+        FrameProfile.step(timed, "grammar.compileQuery " + directory);
         // AND WHERE ITS OPTIONAL FAMILIES LIVE. `folds.scm`, `indents.scm` and `locals.scm` are loaded
         // on first use rather than here, so a document that is never folded pays nothing for them --
         // but only this table knows which directory to read, and a tokenizer built from a bare query
@@ -150,7 +158,11 @@ public enum Grammar {
         tokenizer.readFamiliesFrom(this);
         // AND WHATEVER THIS GRAMMAR CANNOT PARSE, if its language has said so. @see #filterSourceWith
         if (sourceFilter != null) tokenizer.filterSourceWith(sourceFilter);
-        if (hasInjections()) tokenizer.withInjections(this, scheduler);
+        if (hasInjections()) {
+            timed = FrameProfile.begin();
+            tokenizer.withInjections(this, scheduler);
+            FrameProfile.step(timed, "grammar.withInjections " + directory);
+        }
         return tokenizer;
     }
 

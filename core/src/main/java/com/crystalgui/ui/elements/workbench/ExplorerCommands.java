@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.workbench;
 
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
 
@@ -20,6 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import javax.annotation.Nullable;
+import com.crystalgui.core.settings.Settings;
 import com.crystalgui.ui.UiDataKeys;
 import com.crystalgui.ui.elements.chrome.Preferences;
 
@@ -197,10 +199,26 @@ public final class ExplorerCommands {
                 .run(context -> {
                     UIWindow window = context.data().get(UiDataKeys.WINDOW);
                     if (window == null) return;
-                    // The WINDOW's store, not the workbench's: settings resolve outward, so writing at the
-                    // root is what makes a preference apply to every panel rather than to one subtree.
+                    // THE STORE THE APPLICATION SAYS IT LISTENS ON -- asked, not derived.
+                    //
+                    // This used to be `window.ui.rootElement.settings()`, on the reasoning that settings
+                    // resolve outward so writing at the root is what makes a preference reach every panel
+                    // rather than one subtree. The reasoning is right and the expression stopped matching
+                    // it: with a window compositor the editor opens as a WINDOW, so the root element is
+                    // the desktop's and the editor's own store is several levels below it.
+                    //
+                    // Both halves then still looked correct. The value was written, and it RESOLVED
+                    // correctly too -- the walk goes outward, so a value at the root is visible from
+                    // inside. What never happened is the notification: `WorkbenchSettings.install`
+                    // subscribes to the editor's store, which nothing had written to, so `apply` never
+                    // ran. Picking a theme stored the choice, changed nothing on screen, and lost it on
+                    // restart, because `savePreferences` writes the editor store's user layer.
+                    //
+                    // Invisible in the harness, whose scene is `new UIWindow(Ui.of(editor))` -- there the
+                    // editor IS the root element and the two expressions are the same object.
+                    Settings host = context.data().get(UiDataKeys.SETTINGS_HOST);
                     Preferences.open(window,
-                            window.ui.rootElement.settings());
+                            host != null ? host : window.ui.rootElement.settings());
                 }));
 
         registry.register(Command.of(FIND_IN_TREE, "Find in Project View")
@@ -231,7 +249,10 @@ public final class ExplorerCommands {
                 .run(context -> {
                     Workbench workbench = workbenchFor(context);
                     UIWindow window = workbench == null ? null : workbench.getAttachedWindow();
-                    if (window != null) GoToFile.open(window, workbench);
+                    if (window == null) return;
+                    long profiled = FrameProfile.enter("Ctrl+P explorer.goToFile");
+                    GoToFile.open(window, workbench);
+                    FrameProfile.leave(profiled, "Ctrl+P explorer.goToFile");
                 })
                 // Enabled whenever there is a project, not whenever something is selected: it is how you
                 // reach a file you have NOT got selected, which is the whole point of it.

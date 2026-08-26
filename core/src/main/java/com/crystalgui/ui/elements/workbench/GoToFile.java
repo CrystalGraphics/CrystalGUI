@@ -9,6 +9,7 @@ import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.lang.TypeSearch;
 import com.crystalgui.text.lang.TypeSearchRegistry;
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.chrome.QuickPick;
 import com.crystalgui.ui.elements.chrome.QuickPickEntry;
@@ -118,6 +119,8 @@ public final class GoToFile {
         pick.setSource((query, sink) ->
                 fetchInto(query, workbench.fileTree().source().knownFiles(), sink));
         pick.onAccepted.connect(id -> {
+            long accepted = FrameProfile.enter("ENTER accepted " + id);
+            try {
             // THE LOCATION COMES FROM THE QUERY, NOT THE ROW. `Main.java:42` narrows to `Main.java` for
             // matching, so every row is a match for the name and none of them carries the line — which
             // belongs to what was typed rather than to what was found. Read live at accept time rather
@@ -126,6 +129,9 @@ public final class GoToFile {
             Resource resource = Resource.parse(id);
             if (resource.isProject()) workbench.openFileAt(resource.asPath(), at);
             else workbench.openResourceAt(resource, at);
+            } finally {
+                FrameProfile.leave(accepted, "ENTER accepted");
+            }
         });
         workbench.setQuickOpen(pick);
         return pick.open(window);
@@ -160,10 +166,16 @@ public final class GoToFile {
         // `Main.java:42` empties the list, which reads as the search breaking on a keystroke.
         SearchQuery effective = name.equals(typed) ? query : SearchQuery.of(name);
 
+        long profiled = FrameProfile.enter("GoToFile.fetchInto '" + name + "' over "
+                + files.size() + " workspace files");
         List<Scored> fileRows = new ArrayList<>();
+        long timed = FrameProfile.begin();
         collectFiles(files, effective, fileRows);
+        FrameProfile.step(timed, "collectFiles -> " + fileRows.size());
         List<Scored> typeRows = new ArrayList<>();
+        timed = FrameProfile.begin();
         collectTypes(name, effective, typeRows);
+        FrameProfile.step(timed, "collectTypes -> " + typeRows.size());
 
         // RANKED WITHIN EACH GROUP, then pushed group by group -- which is the same order the single
         // sort produced and is cheaper to reason about, since the group is now the outer key.
@@ -171,8 +183,11 @@ public final class GoToFile {
         boolean cut = trimTo(fileRows, MAX_PER_GROUP) | trimTo(typeRows, MAX_PER_GROUP);
         if (cut) sink.markTruncated();
 
-        if (!push(fileRows, sink)) return;
-        push(typeRows, sink);
+        long pushed = FrameProfile.begin();
+        boolean more = push(fileRows, sink);
+        if (more) push(typeRows, sink);
+        FrameProfile.step(pushed, "push rows");
+        FrameProfile.leave(profiled, "GoToFile.fetchInto");
     }
 
     /**
@@ -206,7 +221,10 @@ public final class GoToFile {
     }
 
     private static void collectTypes(String name, SearchQuery effective, List<Scored> out) {
+        // THE CLASSPATH INDEX -- tens of thousands of types, asked on every keystroke.
+        long searched = FrameProfile.begin();
         TypeSearch.Results found = TypeSearchRegistry.search(name, TYPE_LIMIT);
+        FrameProfile.step(searched, "TypeSearchRegistry.search");
         for (TypeSearch.Result result : found.results()) {
             QuickPickItem item = new QuickPickItem(
                     Resource.of(Resource.SCHEME_LIBRARY, result.qualifiedName()).toString(),

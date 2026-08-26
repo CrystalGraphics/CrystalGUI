@@ -5,6 +5,7 @@ import com.crystalgui.core.notify.Notifications;
 
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.async.JobKey;
 import com.crystalgui.core.async.JobLane;
 import com.crystalgui.core.async.JobScheduler;
@@ -16,6 +17,7 @@ import com.crystalgui.fs.FilePatternMap;
 import com.crystalgui.fs.WorkspaceClient;
 import com.crystalgui.fs.WorkingCopies;
 import com.crystalgui.fs.WorkspaceFileService;
+import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.diagnostic.DiagnosticSet;
 import com.crystalgui.text.cursor.IndentationProvider;
@@ -1155,10 +1157,18 @@ public class Workbench extends UIElement {
             // The selection is captured and PUT BACK when the caller asked not to activate. DockLeaf.add
             // activates what it inserts, which is right for a file and wrong for a companion panel.
             DockPanelRef wasActive = target.activePanel();
+            long timed = FrameProfile.begin();
             target.add(ref);
+            FrameProfile.step(timed, "dock.leaf.add");
             if (!options.activates() && wasActive != null) target.activate(wasActive);
+            timed = FrameProfile.begin();
             dock.syncGroups();
-            if (options.activates()) dock.setActiveGroup(dock.groupFor(target));
+            FrameProfile.step(timed, "dock.syncGroups");
+            if (options.activates()) {
+                timed = FrameProfile.begin();
+                dock.setActiveGroup(dock.groupFor(target));
+                FrameProfile.step(timed, "dock.setActiveGroup");
+            }
             return target;
         }
 
@@ -1437,22 +1447,40 @@ public class Workbench extends UIElement {
      */
     public void openResource(Resource resource, @Nullable Runnable onOpened) {
         if (resource == null || ResourceRegistry.providerFor(resource) == null) return;
+        long profiled = FrameProfile.enter("Workbench.openResource " + resource);
+        try {
+            openResourceInternal(resource, onOpened);
+        } finally {
+            FrameProfile.leave(profiled, "Workbench.openResource");
+        }
+    }
+
+    private void openResourceInternal(Resource resource, @Nullable Runnable onOpened) {
+        long timed = FrameProfile.begin();
         DockPanelRef ref = refForResource(resource);
+        FrameProfile.step(timed, "refForResource (displayName + tab title)");
         // CREATED BEFORE THE TAB, which also starts its read. `openFile` reads before it adds a tab so a
         // failed read leaves no empty editor behind; here the editor is the thing the dock builds panels
         // FROM — on a split, a drag, and a layout restore — so it has to exist independently of any one
         // open, and the ordering that matters instead is that nothing reveals a position until there is
         // text to reveal it in.
+        timed = FrameProfile.begin();
         viewerFor(resource);
+        FrameProfile.step(timed, "viewerFor (build editor + submit read)");
         for (DockLeaf leaf : dock.layout().leaves()) {
             if (leaf.indexOf(ref) < 0) continue;
+            FrameProfile.note("already open -- activating existing tab");
             leaf.activate(ref);
+            timed = FrameProfile.begin();
             dock.syncGroups();
+            FrameProfile.step(timed, "dock.syncGroups");
             dock.setActiveGroup(dock.groupFor(leaf));
             whenViewerLoaded(resource, onOpened);
             return;
         }
+        timed = FrameProfile.begin();
         open(DockInput.of(ref));
+        FrameProfile.step(timed, "dock.open (new tab)");
         whenViewerLoaded(resource, onOpened);
     }
 
@@ -1574,19 +1602,43 @@ public class Workbench extends UIElement {
                 // identity, and there is exactly one editor per resource. Two opens of the same class
                 // while the first read is in flight therefore replace rather than race.
                 .job(JobKey.of(editor, "viewer-read"), JobLane.LATENCY,
-                        context -> provider.read(resource))
-                .onDone(bytes -> {
+                        context -> {
+                            // OFF THE FRAME THREAD -- an archive read, or CFR.
+                            long read = System.nanoTime();
+                            byte[] got = provider.read(resource);
+                            FrameProfile.note("[worker] provider.read " + resource + " -> "
+                                    + (got == null ? -1 : got.length) + " bytes in "
+                                    + (System.nanoTime() - read) / 1_000_000L + "ms");
+                            // AND EVERYTHING THE BYTES ALONE DECIDE, on this thread rather than on the
+                            // frame that receives them: the decode, the line-ending scan, the
+                            // normalisation copy and the rope. Measured at ~10ms of a 34ms frame for a
+                            // 108KB decompiled class. @see TextBuffer#prepare
+                            long prepared = System.nanoTime();
+                            TextBuffer.Prepared ready = TextBuffer.prepare(
+                                    got == null ? "" : new String(got, StandardCharsets.UTF_8));
+                            FrameProfile.note("[worker] prepare -> " + ready.document().lineCount()
+                                    + " lines in " + (System.nanoTime() - prepared) / 1_000_000L + "ms");
+                            return ready;
+                        })
+                .onDone(ready -> {
                     // READ-ONLY IS LIFTED FOR THE FILL AND PUT BACK. `setText` goes through the same
                     // edit path typing does, so a viewer that is already read-only refuses its own
                     // content -- and refuses it silently, leaving a blank tab that looks like a failed
                     // read. The window is one statement long and on the UI thread.
+                    long profiled = FrameProfile.enter("viewer-read onDone (FRAME THREAD) " + key);
                     editor.setReadOnly(false);
-                    editor.setText(bytes == null ? "" : new String(bytes, StandardCharsets.UTF_8));
+                    long timed = FrameProfile.begin();
+                    editor.setText(ready);
+                    FrameProfile.step(timed, "editor.setText (prepared)");
                     editor.setReadOnly(true);
                     viewersLoaded.add(key);
                     List<Runnable> waiting = viewerPending.remove(key);
-                    if (waiting == null) return;
-                    for (Runnable each : waiting) each.run();
+                    if (waiting != null) {
+                        timed = FrameProfile.begin();
+                        for (Runnable each : waiting) each.run();
+                        FrameProfile.step(timed, "waiting callbacks (reveal, focus)");
+                    }
+                    FrameProfile.leave(profiled, "viewer-read onDone");
                 })
                 .submit();
     }
@@ -1604,13 +1656,41 @@ public class Workbench extends UIElement {
         TextEditor existing = viewers.get(key);
         if (existing != null) return existing;
 
+        long timed = FrameProfile.begin();
         TextEditor created = new TextEditor("");
+        FrameProfile.step(timed, "new TextEditor");
         created.addClass(FILE_EDITOR_CLASS);
         created.addClass(VIEWER_CLASS);
         created.setReadOnly(true);
+        timed = FrameProfile.begin();
         LanguageRegistry.Entry entry = LanguageRegistry.forFileName(viewerFileNameOf(resource));
+        FrameProfile.step(timed, "LanguageRegistry.forFileName");
         created.setLanguage(entry.language());
-        created.setTokenizer(DocComments.refining(entry.newTokenizer()));
+        // THE TOKENIZER IS BUILT ON A WORKER, and arrives beside the text rather than before it.
+        //
+        // A tree-sitter tokenizer compiles its grammar's whole `highlights.scm` natively, per document,
+        // and Java's is large: measured at 17ms on the frame thread for the SECOND one in a process --
+        // so it is not a cold start, it is what opening any Java document costs. It was a third of the
+        // keystroke that opens a viewer.
+        //
+        // Off-thread is safe here in a way sharing one compiled query would not be. `close()` frees the
+        // query, so a cache handing the same TSQuery to two documents would free it under whichever
+        // outlives the other -- a use-after-free, which is a JVM crash rather than an exception. Building
+        // a fresh one on a worker keeps every native object owned by exactly one document, and asks
+        // nothing about whether tree-sitter's query type is safe to read from two threads at once.
+        //
+        // And nothing is missing meanwhile: this editor is EMPTY until `readViewer` lands, so there is no
+        // window in which text is on screen uncoloured. `setTokenizer` clears the row cache and marks the
+        // highlights dirty, so it re-colours whatever arrived first regardless of which job wins.
+        jobs().job(JobKey.of(created, "viewer-tokenizer"), JobLane.LATENCY,
+                        context -> DocComments.refining(entry.newTokenizer()))
+                .onDone(tokenizer -> {
+                    // STILL THE EDITOR FOR THIS RESOURCE. A tab opened and closed inside the build would
+                    // otherwise be handed a tokenizer nothing will ever close -- one leaked native set.
+                    if (viewers.get(key) != created) return;
+                    created.setTokenizer(tokenizer);
+                })
+                .submit();
         // AND SERVICES, HANDED THE RESOURCE -- which is what lets the engine recognise a borrowed
         // document and configure itself for one: no diagnostics, because its problems are ours and
         // nobody reading it can act on them, and a compliance chosen by where the text came from,
@@ -1620,12 +1700,18 @@ public class Workbench extends UIElement {
         // Without them a viewer colours from the grammar and answers nothing: no hover, no Ctrl+Click
         // onward, no telling a field from a parameter -- which is most of why anybody opens a class
         // they cannot edit.
+        timed = FrameProfile.begin();
         created.setLanguageServices(entry.newServices(created.buffer(), resource));
+        FrameProfile.step(timed, "entry.newServices (engine open + first analyse)");
         // AND ITS JUMPS GO SOMEWHERE. @see #routeDefinitionsOf
         routeDefinitionsOf(created);
+        timed = FrameProfile.begin();
         WorkbenchSettings.applyTo(this, created);
+        FrameProfile.step(timed, "WorkbenchSettings.applyTo");
         viewers.put(key, created);
+        timed = FrameProfile.begin();
         readViewer(resource, created);
+        FrameProfile.step(timed, "readViewer (submit)");
         return created;
     }
 
@@ -2689,8 +2775,13 @@ public class Workbench extends UIElement {
                 if (path.toString().equals(panel.state(DockPanelRef.PATH, ""))) return;
             }
         }
+        long timed = FrameProfile.begin();
         open.close(path);
+        FrameProfile.step(timed, "close.open.close (dispose the document)");
+        timed = FrameProfile.begin();
         onDidCloseDocument.emit(path);
+        FrameProfile.step(timed, "close.onDidCloseDocument -> "
+                + onDidCloseDocument.connectionCount() + " listeners");
     }
 
     /**

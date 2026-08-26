@@ -8,6 +8,7 @@ import com.crystalgui.style.sheet.StyleRule;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.style.transition.TransitionEngine;
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import lombok.Getter;
@@ -113,20 +114,23 @@ public final class StyleEngine {
      * {@code bindVariables()} both change what the sheets say without changing any engine's sheet
      * list, so no per-window hook fires; whoever mutated the sheets calls this next.
      */
-    public static void restyleAllWindows() {
+    public static int restyleAllWindows() {
         synchronized (LIVE) {
             for (StyleEngine engine : LIVE) engine.invalidateAllMatches();
+            // COUNTED, because zero is a real answer and looks exactly like success from the caller.
+            // A sheet mutation that restyles nothing has done everything right and changed no pixel.
+            return LIVE.size();
         }
     }
 
     public void addStylesheet(StyleSheet sheet) {
         sheets.add(sheet);
-        dirtyMatch.addAll(window.getElements());
+        markAllDirty();
     }
 
     public void removeStylesheet(StyleSheet sheet) {
         if (sheets.remove(sheet)) {
-            dirtyMatch.addAll(window.getElements());
+            markAllDirty();
         }
     }
 
@@ -143,11 +147,116 @@ public final class StyleEngine {
      * than left behind as a winning candidate nothing overwrites.</p>
      */
     public void invalidateAllMatches() {
+        markAllDirty();
+    }
+
+    /**
+     * Marks the WHOLE WINDOW — the three bulk entries, so a profile can tell them from a targeted one.
+     *
+     * <p>Routed through one method purely so it can be blamed. A frame reported 243 elements re-matched
+     * with <b>no</b> {@code markDirty} caller at all, which is only possible from here: an invalidation
+     * that names one element and one that names every element are indistinguishable downstream, and the
+     * second is the one that costs a frame. @see FrameProfile</p>
+     */
+    private void markAllDirty() {
+        if (FrameProfile.ENABLED) {
+            FrameProfile.blame("markAllDirty", "com.crystalgui.style");
+            FrameProfile.count("whole-window-invalidations", 1);
+        }
         dirtyMatch.addAll(window.getElements());
+    }
+
+    /**
+     * Whether a STATE change on an ancestor could alter {@code descendant}'s match. @see StyleSheet
+     *
+     * <p>The question {@code UIElement.invalidateStyleMatch()} asks before re-matching a subtree.
+     * Answering it honestly is what turns a hover into a walk instead of hundreds of re-matches — in a
+     * running client one hover change re-matched <b>291</b> elements and a focus change <b>402 to 713</b>,
+     * every one of them at 20-25µs.</p>
+     *
+     * <p>Yes for anything at all when a sheet carries a rule whose subject cannot be keyed, which is the
+     * conservative answer and the pre-existing behaviour.</p>
+     */
+    /**
+     * What a state change on {@code ancestor} can reach — the keys, or null for <b>nothing at all</b>.
+     *
+     * <h3>Resolved once per invalidation, not once per descendant</h3>
+     *
+     * <p>{@link #stateReaches} asks the flat question — "could any state rule reach an element carrying
+     * this key" — and the answer is the same for every ancestor, so a hover anywhere marked every element
+     * whose tag or class appeared in any such rule. {@code text} is one of those, so every label in the
+     * window re-matched on every mouse move.</p>
+     *
+     * <p>This asks the narrow one, and it is answered <em>before</em> the walk starts: a null return means
+     * the subtree is not walked at all, which is the second half of the win — the old walk visited every
+     * descendant unconditionally and only narrowed what it MARKED.</p>
+     *
+     * @return the reachable descendant keys, or null when a state change here can reach nothing
+     */
+    @Nullable
+    public Set<String> stateDescendantKeysFrom(UIElement ancestor) {
+        Set<String> reachable = null;
+        for (int i = 0; i < sheets.size(); i++) {
+            StyleSheet sheet = sheets.get(i);
+            // An unkeyable subject (`foo:hover *`) means anything could match, so nothing can be narrowed.
+            if (sheet.hasUnboundedStateDescendants()) return EVERYTHING;
+            reachable = addAll(reachable, sheet.stateDescendantsFromAnyAncestor());
+            reachable = addAll(reachable, sheet.stateDescendantsFrom(ancestor.tagName()));
+            for (String cls : ancestor.getClasses()) {
+                reachable = addAll(reachable, sheet.stateDescendantsFrom(cls));
+            }
+            if (!ancestor.getId().isEmpty()) {
+                reachable = addAll(reachable, sheet.stateDescendantsFrom(ancestor.getId()));
+            }
+        }
+        return reachable;
+    }
+
+    /** Allocates only when there is something to add — the common answer is "nothing". */
+    @Nullable
+    private static Set<String> addAll(@Nullable Set<String> into, Set<String> more) {
+        if (more.isEmpty()) return into;
+        if (into == null) into = new HashSet<>(more.size() * 2);
+        into.addAll(more);
+        return into;
+    }
+
+    /** The sentinel for "narrowing is off" — an unkeyable subject somewhere in a sheet. */
+    public static final Set<String> EVERYTHING = Collections.unmodifiableSet(new HashSet<>());
+
+    /** Whether {@code descendant} carries any of {@code reachable}. @see #stateDescendantKeysFrom */
+    public static boolean carriesAny(UIElement descendant, Set<String> reachable) {
+        if (reachable == EVERYTHING) return true;
+        if (reachable.contains(descendant.tagName())) return true;
+        for (String cls : descendant.getClasses()) {
+            if (reachable.contains(cls)) return true;
+        }
+        return !descendant.getId().isEmpty() && reachable.contains(descendant.getId());
+    }
+
+    public boolean stateReaches(UIElement descendant) {
+        for (int i = 0; i < sheets.size(); i++) {
+            StyleSheet sheet = sheets.get(i);
+            if (sheet.hasUnboundedStateDescendants()) return true;
+            Set<String> keys = sheet.stateDescendantKeys();
+            if (keys.isEmpty()) continue;
+            if (keys.contains(descendant.tagName())) return true;
+            for (String cls : descendant.getClasses()) {
+                if (keys.contains(cls)) return true;
+            }
+            if (!descendant.getId().isEmpty() && keys.contains(descendant.getId())) return true;
+        }
+        return false;
     }
 
     /** Called from {@link UIElement#invalidateStyleMatch()} — marks an element for re-matching. */
     public void markDirty(UIElement element) {
+        // BLAMED WHILE PROFILING. A count says three hundred elements were re-matched; only the caller
+        // says why, and "why" is the whole question when nothing on screen is moving. @see FrameProfile
+        if (FrameProfile.ENABLED && dirtyMatch.add(element)) {
+            FrameProfile.blame("markDirty", "com.crystalgui.style", "com.crystalgui.ui.UIElement");
+            return;
+        }
         dirtyMatch.add(element);
     }
 
@@ -168,8 +277,15 @@ public final class StyleEngine {
     /** Called from {@link UIWindow#paintFrame()}, before layout is recomputed — and again afterwards for
      * as long as {@link #hasPendingMatches()} reports work that layout itself created. */
     public void calculateStyle(float deltaSeconds) {
+        // THE TWO HALVES REPORTED APART. They cost differently and for unrelated reasons -- the drain is
+        // proportional to how many elements were invalidated, the tick to how many transitions are in
+        // flight -- so one `style` bucket cannot say which of them a slow frame is.
+        long timed = FrameProfile.begin();
         drainDirtyMatch();
+        FrameProfile.end(timed, "style:drainDirtyMatch");
+        timed = FrameProfile.begin();
         transitionEngine.tick(deltaSeconds);
+        FrameProfile.end(timed, "style:transitions");
     }
 
     /**
@@ -184,6 +300,39 @@ public final class StyleEngine {
         return !dirtyMatch.isEmpty();
     }
 
+    /** Exactly what the last {@link #resetRematchCountForTesting} onwards re-matched. Tests only. */
+    private final List<UIElement> rematchedForTesting = new ArrayList<>();
+
+    /**
+     * Whether to record at all — <b>off until a test asks</b>.
+     *
+     * <p>An always-on list of every element ever re-matched is an unbounded leak in a running
+     * application, and one that would grow fastest in exactly the situation this class was just
+     * optimised for. Recording starts when a test resets it and never starts otherwise.</p>
+     */
+    private boolean recordRematches;
+
+    /** @see #rematchedForTesting */
+    public void resetRematchCountForTesting() {
+        recordRematches = true;
+        rematchedForTesting.clear();
+    }
+
+    /** @see #rematchedForTesting */
+    public int rematchCountForTesting() {
+        return rematchedForTesting.size();
+    }
+
+    /**
+     * Which elements were re-matched — the only way to assert that a narrowing SAVED anything.
+     *
+     * <p>Re-matching an element whose answer has not changed is by construction invisible from the
+     * outside, so a test for "and it no longer does that" has nothing else to look at.</p>
+     */
+    public List<UIElement> rematchedForTesting() {
+        return rematchedForTesting;
+    }
+
     private void drainDirtyMatch() {
         if (dirtyMatch.isEmpty()) return;
         // Snapshot-and-clear before iterating: a reentrant invalidateStyleMatch() call during
@@ -192,9 +341,33 @@ public final class StyleEngine {
         // ConcurrentModificationException or recurse within this same pass.
         var batch = new ArrayList<>(dirtyMatch);
         dirtyMatch.clear();
+        // NAMES WHAT IS CHURNING, not merely how much. "Style is slow" is not actionable; "2,143 elements
+        // re-matched, 2,000 of them .__error-stripe__" is a fix. Off unless asked for. @see FrameProfile
+        if (FrameProfile.ENABLED) profileBatch(batch);
+        if (recordRematches) rematchedForTesting.addAll(batch);
+        long timed = FrameProfile.begin();
         for (var element : batch) {
             rematch(element);
         }
+        // THE PER-ELEMENT COST, stated rather than assumed. Everything about narrowing invalidation rests
+        // on "a rematch costs ~20-25us", which was a comment in this file and never a measurement -- and
+        // the trade between marking fewer elements and walking a smaller tree is decided by that number.
+        FrameProfile.step(timed, "style:rematch x" + batch.size());
+    }
+
+    /** Counts the batch by the most specific class each element carries, for the frame report. */
+    private static void profileBatch(List<UIElement> batch) {
+        FrameProfile.count("rematched", batch.size());
+        Map<String, Integer> byName = new HashMap<>();
+        for (UIElement element : batch) {
+            String name = element.getClasses().isEmpty()
+                    ? element.tagName() : element.getClasses().iterator().next();
+            byName.merge(name, 1, Integer::sum);
+        }
+        byName.entrySet().stream()
+                .sorted((a, b) -> Integer.compare(b.getValue(), a.getValue()))
+                .limit(8)
+                .forEach(entry -> FrameProfile.count("~" + entry.getKey(), entry.getValue()));
     }
 
     /** Declarations within one rule share the rule's own {@code sourceOrder} — this multiplier

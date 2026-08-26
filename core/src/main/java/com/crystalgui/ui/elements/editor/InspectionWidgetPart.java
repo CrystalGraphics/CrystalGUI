@@ -105,9 +105,31 @@ final class InspectionWidgetPart extends EditorViewPart {
         if (count > 0) ((UIText) chip.getChildren().get(1)).setText(Integer.toString(count));
     }
 
-    /** Set AND cleared, all three — the panel is long-lived, so a file that was fixed would otherwise keep
-     * the class that made it red. */
+    /**
+     * Set AND cleared, all three — the panel is long-lived, so a file that was fixed would otherwise keep
+     * the class that made it red.
+     *
+     * <h3>...and only when the answer has actually changed</h3>
+     *
+     * <p>This runs from {@code render}, so it ran <b>every frame</b>: three {@code removeClass} calls and
+     * one {@code addClass}, each of which invalidates the style match, to arrive at the classes the panel
+     * already had. Measured in a client — {@code style:rematch x15} at 400-500us appearing on 3,773 of
+     * 3,920 profiled steps, blamed on this line. That is 5-6% of a 120Hz budget spent permanently, on
+     * every frame the editor is open, whatever the file is doing.</p>
+     *
+     * <p><b>A class mutation cannot no-op the way a style write does.</b> {@code replaceOrPutCandidate}
+     * suppresses an unchanged value, which is what makes per-frame geometry writes cheap; a class change
+     * is precisely what invalidation exists for, so it has no such guard and one is owed here instead.
+     * {@code ErrorStripePart} learned the same lesson from the same symptom and remembers what each mark
+     * already shows.</p>
+     *
+     * <p>{@code applied} is tracked separately from the value, because {@code null} is a real severity
+     * here — it means clean — and cannot double as "nothing applied yet".</p>
+     */
     private void applyWorst(DiagnosticSeverity worst) {
+        if (worstApplied && appliedWorst == worst) return;
+        worstApplied = true;
+        appliedWorst = worst;
         panel.removeClass(CLEAN_CLASS);
         panel.removeClass(HAS_ERRORS_CLASS);
         panel.removeClass(HAS_WARNINGS_CLASS);
@@ -115,6 +137,11 @@ final class InspectionWidgetPart extends EditorViewPart {
         else if (worst == DiagnosticSeverity.ERROR) panel.addClass(HAS_ERRORS_CLASS);
         else panel.addClass(HAS_WARNINGS_CLASS);
     }
+
+    /** What {@link #applyWorst} last wrote, and whether it has written at all. */
+    private DiagnosticSeverity appliedWorst;
+
+    private boolean worstApplied;
 
     private UIElement panel() {
         if (panel != null) return panel;
