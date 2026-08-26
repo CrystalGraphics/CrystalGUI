@@ -4,7 +4,7 @@ import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.gl.state.CgGlScope;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgraphics.platform.gl.state.CgGlSlot;
-import com.crystalgui.mc.client.CgUiScreen;
+import com.crystalgui.mc.client.NativeTooltipHost;
 import com.crystalgui.ui.elements.slot.NativeContent;
 import com.crystalgui.ui.elements.slot.NativeContentService;
 import com.crystalgui.ui.elements.slot.NativeProfile;
@@ -287,7 +287,7 @@ public final class Mc1710NativeContentService implements NativeContentService {
                 // GuiScreen and reproducing it would mean copying Minecraft's code into this repository.
                 // It also gets the real thing -- rarity colouring, enchantments, lore, and every line
                 // another mod contributes -- which is the entire reason this is delegated at all.
-                CgUiScreen.drawNativeItemTooltip(stack, Math.round(x) / factor, Math.round(y) / factor);
+                NativeTooltipHost.draw(stack, Math.round(x) / factor, Math.round(y) / factor);
             } finally {
                 popProjection();
             }

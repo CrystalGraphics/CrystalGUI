@@ -54,7 +54,7 @@ import java.io.File;
  *
  * @see CgUiInput for why input does not arrive through this class at all
  */
-public final class CgUiScreen extends GuiScreen {
+public final class CgUiScreen extends GuiScreen implements NativeTooltipHost {
 
     /** @see #HOST_STYLES */
     private static final String ROOT_CLASS = "crystalgui-screen";
@@ -679,14 +679,9 @@ public final class CgUiScreen extends GuiScreen {
      * <p>Sets up no GL of its own — the caller owns that bracket, because the caller is the one that
      * knows it is mid-frame inside a foreign-GL scope.</p>
      */
-    public static boolean drawNativeItemTooltip(ItemStack stack, int scaledX, int scaledY) {
-        if (stack == null) return false;
-        GuiScreen current = Minecraft.getMinecraft().currentScreen;
-        if (!(current instanceof CgUiScreen)) return false;
-        // Legal despite `renderToolTip` being protected and this being a different package: the
-        // qualifying type is this class itself, which is what the protected-access rule turns on.
-        ((CgUiScreen) current).renderToolTip(stack, scaledX, scaledY);
-        return true;
+    @Override
+    public void drawNativeItemTooltip(ItemStack stack, int scaledX, int scaledY) {
+        renderToolTip(stack, scaledX, scaledY);
     }
 
     /** Frees the editor at game shutdown. Not called on close — see the {@code editor} field. */

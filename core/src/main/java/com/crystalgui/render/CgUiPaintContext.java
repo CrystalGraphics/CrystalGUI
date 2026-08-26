@@ -1521,6 +1521,20 @@ public final class CgUiPaintContext {
             // implementation, because every native draw needs it and the symptom points nowhere near
             // the cause. A host with shaders of its own binds them; 0 is the only correct hand-over.
             CgGL.glUseProgram(0);
+            // UNIT 0, AND THIS ONE IS INVISIBLE UNTIL IT IS NOT. A host binds its textures to whatever
+            // texture unit happens to be ACTIVE, while fixed-function sampling reads unit 0 -- so if the
+            // UI left the active unit anywhere else, every bind the host makes lands somewhere nothing
+            // reads and its geometry samples whatever CrystalGUI had in unit 0.
+            //
+            // It does not fail; it draws the wrong thing, and it splits by whether a draw is textured at
+            // all: an item's durability bar (untextured quads) came out perfect while the item itself was
+            // missing, a 3D block rendered its geometry correctly in the wrong colours, and water sampled
+            // orange. That reads as four unrelated faults rather than one line.
+            //
+            // CgUiScreen documents the same trap in the opposite direction -- it resets the unit when
+            // handing the context BACK to Minecraft, because MC presents with one fixed-function quad
+            // bound to the current unit and leaving it elsewhere yields a pure white window.
+            CgGL.glActiveTexture(CgGL.GL_TEXTURE0);
             // THE PROFILE'S CONTRACT, ESTABLISHED HERE RATHER THAN BY EACH HOST. A UI paints in
             // painter's order over whatever the world left behind, so it runs with the depth function
             // at GL_ALWAYS on purpose -- gui_curve.shader says so in its own RenderState. A host

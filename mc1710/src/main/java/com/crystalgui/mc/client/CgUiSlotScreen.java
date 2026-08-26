@@ -54,7 +54,7 @@ import org.lwjgl.input.Mouse;
  * <p>Stacks resolve from the registry by name and a miss degrades to an empty slot and a log line, so
  * one moved registry name cannot take the screen down.</p>
  */
-public final class CgUiSlotScreen extends GuiScreen {
+public final class CgUiSlotScreen extends GuiScreen implements NativeTooltipHost {
 
     /** @see CgUiSlotScreen */
     public static final boolean ENABLED = Boolean.getBoolean("crystalgui.slot.probe");
@@ -92,6 +92,12 @@ public final class CgUiSlotScreen extends GuiScreen {
 
         uiWindow = new UIWindow(Ui.of(root));
         uiWindow.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
+        // ORE, because the user-agent sheet gives a slot GEOMETRY and deliberately no colour -- so an
+        // unthemed slot is an invisible box, and a probe showing invisible boxes cannot tell a missing
+        // well from a missing item. This also puts the ore.css rules themselves under test, which
+        // nothing else does in a client.
+        uiWindow.getStyleEngine().addStylesheet(
+                com.crystalgui.style.sheet.StyleSheetRegistry.of("crystalgui:ore"));
         uiWindow.getStyleEngine().addStylesheet(StyleSheet.parse(HOST_STYLES));
         CrystalGuiCore.LOGGER.info("[slot-probe] screen open; the BLOCK in row 1 is the depth case -- "
                 + "a flat sprite renders the same whether or not depth works");
@@ -109,11 +115,16 @@ public final class CgUiSlotScreen extends GuiScreen {
         items.addChild(new ItemSlot());
         root.addChild(items);
 
-        root.addChild(new UIText("Fluid: water at 25%, 50%, 100%"));
+        root.addChild(new UIText("Fluid: water 25%, 50%, 100%   then lava 100% -- compare against a real slot"));
         UIElement fluids = row();
-        fluids.addChild(fluidSlot(0.25f));
-        fluids.addChild(fluidSlot(0.5f));
-        fluids.addChild(fluidSlot(1f));
+        fluids.addChild(fluidSlot("water", 0.25f));
+        fluids.addChild(fluidSlot("water", 0.5f));
+        fluids.addChild(fluidSlot("water", 1f));
+        // LAVA, full, beside the water. It is the one fluid whose correct appearance everybody already
+        // knows by heart, so it is the cheapest possible check on the atlas and the tiling: if this does
+        // not look like the lava in an inventory slot, the fluid path is wrong regardless of what water
+        // happens to look like.
+        fluids.addChild(fluidSlot("lava", 1f));
         root.addChild(fluids);
 
         root.addChild(new UIText("Hover any slot for the host's own tooltip"));
@@ -131,13 +142,16 @@ public final class CgUiSlotScreen extends GuiScreen {
         return slot;
     }
 
-    private static FluidSlot fluidSlot(float fill) {
+    private static FluidSlot fluidSlot(String name, float fill) {
         FluidSlot slot = new FluidSlot();
-        if (FluidRegistry.WATER != null) {
-            int capacity = 1000;
-            slot.bind(new Mc1710Content.DisplayFluid(
-                    new FluidStack(FluidRegistry.WATER, Math.round(capacity * fill)), capacity));
+        net.minecraftforge.fluids.Fluid fluid = FluidRegistry.getFluid(name);
+        if (fluid == null) {
+            CrystalGuiCore.LOGGER.warn("[slot-probe] no such fluid: {}", name);
+            return slot;
         }
+        int capacity = 1000;
+        slot.bind(new Mc1710Content.DisplayFluid(
+                new FluidStack(fluid, Math.round(capacity * fill)), capacity));
         return slot;
     }
 
@@ -219,6 +233,11 @@ public final class CgUiSlotScreen extends GuiScreen {
      * handler would close the screen out from under a widget that wanted the key. */
     @Override
     protected void keyTyped(char typedChar, int keyCode) {
+    }
+
+    @Override
+    public void drawNativeItemTooltip(ItemStack stack, int scaledX, int scaledY) {
+        renderToolTip(stack, scaledX, scaledY);
     }
 
     /** The world keeps ticking. A probe is something to look at beside a running game, not a pause. */
