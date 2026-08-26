@@ -5,6 +5,7 @@ import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.texture.CgUiGlass;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UITransform;
 import com.crystalgui.ui.UIWindow;
@@ -14,6 +15,7 @@ import com.crystalgui.ui.elements.ColorSelector;
 import com.crystalgui.ui.elements.Slider;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.event.MouseEvent;
+import dev.vfyjxf.taffy.style.TaffyDimension;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -26,7 +28,7 @@ import java.util.function.Supplier;
  * A live tuner for the taskbar: its geometry, its position, and every parameter of its backdrop.
  *
  * <p>This is a DESIGN TOOL, not a settings screen. Its output is not a saved preference but a line of
- * CSS — the <em>Copy CSS</em> button puts a paste-ready {@code taskbar .__entries__ { ... }} block on the
+ * CSS — the <em>Copy CSS</em> button puts a paste-ready {@code taskbar { ... }} block on the
  * clipboard, so the loop from "drag a slider until it looks right" to "commit the value" has no
  * transcription step in it. A tuner whose numbers have to be copied down by hand is a tuner whose numbers
  * get copied down wrong.</p>
@@ -65,12 +67,32 @@ public final class TaskbarDesigner {
     private float offsetX, offsetY;
     private boolean widthAuto = true;
 
+    /**
+     * The sheet's own {@code min-width} on the island, kept so "Width follows content" can hand it back.
+     *
+     * <p><b>A floor beats a width, so the designer has to own both.</b> {@code min-width} is a DIFFERENT
+     * property from {@code width}, and `taskbar .__entries__` carries {@code min-width: 380px} to hide
+     * the hotbar -- so an IMPORTANT {@code width} below that resolved to 380 and the Width slider was
+     * dead across the whole 80..380 third of its travel. It moved, the readout changed, nothing did.
+     * Worse, the emitted rule had the same problem in the sheet it was pasted into, four lines under the
+     * floor that would go on beating it.</p>
+     *
+     * <p>Captured as a {@code TaffyDimension} rather than a float so the value goes back exactly as the
+     * cascade gave it, and so no pixel number from the stylesheet is retyped in Java.</p>
+     */
+    private @Nullable TaffyDimension autoMinWidth;
+
     private final List<Runnable> resets = new ArrayList<>();
     private @Nullable UIText readout;
 
     private TaskbarDesigner(Taskbar taskbar) {
         this.taskbar = taskbar;
-        this.island = taskbar.entries();
+        // THE BAR, not the entries row. Since the strip became a full-width bar the glass, the height, the
+        // padding and the radius are all the bar's own, and the entries row is a transparent flex row
+        // inside it with nothing to tune; a designer aimed at the row would move sliders and change
+        // nothing on screen. "island" survives as the field's name because every rule it drives still
+        // reads as the thing the designer designs.
+        this.island = taskbar;
     }
 
     /**
@@ -199,6 +221,10 @@ public final class TaskbarDesigner {
             glass.setEdgeWidth(v);
             refreshReadout();
         }));
+        body.addChild(slider("Rim evenness", 0f, 1f, glass.getRimAmbient(), "%.2f", v -> {
+            glass.setRimAmbient(v);
+            refreshReadout();
+        }));
         body.addChild(slider("Glow", 0f, 1f, glass.getGlow(), "%.2f", v -> {
             glass.setGlow(v);
             refreshReadout();
@@ -271,7 +297,12 @@ public final class TaskbarDesigner {
                  .setIor(live.getIor()).setSpecular(live.getSpecular())
                  .setNoise(live.getNoise()).setFallbackColor(live.getFallbackColor())
                  .setGlow(live.getGlow()).setEdgeHighlight(live.getEdgeHighlight())
-                 .setEdgeWidth(live.getEdgeWidth()).setChromatic(live.getChromatic());
+                 .setEdgeWidth(live.getEdgeWidth()).setChromatic(live.getChromatic())
+                 .setRimAmbient(live.getRimAmbient());
+        }
+        // BEFORE the IMPORTANT writes below, or this reads back the designer's own value.
+        if (island.getStyle().getComputed(LayoutProperties.MIN_WIDTH) instanceof TaffyDimension floor) {
+            autoMinWidth = floor;
         }
         islandWidth = Math.max(80f, island.getRuntimeCache().getWidth());
         islandHeight = Math.max(12f, island.getRuntimeCache().getHeight());
@@ -281,7 +312,17 @@ public final class TaskbarDesigner {
 
     private void applyGeometry() {
         StyleGroup.importantPipeline(island.getStyle().getLayoutGroup(), l -> {
-            if (widthAuto) l.widthAuto(); else l.width(islandWidth);
+            // MIN-WIDTH TRAVELS WITH WIDTH. @see #autoMinWidth -- the sheet's floor outranks a width at
+            // any origin, being a different property, so the slider is only authoritative if it writes
+            // both. Auto mode hands the sheet's own floor back rather than releasing it to zero: "follows
+            // content" should mean the shipped taskbar, and the floor is what keeps the strip wide enough
+            // to cover the hotbar.
+            if (widthAuto) {
+                l.widthAuto();
+                if (autoMinWidth != null) l.setMinWidth(autoMinWidth);
+            } else {
+                l.width(islandWidth).minWidth(islandWidth);
+            }
             l.height(islandHeight);
             l.paddingAll(padding);
             l.gapAll(gap);
@@ -327,8 +368,13 @@ public final class TaskbarDesigner {
 
     /** The tuned state as a paste-ready rule for {@code ua/desktop.css}. */
     private String css() {
-        StringBuilder sb = new StringBuilder("taskbar .__entries__ {\n");
-        if (!widthAuto) sb.append(String.format(Locale.ROOT, "    width: %.0fpx;%n", islandWidth));
+        StringBuilder sb = new StringBuilder("taskbar {\n");
+        if (!widthAuto) {
+            sb.append(String.format(Locale.ROOT, "    width: %.0fpx;%n", islandWidth));
+            // NOT OPTIONAL: a floor beats a width, being a different property, so a pasted width has
+            // to bring its own floor or whatever `min-width` the sheet carries goes on winning.
+            sb.append(String.format(Locale.ROOT, "    min-width: %.0fpx;%n", islandWidth));
+        }
         sb.append(String.format(Locale.ROOT, "    height: %.0fpx;%n", islandHeight));
         sb.append(String.format(Locale.ROOT, "    padding-all: %.0fpx;%n", padding));
         sb.append(String.format(Locale.ROOT, "    gap-all: %.0fpx;%n", gap));
@@ -337,11 +383,11 @@ public final class TaskbarDesigner {
                 "    background: glass(blur %.0f, tint %s,%n"
                 + "                      bezel %.0f, ior %.2f, specular %.2f, noise %.3f,%n"
                 + "                      saturation %.2f, glow %.2f, edge %.2f, edge-width %.1f,%n"
-                + "                      chromatic %.2f, fallback %s);%n",
+                + "                      rim-ambient %.2f, chromatic %.2f, fallback %s);%n",
                 glass.getBlurRadius(), hex(glass.getTint()), glass.getBezel(), glass.getIor(),
                 glass.getSpecular(), glass.getNoise(), glass.getSaturation(),
                 glass.getGlow(), glass.getEdgeHighlight(), glass.getEdgeWidth(),
-                glass.getChromatic(), hex(glass.getFallbackColor())));
+                glass.getRimAmbient(), glass.getChromatic(), hex(glass.getFallbackColor())));
         sb.append("}\n");
         if (offsetX != 0f || offsetY != 0f) {
             sb.append(String.format(Locale.ROOT,

@@ -1,7 +1,6 @@
 package com.crystalgui.ui.elements.desktop;
 
 import com.crystalgui.core.signal.ConnectionGroup;
-import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
@@ -38,11 +37,14 @@ import java.util.Map;
  * is what keeps the work area trivial — see {@link Desktop}) while only the island in the middle paints,
  * so the corners stay free for whatever a shell later wants in them.</p>
  *
- * <p>There is no conflict with the real hotbar, and it is worth saying why rather than leaving it to
- * look like an oversight: <b>the taskbar exists only on the desktop screen</b>, where the game is paused
- * and the cursor is free. In game there is no strip at all — the cursor is grabbed for look control, so
- * nothing there could be clicked. What genuinely has to respect the hotbar is W14's pinned windows,
- * which do paint over the running game.</p>
+ * <p><b>It covers the real hotbar, deliberately.</b> The strip paints only while our own screen is up
+ * ({@link DesktopPresentation#DESKTOP} — the HUD and overlay presentations paint pinned windows alone),
+ * and with a screen up the hotbar cannot be used: the cursor is the screen's. Minecraft draws the
+ * in-game HUD <em>before</em> every screen, so the hotbar is behind chat and inventories too, and a
+ * full-width, near-opaque bar hides it where a translucent island the same size merely blurred it into
+ * blotches behind the labels. What genuinely has to respect the hotbar is W14's pinned windows, which
+ * paint over the running game. (This used to say the game was paused; it is not — see
+ * {@code CgUiScreen.doesGuiPauseGame}.)</p>
  *
  * <h3>Entries are reconciled, never rebuilt</h3>
  * <p>Refresh runs on every registry change, including activation — so rebuilding the strip would destroy
@@ -69,6 +71,18 @@ public class Taskbar extends UIElement {
     public static final String BUSY_CLASS = "__busy__";
     /** The bar drawn behind an entry's label while its window reports progress. */
     public static final String PROGRESS_CLASS = "__progress__";
+    /**
+     * The pill under every entry — Windows' running indicator. Every live window has one; the active
+     * window's is wider and takes the accent, which is the one place the strip says "this one" in colour.
+     * An internal child of the entry, built in its constructor, so it exists before the entry is attached.
+     */
+    public static final String INDICATOR_CLASS = "__indicator__";
+    /**
+     * The hairline along the bar's top edge. An ELEMENT rather than a border, because a one-sided
+     * {@code border-width-top} draws nothing here and the left-hand spelling draws all four edges — the
+     * documented trap — and a single edge is how {@code statusbarview} spells its separators too.
+     */
+    public static final String EDGE_CLASS = "__edge__";
 
     private final UIElement entries;
 
@@ -86,6 +100,13 @@ public class Taskbar extends UIElement {
      * walking up rather than handed in: a factory has nothing to hand.</p>
      */
     public Taskbar() {
+        // THE HAIRLINE FIRST, so it paints under the entries rather than over them. Absolute, so the row
+        // below still centres its island as if the edge were not there.
+        UIElement edge = new UIElement();
+        edge.addClass(EDGE_CLASS);
+        edge.setHitTest(false);
+        addInternalChild(edge);
+
         entries = new UIElement();
         entries.addClass(ENTRIES_CLASS);
         addInternalChild(entries);
@@ -311,31 +332,25 @@ public class Taskbar extends UIElement {
     }
 
     /**
-     * The window's icon, drawn into the entry's pre-icon slot.
+     * The window's icon, as a {@link WindowIcon} tile in the entry's pre-icon slot.
      *
-     * <p>Resolved through {@link CgUiSvg#ofIcon}, never {@code of(path)} — that is what binds the
-     * light/dark variant at <em>draw</em> time, and the one time a caller reached past it every
-     * {@code icon()} in every stylesheet drew the light file forever.</p>
+     * <p><b>Every entry has one</b>, icon or not — a window without an icon gets its initial on the
+     * neutral tile rather than an entry that starts at its label. The slot is built on the entry's first
+     * refresh and kept, which is the same pattern the badge follows, and it is safe here for the reason
+     * the badge's is: {@code setPreIcon} on an attached entry is a structural change the widget makes
+     * about itself, not a child added from inside a parent's own attach.</p>
      */
     private void applyIcon(Button entry, @Nullable String iconName) {
         UIElement slot = entry.getPreIcon();
-        if (iconName == null) {
-            if (slot != null) slot.setDisplayed(false);
-            return;
+        WindowIcon tile;
+        if (slot instanceof WindowIcon existing) {
+            tile = existing;
+        } else {
+            tile = new WindowIcon();
+            tile.addClass(ICON_CLASS);
+            entry.setPreIcon(tile);
         }
-        CgUiSvg glyph = CgUiSvg.ofIcon(iconName);
-        if (glyph == null) return;
-        if (slot == null) {
-            slot = new UIElement();
-            slot.addClass(ICON_CLASS);
-            // Unhittable, like every other composite part: a hittable icon would swallow the press meant
-            // for the entry itself.
-            slot.setHitTest(false);
-            entry.setPreIcon(slot);
-        }
-        slot.setDisplayed(true);
-        UIElement iconSlot = slot;
-        StyleGroup.defaultPipeline(iconSlot.getStyle().getGeneralGroup(), g -> g.overlay(glyph));
+        tile.show(iconName, entry.getText());
     }
 
     private static void setClass(UIElement element, String cls, boolean on) {
@@ -412,6 +427,15 @@ public class Taskbar extends UIElement {
         Entry(WindowFrame frame) {
             super(frame.getTitle());
             this.frame = frame;
+            // THE RUNNING INDICATOR, built here and never later: a Button refuses public children, and
+            // an internal one added from inside the strip's refresh would be inserted into a parent whose
+            // children are mid-registration. Absolute in the sheet, so the row of icon and label is laid
+            // out as if it were not there; centred by `left: 50%` plus a translate, which is layout-free
+            // and needs no auto-margin support from Taffy.
+            UIElement indicator = new UIElement();
+            indicator.addClass(INDICATOR_CLASS);
+            indicator.setHitTest(false);
+            addInternalChild(indicator);
         }
 
         @Override
