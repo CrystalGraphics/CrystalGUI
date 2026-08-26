@@ -131,6 +131,25 @@ public final class TypeIndex {
      */
     private static final int MAX_PACKAGES = 500;
 
+    /**
+     * The types directly in ONE package get the package budget, not the search budget.
+     *
+     * <p>Forty is right for a <em>search</em>: {@link #matching} is asked about a simple name and the
+     * classpath is unbounded, so its answer is a sample and a narrower query gives a better one. An
+     * import query is not a search. {@code java.util.} names a set that is finite, closed and known —
+     * ninety-six types on a modern JDK — and IntelliJ shows the whole of it, scrolled.</p>
+     *
+     * <p>Capping it at forty samples nothing: it truncates by ALPHABET, so {@code java.util.} stopped
+     * inside the {@code F}s and {@code List}, {@code Map} and {@code Set} were absent from their own
+     * package. The list is sorted by name, so the missing half is always the same half — which reads as
+     * the index not having those types rather than as a cap, because everything shown is correct.</p>
+     *
+     * <p>This is exactly the argument {@link #MAX_PACKAGES} already makes one field up, and it applies
+     * with more force here: a sub-package list is a few dozen, and a package's type list is a few
+     * hundred at worst. Both bound a pathological classpath without ever biting a real one.</p>
+     */
+    private static final int MAX_PACKAGE_TYPES = 500;
+
     private final List<String> classpath;
     private List<Entry> entries;
 
@@ -325,9 +344,9 @@ public final class TypeIndex {
      * Worse, {@code net.minecraft.client.Minecraft} was missing from its own package while two classes
      * alphabetically before it were shown.</p>
      *
-     * <p>So this is a full pass with the two output lists bounded <b>separately</b>. Packages are deduped
-     * to a segment each and there are rarely more than a few dozen, so the whole set survives; types are
-     * capped, because one package genuinely can hold hundreds and that is a list nobody reads.</p>
+     * <p>So this is a full pass with the two output lists bounded <b>separately</b>, and both bounds are
+     * sized for a package rather than for a search: a sub-package set is a few dozen and a package's own
+     * types a few hundred, so in practice the whole of both survives. @see #MAX_PACKAGE_TYPES</p>
      *
      * @param parentPackage the completed part, {@code ""} for the top level
      * @param partialSegment what has been typed of the next segment, possibly empty
@@ -374,7 +393,7 @@ public final class TypeIndex {
             String owner = entry.packageName();
             if (owner.equals(parent)) {
                 if (!startsWith(entry.simpleName(), partial)) continue;
-                if (types.size() >= MAX_RESULTS) {
+                if (types.size() >= MAX_PACKAGE_TYPES) {
                     truncated = true;
                     continue;
                 }
