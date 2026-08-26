@@ -113,6 +113,7 @@ public final class CgUiServerSmoke {
             // Ours. CommonProxy exists so this one is unreachable from common code.
             "com.crystalgui.mc.client.CgUiScreen",
             "com.crystalgui.mc.client.CgUiInput",
+            "com.crystalgui.mc.client.CgUiSlotScreen",
             "com.crystalgui.mc.client.Mc1710Workspace",
             "com.crystalgui.mc.ClientProxy",
             // Minecraft's. Naming one from a common path is the commonest spelling of this bug.

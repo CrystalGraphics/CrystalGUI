@@ -84,8 +84,8 @@ and reaches no loader; the GL harness is a client with a context by design.
 ./gradlew :mc1710:runClient -PcgJoin=localhost:25565   # join a server: TWO PROCESSES, ONE SOCKET
 ./gradlew :mc1710:runClient -PcgSessionProbe      # a real Server/ClientUiSession pair over the wire
 ./gradlew :mc1710:runClient -PcgNetProbe          # the raw transport, below the session layer
-./gradlew :mc1710:runClient -PcgSlotProbe         # item/fluid slots -- the ONLY thing that runs the
-                                                  # 1.7.10 native-content renderer
+./gradlew :mc1710:runClient -PcgSlotProbe         # arms F8: a FULL-SCREEN slot probe, the only thing
+                                                  # that runs the 1.7.10 native-content renderer
 ```
 
 > **`serverSmoke` is the one to reach for first.** Three fatal defects — CrystalGraphics building its

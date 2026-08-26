@@ -370,8 +370,8 @@ updating the test that asserts the old behaviour.
 # artifact: gl-debug-harness/harness-output/cgui-slot/cgui-slot-startup.png
 
 # in-game -- the ONLY way to test the real renderer
-./gradlew :mc1710:runClient --max-workers=1 -PcgSlotProbe    # opens a window of real slots
-./gradlew :mc1710:serverSmoke --max-workers=1   # BLOCKED: needs eula=true in mc1710/run/eula.txt
+./gradlew :mc1710:runClient --max-workers=1 -PcgSlotProbe    # arms F8 -> full-screen slot probe
+./gradlew :mc1710:serverSmoke --max-workers=1                    # PASSES (eula accepted locally)
 ```
 
 `--max-workers=1` matters for anything touching `:mc1710` — the root `gradle.properties` warns that
