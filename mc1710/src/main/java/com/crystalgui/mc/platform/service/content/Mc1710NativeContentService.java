@@ -12,6 +12,7 @@ import com.crystalgui.ui.elements.slot.NativeSurface;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.ScaledResolution;
 import net.minecraft.client.renderer.Tessellator;
+import net.minecraft.client.renderer.OpenGlHelper;
 import net.minecraft.client.renderer.RenderHelper;
 import net.minecraft.client.renderer.entity.RenderItem;
 import net.minecraft.client.renderer.texture.TextureMap;
@@ -116,10 +117,34 @@ public final class Mc1710NativeContentService implements NativeContentService {
 
     // ── Drawing ─────────────────────────────────────────────────────────────
 
+    /**
+     * Turns the lightmap texture unit off, exactly as {@code EntityRenderer.disableLightmap} does.
+     *
+     * <p><b>Vanilla does this before every GUI it draws</b>, and the reason is invisible until it is
+     * missing: Minecraft's item and block rendering is fixed-function <em>multi</em>-texturing, so with
+     * unit 1 still enabled the result is modulated by whatever texture is bound there. It does not fail
+     * — it shades wrong, which reads as broken lighting rather than as a stray texture unit.</p>
+     *
+     * <p>Needed here because CrystalGUI paints through shaders and has no reason to leave the
+     * fixed-function units in any particular state; whatever the world render left is simply still
+     * there when a slot hands GL over. Not restored afterwards, for the same reason vanilla does not:
+     * disabled is the correct state for GUI rendering, and the UI's own draws are shader-side and
+     * indifferent to it.</p>
+     */
+    private static void disableLightmapUnit() {
+        OpenGlHelper.setActiveTexture(OpenGlHelper.lightmapTexUnit);
+        GL11.glDisable(GL11.GL_TEXTURE_2D);
+        OpenGlHelper.setActiveTexture(OpenGlHelper.defaultTexUnit);
+    }
+
     @Override
     public void draw(NativeSurface surface, NativeContent content) {
         Minecraft mc = Minecraft.getMinecraft();
         if (mc == null) return;
+
+        // Both paths, not just the item one: a fluid is fixed-function textured too and is modulated by
+        // a live lightmap exactly the same way.
+        disableLightmapUnit();
 
         if (surface.profile() == NativeProfile.MODEL) {
             drawItem(mc, surface, content);
