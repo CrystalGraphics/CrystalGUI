@@ -779,22 +779,58 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
                 answer.accept(Versioned.<SymbolInfo>none(buffer.version()));
                 return;
             }
-            // SYNCHRONOUS, ON WHATEVER THREAD ASKED -- and hover asks from the frame thread. Measured on a
-            // live hover: 186ms in one frame, 42ms and 37ms in others. The Resolver contract is a
-            // CALLBACK, so answering later is already allowed and the editor already handles a late
-            // answer (it gates on a serial and on buffer freshness); what is not yet decided is whether
-            // this Analysis can be read from a worker while completion may be reading the same one, since
-            // JDT resolves bindings LAZILY and therefore mutates as it answers.
+            // OFF THE FRAME THREAD, because answering can mean PARSING A WHOLE COMPILATION UNIT.
             //
-            // Split so the next reader knows which half to move: the walk and the ANSWER are one call,
-            // and for Java the answer includes quoting a declaration out of attached sources -- which is
-            // archive I/O and a parse, and is the half that would be cacheable rather than moved.
+            // For a symbol whose class has attached source, the answer quotes the real declaration -- so
+            // resolving it parses that source file. Measured by hovering, with no scrolling at all:
+            // `CgFrameBuffer` 159,360us in one frame, `CgBlendState` 29,000us. A class with no attached
+            // source falls back to an assembled signature and costs ~400us, which is why the same gesture
+            // looks free on some symbols and janks on others.
+            //
+            // The contract already allowed this: `Resolver` takes a CALLBACK, a caller is told it may
+            // never fire, and the editor gates every answer on a serial and on buffer freshness. Nothing
+            // at a call site changes.
+            if (scheduler == null) {
+                answer.accept(Versioned.of(analysis.version(), resolveUnderLock(analysis, offset)));
+                return;
+            }
+            // ITS OWN KEY, never the analysis key: single-flight REPLACES, so sharing one would let a
+            // hover cancel the analysis that hover is asking about. Single-flight among resolves is
+            // exactly right, though -- the newest question is the only one anybody is waiting for.
+            scheduler.job(JobKey.of(AnalysedLanguageServices.this, id + "-resolve"), JobLane.LATENCY,
+                            context -> resolveUnderLock(analysis, offset))
+                    .onDone(resolved -> answer.accept(Versioned.of(analysis.version(), resolved)))
+                    .submit();
+        }
+
+        /**
+         * The resolve itself, under the analysis's own monitor.
+         *
+         * <h3>Why a lock and not just a thread</h3>
+         *
+         * <p>JDT resolves bindings <b>lazily</b>, so {@code resolveAt} mutates the analysis as it answers
+         * -- and {@code JavaCompletionProvider.memberItems} reads the same live {@code Analysis} from the
+         * frame thread. Moving hover to a worker without this would be two threads mutating one JDT tree,
+         * which is a crash rather than an exception.</p>
+         *
+         * <p>The monitor is the {@code Analysis} itself rather than a field here, so every reader can take
+         * it without being handed anything: the rule is "hold the analysis to read the analysis", and it
+         * is enforceable at any call site that has one.</p>
+         *
+         * <p>The frame thread therefore blocks only when a completion collides with a hover in flight --
+         * typing and resting are close to mutually exclusive gestures, and the collision costs one
+         * resolve rather than one per hover.</p>
+         */
+        private SymbolInfo resolveUnderLock(Analysis analysis, int offset) {
             long timed = FrameProfile.begin();
-            SymbolInfo resolved = analysis.resolveAt(offset);
-            FrameProfile.step(timed, "engine.resolveAt -> "
+            SymbolInfo resolved;
+            synchronized (analysis) {
+                resolved = analysis.resolveAt(offset);
+            }
+            FrameProfile.step(timed, "engine.resolveAt" + (scheduler == null ? "" : " [worker]") + " -> "
                     + (resolved == null ? "nothing"
                             : resolved.kind() + " " + resolved.container() + "." + resolved.name()));
-            answer.accept(Versioned.of(analysis.version(), resolved));
+            return resolved;
         }
 
         @Override

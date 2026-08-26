@@ -173,7 +173,14 @@ public final class JavaCompletionProvider implements CompletionProvider {
         // Mid-identifier, so resolveAt lands on the receiver's own name rather than between tokens.
         int probe = Math.max(0, nameEnd - 1);
 
-        SymbolInfo receiver = current.resolveAt(probe);
+        // UNDER THE ANALYSIS'S OWN MONITOR, because hover now resolves the SAME live Analysis from a
+        // worker and JDT resolves bindings lazily -- so this call and that one both mutate one JDT tree.
+        // The rule is "hold the analysis to read the analysis".
+        // @see AnalysedLanguageServices.AnalysisResolver#resolveUnderLock
+        SymbolInfo receiver;
+        synchronized (current) {
+            receiver = current.resolveAt(probe);
+        }
         // WHY, when the answer is nothing. Four states -- the receiver did not resolve, it resolved with
         // no type, it resolved to something with no members, or the probe could not parse either -- and
         // ALL FOUR LOOK THE SAME from outside: a box with a hint strip and no rows.
