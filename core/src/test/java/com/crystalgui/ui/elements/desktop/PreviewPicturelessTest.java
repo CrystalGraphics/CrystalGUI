@@ -76,7 +76,15 @@ public class PreviewPicturelessTest extends UiTestBase {
     }
 
     private WindowFrame open(String title, float width, float height) {
+        // OPENED WITH ANIMATIONS OFF, then handed straight back to the gesture under test — the rule the
+        // window-animation tests already follow, reached from a new direction. A taskbar entry now ramps
+        // its own width open over 150ms of REAL time, and this fixture measures entry positions and hovers
+        // them by coordinate, so a window opened with animations on leaves every entry a sliver for the
+        // whole test. The previews being tested here are unaffected: they animate on hover, not on open.
+        // @see TaskbarEntryMotion
+        Desktop.setAnimationsEnabled(false);
         WindowFrame frame = window.openWindow(new WindowFrame(title).setIcon("crystalgui:code"));
+        Desktop.setAnimationsEnabled(true);
         frame.resizeTo(width, height).moveTo(10, 10);
         frame();
         frame();

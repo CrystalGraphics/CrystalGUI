@@ -156,6 +156,13 @@ theme {
     --window-icon-tile-4: #8B63D9;
     --window-icon-tile-5: #2FA7B8;
     --window-icon-tile-6: #D85A7A;
+    /* THE MONOGRAM'S TILE: a hue of its own, never a grey. It derived from --border-strong, which put it
+     * at (87,90,97) against an active entry at (90,93,99) -- three levels apart, so a window that
+     * declares no icon vanished the moment its entry became the active one, which is the one entry you
+     * are looking at. Chosen rather than derived, and close to the badge red and to tile-6: that is a
+     * real cost and a deliberate one, because a tile is an identity and never a status, and nothing else
+     * in the strip is a filled crimson square. */
+    --window-icon-mono-bg: #DE2A4D;
     --colorpicker-bg: #1E1E1EDD;
     --colorpicker-handle-shadow: #00000080;
 

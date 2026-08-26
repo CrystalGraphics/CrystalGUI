@@ -2,10 +2,13 @@ package com.crystalgui.ui.elements.desktop;
 
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.CgUiSvg;
+import com.crystalgui.render.texture.svg.SvgDocument;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.UIText;
 import org.jetbrains.annotations.Nullable;
+
+import java.util.Objects;
 
 /**
  * <b>A window's icon as a TILE</b> — the one drawing of it the taskbar entry, the hover preview and the
@@ -21,6 +24,16 @@ import org.jetbrains.annotations.Nullable;
  * a filled rounded square with the glyph knocked out in the on-accent colour — which is how VS Code's,
  * IntelliJ's and every Fluent app icon reads at taskbar size, and it is the shape a real per-app icon
  * drops into later without the layout moving.</p>
+ *
+ * <h3>A branded icon IS the tile</h3>
+ *
+ * <p>That later is now: {@code crystalgui:logo} ships as the filled, coloured rounded square itself. Put
+ * a palette tile under it and there is a square behind a square; knock it out in the glyph colour and a
+ * palette it was drawn with is tinted away. So artwork wears {@link #BRANDED_CLASS} instead of a tile
+ * class and paints into the slot's whole box. <b>Which of the two an icon is comes off the FILE</b>
+ * ({@link SvgDocument#usesCurrentColor}): a chrome mark is {@code currentColor} so the cascade can colour
+ * it, a brand mark names every colour it uses. Nothing has to declare it beside the name, and a pack that
+ * drops in its own artwork gets the right treatment without knowing this class exists.</p>
  *
  * <h3>Same icon, same colour</h3>
  *
@@ -50,6 +63,8 @@ public class WindowIcon extends UIElement {
     public static final String MONO_TILE_CLASS = "__tile-mono__";
     /** {@code __tile-1__} … {@code __tile-N__}: the palette, one class per hue. */
     public static final String TILE_CLASS_PREFIX = "__tile-";
+    /** Worn INSTEAD of a tile class by artwork that carries its own palette and is therefore its own tile. */
+    public static final String BRANDED_CLASS = "__branded__";
     /** How many hues the sheet defines. Kept small so two windows rarely share one by accident of hashing. */
     public static final int PALETTE_SIZE = 6;
 
@@ -83,7 +98,16 @@ public class WindowIcon extends UIElement {
             StyleGroup.defaultPipeline(getStyle().getGeneralGroup(), g -> g.overlay(glyph));
             if (showingMonogram) monogram.setDisplayed(false);
             showingMonogram = false;
-            setTile(TILE_CLASS_PREFIX + paletteIndexOf(iconName) + "__");
+            SvgDocument document = glyph.getDocument();
+            if (document != null && !document.usesCurrentColor()) {
+                // ARTWORK IS ITS OWN TILE -- see the class comment. No palette class, so nothing paints
+                // behind it, and the branded class lets the sheet drop the inset a knocked-out glyph needs.
+                setTile(null);
+                addClass(BRANDED_CLASS);
+            } else {
+                removeClass(BRANDED_CLASS);
+                setTile(TILE_CLASS_PREFIX + paletteIndexOf(iconName) + "__");
+            }
         } else {
             // THE OLD GLYPH MUST GO. An overlay is a cascade candidate at DEFAULT origin and outlives the
             // icon it was set for, so a window that loses its icon would keep drawing it under the letter.
@@ -91,6 +115,7 @@ public class WindowIcon extends UIElement {
             monogram.setText(initialOf(title));
             if (!showingMonogram) monogram.setDisplayed(true);
             showingMonogram = true;
+            removeClass(BRANDED_CLASS);
             setTile(MONO_TILE_CLASS);
         }
         return this;
@@ -110,15 +135,18 @@ public class WindowIcon extends UIElement {
         return new String(Character.toChars(Character.toUpperCase(first)));
     }
 
-    /** SWAPS the palette class rather than adding it — a recycled element must never wear two hues. */
-    private void setTile(String cls) {
-        if (cls.equals(tileClass)) return;
+    /**
+     * SWAPS the palette class rather than adding it — a recycled element must never wear two hues.
+     * {@code null} takes the tile away, which is what branded artwork wants.
+     */
+    private void setTile(@Nullable String cls) {
+        if (Objects.equals(cls, tileClass)) return;
         if (tileClass != null) removeClass(tileClass);
         tileClass = cls;
-        addClass(cls);
+        if (cls != null) addClass(cls);
     }
 
-    /** The palette class currently worn — for tests, which have no other way to read the hue. */
+    /** The palette class currently worn, or null for branded artwork — for tests, which have no other way to read the hue. */
     @Nullable
     public String tileClass() {
         return tileClass;

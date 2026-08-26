@@ -129,6 +129,10 @@ theme {
     --window-icon-tile-4: #7550C4;
     --window-icon-tile-5: #2490A0;
     --window-icon-tile-6: #C24A68;
+    /* The monogram's tile — @see crystal-dark.css. The SAME value as the dark theme's, not a deepened
+     * one like the six above: it already carries white at 4.6:1, which is better than tile-3 manages in
+     * either theme, so there is nothing for a darker variant to buy here. */
+    --window-icon-mono-bg: #DE2A4D;
     --colorpicker-bg: #FFFFFFEE;
     --colorpicker-handle-shadow: #00000040;
 

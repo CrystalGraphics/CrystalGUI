@@ -94,8 +94,41 @@ public class Taskbar extends UIElement {
     /** The glow, kept so the designer can retone it. @see #GLOW_CLASS */
     private final UIElement glow;
 
+    /**
+     * An entry collapsing out of the row — it is no longer in {@link #entryOf} and is not a target.
+     * @see TaskbarEntryExit
+     */
+    public static final String EXITING_CLASS = "__exiting__";
+
+    /**
+     * On an entry for as long as it is ramping, in either direction — the sheet clips it while it is
+     * narrower than its own label.
+     *
+     * <p>A CLASS rather than an inline {@code overflow} written from Java, and not merely for the
+     * no-properties-in-widgets rule: nothing in the sheet sets {@code overflow} on an entry, so an inline
+     * write is the ONLY candidate the property has, and withdrawing it at the end left the property with
+     * no value at any origin. {@code getComputed} answers null for that, and the {@code overflow}
+     * listener hands its argument straight to a switch — {@code NullPointerException} out of
+     * {@code resolveTouched}, on the frame an arriving entry settled. @see TaskbarEntryMotion
+     */
+    public static final String ANIMATING_CLASS = "__animating__";
+
     /** Window → its entry. Insertion-ordered so a rebuild of the child list keeps open order. */
     private final Map<WindowFrame, Button> entryOf = new LinkedHashMap<>();
+
+    /**
+     * Entries mid-collapse, by the window they stood for, so a window that comes back can cancel one.
+     *
+     * <p>SEPARATE from {@link #entering} rather than one map of motions, because the two are cancelled by
+     * opposite events: a frame appearing in the registry cancels its collapse, and a frame leaving cancels
+     * its arrival. One map would have to ask which direction it held on every refresh — and a refresh runs
+     * on every activation and every title change, so getting it backwards kills every opening animation on
+     * the next thing that happens.</p>
+     */
+    private final Map<WindowFrame, TaskbarEntryMotion> exiting = new LinkedHashMap<>();
+
+    /** Entries mid-arrival. @see #exiting */
+    private final Map<WindowFrame, TaskbarEntryMotion> entering = new LinkedHashMap<>();
 
     private final ConnectionGroup subscriptions = new ConnectionGroup();
 
@@ -227,20 +260,63 @@ public class Taskbar extends UIElement {
         }
         for (WindowFrame frame : stale) {
             Button entry = entryOf.remove(frame);
-            if (entry != null) entries.removeChild(entry);
+            if (entry == null) continue;
+            // CLOSED WHILE IT WAS STILL ARRIVING: settle the arrival first, or both motions write the same
+            // cap every frame and the picture is whichever ran last. Cancelling also hands the entry back
+            // at full width, which is what the collapse below is about to measure.
+            TaskbarEntryMotion arriving = entering.remove(frame);
+            if (arriving != null) arriving.cancel();
+
+            Runnable detach = () -> {
+                exiting.remove(frame);
+                entries.removeChild(entry);
+            };
+            // THE ROW CLOSES UP rather than the button blinking out and everything after it jumping.
+            // SYNCHRONOUS with animations off -- "off" has to turn off the waiting too, or every caller
+            // pays the frames the collapse takes in a mode where nothing is animating. @see WindowAnimator
+            if (!WindowAnimator.isEnabled()) {
+                detach.run();
+                continue;
+            }
+            entry.addClass(EXITING_CLASS);
+            TaskbarEntryMotion collapse = TaskbarEntryMotion.closing(entry, detach);
+            if (collapse.start()) exiting.put(frame, collapse);
+            else detach.run();
         }
 
         WindowFrame active = desktop.activeWindow();
         int index = 0;
         for (WindowFrame frame : live) {
+            // BACK BEFORE IT FINISHED LEAVING. Dropped now rather than revived: the collapse is 150ms and
+            // a window returning inside it is rare, while a half-width entry handed back to the strip is
+            // a pinned width nothing would ever clear. @see TaskbarEntryExit
+            TaskbarEntryMotion returning = exiting.remove(frame);
+            if (returning != null) returning.cancel();
+
             Button entry = entryOf.get(frame);
             if (entry == null) {
                 entry = createEntry(desktop, frame);
                 entryOf.put(frame, entry);
                 entries.addChild(entry);
+                // ...AND THE ROW OPENS FOR IT, the collapse in reverse. Only for an entry built HERE: this
+                // loop runs on every activation and every title change, so anything keyed on the frame
+                // rather than on the entry being new would restart the arrival over and over.
+                if (WindowAnimator.isEnabled()) {
+                    Button arrival = entry;
+                    TaskbarEntryMotion open =
+                            TaskbarEntryMotion.opening(arrival, () -> entering.remove(frame));
+                    if (open.start()) entering.put(frame, open);
+                }
             }
             // OPEN ORDER, and stable: a bar whose entries jump on every activation is the "never in the
             // same place twice" menu bug wearing a strip. addChildAt is a no-op when it is already there.
+            //
+            // AN ENTRY MID-COLLAPSE HOLDS ITS PLACE, so the running index steps over it. It is not in
+            // `live`, so without this the next live entry is addressed into the slot the collapsing one
+            // still occupies and shunts it to the end of the row: the row snaps shut in one frame and the
+            // dying button slides sideways, which is the opposite of what the animation is for.
+            List<UIElement> row = entries.getChildren();
+            while (index < row.size() && row.get(index).hasClass(EXITING_CLASS)) index++;
             if (entry.getSiblingIndex() != index) entries.addChildAt(entry, index);
             index++;
 

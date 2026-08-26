@@ -352,7 +352,7 @@ public class WindowFrame extends UIElement implements Disposable {
     private final UIElement captionChrome;
     private final UIElement overlays;
     private final UIText titleLabel;
-    private final UIElement icon;
+    private final WindowIcon icon;
     private final Button closeButton;
     private final Button minimizeButton;
     private final Button maximizeButton;
@@ -477,9 +477,15 @@ public class WindowFrame extends UIElement implements Disposable {
         // BUILT NOW AND HIDDEN, rather than created when an icon arrives. Creating an element from a
         // setter means creating it possibly mid-gesture, and the title bar has no `gap-all` for a hidden
         // child to occupy — the one cost that would have made the lazy version worth it.
-        icon = new UIElement();
+        // THE SAME DRAWING THE STRIP USES. It was a bare element with the glyph as an overlay, which
+        // predates WindowIcon and meant a caption showed an uncoloured mark while the entry, the hover
+        // preview and the switcher tile all showed the same window as a coloured tile — one window with
+        // two appearances, differing only in which of them had been written first. WindowIcon carries
+        // the tile, the palette keyed on the icon NAME (so the caption and the entry cannot disagree
+        // about the hue) and the branded-artwork case; the SIZE stays the context's, which for a caption
+        // is `window > .__title-bar__ > .__icon__`.
+        icon = new WindowIcon();
         icon.addClass(ICON_CLASS);
-        icon.setHitTest(false);
         icon.setDisplayed(false);
 
         // AFTER the icon and BEFORE the title, which is where IntelliJ's New UI and VS Code's custom
@@ -694,6 +700,14 @@ public class WindowFrame extends UIElement implements Disposable {
         return maximizeButton;
     }
 
+    /**
+     * The caption's tile — the same {@link WindowIcon} the strip, the preview and the switcher draw.
+     * Package-private: it exists so a test can read the hue, which nothing else can observe.
+     */
+    WindowIcon icon() {
+        return icon;
+    }
+
     /** The icon this window declares, or null. @see #setIcon */
     @Nullable
     public String iconName() {
@@ -717,10 +731,13 @@ public class WindowFrame extends UIElement implements Disposable {
             icon.setDisplayed(false);
             return this;
         }
-        CgUiSvg glyph = CgUiSvg.ofIcon(namespacedIcon);
-        if (glyph == null) return this;
+        if (CgUiSvg.ofIcon(namespacedIcon) == null) return this;
+        // SHOWN ONLY WHEN THERE IS AN ICON, which is where the caption still differs from the strip on
+        // purpose: WindowIcon's other consumers fall back to a monogram tile, and a caption that grew one
+        // would put a filled square on every dialog and tool window that has never declared an icon. The
+        // title is passed anyway so the fallback is one argument away if that is wanted.
+        icon.show(namespacedIcon, getTitle());
         icon.setDisplayed(true);
-        StyleGroup.defaultPipeline(icon.getStyle().getGeneralGroup(), g -> g.overlay(glyph));
         Desktop desktop = owner;
         if (desktop != null) desktop.registry().changed();
         return this;

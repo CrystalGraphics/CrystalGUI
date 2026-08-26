@@ -355,7 +355,7 @@ public final class CgUiScreen extends GuiScreen {
         // and closes the screen.
         editorWindow = uiWindow.openWindow(new WindowFrame("Crystal Editor"));
         editorWindow.setPolicy(WindowPolicy.HIDE_ON_CLOSE).setKey("editor:main");
-        editorWindow.setIcon("crystalgui:code");
+        editorWindow.setIcon("crystalgui:logo");
         // setContent, not content().addChild -- it is what ADOPTS the editor's menu bar into the
         // caption, so the window has one header rather than two stacked on each other.
         editorWindow.setContent(editor);

@@ -687,8 +687,8 @@ editor scheme's.
 | `--window-control-hover-fg` | `var(--fg)` | base.css |
 | `--window-fg` | `var(--fg)` | base.css |
 | `--window-icon-glyph` | `var(--fg-on-accent)` | base.css |
-| `--window-icon-mono-bg` | `var(--border-strong)` | base.css |
-| `--window-icon-mono-fg` | `var(--fg)` | base.css |
+| `--window-icon-mono-bg` | `#DE2A4D` | crystal-dark.css |
+| `--window-icon-mono-fg` | `var(--fg-on-accent)` | base.css |
 | `--window-icon-tile-1` | `#4A7CE0` | crystal-dark.css |
 | `--window-icon-tile-2` | `#3FA36B` | crystal-dark.css |
 | `--window-icon-tile-3` | `#D98A3A` | crystal-dark.css |

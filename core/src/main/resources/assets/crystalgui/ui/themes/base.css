@@ -725,12 +725,14 @@ theme {
      * One drawing of a window's icon for the taskbar entry, the hover preview and the switcher tile
      * (WindowIcon): a filled rounded square with the glyph in the on-accent colour. The six tile HUES
      * are theme pins, not derivations — no system role is "a pleasant blue for a tile", and deriving
-     * them from --error/--success would make a tile mean something it does not. What CAN derive is the
-     * glyph and the monogram: a letter on the neutral tile takes the ordinary foreground on the strong
-     * border grey, which reads in both themes without a pin of its own. */
+     * them from --error/--success would make a tile mean something it does not. THE MONOGRAM'S TILE IS A
+     * SEVENTH PIN for the same reason, and it stopped deriving from --border-strong the day that grey
+     * landed three levels from --taskbar-entry-active-bg: a window with no icon disappeared on the one
+     * entry you are looking at. What CAN derive is the glyph and the LETTER, and both now take the
+     * on-accent foreground — the letter sits on a saturated tile in both themes, so the ordinary --fg it
+     * used to take would be black on crimson in the light one. */
     --window-icon-glyph: var(--fg-on-accent);
-    --window-icon-mono-bg: var(--border-strong);
-    --window-icon-mono-fg: var(--fg);
+    --window-icon-mono-fg: var(--fg-on-accent);
     /* The snap preview has NO derivation here, and its absence is the point. It is a translucent wash,
      * so the transparency has to live in the colour — `opacity` would dim the border along with the
      * fill, and a border lighter than its fill is the whole shape of the affordance. No system role
