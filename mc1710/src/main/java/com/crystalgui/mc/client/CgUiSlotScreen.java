@@ -4,6 +4,7 @@ import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.mc.platform.service.content.Mc1710Content;
+import com.crystalgui.mc.platform.service.content.Mc1710NativeContentService;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.Ui;
 import com.crystalgui.ui.UIElement;
@@ -156,7 +157,11 @@ public final class CgUiSlotScreen extends GuiScreen implements NativeTooltipHost
         // Sideways, for the inner loop: the same four tiles across instead of up.
         UIElement wide = fluidSlot("water", 1f);
         wide.addClass("tank-wide");
+
+        UIElement wideTall = fluidSlot("water", 1f);
+        wideTall.layout(s->s.width(66).height(66));
         tanks.addChild(wide);
+        tanks.addChild(wideTall);
         root.addChild(tanks);
 
         root.addChild(new UIText("Hover any slot for the host's own tooltip"));
@@ -232,6 +237,9 @@ public final class CgUiSlotScreen extends GuiScreen implements NativeTooltipHost
 
         // Minecraft writes GL behind CrystalGraphics' back, so the shadow must be dropped before and
         // after. Getting this wrong produces a MISSING GL CALL: wrong rendering, no exception.
+        // ONCE PER FRAME, and on the RAW path: the lightmap unit must be off before anything hands GL
+        // to Minecraft's renderers. It lived in core briefly and could not stay -- see prepareHostGl.
+        Mc1710NativeContentService.prepareHostGl();
         CgGlState.invalidateAllIfPresent();
         uiWindow.paintFrame();
 

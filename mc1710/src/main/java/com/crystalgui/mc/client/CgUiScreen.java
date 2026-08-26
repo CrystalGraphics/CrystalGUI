@@ -509,6 +509,10 @@ public final class CgUiScreen extends GuiScreen implements NativeTooltipHost {
         // frames.
         CgGlState.invalidateAllIfPresent();
 
+        // ONCE PER FRAME, and on the RAW path: the lightmap unit must be off before anything hands GL to
+        // Minecraft's renderers. It lived in core briefly and could not stay -- see prepareHostGl.
+        com.crystalgui.mc.platform.service.content.Mc1710NativeContentService.prepareHostGl();
+
         uiWindow.paintFrame();
         if (TRACE && !tracedFirstPaint) {
             tracedFirstPaint = true;

@@ -10,6 +10,7 @@ import com.crystalgui.ui.elements.slot.NativeContentService;
 import com.crystalgui.ui.elements.slot.NativeProfile;
 import com.crystalgui.ui.elements.slot.NativeSurface;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.OpenGlHelper;
 import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.client.renderer.RenderHelper;
 import net.minecraft.client.renderer.entity.RenderItem;
@@ -114,6 +115,35 @@ public final class Mc1710NativeContentService implements NativeContentService {
     }
 
     // ── Drawing ─────────────────────────────────────────────────────────────
+
+    /**
+     * <b>Turns the lightmap texture unit off — call once per frame, before painting.</b>
+     *
+     * <p>Vanilla does exactly this before every GUI it draws ({@code EntityRenderer.disableLightmap}).
+     * Minecraft's item and block rendering is fixed-function <em>multi</em>-texturing, so with unit 1
+     * still enabled the result is modulated by whatever is bound there — it does not fail, it shades
+     * wrong, which reads as broken lighting rather than as a stray texture unit.</p>
+     *
+     * <h3>Why this cannot live in {@code core}</h3>
+     *
+     * <p>It was there, at the top of {@code beginFrame}, written through {@code CgGL} — and it broke the
+     * lighting it was meant to fix. {@code CgGL.glActiveTexture} is <b>deduplicated</b> against the state
+     * shadow, while {@code glDisable(GL_TEXTURE_2D)} is not tracked at all: {@code capabilityChanged}
+     * has no notion of texture units, so it always issues. That makes the sequence an always-issued call
+     * bracketed by two that may be elided — and when the shadow's belief about the active unit is stale,
+     * the disable lands on <b>unit 0</b> and switches off fixed-function texturing on the unit Minecraft
+     * actually samples. Items then draw untextured, which looks like the same lighting bug.</p>
+     *
+     * <p>The shadow cannot be taught this either: "texturing enabled on unit 1" is not a state it can
+     * represent. So the operation belongs where it can be issued unconditionally — and going through
+     * {@code OpenGlHelper} rather than raw {@code GL13} additionally keeps Minecraft's own state mirror
+     * in step, which {@code hostForeign} is documented as unable to do.</p>
+     */
+    public static void prepareHostGl() {
+        OpenGlHelper.setActiveTexture(OpenGlHelper.lightmapTexUnit);
+        GL11.glDisable(GL11.GL_TEXTURE_2D);
+        OpenGlHelper.setActiveTexture(OpenGlHelper.defaultTexUnit);
+    }
 
     @Override
     public void draw(NativeSurface surface, NativeContent content) {
