@@ -1,8 +1,11 @@
 # The UI host — a lifecycle engine for networked windows
 
-**Status: SHIPPED 2026-08-27**, in six commits (P0 → P4 plus docs). See the tail of this document
-for what implementation changed about the design and for the three findings the build itself turned
-up. Written 2026-08-27, from an aggressive audit of the Machine example stack
+**Status: Parts I–V SHIPPED 2026-08-27**, in seven commits (P0 → P4, docs, and the naming pass).
+**Part VI is LIVE DESIGN** for a second, larger rewrite — notes accumulated as they are decided
+rather than written up at the end, so nothing is re-derived. See Part V for what implementation
+changed about the shipped design and for the findings the build itself turned up.
+
+Written 2026-08-27, from an aggressive audit of the Machine example stack
 (`core/src/main/java/com/crystalgui/example/machine/`, `mc1710/src/main/java/com/crystalgui/mc/example/`)
 and of every other consumer of the session layer. The protocol underneath — envelopes, the router,
 sessions, the mux, the wire — is sound and is not what this plan touches. What is missing is the layer
@@ -811,3 +814,251 @@ known wart with the right name recorded.
   it must be class-namespaced by convention until the engine has scoped sheets.
 - **Detaching a fragment** from a live window still needs a per-`(method, window)` release on
   `UiWindowMux`, which releases whole windows only. Fragments attach for a window's life.
+
+
+---
+
+# Part VI — The next rewrite: ownership, binding, and typed access
+
+**Live.** Parts I–V shipped a lifecycle. What follows is the next question, which the shipped code
+raised rather than answered: **who owns the tree, and how does each side get typed hold of it?**
+
+Nothing here is built. Entries are added as they are settled, with the evidence that settled them.
+
+---
+
+## VI.1 — The inversion: a window is *attached to* a panel, it does not own one
+
+**Decided: the direction is right.** What shipped has `ServerWindow` create and hold its panel; the
+example does `private final MachinePanel panel = new MachinePanel()`. That reads as ownership and it
+is the wrong way round.
+
+The panel should be the primary artefact — created, owned and stored by the application — with
+`ServerWindow` attached to it as **the networking aspect**: what the buttons actually do across a
+wire. Three arguments, and they converge:
+
+- **It is how the rest of the engine already thinks.** A tree is the thing and behaviour attaches to
+  it: `session.on(element, kind, handler)` attaches, `UITreeObserver` attaches, and `ServerUiSession`
+  is *given* a root and observes it — it has never owned one.
+- **Minecraft agrees.** `ContainerChest(inventory, chest)` is handed its state; a menu is an aspect
+  of an inventory rather than its owner. `AbstractContainerMenu` takes a `ContainerLevelAccess`.
+- **Reuse.** A panel you own is a panel you can build without deciding it is networked — the same
+  tree then serves the harness, a local-only screen, and a server session.
+
+### Most of it already works, and the example is what misleads
+
+`ServerWindow.root()` is abstract and returns *any* `UIElement` (`ServerWindow.java:103` — that plus
+`type()` is the entire contract with a subclass). Nothing requires a window to build its tree:
+
+```java
+public final class MachineWindow extends ServerWindow {
+    private final MachinePanel panel;                    // GIVEN, not created
+    public MachineWindow(MachinePanel panel, MachineModel model) { … }
+    @Override public UIElement root() { return panel.root; }
+}
+```
+
+That compiles against what shipped. **The example teaches ownership because it was written that way**,
+which is worth correcting regardless of how far the rest of this goes.
+
+**The builder is the part that genuinely blocks it.** `ServerWindow.of(type, Supplier<P> contents,
+rootOf)` takes a *factory* — ownership by construction. It needs an overload taking a tree that
+already exists.
+
+---
+
+## VI.2 — Three constraints, two of them hard engine limits
+
+Verified in the source, not assumed. All three are silent when violated.
+
+### One observer per tree, so one window per panel — and it must throw
+
+`UIElement.observer` is a **single field** (`UIElement.java:810`), and `setObserver` replaces it and
+cascades over the whole subtree (`:824-829`). Two `ServerWindow`s over one panel therefore means the
+second silently steals the first's change notifications, and the first stops sending state updates
+**for good**.
+
+Nothing currently prevents it. Attaching to a tree that already has a window has to be refused, with
+a message naming the window that holds it. (This is the same fact that made `ServerUiSession` grow
+*viewers* rather than allowing several sessions over one tree — see C1.)
+
+### Reported events are add-only, which breaks re-attachment
+
+`addReportedEvent` exists (`UIElement.java:795`) and there is **no remove and no clear** —
+`getReportedEvents` hands back an unmodifiable view (`:803`). So with a panel that outlives its
+window:
+
+1. Window A binds `purge` → the element is stamped `report: activate`.
+2. A closes. The panel survives — which is the whole point of the inversion.
+3. Window B attaches and does *not* bind `purge`.
+4. The element still advertises the event, the client still wires a listener, and every press
+   produces `no handler for 'activate' on element N`.
+
+Noisy rather than fatal, but it is once again the *wired, looks wired, does nothing* shape.
+
+**And there is a second-order cost that is easy to miss:** reported events are part of the
+description, so stale ones change the **content hash** — a re-attach would make the client refetch a
+tree it already has, throwing away the one-packet-reopen win that content addressing exists for.
+
+Needs `UIElement.clearReportedEvents()`, called when a window releases its tree.
+
+### The lifetime inversion is the actual design decision
+
+The window becomes transient and the panel persistent. That is *good* — it is the server-side
+analogue of hide-is-not-close — but it splits a word that is currently one word. `onClosed(reason)`
+today implies both **this window is finished** and **this panel is finished**, and after the
+inversion those are different events with different audiences.
+
+---
+
+## VI.3 — The client's typed panel: a **binding**, not the object
+
+### The problem is worse than verbosity
+
+```java
+if (ask instanceof Button) ((Button) ask).attachListener(this::requestStats);
+```
+
+If that id moves, or the widget type changes, **the line silently does nothing**. `MachineClient.wire`
+has three of them in a row, and this is currently the *recommended* pattern for every client
+behaviour anybody writes.
+
+It is forced by the engine rather than chosen: **`UIElement` has no typed lookup at all.** All four
+accessors (`querySelector`, `querySelectorAll`, `getElementById`, `getElementsByClassName`,
+`UIElement.java:1982-1997`) return `UIElement` or `List<UIElement>`. Meanwhile `MachinePanel` has
+fourteen typed public fields that the client throws away and re-derives by string.
+
+### The constraint, stated honestly
+
+**There is no `MachinePanel` on the client and there cannot be.** The tree is *decoded* —
+`UIDescriptionCodec` builds plain widgets from tags through `ElementRegistry`. The description
+carries tags, not classes, and that is exactly what lets an old client draw a new panel.
+
+### What is available instead is standard
+
+A **binding**: the same class, bound to the rebuilt tree, with the same field names. Android's View
+Binding and JavaFX's `@FXML` injection exist for precisely this problem, and both are worth reading
+before this is built.
+
+```java
+new MachinePanel()            // server: builds the tree
+MachinePanel.bindTo(root)     // client: resolves the rebuilt tree by id
+```
+
+Told to the registry, so a behaviour receives it typed:
+
+```java
+ClientWindows.register(TYPE, MachinePanel::bindTo, MachineClient::new);
+```
+
+…and the three silent lines become three loud ones:
+
+```java
+private void wire(MachinePanel panel) {
+    panel.askStats.attachListener(this::requestStats);
+    panel.heartbeat.attachListener(this::sendHeartbeat);
+    panel.badRename.attachListener(() -> rename("   "));
+}
+```
+
+A missing id then fails **at bind time, loudly**, instead of at press time, silently — and it is
+contained, because `ClientWindows` already catches a failing behaviour and keeps the window.
+
+### It completes the symmetry VI.1 is reaching for
+
+The application owns `MachinePanel`; the server attaches a `ServerWindow` to it; the client binds a
+`MachinePanel` to the rebuilt tree. **One class, one set of field names, both sides.**
+
+Worth stating in the docs when it lands, because it invites exactly one misreading: they are
+*different instances over different trees*. A client-side `panel.power.setChecked(…)` is a local
+write that the next state delta overwrites — the preview-not-a-fact rule `MachineClient.show` already
+records.
+
+### Required vs optional is the version-skew story
+
+An older client binding against a newer tree must not explode over a widget it has never heard of, so
+a binding needs both:
+
+- `require(id, Type.class)` — throws, naming the id and the type. For anything the behaviour cannot
+  work without.
+- `find(id, Type.class)` — null or `Optional`, for anything added since.
+
+Getting this wrong in either direction is bad: throw on everything and one new server-side button
+takes down every old client's local behaviour; throw on nothing and the silent-skip failure is back
+with more ceremony.
+
+---
+
+## VI.4 — Where a type parameter is earned, and where it is not
+
+The test that settles it, and it has now come up three times: **does the framework hand you the thing,
+or do you already hold it?**
+
+| | Handed to you? | Verdict |
+|---|---|---|
+| `ServerWindow<P>` (the class) | No — the subclass holds a typed field, whether it created the panel or was given one in its constructor | **No parameter.** It would be a promise nobody collects |
+| `ServerWindow.Builder<P>` | Yes — `wire((p, io) -> …)`, `title(p -> …)` receive the panel | **Parameter earned**, and already there |
+| `ClientWindowBehaviour` | Yes — the factory receives the bound panel | **Pass it as a constructor argument**, not as a generic on the context |
+
+The third row is the one with a trap in it. Generifying `ClientWindowContext<P>` would leak `<?>`
+into everything that holds a window generically — the same cost measured for the server side, where
+**thirteen sites in `ServerWindows` would need a wildcard** (the `Map`, the `List`, `byKey`, `close`,
+`finish`, and three loops).
+
+And it buys nothing where it looks like it should. The one place a typed panel is genuinely wanted is
+a lookup —
+
+```java
+ServerWindow w = ServerWindows.of(c).byKey("mymod:machine");
+```
+
+— and generics **cannot** help there, because the registry is heterogeneous: `ServerWindow<?>` hands
+back a capture, so `w.panel()` is `Object` with extra steps. You cast either way. The parameter is
+absent exactly where you would reach for it and present everywhere you would not.
+
+There is a consistency argument too. `WindowProtocol`'s javadoc already records why this layer is
+non-generic over the wire representation — *"making `ServerWindow` generic would put a type parameter
+in every mod's class declaration and every handler signature to serve a case no wire in this engine
+has."* Angle brackets staying out of what a mod author writes is a decision, not an accident.
+
+---
+
+## VI.5 — Engine gaps this needs
+
+Small, and each is useful well beyond this plan.
+
+| Gap | Why | Blast radius |
+|---|---|---|
+| `UIElement.require(sel, Class<T>)` / `find(sel, Class<T>)` | There is no typed lookup anywhere; every consumer in the codebase pays the `instanceof`-and-cast tax, and every one of them degrades silently | Additive |
+| `UIElement.clearReportedEvents()` | VI.2 — without it a re-attached panel advertises events nothing handles, and its content hash drifts | Additive |
+| Refuse a second `ServerWindow` on one tree | VI.2 — the alternative is one window silently going deaf | One check in the attach path |
+| `ServerWindow` builder overload taking an existing tree | VI.1 — the `Supplier` is what forces ownership | Additive overload |
+
+---
+
+## VI.6 — Open forks
+
+**How panel ids get declared.** Both modes need to agree on them, and drift between them is a silent
+failure.
+
+- **(A) Two factories, ids as constants.** `MachinePanel` gains `bindTo`; ids are `static final
+  String` used by both paths. Plain Java, no framework, roughly thirty lines in the panel, ships
+  immediately.
+- **(B) Declare-once base class.** `public final Switch power = require("power", Switch.class);`
+  where `require` *creates* in build mode and *resolves* in bind mode, with a separate `layout()` for
+  arrangement. The id genuinely appears once and every future panel gets it free — but it is a real
+  framework: field-initialiser ordering against the mode, a widget factory per class (`ElementRegistry`
+  already holds one per *tag*, which may or may not be the right hook), and layout split from
+  declaration.
+
+Leaning **(A) first, (B) once three panels prove the shape** — but (B) is the one that stops this
+recurring, and this session's premise is rewriting until the model is right rather than shipping the
+cheap version.
+
+**Whether `ServerWindow` stays a class you extend.** Once the panel is passed in, the class *is* an
+attachment with a nice constructor. Whether it should instead be `ServerWindows.attach(tree)…` is
+worth revisiting only after VI.1 lands, because the answer is much clearer once the ownership is the
+right way round.
+
+**What `onClosed` means after the split** — VI.2's third constraint. Probably two callbacks, but the
+audience for each wants naming before the shape is chosen.
