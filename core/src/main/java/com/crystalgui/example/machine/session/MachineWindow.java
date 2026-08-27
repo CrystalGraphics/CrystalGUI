@@ -8,6 +8,7 @@ import com.crystalgui.example.machine.ui.MachinePanel;
 import com.crystalgui.example.machine.ui.MachineStyles;
 import com.crystalgui.net.UiEventKinds;
 import com.crystalgui.net.window.ServerWindows;
+import com.crystalgui.net.window.WindowType;
 import com.crystalgui.net.window.ServerWindow;
 import com.crystalgui.net.window.WindowScope;
 import com.crystalgui.serialization.StateMap;
@@ -106,8 +107,6 @@ import com.crystalgui.ui.UIElement;
  */
 public final class MachineWindow extends ServerWindow {
 
-    /** What a client dispatches its local behaviour on. @see MachineClient */
-    public static final String TYPE = "crystalgui:machine";
 
     /**
      * One panel per viewer, and re-opening brings the existing one forward.
@@ -144,9 +143,13 @@ public final class MachineWindow extends ServerWindow {
 
     // ── What this window says about itself ──────────────────────────────────
 
+    /**
+     * The descriptor {@link MachinePanel} declares — <b>the same value the client registers
+     * against</b>, so the two halves cannot drift apart by a typo. @see WindowType
+     */
     @Override
-    public String type() {
-        return TYPE;
+    public WindowType<MachinePanel> type() {
+        return MachinePanel.TYPE;
     }
 
     @Nullable

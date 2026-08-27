@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.crystalgui.example.machine.MachineTrace;
+import com.crystalgui.example.machine.ui.MachinePanel;
 import com.crystalgui.example.machine.ui.MachineStyles;
 import com.crystalgui.example.machine.MachineModel;
 import com.crystalgui.net.InMemoryTransport;
@@ -90,7 +91,8 @@ public final class MachineDemo {
         // still opens, still renders and still reports every event the server asked for; only the three
         // buttons THIS side drives would go quiet.
         MachineClient[] behaviour = new MachineClient[1];
-        ClientWindows.register(MachineWindow.TYPE, context -> behaviour[0] = new MachineClient(context));
+        ClientWindows.register(MachinePanel.TYPE,
+                (panel, context) -> behaviour[0] = new MachineClient(panel, context));
 
         // Where windows land. A real host wraps the tree in a WindowFrame on the desktop; here it is a
         // println. That is the whole platform surface for networked UI.
