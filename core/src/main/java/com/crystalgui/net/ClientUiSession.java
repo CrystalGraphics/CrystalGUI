@@ -80,6 +80,12 @@ public final class ClientUiSession<T> {
     private List<SheetRef> sheets = List.of();
     private boolean useUserAgentSheet = true;
 
+    /** What the server said this window is, for a client that dispatches behaviour on it. */
+    private String type = "";
+    private String title = "";
+    @Nullable
+    private String key;
+
     @Nullable
     private Consumer<UIElement> onWindowOpened;
     @Nullable
@@ -149,6 +155,15 @@ public final class ClientUiSession<T> {
         return this;
     }
 
+    /** The server asked for this window to be brought forward. @see UiMethods#FOCUS_WINDOW */
+    public ClientUiSession<T> onFocusRequested(Runnable handler) {
+        this.onFocusRequested = handler;
+        return this;
+    }
+
+    @Nullable
+    private Runnable onFocusRequested;
+
     @Nullable
     public UIElement root() {
         return root;
@@ -164,6 +179,29 @@ public final class ClientUiSession<T> {
 
     public boolean useUserAgentSheet() {
         return useUserAgentSheet;
+    }
+
+    /**
+     * What kind of window this is — {@code "mymod:machine"}, or {@code ""} from a server that named
+     * none.
+     *
+     * <p>What a client dispatches local behaviour on. Empty is not an error: a window with no type
+     * still renders and still reports every event its description asked for, because a description is
+     * self-sufficient. It simply has no local extras. @see UiMethods#TYPE</p>
+     */
+    public String type() {
+        return type;
+    }
+
+    /** What to call it on screen, or {@code ""} — the frame falls back to whatever it wants. */
+    public String title() {
+        return title;
+    }
+
+    /** Its uniqueness and persistence key, or {@code null} where the server named none. */
+    @Nullable
+    public String key() {
+        return key;
     }
 
     public boolean hasCached(String descHash) {
@@ -227,6 +265,11 @@ public final class ClientUiSession<T> {
             this.sheets = in.getList("sheets", entry -> SheetRef.CODEC.decode(ops, entry.encode()));
             this.useUserAgentSheet = in.getBool("ua", false);
             this.expectedElementCount = in.getInt("count", 0);
+            // FALLBACKS, so a server that predates these fields opens exactly as it always did.
+            this.type = in.getString(UiMethods.TYPE, "");
+            this.title = in.getString(UiMethods.TITLE, "");
+            String named = in.getString(UiMethods.KEY, "");
+            this.key = named.isEmpty() ? null : named;
 
             String hash = in.getString("hash", "");
             T cached = descriptionCache.get(hash);
@@ -324,6 +367,16 @@ public final class ClientUiSession<T> {
                     CrystalGuiCore.LOGGER.warn("Bad state for element {}: {}", nid, bad.getMessage());
                 }
             }
+        });
+
+        // BRING IT FORWARD. What re-opening an already-open window means: the tree, the scroll position
+        // and whatever is half-typed all stay, and only the compositor is asked to do something. A
+        // re-sent ui/openWindow would work and would throw away exactly the state the window was kept
+        // for. @see UiMethods#FOCUS_WINDOW
+        bindNotify(UiMethods.FOCUS_WINDOW, payload -> {
+            StateMap<T> in = read(payload);
+            if (in.getInt(UiMethods.WINDOW, windowId) != windowId || root == null) return;
+            if (onFocusRequested != null) onFocusRequested.run();
         });
 
         bindNotify(UiMethods.CLOSE_WINDOW, payload -> {
@@ -490,5 +543,65 @@ public final class ClientUiSession<T> {
                 },
                 onError,
                 System.currentTimeMillis() + callTimeoutMillis);
+    }
+
+    /**
+     * Listens for a notification <b>on this window</b> — the mirror of
+     * {@link ServerUiSession#onNotify}.
+     *
+     * <p>Registering on {@link ProtocolConnection#onNotify} instead is keyed by method name alone, so a
+     * second window of the same application listening for the same thing is refused outright by the
+     * router. Through here two windows may each name {@code app/announce} and each hear only their
+     * own.</p>
+     */
+    public ClientUiSession<T> onNotify(String method, Consumer<StateMap<T>> handler) {
+        bindNotify(method, payload -> handler.accept(read(payload)));
+        return this;
+    }
+
+    /** Tells the server, stamped with this window. Nothing comes back. */
+    public void notify(String method, @Nullable StateMap<T> payload) {
+        StateMap<T> stamped = payload == null ? new StateMap<>(ops) : payload;
+        stamped.putInt(UiMethods.WINDOW, windowId);
+        router.notify(method, stamped.encode());
+    }
+
+    /**
+     * Tells the server the user closed this window, and stops serving it.
+     *
+     * <p>The client end of {@link UiMethods#CLOSE}. Local teardown happens either way — the window is
+     * gone here whatever the far side does with the news — so this releases the mux slots and drops the
+     * tree exactly as an incoming {@code ui/closeWindow} would, without waiting for one to come back.
+     * Idempotent, and silent once the window has already gone.</p>
+     */
+    public void closeFromClient(String reason) {
+        if (windowId < 0) return;
+        StateMap<T> out = new StateMap<>(ops);
+        out.putString("reason", reason == null ? "" : reason);
+        notify(UiMethods.CLOSE, out);
+        root = null;
+        release();
+    }
+
+    /** Tells the server whether this window is on screen. @see UiMethods#VISIBILITY */
+    public void reportVisibility(boolean visible) {
+        if (windowId < 0) return;
+        StateMap<T> out = new StateMap<>(ops);
+        out.putBool("visible", visible);
+        notify(UiMethods.VISIBILITY, out);
+    }
+
+    /**
+     * Asks the server for the stylesheet behind a hash. @see UiMethods#SHEET
+     *
+     * <p>Content-addressed, so the answer is cacheable forever and a client that already has the hash
+     * need never ask. Both callbacks run on the thread that ticked the connection.</p>
+     */
+    public void requestSheet(String hash, Consumer<String> onCss, Consumer<String> onError) {
+        StateMap<T> ask = new StateMap<>(ops);
+        ask.putString("hash", hash);
+        call(UiMethods.SHEET, ask,
+                answer -> onCss.accept(answer.getString("css", "")),
+                onError);
     }
 }
