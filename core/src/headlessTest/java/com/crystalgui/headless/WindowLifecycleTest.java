@@ -20,6 +20,7 @@ import com.crystalgui.net.window.ServerWindow;
 import com.crystalgui.net.window.WindowScope;
 import com.crystalgui.net.window.WindowProtocol;
 import com.crystalgui.net.window.WindowMount;
+import com.crystalgui.net.window.WindowType;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
@@ -58,6 +59,13 @@ import static org.junit.Assert.fail;
  * runs on the side you looked at, which is precisely the shape of the bug being fixed.</p>
  */
 public class WindowLifecycleTest {
+
+    /** The shared descriptor both halves reference, so a mismatch cannot be spelled. */
+    private static final WindowType<Panel> PANEL = WindowType.of("test:panel", Panel::bindTo);
+    private static final WindowType<Panel> OTHER_PANEL = WindowType.of("test:other", Panel::bindTo);
+
+    /** A third type, for the builder — it needs no behaviour, so binding is never asked for. */
+    private static final WindowType<Panel> BUILT = WindowType.of("test:built", Panel::bindTo);
 
     private static final String TYPE = "test:panel";
     private static final String OTHER_TYPE = "test:other";
@@ -367,6 +375,69 @@ public class WindowLifecycleTest {
         assertEquals(1, seen.size());
     }
 
+    /**
+     * The typed registration hands a behaviour its <b>bound panel</b>, not a tree to search.
+     *
+     * <p>What it replaces is three lines of {@code querySelector} guarded by {@code instanceof} —
+     * which silently do nothing when an id moves, and are indistinguishable from a window that is
+     * deliberately inert. Here the parts are resolved once, up front, and a press reaches the server
+     * through a field.</p>
+     */
+    @Test
+    public void aTypedRegistrationHandsTheBehaviourThePanelRatherThanTheTree() {
+        AtomicReference<Panel> bound = new AtomicReference<>();
+        ClientWindows.register(PANEL, (panel, context) -> {
+            bound.set(panel);
+            return new ClientWindowBehaviour() { };
+        });
+
+        TestWindow window = server.open(new TestWindow());
+        settle();
+
+        assertNotNull("the behaviour was handed a panel", bound.get());
+        assertNotSame("bound to the CLIENT's rebuilt tree, not the server's object",
+                window.panel.root, bound.get().root);
+
+        // A field, not a lookup -- and it reaches the server exactly as the searched version did.
+        bound.get().press.onPressed.emit();
+        settle();
+        assertEquals(1, window.presses.get());
+    }
+
+    /**
+     * A binding fails <b>loudly</b> when the tree is not the shape it expects.
+     *
+     * <p>The whole point of binding over searching: a missing part is an error at mount rather than a
+     * control that looks wired and does nothing. Contained, too — the window itself still mounts,
+     * because a broken behaviour must not take the server's UI down with it.</p>
+     */
+    @Test
+    public void aBindingThatCannotFindItsPartsFailsAtMountRatherThanAtPressTime() {
+        WindowType<Panel> wrong = WindowType.of(TYPE, root -> {
+            root.require("#nothing-like-this", Button.class);
+            throw new AssertionError("require should have thrown first");
+        });
+        ClientWindows.register(wrong, (panel, context) -> new ClientWindowBehaviour() { });
+
+        server.open(new TestWindow());
+        settle();
+
+        assertEquals("the window is still on screen", 1, mount.mounted.size());
+        assertNull("but it has no local behaviour", clientBehaviourOf(mount.mounted.get(0)));
+    }
+
+    /** There is no accessor for it, and there should not be — this is the test peeking. */
+    @Nullable
+    private static ClientWindowBehaviour clientBehaviourOf(ClientWindowContext context) {
+        try {
+            java.lang.reflect.Field field = context.getClass().getDeclaredField("behaviour");
+            field.setAccessible(true);
+            return (ClientWindowBehaviour) field.get(context);
+        } catch (ReflectiveOperationException impossible) {
+            throw new AssertionError(impossible);
+        }
+    }
+
     // ── Window-scoped notifications ─────────────────────────────────────────
 
     /**
@@ -640,7 +711,7 @@ public class WindowLifecycleTest {
         AtomicInteger pressed = new AtomicInteger();
         List<ServerWindow.CloseReason> closes = new ArrayList<>();
 
-        ServerWindow window = server.open(ServerWindow.of("test:built", Panel::new, panel -> panel.root)
+        ServerWindow window = server.open(ServerWindow.of(BUILT, Panel::new, panel -> panel.root)
                 .key("test:built")
                 .title(panel -> "Built")
                 .wire((panel, io) -> io.onActivate(panel.press, ctx -> pressed.incrementAndGet()))
@@ -671,15 +742,29 @@ public class WindowLifecycleTest {
 
     /** A tree with one button and one label, which is all any of these need. */
     private static final class Panel {
-        final UIElement root = new UIElement();
-        final Button press = new Button("press");
-        final com.crystalgui.ui.elements.UIText label = new com.crystalgui.ui.elements.UIText("");
+        final UIElement root;
+        final Button press;
+        final com.crystalgui.ui.elements.UIText label;
 
         Panel() {
+            root = new UIElement();
+            press = new Button("press");
             press.setId("press");
+            label = new com.crystalgui.ui.elements.UIText("");
             label.setId("label");
             root.addChild(press);
             root.addChild(label);
+        }
+
+        /** The client's half: typed hold of a tree that was rebuilt from a description. */
+        private Panel(UIElement rebuilt) {
+            root = rebuilt;
+            press = rebuilt.require("#press", Button.class);
+            label = rebuilt.require("#label", com.crystalgui.ui.elements.UIText.class);
+        }
+
+        static Panel bindTo(UIElement rebuilt) {
+            return new Panel(rebuilt);
         }
     }
 
@@ -697,8 +782,8 @@ public class WindowLifecycleTest {
         }
 
         @Override
-        public String type() {
-            return TYPE;
+        public WindowType<Panel> type() {
+            return PANEL;
         }
 
         @Override
@@ -738,8 +823,8 @@ public class WindowLifecycleTest {
         private final Panel panel = new Panel();
 
         @Override
-        public String type() {
-            return TYPE;
+        public WindowType<Panel> type() {
+            return PANEL;
         }
 
         @Override
@@ -759,8 +844,8 @@ public class WindowLifecycleTest {
         private final Panel panel = new Panel();
 
         @Override
-        public String type() {
-            return TYPE;
+        public WindowType<Panel> type() {
+            return PANEL;
         }
 
         @Override
@@ -777,8 +862,8 @@ public class WindowLifecycleTest {
 
     private static final class OtherWindow extends TestWindow {
         @Override
-        public String type() {
-            return OTHER_TYPE;
+        public WindowType<Panel> type() {
+            return OTHER_PANEL;
         }
     }
 
@@ -792,8 +877,8 @@ public class WindowLifecycleTest {
         }
 
         @Override
-        public String type() {
-            return TYPE;
+        public WindowType<Panel> type() {
+            return PANEL;
         }
 
         @Override
@@ -841,8 +926,8 @@ public class WindowLifecycleTest {
         final SaveFragment fragment = new SaveFragment();
 
         @Override
-        public String type() {
-            return TYPE;
+        public WindowType<Panel> type() {
+            return PANEL;
         }
 
         @Override
@@ -861,8 +946,8 @@ public class WindowLifecycleTest {
         private final Panel panel = new Panel();
 
         @Override
-        public String type() {
-            return TYPE;
+        public WindowType<Panel> type() {
+            return PANEL;
         }
 
         @Override
@@ -886,8 +971,8 @@ public class WindowLifecycleTest {
         private final Panel panel = new Panel();
 
         @Override
-        public String type() {
-            return TYPE;
+        public WindowType<Panel> type() {
+            return PANEL;
         }
 
         @Override
@@ -911,8 +996,8 @@ public class WindowLifecycleTest {
         private WindowScope scope;
 
         @Override
-        public String type() {
-            return TYPE;
+        public WindowType<Panel> type() {
+            return PANEL;
         }
 
         @Override

@@ -989,7 +989,21 @@ with more ceremony.
 
 ---
 
-## VI.4 — The two halves are paired by a **string**, and breaking it is silent
+## VI.4 — The two halves are paired by a **string**, and breaking it is silent · **SHIPPED**
+
+> **Shipped with VI.3's binding and VI.6's typed lookup**, which it depends on: `WindowType<P>`'s
+> value is the type parameter, and without a way for the client to produce a `P` it degrades to an id
+> holder the example already had. Built bottom-up — typed lookup, then binding, then the descriptor.
+>
+> **One decision changed on contact.** The sketch below has `WindowType` carrying four things
+> (`id`, `create`, `rootOf`, `bind`). It ships with **two** — `id` and `bind` — because *how the
+> server constructs its panel is not part of the contract between the two halves*: that is the
+> builder's business, and an application that already owns its panel (VI.1) has no supplier to give
+> at all. Putting construction in the shared descriptor would have baked in the ownership model VI.1
+> exists to invert.
+>
+> **VI.6's fork was settled as (A)**, ids as constants used by both the build and the bind path, and
+> it does not foreclose (B): a declare-once base class would not change `WindowType` at all.
 
 `ClientWindows.register(String type, factory)` takes a raw string, and dispatch is
 `FACTORIES.get(fresh.type())` with the miss handled as:
@@ -1122,7 +1136,8 @@ Small, and each is useful well beyond this plan.
 | `UIElement.clearReportedEvents()` | VI.2 — without it a re-attached panel advertises events nothing handles, and its content hash drifts | Additive |
 | Refuse a second `ServerWindow` on one tree | VI.2 — the alternative is one window silently going deaf | One check in the attach path |
 | `ServerWindow` builder overload taking an existing tree | VI.1 — the `Supplier` is what forces ownership | Additive overload |
-| `WindowType<P>` + type-checked `ClientWindows.register` | VI.4 — the two halves are paired by a string today, and breaking it is silent | New type; `type()` and `register` change shape |
+| ~~`WindowType<P>` + type-checked `ClientWindows.register`~~ | VI.4 — **shipped** | — |
+| ~~`UIElement.require` / `find`~~ | VI.6 — **shipped**, and the first consumer is the binding | — |
 
 ---
 
@@ -1157,5 +1172,11 @@ audience for each wants naming before the shape is chosen.
 tell "never heard of it" from "this installation declares it and did not register a behaviour", and
 only the second is likely to be a mistake. The risk is noise for a deliberately bare window.
 
-**Where `WindowType` lives** — VI.4. On the panel (loader-safe, zero extra classes) or in a registry
-keyed by id (buys enumeration for diagnostics, brings registration order back).
+**Where `WindowType` lives** — VI.4, **settled: on the panel.** Loader-safe (every reference in the
+initialiser points at the panel itself) and zero extra classes. A registry keyed by id is still the
+alternative if enumeration is ever wanted for diagnostics, at the cost of registration order
+mattering again.
+
+**Whether a declared-but-unregistered type warns** — VI.4, still open, and now cheaper to answer:
+with `WindowType` the client can tell "never heard of it" from "this installation declares it and
+registered nothing", and only the second is likely to be a mistake.

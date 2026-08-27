@@ -22,8 +22,14 @@ import com.crystalgui.ui.elements.UIText;
  * <p>Registered once, at mod init:</p>
  *
  * <pre>{@code
- * ClientWindows.register(MachineWindow.TYPE, MachineClient::new);
+ * ClientWindows.register(MachinePanel.TYPE, MachineClient::new);
  * }</pre>
+ *
+ * <p><b>Type-checked, not string-matched.</b> {@code MachinePanel.TYPE} is a {@code
+ * WindowType<MachinePanel>}, so this constructor <em>must</em> take a {@code MachinePanel} — a
+ * mismatched pair is a compile error. It used to be two copies of a string that nothing compared,
+ * where a typo produced a window that opened, rendered and reported every event with no behaviour at
+ * all.</p>
  *
  * <p>That is the whole of the client's wiring. What used to sit around it — tracking whether the
  * connection had been replaced, tearing down on disconnect, installing a session listener at exactly
@@ -63,15 +69,25 @@ public final class MachineClient implements ClientWindowBehaviour {
     private ClientWindowContext window;
 
     /**
-     * Built by {@link ClientWindows} when a window of {@link MachineWindow#TYPE} opens.
+     * The panel, <b>bound to the tree this client rebuilt</b> — not the server's object.
      *
-     * <p>Everything it needs is on the context: the rebuilt tree, and the session for calls and
-     * notifications. There is no connection to find, no session to adopt and nothing to wait for —
-     * by the time this runs the window is on screen.</p>
+     * <p>Same class, same field names, different instance over a different tree. Writing to it is a
+     * local preview the next state delta overwrites; the server is reached through the session.</p>
      */
-    public MachineClient(ClientWindowContext window) {
+    private MachinePanel panel;
+
+    /**
+     * Built by {@link ClientWindows} when a window of {@link MachinePanel#TYPE} opens.
+     *
+     * <p>Everything it needs arrives here: the panel already bound to the rebuilt tree, and the
+     * context carrying the session for calls and notifications. There is no connection to find, no
+     * session to adopt, no tree to search and nothing to wait for — by the time this runs the window
+     * is on screen.</p>
+     */
+    public MachineClient(MachinePanel panel, ClientWindowContext window) {
+        this.panel = panel;
         this.window = window;
-        wire(window);
+        wire(panel);
 
         /*
          * ── S -> C NOTIFICATION, the receiving half ───────────────────────────────────────────
@@ -121,7 +137,10 @@ public final class MachineClient implements ClientWindowBehaviour {
     @Override
     public void onContentReplaced(ClientWindowContext context) {
         this.window = context;
-        wire(context);
+        // RE-BOUND, because the old panel's fields point into a tree nothing updates any more. The
+        // session's own registrations survive -- those are keyed by method, not by element.
+        this.panel = MachinePanel.TYPE.bind(context.root());
+        wire(panel);
     }
 
     @Override
@@ -131,19 +150,20 @@ public final class MachineClient implements ClientWindowBehaviour {
 
     // ── Behaviour this side adds for itself ─────────────────────────────────
 
-    private void wire(ClientWindowContext context) {
-        UIElement built = context.root();
-
-        UIElement ask = built.querySelector("#ask-stats");
-        if (ask instanceof Button) ((Button) ask).attachListener(this::requestStats);
-
-        UIElement beat = built.querySelector("#heartbeat");
-        if (beat instanceof Button) ((Button) beat).attachListener(this::sendHeartbeat);
-
-        UIElement rename = built.querySelector("#bad-rename");
+    /**
+     * Three lines, and each one is checked.
+     *
+     * <p>This used to be three {@code querySelector} calls guarded by {@code instanceof}, and the
+     * guard was the problem: the day an id moved, the line <b>silently did nothing</b> and left a
+     * button that looked wired and was not. Binding resolves every part once, up front, and fails
+     * loudly there instead. @see MachinePanel#bindTo</p>
+     */
+    private void wire(MachinePanel panel) {
+        panel.askStats.attachListener(this::requestStats);
+        panel.heartbeat.attachListener(this::sendHeartbeat);
         // Deliberately blank -- the server refuses it, which is the only way to watch the error callback
         // fire. See MachineWindow's machine/rename handler.
-        if (rename instanceof Button) ((Button) rename).attachListener(() -> rename("   "));
+        panel.badRename.attachListener(() -> rename("   "));
     }
 
     /**
@@ -241,6 +261,11 @@ public final class MachineClient implements ClientWindowBehaviour {
         return window.root();
     }
 
+    /** The panel bound to that tree. Same field names as the server's, different object. */
+    public MachinePanel panel() {
+        return panel;
+    }
+
     /**
      * Writes a line into the panel's readout — <b>the client's line, and only ever that one</b>.
      *
@@ -256,15 +281,15 @@ public final class MachineClient implements ClientWindowBehaviour {
      * echoing your own keystrokes back cannot reset the caret mid-word.</p>
      */
     private void show(String text) {
-        UIElement root = window.root();
-        if (root == null) return;
         /*
-         * BY ID, because this side has no MachinePanel. The server holds the object and reaches the
-         * field; this side holds a tree it rebuilt from a description and addresses the same element the
-         * only way it can -- by the id the description carried. That asymmetry is the architecture in
-         * miniature: both halves looking at the same widget, sharing no object.
+         * A FIELD NOW, and it used to be querySelector("#result-client") plus an instanceof.
+         *
+         * The asymmetry it demonstrated is still exactly true and is worth keeping in mind: the server
+         * holds the panel OBJECT and reaches a field, while this side holds a tree it rebuilt from a
+         * description. What changed is that the binding does that translation once, at mount, instead
+         * of at every call site -- so both halves now read `panel.clientLine`, sharing a class and no
+         * object at all.
          */
-        UIElement line = root.querySelector("#result-client");
-        if (line instanceof UIText) ((UIText) line).setText(text);
+        panel.clientLine.setText(text);
     }
 }

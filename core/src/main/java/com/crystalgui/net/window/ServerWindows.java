@@ -124,7 +124,7 @@ public final class ServerWindows {
         if (key != null) {
             ServerWindow existing = byKey(key);
             if (existing != null) {
-                if (!existing.type().equals(window.type())) {
+                if (!existing.type().id().equals(window.type().id())) {
                     throw new IllegalStateException("key '" + key + "' is already held by a <"
                             + existing.type() + ">, so a <" + window.type() + "> cannot take it");
                 }
@@ -141,7 +141,7 @@ public final class ServerWindows {
 
         int id = nextWindowId++;
         ServerUiSession<Object> session = new ServerUiSession<>(id, root, connection)
-                .setType(window.type())
+                .setType(window.type().id())
                 .setTitle(window.title())
                 .setKey(key);
 

@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import javax.annotation.Nullable;
@@ -50,12 +51,11 @@ import com.crystalgui.ui.UIElement;
 public final class ClientWindows {
 
     /**
-     * type → local behaviour. Static, because what a client can do about a window type is a fact about
+     * type id → local behaviour. Static, because what a client can do about a window type is a fact about
      * this installation rather than about any one connection — the same reason {@code MenuScreens}'
      * registry is static and a {@code MenuType} is not per player.
      */
-    private static final Map<String, Function<ClientWindowContext, ClientWindowBehaviour>> FACTORIES =
-            new ConcurrentHashMap<>();
+    private static final Map<String, Registration<?>> FACTORIES = new ConcurrentHashMap<>();
 
     private final ProtocolConnection<Object> connection;
 
@@ -110,21 +110,69 @@ public final class ClientWindows {
     // ── The type registry ───────────────────────────────────────────────────
 
     /**
-     * Says what this client does locally about a window type. Idempotent per type; re-registering
-     * replaces.
+     * Says what this client does locally about a window type, <b>type-checked against its panel</b>.
      *
-     * <p>Called once at mod init, like {@code MenuScreens.register}. Windows of unregistered types are
-     * unaffected and still open.</p>
+     * <pre>{@code
+     * ClientWindows.register(MachinePanel.TYPE, MachineClient::new);
+     * }</pre>
+     *
+     * <p>The factory receives the panel {@link WindowType#bind bound} to the rebuilt tree, so a
+     * behaviour reaches {@code panel.askStats} instead of {@code querySelector("#ask-stats")} followed
+     * by an {@code instanceof} that silently does nothing when the id moves. And because the signature
+     * ties the two together, <b>a mismatched pair is a compile error</b> rather than the runtime no-op
+     * a pair of strings used to give.</p>
+     *
+     * <p>Called once at mod init, like {@code MenuScreens.register}. Idempotent per type;
+     * re-registering replaces. Windows of unregistered types are unaffected and still open.</p>
+     *
+     * <p><b>Registered from client code, and that is the loader seam rather than a wart.</b> A shared
+     * descriptor naming the behaviour would be a {@code static final} field whose initialiser resolves
+     * that constructor at class init, loading a client-only class on a dedicated server. @see
+     * WindowType</p>
+     */
+    public static <P> void register(WindowType<P> type,
+                                    BiFunction<P, ClientWindowContext, ClientWindowBehaviour> factory) {
+        if (type == null) throw new IllegalArgumentException("a behaviour needs a type");
+        if (factory == null) throw new IllegalArgumentException("factory is null");
+        FACTORIES.put(type.id(), new Registration<>(type, factory));
+    }
+
+    /**
+     * The untyped form, for a window with no panel class behind it.
+     *
+     * <p>Equivalent to registering against {@link WindowType#bare} — the tree is its own panel, so
+     * there is nothing to bind and nothing to check.</p>
      */
     public static void register(String type, Function<ClientWindowContext, ClientWindowBehaviour> factory) {
         if (type == null || type.isEmpty()) throw new IllegalArgumentException("a behaviour needs a type");
         if (factory == null) throw new IllegalArgumentException("factory is null");
-        FACTORIES.put(type, factory);
+        register(WindowType.bare(type), (root, context) -> factory.apply(context));
     }
 
     /** Drops a registration. Tests, and a mod unloading itself. */
     public static void unregister(String type) {
         FACTORIES.remove(type);
+    }
+
+    /** Drops a registration. @see #unregister(String) */
+    public static void unregister(WindowType<?> type) {
+        if (type != null) FACTORIES.remove(type.id());
+    }
+
+    /**
+     * A type and the behaviour registered for it, kept together so binding stays typed.
+     *
+     * <p>The map holds {@code Registration<?>} because the registry is heterogeneous by nature, but
+     * {@link #build} is written inside a class that still knows {@code P} — so the bind and the
+     * factory application need no cast between them. That is the whole reason this is a class rather
+     * than two parallel maps.</p>
+     */
+    private record Registration<P>(WindowType<P> type,
+                                   BiFunction<P, ClientWindowContext, ClientWindowBehaviour> factory) {
+
+        ClientWindowBehaviour build(ClientWindowContext context) {
+            return factory.apply(type.bind(context.root()), context);
+        }
     }
 
     /** Every type something has registered behaviour for. Diagnostics. */
@@ -236,10 +284,10 @@ public final class ClientWindows {
         }
         applySheets(fresh);
 
-        Function<ClientWindowContext, ClientWindowBehaviour> factory = FACTORIES.get(fresh.type());
-        if (factory == null) return;   // an unknown type is a window with no local extras, not a failure
+        Registration<?> registration = FACTORIES.get(fresh.type());
+        if (registration == null) return;   // an unknown type is a window with no local extras, not a failure
         try {
-            fresh.behaviour = factory.apply(fresh);
+            fresh.behaviour = registration.build(fresh);
         } catch (RuntimeException failed) {
             // The window stays: it is the server's, it renders, and it reports its events. Only the
             // local extras are missing, and saying so is better than taking the window down with them.

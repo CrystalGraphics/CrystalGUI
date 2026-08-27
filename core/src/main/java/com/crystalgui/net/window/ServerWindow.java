@@ -91,20 +91,24 @@ public abstract class ServerWindow {
      * What kind of window this is — {@code "mymod:machine"}, namespaced like everything else on the
      * wire.
      *
-     * <p>Travels on {@code ui/openWindow} and is what a client dispatches its local behaviour on
-     * ({@code ClientWindows.register}). A client that has no factory for the type still shows the
-     * window, correctly and interactively: a description is self-sufficient, so an unknown type simply
-     * has no local extras. That is the one respect in which this beats Minecraft's own model, where an
-     * unknown {@code MenuType} is a broken screen.</p>
+     * <p>Travels on {@code ui/openWindow} (as its {@link WindowType#id() id} — a value never crosses
+     * a wire) and is what a client dispatches its local behaviour on. A client that has no factory for
+     * the type still shows the window, correctly and interactively: a description is self-sufficient,
+     * so an unknown type simply has no local extras. That is the one respect in which this beats
+     * Minecraft's own model, where an unknown {@code MenuType} is a broken screen.</p>
+     *
+     * <p><b>A value rather than a string</b>, because the two halves used to be paired by one and
+     * nothing checked they matched — and an unregistered type mounting successfully meant a typo was
+     * pixel-identical to a deliberately bare window. @see WindowType</p>
      */
-    public abstract String type();
+    public abstract WindowType<?> type();
 
     /** The tree. Built once, by whatever this window's constructor did; the host asks for it at open. */
     public abstract UIElement root();
 
     /** What to call it on screen. The side that opens a window is the side that knows what it is. */
     public String title() {
-        return type();
+        return type().id();
     }
 
     /**
@@ -211,9 +215,9 @@ public abstract class ServerWindow {
     /**
      * A window whose contents are just a tree.
      *
-     * @see #of(String, Supplier, Function)
+     * @see #of(WindowType, Supplier, Function)
      */
-    public static Builder<UIElement> of(String type, Supplier<UIElement> contents) {
+    public static Builder<UIElement> of(WindowType<UIElement> type, Supplier<UIElement> contents) {
         return new Builder<>(type, contents, root -> root);
     }
 
@@ -228,7 +232,7 @@ public abstract class ServerWindow {
      *
      * <pre>{@code
      * ServerWindows.of(connection).open(
-     *     ServerWindow.of("mymod:machine", MachinePanel::new, p -> p.root)
+     *     ServerWindow.of(MachinePanel.TYPE, MachinePanel::new, p -> p.root)
      *         .key("mymod:machine")
      *         .title(p -> model.label())
      *         .wire((p, io) -> {
@@ -250,12 +254,14 @@ public abstract class ServerWindow {
      * unregistered one — so a {@code MachinePanel extends UIElement} would encode as
      * {@code <machinepanel>} and fail to decode on the client. A panel is therefore a plain holder with
      * a root element in it, and this takes the function that reaches it.
-     * {@link #of(String, Supplier)} is the shorthand for when the tree <em>is</em> the whole panel.</p>
+     * {@link #of(WindowType, Supplier)} is the shorthand for when the tree <em>is</em> the whole
+     * panel — {@code WindowType.bare(id)} being the type for one.</p>
      *
      * @param contents builds the panel, once, when the window opens
      * @param rootOf   reaches the panel's root element
      */
-    public static <P> Builder<P> of(String type, Supplier<P> contents, Function<P, UIElement> rootOf) {
+    public static <P> Builder<P> of(WindowType<P> type, Supplier<P> contents,
+                                    Function<P, UIElement> rootOf) {
         return new Builder<>(type, contents, rootOf);
     }
 
@@ -268,7 +274,7 @@ public abstract class ServerWindow {
      */
     public static final class Builder<P> {
 
-        private final String type;
+        private final WindowType<P> type;
         private final Supplier<P> contents;
         private final Function<P, UIElement> rootOf;
 
@@ -289,8 +295,8 @@ public abstract class ServerWindow {
         @Nullable
         private P built;
 
-        Builder(String type, Supplier<P> contents, Function<P, UIElement> rootOf) {
-            if (type == null || type.isEmpty()) throw new IllegalArgumentException("a window needs a type");
+        Builder(WindowType<P> type, Supplier<P> contents, Function<P, UIElement> rootOf) {
+            if (type == null) throw new IllegalArgumentException("a window needs a type");
             if (contents == null) throw new IllegalArgumentException("a window needs contents");
             if (rootOf == null) throw new IllegalArgumentException("a window needs a root");
             this.type = type;
@@ -379,7 +385,7 @@ public abstract class ServerWindow {
         }
 
         @Override
-        public String type() {
+        public WindowType<P> type() {
             return spec.type;
         }
 
@@ -390,7 +396,7 @@ public abstract class ServerWindow {
 
         @Override
         public String title() {
-            return spec.title == null ? spec.type : spec.title.apply(panel());
+            return spec.title == null ? spec.type.id() : spec.title.apply(panel());
         }
 
         @Nullable

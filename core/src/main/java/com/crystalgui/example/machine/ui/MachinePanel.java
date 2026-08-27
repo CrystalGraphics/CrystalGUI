@@ -1,6 +1,7 @@
 package com.crystalgui.example.machine.ui;
 
 import com.crystalgui.example.machine.session.MachineWindow;
+import com.crystalgui.net.window.WindowType;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.ProgressBar;
@@ -43,6 +44,37 @@ import com.crystalgui.ui.elements.UIText;
  * the network id is for the protocol; they are unrelated and it is worth not confusing them.</p>
  */
 public final class MachinePanel {
+
+    /**
+     * <b>What ties the two halves together.</b> Declared here because the panel is the artefact both
+     * sides genuinely share — and because every reference in this initialiser points at this class,
+     * which is what keeps it loadable on a dedicated server.
+     *
+     * <p>The server's window answers with it, and the client registers against it. Being a value
+     * rather than a string, a mismatched pair is a compile error instead of a window that opens
+     * perfectly and silently has no behaviour. @see WindowType</p>
+     */
+    public static final WindowType<MachinePanel> TYPE =
+            WindowType.of("crystalgui:machine", MachinePanel::bindTo);
+
+    /*
+     * THE IDS, WRITTEN ONCE. The build path stamps them on; the bind path looks them up. Two copies of
+     * a string that must agree is exactly the failure WindowType exists to remove one level up, and it
+     * would be odd to remove it there and reintroduce it here.
+     */
+    private static final String ID_POWER = "power";
+    private static final String ID_THROUGHPUT = "throughput";
+    private static final String ID_LABEL = "label";
+    private static final String ID_PROGRESS = "progress";
+    private static final String ID_STATUS = "status";
+    private static final String ID_PURGE = "purge";
+    private static final String ID_PING_CLIENT = "ping-client";
+    private static final String ID_ANNOUNCE = "announce";
+    private static final String ID_ASK_STATS = "ask-stats";
+    private static final String ID_HEARTBEAT = "heartbeat";
+    private static final String ID_BAD_RENAME = "bad-rename";
+    private static final String ID_RESULT_SERVER = "result-server";
+    private static final String ID_RESULT_CLIENT = "result-client";
 
     /** The root the description is taken from, and the root the client rebuilds. */
     public final UIElement root;
@@ -97,29 +129,30 @@ public final class MachinePanel {
         root.addChild(title);
 
         power = new Switch();
-        power.setId("power");
+        power.setId(ID_POWER);
         root.addChild(row("Power", power));
 
         throughput = new Slider();
         throughput.setRange(0f, 1f);
-        throughput.setId("throughput");
+        throughput.setId(ID_THROUGHPUT);
         root.addChild(row("Throughput", throughput));
 
         label = new TextField();
         label.setPlaceholder("name this machine");
-        label.setId("label");
+        label.setId(ID_LABEL);
         root.addChild(row("Label", label));
 
         progress = new ProgressBar();
-        progress.setId("progress");
+        progress.setId(ID_PROGRESS);
         root.addChild(row("Cycle", progress));
 
         status = new UIText("");
+        status.setId(ID_STATUS);
         status.addClass(MachineStyles.STATUS_CLASS);
         root.addChild(status);
 
         purge = new Button("Purge");
-        purge.setId("purge");
+        purge.setId(ID_PURGE);
         root.addChild(purge);
 
         /*
@@ -154,31 +187,31 @@ public final class MachinePanel {
         root.addChild(demoHint);
 
         pingClient = new Button("Ping client");
-        pingClient.setId("ping-client");
+        pingClient.setId(ID_PING_CLIENT);
         root.addChild(demoEntry(pingClient, KIND_REQUEST, "server asks client",
                 "machine/clientInfo",
                 "The server asks who is drawing this. The client answers; the reply shows below."));
 
         announce = new Button("Announce");
-        announce.setId("announce");
+        announce.setId(ID_ANNOUNCE);
         root.addChild(demoEntry(announce, KIND_NOTIFY, "server tells client",
                 "machine/announce",
                 "The server sends a message. Nothing comes back, and nothing is waiting for one."));
 
         askStats = new Button("Ask stats");
-        askStats.setId("ask-stats");
+        askStats.setId(ID_ASK_STATS);
         root.addChild(demoEntry(askStats, KIND_REQUEST, "client asks server",
                 "machine/stats",
                 "The client asks for the cycle and heartbeat counts. The server answers."));
 
         heartbeat = new Button("Heartbeat");
-        heartbeat.setId("heartbeat");
+        heartbeat.setId(ID_HEARTBEAT);
         root.addChild(demoEntry(heartbeat, KIND_NOTIFY, "client tells server",
                 "machine/heartbeat",
                 "The client reports in. The server counts it and replies with nothing."));
 
         badRename = new Button("Rename to ''");
-        badRename.setId("bad-rename");
+        badRename.setId(ID_BAD_RENAME);
         root.addChild(demoEntry(badRename, KIND_REFUSED, "client asks server",
                 "machine/rename",
                 "Asks for a blank name. The server REFUSES with the code EMPTY_NAME -- which is a "
@@ -217,15 +250,55 @@ public final class MachinePanel {
          * the client line says it sent one while the server line says it received one.
          */
         serverLine = new UIText("nothing yet");
-        serverLine.setId("result-server");
+        serverLine.setId(ID_RESULT_SERVER);
         root.addChild(resultRow(MachineStyles.WHO_SERVER_CLASS, "SERVER", serverLine));
 
         clientLine = new UIText("nothing yet");
-        clientLine.setId("result-client");
+        clientLine.setId(ID_RESULT_CLIENT);
         root.addChild(resultRow(MachineStyles.WHO_CLIENT_CLASS, "CLIENT", clientLine));
     }
 
     /** A fixed side badge and the line only that side writes. */
+    /**
+     * Typed hold of a tree a <b>client</b> rebuilt from this panel's description.
+     *
+     * <p>The client has no {@code MachinePanel} and cannot have one: its tree is decoded from a
+     * description that carries tags, not classes, which is exactly what lets an old client draw a new
+     * panel. What this produces is a <b>binding</b> — the same class, over the rebuilt tree, with the
+     * same field names. Android's View Binding and JavaFX's {@code @FXML} injection solve the same
+     * problem the same way.</p>
+     *
+     * <p>So the two panels are different instances over different trees. A client-side
+     * {@code panel.power.setChecked(…)} is a local write that the next state delta overwrites — the
+     * preview-not-a-fact rule, unchanged.</p>
+     *
+     * <p><b>{@code require} rather than {@code find}</b>, because every part of this panel is in every
+     * description of it. {@code find} is for a part that may be absent — a widget a newer server added
+     * that this client has never heard of — and using it here would trade a loud failure for the
+     * silent skip the binding exists to remove.</p>
+     */
+    public static MachinePanel bindTo(UIElement rebuilt) {
+        return new MachinePanel(rebuilt);
+    }
+
+    /** @see #bindTo */
+    private MachinePanel(UIElement rebuilt) {
+        root = rebuilt;
+        power = rebuilt.require("#" + ID_POWER, Switch.class);
+        throughput = rebuilt.require("#" + ID_THROUGHPUT, Slider.class);
+        label = rebuilt.require("#" + ID_LABEL, TextField.class);
+        progress = rebuilt.require("#" + ID_PROGRESS, ProgressBar.class);
+        status = rebuilt.require("#" + ID_STATUS, UIText.class);
+        purge = rebuilt.require("#" + ID_PURGE, Button.class);
+        pingClient = rebuilt.require("#" + ID_PING_CLIENT, Button.class);
+        announce = rebuilt.require("#" + ID_ANNOUNCE, Button.class);
+        askStats = rebuilt.require("#" + ID_ASK_STATS, Button.class);
+        heartbeat = rebuilt.require("#" + ID_HEARTBEAT, Button.class);
+        badRename = rebuilt.require("#" + ID_BAD_RENAME, Button.class);
+        serverLine = rebuilt.require("#" + ID_RESULT_SERVER, UIText.class);
+        clientLine = rebuilt.require("#" + ID_RESULT_CLIENT, UIText.class);
+    }
+
     private static UIElement resultRow(String badgeClass, String side, UIText line) {
         UIElement row = new UIElement();
         row.addClass(MachineStyles.ROW_CLASS);

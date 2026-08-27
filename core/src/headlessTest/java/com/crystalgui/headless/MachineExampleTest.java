@@ -9,6 +9,7 @@ import static org.junit.Assert.fail;
 import org.junit.Test;
 
 import com.crystalgui.example.machine.session.MachineClient;
+import com.crystalgui.example.machine.ui.MachinePanel;
 import com.crystalgui.example.machine.MachineModel;
 import com.crystalgui.example.machine.session.MachineWindow;
 import com.crystalgui.net.window.ClientWindows;
@@ -78,7 +79,8 @@ public class MachineExampleTest {
             serverEnd = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "player");
             clientEnd = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
 
-            ClientWindows.register(MachineWindow.TYPE, context -> client = new MachineClient(context));
+            ClientWindows.register(MachinePanel.TYPE,
+                    (panel, context) -> client = new MachineClient(panel, context));
             ClientWindows.of(clientEnd).setMount(new SilentMount());
         }
 
