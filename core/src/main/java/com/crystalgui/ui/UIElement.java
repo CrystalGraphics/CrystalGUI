@@ -1998,6 +1998,51 @@ public class UIElement implements SettingsScope, DataProvider {
         return UITreeTraversal.getElementsByClassName(this, className, false);
     }
 
+    /**
+     * First descendant matching {@code selector} <b>as a {@code type}</b>, or {@code null} if there is
+     * none.
+     *
+     * <p>Every other query here answers {@code UIElement}, so a caller that wants a widget writes
+     * {@code if (found instanceof Button) ((Button) found).…} — and <b>that line silently does nothing
+     * when the id moves.</b> A control that looks wired and is not is this codebase's most-repeated
+     * failure, and until now the engine had no way to ask the question that avoids it.</p>
+     *
+     * <p><b>Absent answers null; present-but-wrong-type throws.</b> The two are different facts. A
+     * missing element is ordinary version skew — a client older than the tree it was sent, which the
+     * description architecture exists to survive — and a caller can reasonably carry on without it. A
+     * <em>differently typed</em> element is the two sides disagreeing about what a widget is, which is
+     * a real defect on somebody's side whichever way the versions run.</p>
+     *
+     * @see #require(String, Class) when the caller genuinely cannot continue without it
+     */
+    @Nullable
+    public <T extends UIElement> T find(String selector, Class<T> type) {
+        UIElement found = querySelector(selector);
+        if (found == null) return null;
+        if (!type.isInstance(found)) {
+            throw new IllegalStateException("'" + selector + "' is a <" + found.tagName() + "> ("
+                    + found.getClass().getSimpleName() + "), not a " + type.getSimpleName());
+        }
+        return type.cast(found);
+    }
+
+    /**
+     * First descendant matching {@code selector} as a {@code type}, or <b>throws</b>.
+     *
+     * <p>For anything a caller cannot work without — the binding half of a panel, a composite's own
+     * parts. Failing here is failing at the moment the mistake was made, with the selector and the
+     * expected type in the message, rather than at the moment somebody presses a control that turns
+     * out to be inert.</p>
+     */
+    public <T extends UIElement> T require(String selector, Class<T> type) {
+        T found = find(selector, type);
+        if (found == null) {
+            throw new IllegalStateException("no " + type.getSimpleName() + " matching '" + selector
+                    + "' under <" + tagName() + ">");
+        }
+        return found;
+    }
+
     // ── Hit-testing ──────────────────────────────────────────────────────────
 
     /**
