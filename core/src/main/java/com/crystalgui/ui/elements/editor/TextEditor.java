@@ -314,6 +314,17 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private boolean highlightsDirty = true;
 
     /**
+     * The model rows the pending rebuild is confined to, or null for every realised row.
+     *
+     * <p>Set only by the edit path and cleared by {@link #markHighlightsDirty}, so anything that dirties
+     * the highlights <em>after</em> an edit — a search re-running, occurrences moving — widens it back to
+     * everything on its own. That ordering is the whole safety argument: narrowing is opt-in and every
+     * other producer overrides it by doing what it already did.</p>
+     */
+    @Nullable
+    private int[] highlightRowLimit;
+
+    /**
      * The viewport moved, so {@link #refreshHighlights} must run — but every row it still shows keeps the
      * bands it has. Distinct from {@link #highlightsDirty}, which means the bands themselves are wrong.
      */
@@ -324,9 +335,17 @@ public class TextEditor extends ScrollerView implements UndoScope {
      *
      * <p>For the subsystems that own a range set of their own — find, occurrences — since the flag itself
      * is the editor's and the pass that reads it is too.</p>
+     *
+     * <h3>...and now the only writer of the flag, which is what makes the row limit trustworthy</h3>
+     *
+     * <p>Thirteen places dirtied the highlights by assignment, and one of them — an edit — knows
+     * something the other twelve do not: <b>which rows it touched</b>. Routing every site through here
+     * makes "assume every row" the default a caller has to opt out of, rather than a fact about twelve
+     * scattered assignments that the thirteenth quietly contradicts. @see #highlightRowLimit</p>
      */
     void markHighlightsDirty() {
         highlightsDirty = true;
+        highlightRowLimit = null;
     }
 
     /**
@@ -718,7 +737,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             long timed = FrameProfile.begin();
             tokenizer.edited(buffer.document(), change);
             FrameProfile.step(timed, "tokenizer.edited");
-            highlightsDirty = true;
+            markHighlightsDirty();
             FrameProfile.leave(changed, "buffer.onChanged head");
             // BEFORE reprojectAfterEdit, which is what advances previousLineCount -- this needs the count
             // as it was in order to tell a same-row edit from one that shifted every row below it.
@@ -765,8 +784,15 @@ public class TextEditor extends ScrollerView implements UndoScope {
             folds.markDirty();
             FrameProfile.step(piece, "ed:folds.markDirty");
             long rebound = FrameProfile.begin();
-            rebindRealisedLines(rowsTouchedBy(change, viewLinesBefore));
+            int[] touched = rowsTouchedBy(change, viewLinesBefore);
+            rebindRealisedLines(touched);
             FrameProfile.step(rebound, "rebindRealisedLines");
+            // AND THE BANDS ARE CONFINED TO THE SAME ROWS. Set here rather than beside the
+            // markHighlightsDirty() above because this is the first point the answer exists -- and
+            // because anything later in this listener that dirties the highlights for a reason of its
+            // own (find.refreshAfterEdit is the one that does) clears it again, which is the direction
+            // that keeps this safe.
+            highlightRowLimit = touched;
             // A document that shrank can leave a selection pointing past its end, and the caret then
             // indexes a row that is not there. Clamped HERE rather than at the keystroke that caused it,
             // because undo is no longer the only way in: edit.undo from a menu or the palette, a
@@ -1084,7 +1110,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         buffer.breakUndoCoalescing();
         updateBracketMatch();
         updateOccurrences();
-        highlightsDirty = true;
+        markHighlightsDirty();
         viewCursorsPart.restartBlink();
         // These two EAGERLY, ahead of the frame's own pass. A caret that only moved on the next
         // updateWindow would lag every keystroke by a frame, which is the one place in this widget where
@@ -1960,10 +1986,10 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // highlighting would sit one edit behind until something unrelated repainted.
         this.tokenizer.setInvalidationListener((fromOffset, toOffset) -> {
             invalidateRowSyntax(fromOffset, toOffset);
-            highlightsDirty = true;
+            markHighlightsDirty();
         });
         rowSyntax.clear();
-        highlightsDirty = true;
+        markHighlightsDirty();
         highlightedFrom = -1;
         highlightedTo = -1;
         return this;
@@ -2000,7 +2026,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         if (services != null) {
             services.semanticTokens().setInvalidationListener((fromOffset, toOffset) -> {
                 invalidateRowSyntax(fromOffset, toOffset);
-                highlightsDirty = true;
+                markHighlightsDirty();
                 // A NEW ANALYSIS LANDED. This is the only signal the editor gets that the engine knows more
                 // than it did, and a completion list opened against the previous one may have been unable
                 // to resolve its receiver at all. Asking again here is what stops an empty popup sitting on
@@ -2015,7 +2041,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
                     announced -> problems.install(services.id(), announced));
         }
         rowSyntax.clear();
-        highlightsDirty = true;
+        markHighlightsDirty();
         highlightedFrom = -1;
         highlightedTo = -1;
         return this;
@@ -2399,8 +2425,19 @@ public class TextEditor extends ScrollerView implements UndoScope {
         for (Map.Entry<Integer, UIElement> entry : realisedLines.entrySet()) {
             int viewLine = entry.getKey();
             if (viewLine < 0 || viewLine >= viewLineCount()) continue;
+            int modelRow = modelAt(viewLine).row();
             // ALREADY SHOWING THIS VIEW LINE, and nothing about its content changed. @see #bandsShownFor
-            if (!rebuildEveryRow && Integer.valueOf(viewLine).equals(bandsShownFor.get(entry.getValue()))) {
+            //
+            // The second half of the condition is what an EDIT buys. A rebuild triggered by anything else
+            // has to assume every row moved, but a single-character edit is confined to the rows
+            // `rowsTouchedBy` names -- and skipping the rest here skips the BUILD, not merely the
+            // publish. The comparison below already avoided re-publishing identical bands; this avoids
+            // assembling them in the first place, which is the part that was still costing ~1.9ms for
+            // twenty-six rows of which one had changed.
+            boolean untouchedByThisEdit = highlightRowLimit != null
+                    && (modelRow < highlightRowLimit[0] || modelRow > highlightRowLimit[1]);
+            if ((!rebuildEveryRow || untouchedByThisEdit)
+                    && Integer.valueOf(viewLine).equals(bandsShownFor.get(entry.getValue()))) {
                 continue;
             }
             // Ranges are offsets into the UIText this line owns, and that text is one VIEW line -- so a
@@ -2409,7 +2446,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // it, which reads as the highlighter losing sync rather than as a coordinate bug.
             int lineStart = viewLineStartOffset(viewLine);
             int lineEnd = viewLineEndOffset(viewLine);
-            int modelRow = modelAt(viewLine).row();
             int rowStart = buffer.document().lineStartOffset(modelRow);
 
             Map<String, List<TextRange>> byName = new LinkedHashMap<>();
@@ -2551,6 +2587,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
             }
             bandsShownFor.put(entry.getValue(), viewLine);
         }
+        // SPENT. It described one edit, and a limit left standing would confine the NEXT rebuild -- one
+        // raised by something with no row information at all -- to that edit's rows.
+        highlightRowLimit = null;
         FrameProfile.end(bandsTimed, "ed:highlightBands " + rebuilt + "/" + realisedLines.size()
                 + " (" + unchanged + " unchanged)");
     }
@@ -2704,7 +2743,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // may be negative, so a sentinel subtraction can overflow into a SMALL elapsed time.
         if (System.nanoTime() - lastEditNanos < TYPING_SETTLE_NANOS) return;
         editing = false;
-        if (!staleRows.isEmpty()) highlightsDirty = true;
+        if (!staleRows.isEmpty()) markHighlightsDirty();
     }
 
     /**
@@ -3056,7 +3095,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * differently. The rows are marked and re-queried on settle. See {@link #settleSyntaxIfIdle}.</p>
      */
     private void invalidateRowSyntax(int fromOffset, int toOffset) {
-        highlightsDirty = true;
+        markHighlightsDirty();
         if (toOffset >= SyntaxTokenizer.InvalidationListener.EVERYTHING
                 || fromOffset <= 0 && toOffset >= buffer.length()) {
             // OVER WHAT IS CACHED, not over every row in the document: a row nobody has looked at has
@@ -5387,7 +5426,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             //
             // Compared rather than assumed, so the method keeps its contract that a frame which changed
             // nothing writes nothing: setText no-ops on an unchanged string, and so does this.
-            if (!before.equals(textOf(entry.getValue()).getText())) highlightsDirty = true;
+            if (!before.equals(textOf(entry.getValue()).getText())) markHighlightsDirty();
         }
         FrameProfile.report(placed, "ed:rebind.layOutLine x" + rows);
         // NO markTreeDirty() HERE, and its absence is the point.
@@ -5415,7 +5454,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * consumed by whichever pass runs first, and the range comparison then holds the stale answer.</p>
      */
     public void invalidateHighlights() {
-        highlightsDirty = true;
+        markHighlightsDirty();
         highlightedFrom = -1;
         highlightedTo = -1;
     }
@@ -5513,7 +5552,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             firstRealised = -1;
             lastRealised = -1;
             rebindRealisedLines();
-            highlightsDirty = true;
+            markHighlightsDirty();
         }
 
         // AFTER reprojection, BEFORE the view line count is read. Folding changes how many view lines
@@ -5532,7 +5571,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             firstRealised = -1;
             lastRealised = -1;
             rebindRealisedLines();
-            highlightsDirty = true;
+            markHighlightsDirty();
             forgetWidestLine();
         }
 
