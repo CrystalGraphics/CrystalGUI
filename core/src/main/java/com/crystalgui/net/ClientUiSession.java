@@ -198,6 +198,11 @@ public final class ClientUiSession<T> {
         return title;
     }
 
+    /** The wire format — always the connection's own. @see ServerUiSession#ops() */
+    public DynamicOps<T> ops() {
+        return ops;
+    }
+
     /** Its uniqueness and persistence key, or {@code null} where the server named none. */
     @Nullable
     public String key() {
@@ -311,8 +316,41 @@ public final class ClientUiSession<T> {
          */
         bindNotify(UiMethods.TREE_DELTA, payload -> {
             StateMap<T> in = read(payload);
-            if (in.getInt(UiMethods.WINDOW, windowId) != windowId || root == null) return;
+            if (in.getInt(UiMethods.WINDOW, windowId) != windowId) return;
+            if (defer(() -> applyTreeDelta(in))) return;
+            applyTreeDelta(in);
+        });
 
+        bindNotify(UiMethods.STATE_DELTA, payload -> {
+            StateMap<T> in = read(payload);
+            if (in.getInt(UiMethods.WINDOW, windowId) != windowId) return;
+            if (defer(() -> applyStateDelta(in))) return;
+            applyStateDelta(in);
+        });
+        // BRING IT FORWARD. What re-opening an already-open window means: the tree, the scroll position
+        // and whatever is half-typed all stay, and only the compositor is asked to do something. A
+        // re-sent ui/openWindow would work and would throw away exactly the state the window was kept
+        // for. @see UiMethods#FOCUS_WINDOW
+        bindNotify(UiMethods.FOCUS_WINDOW, payload -> {
+            StateMap<T> in = read(payload);
+            if (in.getInt(UiMethods.WINDOW, windowId) != windowId || root == null) return;
+            if (onFocusRequested != null) onFocusRequested.run();
+        });
+
+        bindNotify(UiMethods.CLOSE_WINDOW, payload -> {
+            StateMap<T> in = read(payload);
+            if (in.getInt(UiMethods.WINDOW, windowId) != windowId) return;
+            String reason = in.getString("reason", "");
+            root = null;
+            deferred.clear();
+            release();
+            if (onWindowClosed != null) onWindowClosed.accept(reason);
+        });
+    }
+
+    /** @see #registerWindowMethods */
+    private void applyTreeDelta(StateMap<T> in) {
+        {
             for (StateMap<T> entry : in.getList("entries", e -> e)) {
                 int nid = entry.getInt("nid", -1);
                 UIElement anchor = NetworkIds.find(root, nid);
@@ -345,48 +383,28 @@ public final class ClientUiSession<T> {
                 return;
             }
             expectedElementCount = assigned;
-        });
+        }
+    }
 
-        bindNotify(UiMethods.STATE_DELTA, payload -> {
-            StateMap<T> in = read(payload);
-            if (in.getInt(UiMethods.WINDOW, windowId) != windowId || root == null) return;
-            for (StateMap<T> entry : in.getList("entries", e -> e)) {
-                int nid = entry.getInt("nid", -1);
-                UIElement target = NetworkIds.find(root, nid);
-                if (target == null) {
-                    CrystalGuiCore.LOGGER.warn("State update for unknown element {}", nid);
-                    continue;
-                }
-                if (shouldSuppress(target)) continue;
-                T state = entry.getRaw("s");
-                if (state == null) continue;
-                try {
-                    target.readStateFrom(new StateMap<>(ops, state));
-                } catch (RuntimeException bad) {
-                    // Per-entry, so one malformed update cannot take the rest of the batch with it.
-                    CrystalGuiCore.LOGGER.warn("Bad state for element {}: {}", nid, bad.getMessage());
-                }
+    /** @see #registerWindowMethods */
+    private void applyStateDelta(StateMap<T> in) {
+        for (StateMap<T> entry : in.getList("entries", e -> e)) {
+            int nid = entry.getInt("nid", -1);
+            UIElement target = NetworkIds.find(root, nid);
+            if (target == null) {
+                CrystalGuiCore.LOGGER.warn("State update for unknown element {}", nid);
+                continue;
             }
-        });
-
-        // BRING IT FORWARD. What re-opening an already-open window means: the tree, the scroll position
-        // and whatever is half-typed all stay, and only the compositor is asked to do something. A
-        // re-sent ui/openWindow would work and would throw away exactly the state the window was kept
-        // for. @see UiMethods#FOCUS_WINDOW
-        bindNotify(UiMethods.FOCUS_WINDOW, payload -> {
-            StateMap<T> in = read(payload);
-            if (in.getInt(UiMethods.WINDOW, windowId) != windowId || root == null) return;
-            if (onFocusRequested != null) onFocusRequested.run();
-        });
-
-        bindNotify(UiMethods.CLOSE_WINDOW, payload -> {
-            StateMap<T> in = read(payload);
-            if (in.getInt(UiMethods.WINDOW, windowId) != windowId) return;
-            String reason = in.getString("reason", "");
-            root = null;
-            release();
-            if (onWindowClosed != null) onWindowClosed.accept(reason);
-        });
+            if (shouldSuppress(target)) continue;
+            T state = entry.getRaw("s");
+            if (state == null) continue;
+            try {
+                target.readStateFrom(new StateMap<>(ops, state));
+            } catch (RuntimeException bad) {
+                // Per-entry, so one malformed update cannot take the rest of the batch with it.
+                CrystalGuiCore.LOGGER.warn("Bad state for element {}: {}", nid, bad.getMessage());
+            }
+        }
     }
 
     /**
@@ -400,6 +418,55 @@ public final class ClientUiSession<T> {
     private void bindNotify(String method, MessageRouter.NotificationHandler<T> handler) {
         if (mux != null) mux.onNotify(windowId, method, handler);
         else router.onNotify(method, handler);
+    }
+
+    /**
+     * Deltas that arrived <b>before the tree existed</b>, waiting for it.
+     *
+     * <h3>The window between opening and being able to draw</h3>
+     *
+     * <p>{@code ui/openWindow} carries a hash, so unless the description is already cached the client
+     * has to <em>ask</em> for it — and the server is free to flush state in the meantime, because
+     * nothing tells it the far side is not ready. Both delta handlers began
+     * {@code if (… || root == null) return;}, so everything in that window was <b>silently dropped</b>.</p>
+     *
+     * <p>And permanently, which is what makes it worse than a dropped frame: {@code Property.set}
+     * returns early on an unchanged value, so a widget the server has already written keeps its value
+     * and is never marked dirty again. The client shows whatever the description said at open, forever,
+     * for exactly the fields that changed early. A window whose first tick writes a status line loses
+     * that line for the life of the window.</p>
+     *
+     * <p>Queued and replayed <b>in arrival order</b>, which is the whole correctness argument: ids are a
+     * depth-first position, so a state delta computed after a renumber must be applied after the tree
+     * delta that caused it. Bounded by one description round trip, cleared if the window is refused or
+     * closed.</p>
+     */
+    private final Deque<Runnable> deferred = new ArrayDeque<>();
+
+    /**
+     * Holds {@code apply} until the tree exists, and says whether it did.
+     *
+     * @return true when it was queued and the caller must not run it now
+     */
+    private boolean defer(Runnable apply) {
+        if (root != null) return false;
+        // MUTATION CHECK: drop the queue here and aStateChangeMadeWhileTheDescriptionIsStillInFlightIsNotLost
+        // fails, which is the whole of what it is for.
+        deferred.add(apply);
+        return true;
+    }
+
+    /** Replays what arrived while the description was in flight, in order. */
+    private void drainDeferred() {
+        if (deferred.isEmpty()) return;
+        List<Runnable> pending = new ArrayList<>(deferred);
+        deferred.clear();
+        for (Runnable apply : pending) {
+            // A tree delta in the queue can refuse the window and null the root, at which point the
+            // rest describe a tree that is no longer here.
+            if (root == null) break;
+            apply.run();
+        }
     }
 
     /** Lets go of the window id, and of the mux slots held under it. */
@@ -437,11 +504,16 @@ public final class ClientUiSession<T> {
                     + "produced {}. The two sides' widget constructors disagree — check for a version "
                     + "mismatch.", windowId, expectedElementCount, actual);
             windowId = -1;
+            // Nothing to apply them to, and they describe a tree this client refused to build.
+            deferred.clear();
             return;
         }
 
         root = rebuilt;
         wireReportedEvents(root);
+        // BEFORE the callback, so a host mounting the tree sees the state the server has already sent
+        // rather than the description's and one frame of catching up. @see #deferred
+        drainDeferred();
         if (onWindowOpened != null) onWindowOpened.accept(root);
     }
 

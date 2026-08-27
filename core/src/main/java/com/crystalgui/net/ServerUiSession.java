@@ -353,6 +353,18 @@ public final class ServerUiSession<T> implements UITreeObserver {
         return this;
     }
 
+    /**
+     * The wire format — <b>always the connection's own</b>.
+     *
+     * <p>Exposed so a handler builds its payloads in the same representation everything else on this
+     * wire uses, rather than reaching for a hardcoded {@code PlainOps.INSTANCE} that happens to be
+     * right today. A {@code StateMap} built with the wrong ops encodes values the codec on the way out
+     * cannot read.</p>
+     */
+    public DynamicOps<T> ops() {
+        return ops;
+    }
+
     public String type() {
         return type;
     }
