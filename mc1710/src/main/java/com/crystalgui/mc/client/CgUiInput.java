@@ -98,7 +98,7 @@ public final class CgUiInput {
      * each one line and each invisible when wrong -- LWJGL2's bottom-left origin, the wheel's sign,
      * the notch divisor, and that a move event carries no button and must not carry a click timestamp
      * or the multi-click counter drifts. A host that re-derives them gets a pointer at the wrong Y, a
-     * canvas that zooms backwards, or a triple-click from a slow double. {@code MachineScreen} is the
+     * canvas that zooms backwards, or a triple-click from a slow double. {@code CgUiScreen} is the
      * second host; the answer is to share these, not to copy them.</p>
      *
      * @param displayHeight raw device height — <b>not</b> {@code GuiScreen.height}, which is the scaled

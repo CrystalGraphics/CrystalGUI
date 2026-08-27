@@ -113,6 +113,40 @@ public final class SessionScope {
         return prefix.isEmpty() ? method : prefix + method;
     }
 
+    // ── Theming ─────────────────────────────────────────────────────────────
+
+    /**
+     * Names a stylesheet this window wants, <b>in order</b>.
+     *
+     * <p>Order is load-bearing and must not be sorted: the engine's sheet list is flat and ordered, and
+     * a later sheet wins ties at equal specificity.</p>
+     *
+     * <p>Only legal from {@link ServerWindow#bind} — the list is part of the {@code ui/openWindow} the
+     * host is about to send, and adding one afterwards would be naming a theme the client will never
+     * hear about.</p>
+     */
+    public SessionScope sheet(com.crystalgui.net.SheetRef ref) {
+        session.addSheet(ref);
+        return this;
+    }
+
+    /**
+     * Names a stylesheet <b>and offers its text</b>, so a client that has never heard of it can ask.
+     *
+     * <p>Use this for a sheet the server authored. The one-argument form is right for a theme the
+     * client is expected to already ship, where sending bytes both sides hold is waste.</p>
+     */
+    public SessionScope sheet(com.crystalgui.net.SheetRef ref, @Nullable String css) {
+        session.addSheet(ref, css);
+        return this;
+    }
+
+    /** Whether the engine's own sheet goes underneath. On by default, and almost always right. */
+    public SessionScope useUserAgentSheet(boolean use) {
+        session.setUseUserAgentSheet(use);
+        return this;
+    }
+
     // ── Composition ─────────────────────────────────────────────────────────
 
     /**
