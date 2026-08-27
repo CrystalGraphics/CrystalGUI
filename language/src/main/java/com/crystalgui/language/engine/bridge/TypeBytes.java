@@ -71,6 +71,23 @@ public interface TypeBytes {
     byte[] readable(String internalName);
 
     /**
+     * The same bytes, for a COMPILER rather than a reader — every member also declared under the name the
+     * runtime knows it by.
+     *
+     * <p>A script written against SRG names (`Minecraft.func_71410_x()`) runs perfectly, because that IS
+     * the runtime's name for it; it just did not compile, because {@link #readable} renames the member and
+     * the old name is gone. The two views part company for exactly one consumer — the name environment —
+     * and everything that READS a class keeps the plain one, since aliases in a decompiled library viewer
+     * would show every mapped member twice.</p>
+     *
+     * <p>Defaults to {@link #readable}, which is correct for any implementation with no mapping behind it:
+     * where nothing is renamed there is no second name to offer.</p>
+     */
+    default byte[] forCompiling(String internalName) {
+        return readable(internalName);
+    }
+
+    /**
      * A reflective stub for a type that exists to the JVM and has no bytes anywhere, or null.
      *
      * <p>Supertypes, members and signatures, no bodies. The two cases that occur are a class generated

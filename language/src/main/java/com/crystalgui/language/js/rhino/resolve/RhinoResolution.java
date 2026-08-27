@@ -207,6 +207,24 @@ public final class RhinoResolution {
      * <p>Null rather than a default, so a member the resolver cannot type keeps whatever the grammar
      * guessed. A worse answer than the grammar's is the one outcome not worth having.</p>
      */
+    /**
+     * The capture for an imported Java TYPE — {@code type.enum} for an enum, and so on.
+     *
+     * <p>Every imported name was painted a flat {@code type}, so an enum, an interface and a class were
+     * one colour. Java's side has always asked the engine for the kind; this is the same question, and the
+     * engine that answers it is the one already lent to this analyser.</p>
+     *
+     * <p>Null when nothing is known, which leaves the caller's own {@code type} in place — an unresolved
+     * import should stay coloured as the type it is meant to be rather than losing its colour entirely.</p>
+     */
+    @Nullable
+    public String typeCaptureFor(String binaryName) {
+        if (interop == null || binaryName == null || binaryName.isEmpty()) return null;
+        SymbolInfo described = interop.describe(binaryName, false);
+        if (described == null || described.kind() == null) return null;
+        return described.kind().captureName();
+    }
+
     public String memberCaptureAt(PropertyGet access) {
         Name property = access == null ? null : access.getProperty();
         if (property == null) return null;
@@ -256,7 +274,11 @@ public final class RhinoResolution {
                 // THE JAVA ENGINE'S OWN ANSWER, handed back unchanged. Rewriting it here would be a
                 // second opinion about a Java member, which is exactly what asking the Java engine was
                 // meant to avoid -- generic substitution and deprecation both travel with it.
-                if (!identifier.equals(candidate.name())) continue;
+                // EITHER NAME. A script may spell a Minecraft member the way the runtime does
+                // (`func_71276_C`) rather than the way the mapping shows it (`getServer`) -- it runs
+                // perfectly either way, and until this asked, the editor could say nothing at all about
+                // the first kind. @see InteropResolver#isCalled
+                if (!interop.isCalled(javaName, candidate, identifier)) continue;
                 // AND ITS SIGNATURE, WHICH `membersOf` DOES NOT CARRY, asked of the Java engine for this
                 // one member -- so a hover over `list.add` quotes `src.zip` exactly as it does in a .java
                 // file. Null when there is no source beside the class, and then the signature is assembled

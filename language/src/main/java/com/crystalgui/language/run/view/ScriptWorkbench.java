@@ -5,6 +5,9 @@ import com.crystalgui.core.async.JobLane;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
+import java.util.List;
+import java.util.Map;
+import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
@@ -100,7 +103,18 @@ public final class ScriptWorkbench implements Closeable {
         ScriptWorkbench installed =
                 new ScriptWorkbench(runtimes, console, sessions, panel, registry);
         ScriptCommands.register(registry, runtimes,
-                script -> installed.compileFor(workbench, script),
+                new ScriptCommands.ScriptSource() {
+                    @Override
+                    public ScriptRuntime.Compiled compile(Resource script) {
+                        return installed.compileFor(workbench, script);
+                    }
+
+                    @Override
+                    public void compileAsync(Resource script,
+                                             java.util.function.Consumer<ScriptRuntime.Compiled> onReady) {
+                        installed.compileForAsync(workbench, script, onReady);
+                    }
+                },
                 ScriptBindings::values,
                 installed::report,
                 // RUNNING SOMETHING BRINGS THE CONSOLE UP, which is what both references do -- output
@@ -188,6 +202,9 @@ public final class ScriptWorkbench implements Closeable {
     private final AtomicBoolean promptShown = new AtomicBoolean();
 
     private final JobKey promptKey = JobKey.of(ScriptWorkbench.class, "run-input-prompt");
+
+    /** @see #compileForAsync */
+    private final JobKey compileKey = JobKey.of(ScriptWorkbench.class, "run-compile");
 
     /**
      * Brings the console up when something blocks reading {@code System.in}.
@@ -298,6 +315,114 @@ public final class ScriptWorkbench implements Closeable {
     }
 
     /**
+     * The compile, <b>off the frame thread</b> — which is the only place it can succeed.
+     *
+     * <h3>Two threads, and each does the part only it may do</h3>
+     *
+     * <p>Everything a compile needs from the application is UI-owned: which files are open, which editor
+     * holds one, and its buffer. So the SNAPSHOT is taken here, on the frame thread, exactly as before.
+     * The compile itself is a pure function of that snapshot, and {@code AGENTS.md} is explicit that such
+     * work belongs on {@link JobScheduler} — the same rule the {@code ui-budget} guard prints when it
+     * catches one.</p>
+     *
+     * <p>It is not a tidiness point. A script naming a project file nobody has open needs that file READ,
+     * and on a real host that is a round trip whose answer the frame loop delivers. Compiling on the frame
+     * thread therefore waits for a message only it can deliver: the read times out, the type never
+     * resolves, and the run fails with {@code cannot be resolved} on a file the editor reports as clean.
+     * It worked in the harness throughout, because an in-memory workspace answers inside the call.</p>
+     *
+     * <p>{@code onDone} runs on the UI thread during {@code drain()}, which is what lets the refusal
+     * notification and the console below stay where they are.</p>
+     */
+    private void compileForAsync(Workbench workbench, @Nullable Resource script,
+                                 java.util.function.Consumer<ScriptRuntime.Compiled> onReady) {
+        Snapshot snapshot = snapshotFor(workbench, script);
+        if (snapshot == null) {
+            onReady.accept(null);
+            return;
+        }
+        JobScheduler.shared()
+                .<ScriptRuntime.Compiled>job(compileKey, JobLane.LATENCY,
+                        context -> snapshot.runtime.compileScript(
+                                snapshot.name, snapshot.source, snapshot.bindings))
+                .onDone(compiled -> onReady.accept(finish(snapshot, compiled)))
+                .submit();
+    }
+
+    /** What a compile needs from the application, read on the thread that owns it. */
+    private static final class Snapshot {
+
+        private final ScriptRuntime runtime;
+        private final String name;
+        private final String source;
+        private final Map<String, String> bindings;
+        @Nullable private final CgPath path;
+
+        Snapshot(ScriptRuntime runtime, String name, String source,
+                 Map<String, String> bindings, @Nullable CgPath path) {
+            this.runtime = runtime;
+            this.name = name;
+            this.source = source;
+            this.bindings = bindings;
+            this.path = path;
+        }
+    }
+
+    /** The UI-thread half of a run: which file, which runtime, and what it says right now. */
+    @Nullable
+    private Snapshot snapshotFor(Workbench workbench, @Nullable Resource script) {
+        CgPath path;
+        TextEditor editor;
+        if (script == null) {
+            editor = workbench.activeEditor();
+            if (editor == null) {
+                Notifications.warning("Run: no text file is open");
+                return null;
+            }
+            path = workbench.activeFilePath();
+        } else {
+            path = script.asPath();
+            if (path == null) {
+                Notifications.warning("Run: " + script.name() + " has no file to read");
+                return null;
+            }
+            // ASKED, NOT documentFor() -- see compileFor.
+            if (!workbench.openPaths().contains(path)) {
+                Notifications.warning("Run: " + path.name() + " is not open");
+                return null;
+            }
+            editor = workbench.editorFor(path);
+            if (editor == null) {
+                Notifications.warning("Run: " + path.name() + " is not a text file");
+                return null;
+            }
+        }
+
+        String name = path == null ? "Script" : path.name();
+        ScriptRuntime runtime = runtimes.forFile(name);
+        if (runtime == null) {
+            Notifications.warning("Run: " + name + " is not a script this workbench can run ("
+                    + runtimes.languageNames() + ")");
+            return null;
+        }
+        // THE BUFFER, READ HERE. It is the editor's text rather than the file on disk, so Run executes
+        // what is on screen including unsaved edits -- and a buffer may only be read on this thread.
+        return new Snapshot(runtime, name, editor.buffer().document().toString(),
+                ScriptBindings.types(), path);
+    }
+
+    /** The UI-thread half again: refuse with a reason, or name the file the run came from. */
+    @Nullable
+    private ScriptRuntime.Compiled finish(Snapshot snapshot, @Nullable ScriptRuntime.Compiled compiled) {
+        if (compiled == null) return null;
+        if (!compiled.successful()) {
+            refuse(snapshot.name, compiled);
+            return null;
+        }
+        return snapshot.path == null ? compiled : compiled.withSource(Resource.of(snapshot.path));
+    }
+
+    /**
      * One compile, whichever way the script was named.
      *
      * <p>It is the <b>editor's buffer</b> rather than the file on disk, so Run executes what is on screen
@@ -320,16 +445,48 @@ public final class ScriptWorkbench implements Closeable {
         ScriptRuntime.Compiled compiled = runtime.compileScript(
                 name, editor.buffer().document().toString(), ScriptBindings.types());
         if (!compiled.successful()) {
-            // THE DIAGNOSTICS ALREADY SAY WHAT IS WRONG, in the editor, on the line. This says only that
-            // the run did not start, because a notification repeating a compiler message is a second
-            // report of the same thing in a worse place.
-            Notifications.error("Run: " + name + " has compile errors");
+            refuse(name, compiled);
             return null;
         }
         // THE FILE IT CAME FROM, which is what attributes its output and marks it as running. Built from
         // the CgPath rather than from a scheme and a string: only that carries a path, and a resource
         // without one looks up correctly everywhere and is silently skipped by folder bubbling.
         return path == null ? compiled : compiled.withSource(Resource.of(path));
+    }
+
+    /**
+     * Says a run was refused, and why when there is a why.
+     *
+     * <p>ONE of these, because both compile paths reach it and a second copy would drift.</p>
+     */
+    private static void refuse(String name, ScriptRuntime.Compiled compiled) {
+        {
+            // THE DIAGNOSTICS USUALLY SAY WHAT IS WRONG, in the editor, on the line -- so the headline
+            // stays terse rather than repeating a compiler message in a worse place.
+            //
+            // BUT A REFUSAL WITH NOTHING TO SHOW IS A DEAD END, and that premise fails more often than it
+            // reads. `messages()` is documented as "what went wrong, for a run that was refused" and was
+            // being discarded here, so a compile that failed WITHOUT producing diagnostics -- a unit that
+            // never reached the requestor, a project source that could not be read in time, an
+            // environment that refused a name -- announced only that something had gone wrong, on a file
+            // the editor was simultaneously reporting as clean. There was then nowhere left to look: the
+            // Problems panel is empty because the analyser is happy, and the one component that knows the
+            // reason threw it away. @see ScriptRuntime.Compiled#messages
+            //
+            // Shown as DETAIL rather than in the headline, so the common case reads exactly as before.
+            List<String> why = compiled.messages();
+            Notification refused = Notification.error("Run: " + name + " has compile errors");
+            if (why != null && !why.isEmpty()) {
+                StringBuilder detail = new StringBuilder();
+                for (int at = 0; at < why.size() && at < 3; at++) {
+                    if (detail.length() > 0) detail.append('\n');
+                    detail.append(why.get(at));
+                }
+                if (why.size() > 3) detail.append("\n(+").append(why.size() - 3).append(" more)");
+                refused = refused.withDetail(detail.toString());
+            }
+            Notifications.show(refused);
+        }
     }
 
     /**

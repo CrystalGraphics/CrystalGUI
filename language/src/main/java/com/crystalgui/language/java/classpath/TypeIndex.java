@@ -1,6 +1,7 @@
 package com.crystalgui.language.java.classpath;
 
 import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgui.language.platform.ScriptService;
 import com.crystalgui.language.platform.ScriptServices;
 
 import com.crystalgui.text.SimilarNames;
@@ -70,13 +71,35 @@ public final class TypeIndex {
      * root. The <b>same String instance</b> is shared by every entry from one archive, so this costs a
      * pointer per entry rather than a copy, which matters at fifty thousand of them.</p>
      */
-    public record Entry(String simpleName, String packageName, String container) {
+    /**
+     * A type the classpath holds.
+     *
+     * <h3>Two spellings, because a NESTED type has two</h3>
+     *
+     * <p>{@code WorldSettings.GameType} is what an author writes and what an import must say;
+     * {@code WorldSettings$GameType} is what the class file is called. For a top-level type they are the
+     * same string, which is why one field served until nested types were indexed at all.</p>
+     *
+     * @param packageName for a nested type this is the ENCLOSING TYPE, not a package — so
+     *                    {@link #qualifiedName} spells the importable name and {@code simpleName} stays
+     *                    what somebody types to find it
+     * @param binaryName  the class file's own name, {@code $} and all
+     */
+    public record Entry(String simpleName, String packageName, String container, String binaryName) {
+
+        /** A top-level type, whose two spellings are the same. */
+        public Entry(String simpleName, String packageName, String container) {
+            this(simpleName, packageName, container,
+                    packageName.isEmpty() ? simpleName : packageName + "." + simpleName);
+        }
+
         public String qualifiedName() {
             return packageName.isEmpty() ? simpleName : packageName + "." + simpleName;
         }
 
+        /** From the BINARY name — a nested type does not live at {@code Outer/Inner.class}. */
         String classFilePath() {
-            return qualifiedName().replace('.', '/') + ".class";
+            return binaryName.replace('.', '/') + ".class";
         }
     }
 
@@ -107,6 +130,25 @@ public final class TypeIndex {
      * classpath without ever biting a real one.</p>
      */
     private static final int MAX_PACKAGES = 500;
+
+    /**
+     * The types directly in ONE package get the package budget, not the search budget.
+     *
+     * <p>Forty is right for a <em>search</em>: {@link #matching} is asked about a simple name and the
+     * classpath is unbounded, so its answer is a sample and a narrower query gives a better one. An
+     * import query is not a search. {@code java.util.} names a set that is finite, closed and known —
+     * ninety-six types on a modern JDK — and IntelliJ shows the whole of it, scrolled.</p>
+     *
+     * <p>Capping it at forty samples nothing: it truncates by ALPHABET, so {@code java.util.} stopped
+     * inside the {@code F}s and {@code List}, {@code Map} and {@code Set} were absent from their own
+     * package. The list is sorted by name, so the missing half is always the same half — which reads as
+     * the index not having those types rather than as a cap, because everything shown is correct.</p>
+     *
+     * <p>This is exactly the argument {@link #MAX_PACKAGES} already makes one field up, and it applies
+     * with more force here: a sub-package list is a few dozen, and a package's type list is a few
+     * hundred at worst. Both bound a pathological classpath without ever biting a real one.</p>
+     */
+    private static final int MAX_PACKAGE_TYPES = 500;
 
     private final List<String> classpath;
     private List<Entry> entries;
@@ -302,9 +344,9 @@ public final class TypeIndex {
      * Worse, {@code net.minecraft.client.Minecraft} was missing from its own package while two classes
      * alphabetically before it were shown.</p>
      *
-     * <p>So this is a full pass with the two output lists bounded <b>separately</b>. Packages are deduped
-     * to a segment each and there are rarely more than a few dozen, so the whole set survives; types are
-     * capped, because one package genuinely can hold hundreds and that is a list nobody reads.</p>
+     * <p>So this is a full pass with the two output lists bounded <b>separately</b>, and both bounds are
+     * sized for a package rather than for a search: a sub-package set is a few dozen and a package's own
+     * types a few hundred, so in practice the whole of both survives. @see #MAX_PACKAGE_TYPES</p>
      *
      * @param parentPackage the completed part, {@code ""} for the top level
      * @param partialSegment what has been typed of the next segment, possibly empty
@@ -351,7 +393,7 @@ public final class TypeIndex {
             String owner = entry.packageName();
             if (owner.equals(parent)) {
                 if (!startsWith(entry.simpleName(), partial)) continue;
-                if (types.size() >= MAX_RESULTS) {
+                if (types.size() >= MAX_PACKAGE_TYPES) {
                     truncated = true;
                     continue;
                 }
@@ -629,7 +671,25 @@ public final class TypeIndex {
     private static final int MAX_HIERARCHY_HOPS = 8;
 
     private byte[] bytesOf(Entry entry) {
-        return bytesFrom(entry.container(), entry.classFilePath());
+        byte[] fromContainer = bytesFrom(entry.container(), entry.classFilePath());
+        if (fromContainer != null) return fromContainer;
+        // THE LIVE RUNTIME, when the container has nothing under that path.
+        //
+        // The path is built from the READABLE name, and on an obfuscated host no jar entry is called
+        // that -- `net/minecraft/client/Minecraft.class` is `ave.class` on disk. So this missed for every
+        // Minecraft type and every one of them drew the plain-class glyph, an enum included. It was
+        // invisible while the picker's rows were mostly JDK, where the two names agree.
+        //
+        // The same service that renamed the entry in the first place can produce the bytes, so this asks
+        // it rather than teaching the index a second thing about obfuscation. @see #scan
+        try {
+            ScriptService platform = CgPlatform.get(ScriptServices.SERVICE);
+            if (platform == ScriptService.NONE) return null;
+            return platform.liveBytes().bytesOf(entry.binaryName().replace('.', '/'));
+        } catch (Exception | LinkageError unavailable) {
+            // A kind nobody could read is a plain class, which is what the caller already defaults to.
+            return null;
+        }
     }
 
     /** Reads one class file out of whichever kind of container it came from. */
@@ -781,16 +841,38 @@ public final class TypeIndex {
         String internalName = path.substring(0, path.length() - ".class".length());
         String binary = CgPlatform.get(ScriptServices.SERVICE).runtimeClassName(internalName).replace('/', '.');
 
-        // NESTED TYPES ARE SKIPPED. `Map$Entry` cannot be imported under that name and inserting it
-        // produces a compile error naming a type the list just offered -- which reads as the completion
-        // being wrong rather than the name being unusable.
+        // A NESTED TYPE IS INDEXED UNDER THE NAME AN AUTHOR WRITES, not discarded.
         //
-        // AFTER THE RENAME, NOT BEFORE, and that ordering is the whole of it. 1.7.10 obfuscation gives an
-        // inner class a TOP-LEVEL Notch name -- `avf.class`, no dollar in it anywhere -- so a check
-        // against the path passes it, and the dollar only appears once the name is translated back. The
-        // list filled with Minecraft$1 through Minecraft$16 before Minecraft itself, none of which can be
-        // imported. Checking the on-disk path was correct for as long as the two names were the same.
-        if (binary.indexOf('$') >= 0) return;
+        // This used to be `if (binary.indexOf('$') >= 0) return;`, on the true observation that
+        // `Map$Entry` cannot be imported under that name -- and it threw away every nested type on the
+        // classpath to say so. `net.minecraft.world.WorldSettings.GameType` is perfectly importable and
+        // was in no index, so Go To File could not find it, no completion offered it, and Ctrl+B had
+        // nothing to navigate to. Meanwhile the class loads and runs, because the RUNTIME never consults
+        // any of this -- which is what makes the symptom read as "that class does not exist" from an
+        // editor that is executing it successfully in the next pane.
+        //
+        // What that guard was RIGHT about is anonymous and local classes: `Minecraft$1` through
+        // `Minecraft$16` are unwritable in any spelling and filled the list ahead of `Minecraft` itself.
+        // They are told apart by their first character -- the JLS gives an anonymous class a number, and
+        // a local one a number followed by its name -- so a segment starting with a digit is not
+        // something anybody can type.
+        //
+        // AFTER THE RENAME, NOT BEFORE, and that ordering is still the whole of it. 1.7.10 obfuscation
+        // gives an inner class a TOP-LEVEL Notch name -- `avf.class`, no dollar in it anywhere -- so a
+        // check against the path sees nothing, and the dollar only appears once the name is translated
+        // back.
+        int nestedAt = binary.indexOf('$');
+        if (nestedAt >= 0) {
+            if (!writableNestedName(binary)) return;
+            // The ENCLOSING TYPE takes the place of the package: `qualifiedName()` then spells the
+            // importable form and the simple name stays what somebody types to find it.
+            String enclosing = binary.substring(0, binary.lastIndexOf('$')).replace('$', '.');
+            String nested = binary.substring(binary.lastIndexOf('$') + 1);
+            if (nested.isEmpty() || !Character.isJavaIdentifierStart(nested.charAt(0))) return;
+            if (enclosing.startsWith("sun.") || enclosing.contains(".internal.")) return;
+            into.add(new Entry(nested, enclosing, container, binary));
+            return;
+        }
         // NOT FOR USERS. `sun.` and anything with an `internal` package segment is implementation detail
         // that the compiler will refuse or warn about; offering it is offering a mistake. IntelliJ hides
         // the same set. Filtered here rather than per-source so the classpath gets it too.
@@ -804,5 +886,24 @@ public final class TypeIndex {
         // flags. CLASS is the honest majority answer and the icon is the only thing that reads it; the
         // alternative is opening every entry on the classpath to colour a letter.
         into.add(new Entry(simple, packageName, container));
+    }
+
+    /**
+     * Whether every nesting segment of {@code binary} is a name somebody could write.
+     *
+     * <p>The JLS numbers an anonymous class ({@code Outer$1}) and prefixes a local one with a number
+     * ({@code Outer$1Helper}), so a segment beginning with a digit belongs to neither an import nor a
+     * completion list. Every segment is checked rather than only the last, because the enclosing chain
+     * has to be writable too — {@code Outer$1$Inner} is a member of something unnameable.</p>
+     */
+    private static boolean writableNestedName(String binary) {
+        int from = 0;
+        while (true) {
+            int at = binary.indexOf('$', from);
+            String segment = at < 0 ? binary.substring(from) : binary.substring(from, at);
+            if (segment.isEmpty() || !Character.isJavaIdentifierStart(segment.charAt(0))) return false;
+            if (at < 0) return true;
+            from = at + 1;
+        }
     }
 }

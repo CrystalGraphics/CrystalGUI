@@ -76,7 +76,8 @@ public final class ClasspathTypeSearch implements TypeSearch {
             }
             TypeIndex.Kind kind = index.kindOf(entry);
             out.add(new Result(entry.simpleName(), entry.packageName(), entry.container(),
-                    kind == null ? null : kind.kind(), kind != null && kind.isAbstract()));
+                    kind == null ? null : kind.kind(), kind != null && kind.isAbstract(),
+                    entry.binaryName()));
         }
         FrameProfile.step(timed, "kindOf x" + out.size());
         return new Results(out, matched.truncated());

@@ -91,11 +91,27 @@ public final class SourcePackages {
      *                  one, this is where the two would disagree
      */
     static String unitPath(String className, String source) {
-        String simple = className == null || className.isEmpty() ? "Script" : className;
+        // THE EXTENSION COMES OFF FIRST, and off the name BOTH readers see.
+        //
+        // A dot means opposite things in the two spellings callers hand this. In a qualified name it
+        // separates the package (`com.example.Main`); in a file name it introduces the extension
+        // (`Main.java`), which is what the RUN passes -- `path.name()`. Read as a qualifier, `Main.java`
+        // gave a simple name of `java` AND a package of `Main`, so the unit compiled as
+        // `com.example.java` in a file called `java.java`: ECJ reported that `Main` must be declared in
+        // its own file, and `self` became `com/example/java`, which stopped `fromProject` excluding the
+        // real name -- so the project index served the same file a second time and the type was declared
+        // twice.
+        //
+        // Neither message reached the author: the analyser passes a real class name so the editor stayed
+        // green, and the run's messages went to `Compiled.messages()`, which the notification discarded.
+        String named = className == null || className.isEmpty() ? "Script" : className;
+        if (named.endsWith(".java")) named = named.substring(0, named.length() - ".java".length());
+
+        String simple = named;
         int lastDot = simple.lastIndexOf('.');
         if (lastDot >= 0) simple = simple.substring(lastDot + 1);
 
-        String effective = effectivePackage(className, source);
+        String effective = effectivePackage(named, source);
         return effective.isEmpty() ? simple + ".java"
                 : effective.replace('.', '/') + "/" + simple + ".java";
     }

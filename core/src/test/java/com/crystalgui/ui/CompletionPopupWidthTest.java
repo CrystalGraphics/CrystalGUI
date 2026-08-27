@@ -111,6 +111,119 @@ public class CompletionPopupWidthTest extends UiTestBase {
         assertTrue("no rows carried a type, so nothing was measured", measured >= 4);
     }
 
+    /**
+     * <b>Nothing in a row is ever painted outside the popup.</b>
+     *
+     * <h3>"Never gives" is not the same claim as "gives last"</h3>
+     *
+     * <p>The type column was made {@code flex-shrink: 0} so it could not be shaved to a stub, and the
+     * test above is what pins that. The cost only shows once a row cannot fit at all: with the label
+     * already shrunk to nothing there was nothing left to give, so the row exceeded the popup and the
+     * type was drawn OUTSIDE it, over the editor behind — past the scrollbar, on rows whose own detail
+     * was short enough to have fit anywhere.</p>
+     *
+     * <p>Asserted as a geometric containment rather than as a width, because the failure is not that the
+     * column is the wrong size: it is that it is in the wrong place. A width assertion passes against a
+     * row that is correctly proportioned and sitting half a popup to the right.</p>
+     *
+     * <p>The long details are the point of the fixture — a list of short ones fits whatever the shrink
+     * factors say, and passes against no fix at all.</p>
+     */
+    @Test
+    public void nothingInARowIsPaintedOutsideThePopup() {
+        UIElement root = new UIElement().layout(l -> l.width(320).height(600));
+        UIWindow window = new UIWindow(Ui.of(root));
+        window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
+        window.init(320, 600);
+
+        List<CompletionItem> items = new ArrayList<>();
+        items.add(constant("META-INF", "META-INF"));
+        items.add(constant("com", "com"));
+        items.add(constant("getPropertyWithAVeryLongName", "java.util.concurrent.ConcurrentHashMap"));
+        items.add(constant("x", "java.util.concurrent.atomic.AtomicIntegerFieldUpdater"));
+
+        TextBuffer buffer = new TextBuffer("");
+        CompletionSession session = CompletionSession.open(
+                buffer, offering(items), 0, CompletionProvider.TriggerKind.EXPLICIT, null);
+        assertTrue("the stub provider must have produced a session", session != null);
+
+        CompletionPopup popup = new CompletionPopup();
+        popup.attach(window, session);
+        for (int i = 0; i < 8; i++) window.updateWithoutPainting();
+
+        float popupRight = popup.getRuntimeCache().getX() + popup.getRuntimeCache().getWidth();
+        int checked = 0;
+        for (UIElement row : rowsIn(popup)) {
+            UIText detail = detailOf(row);
+            if (detail == null || detail.getText().isEmpty()) continue;
+            checked++;
+            float right = detail.getRuntimeCache().getX() + detail.getRuntimeCache().getWidth();
+            assertTrue("'" + detail.getText() + "' is painted outside the popup: ends at "
+                    + right + ", popup ends at " + popupRight, right <= popupRight + 0.5f);
+        }
+        assertTrue("no rows carried a type, so nothing was checked", checked >= 3);
+    }
+
+    /**
+     * <b>Every realised row is the same width.</b>
+     *
+     * <p>A list is a column of identical boxes, so this ought to be free — and it was not. With enough
+     * items to scroll, the rows realised first came out narrower than the ones realised after, and the
+     * wider ones ran their right-aligned type column under the scrollbar and off the edge of the popup.
+     * The top of the list looked perfect and the bottom looked clipped, which reads as a clipping bug
+     * rather than as a sizing one.</p>
+     *
+     * <p>Enough items to force a scrollbar is the whole fixture: a list that fits has one batch of rows
+     * and cannot show the difference, which is why every earlier test here passed.</p>
+     */
+    @Test
+    public void everyRealisedRowIsTheSameWidth() {
+        UIElement root = new UIElement().layout(l -> l.width(420).height(600));
+        UIWindow window = new UIWindow(Ui.of(root));
+        window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
+        window.init(420, 600);
+
+        List<CompletionItem> items = new ArrayList<>();
+        // Long enough to scroll, and with types of very different lengths so a mis-sized row shows.
+        items.add(constant("err", "PrintStream"));
+        items.add(constant("in", "InputStream"));
+        items.add(constant("out", "PrintStream"));
+        for (int at = 0; at < 30; at++) {
+            items.add(constant("member" + at, at % 2 == 0 ? "String" : "Map<String,String>"));
+        }
+
+        TextBuffer buffer = new TextBuffer("");
+        CompletionSession session = CompletionSession.open(
+                buffer, offering(items), 0, CompletionProvider.TriggerKind.EXPLICIT, null);
+        assertTrue("the stub provider must have produced a session", session != null);
+
+        CompletionPopup popup = new CompletionPopup();
+        popup.attach(window, session);
+        for (int i = 0; i < 10; i++) window.updateWithoutPainting();
+
+        float first = -1f;
+        int checked = 0;
+        for (UIElement row : rowsIn(popup)) {
+            float width = row.getRuntimeCache().getWidth();
+            if (width <= 0f) continue;          // pooled and hidden templates measure nothing
+            checked++;
+            if (first < 0f) first = width;
+            assertEquals("realised rows came out different widths, so the wider ones run past the popup",
+                    first, width, 0.5f);
+
+            // AND THE TYPE HAS A BOX AT ALL. This is the assertion the row-width one cannot make: a
+            // collapsed detail is the same width on every row, so "all rows agree" is satisfied by every
+            // one of them being ZERO. A zero-width UIText still paints -- from the right edge its
+            // collapsed box sits at -- and the row's `overflow: hidden` cuts it a dozen pixels later, so
+            // it reads as clipping rather than as a box that was never sized.
+            UIText detail = detailOf(row);
+            if (detail == null || detail.getText().isEmpty()) continue;
+            assertTrue("'" + detail.getText() + "' has no width, so only the first few pixels can paint",
+                    detail.getRuntimeCache().getWidth() > 0f);
+        }
+        assertTrue("no rows were realised, so nothing was checked", checked >= 5);
+    }
+
     /** The type column — the last child of a row, after the growing spacer. */
     private static UIText detailOf(UIElement row) {
         for (UIElement child : row.getChildren()) {

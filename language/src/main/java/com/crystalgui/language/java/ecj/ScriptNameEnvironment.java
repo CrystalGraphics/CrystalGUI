@@ -196,9 +196,24 @@ final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
         NameEnvironmentAnswer cached = cache.get(internalName);
         if (cached != null) return cached;
         if (!misses.containsKey(internalName)) {
-            byte[] bytes = types.readable(internalName);
+            // FOR COMPILING, so a member spelled the way the runtime spells it resolves too. This is the
+            // one consumer that wants both names; the decompiler deliberately keeps the plain view.
+            byte[] bytes = types.forCompiling(internalName);
             if (bytes != null) {
                 NameEnvironmentAnswer answer = answerFor(internalName, bytes);
+                if (answer != null) {
+                    remember(internalName, answer);
+                    return answer;
+                }
+            }
+            // A NESTED TYPE IS SPELLED WITH A DOLLAR, and ECJ cannot know which dot is the package
+            // boundary -- it hands over every segment alike and expects the environment to know. So a
+            // miss on `a/b/Outer/Inner` is asked again as `a/b/Outer$Inner`, right-hand dot first, which
+            // is the common shape. @see #nestedSpellings
+            for (String nested : nestedSpellings(internalName)) {
+                byte[] inner = types.forCompiling(nested);
+                if (inner == null) continue;
+                NameEnvironmentAnswer answer = answerFor(nested, inner);
                 if (answer != null) {
                     remember(internalName, answer);
                     return answer;
@@ -247,7 +262,22 @@ final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
         // is not a deferral but a failure, and running a second time makes it work. @see #mayWaitForSources
         String source = mayWaitForSources
                 ? project.awaitSourceOf(qualified) : project.sourceOf(qualified);
-        if (source == null) return null;
+        if (source == null) {
+            // SAID OUT LOUD, and only for a RUN. "Not in the index", "indexed but never read", "read and
+            // refused" and "not a project file at all" are one silence from here, and the compiler turns
+            // all four into the same `cannot be resolved` on somebody else's line -- which is what made
+            // this take several rounds to place. The analyser stays quiet: a miss there is an ordinary
+            // deferral that the next keystroke re-asks, and a line per keystroke is noise.
+            // ONLY FOR A NAME THE PROJECT ACTUALLY HAS, which is the only shape that can be a defect.
+            // Ungated this fired for every package segment and every JDK type the unit touches -- ninety
+            // lines a run, of which one was the answer -- and a report nobody can read is the state this
+            // was written to escape. A path with no text is the real thing: indexed, and unreadable.
+            if (mayWaitForSources && path != null) {
+                System.err.println("[crystalgui] run: " + qualified
+                        + " is in the project index at " + path + " but its text could not be read");
+            }
+            return null;
+        }
         // RECORDED, because a compiled script is CACHED and this is the only place that knows what went
         // into it. The key describes the file the author ran; a sibling it pulled in is invisible to it,
         // so editing that sibling would leave the cache serving bytes compiled against the old one --
@@ -454,9 +484,75 @@ final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
         // and asking it here for every segment of every qualified name resolved `demo` to nothing where
         // the live route had it. The inversion's job is to answer for names the classpath has never
         // heard of, which is the whole reason it exists on an obfuscated host.
+        // THE UNIT UNDER ANALYSIS IS A TYPE, and it is the one name nothing else here can vouch for.
+        //
+        // The inversion below reads "no live bytes, therefore a package". That is right for the classpath
+        // it was written for -- an obfuscated jar has no directory entry for `net/minecraft/init`, so a
+        // loader cannot be asked what is a package -- and it has no notion of a workspace source, which is
+        // on no runtime classpath at all.
+        //
+        // `fromProject` excludes `self` deliberately: it is already in the compiler's own work list, so
+        // serving it again would declare it twice. That exclusion is exactly what leaves this name with
+        // nobody to answer for it -- every other project type is resolved by `fromProject` before ECJ ever
+        // needs to ask whether it is a package. So the live tier is asked, truthfully has nothing, and ECJ
+        // is told that `com.example.Main` is a package while compiling `com.example.Main`: the error lands
+        // on the class's own declaration, in the file the author is looking at, and it is the ONLY file it
+        // can land on. Every reference to that class elsewhere then fails to resolve.
+        //
+        // Two conditions have to hold together, which is why this was client-only. `live` is false in the
+        // harness, in every test and on a plain JVM. And from compliance 9 onward ECJ asks
+        // `getModulesDeclaringPackage` instead and never reaches here -- only band 8 takes this path.
+        if (name.equals(self)) {
+            packages.put(name, Boolean.FALSE);
+            return false;
+        }
+
+        // ...AND SO IS EVERY OTHER FILE THE PROJECT DECLARES, which is not the same rule as the one above
+        // and is not covered by it.
+        //
+        // `self` is only the unit the caller named. A RUN compiles the whole reachable graph, so a project
+        // file pulled in through `fromProject` becomes a SECONDARY unit that declares its own package and
+        // is checked for a collision exactly as the first one is -- and it is not `self`, so it fell
+        // straight through to the inversion. `Main.java` compiled clean and `Greeter.java` came back with
+        // `The type Greeter collides with a package`, followed by everything Greeter names failing to
+        // resolve.
+        //
+        // This half was written, then deleted as unreachable because removing it failed no test. That was
+        // a gap in the test, not evidence: `analyze` reports problems for the unit under analysis ONLY, so
+        // a secondary unit's diagnostics are invisible to it however wrong they are. Only the compile path
+        // reports them.
+        String qualified = name.replace('/', '.');
+        String path = project.pathOf(qualified);
+        // The same `.java` rule `fromProject` applies: one index holds `com.example.Main` beside a
+        // JavaScript file, and a name ECJ can never compile must not be claimed as a Java type here.
+        if ((path != null && path.endsWith(".java")) || project.sourceOf(qualified) != null) {
+            packages.put(name, Boolean.FALSE);
+            return false;
+        }
+
         boolean isPackage = types.readable(name) == null;
         packages.put(name, isPackage);
         return isPackage;
+    }
+
+    /**
+     * The same qualified name spelled as a NESTED type, innermost boundary first.
+     *
+     * <p>A class file names a member type {@code a/b/Outer$Inner} while ECJ asks for
+     * {@code a.b.Outer.Inner}; every dot after the package is a candidate boundary, so the spellings are
+     * produced from the right inwards — one level of nesting under a real package is much the commonest
+     * shape, and it is tried first. The list is one entry per dot and is only reached after the plain
+     * spelling has already missed.</p>
+     */
+    private static java.util.List<String> nestedSpellings(String internalName) {
+        if (internalName == null || internalName.indexOf('/') < 0) return java.util.List.of();
+        java.util.List<String> spellings = new java.util.ArrayList<>(2);
+        StringBuilder name = new StringBuilder(internalName);
+        for (int at = name.lastIndexOf("/"); at > 0; at = name.lastIndexOf("/", at - 1)) {
+            name.setCharAt(at, '$');
+            spellings.add(name.toString());
+        }
+        return spellings;
     }
 
     @Override
