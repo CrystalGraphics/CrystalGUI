@@ -1014,6 +1014,16 @@ with more ceremony.
 > never held in a public heterogeneous collection, so the wildcard stays on one private field and one
 > `@SuppressWarnings` inside `ClientWindows`. One suppression in the engine is the price of none in
 > every mod.
+>
+> **And a second pass removed the re-wiring entirely.** Even handed the panel, a behaviour still had
+> to attach its widget listeners in *two* places — the constructor and `onContentReplaced` — and
+> forgetting the second was silent: every button dead, the window otherwise perfect. The cause is that
+> a behaviour holds **two lifetimes that look like one**. Things registered on the *session*
+> (`onCall`, `onNotify`) are keyed by method and survive a re-describe untouched; things attached to
+> *elements* die with the tree that carried them. `ClientWindowBehaviour.onPanelBound(P)` is now the
+> **only** place a panel arrives — called at mount and again after every re-describe — so the choice
+> is gone rather than documented, and the factory drops to `Function<ClientWindowContext, …>` with the
+> pairing checked by the behaviour's own declared type instead of by a constructor parameter.
 
 `ClientWindows.register(String type, factory)` takes a raw string, and dispatch is
 `FACTORIES.get(fresh.type())` with the miss handled as:
@@ -1089,6 +1099,23 @@ the exception, and designing around it would be designing around an accident.)*
 Couple **the type and the panel** into one shared value; leave **the behaviour** registered from
 client code, but type-checked against that value instead of matched by string. The coupling lands
 where the silent failures actually are, and the seam stays intact.
+
+### A re-describe is currently **unreachable**, and that is worth knowing
+
+`onPanelBound`'s second call, `WindowMount.contentReplaced`, and `ClientUiSessions`' re-delivery
+branch are all defensive: **nothing triggers them today.** `ServerUiSession.sendOpenTo` early-returns
+once `viewer.opened` is set (`ServerUiSession.java:450`) and nothing ever resets it, so an existing
+viewer receives exactly one `ui/openWindow` and never a second.
+
+That is not an argument for deleting them — it is an argument for noticing what they point at. The
+case they were written for is *"a reshape reaches a client that missed the delta"*, and the client
+**does** have a state it cannot recover from: on a tree-delta count mismatch it sets `root = null`
+and releases the window, which leaves a dead window and no way back. Re-sending `ui/openWindow` is
+exactly the recovery, and it is currently the only thing that would make these paths fire.
+
+So: either a client that refuses a delta asks to be re-described, or the paths stay dead code with a
+comment saying so. Deciding that is a separate item; what must not happen is the current state, where
+the machinery exists, reads as live, and is reachable by nothing.
 
 ### Still open here
 

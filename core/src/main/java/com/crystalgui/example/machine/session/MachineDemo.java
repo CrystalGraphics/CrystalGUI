@@ -91,8 +91,7 @@ public final class MachineDemo {
         // still opens, still renders and still reports every event the server asked for; only the three
         // buttons THIS side drives would go quiet.
         MachineClient[] behaviour = new MachineClient[1];
-        ClientWindows.register(MachinePanel.TYPE,
-                (panel, context) -> behaviour[0] = new MachineClient(panel, context));
+        ClientWindows.register(MachinePanel.TYPE, context -> behaviour[0] = new MachineClient(context));
 
         // Where windows land. A real host wraps the tree in a WindowFrame on the desktop; here it is a
         // println. That is the whole platform surface for networked UI.

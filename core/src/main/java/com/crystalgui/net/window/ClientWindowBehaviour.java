@@ -15,8 +15,8 @@ package com.crystalgui.net.window;
  * self-sufficient. It simply has no local extras. Minecraft cannot do that: an unregistered
  * {@code MenuType} there is a broken screen.</p>
  *
- * <p>Both methods are defaults, so a behaviour that only wires listeners in its constructor implements
- * nothing at all.</p>
+ * <p>Both methods are defaults, so a behaviour whose whole job is a couple of {@code onCall}
+ * handlers implements neither.</p>
  *
  * <h3>Typed on its panel, and the parameter is earned</h3>
  *
@@ -37,18 +37,29 @@ package com.crystalgui.net.window;
 public interface ClientWindowBehaviour<P> {
 
     /**
-     * The server re-described the window: this is a <b>new tree</b> and a <b>freshly bound panel</b>,
-     * and every listener attached to the old one went with it.
+     * <b>The panel, freshly bound</b> — at mount, and again after every re-describe.
      *
-     * <p>Re-wire here. The behaviour itself is kept rather than rebuilt, so anything it was remembering
-     * survives — which is the reason this exists instead of the host simply discarding it and calling
-     * the factory again.</p>
+     * <p><b>Attach local widget listeners here and nowhere else.</b> This is the only place a panel is
+     * handed over, which is deliberate: a behaviour that wired in its constructor had to remember to
+     * wire again on a re-describe, and forgetting was silent — every button dead, the window otherwise
+     * perfect. One entry point makes that unforgettable rather than documented.</p>
      *
-     * <p>The panel is bound <b>by the host</b>, so an implementation never repeats what its own
-     * registration already said. Its own registrations on the session survive untouched: those are
-     * keyed by method, not by element.</p>
+     * <h3>Why a constructor is the wrong place, structurally</h3>
+     *
+     * <p>A behaviour has <b>two lifetimes in it</b> and they are easy to mistake for one. Things
+     * registered on the <em>session</em> — {@code onCall}, {@code onNotify} — are keyed by method and
+     * survive a re-describe untouched, so they belong in the constructor and run once. Things attached
+     * to <em>elements</em> die with the tree that carried them, so they belong here and run every time.
+     * Putting both in the constructor works right up until the server re-describes the window.</p>
+     *
+     * <p>The behaviour object itself is <b>kept</b> across a re-describe rather than rebuilt, so
+     * anything it was remembering survives. Only the tree underneath it was replaced.</p>
+     *
+     * <p>The context is not passed again because it does not change: the same
+     * {@link ClientWindowContext} is live for the whole of a window, and only what it points at moved.
+     * Hold it from the constructor.</p>
      */
-    default void onContentReplaced(P panel, ClientWindowContext context) {
+    default void onPanelBound(P panel) {
     }
 
     /** The window ended, however it ended. A report: it has already gone. */
