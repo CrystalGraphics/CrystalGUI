@@ -35,10 +35,12 @@ import net.minecraft.client.settings.KeyBinding;
  * <h3>What each of the two lines does</h3>
  *
  * <ul>
- *   <li>{@code ClientWindows.register(type, factory)} — what this client does <em>locally</em> about a
- *       window of that type. Minecraft's {@code MenuScreens.register}, and optional in a way that one
- *       is not: delete it and the panel still opens, still renders and still reports every event the
- *       server asked for. Only the three buttons this side drives would go quiet.</li>
+ *   <li>{@code ClientWindows.register(MachinePanel.TYPE)} — what this client does <em>locally</em>
+ *       about a window of that type. Minecraft's {@code MenuScreens.register}, and one argument rather
+ *       than two because the panel carries its own client half: the type already knows how to build
+ *       one, so there is no second class to name. Optional in a way {@code MenuScreens.register} is
+ *       not — delete this line and the panel still opens, still renders and still reports every event
+ *       the server asked for. Only the three buttons this side drives would go quiet.</li>
  *   <li>F8 — <b>a user asking for a UI</b>, which is the direction Minecraft's model has no message
  *       for and which every "right-click to open" actually needs. It sends {@code machine/open} and the
  *       server decides.</li>
