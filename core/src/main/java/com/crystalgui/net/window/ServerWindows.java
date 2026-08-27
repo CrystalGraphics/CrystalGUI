@@ -263,7 +263,7 @@ public final class ServerWindows {
             try {
                 window.ticker.run();
                 // Nested panels, each with the slice it was attached with, in attach order.
-                for (ServerWindow.Attached child : window.attached) child.ticker.run();
+                for (ServerWindow.Attached child : window.attached) child.ticker().run();
             } catch (RuntimeException failed) {
                 // One window's broken tick must not stop every other window on this connection --
                 // the frozen ones would show no error of their own, which is what gets diagnosed as a
@@ -338,7 +338,7 @@ public final class ServerWindows {
         }
         for (ServerWindow.Attached child : window.attached) {
             try {
-                child.closer.accept(reason.name());
+                child.closer().accept(reason.name());
             } catch (RuntimeException failed) {
                 CrystalGuiCore.LOGGER.error("A nested panel of <{}> failed on close: {}",
                         window.typeId(), failed.getMessage(), failed);
