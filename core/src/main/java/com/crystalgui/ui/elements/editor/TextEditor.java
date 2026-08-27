@@ -2157,6 +2157,25 @@ public class TextEditor extends ScrollerView implements UndoScope {
         return langFeatures.isHoverEnabled();
     }
 
+    /**
+     * What a model row is currently coloured with — <b>a diagnostic seam</b>.
+     *
+     * <p>The row cache is what decides a character's colour, and it is the one thing about the
+     * highlighter that cannot be read off the screen: two producers write into it, semantic tokens
+     * replace grammar ones where they overlap, and a stale entry looks exactly like a correct colour on
+     * the wrong word. Reading it is how "the highlight is broken" becomes a claim about a token.</p>
+     *
+     * <p>It is what caught the tree-sitter tree going out of step with the document after a completion
+     * was accepted: the row read {@code [0,1)} over a space and {@code [11,15)} over the tail of a word,
+     * which says "the offsets are wrong" where a screenshot only says "the colour is wrong".</p>
+     *
+     * <p>Empty for a row nothing has tokenised yet, which is not the same as a row with no tokens.</p>
+     */
+    public List<SyntaxToken> rowSyntaxForTest(int modelRow) {
+        List<SyntaxToken> tokens = rowSyntax.get(modelRow);
+        return tokens == null ? List.of() : List.copyOf(tokens);
+    }
+
     /** Test seam — @see HoverDocumentation#pointerForTest */
     public void hoverPointerForTest(int offset) {
         langFeatures.hover().pointerForTest(offset);
