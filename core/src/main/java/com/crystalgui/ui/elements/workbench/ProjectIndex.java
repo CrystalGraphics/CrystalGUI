@@ -325,10 +325,38 @@ final class ProjectIndex implements ProjectSources {
         // ITS OWN READ, deliberately not routed through `requestRead`: that one is guarded so a repeated
         // MISS does not repeat a request, and here a request already in flight would leave nothing to
         // wait on -- the guard would swallow the call and the latch would never count down.
+        //
+        // CACHED IN THE CALLBACK, not after the wait. An answer that arrives LATE is still the file's
+        // text, and storing it only on the waiting side threw it away: the wait timed out, the content
+        // landed a moment later with nowhere to go, and the next run asked all over again. That is what
+        // made this fail identically however many times it was pressed, in flat contradiction of the note
+        // above -- "running a second time makes it work" was the behaviour this method was written to
+        // replace, and it had quietly lost even that.
         read.read(path, content -> {
+            if (content != null) text.put(path, content);
             answer.set(content);
             landed.countDown();
         });
+        // NEVER ON THE FRAME THREAD, because there the wait cannot succeed -- it can only stall.
+        //
+        // The workspace connection is pumped by the frame loop, so the callback above is delivered BY the
+        // thread this would block. Waiting on it is a deadlock against its own answer, resolved only by
+        // the timeout: a run that needed a file nobody had open froze the UI for the full bound and then
+        // failed anyway. It looked like a compiler fault -- "Formatter cannot be resolved" -- and went
+        // away the moment the file was opened in a tab, because then the buffer answers above and no read
+        // is needed at all.
+        //
+        // The read is still ISSUED, so the text is cached by the callback and the next attempt has it.
+        // @see com.crystalgui.core.async.UiThread
+        // A TRANSPORT MAY ANSWER SYNCHRONOUSLY, and then there is nothing to wait for. An in-memory
+        // workspace -- the harness, every test -- runs the callback inside `read` above, so the text is
+        // already here; returning null because of the guard below would throw away an answer we hold.
+        // This is also the difference between the two hosts: the harness resolves a cold file on the
+        // first run and mc1710 cannot, because there the read is a round trip.
+        String immediate = answer.get();
+        if (immediate != null) return immediate;
+
+        if (com.crystalgui.core.async.UiThread.isCurrent()) return null;
         try {
             if (!landed.await(READ_TIMEOUT_MILLIS, java.util.concurrent.TimeUnit.MILLISECONDS)) {
                 return null;
