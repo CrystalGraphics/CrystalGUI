@@ -131,7 +131,7 @@ public final class ClientWindows {
      * WindowType</p>
      */
     public static <P> void register(WindowType<P> type,
-                                    BiFunction<P, ClientWindowContext, ClientWindowBehaviour> factory) {
+                                    BiFunction<P, ClientWindowContext, ClientWindowBehaviour<P>> factory) {
         if (type == null) throw new IllegalArgumentException("a behaviour needs a type");
         if (factory == null) throw new IllegalArgumentException("factory is null");
         FACTORIES.put(type.id(), new Registration<>(type, factory));
@@ -143,7 +143,8 @@ public final class ClientWindows {
      * <p>Equivalent to registering against {@link WindowType#bare} — the tree is its own panel, so
      * there is nothing to bind and nothing to check.</p>
      */
-    public static void register(String type, Function<ClientWindowContext, ClientWindowBehaviour> factory) {
+    public static void register(String type,
+                                Function<ClientWindowContext, ClientWindowBehaviour<UIElement>> factory) {
         if (type == null || type.isEmpty()) throw new IllegalArgumentException("a behaviour needs a type");
         if (factory == null) throw new IllegalArgumentException("factory is null");
         register(WindowType.bare(type), (root, context) -> factory.apply(context));
@@ -163,15 +164,28 @@ public final class ClientWindows {
      * A type and the behaviour registered for it, kept together so binding stays typed.
      *
      * <p>The map holds {@code Registration<?>} because the registry is heterogeneous by nature, but
-     * {@link #build} is written inside a class that still knows {@code P} — so the bind and the
-     * factory application need no cast between them. That is the whole reason this is a class rather
-     * than two parallel maps.</p>
+     * both methods below are written where {@code P} is still known — so the bind and the factory
+     * application need no cast between them. That is the whole reason this is one record rather than
+     * two parallel maps.</p>
      */
     private record Registration<P>(WindowType<P> type,
-                                   BiFunction<P, ClientWindowContext, ClientWindowBehaviour> factory) {
+                                   BiFunction<P, ClientWindowContext, ClientWindowBehaviour<P>> factory) {
 
-        ClientWindowBehaviour build(ClientWindowContext context) {
+        ClientWindowBehaviour<P> build(ClientWindowContext context) {
             return factory.apply(type.bind(context.root()), context);
+        }
+
+        /**
+         * Re-binds, and hands the behaviour its new panel.
+         *
+         * <p>The cast is <b>sound by construction</b>: a {@code Mounted} keeps the registration that
+         * built its behaviour, so the two {@code P}s are the same one — the compiler simply cannot see
+         * it across a heterogeneous map. One suppression here is the price of none in every mod, which
+         * is the right way round.</p>
+         */
+        @SuppressWarnings("unchecked")
+        void replaced(ClientWindowBehaviour<?> behaviour, ClientWindowContext context) {
+            ((ClientWindowBehaviour<P>) behaviour).onContentReplaced(type.bind(context.root()), context);
         }
     }
 
@@ -255,9 +269,12 @@ public final class ClientWindows {
             live.root = root;
             live.handle.contentReplaced(root);
             applySheets(live);
-            if (live.behaviour != null) {
+            if (live.behaviour != null && live.registration != null) {
                 try {
-                    live.behaviour.onContentReplaced(live);
+                    // THROUGH THE REGISTRATION, which is the only thing that still knows the panel
+                    // type -- so the host does the binding rather than every behaviour naming its own
+                    // type back at a framework that already knew it.
+                    live.registration.replaced(live.behaviour, live);
                 } catch (RuntimeException failed) {
                     CrystalGuiCore.LOGGER.error("<{}> behaviour failed on a re-describe: {}",
                             live.type(), failed.getMessage(), failed);
@@ -287,8 +304,10 @@ public final class ClientWindows {
         Registration<?> registration = FACTORIES.get(fresh.type());
         if (registration == null) return;   // an unknown type is a window with no local extras, not a failure
         try {
+            fresh.registration = registration;
             fresh.behaviour = registration.build(fresh);
         } catch (RuntimeException failed) {
+            fresh.registration = null;
             // The window stays: it is the server's, it renders, and it reports its events. Only the
             // local extras are missing, and saying so is better than taking the window down with them.
             CrystalGuiCore.LOGGER.error("The behaviour for <{}> could not be built: {}",
@@ -334,7 +353,11 @@ public final class ClientWindows {
         @Nullable
         private WindowMount.MountedWindow handle;
         @Nullable
-        private ClientWindowBehaviour behaviour;
+        private ClientWindowBehaviour<?> behaviour;
+
+        /** What built {@link #behaviour}, kept so a re-describe can re-bind with the same type. */
+        @Nullable
+        private Registration<?> registration;
 
         private boolean ended;
         private boolean visible = true;
