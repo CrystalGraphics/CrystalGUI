@@ -1,6 +1,8 @@
 package com.crystalgui.language.java;
 
 import com.crystalgui.core.async.FrameProfile;
+import com.crystalgui.core.async.JobKey;
+import com.crystalgui.core.async.JobLane;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.language.engine.AnalysedLanguageServices;
 import com.crystalgui.language.engine.JavaEngine;
@@ -13,9 +15,13 @@ import com.crystalgui.language.java.fix.JavaCodeActions;
 import com.crystalgui.language.run.ScriptBindings;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.lang.CodeActionProvider;
+import com.crystalgui.text.lang.CompletionItem;
+import com.crystalgui.text.lang.CompletionList;
 import com.crystalgui.text.lang.CompletionProvider;
+import com.crystalgui.text.lang.Versioned;
 
 import java.util.ArrayList;
+import java.util.function.Consumer;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -50,7 +56,7 @@ public final class JavaLanguageServices extends AnalysedLanguageServices {
      * silently going stale after the first edit, which is the worst version: the list is plausible and
      * describes a document from thirty seconds ago.</p>
      */
-    private final JavaCompletionProvider completion;
+    private final CompletionProvider completion;
 
     /** Same supplier arrangement, same reason. @see JavaCodeActions */
     private final JavaCodeActions actions;
@@ -115,8 +121,8 @@ public final class JavaLanguageServices extends AnalysedLanguageServices {
         this.className = className;
         this.classpath = classpath == null ? Collections.emptyList() : new ArrayList<>(classpath);
         long timed = FrameProfile.begin();
-        this.completion = new JavaCompletionProvider(buffer, this::current,
-                typeIndexFor(this.classpath), this::analyseText);
+        this.completion = offThread(new JavaCompletionProvider(buffer, this::current,
+                typeIndexFor(this.classpath), this::analyseText));
         FrameProfile.step(timed, "new JavaCompletionProvider (+ typeIndexFor)");
         timed = FrameProfile.begin();
         this.actions = new JavaCodeActions(this::current, typeIndexFor(this.classpath));
@@ -189,6 +195,59 @@ public final class JavaLanguageServices extends AnalysedLanguageServices {
      * one scan of one classpath answers for both languages, and a second index would be the same fifty
      * thousand entries built twice. @see TypeIndex's visibility note</p>
      */
+    /**
+     * The same provider, <b>answering from a worker</b> — or unchanged when there is no scheduler.
+     *
+     * <h3>A completion is a pure function of a snapshot, and it was running on the frame thread</h3>
+     *
+     * <p>Every keystroke into a live list re-asks the provider, correctly: the type index is sampled, so
+     * the answer is honestly partial and narrowing can reach items the sample never sent. Measured in the
+     * harness, that cost <b>5-21ms per letter</b> and <b>~100ms for a member query after a dot</b>, all of
+     * it synchronous on the thread that draws — which is the one thing {@code AGENTS.md} says work of this
+     * shape must not do.</p>
+     *
+     * <p>Nothing above had to change to allow it. {@code CompletionProvider} is callback-shaped,
+     * {@code CompletionSession.accept} carries a serial and drops anything superseded, and answers are
+     * {@code Versioned} — the session was written for a late answer from the start, and this is the first
+     * caller to give it one.</p>
+     *
+     * <p><b>The snapshot is taken here, on the calling thread</b>, and the work reads only that. It is
+     * also why the provider itself stays synchronous: tests drive it directly, and moving the threading
+     * inside would make every one of them wait for a frame.</p>
+     *
+     * <p>{@code JobLane.INTERACTIVE} because that lane's own documentation names this case — "a human is
+     * mid-gesture and blocked on the answer, a completion query after a keystroke". One key, so a
+     * keystroke arriving while the previous query is still running supersedes it rather than queueing
+     * behind it; the session would have dropped the older answer regardless.</p>
+     *
+     * <p>Without a scheduler the provider is returned untouched, which is what keeps a headless caller
+     * working: {@code onDone} runs during a window's {@code drain()}, so a scheduled answer in a process
+     * that never paints would never be delivered at all.</p>
+     */
+    private CompletionProvider offThread(JavaCompletionProvider provider) {
+        JobScheduler jobs = scheduler();
+        if (jobs == null) return provider;
+        JobKey key = JobKey.of(JavaLanguageServices.class, "completion");
+        // AN ANONYMOUS CLASS, not a lambda: `CompletionProvider` has a second abstract method, and
+        // `resolveItem` belongs to the provider unchanged -- it fills in one already-chosen row and is
+        // not the thing that costs.
+        return new CompletionProvider() {
+            @Override
+            public void complete(Request request, Consumer<Versioned<CompletionList>> answer) {
+                JavaCompletionProvider.Snapshot snap = provider.snapshot();
+                jobs.<Versioned<CompletionList>>job(key, JobLane.INTERACTIVE,
+                                context -> provider.completeFrom(snap, request))
+                        .onDone(answer::accept)
+                        .submit();
+            }
+
+            @Override
+            public void resolveItem(CompletionItem item, Consumer<CompletionItem> answer) {
+                provider.resolveItem(item, answer);
+            }
+        };
+    }
+
     public static synchronized TypeIndex typeIndexFor(List<String> classpath) {
         return TYPE_INDICES.computeIfAbsent(classpath, TypeIndex::new);
     }
