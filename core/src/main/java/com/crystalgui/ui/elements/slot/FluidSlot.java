@@ -78,8 +78,39 @@ public class FluidSlot extends NativeContentSlot {
                              float x, float y, float width, float height, float fill) {
         float[] box = fillBox(fillDirection, x, y, width, height, fill);
         if (box[2] <= 0f || box[3] <= 0f) return;
-        ctx.nativeContent(current.profile(), box[0], box[1], box[2], box[3],
+        ctx.nativeContent(current.profile(), anchorFor(fillDirection), box[0], box[1], box[2], box[3],
                 surface -> service.draw(surface, current));
+    }
+
+    /**
+     * The corner a tiling renderer should pin its pattern to, for a box this class has already narrowed.
+     *
+     * <p><b>The anchor is the edge that MOVES.</b> {@link #fillBox} keeps three edges of the content box
+     * and slides the fourth, so pinning the tile grid there makes that edge always a whole tile's edge —
+     * identical at every fill level — and pushes the remainder against a static edge, where the slot's
+     * own border already sits. Pinned to a static edge instead, the moving one cuts through a tile and
+     * the fluid's surface shows a different slice of the sprite at every level.</p>
+     *
+     * <p>The axis that is not being filled takes the near end, which is what it answered before
+     * {@link NativeAnchor} existed. Package-private and static so the mapping is testable without a
+     * paint — it is four one-line answers and every one of them is invisible in a screenshot until the
+     * tank is at a level that is not a whole number of tiles.</p>
+     */
+    static NativeAnchor anchorFor(FillDirection direction) {
+        switch (direction) {
+            // The bottom edge slides down as it drains, so the grid hangs from it.
+            case TOP_DOWN:
+                return NativeAnchor.BOTTOM_LEFT;
+            // The right edge sweeps rightwards as it fills.
+            case LEFT_RIGHT:
+                return NativeAnchor.TOP_RIGHT;
+            // RIGHT_LEFT's moving edge is the left one, and BOTTOM_UP's is the top — both the near end
+            // of their axis, so both are the default corner.
+            case RIGHT_LEFT:
+            case BOTTOM_UP:
+            default:
+                return NativeAnchor.TOP_LEFT;
+        }
     }
 
     /**
@@ -95,18 +126,39 @@ public class FluidSlot extends NativeContentSlot {
     static float[] fillBox(FillDirection direction, float x, float y, float width, float height, float fill) {
         switch (direction) {
             case TOP_DOWN:
-                return new float[] { x, y, width, height * fill };
+                return new float[] { x, y, width, filled(height, fill) };
             case LEFT_RIGHT:
-                return new float[] { x, y, width * fill, height };
+                return new float[] { x, y, filled(width, fill), height };
             case RIGHT_LEFT: {
-                float w = width * fill;
+                float w = filled(width, fill);
                 return new float[] { x + (width - w), y, w, height };
             }
             case BOTTOM_UP:
             default: {
-                float h = height * fill;
+                float h = filled(height, fill);
                 return new float[] { x, y + (height - h), width, h };
             }
         }
+    }
+
+    /**
+     * The filled length along the narrowed axis — <b>never rounded away to nothing while there is
+     * anything in the tank</b>.
+     *
+     * <p>Tinkers' Construct clamps the same way ({@code Math.max(Math.min(height, amount * height /
+     * capacity), 1)}), and the reason is that the two states a reader most needs to tell apart are
+     * "empty" and "nearly empty". A bucket in a 32-bucket tank is 3% of an 18px slot, which is half a
+     * pixel, which is no pixels — so a tank that is genuinely holding something reads as one that is
+     * not, and the only way to find out is to try to draw from it.</p>
+     *
+     * <p>The floor is one <em>logical</em> pixel, so it stays one pixel at any {@code uiScale} rather
+     * than becoming a hairline at 2x. It cannot overflow a box smaller than itself — a slot under 1px
+     * is already invisible and clamping up would draw outside it. Genuine emptiness is filtered out
+     * before this: {@link NativeContentSlot#paintSelf} returns on {@link NativeContent#isEmpty()}, so
+     * {@code fill <= 0} here means a rounding artefact rather than an empty tank.</p>
+     */
+    private static float filled(float extent, float fill) {
+        if (extent <= 0f || fill <= 0f) return 0f;
+        return Math.min(extent, Math.max(1f, extent * fill));
     }
 }

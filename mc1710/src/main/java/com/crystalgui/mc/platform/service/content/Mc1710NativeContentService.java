@@ -9,8 +9,11 @@ import com.crystalgui.ui.elements.slot.NativeContent;
 import com.crystalgui.ui.elements.slot.NativeContentService;
 import com.crystalgui.ui.elements.slot.NativeProfile;
 import com.crystalgui.ui.elements.slot.NativeSurface;
+import com.crystalgui.ui.elements.slot.NativeTileGrid;
+import net.minecraft.block.Block;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.OpenGlHelper;
+import net.minecraft.client.renderer.RenderBlocks;
 import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.client.renderer.RenderHelper;
 import net.minecraft.client.renderer.entity.RenderItem;
@@ -18,6 +21,8 @@ import net.minecraft.client.renderer.texture.TextureMap;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.IIcon;
+import net.minecraftforge.client.IItemRenderer;
+import net.minecraftforge.client.MinecraftForgeClient;
 import net.minecraftforge.fluids.Fluid;
 import net.minecraftforge.fluids.FluidRegistry;
 import net.minecraftforge.fluids.FluidStack;
@@ -178,6 +183,10 @@ public final class Mc1710NativeContentService implements NativeContentService {
             GL11.glDepthMask(true);
             GL11.glEnable(GL11.GL_BLEND);
             GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+            // RenderItem's 2D branch never ENABLES texturing -- it only ever inherits it, because
+            // GuiContainer always has it on. drawFluid and drawTooltip both assert it; this one did not,
+            // and an untextured item quad is a flat coloured square.
+            GL11.glEnable(GL11.GL_TEXTURE_2D);
 
             // VANILLA'S OWN PREAMBLE, reproduced rather than guessed at. This is the exact sequence
             // GuiContainer.drawScreen runs before it draws a single slot, and every line of it earns its
@@ -206,17 +215,200 @@ public final class Mc1710NativeContentService implements NativeContentService {
             OpenGlHelper.setLightmapTextureCoords(OpenGlHelper.lightmapTexUnit, 240f, 240f);
             GL11.glColor4f(1f, 1f, 1f, 1f);
 
+            // AND THE ONE VANILLA NEVER SETS, because it never has to. RenderItem's 2D branch ENABLES
+            // GL_ALPHA_TEST (:552) without ever setting the func, and renderItemOverlayIntoGUI disables
+            // blending (:709) before drawing the stack count through FontRenderer, which enables the
+            // alpha test again and nothing else. So every transparent glyph texel and every transparent
+            // icon texel is discarded purely by whatever glAlphaFunc the process happens to be carrying.
+            //
+            // Minecraft's own ambient is GREATER 0.1 (Minecraft:576), set once at startup and restored
+            // all over EntityRenderer -- it is simply always true in a vanilla frame. It is NOT always
+            // true here: no CgGlSlot models the alpha FUNC (ALPHA_TEST tracks the enable), the UI never
+            // writes one, and at the GL default of (GL_ALWAYS, 0) nothing is discarded at all -- so the
+            // stack count draws a black rectangle through the item behind it, with blending off.
+            GL11.glAlphaFunc(GL11.GL_GREATER, 0.1f);
+
             itemRenderer.zLevel = 0f;
-            itemRenderer.renderItemAndEffectIntoGUI(mc.fontRenderer, mc.getTextureManager(), stack, 0, 0);
+            drawItemIcon(mc, stack);
             // The host's own decorations -- stack size, durability bar, and whatever another mod has
             // hooked into item rendering. Reproducing them here would be a worse copy that drifts.
             itemRenderer.renderItemOverlayIntoGUI(mc.fontRenderer, mc.getTextureManager(), stack, 0, 0);
             RenderHelper.disableStandardItemLighting();
             // Paired with the enable above -- vanilla drops it on the way out too (GuiContainer line 7).
             GL11.glDisable(GL12.GL_RESCALE_NORMAL);
+            // RenderItem never restores glColor, and renderEffect leaves it at the glint's purple
+            // (0.5, 0.25, 0.8, 1). No CgGlSlot models glColor, so hostForeign cannot put it back either
+            // and whatever draws next inherits it. Vanilla is immune only because GuiContainer re-issues
+            // glColor4f(1,1,1,1) before every single slot.
+            GL11.glColor4f(1f, 1f, 1f, 1f);
         } finally {
             popProjection();
         }
+    }
+
+    /**
+     * The item's icon and its enchantment glint — <b>vanilla's, called verbatim</b> — followed by a
+     * repair of the coverage the glint destroys on the way past.
+     *
+     * <h3>Why an enchanted stack needs anything special here</h3>
+     *
+     * <p>{@link com.crystalgui.render.CgUiPaintContext#nativeContent} draws the host into an offscreen
+     * RGBA8 target and composites it with {@code gui_layer_blit.shader}
+     * ({@code Blend ONE ONE_MINUS_SRC_ALPHA}), so <b>that target's alpha channel is our coverage
+     * mask</b>. Minecraft treats destination alpha as a scratch working channel:</p>
+     *
+     * <pre>
+     * RenderItem.renderGlint:669   OpenGlHelper.glBlendFunc(772, 1, 0, 0)
+     *                            = glBlendFuncSeparate(GL_DST_ALPHA, GL_ONE, GL_ZERO, GL_ZERO)
+     *
+     *   rgb   = src.rgb * dst.a + dst.rgb * 1
+     *   alpha = src.a   * 0     + dst.a   * 0   =  0
+     * </pre>
+     *
+     * <p>772 is {@code GL_DST_ALPHA}, not {@code GL_DST_COLOR}, so the glint <em>reads</em> destination
+     * alpha as its source factor and <em>writes</em> it to literal zero — over exactly the item's own
+     * silhouette, {@code glDepthFunc(GL_EQUAL)} having clipped it to the texels the icon wrote depth
+     * for. Neither half is incidental. The read is <b>how the glint comes out shaped like the item at
+     * all</b>: both icon branches end on {@code glBlendFunc(770, 771, 1, 0)} — {@code dst.a := src.a}
+     * under the alpha test — which exists to build precisely the mask the glint then consumes.</p>
+     *
+     * <h3>...so the mask is REBUILT afterwards, never protected during</h3>
+     *
+     * <p>Protecting it is the obvious repair, it was the first one shipped, and it is wrong: the
+     * clearing is load-bearing. {@code renderGlint} draws its quad <b>twice</b>, and it is pass 0
+     * zeroing the alpha that stops pass 1 drawing. Hold the alpha still and both passes land. See
+     * {@link #rebuildCoverageMask} for the evidence; the short version is that it comes out twice as
+     * intense as an inventory slot's.</p>
+     *
+     * <p>So vanilla is called the way any other GUI calls it — one line, no flags, no split — and the
+     * coverage is re-stated afterwards out of the icons themselves.</p>
+     *
+     * <h3>Why the guard is three conditions</h3>
+     *
+     * <ul>
+     *   <li><b>{@code hasEffect(0)}</b> — nothing else in the GUI path reaches {@code renderGlint}, so
+     *       an unenchanted stack keeps the plain single call and pays nothing.</li>
+     *   <li><b>Not the 3D-block branch</b> ({@code RenderItem:426}) — it draws no glint, so there is no
+     *       damage to repair, and a repair built from flat 16x16 icon quads would be the wrong shape
+     *       for a rotated block model's coverage anyway.</li>
+     *   <li><b>No Forge {@code IItemRenderer}</b> — {@code ForgeHooksClient.renderInventoryItem} draws
+     *       no glint either, and the repair would stamp a vanilla-icon-shaped mask over a picture the
+     *       mod drew to some entirely different outline.</li>
+     * </ul>
+     */
+    private void drawItemIcon(Minecraft mc, ItemStack stack) {
+        if (!glintWillEraseCoverage(stack)) {
+            itemRenderer.renderItemAndEffectIntoGUI(mc.fontRenderer, mc.getTextureManager(), stack, 0, 0);
+            return;
+        }
+
+        // VANILLA, ENTIRELY UNTOUCHED -- glint included, destination alpha left to be destroyed exactly
+        // as it is on framebufferMc. Vanilla decides the branch, the pass count, the per-pass glint and
+        // the two-pass alpha interplay inside renderGlint; nothing here second-guesses any of it, which
+        // is the only way the picture comes out identical to an inventory slot.
+        itemRenderer.renderItemAndEffectIntoGUI(mc.fontRenderer, mc.getTextureManager(), stack, 0, 0);
+        rebuildCoverageMask(mc, stack);
+    }
+
+    /**
+     * Re-states the item's silhouette in the destination alpha, <b>without touching a single pixel of
+     * colour</b>, after {@code renderEffect} has erased it.
+     *
+     * <h3>Why the mask has to be rebuilt rather than protected</h3>
+     *
+     * <p>The obvious guard — wrap {@code renderEffect} in
+     * {@code glColorMask(true, true, true, false)} — is what shipped first, and it is <b>twice as
+     * bright as Minecraft</b>. {@code renderGlint} draws its quad <b>twice</b> with different scroll
+     * rates, both under {@code glBlendFuncSeparate(GL_DST_ALPHA, GL_ONE, GL_ZERO, GL_ZERO)}: the source
+     * factor is the destination alpha, and the destination alpha is written to zero. So on a target
+     * with real alpha, pass 0 draws at full strength and then <em>switches pass 1 off</em>, and
+     * Minecraft's own GUI target is exactly such a target — {@code framebufferMc} is
+     * {@code GL_RGBA8} ({@code Framebuffer:113}), cleared to alpha 0 ({@code Minecraft:510}), with
+     * {@code fboEnable} defaulting to true. Protecting the alpha keeps pass 1 alive and doubles the
+     * glint. It also explains a leather chestplate coming back as a featureless magenta blob: two
+     * additive layers over a large solid icon saturate it.</p>
+     *
+     * <p>Two facts make "pass 1 contributes nothing" exact rather than approximate. The glint texture
+     * is an <b>indexed PNG carrying a PLTE and no {@code tRNS} chunk</b> — every texel is alpha 255 —
+     * so pass 0's alpha test discards none of it and it zeroes the destination alpha across the whole
+     * quad, leaving pass 1 no gaps to show through. And nothing between the two draws can restore it:
+     * depth cannot separate them either, since {@code RenderItem:652} sets {@code glDepthMask(false)}
+     * and both quads are the same rect at the same {@code zLevel}.</p>
+     *
+     * <p>Mojang's own <em>world</em> glint corroborates the count from the other side.
+     * {@code RenderItem:342-370} genuinely does composite two layers — {@code glBlendFunc(GL_SRC_COLOR,
+     * GL_ONE)}, with no {@code DST_ALPHA} anywhere — and it <b>dims them</b>, {@code f11 = 0.76F}
+     * scaling the colour before {@code glColor4f}. The GUI path uses the same {@code (0.5, 0.25, 0.8)}
+     * undimmed, which is only reasonable for a single layer. Two undimmed layers sum toward
+     * {@code (1.0, 0.5, 1.6)} — blue clips first, which is precisely the washed-out magenta that was
+     * reported.</p>
+     *
+     * <p>So the alpha has to be left as vanilla's scratch channel and the mask rebuilt afterwards.</p>
+     *
+     * <h3>Why a rebuild, and not a redraw or the depth buffer</h3>
+     *
+     * <p>Re-running {@code renderItemIntoGUI} under a colour mask is the tidier-looking repair and it
+     * breaks the multi-pass branch: that branch sets its <em>own</em> {@code glColorMask} at
+     * {@code RenderItem:482} and restores it to all-true at {@code :492}, so the second half of the
+     * repair would paint the icon back over the glint. Deriving the mask from the depth buffer fails on
+     * the same branch for the same reason in a different disguise — the {@code :481} alpha-wipe quad
+     * rasterises untextured and alpha-test-free across the full 20x20, so with depth testing on (which
+     * is what {@link NativeProfile#MODEL} establishes) it writes depth over the whole slot and
+     * {@code GL_EQUAL} would report the slot as covered.</p>
+     *
+     * <p>Drawing the icons ourselves has neither problem, because Minecraft is not running while it
+     * happens and cannot revoke the guard. It is still all public API — {@code getRenderPasses},
+     * {@code getIcon} and {@code RenderItem.renderIcon} — so no rendering behaviour is reproduced here,
+     * only the coverage.</p>
+     */
+    private void rebuildCoverageMask(Minecraft mc, ItemStack stack) {
+        Item item = stack.getItem();
+        int passes = Math.max(1, item.getRenderPasses(stack.getItemDamage()));
+
+        // Depth OFF, deliberately. renderItemAndEffectIntoGUI restores zLevel on the way out, so a
+        // depth-tested rebuild would be a quad at z = 0 tested against an icon written at z = 50 --
+        // LEQUAL fails, nothing draws, and the mask is silently never rebuilt. The mask does not want
+        // depth for anything, so the safest thing is for z to be unable to matter.
+        GL11.glDisable(GL11.GL_DEPTH_TEST);
+        GL11.glDisable(GL11.GL_LIGHTING);
+        GL11.glEnable(GL11.GL_TEXTURE_2D);
+        // ALPHA TEST ON, which is what makes several passes UNION rather than overwrite: a later pass's
+        // transparent texels are discarded and leave an earlier pass's coverage standing. It is the
+        // same pairing vanilla builds its own mask with at RenderItem:499.
+        GL11.glEnable(GL11.GL_ALPHA_TEST);
+        // BLENDING OFF, rather than a clever blend func. With GL_BLEND disabled the fragment is written
+        // unmodified and the write mask below keeps RGB, so this is dst.a := src.a on any GL that runs
+        // at all -- which is bit-identical to what vanilla's own (770, 771, 1, 0) produced for the mask
+        // the glint has just destroyed. It also means no dependence on the hostile func renderEffect
+        // leaves set on the way out: (GL_DST_ALPHA, GL_ONE, GL_ZERO, GL_ZERO), inert only because
+        // RenderItem:659 disables blending, and pure garbage for anything that re-enables it without
+        // setting its own.
+        GL11.glDisable(GL11.GL_BLEND);
+        GL11.glColor4f(1f, 1f, 1f, 1f);
+        GL11.glColorMask(false, false, false, true);
+        try {
+            for (int pass = 0; pass < passes; pass++) {
+                IIcon icon = item.getIcon(stack, pass);
+                if (icon == null) continue;
+                mc.getTextureManager().bindTexture(item.getSpriteNumber() == 0
+                        ? TextureMap.locationBlocksTexture
+                        : TextureMap.locationItemsTexture);
+                itemRenderer.renderIcon(0, 0, icon, 16, 16);
+            }
+        } finally {
+            GL11.glColorMask(true, true, true, true);
+            GL11.glEnable(GL11.GL_DEPTH_TEST);
+        }
+    }
+
+    /** See {@link #drawItemIcon} — the three conditions are argued there. */
+    private static boolean glintWillEraseCoverage(ItemStack stack) {
+        if (!stack.hasEffect(0)) return false;
+        if (stack.getItemSpriteNumber() == 0
+                && RenderBlocks.renderItemIn3d(Block.getBlockFromItem(stack.getItem()).getRenderType())) {
+            return false;
+        }
+        return MinecraftForgeClient.getItemRenderer(stack, IItemRenderer.ItemRenderType.INVENTORY) == null;
     }
 
     /**
@@ -245,32 +437,72 @@ public final class Mc1710NativeContentService implements NativeContentService {
         try {
             GL11.glDisable(GL11.GL_DEPTH_TEST);
             GL11.glDepthMask(false);
+            // A SEPARATE ALPHA FUNCTION, which is where this deliberately parts company with TiC.
+            //
+            // TiC's FluidTankElement disables blending outright, and it is right to: it draws onto the
+            // SCREEN, where a translucent fluid icon would ghost the GUI behind it. We draw into a
+            // transparent-cleared FBO that gui_layer_blit.shader composites PREMULTIPLIED
+            // (Blend ONE ONE_MINUS_SRC_ALPHA), and neither of the two obvious options is right there:
+            //
+            //   blend off                    rgb = C,        a = As   -- straight alpha into a
+            //                                                            premultiplied composite, so
+            //                                                            anything translucent is bright
+            //   glBlendFunc(SRC_ALPHA, ...)  rgb = C*As,     a = As*As -- the NON-separate form uses the
+            //                                                            colour factors for alpha too,
+            //                                                            so coverage comes out squared
+            //
+            // The separate form gives rgb = C*As and a = As + Ad*(1-As): premultiplied colour and
+            // properly accumulated coverage. It is the same pair gui_quad.shader declares for every
+            // quad this engine draws, and for the opaque still-icon that is the ordinary case all three
+            // agree -- so this costs nothing and is only visible on a mod fluid with real alpha.
+            OpenGlHelper.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA,
+                                     GL11.GL_ONE, GL11.GL_ONE_MINUS_SRC_ALPHA);
             GL11.glEnable(GL11.GL_BLEND);
-            GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
             GL11.glEnable(GL11.GL_TEXTURE_2D);
             GL11.glDisable(GL11.GL_LIGHTING);
 
-            int colour = fluidStack.getFluid().getColor(fluidStack);
-            GL11.glColor4f(((colour >> 16) & 0xFF) / 255f,
-                           ((colour >> 8) & 0xFF) / 255f,
-                           (colour & 0xFF) / 255f,
-                           1f);
             mc.getTextureManager().bindTexture(TextureMap.locationBlocksTexture);
 
             Tessellator tessellator = Tessellator.instance;
             tessellator.startDrawingQuads();
-            // Bottom-up, because a tile that is cut should be cut at the top -- a tank fills upward and a
-            // partial tile at the waterline is what that looks like. The slot has already narrowed the box
-            // to the filled portion, so this only decides where the seam falls inside it.
-            for (float y = boxH; y > 0f; y -= TILE) {
-                float tileH = Math.min(TILE, y);
-                float top = y - tileH;
-                for (float x = 0f; x < boxW; x += TILE) {
-                    float tileW = Math.min(TILE, boxW - x);
-                    addTile(tessellator, icon, x, top, tileW, tileH);
+            // THE TINT RIDES THE VERTICES, not glColor -- which is what both TiC implementations do
+            // (setColorOpaque_I in SmelteryGui, glColor3ub in FluidTankElement). It must come after
+            // startDrawingQuads, which resets hasColor, and it means the fluid cannot pick up whatever
+            // glColor the item path left behind -- after an enchanted item that is the glint's purple.
+            tessellator.setColorOpaque_I(fluidStack.getFluid().getColor(fluidStack));
+            // THE GRID IS PINNED TO THE EDGE THAT MOVES, and the SURFACE is what knows which one that
+            // is: FluidSlot has already narrowed the box to the filled portion, so a width and a height
+            // cannot tell a tank's waterline from its floor. See NativeAnchor.
+            //
+            // This is the whole of "the fluid tiling looks wrong". Pinned to a STATIC edge -- which is
+            // what this did, unconditionally -- the cut tile lands on the MOVING one, so the fluid's
+            // surface shows a different slice of the sprite at every fill level and the seam walks as
+            // the tank fills. That is the "intersects when 2 tiles repeat" artifact. Pinned to the
+            // moving edge the surface is always a whole tile's edge, identical at every level, and the
+            // remainder falls against a border.
+            //
+            // Both Tinkers' Construct tank renderers do it this way for the BOTTOM_UP case, which is
+            // the reference: SmelteryGui tiles downward from `(cornerY + 68) - h - base`, and
+            // RecipeHandlerBase from `position.y + position.height - amount`. Neither has to think
+            // about the other three directions because neither has any.
+            boolean fromRight = surface.anchor().fromRight();
+            boolean fromBottom = surface.anchor().fromBottom();
+            int rows = NativeTileGrid.count(boxH, TILE);
+            int cols = NativeTileGrid.count(boxW, TILE);
+            for (int row = 0; row < rows; row++) {
+                float tileY = NativeTileGrid.startOf(boxH, TILE, row, fromBottom);
+                float tileH = NativeTileGrid.sizeOf(boxH, TILE, row);
+                for (int col = 0; col < cols; col++) {
+                    addTile(tessellator, icon,
+                            NativeTileGrid.startOf(boxW, TILE, col, fromRight), tileY,
+                            NativeTileGrid.sizeOf(boxW, TILE, col), tileH,
+                            fromRight, fromBottom);
                 }
             }
             tessellator.draw();
+            // A draw with GL_COLOR_ARRAY enabled -- which setColorOpaque_I turns on -- leaves the GL
+            // CURRENT colour undefined per spec, so this is not tidiness. Without it whatever draws next
+            // through fixed function inherits a colour nobody chose.
             GL11.glColor4f(1f, 1f, 1f, 1f);
         } finally {
             popProjection();
@@ -287,24 +519,45 @@ public final class Mc1710NativeContentService implements NativeContentService {
      * already doing real work for whatever scroller the slot sits in, and nesting a second one inside a
      * foreign-GL bracket means restoring state the shadow cannot see.</p>
      */
-    private static void addTile(Tessellator tessellator, IIcon icon, float x, float y, float w, float h) {
-        // THE TWO AXES SHRINK FROM OPPOSITE ENDS, because the tile grid is anchored at opposite ends.
+    private static void addTile(Tessellator tessellator, IIcon icon, float x, float y, float w, float h,
+                                boolean fromRight, boolean fromBottom) {
+        // THE SPRITE IS ALIGNED TO THE ANCHORED END OF ITS OWN TILE, per axis. Which is only "repeat
+        // from the anchor and clip at the far end" -- and it is what makes the tiling SEAMLESS: a full
+        // tile ends on maxV, the cut tile beyond it starts on minV, so the pattern crosses that join
+        // exactly as it crosses every other one. The sprite is interrupted in precisely one place, the
+        // far edge, which is where the slot's own border is.
         //
-        // Horizontally the tiles run left to right, so the cut one is the RIGHTMOST and its LEFT edge is
-        // the one that lands on the grid: keep uMin, shrink uMax. That was always right.
+        // TINKERS' CONSTRUCT DOES THE OPPOSITE VERTICALLY and it is deliberately not copied here.
+        // drawLiquidRect pins the cut tile to getMaxV() -- the tank floor -- which puts a texture
+        // discontinuity one tile ABOVE the floor. Its own horizontal axis disagrees with it
+        // (getMinU() to getInterpolatedU(w), aligned to the grid end, as below), and it never exercises
+        // that horizontal cut because SmelteryGui always passes endU = 16. So the vertical spelling is
+        // the odd one out rather than half of a considered pair, and the horizontal one is the rule.
         //
-        // Vertically they stack bottom-up -- a tank fills from the bottom -- so the cut one is the
-        // TOPMOST and its BOTTOM edge is the one on the grid. It therefore shows the texture's BOTTOM
-        // slice, which means anchoring vMax and raising vMin.
-        //
-        // Doing it the other way (keeping vMin, as this did) gives the partial tile the texture's TOP
-        // slice, so the pattern restarts at the waterline instead of continuing into it. Full tiles are
-        // unaffected, which is why it survived: it is only visible once a tank is deep enough to need a
-        // second row AND is filled to something that is not a multiple of a tile.
-        double uMin = icon.getMinU();
-        double uMax = uMin + (icon.getMaxU() - uMin) * (w / TILE);
-        double vMax = icon.getMaxV();
-        double vMin = vMax - (vMax - icon.getMinV()) * (h / TILE);
+        // This does mean reverting 0ec3db71's vMax anchoring, which was correct for the loop it was
+        // written against -- that loop pinned the grid to the floor, so the cut tile was at the
+        // WATERLINE and anchoring vMax was what kept the join seamless there. The grid has since moved
+        // to the waterline, which moves the cut tile to the floor, which moves the anchoring with it.
+        double uMin;
+        double uMax;
+        if (fromRight) {
+            uMax = icon.getMaxU();
+            uMin = uMax - (uMax - icon.getMinU()) * (w / TILE);
+        } else {
+            uMin = icon.getMinU();
+            uMax = uMin + (icon.getMaxU() - uMin) * (w / TILE);
+        }
+
+        double vMin;
+        double vMax;
+        if (fromBottom) {
+            vMax = icon.getMaxV();
+            vMin = vMax - (vMax - icon.getMinV()) * (h / TILE);
+        } else {
+            vMin = icon.getMinV();
+            vMax = vMin + (icon.getMaxV() - vMin) * (h / TILE);
+        }
+
         tessellator.addVertexWithUV(x, y + h, 0d, uMin, vMax);
         tessellator.addVertexWithUV(x + w, y + h, 0d, uMax, vMax);
         tessellator.addVertexWithUV(x + w, y, 0d, uMax, vMin);

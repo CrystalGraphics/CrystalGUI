@@ -794,6 +794,48 @@ read for shape only: LDLib2 is **LGPL-3.0** and nothing is ported from it.
 > press and asks the platform to perform a slot action — no mixin, at the cost of owing vanilla's
 > slot-click *semantics*. The binding handle is the seam that keeps it a follow-up.
 
+### `FluidSlot` fills by narrowing the box, and pins the tiling to the edge that moves
+
+`fillFraction()` becomes geometry here, not alpha: `applyFill` narrows the content box to the filled
+portion and the service fills whatever box it is handed. Drawing a full tank at reduced alpha would be
+the obvious shortcut and is wrong twice — a half-full tank would read as a full tank of something
+translucent, and a genuinely translucent fluid would have nothing left to say.
+
+The consequence is that **one edge of the surface moves with the tank and the other three do not, and a
+width and a height cannot say which**. That is what `NativeAnchor` carries, defaulted on
+`NativeSurface` so an item never answers it and never reads it:
+
+| `FillDirection` | Moving edge | `NativeAnchor` |
+|---|---|---|
+| `BOTTOM_UP` (default — a tank) | top | `TOP_LEFT` |
+| `TOP_DOWN` (a draining reservoir) | bottom | `BOTTOM_LEFT` |
+| `LEFT_RIGHT` (a gauge) | right | `TOP_RIGHT` |
+| `RIGHT_LEFT` | left | `TOP_LEFT` |
+
+Pin the tile grid to the moving edge and that edge is always a whole tile's edge, identical at every
+fill level, with the remainder falling against a static edge where the slot's border already is. Pin it
+to a static edge and the *moving* one cuts through a tile, so the fluid's surface shows a different
+slice of the sprite at every level and the seam walks as it fills. Both Tinkers' Construct tank
+renderers pin to the moving edge for the tank case, which is the reference.
+
+A fill is also clamped to a **minimum of one logical pixel** while there is anything in the tank
+(`FluidSlot.fillBox`), because the two states a reader most needs to tell apart are "empty" and "nearly
+empty" — a bucket in a 32-bucket tank is half a pixel of an 18px slot.
+
+### The host owns RGB; this engine owns alpha
+
+`nativeContent` renders into an offscreen RGBA8 target and composites it premultiplied, so **that
+target's alpha is the coverage mask**. Minecraft treats destination alpha as a scratch working channel
+and will happily zero it — its GUI enchantment glint does exactly that, over precisely the item's own
+silhouette — because the framebuffer it was written against has no alpha bits to lose.
+
+But the destruction cannot simply be *prevented*, because vanilla depends on it: `renderGlint` draws
+its quad twice and it is pass 0 clearing the alpha that stops pass 1, so holding the alpha still gives
+a glint of double intensity. The 1.7.10 implementation therefore calls vanilla verbatim and **re-states
+the coverage afterwards**, out of the icons themselves (`getRenderPasses` + `getIcon` +
+`RenderItem.renderIcon`, all public), writing alpha only. **`AGENTS.md` carries the full account**,
+including the four repairs that look right and are not.
+
 ### Three platform states, and the middle one is the point
 
 | State | How | Result |

@@ -64,4 +64,15 @@ public interface NativeSurface {
      * one silently gets always-pass rather than an error.</p>
      */
     NativeProfile profile();
+
+    /**
+     * Which corner a repeating pattern should be pinned to.
+     *
+     * <p>Defaulted, because only a tiling implementation has any use for it and only {@link FluidSlot}
+     * has anything to say — an item surface never overrides it and never reads it. See
+     * {@link NativeAnchor} for why a width and a height cannot answer this on their own.</p>
+     */
+    default NativeAnchor anchor() {
+        return NativeAnchor.TOP_LEFT;
+    }
 }
