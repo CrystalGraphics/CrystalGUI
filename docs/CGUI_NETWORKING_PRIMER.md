@@ -59,6 +59,8 @@ below it.
 
 ```
       ┌──────────────────────────────────────────────────────────────┐
+  8   │  ServerUiHost / ClientUiHost    ServerWindow, WindowMount    │  a window's LIFETIME
+      ├──────────────────────────────────────────────────────────────┤
   7   │  ServerUiSession / ClientUiSession   WorkspaceRpc / Client   │  what a message MEANS
       │  RemoteCommands                       (the "tenants")        │
       ├──────────────────────────────────────────────────────────────┤
@@ -773,14 +775,52 @@ Three subsystems ride a `ProtocolConnection`. They're peers of each other; none 
 | `ui/description` | **request** | C→S — answered with the tree |
 | `ui/stateDelta` | notification | S→C |
 | `ui/treeDelta` | notification | S→C |
-| `ui/closeWindow` | notification | S→C |
+| `ui/closeWindow` | notification | S→C — "this window is finished" |
+| `ui/close` | notification | **C→S — "the user closed it"** |
+| `ui/focusWindow` | notification | S→C — "bring it forward" |
+| `ui/visibility` | notification | C→S — "it is / is not on screen" |
+| `ui/sheet` | **request** | C→S — answered with a stylesheet, by hash |
 | `ui/event` | notification | C→S |
+
+> **`ui/close` is the newest of these by years, and its absence was not a missing feature.** Minecraft
+> has had the equivalent since alpha — `C0DPacketCloseWindow` → `processCloseWindow` →
+> `closeContainer`, and `ServerboundContainerClosePacket` → `doCloseContainer` on 1.20 — because a
+> server holding a window's model needs to know when nobody is looking at it. Without it a closed
+> window left its session open, observing its tree and flushing state deltas into a frame that had
+> been destroyed, and the only close anything ever noticed was the player disconnecting.
 
 **Every `ui/*` payload carries `w`, the window id** — in the *payload*, not the envelope, because
 it's a fact about the UI protocol and the envelope isn't allowed to know one.
 
 > LDLib2 resolves incoming packets against *"whatever menu the player has open"*, so a packet in
 > flight when a GUI closes lands on the **next** one. Four bytes makes that impossible.
+
+### `ServerUiHost` / `ClientUiHost` — a window's lifetime
+
+**The layer above the sessions, and the one you actually use.** A session is the *protocol* for one
+window; a host is what opens one, ticks it, and ends it — the id allocation, the `bind`-then-`open`
+ordering, the per-tick validity sweep and flush, and all four ways a window can end.
+
+```java
+UiHosts.register();                                  // once, at init
+ServerUiHost.of(connection).open(new MyWindow(model));   // whenever you have something to show
+```
+
+It is ported from `ServerPlayer.openMenu` (both MC versions): allocate the next id, construct, tell
+the client with the **type** and the **title**, start observing, tick with a `stillValid` check. Two
+divergences, both deliberate:
+
+- **Many windows per connection.** `openMenu` force-closes the previous container; CrystalOS is built
+  for several at once. Uniqueness is per **key** instead — opening under a key that is already open
+  brings the existing window forward, which is Minecraft's rule narrowed from "any window" to "the
+  same subject", and keeps its scroll position and whatever is half-typed in it.
+- **Close is a request.** The frame asks, the client decides, then tells the server via `ui/close`.
+
+On the client, `ClientUiHost` adopts each session as it arrives and hands the rebuilt tree to a
+**`WindowMount`** — the one thing a platform implements (on 1.7.10, a `WindowFrame` on the desktop).
+Local behaviour is looked up **by window type**, which is `MenuScreens.register` — with one
+improvement over it: **a window whose type nothing registered still mounts and still works**, because
+a description is self-sufficient where a `MenuType` is only a key to code.
 
 ### `ServerUiSession` — owns the tree, never lays it out
 
@@ -1027,13 +1067,19 @@ not build, from widget classes it already had.
 | `channel.setInboundHandler` | once, at init | — | Frames arrive and go nowhere |
 | `FrameMultiplexer.onFrameReceived` | the channel adapter | **Netty** | — (it only enqueues) |
 | `ProtocolConnection.tick()` | the loader, per tick | server / client thread | **Silence.** Nothing arrives, nothing sends, nothing times out |
-| `ServerUiSession.tick()` | your host, per tick | server thread | Session stays live, answers calls, **never sends another state update** |
-| `ClientUiSession.tick()` | your host, per tick | client thread | Nothing — it's a genuine no-op while riding a connection |
+| `ProtocolConnection.onTick` hooks | `tick()`, after the drain | server / client thread | Whatever registered one stops running. `ServerUiHost` is one |
+| `ServerUiSession.tick()` | **`ServerUiHost`**, per tick | server thread | Session stays live, answers calls, **never sends another state update** |
+| `ClientUiSession.tick()` | nobody needs to | client thread | Nothing — it's a genuine no-op while riding a connection |
 
 > ⚠️ **The two session `tick()`s are not symmetric, and they read alike.** `ClientUiSession.tick()`
 > returns immediately when riding a connection — the connection already drained the mailbox for every
 > subsystem on it. But `ServerUiSession.tick()` **still flushes**, because it is the observer holding
 > that tick's dirty set and *nothing else knows the set exists*.
+>
+> **You no longer call either.** `ServerUiHost` ticks every window on a connection from that
+> connection's own `onTick` hook, which is most of the reason a mod stopped needing a tick handler at
+> all. Forgetting the server's used to be a live session that answered calls and silently never sent
+> another state update; it is now unforgettable.
 
 **The one rule underneath all of this:** everything above `onFrameReceived` runs on the thread that
 owns the tree. `Property` and `SignalBase` are single-threaded by documented contract, so touching an
@@ -1050,6 +1096,10 @@ element from the network thread isn't a race to tune — it's a correctness bug.
 | **Request** / **Notification** | Somebody is waiting / nobody is. Decides how an unknown method is treated |
 | **Network id** / **CSS id** | A depth-first position the protocol addresses by / a string the cascade matches. **Unrelated** |
 | **`ClientUiSession`** / **`ClientUiSessions`** | One window / the owner that hands them out. **Mutually exclusive on one connection** |
+| **`ServerUiSession`** / **`ServerWindow`** | The protocol for one window / the thing you *write*. A window has a session; you rarely touch it |
+| **`ui/closeWindow`** / **`ui/close`** | Server→client, "this is finished" / client→server, "the user closed it". **Different directions, and the second is newer than the first by years** |
+| **hidden** / **closed** | Retained, detached, `ui/visibility false`, comes back / gone, session ended, `onClosed` fired |
+| **`window.key()`** / **`window.type()`** | *Which* window (dedup + geometry) / *what kind* (client behaviour lookup) |
 | **Stream error** / **Connection error** | Reset one stream, carry on / the peer isn't speaking the protocol |
 | **`ui/`** / **`fs.`** | Same idea, different separator. An inconsistency, not a rule |
 
@@ -1073,16 +1123,43 @@ c.call("mything.doIt", args, onResult, onError);      // request — you get an 
 c.notify("mything/tick", args);                       // notification — you don't
 
 // ── Serve a UI ────────────────────────────────────────────────────────────
-var session = new ServerUiSession<>(windowId, root, c)
-        .addSheet(SheetRef.ofResource("mymod:theme", hash))
-        .setUseUserAgentSheet(true);
-session.on(button, UiEventKinds.ACTIVATE, ctx -> doThing());   // BEFORE open()
-session.open();
-// every tick: session.tick();
+// once, at init, beside the contributor above:
+UiHosts.register();
+
+// wherever you have something to show. No id, no session, no tick, no teardown.
+ServerUiHost.of(c).open(new MyWindow(model));
+
+public final class MyWindow extends ServerWindow {
+    @Override public String type()    { return "mymod:panel"; }   // client dispatches on this
+    @Override public String title()   { return "My panel"; }      // the frame's caption
+    @Override public String key()     { return "mymod:panel"; }   // dedup + remembered geometry
+    @Override public UIElement root() { return panel.root; }
+
+    @Override protected void bind(SessionScope io) {              // before open(), enforced
+        io.sheet(SheetRef.ofResource("mymod:theme", hash), css);
+        io.onActivate(panel.button, ctx -> doThing());
+        io.onCall  ("save",  (args, respond) -> respond.ok(null)); // window-scoped
+        io.onNotify("ping",  payload -> noted());                  // window-scoped
+        io.attach(new MyFragment(model.part()), "part");           // composition
+    }
+
+    @Override protected void tick() { panel.status.setText(model.summary()); }
+    @Override protected boolean stillValid(Object viewer) { return model.exists(); }
+    @Override protected void onClosed(CloseReason why) { … }       // SERVER/CLIENT/NOT_VALID/CONNECTION_LOST
+}
+
+// …or with no class at all, for a window that is one screenful of handlers:
+ServerUiHost.of(c).open(UiWindows.window("mymod:panel", MyPanel::new, p -> p.root)
+        .key("mymod:panel")
+        .wire((p, io) -> io.onActivate(p.button, ctx -> doThing())));
 
 // ── Receive a UI ──────────────────────────────────────────────────────────
-ClientUiSessions.forConnection(c).onSession(session ->
-        session.onWindowOpened(root -> mount(root)));   // it HANDS you the session
+// once, at init. OPTIONAL: a window with no factory still opens, renders and
+// reports every event the server asked for — it just has no local extras.
+ClientUiHost.register("mymod:panel", MyBehaviour::new);
+
+// once per platform, not per mod — CgUiScreen does this on 1.7.10:
+ClientUiHost.of(c).setMount(myWindowMount);
 ```
 
 ## 25. Where to look next
@@ -1093,6 +1170,7 @@ ClientUiSessions.forConnection(c).onSession(session ->
 | `docs/CGUI_SERVER_AND_SERIALIZATION.md` | The same ground as a reference: codecs, hashing, the headless contract |
 | `core/src/headlessTest/` | CrystalGraphics deliberately absent. If it loads here, it runs on a server |
 | `mc1710/…/CgUiSessionProbe` | The whole stack against a real MC connection, as a ten-point checklist |
+| `plan_ui_host.md` | Why the layer above the sessions exists: the audit that produced it, and the seventeen findings |
 | `./gradlew :mc1710:serverSmoke` | Boots a dedicated server, asserts the stack came up, stops. ~48s |
 
 ---
