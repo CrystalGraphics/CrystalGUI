@@ -340,4 +340,45 @@ public class GoToFileTest {
     public void aListThatFitsIsNotReportedAsCut() {
         assertFalse(batch("Match", manyFiles(3)).truncated());
     }
+
+    /**
+     * <b>The project id is not searchable</b>, because every file shares it.
+     *
+     * <p>A row's location is a {@code CgPath}, which reads {@code project:dir/dir}, and it was matched
+     * whole. So in a workspace called {@code minecraft.workspace}, typing {@code Minecraft} matched the
+     * location of EVERY file in it — {@code README.md}, {@code shader.shadergraph}, every {@code .js} —
+     * and the file-before-type partition then put all of them ahead of the classpath, leaving
+     * {@code net.minecraft.client.Minecraft}, an exact hit on the name, at the bottom of the list.</p>
+     *
+     * <p>The counter-assertion below is the half that keeps this honest: the rest of the path is still
+     * matched, because finding files by the folder they are in is the reason a location is searched.</p>
+     */
+    @Test
+    public void theProjectIdIsNotMatched() {
+        provideTypes(type("net.minecraft.client", "Minecraft", SymbolKind.CLASS));
+        List<String> labels = labelsOf(rows("Minecraft", files(
+                "minecraft.workspace:README.md",
+                "minecraft.workspace:src/main/js/App.js",
+                "minecraft.workspace:test.java")));
+
+        assertFalse("a file matched only by the shared project id: " + labels,
+                labels.contains("README.md"));
+        assertFalse("a file matched only by the shared project id: " + labels,
+                labels.contains("App.js"));
+        assertTrue("the type that actually matches the name was dropped: " + labels,
+                labels.contains("Minecraft"));
+    }
+
+    /** ...and the rest of the path still matches, which is what a location search is FOR. */
+    @Test
+    public void theFolderPartOfALocationStillMatches() {
+        List<String> labels = labelsOf(rows("util", files(
+                "minecraft.workspace:src/main/java/com/example/util/Greeter.java",
+                "minecraft.workspace:README.md")));
+
+        assertTrue("a folder fragment no longer finds the file under it: " + labels,
+                labels.contains("Greeter.java"));
+        assertFalse("an unrelated file was matched: " + labels, labels.contains("README.md"));
+    }
+
 }
