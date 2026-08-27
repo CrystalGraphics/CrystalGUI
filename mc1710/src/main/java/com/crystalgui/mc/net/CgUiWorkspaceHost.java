@@ -140,8 +140,18 @@ public final class CgUiWorkspaceHost {
         return service;
     }
 
-    /** A player's id, which is what a permission check and an audit line both need. */
+    /**
+     * A player's id, which is what a permission check and an audit line both need.
+     *
+     * <p>Read off {@link Mc1710Peer}, which is stable for the connection's life — an entity is not.
+     * The name rather than the UUID because that is what {@code OperatorsMayWrite} matches against the
+     * live player list and what a log line has to be readable as.</p>
+     */
     private static WorkspaceActor actorFor(Object peer) {
+        if (peer instanceof Mc1710Peer) {
+            final String name = ((Mc1710Peer) peer).name();
+            return () -> name;
+        }
         if (peer instanceof EntityPlayerMP) {
             final String name = ((EntityPlayerMP) peer).getCommandSenderName();
             return () -> name;
