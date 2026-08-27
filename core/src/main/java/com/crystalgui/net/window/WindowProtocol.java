@@ -11,28 +11,18 @@ import com.crystalgui.net.protocol.Protocols;
  * {@link ServerWindows#of(ProtocolConnection)}{@code .open(window)} when it has a window to show, and
  * {@link ClientWindows#register} once to say what it does about a window type locally.</p>
  *
- * <h3>Which side gets which host is decided by the peer</h3>
+ * <h3>Which side gets which host is said at the call site</h3>
  *
- * <p>{@code connection.peer()} is the platform's handle for who is on the other end, and it is
- * {@code null} exactly on a client — where there is one peer and it does not need naming. So the same
- * contributor installs the server host on a server connection and the client host on a client one, and
- * a single-player process ends up with one of each on two different connections, which is what it
- * genuinely has. {@code CgUiWorkspaceHost.bindWorkspace} reads the same field for the same reason.</p>
+ * <p>{@code Protocols.server} binds {@link ServerWindows} where the connection has a peer and
+ * {@code Protocols.client} binds {@link ClientWindows} where it has none — two method references, with
+ * the side in the method name rather than in a {@code peer() == null} guard. A single-player process
+ * ends up with one host of each on two different connections, which is what it genuinely has.</p>
  *
- * <h3>The generic seam, and why an unchecked cast is sound here</h3>
- *
- * <p>{@code Protocols.Contributor.bind} is generic over the encoded representation, and the host layer
- * is written against {@code Object} — because making {@link ServerWindow} generic would put a type
- * parameter in every mod's class declaration and every handler signature to serve a case no wire in
- * this engine has.</p>
- *
- * <p>The cast is safe for a reason worth stating rather than assuming: <b>every {@code StateMap} the
- * host layer builds takes its {@code DynamicOps} from {@code connection.ops()}</b>, never from a
- * hardcoded {@code PlainOps.INSTANCE}. Erasure means a {@code ProtocolConnection<JsonElement>} viewed
- * as {@code ProtocolConnection<Object>} still hands back its own ops, so values are encoded in the
- * representation the codec on the way out expects. It is the same cast {@code CgUiWorkspaceHost}
- * already makes, and the discipline it depends on is the one {@code ServerUiSession} already
- * follows.</p>
+ * <p>The host layer is written against {@code ProtocolConnection<Object>} — making {@link ServerWindow}
+ * generic would put a type parameter in every mod's class declaration to serve a case no wire in this
+ * engine has — and the one unchecked cast that view needs lives in {@code Protocols.open}, sound by
+ * the ops discipline documented there: every {@code StateMap} takes its {@code DynamicOps} from
+ * {@code connection.ops()}, never from a hardcoded instance.</p>
  */
 public final class WindowProtocol {
 
@@ -45,15 +35,8 @@ public final class WindowProtocol {
     public static synchronized void register() {
         if (registered) return;
         registered = true;
-        Protocols.contribute("ui", new Protocols.Contributor() {
-            @Override
-            @SuppressWarnings("unchecked")
-            public <T> void bind(ProtocolConnection<T> connection) {
-                ProtocolConnection<Object> wire = (ProtocolConnection<Object>) connection;
-                if (connection.peer() != null) ServerWindows.install(wire);
-                else ClientWindows.install(wire);
-            }
-        });
+        Protocols.server("ui", ServerWindows::install);
+        Protocols.client("ui", ClientWindows::install);
     }
 
     /** Whether {@link #register()} has run. Diagnostics, and what a test asserts before opening. */

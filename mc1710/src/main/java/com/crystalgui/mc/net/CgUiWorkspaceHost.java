@@ -86,31 +86,23 @@ public final class CgUiWorkspaceHost {
     public static synchronized void register() {
         if (registered) return;
         registered = true;
-        Protocols.contribute("workspace", new Protocols.Contributor() {
-            @Override
-            public <T> void bind(ProtocolConnection<T> connection) {
-                bindWorkspace(connection);
-            }
-        });
+        // SERVER-sided at the call site: a client end must not host a workspace -- it is the
+        // consumer, and without the split a single-player process would serve itself from its own
+        // client end as well, both ends answering fs.* on one wire.
+        Protocols.server("workspace", CgUiWorkspaceHost::bindWorkspace);
         FMLCommonHandler.instance().bus().register(new Handler());
         CrystalGuiCore.LOGGER.info("[cgui-fs] workspace contributed to the protocol");
     }
 
-    @SuppressWarnings("unchecked")
-    private static <T> void bindWorkspace(ProtocolConnection<T> connection) {
-        // A CLIENT connection has no peer, and must not host a workspace: it is the consumer. Without
-        // this, a single-player process would serve itself from its own client end as well -- both ends
-        // answering fs.* on one wire, with whichever registered first winning.
-        Object peer = connection.peer();
-        if (peer == null) return;
-
+    private static void bindWorkspace(ProtocolConnection<Object> connection) {
+        Object peer = connection.peer();   // non-null: Protocols.server only binds where there is one
         WorkspaceService live = service();
         if (live == null) return;
 
-        WorkspaceRpc<T> rpc = new WorkspaceRpc<>(live, actorFor(peer));
+        WorkspaceRpc<Object> rpc = new WorkspaceRpc<>(live, actorFor(peer));
         rpc.installOn(connection::onRequest);
-        BY_PEER.put(peer, (WorkspaceRpc<Object>) rpc);
-        CONNECTIONS.put(peer, (ProtocolConnection<Object>) connection);
+        BY_PEER.put(peer, rpc);
+        CONNECTIONS.put(peer, connection);
         CrystalGuiCore.LOGGER.info("[cgui-fs] workspace bound for {}", actorFor(peer).id());
     }
 

@@ -404,12 +404,9 @@ Default call timeout: **10 seconds**.
 line opens, everyone on the sheet gets wired into it.
 
 ```java
-// ONCE, at mod init:
-Protocols.contribute("workspace", new Protocols.Contributor() {
-    @Override public <T> void bind(ProtocolConnection<T> connection) {
-        new WorkspaceRpc<T>(service, actorFor(connection.peer())).installOn(connection::onRequest);
-    }
-});
+// ONCE, at mod init -- sided at the call site, and a lambda:
+Protocols.server("workspace", connection ->
+        new WorkspaceRpc<>(service, actorFor(connection.peer())).installOn(connection::onRequest));
 
 // PER CONNECTION, wherever a peer appears:
 ProtocolConnection<Object> connection =
@@ -961,14 +958,16 @@ leave.**
 ## 20. `CgUiWorkspaceHost` — the server actually serving files
 
 ```java
-Protocols.contribute("workspace", new Protocols.Contributor() {
-    @Override public <T> void bind(ProtocolConnection<T> connection) { bindWorkspace(connection); }
-});
+Protocols.server("workspace", CgUiWorkspaceHost::bindWorkspace);
 ```
 
-> **`Contributor` cannot be a lambda.** Its `bind` is a *generic method* — it takes the connection's
-> `T` — and Java has no syntax for a generic lambda. That is one anonymous class per **subsystem**,
-> not per message.
+> **`Contributor` is a lambda over `ProtocolConnection<Object>`.** It used to be a generic method —
+> `<T> void bind(ProtocolConnection<T>)` — and every contributor that ever existed immediately cast
+> to `Object` with a `@SuppressWarnings`, so the genericity bought an anonymous class per mod and
+> nothing else. The one unchecked cast now lives inside `Protocols.open`, sound by the ops
+> discipline: every `StateMap` takes its ops from `connection.ops()`. And `Protocols.server` /
+> `Protocols.client` put the side in the method name instead of a `peer() == null` guard every
+> contributor had to open with.
 
 **Files live on the server's machine, and single player is not a special case.** The root is
 `<serverdir>/crystalgui/workspace` via `MinecraftServer.getFile(...)` — the server directory on a
