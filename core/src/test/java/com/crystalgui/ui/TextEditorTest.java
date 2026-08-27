@@ -954,26 +954,26 @@ public class TextEditorTest extends EditorTestBase {
      * was Alt+Click — the model was built and all but unusable.
      */
     @Test
-    public void ctrlDSelectsTheWordThenAddsTheNextOccurrence() {
+    public void addCaretChordSelectsTheWordThenAddsTheNextOccurrence() {
         build("foo bar foo baz foo");
         editor.setCaret(1);
 
-        key(CgKeyCodes.KEY_D, CgModifiers.CTRL);
+        key(CgKeyCodes.KEY_J, CgModifiers.ALT);
         assertEquals("first press selects the word", "foo", editor.getSelectedText());
         assertEquals(1, editor.caretCount());
 
-        key(CgKeyCodes.KEY_D, CgModifiers.CTRL);
+        key(CgKeyCodes.KEY_J, CgModifiers.ALT);
         assertEquals("second adds the next occurrence", 2, editor.caretCount());
-        key(CgKeyCodes.KEY_D, CgModifiers.CTRL);
+        key(CgKeyCodes.KEY_J, CgModifiers.ALT);
         assertEquals(3, editor.caretCount());
     }
 
     @Test
-    public void typingWithCaretsFromCtrlDEditsEveryOccurrence() {
+    public void typingWithCaretsFromTheAddCaretChordEditsEveryOccurrence() {
         build("foo bar foo");
         editor.setCaret(0);
-        key(CgKeyCodes.KEY_D, CgModifiers.CTRL);
-        key(CgKeyCodes.KEY_D, CgModifiers.CTRL);
+        key(CgKeyCodes.KEY_J, CgModifiers.ALT);
+        key(CgKeyCodes.KEY_J, CgModifiers.ALT);
 
         type("X");
 
@@ -1436,12 +1436,19 @@ public class TextEditorTest extends EditorTestBase {
         settle();
 
         var context = com.crystalgui.core.command.CommandContext.of(editor);
-        assertFalse("nothing is selected, so cut is not applicable",
+        // READ-ONLY, not "nothing selected". Cut with no selection takes the whole line now -- both
+        // references do -- so an empty selection is no longer a state it cannot run in, and the example
+        // had to move to the condition that still stops it. The SUBJECT is unchanged: a command that
+        // cannot run says so, which is the same answer that greys out a menu row.
+        editor.setReadOnly(true);
+        settle();
+        assertFalse("a read-only editor has nowhere to cut from",
                 window.getCommands().run("editor.cut", context));
 
+        editor.setReadOnly(false);
         editor.setSelection(0, 3);
         settle();
-        assertTrue("with a selection it runs", window.getCommands().run("editor.cut", context));
+        assertTrue("with somewhere to cut from it runs", window.getCommands().run("editor.cut", context));
         assertEquals("one", clipboard);
         assertEquals("and the text is gone from the document", NL + "two", editor.getText());
     }
@@ -1713,4 +1720,199 @@ public class TextEditorTest extends EditorTestBase {
         editor.setText("first\r\nsecond\r\nthird\r\n");
         assertEquals("an identical re-read moved the caret", 8, editor.getCaret());
     }
+
+    /**
+     * <b>Cut with no selection takes the whole line, and the line goes.</b>
+     *
+     * <p>Both references do this and it is among the most-used things in either. Ours required a
+     * selection to even ENABLE the command, so {@code Ctrl+X} on an unselected line did nothing at all —
+     * which reads as the editor ignoring the key rather than as a disabled command.</p>
+     *
+     * <p>The line is REMOVED rather than emptied: what was below moves up. A cut that left a blank line
+     * behind would be a different operation, and the wrong one.</p>
+     */
+    @Test
+    public void cutWithNoSelectionTakesTheWholeLine() {
+        build("alpha" + NL + "beta" + NL + "gamma");
+        editor.setCaret(editor.buffer().pointToOffset(new TextPoint(1, 2)));
+        settle();
+
+        assertFalse("the fixture must have no selection", editor.hasSelection());
+
+        // THROUGH THE COMMAND, not the helper it calls. What broke was the command refusing to run at all
+        // with no selection, and a test that reaches past it into `deleteLines` asserts about a method
+        // nothing was wrong with.
+        editor.updateWindow();
+        settle();
+        var context = com.crystalgui.core.command.CommandContext.of(editor);
+        assertTrue("cut refused to run with no selection",
+                window.getCommands().run("editor.cut", context));
+        settle();
+
+        assertEquals("the whole line, newline included, must reach the clipboard", "beta" + NL, clipboard);
+        assertEquals("the line was not removed", "alpha" + NL + "gamma", editor.getText());
+    }
+
+    /**
+     * ...and with a selection it still takes only the selection, which is the counter-assertion.
+     *
+     * <p>A fallback written as "always take the line" would satisfy the test above and quietly break
+     * every ordinary cut in the editor.</p>
+     */
+    @Test
+    public void cutWithASelectionStillTakesOnlyTheSelection() {
+        build("alpha" + NL + "beta" + NL + "gamma");
+        int from = editor.buffer().pointToOffset(new TextPoint(1, 0));
+        editor.setSelection(from, from + 2);
+        settle();
+
+        assertTrue(editor.hasSelection());
+        assertEquals("be", editor.selectionOrTouchedLines());
+    }
+
+
+    /**
+     * <b>Duplicating moves the caret onto the copy.</b>
+     *
+     * <p>Both references do: the point of duplicating a line is to edit the new one, and leaving the
+     * caret on the original means every use is followed by pressing Down. The column is kept rather than
+     * forced to the end, which is the same rule and lands at the end when that is where you were.</p>
+     */
+    @Test
+    public void duplicatingPutsTheCaretOnTheNewLine() {
+        build("alpha" + NL + "beta" + NL + "gamma");
+        editor.setCaret(editor.buffer().pointToOffset(new TextPoint(1, 4)));
+        settle();
+
+        editor.duplicateLines(1);
+        settle();
+
+        assertEquals("the line was not duplicated",
+                "alpha" + NL + "beta" + NL + "beta" + NL + "gamma", editor.getText());
+        assertEquals("the caret stayed on the original instead of moving to the copy",
+                2, editor.buffer().offsetToPoint(editor.getCaret()).row());
+        assertEquals("the column was not kept",
+                4, editor.buffer().offsetToPoint(editor.getCaret()).column());
+    }
+
+    /**
+     * <b>Cutting a line leaves the caret on the line that moved up.</b>
+     *
+     * <p>The row does not change -- what was below is now here -- so the caret has to be re-seated
+     * against a line that is not the one it was measuring against, or it points past the end of a shorter
+     * one.</p>
+     */
+    @Test
+    public void cuttingALineLeavesTheCaretOnTheLineThatMovedUp() {
+        build("alpha" + NL + "beta" + NL + "gamma");
+        editor.setCaret(editor.buffer().pointToOffset(new TextPoint(1, 4)));
+        editor.updateWindow();
+        settle();
+
+        var context = com.crystalgui.core.command.CommandContext.of(editor);
+        assertTrue(window.getCommands().run("editor.cut", context));
+        settle();
+
+        assertEquals("alpha" + NL + "gamma", editor.getText());
+        assertEquals("the caret left the row the cut line was on",
+                1, editor.buffer().offsetToPoint(editor.getCaret()).row());
+        // COLUMN 0, which is what IntelliJ does and what the reported screenshots show: the line the
+        // caret was measuring against is gone, so keeping its column would point into unrelated text.
+        assertEquals("the caret should land at the start of the line that moved up",
+                0, editor.buffer().offsetToPoint(editor.getCaret()).column());
+    }
+
+    /** ...and cutting the FIRST line keeps the caret at the top rather than pushing it down one. */
+    @Test
+    public void cuttingTheFirstLineKeepsTheCaretAtTheTop() {
+        build("alpha" + NL + "beta" + NL + "gamma");
+        editor.setCaret(0);
+        editor.updateWindow();
+        settle();
+
+        var context = com.crystalgui.core.command.CommandContext.of(editor);
+        assertTrue(window.getCommands().run("editor.cut", context));
+        settle();
+
+        assertEquals("beta" + NL + "gamma", editor.getText());
+        assertEquals("the caret was pushed down instead of staying on row 0",
+                0, editor.buffer().offsetToPoint(editor.getCaret()).row());
+    }
+
+    /**
+     * <b>Cutting the LAST line puts the caret on the line above, not past the end.</b>
+     *
+     * <p>The rule above -- the caret stays on its row, because what was below moved up -- has no row to
+     * stay on here: there is nothing below. A middle line cannot show this, which is why the first test
+     * passed while the reported case did not.</p>
+     */
+    @Test
+    public void cuttingTheLastLineLeavesTheCaretInTheDocument() {
+        build("alpha" + NL + "beta" + NL + "gamma");
+        editor.setCaret(editor.buffer().pointToOffset(new TextPoint(2, 3)));
+        editor.updateWindow();
+        settle();
+
+        var context = com.crystalgui.core.command.CommandContext.of(editor);
+        assertTrue(window.getCommands().run("editor.cut", context));
+        settle();
+
+        assertEquals("alpha" + NL + "beta", editor.getText());
+        int caret = editor.getCaret();
+        assertTrue("the caret is outside the document", caret >= 0 && caret <= editor.getText().length());
+        assertEquals("the caret should fall back to the last line there is",
+                1, editor.buffer().offsetToPoint(caret).row());
+    }
+
+
+    /**
+     * <b>A cut line pastes back as a line, from the end of another one.</b>
+     *
+     * <p>The reported case. Cut puts the line and its newline on the clipboard; inserting that raw at the
+     * caret welded the text onto the end of the line the caret was on AND pushed the caret to an empty
+     * line below it. What was cut was a line, so a line is what comes back.</p>
+     */
+    @Test
+    public void aCutLinePastesAsItsOwnLineFromTheEndOfAnother() {
+        build("alpha" + NL + "beta");
+        editor.updateWindow();
+        settle();
+
+        // Cut "beta" with no selection, then put the caret at the END of "alpha".
+        editor.setCaret(editor.buffer().pointToOffset(new TextPoint(1, 0)));
+        settle();
+        var context = com.crystalgui.core.command.CommandContext.of(editor);
+        assertTrue(window.getCommands().run("editor.cut", context));
+        settle();
+        assertEquals("alpha", editor.getText());
+
+        editor.setCaret(editor.getText().length());
+        settle();
+        assertTrue(window.getCommands().run("editor.paste", context));
+        settle();
+
+        assertEquals("the line was welded onto the one the caret was on",
+                "beta" + NL + "alpha", editor.getText());
+        assertEquals("the caret should end at the end of what was pasted",
+                4, editor.getCaret());
+    }
+
+    /**
+     * ...and ordinary text still pastes AT the caret, which is the counter-assertion.
+     *
+     * <p>A paste written as "always insert whole lines" would satisfy the test above and break every
+     * ordinary paste in the editor.</p>
+     */
+    @Test
+    public void textWithNoTrailingNewlineStillPastesAtTheCaret() {
+        build("alpha" + NL + "beta");
+        editor.setCaret(editor.buffer().pointToOffset(new TextPoint(0, 5)));
+        settle();
+
+        editor.pasteAtCaret("XY");
+        settle();
+
+        assertEquals("alphaXY" + NL + "beta", editor.getText());
+    }
+
 }

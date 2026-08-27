@@ -1099,6 +1099,39 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * change set it is one edit, one undo step, and every caret is carried through it by the same mapping
      * that carries an anchor.</p>
      */
+    /**
+     * Pastes, treating <b>whole-line clipboard content as whole lines</b> — what every IDE does.
+     *
+     * <h3>A cut line is a LINE, not the characters that were on it</h3>
+     *
+     * <p>Cut with no selection puts the line and its newline on the clipboard. Inserting that raw at the
+     * caret does two visible wrongs at once, and they were reported as one: the text welds onto the end of
+     * whatever line you are on, and the trailing newline then pushes the caret down to an empty line
+     * below. Neither is what was cut -- a line was, so a line is what comes back.</p>
+     *
+     * <p>Recognised by the trailing newline rather than by remembering the cut. VS Code keeps a flag for
+     * this, which it can because its clipboard is its own; ours is the SYSTEM clipboard, so a flag would
+     * be wrong the moment the text came from anywhere else. The newline is the honest signal, and it is
+     * the one thing a copied line always has and a copied fragment never does.</p>
+     *
+     * <p>Inserted at the START of the caret's line, so the paste lands on a line of its own however far
+     * along the current one the caret happens to be -- a line paste ignores the column, which is the whole
+     * point of it. The caret then goes to the END of what was pasted, so the next thing typed continues
+     * the line that just arrived rather than sitting on a blank one after it.</p>
+     */
+    public void pasteAtCaret(String text) {
+        if (text == null || text.isEmpty()) return;
+        if (hasSelection() || !text.endsWith("\n")) {
+            insertAtCaret(text);
+            return;
+        }
+        int row = buffer.offsetToPoint(getCaret()).row();
+        int lineStart = buffer.document().lineStartOffset(row);
+        applyEdit(new ArrayList<>(List.of(new Change(lineStart, lineStart, text))));
+        // The end of the last line pasted: everything inserted, less the newline that closes it.
+        setCaret(Math.min(buffer.length(), lineStart + text.length() - 1));
+    }
+
     public void insertAtCaret(String text) {
         List<Change> changes = new ArrayList<>(selections.count());
         for (Selection selection : selections.all()) {
@@ -3468,15 +3501,76 @@ public class TextEditor extends ScrollerView implements UndoScope {
         setSelection(start, end);
     }
 
+    /**
+     * What Cut and Copy act on: the selection, or <b>the whole of every line a caret touches</b>.
+     *
+     * <h3>An empty selection is not nothing to cut</h3>
+     *
+     * <p>Both references do this and it is one of the most-used things in either: {@code Ctrl+X} on a line
+     * you have not selected takes the line. Ours required a selection to even ENABLE the command, so the
+     * chord did nothing at all and read as the editor ignoring it.</p>
+     *
+     * <p>The trailing newline is part of what is taken, which is what makes the pair whole: cut a line,
+     * put the caret elsewhere, paste, and you get a LINE back rather than its text welded into the middle
+     * of another one. It is also why this cannot be built from {@code getSelectedText} plus a range — the
+     * newline belongs to the operation, not to the text.</p>
+     */
+    public String selectionOrTouchedLines() {
+        if (hasSelection()) return getSelectedText();
+        StringBuilder out = new StringBuilder();
+        for (int row : touchedRows()) {
+            out.append(buffer.document().line(row)).append('\n');
+        }
+        return out.toString();
+    }
+
     /** Deletes every line any caret touches — {@code Ctrl+Shift+K}. */
     public void deleteLines() {
         applyEdit(new ArrayList<>(LineOperations.delete(buffer.document(), touchedRows())));
     }
 
-    /** Copies every touched line above or below itself — {@code Shift+Alt+Up/Down}. */
+    /** Copies every touched line above or below itself — {@code Shift+Alt+Up/Down}, {@code Mod+D}. */
     public void duplicateLines(int direction) {
+        List<Integer> rows = touchedRows();
         applyEditKeepingSelection(new ArrayList<>(
-                LineOperations.duplicate(buffer.document(), touchedRows(), direction)));
+                LineOperations.duplicate(buffer.document(), rows, direction)));
+        if (direction > 0) moveSelectionsDownRows(rows.size());
+    }
+
+    /**
+     * Puts every caret on the COPY after a downward duplicate.
+     *
+     * <h3>The point of duplicating a line is to edit the new one</h3>
+     *
+     * <p>Both references land the caret on the copy, and leaving it on the original means every use of
+     * the chord is followed by pressing Down -- which is the whole gesture again, by hand. Upward
+     * duplication needs nothing: the copy goes ABOVE, so the original keeps its row and the caret is
+     * already on the text that moved down into it.</p>
+     *
+     * <p>The COLUMN is kept rather than forced to the end. That is the same rule, and it lands at the end
+     * of the copy when the end is where you were -- which is the common case and the one that reads as
+     * "the caret follows the duplicate".</p>
+     *
+     * <p>Done by row rather than by offset because a duplicate inserts whole lines: shifting by a
+     * character count would need the copied text's length, and the row count is what the operation
+     * already knows.</p>
+     */
+    private void moveSelectionsDownRows(int rows) {
+        if (rows <= 0) return;
+        selections.transform(selection -> new Selection(
+                shiftedDownRows(selection.anchor(), rows),
+                shiftedDownRows(selection.head(), rows)));
+        clearGoalColumns();
+        ensureCaretVisible();
+        onSelectionChanged.emit();
+    }
+
+    /** The same column, {@code rows} lines further down — clamped to the document and to that line. */
+    private int shiftedDownRows(int offset, int rows) {
+        TextPoint at = buffer.offsetToPoint(offset);
+        int row = Math.min(buffer.lineCount() - 1, at.row() + rows);
+        int column = Math.min(at.column(), buffer.document().line(row).length());
+        return buffer.pointToOffset(new TextPoint(row, column));
     }
 
     /** Moves every touched line up or down one — {@code Alt+Up/Down}. */

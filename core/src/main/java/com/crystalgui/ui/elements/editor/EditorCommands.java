@@ -265,20 +265,28 @@ public final class EditorCommands {
                 // worse than one that is greyed out" is already stated on DockCommands.TOGGLE_MAXIMIZE.
                 .enabledWhen(when(editor -> true))
                 .run(on(editor -> editor.setSelection(0, editor.getText().length()))));
+        // WITH NO SELECTION, BOTH TAKE THE LINE -- which is what both references do and what makes these
+        // the chords people actually use. Requiring a selection to ENABLE them meant Ctrl+X on an
+        // unselected line did nothing whatever, which reads as the editor ignoring the key rather than as
+        // a disabled command. @see TextEditor#selectionOrTouchedLines
         registry.register(Command.of(PREFIX + "copy", "Copy")
-                .run(on(editor -> CgPlatform.input().setClipboard(editor.getSelectedText())))
-                .enabledWhen(when(TextEditor::hasSelection)));
+                .run(on(editor -> CgPlatform.input().setClipboard(editor.selectionOrTouchedLines()))));
         registry.register(Command.of(PREFIX + "cut", "Cut")
                 .run(on(editor -> {
-                    CgPlatform.input().setClipboard(editor.getSelectedText());
-                    editor.deleteSelections();
+                    CgPlatform.input().setClipboard(editor.selectionOrTouchedLines());
+                    // The line, not a collapsed selection: deleteSelections would remove nothing at all
+                    // when there is none, so the text would be on the clipboard and still on screen.
+                    if (editor.hasSelection()) editor.deleteSelections();
+                    else editor.deleteLines();
                 }))
-                // Two conditions, and both matter: nothing to cut, or nowhere to cut from.
-                .enabledWhen(when(editor -> editor.hasSelection() && !editor.isReadOnly())));
+                // Only one condition left. "Nothing to cut" is no longer a state this can be in -- there is
+                // always a line under the caret -- so what remains is nowhere to cut FROM.
+                .enabledWhen(when(editor -> !editor.isReadOnly())));
         registry.register(Command.of(PREFIX + "paste", "Paste")
                 .run(on(editor -> {
                     String pasted = CgPlatform.input().getClipboard();
-                    if (pasted != null && !pasted.isEmpty()) editor.insertAtCaret(pasted);
+                    // A LINE COMES BACK AS A LINE. @see TextEditor#pasteAtCaret
+                    if (pasted != null && !pasted.isEmpty()) editor.pasteAtCaret(pasted);
                 }))
                 .enabledWhen(whenEditable()));
 
@@ -391,7 +399,19 @@ public final class EditorCommands {
      */
     public static void bindDefaults(Keymap keymap) {
         keymap.bind("Mod+Space", PREFIX + "triggerSuggest");
-        keymap.bind("Mod+D", PREFIX + "addCaretAtNextOccurrence");
+        // Mod+D IS DUPLICATE, WHICH IS IntelliJ's MEANING AND NOT VS CODE's.
+        //
+        // The chords here are VS Code's by default, and this is a deliberate exception rather than a
+        // slip. It is the one chord the two references disagree about that people reach for without
+        // looking: in IntelliJ it duplicates the line under the caret, and in VS Code it grows a
+        // multi-caret selection. A user who expects the first and gets the second does not read it as a
+        // different keymap -- they read it as duplicate being broken, because nothing visible happens on
+        // a line with no other occurrences of the word.
+        //
+        // Alt+J is where the multi-caret action goes, which is IntelliJ's own chord for it -- so neither
+        // action loses its binding and neither is left on a key that means something else.
+        keymap.bind("Mod+D", PREFIX + "duplicateLineDown");
+        keymap.bind("Alt+J", PREFIX + "addCaretAtNextOccurrence");
         keymap.bind("Mod+Shift+L", PREFIX + "selectAllOccurrences");
         keymap.bind("Mod+Alt+Up", PREFIX + "addCaretAbove");
         keymap.bind("Mod+Alt+Down", PREFIX + "addCaretBelow");
