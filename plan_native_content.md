@@ -8,6 +8,13 @@ required to be **exactly** `ns:path` (a registry path cannot contain a colon on 
 `item:a:b:c:1:2` is refused rather than guessed at. Step "interaction" remains out of scope as
 planned. In-game re-verification of the probe (pixel-identical to `0f7d4fe3`) is the open item.*
 
+*Follow-on (same session): the seam grew the value crossing — `wrap(Object)` / `unwrap(NativeContent)`
+on the service (a platform value the grammar cannot express crosses by reference; a binding unwraps
+to its live occupant) — and the two-axis identity question, `kind()` (`ITEM`/`FLUID`/`NONE`, what is
+displayed) + `isBinding()` (whether it reads through), both defaulted from the descriptor. The
+loader's `draw()` now dispatches on kind rather than profile, freeing `profile()` to be purely the
+GL contract. NBT display stacks are thereby authorable from generic glue: `bind(service.wrap(v))`.*
+
 ## Context
 
 The goal is the Architectury property: a UI that names an item slot or a fluid tank is authored

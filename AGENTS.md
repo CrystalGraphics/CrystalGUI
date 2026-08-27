@@ -1660,7 +1660,13 @@ com.crystalgui.ui              UIElement, UIWindow, Ui, UITransform, EventListen
                                description means the same thing on every version. NativeAnchor +
                                NativeTileGrid carry the tiling knowledge a loader must not re-derive:
                                which corner a fill pins to, where the tiles land, and which UV slice a
-                               cut tile shows
+                               cut tile shows. The service also carries wrap/unwrap — a platform value
+                               the grammar cannot express (an NBT stack, a tank) crosses by REFERENCE,
+                               and comes back with unwrap(wrap(v)) == v; a binding unwraps to its live
+                               occupant. NativeContentKind + isBinding() are the two axes abstract code
+                               tells content apart by (a slot:12 binding is ITEM + bound), both
+                               defaulted from the descriptor — and deliberately neither is profile(),
+                               which is the GL contract and merely correlates
     .desktop                   CrystalOS — Desktop (the compositor host), WindowFrame (one window),
                                WindowRegistry (every LIVE window, visible or hidden, in two orders: open
                                order for the taskbar, MRU for the switcher — and neither is derivable

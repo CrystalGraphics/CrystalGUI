@@ -58,6 +58,8 @@ public interface NativeContentService {
     NativeContentService UNSUPPORTED = new NativeContentService() {
         @Override public boolean isAvailable() { return false; }
         @Override public NativeContent resolve(String descriptor) { return NativeContent.EMPTY; }
+        @Override public NativeContent wrap(Object nativeValue) { return NativeContent.EMPTY; }
+        @Override public Object unwrap(NativeContent content) { return null; }
         @Override public void draw(NativeSurface surface, NativeContent content) { }
         @Override public void drawTooltip(NativeContent c, float x, float y, int w, int h) { }
         @Override public String toString() { return "NativeContentService.UNSUPPORTED"; }
@@ -76,6 +78,8 @@ public interface NativeContentService {
             new NativeContentService() {
                 @Override public boolean isAvailable() { return false; }
                 @Override public NativeContent resolve(String descriptor) { return NativeContent.EMPTY; }
+                @Override public NativeContent wrap(Object nativeValue) { return NativeContent.EMPTY; }
+                @Override public Object unwrap(NativeContent content) { return null; }
                 @Override public void draw(NativeSurface surface, NativeContent content) { }
                 @Override public void drawTooltip(NativeContent c, float x, float y, int w, int h) { }
                 @Override public String toString() { return "NativeContentService(absent)"; }
@@ -128,6 +132,39 @@ public interface NativeContentService {
      * a crash.</p>
      */
     NativeContent resolve(String descriptor);
+
+    /**
+     * Wraps a platform value this loader recognises into a content handle, <b>holding the caller's
+     * reference</b> — nothing is copied or recreated, so NBT, damage and object identity all survive.
+     *
+     * <p>The third authoring route, beside bindings ({@code slot:N}) and descriptors: for a value the
+     * platform already holds that the grammar cannot express. It is what lets a <em>generic</em> piece
+     * of glue — one with no per-version imports at all — carry a stack it received as an opaque
+     * {@code Object} into a slot: {@code slot.bind(NativeContentService.require().wrap(value))}. What a
+     * loader recognises is its own to decide, but at minimum its item stack, and its tank types where
+     * they exist (a fluid's fill fraction needs a capacity, and the tank is where the platform keeps
+     * one).</p>
+     *
+     * <p>Unrecognised values answer {@link NativeContent#EMPTY}, never null and never a throw — the
+     * same contract as an unresolvable descriptor, for the same reason: an opaque {@code Object} is as
+     * much wire-shaped data as a string is.</p>
+     */
+    NativeContent wrap(Object nativeValue);
+
+    /**
+     * The platform value behind a content handle, or null when there is none this loader can name.
+     *
+     * <p>The inverse of {@link #wrap}, with one deliberate asymmetry: a <b>binding</b> unwraps to what
+     * its location holds <em>right now</em> — {@code slot:12} answers the live stack in that slot, or
+     * null while it is empty — because a binding never held a value to give back; read-through is its
+     * whole meaning. A wrapped value round-trips identically: {@code unwrap(wrap(v)) == v}.</p>
+     *
+     * <p>Callers are platform code by construction — core cannot so much as name the returned types —
+     * so the {@code Object} is cast at the call site. Null covers {@link NativeContent#EMPTY}, a
+     * foreign {@code NativeContent} implementation, a null argument, and a binding whose container is
+     * not open.</p>
+     */
+    Object unwrap(NativeContent content);
 
     /**
      * Draws {@code content} filling {@code surface}, honouring {@link NativeSurface#profile()}.

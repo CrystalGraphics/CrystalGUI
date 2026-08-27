@@ -807,10 +807,31 @@ fluid:<name>:<amount>:<capacity>             a display fluid, e.g. fluid:water:6
 
 Numerics are counted from the **right** (the id itself contains a colon), formatting is canonical
 (a description is content-addressed), parsing answers null rather than throwing (a descriptor is
-wire data), and **NBT is deliberately outside the grammar** — a display stack that needs one is
-authored through a loader handle, which is a boundary, not a gap. The `-PcgSlotProbe` screen
-demonstrates both routes side by side, and the harness stand-in parses the same grammar as the real
-loader, so drift between implementations shows up in a scene that boots in seconds.
+wire data), and **NBT is deliberately outside the grammar** — a display stack that needs one crosses
+through `wrap` below. The harness stand-in parses the same grammar as the real loader, so drift
+between implementations shows up in a scene that boots in seconds.
+
+**The four routes across the seam**, by what you are holding:
+
+| You have | Route | Stack created? |
+|---|---|---|
+| A container slot | `setDescriptor(NativeDescriptors.slot(n))` | never — MC sync delivers it, NBT included |
+| A name | `setDescriptor(NativeDescriptors.item(...))` | yes, by the resolver — that is what a name means |
+| The value itself | `bind(service.wrap(value))` | **no — your reference is held**, NBT and identity intact |
+| A `NativeContent`, wanting the value back | `service.unwrap(content)`, cast platform-side | no — `unwrap(wrap(v)) == v`; a binding answers its live occupant |
+
+`wrap` recognises whatever the loader decides — at minimum its item stack, and its tank types where
+they exist, because a fluid's fill fraction needs a capacity and the tank is where the platform
+keeps one. Unrecognised values wrap to `EMPTY`, the same contract as an unresolvable descriptor.
+The `-PcgSlotProbe` screen demonstrates the descriptor and wrap routes side by side (the enchanted
+fixtures are the wrap case — a copied stack would visibly lose its glint), and `serverSmoke` is the
+binding case.
+
+**Telling content apart** is two questions on two axes: `kind()` answers what is *displayed*
+(`ITEM`/`FLUID`/`NONE` — a `slot:12` binding contains an item, so it answers `ITEM`), and
+`isBinding()` answers whether it *reads through* to a live location. Both default from the
+descriptor's prefix, so implementations answer correctly for free; deliberately neither is
+`profile()`, which is the GL contract and merely correlates (an entity will also be `MODEL`).
 
 ### `FluidSlot` fills by narrowing the box, and pins the tiling to the edge that moves
 
