@@ -1,5 +1,6 @@
 package com.crystalgui.mc;
 
+import com.crystalgui.mc.example.MachineExample;
 import com.crystalgui.mc.net.CgUiConnections;
 import com.crystalgui.mc.net.CgUiWorkspaceHost;
 import com.crystalgui.mc.net.Mc1710NetworkChannel;
@@ -50,5 +51,10 @@ public class CommonProxy {
         // also makes the lifecycle's own "contributors: [...]" line true rather than an empty list.
         CgUiWorkspaceHost.register();
         CgUiConnections.register();
+        // The worked example's SERVER half. After connections, because it opens a session per player
+        // on the connection that class holds -- registered earlier it would simply find none.
+        // Common code on purpose: it imports no screen, which is the property that lets it run on a
+        // dedicated server. @see com.crystalgui.mc.example.MachineExample
+        MachineExample.registerCommon();
     }
 }

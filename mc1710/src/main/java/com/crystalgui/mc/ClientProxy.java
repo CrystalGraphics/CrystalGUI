@@ -3,6 +3,7 @@ package com.crystalgui.mc;
 import com.crystalgui.lifecycle.CgUiLifecycle;
 import com.crystalgui.mc.client.CgUiAutoTest;
 import com.crystalgui.mc.client.CgUiInput;
+import com.crystalgui.mc.example.MachineExampleClient;
 import com.crystalgui.mc.net.CgUiNetProbe;
 import com.crystalgui.mc.net.CgUiRemoteWorkspaceProbe;
 import com.crystalgui.mc.net.CgUiWireProbe;
@@ -33,5 +34,8 @@ public class ClientProxy extends CommonProxy {
         // The DEDICATED-server version: -PcgRemoteProbe, against runServer over a socket.
         CgUiRemoteWorkspaceProbe.register();
         CgUiWireProbe.register();
+        // The worked example's CLIENT half: F8, and the session it shows. Always on -- it is meant to
+        // be opened and looked at, unlike the probes above, which are diagnostics behind a flag.
+        MachineExampleClient.registerClient();
     }
 }

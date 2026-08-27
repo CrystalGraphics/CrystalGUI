@@ -182,7 +182,16 @@ public final class CgUiScreen extends GuiScreen {
         return uiWindow != null;
     }
 
-    static UIWindow window() {
+    /**
+     * The one {@code UIWindow} on the client, or null before the screen has ever been opened.
+     *
+     * <p><b>Public because there is exactly one, and that is the point.</b> Anything with a UI to show
+     * opens a {@code WindowFrame} on <em>this</em> desktop rather than standing up a second
+     * {@code GuiScreen} — a second screen is a second claim on the input pump, the GL handoff, the
+     * desktop's own persistence and the modal stack, and only one of them can be in front. The editor
+     * is a window here; so is the worked example's panel. @see com.crystalgui.mc.example.MachineExampleClient
+     */
+    public static UIWindow window() {
         return uiWindow;
     }
 
