@@ -8,6 +8,9 @@ import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
 
 import com.crystalgui.net.InMemoryTransport;
+import com.crystalgui.net.SheetRef;
+import com.crystalgui.net.host.SheetSupply;
+import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.net.host.ClientUiHost;
 import com.crystalgui.net.host.ClientWindowBehaviour;
 import com.crystalgui.net.host.ClientWindowContext;
@@ -519,6 +522,72 @@ public class UiHostLifecycleTest {
                 textOf(mount.mounted.get(0).root().querySelector("#label")));
     }
 
+    // ── Sheets ──────────────────────────────────────────────────────────────
+
+    /**
+     * A theme the client has <b>never seen</b> reaches it over the wire.
+     *
+     * <p>{@code SheetRef} crossed the wire from the day sheets did, and there was no way to
+     * <em>fetch</em> the sheet behind one — so every host resolved refs from a constant in its own jar
+     * and said so in a comment. Fine for a UI whose mod is installed on both sides; a wall for anything
+     * a server authors.</p>
+     */
+    @Test
+    public void aSheetTheClientHasNeverSeenIsFetchedByHash() {
+        List<List<String>> applied = new ArrayList<>();
+        client.setSheetSupply(new SheetSupply((window, css) -> applied.add(css)));
+
+        server.open(new StyledWindow());
+        settle();
+
+        assertEquals("the sheets arrived as one batch", 1, applied.size());
+        assertEquals(2, applied.get(0).size());
+        // IN THE ORDER THE SERVER NAMED THEM. Order is load-bearing -- the engine's sheet list is flat
+        // and a later sheet wins ties -- so the batch is collected before any of it is applied rather
+        // than applied as each answer arrives.
+        assertEquals(".a { color: #111111; }", applied.get(0).get(0));
+        assertEquals(".b { color: #222222; }", applied.get(0).get(1));
+    }
+
+    /**
+     * A local resolver answers without asking, and the wire is not touched.
+     *
+     * <p>The right answer for a shared theme: sending bytes both sides already hold is waste, which is
+     * why a {@code SheetRef} carries an id as well as a hash.</p>
+     */
+    @Test
+    public void aSheetTheClientAlreadyHasCostsNoTraffic() {
+        List<List<String>> applied = new ArrayList<>();
+        client.setSheetSupply(new SheetSupply((window, css) -> applied.add(css))
+                .addResolver(ref -> "local:" + ref.id()));
+
+        server.open(new StyledWindow());
+        settle();
+
+        assertEquals(1, applied.size());
+        assertEquals("local:test:a", applied.get(0).get(0));
+        for (Object raw : link[1].sent()) {
+            if (raw instanceof java.util.Map) {
+                assertFalse("nothing asked for a sheet",
+                        UiMethods.SHEET.equals(((java.util.Map<?, ?>) raw).get("m")));
+            }
+        }
+    }
+
+    /** A theme that cannot be fetched is a plain window, never a missing one. */
+    @Test
+    public void aSheetTheServerCannotProduceLeavesTheOthersAlone() {
+        List<List<String>> applied = new ArrayList<>();
+        client.setSheetSupply(new SheetSupply((window, css) -> applied.add(css)));
+
+        server.open(new HalfStyledWindow());
+        settle();
+
+        assertEquals(1, applied.size());
+        assertEquals("the one that could be resolved, and only it", 1, applied.get(0).size());
+        assertEquals(".a { color: #111111; }", applied.get(0).get(0));
+    }
+
     // ── The builder ─────────────────────────────────────────────────────────
 
     /**
@@ -620,6 +689,48 @@ public class UiHostLifecycleTest {
         @Override
         protected void onClosed(CloseReason reason) {
             closes.add(reason);
+        }
+    }
+
+    /** Two sheets, both offered with their text — what a server-authored theme looks like. */
+    private static final class StyledWindow extends ServerWindow {
+        private final Panel panel = new Panel();
+
+        @Override
+        public String type() {
+            return TYPE;
+        }
+
+        @Override
+        public UIElement root() {
+            return panel.root;
+        }
+
+        @Override
+        protected void bind(SessionScope io) {
+            io.sheet(SheetRef.ofResource("test:a", "hash-a"), ".a { color: #111111; }");
+            io.sheet(SheetRef.ofResource("test:b", "hash-b"), ".b { color: #222222; }");
+        }
+    }
+
+    /** One sheet offered with its text, one NAMED only — a theme the client is expected to ship. */
+    private static final class HalfStyledWindow extends ServerWindow {
+        private final Panel panel = new Panel();
+
+        @Override
+        public String type() {
+            return TYPE;
+        }
+
+        @Override
+        public UIElement root() {
+            return panel.root;
+        }
+
+        @Override
+        protected void bind(SessionScope io) {
+            io.sheet(SheetRef.ofResource("test:a", "hash-a"), ".a { color: #111111; }");
+            io.sheet(SheetRef.ofResource("test:missing", "hash-missing"));
         }
     }
 
