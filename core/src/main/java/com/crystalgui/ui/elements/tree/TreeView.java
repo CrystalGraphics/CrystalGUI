@@ -91,11 +91,31 @@ public class TreeView<T> extends ListView<TreeRow<T>> {
             public void bind(TreeRow<T> row, int index, UIElement template) {
                 final float indent = row.depth() * indentPerDepth;
                 StyleGroup.defaultPipeline(template.getStyle().getLayoutGroup(), l -> l.paddingLeft(indent));
-                template.removeClass(EXPANDED_CLASS);
-                template.removeClass(COLLAPSED_CLASS);
-                template.removeClass(LEAF_CLASS);
-                template.addClass(!row.expandable() ? LEAF_CLASS
-                        : row.expanded() ? EXPANDED_CLASS : COLLAPSED_CLASS);
+                // THE CLASS A ROW ALREADY HAS IS NOT A CHANGE, and this removed all three and added one
+                // back — so every bind removed the very class it was about to re-add. `addClass` and
+                // `removeClass` each no-op on an unchanged set, which is exactly why that ordering was
+                // expensive rather than free: the remove genuinely changed the set and the add changed it
+                // back, so the pair fired twice per row per bind and each one calls
+                // `invalidateStyleMatch()`, which re-matches the row and its subtree.
+                //
+                // Measured while typing into a document: 240 of the 246 elements re-matched per frame
+                // were raised from these three lines — ~5ms of `style:drainDirtyMatch` on every keystroke,
+                // spent arriving at the classes every row already had. AGENTS.md records the identical
+                // shape against the error stripe ("four invalidateStyleMatch() calls per problem per
+                // frame ... to arrive at the classes those marks already had"); this is that bug in the
+                // widget every tree in the application is built on.
+                //
+                // The guard is `hasClass(wanted)` rather than a per-class check because this method is
+                // the only writer of the three: it always leaves exactly one, so carrying the wanted one
+                // means the other two are already absent.
+                String wanted = !row.expandable() ? LEAF_CLASS
+                        : row.expanded() ? EXPANDED_CLASS : COLLAPSED_CLASS;
+                if (!template.hasClass(wanted)) {
+                    template.removeClass(EXPANDED_CLASS);
+                    template.removeClass(COLLAPSED_CLASS);
+                    template.removeClass(LEAF_CLASS);
+                    template.addClass(wanted);
+                }
                 renderer.bind(row.item(), row, index, template);
             }
 
