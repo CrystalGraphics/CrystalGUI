@@ -1,4 +1,4 @@
-package com.crystalgui.net.host;
+package com.crystalgui.net.window;
 
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
@@ -8,8 +8,8 @@ import com.crystalgui.net.protocol.Protocols;
  *
  * <p>Called once, at mod init, beside {@code CgUiWorkspaceHost.register()} and before connections are
  * opened. After that a mod never thinks about connections again: it calls
- * {@link ServerUiHost#of(ProtocolConnection)}{@code .open(window)} when it has a window to show, and
- * {@link ClientUiHost#register} once to say what it does about a window type locally.</p>
+ * {@link ServerWindows#of(ProtocolConnection)}{@code .open(window)} when it has a window to show, and
+ * {@link ClientWindows#register} once to say what it does about a window type locally.</p>
  *
  * <h3>Which side gets which host is decided by the peer</h3>
  *
@@ -34,11 +34,11 @@ import com.crystalgui.net.protocol.Protocols;
  * already makes, and the discipline it depends on is the one {@code ServerUiSession} already
  * follows.</p>
  */
-public final class UiHosts {
+public final class WindowProtocol {
 
     private static boolean registered;
 
-    private UiHosts() {
+    private WindowProtocol() {
     }
 
     /** Contributes the window lifecycle to every connection opened after this. Idempotent. */
@@ -50,8 +50,8 @@ public final class UiHosts {
             @SuppressWarnings("unchecked")
             public <T> void bind(ProtocolConnection<T> connection) {
                 ProtocolConnection<Object> wire = (ProtocolConnection<Object>) connection;
-                if (connection.peer() != null) ServerUiHost.install(wire);
-                else ClientUiHost.install(wire);
+                if (connection.peer() != null) ServerWindows.install(wire);
+                else ClientWindows.install(wire);
             }
         });
     }

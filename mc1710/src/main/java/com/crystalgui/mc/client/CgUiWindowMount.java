@@ -3,10 +3,10 @@ package com.crystalgui.mc.client;
 import javax.annotation.Nullable;
 
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.net.host.ClientUiHost;
-import com.crystalgui.net.host.ClientWindowContext;
-import com.crystalgui.net.host.SheetSupply;
-import com.crystalgui.net.host.WindowMount;
+import com.crystalgui.net.window.ClientWindows;
+import com.crystalgui.net.window.ClientWindowContext;
+import com.crystalgui.net.window.SheetSupply;
+import com.crystalgui.net.window.WindowMount;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.UIElement;
@@ -20,7 +20,7 @@ import com.crystalgui.ui.elements.desktop.WindowState;
  *
  * <p>The entire platform surface for networked UI, and deliberately small: no session, no window id,
  * no close matrix, no dispatch by type, no poll. Those are the engine's, in
- * {@code com.crystalgui.net.host}, written once for every loader. What is genuinely 1.7.10's is a
+ * {@code com.crystalgui.net.window}, written once for every loader. What is genuinely 1.7.10's is a
  * frame, a desktop and a style engine.</p>
  *
  * <h3>It is a window, not a screen</h3>
@@ -56,21 +56,21 @@ public final class CgUiWindowMount implements WindowMount {
     }
 
     /**
-     * Makes sure this connection's {@link com.crystalgui.net.host.ClientUiHost} knows where windows go.
+     * Makes sure this connection's {@link com.crystalgui.net.window.ClientWindows} knows where windows go.
      *
      * <p>Called from the frame loop, which is free when the wire has not moved and is what makes a
      * reconnect work at all — the same per-frame re-ask {@code Mc1710Workspace.pump} does, and for the
      * same reason: a rebind nothing re-asks for is machinery that can never fire.</p>
      *
      * <p><b>Installed when the desktop exists, not when the connection does</b>, and that ordering is
-     * the whole reason {@code ClientUiHost} queues. A server can open a window before the player has
+     * the whole reason {@code ClientWindows} queues. A server can open a window before the player has
      * ever pressed a key to open the screen; the window waits, and lands the moment there is somewhere
      * for it to land.</p>
      */
     public static void bind(@Nullable ProtocolConnection<Object> connection) {
         if (connection == null || connection == boundTo) return;
         boundTo = connection;
-        ClientUiHost.of(connection)
+        ClientWindows.of(connection)
                 .setSheetSupply(sheetSupply())
                 .setMount(INSTANCE);
         CrystalGuiCore.LOGGER.info("[cgui-ui] server windows will open on the desktop");
@@ -104,7 +104,7 @@ public final class CgUiWindowMount implements WindowMount {
         UIWindow host = CgUiScreen.window();
         if (host == null) {
             // Should not happen -- the host installs this mount while building the desktop, and the
-            // ClientUiHost queues windows until then -- but a mount that threw would take the window
+            // ClientWindows queues windows until then -- but a mount that threw would take the window
             // down with it rather than merely failing to draw it.
             throw new IllegalStateException("no UIWindow to mount <" + context.type() + "> onto");
         }

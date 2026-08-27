@@ -9,18 +9,17 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.SheetRef;
-import com.crystalgui.net.host.SheetSupply;
+import com.crystalgui.net.window.SheetSupply;
 import com.crystalgui.net.protocol.UiMethods;
-import com.crystalgui.net.host.ClientUiHost;
-import com.crystalgui.net.host.ClientWindowBehaviour;
-import com.crystalgui.net.host.ClientWindowContext;
-import com.crystalgui.net.host.ServerFragment;
-import com.crystalgui.net.host.ServerUiHost;
-import com.crystalgui.net.host.ServerWindow;
-import com.crystalgui.net.host.SessionScope;
-import com.crystalgui.net.host.UiHosts;
-import com.crystalgui.net.host.UiWindows;
-import com.crystalgui.net.host.WindowMount;
+import com.crystalgui.net.window.ClientWindows;
+import com.crystalgui.net.window.ClientWindowBehaviour;
+import com.crystalgui.net.window.ClientWindowContext;
+import com.crystalgui.net.window.ServerFragment;
+import com.crystalgui.net.window.ServerWindows;
+import com.crystalgui.net.window.ServerWindow;
+import com.crystalgui.net.window.WindowScope;
+import com.crystalgui.net.window.WindowProtocol;
+import com.crystalgui.net.window.WindowMount;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
@@ -43,7 +42,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 /**
- * The window lifecycle — {@code UiHosts}, and the four ways a window ends.
+ * The window lifecycle — {@code WindowProtocol}, and the four ways a window ends.
  *
  * <h3>What these are for</h3>
  *
@@ -58,7 +57,7 @@ import static org.junit.Assert.fail;
  * that the other end actually stopped. Asserting one alone passes against a teardown that only ever
  * runs on the side you looked at, which is precisely the shape of the bug being fixed.</p>
  */
-public class UiHostLifecycleTest {
+public class WindowLifecycleTest {
 
     private static final String TYPE = "test:panel";
     private static final String OTHER_TYPE = "test:other";
@@ -66,16 +65,16 @@ public class UiHostLifecycleTest {
     private InMemoryTransport<Object>[] link;
     private ProtocolConnection<Object> serverSide;
     private ProtocolConnection<Object> clientSide;
-    private ServerUiHost server;
-    private ClientUiHost client;
+    private ServerWindows server;
+    private ClientWindows client;
     private RecordingMount mount;
 
     @Before
     public void setUp() {
         ElementRegistry.bootstrapBuiltins();
         Protocols.resetForTesting();
-        UiHosts.resetForTesting();
-        UiHosts.register();
+        WindowProtocol.resetForTesting();
+        WindowProtocol.register();
 
         link = InMemoryTransport.pair();
         // A peer that is non-null is what makes one end the SERVER; null is what makes the other the
@@ -83,18 +82,18 @@ public class UiHostLifecycleTest {
         // ends up with one of each rather than two of either.
         serverSide = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "a-player");
         clientSide = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
-        server = ServerUiHost.of(serverSide);
-        client = ClientUiHost.of(clientSide);
+        server = ServerWindows.of(serverSide);
+        client = ClientWindows.of(clientSide);
         mount = new RecordingMount();
         client.setMount(mount);
     }
 
     @After
     public void tearDown() {
-        ClientUiHost.unregister(TYPE);
-        ClientUiHost.unregister(OTHER_TYPE);
+        ClientWindows.unregister(TYPE);
+        ClientWindows.unregister(OTHER_TYPE);
         Protocols.resetForTesting();
-        UiHosts.resetForTesting();
+        WindowProtocol.resetForTesting();
     }
 
     /**
@@ -306,7 +305,7 @@ public class UiHostLifecycleTest {
     public void behaviourIsBuiltForTheRegisteredTypeAndToldWhenTheWindowEnds() {
         List<String> closed = new ArrayList<>();
         AtomicReference<ClientWindowContext> got = new AtomicReference<>();
-        ClientUiHost.register(TYPE, context -> {
+        ClientWindows.register(TYPE, context -> {
             got.set(context);
             return new ClientWindowBehaviour() {
                 @Override
@@ -354,7 +353,7 @@ public class UiHostLifecycleTest {
     @Test
     public void behaviourRegisteredForOneTypeNeverSeesAnother() {
         List<String> seen = new ArrayList<>();
-        ClientUiHost.register(TYPE, context -> {
+        ClientWindows.register(TYPE, context -> {
             seen.add(context.type());
             return new ClientWindowBehaviour() { };
         });
@@ -641,7 +640,7 @@ public class UiHostLifecycleTest {
         AtomicInteger pressed = new AtomicInteger();
         List<ServerWindow.CloseReason> closes = new ArrayList<>();
 
-        ServerWindow window = server.open(UiWindows.window("test:built", Panel::new, panel -> panel.root)
+        ServerWindow window = server.open(ServerWindow.of("test:built", Panel::new, panel -> panel.root)
                 .key("test:built")
                 .title(panel -> "Built")
                 .wire((panel, io) -> io.onActivate(panel.press, ctx -> pressed.incrementAndGet()))
@@ -719,7 +718,7 @@ public class UiHostLifecycleTest {
         }
 
         @Override
-        protected void bind(SessionScope io) {
+        protected void bind(WindowScope io) {
             io.onActivate(panel.press, ctx -> presses.incrementAndGet());
         }
 
@@ -749,7 +748,7 @@ public class UiHostLifecycleTest {
         }
 
         @Override
-        protected void bind(SessionScope io) {
+        protected void bind(WindowScope io) {
             io.sheet(SheetRef.ofResource("test:a", "hash-a"), ".a { color: #111111; }");
             io.sheet(SheetRef.ofResource("test:b", "hash-b"), ".b { color: #222222; }");
         }
@@ -770,7 +769,7 @@ public class UiHostLifecycleTest {
         }
 
         @Override
-        protected void bind(SessionScope io) {
+        protected void bind(WindowScope io) {
             io.sheet(SheetRef.ofResource("test:a", "hash-a"), ".a { color: #111111; }");
             io.sheet(SheetRef.ofResource("test:missing", "hash-missing"));
         }
@@ -803,7 +802,7 @@ public class UiHostLifecycleTest {
         }
 
         @Override
-        protected void bind(SessionScope io) {
+        protected void bind(WindowScope io) {
             io.onNotify("ping", payload -> heard.add(payload.getString("from", "?")));
         }
     }
@@ -826,7 +825,7 @@ public class UiHostLifecycleTest {
         }
 
         @Override
-        protected void bind(SessionScope io) {
+        protected void bind(WindowScope io) {
             io.onCall("save", (args, respond) -> {
                 saves.incrementAndGet();
                 StateMap<Object> out = io.newMap();
@@ -852,7 +851,7 @@ public class UiHostLifecycleTest {
         }
 
         @Override
-        protected void bind(SessionScope io) {
+        protected void bind(WindowScope io) {
             panel.root.addChild(fragment.root());
             io.attach(fragment, "panel");
         }
@@ -872,7 +871,7 @@ public class UiHostLifecycleTest {
         }
 
         @Override
-        protected void bind(SessionScope io) {
+        protected void bind(WindowScope io) {
             SaveFragment one = new SaveFragment();
             SaveFragment two = new SaveFragment();
             panel.root.addChild(one.root());
@@ -897,7 +896,7 @@ public class UiHostLifecycleTest {
         }
 
         @Override
-        protected void bind(SessionScope io) {
+        protected void bind(WindowScope io) {
             SaveFragment fragment = new SaveFragment();
             panel.root.addChild(fragment.root());
             io.attach(fragment, "panel");
@@ -909,7 +908,7 @@ public class UiHostLifecycleTest {
         final Panel panel = new Panel();
         final SaveFragment fragment = new SaveFragment();
         @Nullable
-        private SessionScope scope;
+        private WindowScope scope;
 
         @Override
         public String type() {
@@ -922,7 +921,7 @@ public class UiHostLifecycleTest {
         }
 
         @Override
-        protected void bind(SessionScope io) {
+        protected void bind(WindowScope io) {
             this.scope = io;
         }
 

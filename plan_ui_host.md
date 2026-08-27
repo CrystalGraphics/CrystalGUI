@@ -224,7 +224,7 @@ same architecture, ~15 years in production:
 | Client closes | `C0DPacketCloseWindow` → `processCloseWindow` → `closeContainer()` → `onContainerClosed` | `ServerboundContainerClosePacket` → `doCloseContainer()` → `removed(player)` | **no message exists** | `ui/close` (C→S notification) → `window.onClosed(CLIENT)` |
 | Server closes | `closeScreen()`: send `S2EPacketCloseWindow`, then `closeContainer()` | `closeContainer()`: send packet, then `removed` | `session.close(reason)` — works | `host.close(window, reason)` / `stillValid` false |
 | Disconnect | logout path closes the container | `removed(player)` distinguishes `hasDisconnected()` | per-mod leave handler | `connection.onClosed` cascade closes every window both sides |
-| Client construction | inventory type → hardcoded `GuiScreen` switch / `IGuiHandler` | `MenuType` → `MenuScreens` registry | every window wrapped by whoever subscribed | type id → `ClientUiHost` registry; **unregistered types still mount** (the description is self-sufficient — our one genuine improvement over MC) |
+| Client construction | inventory type → hardcoded `GuiScreen` switch / `IGuiHandler` | `MenuType` → `MenuScreens` registry | every window wrapped by whoever subscribed | type id → `ClientWindows` registry; **unregistered types still mount** (the description is self-sufficient — our one genuine improvement over MC) |
 | Validity | `Container.canInteractWith(player)` — abstract, usually a distance check | `stillValid(player)` | nothing | `ServerWindow.stillValid(viewer)`, default `true` |
 
 Two deliberate divergences from MC, both already decided elsewhere in this repo:
@@ -249,11 +249,11 @@ description architecture (an old client renders a new panel).
 
 ---
 
-## Part III — The design: `UiHosts`
+## Part III — The design: `WindowProtocol`
 
 > **The mental model in one sentence:** `Protocols` gave subsystems a seat at the connection;
-> `UiHosts` gives *windows* a lifecycle on it. A mod writes a `ServerWindow`, calls
-> `ServerUiHost.of(connection).open(window)`, and registers (optionally) a client factory for its
+> `WindowProtocol` gives *windows* a lifecycle on it. A mod writes a `ServerWindow`, calls
+> `ServerWindows.of(connection).open(window)`, and registers (optionally) a client factory for its
 > type. Everything else — the id, the session, the tick, the mount, every row of the close matrix —
 > is the engine's.
 
@@ -348,15 +348,14 @@ Notes:
 ### III.1b — No class required: the builder shape
 
 The abstract class is right for anything with state worth naming. It must not be the *entry price* —
-LDLib2's `BlockUI` is a `@FunctionalInterface` for exactly this reason. So `UiWindows.window(type)`
-builds an anonymous `ServerWindow` from lambdas, typed on the panel so the wiring lambda gets real
-fields rather than `querySelector` strings:
+LDLib2's `BlockUI` is a `@FunctionalInterface` for exactly this reason. So `ServerWindow.of(…)`
+builds one from lambdas, typed on the panel so the wiring lambda gets real fields rather than
+`querySelector` strings:
 
 ```java
-ServerUiHost.of(connection).open(
-    UiWindows.<MachinePanel>window("crystalgui:machine")
+ServerWindows.of(connection).open(
+    ServerWindow.of("crystalgui:machine", MachinePanel::new, panel -> panel.root)
         .key("crystalgui:machine")
-        .contents(MachinePanel::new)                       // build the tree; runs first
         .title(panel -> "Machine control")
         .wire((panel, io) -> {                             // io = the session; before open, enforced by order
             io.onActivate(panel.purge, ctx -> machine.purge());
@@ -371,14 +370,14 @@ ServerUiHost.of(connection).open(
 The builder *is* a `ServerWindow` underneath — same lifecycle, same close matrix, nothing forked.
 The rule of thumb the docs carry: a window that is one screenful of handlers is a builder call
 where it is opened; a window with a model reference, fragments, or state across ticks earns the
-class. The client side is already classless: `ClientUiHost.register(type, factory)` takes a lambda,
+class. The client side is already classless: `ClientWindows.register(type, factory)` takes a lambda,
 and a window whose local behaviour is a couple of listeners writes it inline there.
 
-### III.2 — `ServerUiHost`: one per connection, owns every window on it
+### III.2 — `ServerWindows`: one per connection, owns every window on it
 
 ```java
-public final class ServerUiHost {
-    public static ServerUiHost of(ProtocolConnection<Object> connection);  // attachment()
+public final class ServerWindows {
+    public static ServerWindows of(ProtocolConnection<Object> connection);  // attachment()
 
     /** Allocates the id, builds the session, binds, opens. Same key open → re-deliver + return existing. */
     public <W extends ServerWindow> W open(W window);
@@ -406,11 +405,11 @@ Internals, each pinned to a finding:
   sessions closed locally (nothing sent — the wire is gone). `MachineExample.onPlayerLeave` and
   `CgUiWorkspaceHost.forget`'s manual choreography both collapse into this hook.
 
-### III.3 — `ClientUiHost`: the mount, the registry, the mirror-image lifecycle
+### III.3 — `ClientWindows`: the mount, the registry, the mirror-image lifecycle
 
 ```java
-public final class ClientUiHost {
-    public static ClientUiHost of(ProtocolConnection<Object> connection);
+public final class ClientWindows {
+    public static ClientWindows of(ProtocolConnection<Object> connection);
 
     /** MenuScreens.register, for behaviour only. Unregistered types still mount — the
      *  description is self-sufficient; a factory only adds local behaviour (F7). */
@@ -462,13 +461,13 @@ call (`WindowFrame.setContent` swaps in place); a key-dedup re-open is `contentR
 
 ### III.4 — Wiring: who installs the hosts
 
-A contributor named `"ui"`, registered by `UiHosts.register()` (idempotent, core):
+A contributor named `"ui"`, registered by `WindowProtocol.register()` (idempotent, core):
 
 ```java
 Protocols.contribute("ui", new Protocols.Contributor() {
     @Override public <T> void bind(ProtocolConnection<T> connection) {
-        if (connection.peer() != null) ServerUiHost.install(connection);
-        else                           ClientUiHost.install(connection);
+        if (connection.peer() != null) ServerWindows.install(connection);
+        else                           ClientWindows.install(connection);
     }
 });
 ```
@@ -502,7 +501,7 @@ is mechanical for its three consumers (`MachineClient(connection)` convenience c
    sheets once per ref-set per engine, wire `onDestroyed` → `ctx.userClosed()`. The
    window-before-screen / screen-before-window race lives in the host's queue now, not in a poll.
 3. **`CgUi.open(EntityPlayer, ServerWindow)`** — the one-line mc1710 convenience:
-   `ServerUiHost.of(CgUiConnections.forPlayer(player)).open(window)`, null-safe with a log line
+   `ServerWindows.of(CgUiConnections.forPlayer(player)).open(window)`, null-safe with a log line
    naming which of the four "nothing happened" causes applies (the F2-style diagnostic the example
    already models for F8).
 
@@ -533,7 +532,7 @@ Protocols.contribute("machine", new Protocols.Contributor() {
     @Override public <T> void bind(ProtocolConnection<T> c) {
         if (c.peer() == null) return;
         c.onNotify("machine/open", p ->
-                ServerUiHost.of((ProtocolConnection<Object>) c).open(new MachineWindow(MACHINES.forPeer(c.peer()))));
+                ServerWindows.of((ProtocolConnection<Object>) c).open(new MachineWindow(MACHINES.forPeer(c.peer()))));
     }
 });
 ```
@@ -546,7 +545,7 @@ moves from the connection to the session (F8).
 **Client half** — `MachineExampleClient` (260 lines) becomes the F8 key binding plus:
 
 ```java
-ClientUiHost.register("crystalgui:machine", MachineClient::new);
+ClientWindows.register("crystalgui:machine", MachineClient::new);
 ```
 
 `bindToConnection`, `placeOnDesktop`, `sheetInstalled`, the DESTROYED-frame resurrection, the
@@ -555,7 +554,7 @@ line — `connection.notify("machine/open", null)` — and demonstrates the one 
 (a client *asking* for a UI), which is a better lesson than open-on-login anyway.
 
 **The demo, the probe, the harness, the fixtures** (F14): `Loopback` grows nothing; the fixtures
-call `UiHosts.register()` in setup and drive `host.open(...)` like production does — so the tests
+call `WindowProtocol.register()` in setup and drive `host.open(...)` like production does — so the tests
 finally exercise the same wiring the game runs, which none of them do today.
 
 ### III.8 — Threading
@@ -571,7 +570,7 @@ proof.
 | Phase | Contents | Proves |
 |---|---|---|
 | **P0** | F5 alone: UUID re-key in `CgUiConnections` + `Mc1710NetworkChannel`. Independent bug fix, ships first. | die → respawn → click still works (manual; `serverSmoke` can't see it) |
-| **P1** | `ProtocolConnection` hooks + attachments; `ServerWindow`/`ServerUiHost`/`ClientUiHost`/mount SPI; `ui/close`; `ui/openWindow` +type/title/key; session `notify`/`onNotify`; migrate the three WeakHashMaps; headless tests | the close matrix, in `core`, against loopback |
+| **P1** | `ProtocolConnection` hooks + attachments; `ServerWindow`/`ServerWindows`/`ClientWindows`/mount SPI; `ui/close`; `ui/openWindow` +type/title/key; session `notify`/`onNotify`; migrate the three WeakHashMaps; headless tests | the close matrix, in `core`, against loopback |
 | **P2** | mc1710: mount in `CgUiScreen`, `CgUi.open`, example rewritten per III.7; deprecate the plain riding constructor; primer + AGENTS.md rows updated | F8 in game; X actually closes; two windows of one type |
 | **P3** | `SheetResolver` + `ui/sheet` fetch-by-hash | a server-authored theme reaches a client that never shipped it |
 | **P4** (optional) | `ui/visibility` throttle for hidden frames | only if a real UI shows the cost |
@@ -638,13 +637,13 @@ defects.
   numbered tree may be wired at any time, because its description has not left the building.
   Without this relaxation, no fragment can ever be attached to a live window.
 
-### IV.1 — `ServerFragment` + `SessionScope`
+### IV.1 — `ServerFragment` + `WindowScope`
 
 ```java
 /** A reusable piece of a window: a subtree plus the behaviour that makes it work. */
 public abstract class ServerFragment {
     public abstract UIElement root();
-    protected abstract void bind(SessionScope io);
+    protected abstract void bind(WindowScope io);
     protected void tick() { }
 }
 ```
@@ -657,7 +656,7 @@ panel.body.addChild(inv.root());
 io.attach(inv, "inventory");     // binds now (or via tree delta on a live window), ticks after the window
 ```
 
-`SessionScope` is a *view* of the session, and the isolation rules fall out of what each surface is
+`WindowScope` is a *view* of the session, and the isolation rules fall out of what each surface is
 keyed by:
 
 | Surface | Keying | Collision story |
@@ -715,8 +714,8 @@ looks, the constructor.
 ### IV.3 — Phase placement
 
 F15 and F16 are session-layer fixes and land in **P1** (F15 is a candidate to land even earlier —
-it is a bug today, fragments or not). `ServerFragment`/`SessionScope` and the `UiWindows` builder
-land in **P2** alongside the example rewrite, which becomes their first consumer: the Machine
+it is a bug today, fragments or not). `ServerFragment`/`WindowScope` and the `ServerWindow.of(…)`
+builder land in **P2** alongside the example rewrite, which becomes their first consumer: the Machine
 panel's demo strip is the natural fragment to extract, and the example then teaches composition in
 the same breath as contracts.
 
@@ -745,11 +744,11 @@ host mounting the tree sees state that has already been sent rather than one fra
 
 ### Two design changes forced by the code
 
-- **`ClientUiHost` keys mounted windows by the SESSION, not by the window id.** `ClientUiSession`
+- **`ClientWindows` keys mounted windows by the SESSION, not by the window id.** `ClientUiSession`
   calls `release()` — which sets the id back to `-1` — *before* it emits `onWindowClosed`, so a
   lookup by id at close time misses every time and the window is never taken off screen. Cost four
   failing tests to find; the session object is the one identity stable for a window's whole life.
-- **`ServerUiHost.open` rolls back a failed `bind`.** Binding is exactly where a wiring mistake is
+- **`ServerWindows.open` rolls back a failed `bind`.** Binding is exactly where a wiring mistake is
   raised (a duplicate handler, two fragments under one name), so a half-opened window left in the map
   holding an id and its mux slots is the *ordinary* path for a mistake rather than a theoretical one.
 
@@ -766,7 +765,7 @@ signals the throttle keys on. Their phases became their covering tests, which is
 
 ### Verification
 
-- `UiHostLifecycleTest`, 26 tests: the four close reasons, key dedup and focus, the mount queue in
+- `WindowLifecycleTest`, 26 tests: the four close reasons, key dedup and focus, the mount queue in
   both orderings, the connection-death cascade, an unknown type mounting bare, two windows naming one
   notification, fragment namespacing and the two boundaries that throw, a fragment attached to a live
   window, the delta race, the sheet tiers, and the hidden-reshape numbering.
@@ -776,6 +775,33 @@ signals the throttle keys on. Their phases became their covering tests, which is
 - The full headless suite (1400+), `:core:runExample` end to end with the wire tapped, and
   `:mc1710:serverSmoke`, which reports contributors `[workspace, ui, machine]` and no client-only
   class loaded on the server.
+
+### The names changed after it shipped
+
+Recorded because every commit message and every earlier revision of this document uses the old ones.
+
+The problem was two overloads, both mine. **"host"** already meant the *platform* (`CgUiScreen` owns
+a `UIWindow`) and a *server-side service* (`CgUiWorkspaceHost`); a third sense read circularly, since
+the platform host installed a mount on the `ClientUiHost`. And **"window"** already meant the
+*engine* (`UIWindow`) and the *chrome* (`WindowFrame`).
+
+| Was | Is | Why |
+|---|---|---|
+| `com.crystalgui.net.host` | `com.crystalgui.net.window` | the package now does the disambiguating: `ui.UIWindow` / `ui.elements.desktop.WindowFrame` / `net.window.ServerWindow` |
+| `ServerUiHost` | `ServerWindows` | the codebase's existing plural-owner convention — `ClientUiSessions`:`ClientUiSession`, `Protocols`, `ScriptRuntimes` |
+| `ClientUiHost` | `ClientWindows` | same |
+| `UiHosts` | `WindowProtocol` | it contributes the window half of the protocol, and `X.register()` is the init convention |
+| `UiWindows` | `ServerWindow.of(…)` → `ServerWindow.Builder` | the builder belongs to what it builds, and a top-level name one letter from `ServerWindows` was a trap |
+| `SessionScope` | `WindowScope` | "session" was triple-booked (`ServerUiSession`, `WorkbenchSession`, `SessionState`) |
+| `UiHostLifecycleTest` | `WindowLifecycleTest` | follows |
+
+**`UIWindow` is the one genuine misnomer and was deliberately left alone.** It is the only thing
+called a window that is not one — it plays the DOM's `Document` role, which this codebase's own
+invariants already say outright (*"`UIWindow` owns the modal stack because the spec hangs it off the
+Document"*), and `UIDocument` is free. It is also **1,069 Java references across 308 files plus 195
+in docs**, several inside load-bearing invariants that would need re-reading rather than
+find-replacing, and the ambiguity it caused is fully resolved by the package split above. Left as a
+known wart with the right name recorded.
 
 ### Still open
 

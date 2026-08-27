@@ -8,9 +8,9 @@ import com.crystalgui.example.machine.MachineModel;
 import com.crystalgui.example.machine.MachineTrace;
 import com.crystalgui.example.machine.ui.MachinePanel;
 import com.crystalgui.net.ClientUiSession;
-import com.crystalgui.net.host.ClientUiHost;
-import com.crystalgui.net.host.ClientWindowBehaviour;
-import com.crystalgui.net.host.ClientWindowContext;
+import com.crystalgui.net.window.ClientWindows;
+import com.crystalgui.net.window.ClientWindowBehaviour;
+import com.crystalgui.net.window.ClientWindowContext;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.Button;
@@ -22,13 +22,13 @@ import com.crystalgui.ui.elements.UIText;
  * <p>Registered once, at mod init:</p>
  *
  * <pre>{@code
- * ClientUiHost.register(MachineWindow.TYPE, MachineClient::new);
+ * ClientWindows.register(MachineWindow.TYPE, MachineClient::new);
  * }</pre>
  *
  * <p>That is the whole of the client's wiring. What used to sit around it — tracking whether the
  * connection had been replaced, tearing down on disconnect, installing a session listener at exactly
  * the right moment, and polling every tick for "is there a screen yet and is there a window yet" — is
- * {@link ClientUiHost}'s, once, for every mod.</p>
+ * {@link ClientWindows}'s, once, for every mod.</p>
  *
  * <h3>What is not here</h3>
  *
@@ -63,7 +63,7 @@ public final class MachineClient implements ClientWindowBehaviour {
     private ClientWindowContext window;
 
     /**
-     * Built by {@link ClientUiHost} when a window of {@link MachineWindow#TYPE} opens.
+     * Built by {@link ClientWindows} when a window of {@link MachineWindow#TYPE} opens.
      *
      * <p>Everything it needs is on the context: the rebuilt tree, and the session for calls and
      * notifications. There is no connection to find, no session to adopt and nothing to wait for —

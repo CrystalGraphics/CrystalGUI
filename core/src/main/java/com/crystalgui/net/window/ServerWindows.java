@@ -1,4 +1,4 @@
-package com.crystalgui.net.host;
+package com.crystalgui.net.window;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -51,7 +51,7 @@ import com.crystalgui.ui.UIElement;
  * may touch the world, and the tick hook sees this tick's input already delivered because hooks run
  * after the drain.</p>
  */
-public final class ServerUiHost {
+public final class ServerWindows {
 
     private final ProtocolConnection<Object> connection;
 
@@ -73,7 +73,7 @@ public final class ServerUiHost {
 
     private boolean closing;
 
-    private ServerUiHost(ProtocolConnection<Object> connection) {
+    private ServerWindows(ProtocolConnection<Object> connection) {
         this.connection = connection;
         // AFTER the drain, so a window's tick runs against messages that have already arrived rather
         // than against the previous tick's. @see ProtocolConnection#onTick
@@ -82,11 +82,11 @@ public final class ServerUiHost {
     }
 
     /** The host for this connection, created on first use. */
-    public static ServerUiHost of(ProtocolConnection<Object> connection) {
-        return connection.attachment(ServerUiHost.class, ServerUiHost::new);
+    public static ServerWindows of(ProtocolConnection<Object> connection) {
+        return connection.attachment(ServerWindows.class, ServerWindows::new);
     }
 
-    /** Builds the host so its tick and close hooks are installed. @see UiHosts */
+    /** Builds the host so its tick and close hooks are installed. @see WindowProtocol */
     static void install(ProtocolConnection<Object> connection) {
         of(connection);
     }
@@ -154,7 +154,7 @@ public final class ServerUiHost {
         try {
             // BEFORE open(), which is what makes the handlers-before-open rule unbreakable from a
             // window's own code rather than a thing every author has to remember.
-            window.bind(new SessionScope(session, window, ""));
+            window.bind(new WindowScope(session, window, ""));
             session.onClientClosed(reason -> finish(window, ServerWindow.CloseReason.CLIENT, reason));
             session.open();
         } catch (RuntimeException | Error failed) {
@@ -177,13 +177,13 @@ public final class ServerUiHost {
     }
 
     /**
-     * Opens a window described by lambdas. @see UiWindows
+     * Opens a window described by lambdas. @see ServerWindow#of(String, java.util.function.Supplier, java.util.function.Function)
      *
      * <p>An overload rather than making the caller write {@code .build()}: the builder has exactly one
      * destination, and a fluent chain that ends in a call nobody needs is a call somebody will forget
      * and then wonder why nothing opened.</p>
      */
-    public ServerWindow open(UiWindows.Builder<?> builder) {
+    public ServerWindow open(ServerWindow.Builder<?> builder) {
         return open(builder.build());
     }
 

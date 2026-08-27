@@ -1,10 +1,10 @@
-package com.crystalgui.net.host;
+package com.crystalgui.net.window;
 
 /**
  * The <b>local</b> half of a window: whatever this client does about a window that the server did not
  * ask for.
  *
- * <p>Registered per window type with {@code ClientUiHost.register}, and constructed once per window of
+ * <p>Registered per window type with {@code ClientWindows.register}, and constructed once per window of
  * that type — Minecraft's {@code MenuScreens} registry, doing rather less because it has rather less to
  * do. A factory does its wiring in its constructor, from the {@link ClientWindowContext} it is handed:
  * listeners on widgets it was given, {@code onCall} methods the server may invoke, a

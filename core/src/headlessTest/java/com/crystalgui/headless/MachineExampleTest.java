@@ -11,11 +11,11 @@ import org.junit.Test;
 import com.crystalgui.example.machine.session.MachineClient;
 import com.crystalgui.example.machine.MachineModel;
 import com.crystalgui.example.machine.session.MachineWindow;
-import com.crystalgui.net.host.ClientUiHost;
-import com.crystalgui.net.host.ClientWindowContext;
-import com.crystalgui.net.host.ServerUiHost;
-import com.crystalgui.net.host.UiHosts;
-import com.crystalgui.net.host.WindowMount;
+import com.crystalgui.net.window.ClientWindows;
+import com.crystalgui.net.window.ClientWindowContext;
+import com.crystalgui.net.window.ServerWindows;
+import com.crystalgui.net.window.WindowProtocol;
+import com.crystalgui.net.window.WindowMount;
 import com.crystalgui.example.machine.ui.MachineStyles;
 import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.UiEventKinds;
@@ -67,23 +67,23 @@ public class MachineExampleTest {
         MachineClient client;
 
         Loopback() {
-            // The contributor is what puts a ServerUiHost on one end and a ClientUiHost on the other,
+            // The contributor is what puts a ServerWindows on one end and a ClientWindows on the other,
             // decided by whether the connection names a peer. Reset first, because a suite shares
             // statics and Protocols refuses a duplicate contributor outright.
             Protocols.resetForTesting();
-            UiHosts.resetForTesting();
-            UiHosts.register();
+            WindowProtocol.resetForTesting();
+            WindowProtocol.register();
 
             link = InMemoryTransport.pair();
             serverEnd = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "player");
             clientEnd = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
 
-            ClientUiHost.register(MachineWindow.TYPE, context -> client = new MachineClient(context));
-            ClientUiHost.of(clientEnd).setMount(new SilentMount());
+            ClientWindows.register(MachineWindow.TYPE, context -> client = new MachineClient(context));
+            ClientWindows.of(clientEnd).setMount(new SilentMount());
         }
 
         Loopback open() {
-            server = ServerUiHost.of(serverEnd).open(new MachineWindow(machine));
+            server = ServerWindows.of(serverEnd).open(new MachineWindow(machine));
             settle(6);
             return this;
         }
@@ -116,7 +116,7 @@ public class MachineExampleTest {
 
         /** The window on screen, for the tests that drive a close from the client's side. */
         ClientWindowContext shown() {
-            return ClientUiHost.of(clientEnd).windows().get(0);
+            return ClientWindows.of(clientEnd).windows().get(0);
         }
     }
 

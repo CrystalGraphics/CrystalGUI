@@ -7,11 +7,11 @@ import com.crystalgui.example.machine.MachineTrace;
 import com.crystalgui.example.machine.ui.MachineStyles;
 import com.crystalgui.example.machine.MachineModel;
 import com.crystalgui.net.InMemoryTransport;
-import com.crystalgui.net.host.ClientUiHost;
-import com.crystalgui.net.host.ClientWindowContext;
-import com.crystalgui.net.host.ServerUiHost;
-import com.crystalgui.net.host.UiHosts;
-import com.crystalgui.net.host.WindowMount;
+import com.crystalgui.net.window.ClientWindows;
+import com.crystalgui.net.window.ClientWindowContext;
+import com.crystalgui.net.window.ServerWindows;
+import com.crystalgui.net.window.WindowProtocol;
+import com.crystalgui.net.window.WindowMount;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
@@ -73,7 +73,7 @@ public final class MachineDemo {
          */
         // ONE CALL, and it is what puts a host on every connection opened afterwards. In game this
         // sits beside CgUiWorkspaceHost.register() in CommonProxy.init().
-        UiHosts.register();
+        WindowProtocol.register();
 
         InMemoryTransport<Object>[] link = InMemoryTransport.pair();
         ProtocolConnection<Object> serverEnd =
@@ -90,15 +90,15 @@ public final class MachineDemo {
         // still opens, still renders and still reports every event the server asked for; only the three
         // buttons THIS side drives would go quiet.
         MachineClient[] behaviour = new MachineClient[1];
-        ClientUiHost.register(MachineWindow.TYPE, context -> behaviour[0] = new MachineClient(context));
+        ClientWindows.register(MachineWindow.TYPE, context -> behaviour[0] = new MachineClient(context));
 
         // Where windows land. A real host wraps the tree in a WindowFrame on the desktop; here it is a
         // println. That is the whole platform surface for networked UI.
-        ClientUiHost.of(clientEnd).setMount(new PrintingMount());
+        ClientWindows.of(clientEnd).setMount(new PrintingMount());
 
         // ── 1. Open ─────────────────────────────────────────────────────────
         say("1. The server opens the window -- one call, and the host does the rest");
-        MachineWindow server = ServerUiHost.of(serverEnd).open(new MachineWindow(machine));
+        MachineWindow server = ServerWindows.of(serverEnd).open(new MachineWindow(machine));
         pump(link, serverEnd, clientEnd, 4);
         MachineClient client = behaviour[0];
 
@@ -120,7 +120,7 @@ public final class MachineDemo {
         say("3. Twenty WORLD ticks. The machine advances; the window is only a view of it");
         for (int i = 0; i < 20; i++) {
             // THE MODEL, not the window. Nothing here ticks a session or flushes anything -- the
-            // connection's own tick does that, through the host, after this. @see ServerUiHost
+            // connection's own tick does that, through the host, after this. @see ServerWindows
             machine.tick();
             pumpQuietly(link, serverEnd, clientEnd);
         }
@@ -169,7 +169,7 @@ public final class MachineDemo {
 
         // ── 9. Close ────────────────────────────────────────────────────────
         say("9. The server puts the window away, and says why");
-        ServerUiHost.of(serverEnd).close(server, "the block was broken");
+        ServerWindows.of(serverEnd).close(server, "the block was broken");
         pump(link, serverEnd, clientEnd, 1);
 
         /*
@@ -180,12 +180,12 @@ public final class MachineDemo {
          * destroyed. The only close anything ever noticed was the player disconnecting.
          */
         say("10. THE USER closes a window, and the server hears about it  [n only]");
-        ServerUiHost.of(serverEnd).open(new MachineWindow(machine));
+        ServerWindows.of(serverEnd).open(new MachineWindow(machine));
         pump(link, serverEnd, clientEnd, 4);
-        ClientUiHost.of(clientEnd).windows().get(0).userClosed();
+        ClientWindows.of(clientEnd).windows().get(0).userClosed();
         pump(link, serverEnd, clientEnd, 2);
         System.out.println("  [server] windows still open: "
-                + ServerUiHost.of(serverEnd).windowCount());
+                + ServerWindows.of(serverEnd).windowCount());
 
         System.out.println();
         System.out.println("Nothing above sent a pixel, a colour or a layout. The client drew a tree "

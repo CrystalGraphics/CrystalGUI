@@ -7,7 +7,7 @@ import com.crystalgui.example.machine.session.MachineClient;
 import com.crystalgui.example.machine.session.MachineWindow;
 import com.crystalgui.mc.client.CgUiScreen;
 import com.crystalgui.mc.net.CgUiConnections;
-import com.crystalgui.net.host.ClientUiHost;
+import com.crystalgui.net.window.ClientWindows;
 import com.crystalgui.net.protocol.ProtocolConnection;
 
 import cpw.mods.fml.client.registry.ClientRegistry;
@@ -36,7 +36,7 @@ import net.minecraft.client.settings.KeyBinding;
  * <h3>What each of the two lines does</h3>
  *
  * <ul>
- *   <li>{@code ClientUiHost.register(type, factory)} — what this client does <em>locally</em> about a
+ *   <li>{@code ClientWindows.register(type, factory)} — what this client does <em>locally</em> about a
  *       window of that type. Minecraft's {@code MenuScreens.register}, and optional in a way that one
  *       is not: delete it and the panel still opens, still renders and still reports every event the
  *       server asked for. Only the three buttons this side drives would go quiet.</li>
@@ -72,8 +72,8 @@ public final class MachineExampleClient {
     public static void registerClient() {
         // WHAT THIS CLIENT DOES LOCALLY about a machine panel. Once, at init -- there is no connection
         // to wait for and no session to adopt, because a window type is a fact about this installation
-        // rather than about any one wire. @see ClientUiHost#register
-        ClientUiHost.register(MachineWindow.TYPE, MachineClient::new);
+        // rather than about any one wire. @see ClientWindows#register
+        ClientWindows.register(MachineWindow.TYPE, MachineClient::new);
 
         openPanel = new KeyBinding("key.crystalgui.machine", Keyboard.KEY_F8,
                 "key.categories.crystalgui");
@@ -113,6 +113,7 @@ public final class MachineExampleClient {
             MachineTrace.log(MachineTrace.CLIENT, "F8 -- asking the server for a panel");
             // A NOTIFICATION: nobody is waiting. The window arriving IS the answer, and it arrives as a
             // window rather than as a reply -- which is why this is not a request.
+            // Says to the server "Hey — the user asked for a machine panel. If they're allowed one, build it and send it to me."
             connection.notify(MachineExample.OPEN, null);
 
             // Ask for the DESKTOP, not the editor: F6 brings the editor forward whatever state it was

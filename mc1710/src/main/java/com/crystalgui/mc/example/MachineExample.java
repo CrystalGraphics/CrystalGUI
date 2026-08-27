@@ -7,7 +7,7 @@ import com.crystalgui.example.machine.MachineModel;
 import com.crystalgui.example.machine.MachineTrace;
 import com.crystalgui.example.machine.session.MachineWindow;
 import com.crystalgui.mc.net.CgUiConnections;
-import com.crystalgui.net.host.ServerUiHost;
+import com.crystalgui.net.window.ServerWindows;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 
@@ -31,7 +31,7 @@ import cpw.mods.fml.common.gameevent.TickEvent;
  * with GUIs on a twenty-player server would ask twenty times a second a question
  * {@link CgUiConnections} answers exactly once, at {@code PlayerLoggedInEvent}.</p>
  *
- * <p>{@link ServerUiHost} owns all of it now. What is left below is the two things that are genuinely
+ * <p>{@link ServerWindows} owns all of it now. What is left below is the two things that are genuinely
  * this example's: the machines, and the message that asks for a window.</p>
  *
  * <h3>The machine is world state; the window is a view of it</h3>
@@ -85,7 +85,7 @@ public final class MachineExample {
     }
 
     /**
-     * Called from {@code CommonProxy.init()}, after {@code UiHosts.register()}.
+     * Called from {@code CommonProxy.init()}, after {@code WindowProtocol.register()}.
      *
      * <p>A contributor, like the workspace: it is told about every connection opened afterwards, and it
      * never sees a player list, a tick or a login event.</p>
@@ -110,8 +110,8 @@ public final class MachineExample {
                     MachineTrace.log(MachineTrace.SERVER, "the client asked for a panel");
                     // ONE CALL. The id, the session, the description, the tick and every way this window
                     // can end are the host's. Asking twice brings the first one forward, because the
-                    // window names a key. @see ServerUiHost#open
-                    ServerUiHost.of(wire).open(new MachineWindow(machine));
+                    // window names a key. @see ServerWindows#open
+                    ServerWindows.of(wire).open(new MachineWindow(machine));
                 });
 
                 // The machine goes when its owner does. A real mod's machine lives in the world and
@@ -130,7 +130,7 @@ public final class MachineExample {
          *
          * <p>This is the one tick handler the example needs, and it is about machines rather than about
          * windows: no player list, no map of sessions, no flush. A window that is open mirrors its
-         * machine from {@code MachineWindow.tick}, which {@link ServerUiHost} calls from the
+         * machine from {@code MachineWindow.tick}, which {@link ServerWindows} calls from the
          * connection's own tick, and the flush after it belongs to the session.</p>
          *
          * <p><b>Everything here runs on the server thread</b>, which is why it may touch the world at
