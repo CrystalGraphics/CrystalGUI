@@ -79,15 +79,16 @@ public final class MachineClient implements ClientWindowBehaviour<MachinePanel> 
     /**
      * Built by {@link ClientWindows} when a window of {@link MachinePanel#TYPE} opens.
      *
-     * <p>Everything it needs arrives here: the panel already bound to the rebuilt tree, and the
-     * context carrying the session for calls and notifications. There is no connection to find, no
-     * session to adopt, no tree to search and nothing to wait for — by the time this runs the window
-     * is on screen.</p>
+     * <p><b>Only the things that happen once.</b> Everything registered on the session below is keyed
+     * by method and survives a re-describe untouched, so it belongs here. Anything attached to a
+     * <em>widget</em> dies with the tree that carried it and belongs in {@link #onPanelBound}, which
+     * the host calls immediately after this and again every time the tree is replaced.</p>
+     *
+     * <p>There is no connection to find, no session to adopt, no tree to search and nothing to wait
+     * for — by the time this runs the window is on screen.</p>
      */
-    public MachineClient(MachinePanel panel, ClientWindowContext window) {
-        this.panel = panel;
+    public MachineClient(ClientWindowContext window) {
         this.window = window;
-        wire(panel);
 
         /*
          * ── S -> C NOTIFICATION, the receiving half ───────────────────────────────────────────
@@ -134,15 +135,25 @@ public final class MachineClient implements ClientWindowBehaviour<MachinePanel> 
      * session's own registrations survive (they are keyed by method, not by element); only the widget
      * listeners have to be put back.</p>
      */
+    /**
+     * The panel, at mount and after every re-describe. <b>The only place this class wires anything to a
+     * widget.</b>
+     *
+     * <p>It used to be a {@code wire(panel)} call in the constructor plus a second one in an
+     * {@code onContentReplaced} that had to remember to repeat it — and forgetting the second was
+     * silent: every button dead, the window otherwise perfect. One entry point removes the choice.</p>
+     *
+     * <p>Nothing here names {@code MachinePanel.TYPE}: the host bound it, from the registration that
+     * built this behaviour and still knows the type.</p>
+     */
     @Override
-    public void onContentReplaced(MachinePanel panel, ClientWindowContext context) {
-        this.window = context;
-        // ALREADY RE-BOUND, by the host, through the registration that built this behaviour -- so
-        // nothing here names MachinePanel.TYPE back at a framework that already knew it. The old
-        // panel's fields pointed into a tree nothing updates any more; the session's own registrations
-        // survive untouched, being keyed by method rather than by element.
+    public void onPanelBound(MachinePanel panel) {
         this.panel = panel;
-        wire(panel);
+        panel.askStats.attachListener(this::requestStats);
+        panel.heartbeat.attachListener(this::sendHeartbeat);
+        // Deliberately blank -- the server refuses it, which is the only way to watch the error
+        // callback fire. See MachineWindow's machine/rename handler.
+        panel.badRename.attachListener(() -> rename("   "));
     }
 
     @Override
@@ -151,22 +162,6 @@ public final class MachineClient implements ClientWindowBehaviour<MachinePanel> 
     }
 
     // ── Behaviour this side adds for itself ─────────────────────────────────
-
-    /**
-     * Three lines, and each one is checked.
-     *
-     * <p>This used to be three {@code querySelector} calls guarded by {@code instanceof}, and the
-     * guard was the problem: the day an id moved, the line <b>silently did nothing</b> and left a
-     * button that looked wired and was not. Binding resolves every part once, up front, and fails
-     * loudly there instead. @see MachinePanel#bindTo</p>
-     */
-    private void wire(MachinePanel panel) {
-        panel.askStats.attachListener(this::requestStats);
-        panel.heartbeat.attachListener(this::sendHeartbeat);
-        // Deliberately blank -- the server refuses it, which is the only way to watch the error callback
-        // fire. See MachineWindow's machine/rename handler.
-        panel.badRename.attachListener(() -> rename("   "));
-    }
 
     /**
      * ── C → S REQUEST ── Asks the server for its numbers, and hands the answer to a caller.

@@ -116,11 +116,15 @@ public final class ClientWindows {
      * ClientWindows.register(MachinePanel.TYPE, MachineClient::new);
      * }</pre>
      *
-     * <p>The factory receives the panel {@link WindowType#bind bound} to the rebuilt tree, so a
-     * behaviour reaches {@code panel.askStats} instead of {@code querySelector("#ask-stats")} followed
-     * by an {@code instanceof} that silently does nothing when the id moves. And because the signature
-     * ties the two together, <b>a mismatched pair is a compile error</b> rather than the runtime no-op
-     * a pair of strings used to give.</p>
+     * <p><b>The pairing is checked by the behaviour's own type.</b> {@code MachineClient} declares
+     * {@code implements ClientWindowBehaviour<MachinePanel>}, so registering it against a
+     * {@code WindowType<SomethingElse>} does not compile — where a pair of strings gave a runtime
+     * no-op that looked exactly like a window with deliberately no behaviour.</p>
+     *
+     * <p>The panel itself arrives at {@link ClientWindowBehaviour#onPanelBound}, {@link WindowType#bind
+     * bound} to the rebuilt tree — at mount and again after every re-describe — so a behaviour reaches
+     * {@code panel.askStats} rather than {@code querySelector("#ask-stats")} guarded by an
+     * {@code instanceof} that silently does nothing when the id moves.</p>
      *
      * <p>Called once at mod init, like {@code MenuScreens.register}. Idempotent per type;
      * re-registering replaces. Windows of unregistered types are unaffected and still open.</p>
@@ -131,7 +135,7 @@ public final class ClientWindows {
      * WindowType</p>
      */
     public static <P> void register(WindowType<P> type,
-                                    BiFunction<P, ClientWindowContext, ClientWindowBehaviour<P>> factory) {
+                                    Function<ClientWindowContext, ClientWindowBehaviour<P>> factory) {
         if (type == null) throw new IllegalArgumentException("a behaviour needs a type");
         if (factory == null) throw new IllegalArgumentException("factory is null");
         FACTORIES.put(type.id(), new Registration<>(type, factory));
@@ -147,7 +151,7 @@ public final class ClientWindows {
                                 Function<ClientWindowContext, ClientWindowBehaviour<UIElement>> factory) {
         if (type == null || type.isEmpty()) throw new IllegalArgumentException("a behaviour needs a type");
         if (factory == null) throw new IllegalArgumentException("factory is null");
-        register(WindowType.bare(type), (root, context) -> factory.apply(context));
+        register(WindowType.bare(type), factory);
     }
 
     /** Drops a registration. Tests, and a mod unloading itself. */
@@ -169,10 +173,19 @@ public final class ClientWindows {
      * two parallel maps.</p>
      */
     private record Registration<P>(WindowType<P> type,
-                                   BiFunction<P, ClientWindowContext, ClientWindowBehaviour<P>> factory) {
+                                   Function<ClientWindowContext, ClientWindowBehaviour<P>> factory) {
 
+        /**
+         * Builds the behaviour and hands it its panel — <b>in that order, and both here</b>.
+         *
+         * <p>The bind happens after construction rather than as a constructor argument, so that
+         * {@code onPanelBound} is the single place a panel ever arrives. A behaviour that could get one
+         * two ways would put the re-wiring footgun straight back.</p>
+         */
         ClientWindowBehaviour<P> build(ClientWindowContext context) {
-            return factory.apply(type.bind(context.root()), context);
+            ClientWindowBehaviour<P> behaviour = factory.apply(context);
+            behaviour.onPanelBound(type.bind(context.root()));
+            return behaviour;
         }
 
         /**
@@ -185,7 +198,7 @@ public final class ClientWindows {
          */
         @SuppressWarnings("unchecked")
         void replaced(ClientWindowBehaviour<?> behaviour, ClientWindowContext context) {
-            ((ClientWindowBehaviour<P>) behaviour).onContentReplaced(type.bind(context.root()), context);
+            ((ClientWindowBehaviour<P>) behaviour).onPanelBound(type.bind(context.root()));
         }
     }
 

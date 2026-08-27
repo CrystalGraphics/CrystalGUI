@@ -315,7 +315,7 @@ public class WindowLifecycleTest {
         AtomicReference<ClientWindowContext> got = new AtomicReference<>();
         ClientWindows.register(TYPE, context -> {
             got.set(context);
-            return new ClientWindowBehaviour() {
+            return new ClientWindowBehaviour<UIElement>() {
                 @Override
                 public void onClosed(String reason) {
                     closed.add(reason);
@@ -363,7 +363,7 @@ public class WindowLifecycleTest {
         List<String> seen = new ArrayList<>();
         ClientWindows.register(TYPE, context -> {
             seen.add(context.type());
-            return new ClientWindowBehaviour() { };
+            return new ClientWindowBehaviour<UIElement>() { };
         });
 
         server.open(new OtherWindow());
@@ -386,9 +386,11 @@ public class WindowLifecycleTest {
     @Test
     public void aTypedRegistrationHandsTheBehaviourThePanelRatherThanTheTree() {
         AtomicReference<Panel> bound = new AtomicReference<>();
-        ClientWindows.register(PANEL, (panel, context) -> {
-            bound.set(panel);
-            return new ClientWindowBehaviour() { };
+        ClientWindows.register(PANEL, context -> new ClientWindowBehaviour<Panel>() {
+            @Override
+            public void onPanelBound(Panel panel) {
+                bound.set(panel);
+            }
         });
 
         TestWindow window = server.open(new TestWindow());
@@ -417,7 +419,7 @@ public class WindowLifecycleTest {
             root.require("#nothing-like-this", Button.class);
             throw new AssertionError("require should have thrown first");
         });
-        ClientWindows.register(wrong, (panel, context) -> new ClientWindowBehaviour() { });
+        ClientWindows.register(wrong, context -> new ClientWindowBehaviour<Panel>() { });
 
         server.open(new TestWindow());
         settle();

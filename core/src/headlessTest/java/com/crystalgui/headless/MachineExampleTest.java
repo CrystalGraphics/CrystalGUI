@@ -79,8 +79,7 @@ public class MachineExampleTest {
             serverEnd = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "player");
             clientEnd = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
 
-            ClientWindows.register(MachinePanel.TYPE,
-                    (panel, context) -> client = new MachineClient(panel, context));
+            ClientWindows.register(MachinePanel.TYPE, context -> client = new MachineClient(context));
             ClientWindows.of(clientEnd).setMount(new SilentMount());
         }
 
