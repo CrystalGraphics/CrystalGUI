@@ -1852,7 +1852,29 @@ public final class JavaSignatures {
         if (type.isAnnotation()) return SymbolKind.CLASS;
         if (type.isInterface()) return SymbolKind.INTERFACE;
         if (type.isRecord()) return SymbolKind.RECORD;
+        // A THROWABLE IS ITS OWN KIND, and this is the only place that decides it for a resolved binding.
+        // `TypeIndex.kindOf` reads the same fact off the class file, so Go To File drew
+        // `WrongMinecraftVersionException` with the throwable glyph while the tab that OPENED it drew a
+        // plain class -- one type, two glyphs, in the same session. Everything else the engine answers
+        // about a type kind comes through here, so the tab is only where it showed.
+        if (isThrowable(type)) return SymbolKind.EXCEPTION;
         return SymbolKind.CLASS;
+    }
+
+    /**
+     * Whether {@code type}'s hierarchy reaches {@code java.lang.Throwable}.
+     *
+     * <p>The superclass chain only: an interface cannot be throwable, and {@code getSuperclass()} answers
+     * null at {@code Object} and for anything with no superclass, which ends the walk without a guard of
+     * its own. The ERASURE is compared, because a generic exception's qualified name carries its type
+     * arguments and would never equal the bare name.</p>
+     */
+    public static boolean isThrowable(ITypeBinding type) {
+        for (ITypeBinding at = type.getSuperclass(); at != null; at = at.getSuperclass()) {
+            ITypeBinding erased = at.getErasure() == null ? at : at.getErasure();
+            if ("java.lang.Throwable".equals(erased.getQualifiedName())) return true;
+        }
+        return false;
     }
 
     private static String declarationKeyword(ITypeBinding type) {

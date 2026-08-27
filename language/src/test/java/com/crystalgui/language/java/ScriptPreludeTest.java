@@ -104,6 +104,42 @@ public class ScriptPreludeTest {
         assertNull("nor its row", wrapped.toScriptPoint(new TextPoint(1, 0)));
     }
 
+    /**
+     * <b>An offset INSIDE a hoisted import maps to the prefix, not to the blanks it left.</b>
+     *
+     * <p>The reverse direction was fixed first and this one was left behind. An import is blanked in the
+     * body and re-emitted in the prefix, so shifting an offset inside one by the prefix length lands on
+     * whitespace: {@code resolveAt} finds no node there, and hovering an import in a class-less script
+     * showed no documentation at all. The same file wrapped in a class hovered correctly, because then
+     * nothing is hoisted and the shift is the whole truth — which is exactly what made it look like a
+     * documentation bug rather than a coordinate one.</p>
+     *
+     * <p>Asserted by reading the unit back at the mapped offset rather than by comparing numbers: an
+     * offset is only right if the text there is the text the author was pointing at.</p>
+     */
+    @Test
+    public void anOffsetInsideAHoistedImportMapsToThePrefix() {
+        String script = "import java.util.List;\nint x = 1;\n";
+        ScriptPrelude.Wrapped wrapped = wrap(script);
+
+        int inScript = script.indexOf("List");
+        int inUnit = wrapped.toUnitOffset(inScript);
+        assertEquals("the offset does not point at the type the author was on",
+                "List", wrapped.unitSource().substring(inUnit, inUnit + "List".length()));
+    }
+
+    /** ...and ordinary body text still shifts, which is what the mapping does the rest of the time. */
+    @Test
+    public void anOffsetInTheBodyStillShiftsByThePrefix() {
+        String script = "import java.util.List;\nint marker = 1;\n";
+        ScriptPrelude.Wrapped wrapped = wrap(script);
+
+        int inScript = script.indexOf("marker");
+        int inUnit = wrapped.toUnitOffset(inScript);
+        assertEquals("ordinary body text no longer maps correctly",
+                "marker", wrapped.unitSource().substring(inUnit, inUnit + "marker".length()));
+    }
+
     @Test
     public void theScriptBodyAppearsVerbatimAfterAFixedPrefix() {
         ScriptPrelude.Wrapped wrapped = wrap("int x = 1;\n");

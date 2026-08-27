@@ -77,6 +77,12 @@ public enum SymbolKind {
             case CLASS:
             case RECORD:
             case ANNOTATION:
+            // AN EXCEPTION IS STILL A TYPE TO THE EYE. The kind exists so the ICON can differ -- both
+            // references draw a throwable with its own glyph -- and nothing about being throwable makes
+            // the NAME a different sort of word on the line. Without this case it fell to the default and
+            // every `catch (IOException e)` and `throws IOException` lost its type colour, which is a
+            // conspicuous regression in exchange for a glyph.
+            case EXCEPTION:
                 return "type";
             // AN INTERFACE AND AN ENUM ARE TYPES THAT A SCHEME MAY WANT TO SAY MORE ABOUT, and the dotted
             // vocabulary is what lets them without a scheme having to care: `type.interface` publishes

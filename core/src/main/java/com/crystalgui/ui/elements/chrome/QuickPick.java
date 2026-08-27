@@ -272,14 +272,15 @@ public class QuickPick extends Popover {
         // hostFor, not the root: a root that refuses public children -- any composite, CrystalEditor
         // included -- would throw here. Null `near` means "window level", which the palette is.
         window.addOverlay(this, null);
-        if (retainQuery && !search.getText().isEmpty()) {
-            // SELECTED, not merely present. An unselected restored query is the "filtered with no visible
-            // indication" complaint this used to answer by clearing; selected, the first character
-            // replaces the lot and the box reads as a fresh one that happens to be pre-filled.
-            search.field().selectAll();
-        } else {
-            search.setText("");
-        }
+        // SELECTED, not merely present -- but not here. An unselected restored query is the "filtered
+        // with no visible indication" complaint this used to answer by clearing; selected, the first
+        // character replaces the lot and the box reads as a fresh one that happens to be pre-filled.
+        //
+        // The selection is made in `onOpened` instead, because `showAt` below is what opens the popover
+        // and opening is what takes focus -- and `requestFocus` puts a caret in the field, which collapses
+        // any selection made before it. Selecting here therefore ran, and was undone one call later: the
+        // query came back, the caret sat at the end of it, and typing APPENDED. @see #onOpened
+        if (!retainQuery || search.getText().isEmpty()) search.setText("");
         // Point-anchored with a null invoker: reposition() below overrides placement entirely, and a null
         // invoker is correct because a palette is not a toggle -- naming a trigger surface as the invoker
         // would exempt that whole surface from light dismiss.
@@ -364,6 +365,8 @@ public class QuickPick extends Popover {
     protected void onOpened() {
         UIWindow window = getAttachedWindow();
         if (window != null) window.getInputHandler().requestFocus(search.field());
+        // AFTER the focus, which is the whole reason this is not in `open`. @see #open
+        if (retainQuery && !search.getText().isEmpty()) search.field().selectAll();
     }
 
     /**

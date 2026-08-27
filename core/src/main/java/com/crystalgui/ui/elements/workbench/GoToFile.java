@@ -302,12 +302,38 @@ public final class GoToFile {
     @Nullable
     private static Scored score(QuickPickItem item, SearchQuery query, int weight) {
         SearchMatch onLabel = SearchMatcher.match(query, item.label(), SearchMatch.FIELD_PRIMARY);
-        SearchMatch onWhere = SearchMatcher.match(query, item.description(), SearchMatch.FIELD_CONTEXT);
+        SearchMatch onWhere = SearchMatcher.match(query, searchableLocation(item.description()),
+                SearchMatch.FIELD_CONTEXT);
         SearchMatch best = SearchMatch.best(onLabel, onWhere);
         if (best == null) return null;
         // ONLY THE LABEL'S RANGES ARE KEPT. A description hit ranks the row and does not light anything --
         // lighting it would need ranges against a field the row deliberately never highlights.
         return new Scored(item, best, best == onLabel ? onLabel : null, weight);
+    }
+
+    /**
+     * The part of a location worth searching — everything after the project id.
+     *
+     * <h3>A name every row shares can only ever be noise</h3>
+     *
+     * <p>A file's location is a {@code CgPath}, which reads {@code project:dir/dir}. The project id is
+     * common to every file in the workspace, so matching against it makes every query that happens to
+     * hit the project name return the ENTIRE workspace — and the partition above then puts all of it
+     * ahead of the classpath. Typing {@code Minecraft} in a workspace called {@code minecraft.workspace}
+     * listed {@code README.md}, {@code shader.shadergraph} and every {@code .js} file in it, with
+     * {@code net.minecraft.client.Minecraft} — an exact hit on the name — last.</p>
+     *
+     * <p>The rest of the path is genuinely worth matching and is kept: {@code util} finding the files
+     * under {@code util} is the reason a location is searched at all, and it is how a qualified query
+     * like {@code util/Greeter} lands.</p>
+     *
+     * <p>Harmless for a type, whose location is a package and carries no colon — so this is one rule
+     * rather than a branch on which half of the list a row came from.</p>
+     */
+    private static String searchableLocation(@Nullable String description) {
+        if (description == null) return "";
+        int projectEnd = description.indexOf(':');
+        return projectEnd < 0 ? description : description.substring(projectEnd + 1);
     }
 
     private static List<TextRange> rangesOf(@Nullable SearchMatch match) {

@@ -646,6 +646,15 @@ quickpick .__qp-description__ {
      * child absorbs every squeeze -- and if it is not this one it is the NAME, which is the thing the row
      * exists to show. A package is the losable half. */
     flex-shrink: 1;
+    /* AND IT GIVES BY TRUNCATING, NOT BY WRAPPING. Shrinking a box whose text still wraps just makes it
+     * taller: a repackaged coordinate -- `ru.timeconqueror.spongemixins.repackage.com.gtnewhorizon` --
+     * took a second line and pushed the row below it down, in a list whose rows are a fixed height, so
+     * the name it belongs to no longer lined up with its own package. `flex-shrink` alone is half the
+     * idiom; `min-width: 0` is what lets the box go below its content at all, and `text-overflow` does
+     * not inherit, so it has to sit on the text element itself. */
+    min-width: 0;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 /* The kind glyph. Sized here and not by SymbolIcon, which writes structure and no geometry.

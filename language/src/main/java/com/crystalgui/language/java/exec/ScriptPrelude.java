@@ -298,8 +298,26 @@ public final class ScriptPrelude {
             return prefixRows;
         }
 
-        /** An offset in the author's text, as the compiler sees it. */
+        /**
+         * An offset in the author's text, as the compiler sees it.
+         *
+         * <p><b>A hoisted import is not where the shift says it is.</b> Its characters are BLANKED in the
+         * body and re-emitted in the prefix, so shifting an offset inside one lands on the whitespace
+         * left behind: {@code resolveAt} finds no node, and hovering an import in a class-less script
+         * showed nothing at all. The same file with a class declaration around it hovered correctly,
+         * because then nothing is hoisted and the shift is the whole truth.</p>
+         *
+         * <p>The mirror of {@link #toScriptOffset}, which was given this treatment first and left this
+         * direction behind — one conversion is not two, and the half that was missing is the half every
+         * QUESTION goes through. @see Hoisted</p>
+         */
         public int toUnitOffset(int scriptOffset) {
+            for (Hoisted each : hoisted) {
+                if (scriptOffset >= each.scriptOffset
+                        && scriptOffset <= each.scriptOffset + each.text.length()) {
+                    return each.prefixOffset + (scriptOffset - each.scriptOffset);
+                }
+            }
             return scriptOffset + prefix.length();
         }
 
