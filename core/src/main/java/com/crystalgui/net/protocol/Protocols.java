@@ -85,7 +85,9 @@ public final class Protocols {
 
     /** Which ends of the wire a contributor binds to. */
     private enum Side {
-        EVERY, SERVER, CLIENT;
+        EVERY,
+        SERVER,
+        CLIENT;
 
         boolean matches(@Nullable Object peer) {
             if (this == EVERY) return true;
@@ -93,16 +95,7 @@ public final class Protocols {
         }
     }
 
-    private static final class Registered {
-        final String name;
-        final Side side;
-        final Contributor contributor;
-
-        Registered(String name, Side side, Contributor contributor) {
-            this.name = name;
-            this.side = side;
-            this.contributor = contributor;
-        }
+    private record Registered(String name, Side side, Contributor contributor) {
     }
 
     /** Keyed (name, side) so a double-register is visible; insertion-ordered so binding is reproducible. */
