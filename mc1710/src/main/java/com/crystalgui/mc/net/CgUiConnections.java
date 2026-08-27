@@ -19,6 +19,7 @@ import net.minecraft.entity.player.EntityPlayerMP;
 
 import javax.annotation.Nullable;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -66,14 +67,28 @@ public final class CgUiConnections {
     private static final class Peer {
         final FrameMultiplexer frames;
         final ProtocolConnection<Object> connection;
+        /** Null on the client, where there is one peer and it does not need naming. */
+        @Nullable
+        final Mc1710Peer identity;
 
-        Peer(FrameMultiplexer frames, ProtocolConnection<Object> connection) {
+        Peer(FrameMultiplexer frames, ProtocolConnection<Object> connection,
+             @Nullable Mc1710Peer identity) {
             this.frames = frames;
             this.connection = connection;
+            this.identity = identity;
         }
     }
 
-    private static final Map<Object, Peer> SERVER = new ConcurrentHashMap<>();
+    /**
+     * Keyed by the player's <b>UUID</b>, never by their entity.
+     *
+     * <p>1.7.10 constructs a new {@code EntityPlayerMP} on every respawn and every dimension change, so
+     * an entity-keyed map is orphaned by the first death: inbound frames name the new body, the lookup
+     * misses, and every frame from that client is dropped for the rest of the session — while outbound
+     * keeps working, which makes it read as an input bug rather than an identity one. The logout event
+     * carries the new body too, so even the cleanup missed and the connection leaked. @see Mc1710Peer</p>
+     */
+    private static final Map<UUID, Peer> SERVER = new ConcurrentHashMap<>();
 
     @Nullable
     private static volatile Peer client;
@@ -125,8 +140,17 @@ public final class CgUiConnections {
     /** The connection to this player, or {@code null} if they have none — they left, or never had one. */
     @Nullable
     public static ProtocolConnection<Object> forPlayer(EntityPlayer player) {
-        Peer peer = SERVER.get(player);
+        UUID id = idOf(player);
+        if (id == null) return null;
+        Peer peer = SERVER.get(id);
         return peer == null ? null : peer.connection;
+    }
+
+    /** A player's stable identity, or {@code null} for anything without a profile (a fake player). */
+    @Nullable
+    private static UUID idOf(@Nullable EntityPlayer player) {
+        if (player == null || player.getGameProfile() == null) return null;
+        return player.getGameProfile().getId();
     }
 
     /** This client's connection to the server, or {@code null} when not in a world. */
@@ -143,16 +167,25 @@ public final class CgUiConnections {
 
     // ── Opening and closing ─────────────────────────────────────────────────
 
-    private static Peer open(CgNetworkChannel channel, boolean initiator, @Nullable Object player) {
+    private static Peer open(CgNetworkChannel channel, boolean initiator, @Nullable Mc1710Peer player) {
         FrameMultiplexer[] slot = new FrameMultiplexer[1];
+        // RESOLVED AT SEND TIME, never captured. The entity a player is wearing is replaced on every
+        // respawn, and capturing one here means sending to a body nobody is in -- which happens to work
+        // today only because the stale entity keeps its handler reference, i.e. by accident. Asking the
+        // peer is what FML's own PLAYER outbound target does one layer down. @see Mc1710Peer
         slot[0] = new FrameMultiplexer(channel.maxFrameBytes(), initiator,
-                player == null ? channel::sendToServer : frame -> channel.sendToPlayer(player, frame));
+                player == null ? channel::sendToServer : frame -> {
+                    EntityPlayerMP live = player.player();
+                    // Null between a disconnect and this peer being dropped; FML's own argument
+                    // validation throws on a null target rather than ignoring it.
+                    if (live != null) channel.sendToPlayer(live, frame);
+                });
         WireTransport transport = new WireTransport(slot[0]);
         // The pump goes in here rather than being left to a caller: tick() is then the one call, and a
         // subsystem that forgot to pump would receive nothing, silently.
         ProtocolConnection<Object> connection =
                 Protocols.open(transport, PlainOps.INSTANCE, transport::pump, player);
-        return new Peer(slot[0], connection);
+        return new Peer(slot[0], connection, player);
     }
 
     private static void closePeer(@Nullable Peer peer, String reason) {
@@ -175,7 +208,12 @@ public final class CgUiConnections {
             if (peer != null) peer.frames.onFrameReceived(frame);
             return;
         }
-        Peer peer = SERVER.get(sender);
+        // BY UUID. The channel hands over whichever entity the player is currently wearing, and that is
+        // a different object after every respawn -- so the translation happens here, at the one seam
+        // where an entity is turned into an identity. @see Mc1710Peer
+        UUID id = sender instanceof EntityPlayer ? idOf((EntityPlayer) sender) : null;
+        if (id == null) return;
+        Peer peer = SERVER.get(id);
         if (peer != null) peer.frames.onFrameReceived(frame);
     }
 
@@ -188,23 +226,30 @@ public final class CgUiConnections {
             if (!(event.player instanceof EntityPlayerMP)) return;
             CgNetworkChannel channel = CgPlatform.get(CgNetworkChannel.SERVICE);
             if (!channel.isAvailable()) return;
+            Mc1710Peer identity = Mc1710Peer.of((EntityPlayerMP) event.player);
+            if (identity == null) return;   // no profile or no handler: nothing to talk to
             // The SERVER is not the initiator: odd/even stream ids, as HTTP/2 splits them, so the two
             // ends can allocate concurrently without agreeing on anything.
-            SERVER.put(event.player, open(channel, false, event.player));
+            SERVER.put(identity.id(), open(channel, false, identity));
             CrystalGuiCore.LOGGER.info("[cgui-net] connection opened for {} ({} open)",
-                    event.player.getCommandSenderName(), openConnections());
+                    identity.name(), openConnections());
         }
 
         @SubscribeEvent
         public void onPlayerLeave(PlayerEvent.PlayerLoggedOutEvent event) {
-            Peer peer = SERVER.remove(event.player);
+            // BY UUID, and this is the half that leaked. The logout event carries whichever entity the
+            // player is wearing NOW, which after any death is not the one that joined -- so an
+            // entity-keyed removal silently removed nothing and every per-peer map grew for the life of
+            // the server. @see Mc1710Peer
+            UUID id = idOf(event.player);
+            Peer peer = id == null ? null : SERVER.remove(id);
             if (peer == null) return;
             // Anything that bound per-peer state must be told, or its maps grow for the life of the
             // server -- a leak that only shows on a box that has been up for a week.
-            CgUiWorkspaceHost.forget(event.player);
+            if (peer.identity != null) CgUiWorkspaceHost.forget(peer.identity);
             closePeer(peer, "player left");
             CrystalGuiCore.LOGGER.info("[cgui-net] connection closed for {} ({} open)",
-                    event.player.getCommandSenderName(), openConnections());
+                    peer.identity == null ? id : peer.identity.name(), openConnections());
         }
 
         @SubscribeEvent
