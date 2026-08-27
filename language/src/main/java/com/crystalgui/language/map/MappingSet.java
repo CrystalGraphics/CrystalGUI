@@ -216,6 +216,30 @@ public final class MappingSet {
         return mapped == null ? runtimeName : mapped;
     }
 
+    /**
+     * The <b>unqualified</b> answer only — no owner-keyed tier, and no owner to key on.
+     *
+     * <p>For a caller that has a name and nothing else, which in practice means a scan of TEXT:
+     * {@code plr.field_71075_bZ} in a source file is a name and a dot, and the file does not say what
+     * {@code plr} is. This tier is the one the format guarantees is answerable that way — an SRG name is
+     * globally unique by construction, which is the whole reason {@code methods.csv} has no owner column.
+     * The owner-keyed tier is deliberately skipped rather than tried first, because in a mapping that
+     * does carry owners {@code a} is a method on hundreds of classes with a different readable name on
+     * each, and reading that table without an owner is a coin toss dressed as a lookup.</p>
+     *
+     * @see ReadableSource
+     */
+    public String readableMethodAnywhere(String runtimeName) {
+        String mapped = globalMethods.get(runtimeName);
+        return mapped == null ? runtimeName : mapped;
+    }
+
+    /** @see #readableMethodAnywhere */
+    public String readableFieldAnywhere(String runtimeName) {
+        String mapped = globalFields.get(runtimeName);
+        return mapped == null ? runtimeName : mapped;
+    }
+
     // ── readable → runtime (the "out" direction) ────────────────────────────────────────────────
 
     public String runtimeClass(String internalName) {

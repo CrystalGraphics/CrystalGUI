@@ -1140,6 +1140,42 @@ public class TextEditor extends ScrollerView implements UndoScope {
         applyEdit(changes);
     }
 
+    /**
+     * Applies a rewrite somebody else computed — a whole-document transformation, as minimal edits.
+     *
+     * <h3>Why this rather than {@link #setText}</h3>
+     *
+     * <p>{@code setText} is <b>loading a file</b>: it replaces the rope wholesale, which is not an
+     * undoable edit, resets the caret to the start, and throws away the widest line measured so far along
+     * with every tracked range in the document. That is right for opening a file and wrong for
+     * transforming the one on screen — a rewrite Ctrl+Z cannot take back is a rewrite nobody should press.
+     * Edits map the carets, the diagnostics, the folds and the search marks through {@code ChangeSet} and
+     * record one undo step, which is what makes a transformation ordinary rather than frightening.</p>
+     *
+     * <p><b>Offsets are into the text as it is now.</b> A caller that computed them off the frame thread
+     * has to say so by comparing {@link TextBuffer#version()} against what it snapshotted, exactly as that
+     * method's own contract requires — this cannot check for it, because a stale edit is arithmetically
+     * indistinguishable from a fresh one and would apply cleanly onto the wrong text.</p>
+     *
+     * <p>Coalescing is broken first, so the rewrite is its own undo step rather than being folded into
+     * the keystroke that preceded it. A rewrite of several changes is refused by the merge predicate
+     * anyway — it only ever continues a run of <em>single</em> insertions or deletions — so this matters
+     * for the one-change case, where a rewrite that happens to insert exactly where typing stopped is
+     * indistinguishable from more typing. Undoing it would then take back the word as well.</p>
+     *
+     * @return whether anything was applied — false for a read-only editor and for an empty rewrite, both
+     *         of which are ordinary outcomes rather than failures
+     */
+    public boolean applyChanges(List<Change> changes) {
+        if (readOnly || changes == null || changes.isEmpty()) return false;
+        List<Change> applied = new ArrayList<>(changes);
+        applied.removeIf(Change::isEmpty);
+        if (applied.isEmpty()) return false;
+        buffer.breakUndoCoalescing();
+        applyEdit(applied);
+        return true;
+    }
+
     /** Applies a set of per-caret changes as one edit, then carries the carets through it. */
     private void applyEdit(List<Change> changes) {
         if (readOnly) return;

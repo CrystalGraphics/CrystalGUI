@@ -2,6 +2,7 @@ package com.crystalgui.ui;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
+import com.crystalgui.text.Change;
 import com.crystalgui.text.Selection;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.syntax.Language;
@@ -1913,6 +1914,68 @@ public class TextEditorTest extends EditorTestBase {
         settle();
 
         assertEquals("alphaXY" + NL + "beta", editor.getText());
+    }
+
+    /**
+     * <b>An externally computed rewrite lands as edits, and undoes in one step.</b>
+     *
+     * <p>The whole reason {@code applyChanges} exists rather than {@code setText}: loading a string
+     * replaces the rope, which is not an undoable edit at all, so the obvious implementation gives a
+     * whole-file transformation that Ctrl+Z cannot take back. Undoing <em>once</em> — not twice — is the
+     * assertion, because a rewrite made of several changes must be one step and not one per rename.</p>
+     */
+    @Test
+    public void aRewriteAppliesAsEditsAndUndoesInOneStep() {
+        build("alpha beta gamma");
+
+        assertTrue(editor.applyChanges(java.util.List.of(
+                new Change(0, 5, "one"),
+                new Change(11, 16, "three"))));
+        assertEquals("one beta three", editor.getText());
+
+        editor.buffer().undo();
+
+        assertEquals("undoing a rewrite took back only part of it",
+                "alpha beta gamma", editor.getText());
+    }
+
+    /**
+     * <b>...and it does not take the keystroke before it with it.</b>
+     *
+     * <p>{@code TextBuffer} coalesces edits into one undo step while they read as a run of typing, which
+     * is right for typing and wrong for a transformation issued from a menu. The fixture is the only
+     * shape that reaches it: the merge predicate continues a run only for a <em>single</em> pure
+     * insertion or deletion, so a rewrite of several changes is refused by it anyway, and one that
+     * inserts exactly where typing stopped is the case it cannot tell apart. Undoing would then take back
+     * the word as well as the rewrite — one Ctrl+Z, two things gone.</p>
+     */
+    @Test
+    public void aRewriteDoesNotSwallowTheKeystrokeBeforeIt() {
+        build("");
+        editor.insertAtCaret("a");
+        editor.insertAtCaret("b");
+        editor.insertAtCaret("c");
+        assertEquals("abc", editor.getText());
+
+        // A pure insertion, starting exactly where the typing left off — indistinguishable from a fourth
+        // keystroke to the merge predicate, and the reason the break is not decoration.
+        assertTrue(editor.applyChanges(java.util.List.of(new Change(3, 3, "d"))));
+        assertEquals("abcd", editor.getText());
+
+        editor.buffer().undo();
+
+        assertEquals("the rewrite was coalesced into the typing before it",
+                "abc", editor.getText());
+    }
+
+    /** A read-only editor refuses it, and says so rather than silently doing nothing. */
+    @Test
+    public void aReadOnlyEditorRefusesARewrite() {
+        build("alpha beta");
+        editor.setReadOnly(true);
+
+        assertFalse(editor.applyChanges(java.util.List.of(new Change(0, 5, "one"))));
+        assertEquals("alpha beta", editor.getText());
     }
 
 }
