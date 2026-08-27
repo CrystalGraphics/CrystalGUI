@@ -725,6 +725,13 @@ public class TextEditor extends ScrollerView implements UndoScope {
             long piece = FrameProfile.begin();
             invalidateMeasuredRows(change);
             FrameProfile.step(piece, "ed:invalidateMeasuredRows");
+            // THE VIEW-LINE COUNT AS IT WAS, read here and USED below -- the two have to be separated.
+            //
+            // Written first as `rowsTouchedBy(change, viewLineCount())` at this line, which reads
+            // correctly and is vacuous: the argument and the comparison inside it are evaluated at the
+            // same instant, so the guard compared a number against itself and could never answer
+            // "everything moved". The reprojection between the two is the whole point of the check.
+            int viewLinesBefore = viewLineCount();
             // Same rule, same reason, and it must read previousLineCount while it still says what it said
             // before this edit -- so it belongs beside the call above rather than anywhere later.
             //
@@ -758,7 +765,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             folds.markDirty();
             FrameProfile.step(piece, "ed:folds.markDirty");
             long rebound = FrameProfile.begin();
-            rebindRealisedLines();
+            rebindRealisedLines(rowsTouchedBy(change, viewLinesBefore));
             FrameProfile.step(rebound, "rebindRealisedLines");
             // A document that shrank can leave a selection pointing past its end, and the caret then
             // indexes a row that is not there. Clamped HERE rather than at the keystroke that caused it,
@@ -2388,6 +2395,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         FrameProfile.end(syntaxTimed, "ed:ensureRowSyntax");
         long bandsTimed = FrameProfile.begin();
         int rebuilt = 0;
+        int unchanged = 0;
         for (Map.Entry<Integer, UIElement> entry : realisedLines.entrySet()) {
             int viewLine = entry.getKey();
             if (viewLine < 0 || viewLine >= viewLineCount()) continue;
@@ -2395,7 +2403,6 @@ public class TextEditor extends ScrollerView implements UndoScope {
             if (!rebuildEveryRow && Integer.valueOf(viewLine).equals(bandsShownFor.get(entry.getValue()))) {
                 continue;
             }
-            rebuilt++;
             // Ranges are offsets into the UIText this line owns, and that text is one VIEW line -- so a
             // wrapped row's second half must publish ranges relative to where IT starts. Using the row's
             // start would push every colour on a continuation line left by the width of everything above
@@ -2516,13 +2523,62 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // `constant` or not depending on scroll history, which is as close to random as makes no
             // difference — and it presented as constants simply never being purple.
             HighlightRegistry highlights = textOf(entry.getValue()).highlights();
+            // ...AND THE ROW MAY ALREADY BE SHOWING EXACTLY THIS, which the clear-then-set below cannot
+            // discover for itself. `set` no-ops on an equal value, deliberately; `clear` cannot, so
+            // clearing first destroys the only evidence that nothing changed and guarantees one
+            // `onChanged` for the clear plus one per name — every one of which re-matches the row.
+            //
+            // That is why an EDIT was expensive out of all proportion to what it changed. A scroll
+            // already rebuilds only the rows that moved (the check at the top of the loop), but any edit
+            // sets `highlightsDirty` for the whole document, and typing one character re-published
+            // identical bands for all 29 realised rows: measured at 5.8-8.3ms per keystroke, the largest
+            // single phase of a frame in which 171 of 171 frames missed the budget. The touched row's
+            // bands really do change; the other twenty-eight are the same ranges over the same text.
+            //
+            // Compared WITHOUT sorting, which is safe in the only direction that matters: `set` stores a
+            // sorted copy, so a producer that emitted out of order compares unequal and is rebuilt — a
+            // lost saving, never a wrong answer. A false "unchanged" is the only dangerous verdict and
+            // cannot be reached this way.
+            if (bandsUnchanged(byName, highlights)) {
+                unchanged++;
+                bandsShownFor.put(entry.getValue(), viewLine);
+                continue;
+            }
+            rebuilt++;
             highlights.clear();
             for (Map.Entry<String, List<TextRange>> named : byName.entrySet()) {
                 highlights.set(named.getKey(), named.getValue());
             }
             bandsShownFor.put(entry.getValue(), viewLine);
         }
-        FrameProfile.end(bandsTimed, "ed:highlightBands " + rebuilt + "/" + realisedLines.size());
+        FrameProfile.end(bandsTimed, "ed:highlightBands " + rebuilt + "/" + realisedLines.size()
+                + " (" + unchanged + " unchanged)");
+    }
+
+    /**
+     * Whether {@code wanted} is exactly what {@code current} already publishes — <b>names, order and
+     * ranges</b>.
+     *
+     * <h3>Order counts, and that is not fussiness</h3>
+     *
+     * <p>A character covered by two names takes the colour of whichever was registered LAST, which is
+     * why the publish clears and rebuilds rather than setting over the top. So two registries holding
+     * the same names in a different order are genuinely different pictures, and treating them as equal
+     * would skip a republish that changes what is on screen.</p>
+     *
+     * <p>{@code Map.equals} is order-independent, so it cannot be used here.</p>
+     */
+    private static boolean bandsUnchanged(Map<String, List<TextRange>> wanted,
+                                          HighlightRegistry current) {
+        Map<String, List<TextRange>> have = current.entries();
+        if (have.size() != wanted.size()) return false;
+        java.util.Iterator<Map.Entry<String, List<TextRange>>> ours = wanted.entrySet().iterator();
+        for (Map.Entry<String, List<TextRange>> theirs : have.entrySet()) {
+            Map.Entry<String, List<TextRange>> mine = ours.next();
+            if (!mine.getKey().equals(theirs.getKey())) return false;
+            if (!mine.getValue().equals(theirs.getValue())) return false;
+        }
+        return true;
     }
 
     /**
@@ -2631,6 +2687,17 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * tier is <b>424µs a keystroke</b>, of which 68µs is the per-row query this skips. The other 356µs is
      * {@code edited()} keeping the tree in sync and cannot be skipped without desynchronising it.</p>
      */
+    /**
+     * Whether a keystroke has landed within the typing settle — "the user is mid-word".
+     *
+     * <p>The one question several parts want and none of them should answer for themselves: an answer
+     * derived from a timestamp of its own would settle at a different moment from the colouring, and two
+     * things that both mean "still typing" disagreeing is worse than either being wrong.</p>
+     */
+    boolean isTyping() {
+        return editing && System.nanoTime() - lastEditNanos < TYPING_SETTLE_NANOS;
+    }
+
     private void settleSyntaxIfIdle() {
         if (!editing) return;
         // Guarded on `editing` rather than on a "long ago" sentinel: nanoTime has an arbitrary origin and
@@ -4350,6 +4417,43 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * <p>Multi-caret edits take the wholesale path. They touch several disjoint rows and the bookkeeping
      * is not worth it, which is the same call {@link #reprojectAfterEdit} makes about the same edits.</p>
      */
+    /**
+     * The model rows an edit could have changed the LOOK of, or null for "assume all of them".
+     *
+     * <h3>Typing one character changes one row, and the editor was re-laying out twenty-six</h3>
+     *
+     * <p>{@link #rebindRealisedLines} re-reads and re-places every realised row after every edit. Its own
+     * note explains why that is safe — the realised map is keyed by row index, so re-reading gives every
+     * element the right content however much the rows shifted — and safe is not the same as free:
+     * measured at <b>415µs a keystroke</b> spent placing twenty-six rows of which one had changed.</p>
+     *
+     * <p>The discrimination is {@link #invalidateMeasuredRows}'s, which needed it first and for the same
+     * reason. Two conditions, and the second is the one that is easy to get wrong:</p>
+     *
+     * <ul>
+     *   <li><b>One change.</b> A multi-cursor edit or a replace-all touches rows all over the document,
+     *       and working out which is more expensive than re-placing them.</li>
+     *   <li><b>The VIEW-line count is unchanged</b> — not the model-line count. With soft wrap on, an
+     *       insertion that pushes its row onto an extra visual line shifts every row below it while
+     *       {@code buffer.lineCount()} says nothing happened, and rows skipped on that frame would be
+     *       left drawn at their old positions. A single change can only alter the wrapping of the row it
+     *       lands on, so the view count staying put is proof that nothing below it moved.</li>
+     * </ul>
+     *
+     * @param viewLinesBefore the view-line count as it was, read before the reprojection
+     * @return {@code {firstRow, lastRow}} inclusive, or null when every row must be re-placed
+     */
+    @Nullable
+    private int[] rowsTouchedBy(ChangeSet change, int viewLinesBefore) {
+        List<Change> changes = change.changes();
+        if (changes.size() != 1 || viewLineCount() != viewLinesBefore) return null;
+        Change edit = changes.get(0);
+        int start = clampToDocument(change.mapPos(edit.from(), -1));
+        int end = clampToDocument(start + edit.insert().length());
+        return new int[] {buffer.document().offsetToPoint(start).row(),
+                buffer.document().offsetToPoint(end).row()};
+    }
+
     private void invalidateMeasuredRows(ChangeSet change) {
         List<Change> changes = change.changes();
         if (changes.size() != 1 || buffer.lineCount() != previousLineCount) {
@@ -5235,6 +5339,15 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     /** Re-reads the text of every realised line without recycling it, so highlights survive the edit. */
     private void rebindRealisedLines() {
+        rebindRealisedLines(null);
+    }
+
+    /**
+     * The same, restricted to the model rows an edit touched. @see #rowsTouchedBy
+     *
+     * @param modelRows {@code {first, last}} inclusive, or null to re-place every realised row
+     */
+    private void rebindRealisedLines(@Nullable int[] modelRows) {
         // THE PER-LINE SPLIT, because this runs over every realised row on every frame and the two things
         // it does are unrelated: placing a row is style writes that no-op when nothing moved, while
         // re-reading its text is a rope read plus a UIText that may re-shape. A scroll changes both for
@@ -5244,6 +5357,13 @@ public class TextEditor extends ScrollerView implements UndoScope {
         for (Map.Entry<Integer, UIElement> entry : realisedLines.entrySet()) {
             int viewLine = entry.getKey();
             if (viewLine < 0 || viewLine >= viewLineCount()) continue;
+            // OUTSIDE WHAT THE EDIT TOUCHED, so this row shows the same model row it already showed, with
+            // the same text, at the same place -- every write below would land on an equal value and
+            // no-op. Skipping is the same answer arrived at without the work. @see #rowsTouchedBy
+            if (modelRows != null) {
+                int touched = modelAt(viewLine).row();
+                if (touched < modelRows[0] || touched > modelRows[1]) continue;
+            }
             rows++;
             // The FULL layout, not just the text. An edit or a reflow can turn a continuation line into a
             // first line or the reverse, which moves its carried indent and its width -- and after a

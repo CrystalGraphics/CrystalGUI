@@ -117,7 +117,19 @@ final class QuickFixBulbPart extends EditorViewPart {
             askedFor = -1;
             return true;
         }
-        if (caret != askedFor) {
+        // NOT WHILE THE USER IS TYPING, and the cache is why it has to be said explicitly.
+        //
+        // The answer is remembered against the caret OFFSET, which is exactly right for arrow keys and
+        // useless for typing: every keystroke moves the caret, so the cache never hits and the whole
+        // quick-fix catalog is run over the unit -- synchronously, from a paint -- once per character.
+        // Measured at 208us a keystroke over seventy of them, plus the `java.codeActionsIn` behind it.
+        //
+        // The last answer is reused for the length of the typing settle, exactly as `settleSyntaxIfIdle`
+        // reuses the last colouring. Neither reference computes intentions between keystrokes either.
+        // The staleness is bounded by construction: the settle expires 300ms after the last edit and the
+        // next frame asks properly, so the worst case is a bulb that lights a third of a second after
+        // you stop typing -- which is when you would look for it.
+        if (caret != askedFor && !editor.isTyping()) {
             askedFor = caret;
             intentionHere = false;
             editor.langFeatures().requestCodeActions(EditorLanguageFeatures.LANE_BULB, caret, actions -> {
