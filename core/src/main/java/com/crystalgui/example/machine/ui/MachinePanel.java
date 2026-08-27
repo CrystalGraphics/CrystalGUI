@@ -65,6 +65,29 @@ public final class MachinePanel {
     /** A line of server-written text. Also server-driven only. */
     public final UIText status;
 
+    /** The last thing the SERVER did. Nothing else may write it. */
+    public final UIText serverLine;
+
+    /** The last thing the CLIENT did. Nothing else may write it. */
+    public final UIText clientLine;
+
+    // ── The four protocol directions, one button each. See MachineServer's table. ──
+
+    /** SERVER-side handler → a REQUEST to the client, answered. */
+    public final Button pingClient;
+
+    /** SERVER-side handler → a NOTIFICATION to the client, unanswered. */
+    public final Button announce;
+
+    /** CLIENT-side listener → a REQUEST to the server, answered. */
+    public final Button askStats;
+
+    /** CLIENT-side listener → a NOTIFICATION to the server, unanswered. */
+    public final Button heartbeat;
+
+    /** CLIENT-side listener → a REQUEST the server REFUSES, so the error path is visible. */
+    public final Button badRename;
+
     public MachinePanel() {
         root = new UIElement();
         root.addClass(MachineStyles.PANEL_CLASS);
@@ -98,6 +121,199 @@ public final class MachinePanel {
         purge = new Button("Purge");
         purge.setId("purge");
         root.addChild(purge);
+
+        /*
+         * THE PROTOCOL DEMO STRIP.
+         *
+         * Each entry SAYS WHAT IT WILL DO, because the first version did not and was unreadable: five
+         * buttons captioned "Ping client" and "Announce" under rows labelled "S -> C" tell a reader
+         * the mechanism's initials and nothing about the outcome. A demo whose controls need the
+         * source open beside them is not demonstrating anything.
+         *
+         * So every entry carries four facts, in the order somebody reads them:
+         *
+         *   KIND       is an answer coming back?  (REQUEST yes, NOTIFY no)
+         *   DIRECTION  who starts it
+         *   METHOD     the exact string on the wire, so the panel, the code and the log line up
+         *   OUTCOME    one sentence of what to expect
+         *
+         * The other thing worth noticing is WHO LISTENS, and it is deliberately mixed. Ping client
+         * and Announce are wired on the SERVER through session.on(...), so pressing them sends a
+         * ui/event and the server's lambda runs. The last three are wired on the CLIENT, in
+         * MachineClient, by finding them in this tree and calling attachListener -- purely local,
+         * never crossing the wire. The button cannot tell which happened to it, and neither can the
+         * stylesheet.
+         */
+        UIText demoTitle = new UIText("Protocol demo");
+        demoTitle.addClass(MachineStyles.TITLE_CLASS);
+        root.addChild(demoTitle);
+
+        UIText demoHint = new UIText(
+                "Press one. The result appears at the bottom, and every step is in the game log.");
+        demoHint.addClass(MachineStyles.HINT_CLASS);
+        root.addChild(demoHint);
+
+        pingClient = new Button("Ping client");
+        pingClient.setId("ping-client");
+        root.addChild(demoEntry(pingClient, KIND_REQUEST, "server asks client",
+                "machine/clientInfo",
+                "The server asks who is drawing this. The client answers; the reply shows below."));
+
+        announce = new Button("Announce");
+        announce.setId("announce");
+        root.addChild(demoEntry(announce, KIND_NOTIFY, "server tells client",
+                "machine/announce",
+                "The server sends a message. Nothing comes back, and nothing is waiting for one."));
+
+        askStats = new Button("Ask stats");
+        askStats.setId("ask-stats");
+        root.addChild(demoEntry(askStats, KIND_REQUEST, "client asks server",
+                "machine/stats",
+                "The client asks for the cycle and heartbeat counts. The server answers."));
+
+        heartbeat = new Button("Heartbeat");
+        heartbeat.setId("heartbeat");
+        root.addChild(demoEntry(heartbeat, KIND_NOTIFY, "client tells server",
+                "machine/heartbeat",
+                "The client reports in. The server counts it and replies with nothing."));
+
+        badRename = new Button("Rename to ''");
+        badRename.setId("bad-rename");
+        root.addChild(demoEntry(badRename, KIND_REFUSED, "client asks server",
+                "machine/rename",
+                "Asks for a blank name. The server REFUSES with the code EMPTY_NAME -- which is a "
+                        + "normal answer, not an error and not a timeout."));
+
+        UIText wireLabel = new UIText("Result");
+        wireLabel.addClass(MachineStyles.LABEL_CLASS);
+        root.addChild(wireLabel);
+
+        /*
+         * TWO LINES, ONE PER SIDE, AND EACH HAS EXACTLY ONE AUTHOR.
+         *
+         * This was one line with a badge naming whoever wrote it last, and it produced a genuinely
+         * wrong readout: "[CLIENT] NOTIFY sent to the client", which is the CLIENT badge above the
+         * SERVER's sentence. Worth understanding, because the mechanism is a property of the engine
+         * rather than a slip.
+         *
+         *   1. The client presses Announce. The server's handler sends the notification and then
+         *      writes the readout: badge = "SERVER", text = "NOTIFY sent to the client ...".
+         *   2. Property.set RETURNS EARLY ON AN EQUAL VALUE. The badge already said "SERVER" from an
+         *      earlier message, so that write marked NOTHING dirty and never entered the delta. The
+         *      text had changed, so it did.
+         *   3. Meanwhile the client's own machine/announce handler had already written badge =
+         *      "CLIENT" locally -- it runs first, because the notification was sent before the delta.
+         *   4. The delta lands carrying only the text. The badge stays "CLIENT".
+         *
+         * The rule underneath it: A STATE DELTA CARRIES WHAT CHANGED ON THE SERVER, NEVER WHAT
+         * DIFFERS BETWEEN THE TWO SIDES. A client that writes locally into a server-owned widget has
+         * desynchronised it, and the server cannot put it right, because from where the server is
+         * standing nothing happened. The idempotent-setter property that makes pushModelIntoPanel
+         * free is the same property that makes this unrecoverable.
+         *
+         * So the fix is not a smarter badge. It is one author per element -- after which each badge
+         * is a fixed label nothing ever rewrites, and the whole class of bug is unreachable. The
+         * bonus is that BOTH HALVES OF EVERY EXCHANGE ARE NOW ON SCREEN AT ONCE: press Heartbeat and
+         * the client line says it sent one while the server line says it received one.
+         */
+        serverLine = new UIText("nothing yet");
+        serverLine.setId("result-server");
+        root.addChild(resultRow(MachineStyles.WHO_SERVER_CLASS, "SERVER", serverLine));
+
+        clientLine = new UIText("nothing yet");
+        clientLine.setId("result-client");
+        root.addChild(resultRow(MachineStyles.WHO_CLIENT_CLASS, "CLIENT", clientLine));
+    }
+
+    /** A fixed side badge and the line only that side writes. */
+    private static UIElement resultRow(String badgeClass, String side, UIText line) {
+        UIElement row = new UIElement();
+        row.addClass(MachineStyles.ROW_CLASS);
+
+        UIText badge = new UIText(side);
+        badge.addClass(MachineStyles.KIND_CLASS);
+        badge.addClass(badgeClass);
+        badge.neverSelfSizeWidth();
+        row.addChild(badge);
+
+        // neverSelfSizeWidth for the opposite reason to the method names above: this is in a ROW and
+        // its text is long, so sizing itself would push the row past the panel edge. Sized by the
+        // sheet, it wraps inside its box.
+        line.addClass(MachineStyles.WIRE_CLASS);
+        line.neverSelfSizeWidth();
+        row.addChild(line);
+
+        return row;
+    }
+
+    // ── The three badges an entry can carry ─────────────────────────────────
+
+    /** An answer is coming back, and the caller can be told it failed. */
+    private static final String[] KIND_REQUEST = { "REQUEST", MachineStyles.KIND_REQUEST_CLASS };
+
+    /** Nothing comes back. A notification that could fail visibly would be a request. */
+    private static final String[] KIND_NOTIFY = { "NOTIFY", MachineStyles.KIND_NOTIFY_CLASS };
+
+    /** A request whose answer is "no" — still an ordinary answer, on the ordinary path. */
+    private static final String[] KIND_REFUSED = { "REFUSED", MachineStyles.KIND_REFUSED_CLASS };
+
+    /**
+     * One self-explaining demo entry.
+     *
+     * <p>Two lines. The first is the button beside its badge, direction and wire method; the second
+     * is a sentence saying what pressing it will do. Everything a reader needs is on screen, which is
+     * the whole difference between this and the version it replaced.</p>
+     */
+    private static UIElement demoEntry(Button button, String[] kind, String direction,
+            String method, String outcome) {
+        UIElement entry = new UIElement();
+        entry.addClass(MachineStyles.DEMO_CLASS);
+
+        UIElement head = new UIElement();
+        head.addClass(MachineStyles.ROW_CLASS);
+        head.addChild(button);
+
+        /*
+         * neverSelfSizeWidth() ON BOTH, and without it the columns do not line up.
+         *
+         * A UIText measures itself after layout and pushes the result back as its width at IMPORTANT
+         * origin -- which outranks any stylesheet rule at any specificity, so `width: 62px` in the
+         * sheet would not be overridden, it would never apply. These two are sized by their BOX and
+         * their text is incidental, which is exactly what this call is for; the sentence below them
+         * is the opposite and is left to size itself.
+         */
+        UIText badge = new UIText(kind[0]);
+        badge.addClass(MachineStyles.KIND_CLASS);
+        badge.addClass(kind[1]);
+        badge.neverSelfSizeWidth();
+        head.addChild(badge);
+
+        UIText where = new UIText(direction);
+        where.addClass(MachineStyles.DIRECTION_CLASS);
+        where.neverSelfSizeWidth();
+        head.addChild(where);
+
+        /*
+         * forceSelfSizeWidth(), and it is not optional: without it this measured ZERO and the method
+         * name -- the one thing tying the panel to the code and the log -- rendered as nothing at all.
+         *
+         * It is the last item in a flex ROW with no width rule of its own, so the auto-detect read a
+         * box of zero and latched "sized by its box". The sentence below it self-sizes correctly with
+         * no help because it is in a COLUMN, which is what makes this a one-element problem rather
+         * than an obvious one. Same trap AGENTS.md records for the Blackboard's type column.
+         */
+        UIText wireName = new UIText(method);
+        wireName.addClass(MachineStyles.METHOD_CLASS);
+        wireName.forceSelfSizeWidth();
+        head.addChild(wireName);
+
+        entry.addChild(head);
+
+        UIText what = new UIText(outcome);
+        what.addClass(MachineStyles.OUTCOME_CLASS);
+        entry.addChild(what);
+
+        return entry;
     }
 
     /**

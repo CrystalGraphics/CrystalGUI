@@ -10,6 +10,7 @@ import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.Switch;
 
 /**
@@ -112,24 +113,43 @@ public final class MachineDemo {
                 ((com.crystalgui.ui.elements.UIText) client.root()
                         .querySelector("." + MachineStyles.STATUS_CLASS)).getText());
 
-        // ── 4. A call, each way ─────────────────────────────────────────────
-        say("4. The client asks the server a question, and is answered exactly once");
-        client.requestStats(
-                stats -> System.out.println("  [client] server says: cycles=" + stats.getInt("cycles", -1)
-                        + " label=" + stats.getString("label", "?")),
-                error -> System.out.println("  [client] refused: " + error));
+        /*
+         * ── 4-7: THE FOUR DIRECTIONS ──────────────────────────────────────────
+         *
+         * Two message kinds times two directions. Watch the envelope tags in the output: a REQUEST is
+         * [q] and is always followed by an [r]; a NOTIFICATION is [n] and is followed by nothing at
+         * all. That difference is the whole distinction, visible on the wire.
+         */
+
+        say("4. C -> S REQUEST -- the client asks, the server answers exactly once  [q then r]");
+        press(client, "#ask-stats");
         pump(link, serverEnd, clientEnd, 2);
 
-        say("5. And the server asks the client one, which is the same machinery pointed the other way");
-        server.session().call("machine/clientInfo", null,
-                info -> System.out.println("  [server] client says: renderer="
-                        + info.getString("renderer", "?")
-                        + " cachedDescription=" + info.getBool("cachedDescription", false)),
-                error -> System.out.println("  [server] refused: " + error));
+        say("5. S -> C REQUEST -- the same machinery pointed the other way  [q then r]");
+        press(client, "#ping-client");   // a SERVER-wired button: the press crosses first
+        pump(link, serverEnd, clientEnd, 3);
+
+        say("6. C -> S NOTIFICATION -- nothing comes back, and nothing is waiting  [n only]");
+        press(client, "#heartbeat");
         pump(link, serverEnd, clientEnd, 2);
 
-        // ── 6. Close ────────────────────────────────────────────────────────
-        say("6. The server puts the window away, and says why");
+        say("7. S -> C NOTIFICATION  [n only]");
+        press(client, "#announce");      // also server-wired
+        pump(link, serverEnd, clientEnd, 3);
+
+        /*
+         * ── 8: THE HALF A HAPPY PATH NEVER SHOWS ──────────────────────────────
+         *
+         * respond.fail is an ordinary answer that happens to say no. Same envelope kind as a success
+         * ([r]), same thread, same latency -- NOT an exception and NOT a timeout. A UI has to tell
+         * "refused" apart from "never came back", because only one of those is worth retrying.
+         */
+        say("8. A REQUEST THE SERVER REFUSES -- still an [r], with an error code instead of a body");
+        press(client, "#bad-rename");
+        pump(link, serverEnd, clientEnd, 2);
+
+        // ── 9. Close ────────────────────────────────────────────────────────
+        say("9. The server puts the window away, and says why");
         server.close("the block was broken");
         pump(link, serverEnd, clientEnd, 1);
 
@@ -191,6 +211,25 @@ public final class MachineDemo {
                     + (method == null ? "(response to #" + envelope.get("i") + ")" : method));
         }
         end.clearSent();
+    }
+
+    /**
+     * Presses a button in the CLIENT's rebuilt tree, exactly as a user would.
+     *
+     * <p>Which side reacts depends on how that button was wired, and the demo deliberately mixes
+     * both: {@code #ask-stats} has a purely local listener {@code MachineClient} attached, while
+     * {@code #ping-client} was given a reported event by the server, so pressing it sends a
+     * {@code ui/event} first and the server's lambda runs a tick later. <b>The button cannot tell the
+     * difference</b>, which is the point.</p>
+     */
+    private static void press(MachineClient client, String selector) {
+        UIElement found = client.root().querySelector(selector);
+        // onPressed is what a real click ends in -- Button.emitActivation fires this signal after
+        // checking isWasPressTarget() and that the LEFT button was the one released. Emitting it
+        // directly is the honest way to simulate a press without a mouse: it runs every listener,
+        // in order, on this thread, exactly as the input handler would have.
+        if (found instanceof Button) ((Button) found).onPressed.emit();
+        else System.out.println("  !! no button at " + selector);
     }
 
     private static int count(UIElement element) {
