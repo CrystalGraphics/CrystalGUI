@@ -1129,6 +1129,67 @@ the machinery exists, reads as live, and is reachable by nothing.
 
 ---
 
+## VI.8 — Should the **panel** declare its own networking? · **Decided: no**
+
+The proposal: put the `call`/`notify`/`on` contracts inside `MachinePanel`, next to the widgets they
+belong to, the way `panel.askStats.attachListener(…)` already sits there.
+
+**The instinct is right and the vehicle is wrong.** Locality is a genuine good — reading what Purge
+does today means three files — and every web framework converged on co-locating markup with
+handlers. What follows is why the panel class specifically cannot be the home, so nobody re-derives
+it.
+
+### The panel is two objects, and the boundary runs through it
+
+`new MachinePanel()` on the server; `MachinePanel.bindTo(tree)` on the client. Two instances, two
+constructors, potentially two JVMs. A declaration in the class body has to survive **both** paths,
+and `ctx -> model.purge()` cannot: there is no model on the client, and naming one would put a
+server-only type into a class the client loads.
+
+React co-locates because there is **one** instance in **one** process and the boundary is a fetch.
+The real analogue is React Server Components — and note what they had to invent: `"use client"` /
+`"use server"` directives **enforced by the bundler**, because the boundary cannot be inferred from
+the code. That is the tax, and it is a build-system feature rather than a flag.
+
+### "Which side am I on" is not a property of a tree
+
+Not merely hard — **false**. The same panel is legitimately used in the harness with no networking at
+all, in a purely local screen, and on both ends of a wire. Side is a property of the *context*, which
+is why `WindowScope` carries it.
+
+Worth stating as a fact rather than a principle: **`core` contains not one side check today** — no
+`isClient`, no `Side.CLIENT`, nothing. That is not an accident to spend.
+
+### And it fights VI.1
+
+VI.1's payoff is *"a panel you own is a panel you can build without deciding it is networked."* A
+panel with baked-in contracts can only ever be networked, only with one model, **captured at
+construction** — so it can never be re-pointed at a different machine.
+
+### The version that almost works, recorded so it is not re-discovered as new
+
+The panel *does* already know its mode: `new` and `bindTo` are different constructors, so
+declarations placed in the build constructor are skipped on the client for free. **No side flag is
+needed.** Buffer them and replay when a scope arrives.
+
+It is genuinely viable. It costs: the panel now **requires** a model to construct (the harness needs
+a dummy), it captures that model forever, it adds a second registration mechanism with its own
+ordering questions — and it saves **one file**, because `MachineClient` must still exist. The loader
+seam does not move.
+
+### What to do instead
+
+**Make `ServerFragment` the normal unit rather than the exception.** A fragment already *is*
+structure plus behaviour in one class with the panel as a field — the thing actually wanted — and it
+composes, nests and namespaces its methods. `MachineWindow` is essentially "the fragment for the
+whole panel" under a different name.
+
+The cheap half is separately available: `WindowScope` could read element-first (`panel.purge` as the
+subject) with no architectural change, since the lambda lands on the session either way. That is
+argument order, worth doing only if it reads better.
+
+---
+
 ## VI.5 — Where a type parameter is earned, and where it is not
 
 The test that settles it, and it has now come up three times: **does the framework hand you the thing,
