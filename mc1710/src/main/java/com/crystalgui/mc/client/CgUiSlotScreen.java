@@ -12,6 +12,7 @@ import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.elements.slot.FluidSlot;
 import com.crystalgui.ui.elements.slot.ItemSlot;
+import com.crystalgui.ui.elements.slot.NativeDescriptors;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
@@ -19,8 +20,7 @@ import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.nbt.NBTTagList;
-import net.minecraftforge.fluids.FluidRegistry;
-import net.minecraftforge.fluids.FluidStack;
+
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
 
@@ -123,11 +123,11 @@ public final class CgUiSlotScreen extends GuiScreen implements NativeTooltipHost
 
         root.addChild(new UIText("Items: block, sprite, GLINT (empty ench tag), damaged+enchanted sword, stack of 64, empty"));
         UIElement items = row();
-        items.addChild(itemSlot(stack("minecraft:stone", 1, 0)));
-        items.addChild(itemSlot(stack("minecraft:stick", 1, 0)));
+        items.addChild(itemSlot("minecraft:stone", 0, 1));
+        items.addChild(itemSlot("minecraft:stick", 0, 1));
         items.addChild(itemSlot(stack("minecraft:stick", 1, 0), true));
-        items.addChild(itemSlot(damagedSword()));
-        items.addChild(itemSlot(stack("minecraft:cobblestone", 64, 0)));
+        items.addChild(itemSlot(damagedSword(), false));
+        items.addChild(itemSlot("minecraft:cobblestone", 0, 64));
         items.addChild(new ItemSlot());
         root.addChild(items);
 
@@ -143,9 +143,9 @@ public final class CgUiSlotScreen extends GuiScreen implements NativeTooltipHost
         // draw.
         root.addChild(new UIText("Multi-pass items: potion, spawn egg, leather chestplate, ENCHANTED leather chestplate"));
         UIElement multiPass = row();
-        multiPass.addChild(itemSlot(stack("minecraft:potion", 1, 8197)));
-        multiPass.addChild(itemSlot(stack("minecraft:spawn_egg", 1, 50)));
-        multiPass.addChild(itemSlot(stack("minecraft:leather_chestplate", 1, 0)));
+        multiPass.addChild(itemSlot("minecraft:potion", 8197, 1));
+        multiPass.addChild(itemSlot("minecraft:spawn_egg", 50, 1));
+        multiPass.addChild(itemSlot("minecraft:leather_chestplate", 0, 1));
         multiPass.addChild(itemSlot(stack("minecraft:leather_chestplate", 1, 0), true));
         root.addChild(multiPass);
 
@@ -217,8 +217,20 @@ public final class CgUiSlotScreen extends GuiScreen implements NativeTooltipHost
         return slot;
     }
 
-    private static ItemSlot itemSlot(ItemStack stack) {
-        return itemSlot(stack, false);
+    /**
+     * By DESCRIPTOR — zero loader types, resolved through the service like a string a server sent.
+     *
+     * <p>This is the cross-version authoring path and the probe deliberately uses it for everything the
+     * grammar can express, so a break in {@code NativeDescriptors} ↔ {@code Mc1710NativeContentService}
+     * agreement shows up here as a row of empty wells rather than on some other version's client. The
+     * {@link #itemSlot(ItemStack, boolean) handle overload} stays for the enchanted fixtures, because
+     * NBT is deliberately outside the grammar — one probe demonstrating both routes is the boundary
+     * made visible.</p>
+     */
+    private static ItemSlot itemSlot(String id, int damage, int count) {
+        ItemSlot slot = new ItemSlot();
+        slot.setDescriptor(NativeDescriptors.item(id, damage, count));
+        return slot;
     }
 
     private static ItemSlot itemSlot(ItemStack stack, boolean enchant) {
@@ -228,16 +240,11 @@ public final class CgUiSlotScreen extends GuiScreen implements NativeTooltipHost
         return slot;
     }
 
+    /** By descriptor too — an unresolvable name now draws the bare well the design promises. */
     private static FluidSlot fluidSlot(String name, float fill) {
         FluidSlot slot = new FluidSlot();
-        net.minecraftforge.fluids.Fluid fluid = FluidRegistry.getFluid(name);
-        if (fluid == null) {
-            CrystalGuiCore.LOGGER.warn("[slot-probe] no such fluid: {}", name);
-            return slot;
-        }
         int capacity = 1000;
-        slot.bind(new Mc1710Content.DisplayFluid(
-                new FluidStack(fluid, Math.round(capacity * fill)), capacity));
+        slot.setDescriptor(NativeDescriptors.fluid(name, Math.round(capacity * fill), capacity));
         return slot;
     }
 

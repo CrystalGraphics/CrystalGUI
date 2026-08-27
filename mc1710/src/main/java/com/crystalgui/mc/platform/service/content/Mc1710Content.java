@@ -1,6 +1,7 @@
 package com.crystalgui.mc.platform.service.content;
 
 import com.crystalgui.ui.elements.slot.NativeContent;
+import com.crystalgui.ui.elements.slot.NativeDescriptors;
 import com.crystalgui.ui.elements.slot.NativeProfile;
 import net.minecraft.client.Minecraft;
 import net.minecraft.entity.player.EntityPlayer;
@@ -28,15 +29,15 @@ import net.minecraftforge.fluids.FluidStack;
  * only interpretation that survives being sent by a server: the two ends do not share object identity,
  * but they do share the container the server opened. A descriptor that named an item instead would
  * describe the contents at the moment the description was built and be wrong by the time it arrived.</p>
+ *
+ * <p>The grammar itself is {@link NativeDescriptors}' — core's, not this loader's — because the same
+ * serialised description must mean the same thing on every version. This class only maps parsed refs
+ * onto 1.7.10's registries and back.</p>
  */
 public final class Mc1710Content {
 
     private Mc1710Content() {
     }
-
-    static final String SLOT_PREFIX = "slot:";
-    static final String ITEM_PREFIX = "item:";
-    static final String FLUID_PREFIX = "fluid:";
 
     /** A live view onto a slot in the player's open container. */
     public static final class BoundSlot implements NativeContent {
@@ -54,7 +55,7 @@ public final class Mc1710Content {
 
         @Override
         public String descriptor() {
-            return SLOT_PREFIX + index;
+            return NativeDescriptors.slot(index);
         }
 
         @Override
@@ -87,11 +88,13 @@ public final class Mc1710Content {
         @Override
         public String descriptor() {
             if (stack == null || stack.getItem() == null) return "";
-            // Name, damage and size -- everything needed to rebuild the same stack. NBT is deliberately
-            // absent: it has no bounded text form, and a description is content-addressed, so a large
-            // tag would be re-hashed on every change of a value nothing here reads.
-            return ITEM_PREFIX + net.minecraft.item.Item.itemRegistry.getNameForObject(stack.getItem())
-                    + ":" + stack.getItemDamage() + ":" + stack.stackSize;
+            // NBT is deliberately absent from the grammar -- see NativeDescriptors. An unregistered item
+            // has no name to describe, and a mod's negative stack size is display state, not wire data,
+            // so both degrade to values the formatter accepts rather than letting it throw on paint.
+            String name = net.minecraft.item.Item.itemRegistry.getNameForObject(stack.getItem());
+            if (name == null) return "";
+            return NativeDescriptors.item(name, Math.max(0, stack.getItemDamage()),
+                    Math.max(0, stack.stackSize));
         }
 
         @Override
@@ -122,7 +125,9 @@ public final class Mc1710Content {
         @Override
         public String descriptor() {
             if (fluid == null || fluid.getFluid() == null) return "";
-            return FLUID_PREFIX + fluid.getFluid().getName() + ":" + fluid.amount + ":" + capacity;
+            String name = fluid.getFluid().getName();
+            if (name == null || name.isEmpty()) return "";
+            return NativeDescriptors.fluid(name, Math.max(0, fluid.amount), capacity);
         }
 
         @Override

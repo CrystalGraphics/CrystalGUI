@@ -109,6 +109,51 @@ public class NativeTileGridTest {
         }
     }
 
+    // ── The UV slice a cut tile shows ───────────────────────────────────────
+
+    /** A full tile shows the whole sprite regardless of which end its axis is anchored at. */
+    @Test
+    public void aFullTileShowsTheWholeSpriteUnderEitherAnchor() {
+        for (boolean fromFar : new boolean[] { false, true }) {
+            assertEquals(0f, NativeTileGrid.uvLo(1f, fromFar), 0.0001f);
+            assertEquals(1f, NativeTileGrid.uvHi(1f, fromFar), 0.0001f);
+        }
+    }
+
+    /**
+     * The rule itself: the sprite aligns to the ANCHORED end of its own tile, so the cut tile's slice
+     * sits against that end — [0, f] near-anchored, [1-f, 1] far-anchored. The "natural" reading
+     * (a tile truncated at its bottom keeps its top slice) is the 1.7.10 renderer's original bug, and
+     * this is the assertion that stops a third derivation of it.
+     */
+    @Test
+    public void aCutTilesSliceSitsAgainstTheAnchoredEnd() {
+        assertEquals(0f, NativeTileGrid.uvLo(0.5f, false), 0.0001f);
+        assertEquals(0.5f, NativeTileGrid.uvHi(0.5f, false), 0.0001f);
+        assertEquals(0.5f, NativeTileGrid.uvLo(0.5f, true), 0.0001f);
+        assertEquals(1f, NativeTileGrid.uvHi(0.5f, true), 0.0001f);
+    }
+
+    /** The two anchors of the same fraction are mirror images — the same slice, reflected. */
+    @Test
+    public void theTwoAnchorsAreMirrorImages() {
+        for (float f = 0.125f; f < 1f; f += 0.125f) {
+            assertEquals(1f - NativeTileGrid.uvHi(f, false), NativeTileGrid.uvLo(f, true), 0.0001f);
+            assertEquals(1f - NativeTileGrid.uvLo(f, false), NativeTileGrid.uvHi(f, true), 0.0001f);
+        }
+    }
+
+    /** Slice width always equals the tile's size fraction — the map into any sprite is linear. */
+    @Test
+    public void theSliceIsExactlyAsWideAsTheTile() {
+        for (float f = 0.1f; f <= 1.0001f; f += 0.1f) {
+            for (boolean fromFar : new boolean[] { false, true }) {
+                assertEquals(Math.min(1f, f),
+                        NativeTileGrid.uvHi(f, fromFar) - NativeTileGrid.uvLo(f, fromFar), 0.0001f);
+            }
+        }
+    }
+
     @Test
     public void aNonPositiveTileIsRefusedRatherThanLoopingForever() {
         try {
