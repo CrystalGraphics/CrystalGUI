@@ -15,17 +15,15 @@
  *   <tr><td>1</td><td>{@link com.crystalgui.example.machine.MachineModel}</td>
  *       <td>The truth the server owns. <b>Not a single UI import.</b></td></tr>
  *   <tr><td>2</td><td>{@link com.crystalgui.example.machine.ui.MachinePanel}</td>
- *       <td>The widget tree. Structure and names — no sizes, no colours.</td></tr>
+ *       <td><b>The whole UI, in one class.</b> Widgets as fields, {@code layout()} to arrange them,
+ *           {@code serve()} for the server half and {@code wire()}/{@code client()} for the client
+ *           half. Read it in that order — the file is written in it.</td></tr>
  *   <tr><td>3</td><td>{@link com.crystalgui.example.machine.ui.MachineStyles}</td>
  *       <td>Where the sizes and colours went, and why they travel separately.</td></tr>
- *   <tr><td>4</td><td>{@link com.crystalgui.example.machine.session.MachineWindow}</td>
- *       <td>A tree, some behaviour, three questions — and <b>no lifecycle at all</b>.</td></tr>
- *   <tr><td>5</td><td>{@link com.crystalgui.example.machine.session.MachineClient}</td>
- *       <td>Receiving a tree that was never built here, and drawing it.</td></tr>
- *   <tr><td>6</td><td>{@link com.crystalgui.example.machine.session.MachineDemo}</td>
+ *   <tr><td>4</td><td>{@link com.crystalgui.example.machine.MachineDemo}</td>
  *       <td>Both ends in one process, with the wire printed.
  *           {@code ./gradlew :core:runExample}</td></tr>
- *   <tr><td>7</td><td>{@code mc1710/…/mc/example/MachineExample}
+ *   <tr><td>5</td><td>{@code mc1710/…/mc/example/MachineExample}
  *                     + {@code MachineExampleClient}</td>
  *       <td>The same thing in game, on a real socket. Press <b>F8</b>.</td></tr>
  * </table>
@@ -131,7 +129,7 @@
  *       {@code StyleSheet} is unloadable on a server.</li>
  *   <li><b>A window is a VIEW of world state, not the state itself.</b> {@link
  *       com.crystalgui.example.machine.MachineModel} ticks with the world, in {@code MachineExample};
- *       {@code MachineWindow.tick} mirrors it into widgets and stops. Fusing the two is invisible
+ *       {@code MachinePanel.tick} mirrors it into widgets and stops. Fusing the two is invisible
  *       until you ask what happens when the last viewer leaves — and the answer was that the machine
  *       stopped existing, which is the opposite of what a server-authoritative UI is for.</li>
  *   <li><b>Nothing here calls {@code session.tick()}.</b> It used to, and forgetting to was a live

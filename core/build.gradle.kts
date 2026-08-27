@@ -297,8 +297,8 @@ tasks.jar {
 // only that it works where everything is present, which is the case nobody doubts.
 tasks.register<JavaExec>("runExample") {
     group = "documentation"
-    description = "Runs com.crystalgui.example.machine.session.MachineDemo -- a server-built UI over a loopback wire."
-    mainClass.set("com.crystalgui.example.machine.session.MachineDemo")
+    description = "Runs com.crystalgui.example.machine.MachineDemo -- a server-built UI over a loopback wire."
+    mainClass.set("com.crystalgui.example.machine.MachineDemo")
     classpath = headlessTest.runtimeClasspath
     // log4j2 with no configuration file defaults its root level to ERROR, so MachineTrace's INFO
     // lines -- the ones naming the thread each step ran on -- are dropped and the demo looks like it

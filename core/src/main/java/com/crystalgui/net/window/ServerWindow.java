@@ -31,16 +31,18 @@ import com.crystalgui.ui.UIElement;
  * that is here because none of it is a window's business.</p>
  *
  * <pre>{@code
- * public final class MachineWindow extends ServerWindow {
- *     private final MachineModel model;              // world state; this window is a VIEW of it
- *     private final MachinePanel panel = new MachinePanel();
+ * public final class FurnaceWindow extends ServerWindow {
+ *     private static final WindowType<UIElement> TYPE = WindowType.bare("mymod:furnace");
  *
- *     public MachineWindow(MachineModel model) { this.model = model; }
+ *     private final FurnaceModel model;              // world state; this window is a VIEW of it
+ *     private final FurnacePanel panel = new FurnacePanel();
  *
- *     @Override public String type()  { return "mymod:machine"; }
- *     @Override public String title() { return model.label(); }
- *     @Override public String key()   { return "mymod:machine"; }   // one per viewer
- *     @Override public UIElement root() { return panel.root; }
+ *     public FurnaceWindow(FurnaceModel model) { this.model = model; }
+ *
+ *     @Override public WindowType<?> type() { return TYPE; }
+ *     @Override public String title()       { return model.label(); }
+ *     @Override public String key()         { return "mymod:furnace"; }   // one per viewer
+ *     @Override public UIElement root()     { return panel.root; }
  *
  *     @Override protected void bind(WindowScope io) {
  *         io.onActivate(panel.purge, ctx -> model.purge());
@@ -51,6 +53,12 @@ import com.crystalgui.ui.UIElement;
  *     @Override protected boolean stillValid(Object viewer) { return model.exists(); }
  * }
  * }</pre>
+ *
+ * <p><b>Most UIs should not write this class.</b> A window whose content is one panel gets all of the
+ * above from {@link Panel} — {@code PanelType.of(id, MyPanel::new)} and then
+ * {@code ServerWindows.of(connection).open(MyPanel.TYPE.serve(model))}, with the handlers living on the
+ * panel beside the widgets they act on. See {@link PanelType}. This class stays the right shape for a
+ * window whose content is <em>not</em> a single panel, and it is what {@code PanelType} is built on.</p>
  *
  * <p>A window that is one screenful of handlers does not need a class at all —
  * {@link #of(String, Supplier, Function)} builds one from lambdas. Extending this is for anything with

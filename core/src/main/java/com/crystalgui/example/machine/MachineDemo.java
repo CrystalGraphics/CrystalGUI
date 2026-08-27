@@ -1,14 +1,13 @@
-package com.crystalgui.example.machine.session;
+package com.crystalgui.example.machine;
 
 import java.util.List;
 import java.util.Map;
 
-import com.crystalgui.example.machine.MachineTrace;
 import com.crystalgui.example.machine.ui.MachinePanel;
 import com.crystalgui.example.machine.ui.MachineStyles;
-import com.crystalgui.example.machine.MachineModel;
 import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.window.ClientWindows;
+import com.crystalgui.net.window.ServerWindow;
 import com.crystalgui.net.window.ClientWindowContext;
 import com.crystalgui.net.window.ServerWindows;
 import com.crystalgui.net.window.WindowProtocol;
@@ -90,8 +89,9 @@ public final class MachineDemo {
         // What this client does about a window of that type, said once. Delete this line and the panel
         // still opens, still renders and still reports every event the server asked for; only the three
         // buttons THIS side drives would go quiet.
-        MachineClient[] behaviour = new MachineClient[1];
-        ClientWindows.register(MachinePanel.TYPE, context -> behaviour[0] = new MachineClient(context));
+        // ONE ARGUMENT. The bound panel is the behaviour: the host binds a MachinePanel from the
+        // rebuilt tree and calls its wire() and client() methods. There is no behaviour class.
+        ClientWindows.register(MachinePanel.TYPE);
 
         // Where windows land. A real host wraps the tree in a WindowFrame on the desktop; here it is a
         // println. That is the whole platform surface for networked UI.
@@ -99,18 +99,20 @@ public final class MachineDemo {
 
         // ── 1. Open ─────────────────────────────────────────────────────────
         say("1. The server opens the window -- one call, and the host does the rest");
-        MachineWindow server = ServerWindows.of(serverEnd).open(new MachineWindow(machine));
+        ServerWindow server = ServerWindows.of(serverEnd).open(MachinePanel.TYPE.serve(machine));
         pump(link, serverEnd, clientEnd, 4);
-        MachineClient client = behaviour[0];
+        // The CLIENT's panel -- a MachinePanel bound to the rebuilt tree. Same class as the server's,
+        // same field names, different object over a different tree.
+        MachinePanel client = MachinePanel.TYPE.windowType().bind(mounted(clientEnd).root());
 
         // The handshake is two round trips at most, and the second one is skipped once the client
         // has the hash cached -- which is what makes re-opening a large GUI cost one small packet.
-        say("   the client now holds " + client.session().cacheSize() + " cached description(s); "
+        say("   the client now holds " + mounted(clientEnd).session().cacheSize() + " cached description(s); "
                 + "re-opening this window would transfer nothing");
 
         // ── 2. A user flips the switch ──────────────────────────────────────
         say("2. The user flips the power switch -- ON THE CLIENT'S COPY of the tree");
-        Switch clientPower = (Switch) client.root().querySelector("#power");
+        Switch clientPower = client.power;
         clientPower.setChecked(true);
         pump(link, serverEnd, clientEnd, 1);
 
@@ -128,10 +130,8 @@ public final class MachineDemo {
         System.out.printf("  [server] progress=%.2f cycles=%d%n",
                 machine.progress(), machine.completedCycles());
         System.out.printf("  [client] progress=%.2f status=%s%n",
-                ((com.crystalgui.ui.elements.ProgressBar) client.root().querySelector("#progress"))
-                        .fraction(),
-                ((com.crystalgui.ui.elements.UIText) client.root()
-                        .querySelector("." + MachineStyles.STATUS_CLASS)).getText());
+                client.progress.fraction(),
+                client.status.getText());
 
         /*
          * ── 4-7: THE FOUR DIRECTIONS ──────────────────────────────────────────
@@ -142,19 +142,19 @@ public final class MachineDemo {
          */
 
         say("4. C -> S REQUEST -- the client asks, the server answers exactly once  [q then r]");
-        press(client, "#ask-stats");
+        press(client.askStats);
         pump(link, serverEnd, clientEnd, 2);
 
         say("5. S -> C REQUEST -- the same machinery pointed the other way  [q then r]");
-        press(client, "#ping-client");   // a SERVER-wired button: the press crosses first
+        press(client.pingClient);   // a SERVER-wired button: the press crosses first
         pump(link, serverEnd, clientEnd, 3);
 
         say("6. C -> S NOTIFICATION -- nothing comes back, and nothing is waiting  [n only]");
-        press(client, "#heartbeat");
+        press(client.heartbeat);
         pump(link, serverEnd, clientEnd, 2);
 
         say("7. S -> C NOTIFICATION  [n only]");
-        press(client, "#announce");      // also server-wired
+        press(client.announce);      // also server-wired
         pump(link, serverEnd, clientEnd, 3);
 
         /*
@@ -165,7 +165,7 @@ public final class MachineDemo {
          * "refused" apart from "never came back", because only one of those is worth retrying.
          */
         say("8. A REQUEST THE SERVER REFUSES -- still an [r], with an error code instead of a body");
-        press(client, "#bad-rename");
+        press(client.badRename);
         pump(link, serverEnd, clientEnd, 2);
 
         // ── 9. Close ────────────────────────────────────────────────────────
@@ -181,7 +181,7 @@ public final class MachineDemo {
          * destroyed. The only close anything ever noticed was the player disconnecting.
          */
         say("10. THE USER closes a window, and the server hears about it  [n only]");
-        ServerWindows.of(serverEnd).open(new MachineWindow(machine));
+        ServerWindows.of(serverEnd).open(MachinePanel.TYPE.serve(machine));
         pump(link, serverEnd, clientEnd, 4);
         ClientWindows.of(clientEnd).windows().get(0).userClosed();
         pump(link, serverEnd, clientEnd, 2);
@@ -252,19 +252,22 @@ public final class MachineDemo {
      * Presses a button in the CLIENT's rebuilt tree, exactly as a user would.
      *
      * <p>Which side reacts depends on how that button was wired, and the demo deliberately mixes
-     * both: {@code #ask-stats} has a purely local listener {@code MachineClient} attached, while
+     * both: {@code askStats} has a purely local listener the panel's own {@code wire()} attached, while
      * {@code #ping-client} was given a reported event by the server, so pressing it sends a
      * {@code ui/event} first and the server's lambda runs a tick later. <b>The button cannot tell the
      * difference</b>, which is the point.</p>
      */
-    private static void press(MachineClient client, String selector) {
-        UIElement found = client.root().querySelector(selector);
+    private static void press(Button button) {
         // onPressed is what a real click ends in -- Button.emitActivation fires this signal after
         // checking isWasPressTarget() and that the LEFT button was the one released. Emitting it
         // directly is the honest way to simulate a press without a mouse: it runs every listener,
         // in order, on this thread, exactly as the input handler would have.
-        if (found instanceof Button) ((Button) found).onPressed.emit();
-        else System.out.println("  !! no button at " + selector);
+        button.onPressed.emit();
+    }
+
+    /** The one window this client is showing. */
+    private static ClientWindowContext mounted(ProtocolConnection<Object> clientEnd) {
+        return ClientWindows.of(clientEnd).windows().get(0);
     }
 
     /**

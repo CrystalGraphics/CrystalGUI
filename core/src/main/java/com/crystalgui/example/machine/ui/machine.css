@@ -83,11 +83,11 @@
  * eye can run down. Sized here rather than in Java for the reason at the top of this file: a width
  * written from Java lands at INLINE origin and no stylesheet rule could ever move it again.
  */
-#ping-client,
+#pingClient,
 #announce,
-#ask-stats,
+#askStats,
 #heartbeat,
-#bad-rename {
+#badRename {
     width: 120px;
 }
 

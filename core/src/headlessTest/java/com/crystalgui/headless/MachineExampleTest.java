@@ -8,12 +8,11 @@ import static org.junit.Assert.fail;
 
 import org.junit.Test;
 
-import com.crystalgui.example.machine.session.MachineClient;
 import com.crystalgui.example.machine.ui.MachinePanel;
 import com.crystalgui.example.machine.MachineModel;
-import com.crystalgui.example.machine.session.MachineWindow;
 import com.crystalgui.net.window.ClientWindows;
 import com.crystalgui.net.window.ClientWindowContext;
+import com.crystalgui.net.window.ServerWindow;
 import com.crystalgui.net.window.ServerWindows;
 import com.crystalgui.net.window.WindowProtocol;
 import com.crystalgui.net.window.WindowMount;
@@ -27,7 +26,6 @@ import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.ProgressBar;
 import com.crystalgui.ui.elements.Switch;
-import com.crystalgui.ui.elements.UIText;
 
 /**
  * The worked example in {@code com.crystalgui.example}, run end to end.
@@ -64,8 +62,16 @@ public class MachineExampleTest {
         /** World state. Ticked by {@link #tickWorld}, never by the window. */
         final MachineModel machine = new MachineModel();
 
-        MachineWindow server;
-        MachineClient client;
+        /** The window the host serves, and the panel behind it — the SERVER's instance. */
+        ServerWindow server;
+        MachinePanel serverPanel;
+
+        /**
+         * The CLIENT's panel: the same class bound to the rebuilt tree, so its fields are the very
+         * widgets the framework's own bound panel wired. A different object over a different tree,
+         * which is the whole architecture in one line.
+         */
+        MachinePanel client;
 
         Loopback() {
             // The contributor is what puts a ServerWindows on one end and a ClientWindows on the other,
@@ -79,13 +85,15 @@ public class MachineExampleTest {
             serverEnd = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "player");
             clientEnd = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
 
-            ClientWindows.register(MachinePanel.TYPE, context -> client = new MachineClient(context));
+            ClientWindows.register(MachinePanel.TYPE);
             ClientWindows.of(clientEnd).setMount(new SilentMount());
         }
 
         Loopback open() {
-            server = ServerWindows.of(serverEnd).open(new MachineWindow(machine));
+            server = ServerWindows.of(serverEnd).open(MachinePanel.TYPE.serve(machine));
+            serverPanel = MachinePanel.TYPE.panelOf(server);
             settle(6);
+            client = MachinePanel.TYPE.windowType().bind(shown().root());
             return this;
         }
 
@@ -154,7 +162,7 @@ public class MachineExampleTest {
         // walk and send none, so a structural disagreement of any size mis-addresses every element
         // after it -- which is why ClientUiSession refuses a tree whose count does not match.
         assertEquals("the rebuilt tree is a different shape from the described one",
-                countElements(net.server.panel().root), countElements(root));
+                countElements(net.serverPanel.root()), countElements(root));
 
         assertNotNull("the panel's switch did not survive the round trip", root.querySelector("#power"));
         assertNotNull(root.querySelector("#throughput"));
@@ -176,8 +184,8 @@ public class MachineExampleTest {
     public void reopeningTransfersNothing() {
         Loopback net = new Loopback().open();
         assertEquals("the description should be cached against its hash",
-                1, net.client.session().cacheSize());
-        assertTrue(net.client.session().hasCached(net.server.session().descHash()));
+                1, net.shown().session().cacheSize());
+        assertTrue(net.shown().session().hasCached(net.server.session().descHash()));
     }
 
     // ── Client to server: an interaction reaches the model ──────────────────
@@ -186,11 +194,11 @@ public class MachineExampleTest {
     public void flippingTheClientsSwitchStartsTheServersMachine() {
         Loopback net = new Loopback().open();
 
-        Switch power = (Switch) net.client.root().querySelector("#power");
+        Switch power = net.client.power;
         power.setChecked(true);
         net.settle(2);
 
-        assertTrue("the server's own handler never ran", net.server.model().isRunning());
+        assertTrue("the server's own handler never ran", net.machine.isRunning());
     }
 
     // ── Server to client: a model change reaches the widget ─────────────────
@@ -206,15 +214,15 @@ public class MachineExampleTest {
     public void theServersProgressReachesTheClientsBarAfterOpening() {
         Loopback net = new Loopback().open();
 
-        ProgressBar bar = (ProgressBar) net.client.root().querySelector("#progress");
+        ProgressBar bar = net.client.progress;
         assertEquals("nothing has run yet", 0f, bar.fraction(), 1e-4);
 
-        net.server.model().setRunning(true);
+        net.machine.setRunning(true);
         net.tickWorld(10);
 
-        assertTrue("the server did not advance", net.server.model().progress() > 0f);
+        assertTrue("the server did not advance", net.machine.progress() > 0f);
         assertEquals("the bar froze at the value it opened with",
-                net.server.model().progress(), bar.fraction(), 1e-4);
+                net.machine.progress(), bar.fraction(), 1e-4);
     }
 
     // ── The other two contract shapes ───────────────────────────────────────
@@ -231,7 +239,7 @@ public class MachineExampleTest {
     public void aNotificationReachesTheServerWithNothingComingBack() {
         Loopback net = new Loopback().open();
 
-        net.client.sendHeartbeat();
+        net.client.heartbeat.onPressed.emit();
         net.settle(1);      // the notification crosses and the server's handler runs
 
         /*
@@ -265,7 +273,7 @@ public class MachineExampleTest {
 
         String[] result = { null };
         String[] failure = { null };
-        net.client.session().call("machine/rename",
+        net.shown().session().call("machine/rename",
                 new StateMap<Object>(PlainOps.INSTANCE).putString("name", "   "),
                 ok -> result[0] = "accepted",
                 error -> failure[0] = error);
@@ -284,7 +292,7 @@ public class MachineExampleTest {
 
         String[] failure = { null };
         boolean[] accepted = { false };
-        net.client.session().call("machine/rename",
+        net.shown().session().call("machine/rename",
                 new StateMap<Object>(PlainOps.INSTANCE).putString("name", "Furnace"),
                 ok -> accepted[0] = true,
                 error -> failure[0] = error);
@@ -292,7 +300,7 @@ public class MachineExampleTest {
 
         assertNull(failure[0]);
         assertTrue("the result callback never ran", accepted[0]);
-        assertEquals("and the model was actually renamed", "Furnace", net.server.model().label());
+        assertEquals("and the model was actually renamed", "Furnace", net.machine.label());
     }
 
     /**
@@ -314,7 +322,7 @@ public class MachineExampleTest {
     public void eachSideWritesItsOwnResultLineAndOnlyItsOwn() {
         Loopback net = new Loopback().open();
 
-        net.client.sendHeartbeat();     // the client says "sent", locally and immediately
+        net.client.heartbeat.onPressed.emit();     // the client says "sent", locally and immediately
         net.settle(1);
         net.tickWorld(1);               // the server says "received", and flushes it
 
@@ -335,30 +343,35 @@ public class MachineExampleTest {
     public void aClientWriteDoesNotDisturbTheServersLine() {
         Loopback net = new Loopback().open();
 
-        net.client.sendHeartbeat();
+        net.client.heartbeat.onPressed.emit();
         net.settle(1);
         net.tickWorld(1);
         String afterServerWrote = serverLine(net);
 
-        net.client.requestStats();      // a purely client-side write, no round trip completed yet
+        net.client.askStats.onPressed.emit();      // a purely client-side write, no round trip completed yet
         assertEquals("the client must not be able to overwrite the server's line",
                 afterServerWrote, serverLine(net));
     }
 
+    /*
+     * READ THROUGH THE PANEL, NOT THROUGH A SELECTOR.
+     *
+     * These were `textOf(net, "#result-client")` until the panel rewrite made a widget's FIELD NAME
+     * its id -- at which point every one of these strings was silently wrong. `querySelector` answers
+     * null for a miss and the helper turned that into "", so two tests failed on an empty readout with
+     * nothing pointing at the selector. Going through the bound panel is the same read with the
+     * compiler holding the name.
+     */
     private static String serverLine(Loopback net) {
-        return textOf(net, "#result-server");
+        return net.client.serverLine.getText();
     }
 
     private static String clientLine(Loopback net) {
-        return textOf(net, "#result-client");
+        return net.client.clientLine.getText();
     }
 
-    private static String textOf(Loopback net, String selector) {
-        UIElement found = net.client.root().querySelector(selector);
-        return found instanceof UIText ? ((UIText) found).getText() : "";
-    }
 
-    /** Reads the panel's protocol readout out of the CLIENT's tree. */    /** Reads the panel's protocol readout out of the CLIENT's tree. */
+    /** Reads the panel's protocol readout out of the CLIENT's tree. */
     private static String wireText(Loopback net) {
         return serverLine(net);
     }
@@ -377,7 +390,7 @@ public class MachineExampleTest {
     public void behaviourCannotBeAddedOnceTheDescriptionHasGone() {
         Loopback net = new Loopback().open();
         try {
-            net.server.session().on(net.server.panel().purge, UiEventKinds.ACTIVATE, ctx -> { });
+            net.server.session().on(net.serverPanel.purge, UiEventKinds.ACTIVATE, ctx -> { });
             fail("expected a refusal");
         } catch (IllegalStateException expected) {
             assertTrue("the message should say why, not merely that",

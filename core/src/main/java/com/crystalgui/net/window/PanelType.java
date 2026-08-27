@@ -116,8 +116,25 @@ public final class PanelType<P extends Panel<M>, M> {
         }
 
         @Override
+        public String title() {
+            String named = panel.title();
+            return named == null ? super.title() : named;
+        }
+
+        @Nullable
+        @Override
+        public String key() {
+            return panel.key();
+        }
+
+        @Override
         protected void bind(WindowScope io) {
             panel.serve(io);
+        }
+
+        @Override
+        protected void tick() {
+            panel.tick();
         }
 
         @Override

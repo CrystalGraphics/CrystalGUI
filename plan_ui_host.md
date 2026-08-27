@@ -1282,7 +1282,7 @@ field-declaration work needed anyway.
 
 ---
 
-## VI.9 — The panel as the **whole** component · **live**
+## VI.9 — The panel as the **whole** component · **SHIPPED**
 
 The destination this section has been converging on: **one class per UI**, with structure, server
 behaviour and client behaviour as methods on it, and no `ServerWindow` or `ClientWindowBehaviour` in
@@ -1387,3 +1387,42 @@ rather than to the panel, and for anything the server already observes it is one
 and no contributor at all.
 
 ---
+
+### What shipped, and what changed on contact
+
+`Panel<M>`, `PanelType<P, M>` and `ClientWindows.register(PanelType)` are in `com.crystalgui.net.window`.
+The example proved it by **losing two files** — `MachineWindow` and `MachineClient` are deleted, their
+bodies now methods on `MachinePanel`, with the 1414-test headless suite unchanged apart from the read
+path noted below. `serverSmoke` still reports *no client-only class loaded on the server*, which is the
+whole loader-seam claim: `PanelType`'s initialiser names the panel class and nothing else, so a
+dedicated server never resolves `ClientWindowContext`.
+
+Three things were different from the sketch above.
+
+**`wire()` and `client()` are two hooks, not one.** The sketch had a single client-side method. They
+have different *lifetimes* and the difference is not cosmetic: a widget listener dies with the tree and
+must be re-attached on **every** bind, while a session registration is keyed by method name and would be
+**refused** a second time. Running one method twice therefore cannot be right for both. So `wire()` runs
+at mount and again after every re-describe, `client(ClientWindowContext)` runs once. This is the same
+distinction VI.8 identified between the two kinds of registration, arriving as an API shape rather than
+as advice.
+
+**`PanelBehaviour` keeps the panel instance across a re-describe.** It calls `panel.rebind(newRoot)` and
+`wire()` again rather than adopting the freshly bound panel — because the instance holds the session
+registrations `client()` made, and anything the panel remembers. Rebuilding it would lose both silently.
+
+**A field name becoming an id is a real rename, and it reached the stylesheet and the tests.** This is
+the cost VI.9 accepted in the abstract, and it cost two failing tests to pay in practice. `machine.css`
+moved from `#result-client` to `#clientLine`; the tests' `textOf(net, "#result-server")` helpers did not,
+and `querySelector` answers **null** for a miss which the helper turned into `""` — so two tests failed
+on an empty readout with nothing anywhere pointing at a selector. The fix is the feature: a test holding
+a bound panel reads `net.client.clientLine.getText()` and the compiler holds the name. **Anything reading
+a panel's widget by selector should stop** — the panel is the accessor, and a selector is the one way
+back into the failure mode the field walk exists to remove.
+
+### The one hook that is deliberately not split
+
+`closed(String)` runs on **both** sides, on two different instances. It is not split into a server and a
+client half because most panels want the same teardown twice, and a panel that does want to tell them
+apart already can: only the client half was ever handed a `ClientWindowContext`, so a null one *is* the
+server. `MachinePanel.closed` does exactly that and is the worked example.
