@@ -68,6 +68,17 @@ public final class IndentRangeProvider implements FoldingRangeProvider {
         return new IndentRangeProvider(false, null, DEFAULT_LIMIT, true);
     }
 
+    /**
+     * Yes — this reads nothing but its arguments.
+     *
+     * <p>Every field here is configuration fixed at construction, and a {@link Rope} is persistent, so
+     * the snapshot handed to a worker cannot be edited underneath it. @see FoldingRangeProvider#computesOffThread
+     */
+    @Override
+    public boolean computesOffThread() {
+        return true;
+    }
+
     @Override
     public FoldingRegions compute(Rope document, int tabSize) {
         FoldingRegions regions = computeRanges(document, offSide, markers, tabSize, limit);

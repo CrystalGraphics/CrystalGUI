@@ -1,5 +1,10 @@
 package com.crystalgui.ui.elements.editor;
 
+import com.crystalgui.core.async.FrameProfile;
+import com.crystalgui.core.async.JobKey;
+import com.crystalgui.core.async.JobLane;
+import com.crystalgui.core.async.JobScheduler;
+import com.crystalgui.text.Rope;
 import com.crystalgui.text.Selection;
 import com.crystalgui.text.fold.FoldingModel;
 import com.crystalgui.text.fold.FoldingRangeProvider;
@@ -86,8 +91,18 @@ final class EditorFolding {
      */
     boolean refreshFolding() {
         if (!enabled) return false;
+        // TWO HALVES WITH NOTHING IN COMMON, and ed:refreshFolding measured 12-17ms without saying
+        // which. Asking the provider is a query over the whole document; applying the answer rebuilds
+        // per-row visibility across the projection. One is a language question and one is a view
+        // question, and they would be fixed in different files.
+        long asked = FrameProfile.begin();
         ensureFoldingCurrent();
-        return applyHiddenRows();
+        FrameProfile.step(asked, "fold:computeRegions ("
+                + (provider == null ? "none" : provider.getClass().getSimpleName()) + ")");
+        long applied = FrameProfile.begin();
+        boolean changed = applyHiddenRows();
+        FrameProfile.step(applied, "fold:applyHiddenRows");
+        return changed;
     }
 
     private boolean applyHiddenRows() {
@@ -107,7 +122,28 @@ final class EditorFolding {
     private void ensureFoldingCurrent() {
         if (!dirty) return;
         dirty = false;
-        folding.update(editor.buffer().document(), provider, editor.getTabSize());
+        Rope document = editor.buffer().document();
+        int tabSize = editor.getTabSize();
+        // ON A WORKER WHEN THE PROVIDER SAYS IT MAY BE. Folding is a whole-document pass and the only
+        // part of a frame whose cost scales with the FILE rather than the screen -- 25.7ms on a
+        // 2,020-line class, on the frame that opens it. @see FoldingRangeProvider#computesOffThread
+        //
+        // No callback is needed when it lands: refreshFolding runs applyHiddenRows every frame, and that
+        // is what notices the new regions and reports the visibility change. The frames in between show
+        // the document unfolded, which is the correct default rather than a wrong picture.
+        if (!provider.computesOffThread() || !JobScheduler.hasShared()) {
+            folding.update(document, provider, tabSize);
+            return;
+        }
+        JobScheduler.shared()
+                .job(JobKey.of(this, "folding"), JobLane.LATENCY,
+                        context -> provider.compute(document, tabSize))
+                .onDone(next -> {
+                    // Null is a cancelled or superseded job -- an edit landed and re-dirtied us, so a
+                    // newer compute is already queued and this answer describes text nobody is showing.
+                    if (next != null) folding.install(next);
+                })
+                .submit();
     }
 
     // ── State in and out ────────────────────────────────────────────────────────────────────────

@@ -376,6 +376,14 @@ tasks.named<JavaExec>(runTask) {
         systemProperty("crystalgui.startup.trace", "true")
     }
 
+    // -PcgFrameProfile names where a SLOW frame's time went, once a second, for as long as frames are
+    // slow. cgTrace above covers the first frame only, which is the startup question; this is the
+    // steady-state one -- "opening this file drops 120fps to 55" needs to know which phase, and for the
+    // cascade which ELEMENTS are being re-matched.
+    if (providers.gradleProperty("cgFrameProfile").isPresent) {
+        systemProperty("crystalgui.frameprofile", "true")
+    }
+
     // -PcgNetProbe runs BOTH in-game network probes, in order. CgUiNetProbe echoes raw frames
     // client->server->client over the Forge channel; CgUiSessionProbe then runs a real
     // Server/ClientUiSession pair over the same wire and checks the description handshake, a state

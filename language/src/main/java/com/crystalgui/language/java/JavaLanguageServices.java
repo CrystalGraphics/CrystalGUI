@@ -1,5 +1,6 @@
 package com.crystalgui.language.java;
 
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.language.engine.AnalysedLanguageServices;
 import com.crystalgui.language.engine.JavaEngine;
@@ -113,10 +114,16 @@ public final class JavaLanguageServices extends AnalysedLanguageServices {
         this.platform = platform;
         this.className = className;
         this.classpath = classpath == null ? Collections.emptyList() : new ArrayList<>(classpath);
+        long timed = FrameProfile.begin();
         this.completion = new JavaCompletionProvider(buffer, this::current,
                 typeIndexFor(this.classpath), this::analyseText);
+        FrameProfile.step(timed, "new JavaCompletionProvider (+ typeIndexFor)");
+        timed = FrameProfile.begin();
         this.actions = new JavaCodeActions(this::current, typeIndexFor(this.classpath));
+        FrameProfile.step(timed, "new JavaCodeActions");
+        timed = FrameProfile.begin();
         start();
+        FrameProfile.step(timed, "start() -- first analysis (inline only when there is no scheduler)");
     }
 
     /**

@@ -9,6 +9,7 @@ import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.lang.TypeSearch;
 import com.crystalgui.text.lang.TypeSearchRegistry;
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.chrome.QuickPick;
 import com.crystalgui.ui.elements.chrome.QuickPickEntry;
@@ -118,6 +119,14 @@ public final class GoToFile {
         pick.setSource((query, sink) ->
                 fetchInto(query, workbench.fileTree().source().knownFiles(), sink));
         pick.onAccepted.connect(id -> {
+            long accepted = FrameProfile.enter("ENTER accepted " + id);
+            try {
+            String member = null;
+            int carried = id.indexOf(MEMBER_SEPARATOR);
+            if (carried >= 0) {
+                member = id.substring(carried + 1);
+                id = id.substring(0, carried);
+            }
             // THE LOCATION COMES FROM THE QUERY, NOT THE ROW. `Main.java:42` narrows to `Main.java` for
             // matching, so every row is a match for the name and none of them carries the line — which
             // belongs to what was typed rather than to what was found. Read live at accept time rather
@@ -125,7 +134,10 @@ public final class GoToFile {
             TextPoint at = QueryLocation.parse(pick.searchField().getText()).point();
             Resource resource = Resource.parse(id);
             if (resource.isProject()) workbench.openFileAt(resource.asPath(), at);
-            else workbench.openResourceAt(resource, at);
+            else workbench.openResourceAt(resource, at, member);
+            } finally {
+                FrameProfile.leave(accepted, "ENTER accepted");
+            }
         });
         workbench.setQuickOpen(pick);
         return pick.open(window);
@@ -160,10 +172,16 @@ public final class GoToFile {
         // `Main.java:42` empties the list, which reads as the search breaking on a keystroke.
         SearchQuery effective = name.equals(typed) ? query : SearchQuery.of(name);
 
+        long profiled = FrameProfile.enter("GoToFile.fetchInto '" + name + "' over "
+                + files.size() + " workspace files");
         List<Scored> fileRows = new ArrayList<>();
+        long timed = FrameProfile.begin();
         collectFiles(files, effective, fileRows);
+        FrameProfile.step(timed, "collectFiles -> " + fileRows.size());
         List<Scored> typeRows = new ArrayList<>();
+        timed = FrameProfile.begin();
         collectTypes(name, effective, typeRows);
+        FrameProfile.step(timed, "collectTypes -> " + typeRows.size());
 
         // RANKED WITHIN EACH GROUP, then pushed group by group -- which is the same order the single
         // sort produced and is cheaper to reason about, since the group is now the outer key.
@@ -171,8 +189,11 @@ public final class GoToFile {
         boolean cut = trimTo(fileRows, MAX_PER_GROUP) | trimTo(typeRows, MAX_PER_GROUP);
         if (cut) sink.markTruncated();
 
-        if (!push(fileRows, sink)) return;
-        push(typeRows, sink);
+        long pushed = FrameProfile.begin();
+        boolean more = push(fileRows, sink);
+        if (more) push(typeRows, sink);
+        FrameProfile.step(pushed, "push rows");
+        FrameProfile.leave(profiled, "GoToFile.fetchInto");
     }
 
     /**
@@ -205,12 +226,46 @@ public final class GoToFile {
         return true;
     }
 
+    /**
+     * Separates a resource id from the MEMBER to land on — {@code library://…WorldSettings#GameType}.
+     *
+     * <p>A {@code #} because it cannot occur in a binary name and reads as a fragment does everywhere
+     * else. {@code Resource.parse} never sees it: the split happens before the parse.</p>
+     */
+    private static final String MEMBER_SEPARATOR = "#";
+
+    /**
+     * The row's second line — {@code in WorldSettings of net.minecraft.world} for a nested type.
+     *
+     * <p>IntelliJ's phrasing, and it says the thing that matters: for a member type the package alone is
+     * misleading, because the name a reader has to write goes through the enclosing class. A flat
+     * {@code net.minecraft.world.WorldSettings} reads as a package with an odd last segment.</p>
+     */
+    private static String describe(TypeSearch.Result result) {
+        if (!result.isNested()) return result.packageName();
+        String enclosing = result.enclosingName();
+        String pkg = result.packageOnly();
+        return pkg.isEmpty() ? "in " + enclosing : "in " + enclosing + " of " + pkg;
+    }
+
     private static void collectTypes(String name, SearchQuery effective, List<Scored> out) {
+        // THE CLASSPATH INDEX -- tens of thousands of types, asked on every keystroke.
+        long searched = FrameProfile.begin();
         TypeSearch.Results found = TypeSearchRegistry.search(name, TYPE_LIMIT);
+        FrameProfile.step(searched, "TypeSearchRegistry.search");
         for (TypeSearch.Result result : found.results()) {
-            QuickPickItem item = new QuickPickItem(
-                    Resource.of(Resource.SCHEME_LIBRARY, result.qualifiedName()).toString(),
-                    result.simpleName(), result.packageName(), null, null, true,
+            // THE FILE THE TYPE LIVES IN, which for a nested type is not the type. A member has no class
+            // file of its own, so addressing a `library:` resource by `WorldSettings.GameType` asked the
+            // decompiler for a class nothing is called and opened an empty tab. Nested types were absent
+            // from the index until recently, which is why one spelling served for both until now.
+            //
+            // THE MEMBER RIDES ON THE ID after a `#`, because the picker hands back an id and nothing
+            // else. Splitting it at accept time keeps the whole round trip inside this class rather than
+            // widening QuickPickItem with a field only one of its callers would ever set.
+            String id = Resource.of(Resource.SCHEME_LIBRARY, result.topLevelName()).toString()
+                    + (result.isNested() ? MEMBER_SEPARATOR + result.simpleName() : "");
+            QuickPickItem item = new QuickPickItem(id,
+                    result.simpleName(), describe(result), null, null, true,
                     result.kind(), result.isAbstract(), null);
             // OUR MATCHER HAS THE LAST WORD, and the first version did not let it.
             //
@@ -247,12 +302,38 @@ public final class GoToFile {
     @Nullable
     private static Scored score(QuickPickItem item, SearchQuery query, int weight) {
         SearchMatch onLabel = SearchMatcher.match(query, item.label(), SearchMatch.FIELD_PRIMARY);
-        SearchMatch onWhere = SearchMatcher.match(query, item.description(), SearchMatch.FIELD_CONTEXT);
+        SearchMatch onWhere = SearchMatcher.match(query, searchableLocation(item.description()),
+                SearchMatch.FIELD_CONTEXT);
         SearchMatch best = SearchMatch.best(onLabel, onWhere);
         if (best == null) return null;
         // ONLY THE LABEL'S RANGES ARE KEPT. A description hit ranks the row and does not light anything --
         // lighting it would need ranges against a field the row deliberately never highlights.
         return new Scored(item, best, best == onLabel ? onLabel : null, weight);
+    }
+
+    /**
+     * The part of a location worth searching — everything after the project id.
+     *
+     * <h3>A name every row shares can only ever be noise</h3>
+     *
+     * <p>A file's location is a {@code CgPath}, which reads {@code project:dir/dir}. The project id is
+     * common to every file in the workspace, so matching against it makes every query that happens to
+     * hit the project name return the ENTIRE workspace — and the partition above then puts all of it
+     * ahead of the classpath. Typing {@code Minecraft} in a workspace called {@code minecraft.workspace}
+     * listed {@code README.md}, {@code shader.shadergraph} and every {@code .js} file in it, with
+     * {@code net.minecraft.client.Minecraft} — an exact hit on the name — last.</p>
+     *
+     * <p>The rest of the path is genuinely worth matching and is kept: {@code util} finding the files
+     * under {@code util} is the reason a location is searched at all, and it is how a qualified query
+     * like {@code util/Greeter} lands.</p>
+     *
+     * <p>Harmless for a type, whose location is a package and carries no colon — so this is one rule
+     * rather than a branch on which half of the list a row came from.</p>
+     */
+    private static String searchableLocation(@Nullable String description) {
+        if (description == null) return "";
+        int projectEnd = description.indexOf(':');
+        return projectEnd < 0 ? description : description.substring(projectEnd + 1);
     }
 
     private static List<TextRange> rangesOf(@Nullable SearchMatch match) {

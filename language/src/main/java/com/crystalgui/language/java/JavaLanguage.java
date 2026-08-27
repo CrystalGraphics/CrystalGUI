@@ -1,5 +1,6 @@
 package com.crystalgui.language.java;
 
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.fs.Resource;
@@ -286,6 +287,40 @@ public final class JavaLanguage {
                 // open a .java file. That is the trade, and it is stated rather than hidden.
                 ready.analyzer().analyze("Warm", "final class Warm { void f() { int i = 0; } }",
                         classpath, ready.releaseLevel(), 0L).close();
+
+                // AND THE TWO THINGS AN ANALYSIS DOES NOT TOUCH, both measured on the frame thread.
+                //
+                // The warm above builds the compiler's name environment, and for a long time that was
+                // taken to mean "the classpath is warm". It is not. Opening a `library://` viewer was
+                // measured at 332ms inside a keypress, and 250ms of it is here: source DISCOVERY, which
+                // opens every jar's central directory looking for a `-sources.jar` and for
+                // `assets/*/sources/`, and then the archive lookup that decides whether a class came out
+                // of `src.zip`. Neither is reachable from analysing a snippet that mentions no library
+                // type, so neither was ever warmed.
+                AttachedSources attached = AttachedSources.forClasspath(classpath);
+                // EVERY ARCHIVE, NAMING NO TYPE. This used to ask about `java.lang.Object` -- "a type
+                // every classpath has, so the lookup does real work rather than missing early" -- and the
+                // reasoning is exactly inverted. `SourceArchives.find` BREAKS on the first archive that
+                // answers, and `java.lang.Object` is answered by the JDK's `src.zip`, which is first in
+                // precedence order precisely because it answers most hovers. So the warm indexed one
+                // archive and left the other ~360 cold, and the first name none of them has -- a mod's
+                // own class, opened from the picker -- walked and indexed the whole list on the frame
+                // thread: `isPlatformSource` 63ms of a 117ms open, to answer "no".
+                attached.warm();
+                // AND ONE ATTACHED PARSE, which is a different cost from indexing the archives above.
+                // Discovery finds WHERE sources are; this builds what JDT needs to read one -- measured
+                // at ~70ms on top of the per-class parse, paid by whichever hover happens to be first.
+                // @see AttachedSources#warmParser
+                attached.warmParser();
+
+                // AND THE TYPE INDEX'S SCAN, which is LAZY INSIDE `matching` rather than in the
+                // constructor -- so `typeIndexFor` returning an instance proves nothing about it being
+                // built. Go to File's first keystroke was measured at 226ms, 172ms of it this scan,
+                // because a picker opened before any Java document is the one path that reaches the
+                // index first. `TypeIndex`'s own note says a warm-up "pays the cost on every launch
+                // including the ones where nobody opens a Java file" -- true, and this thread is where
+                // that speculation is already being made and already stated as the trade.
+                JavaLanguageServices.typeIndexFor(classpath).matching("a");
             } catch (Throwable ignored) {
                 // See the note above: an optimisation that fails is silent.
             }
@@ -312,18 +347,41 @@ public final class JavaLanguage {
 
     private static LanguageServices servicesFor(TextBuffer buffer, Resource resource,
                                                 List<String> classpath) {
+        long profiled = FrameProfile.enter("servicesFor " + resource);
+        try {
+        long timed = FrameProfile.begin();
         JavaEngine ready = engine();
+        FrameProfile.step(timed, "JavaLanguage.engine() (opens the band loader if cold)");
         // NULL RATHER THAN A BROKEN SERVICES OBJECT. No engine is a legitimate deployment -- the editor
         // colours from the grammar and analyses nothing -- and it is the state a first launch is in while
         // the band is still arriving.
-        if (ready == null) return null;
+        if (ready == null) {
+            FrameProfile.note("no engine");
+            return null;
+        }
         // A BORROWED DOCUMENT gets services configured for one: no diagnostics, and compliance 8 when
         // the text came out of src.zip. @see JavaLanguageServices#forLibrary
         if (resource != null && Resource.SCHEME_LIBRARY.equals(resource.scheme())) {
-            return JavaLanguageServices.forLibrary(buffer, ready, scheduler, resource.path(), classpath,
-                    AttachedSources.forClasspath(classpath).isPlatformSource(resource.path()));
+            timed = FrameProfile.begin();
+            AttachedSources attached = AttachedSources.forClasspath(classpath);
+            FrameProfile.step(timed, "AttachedSources.forClasspath (SCANS EVERY JAR if cold)");
+            timed = FrameProfile.begin();
+            boolean platform = attached.isPlatformSource(resource.path());
+            FrameProfile.step(timed, "isPlatformSource");
+            timed = FrameProfile.begin();
+            LanguageServices made = JavaLanguageServices.forLibrary(
+                    buffer, ready, scheduler, resource.path(), classpath, platform);
+            FrameProfile.step(timed, "new JavaLanguageServices.forLibrary (ctor + start)");
+            return made;
         }
-        return new JavaLanguageServices(buffer, ready, scheduler, classNameFor(resource), classpath);
+        timed = FrameProfile.begin();
+        LanguageServices made =
+                new JavaLanguageServices(buffer, ready, scheduler, classNameFor(resource), classpath);
+        FrameProfile.step(timed, "new JavaLanguageServices (ctor + start)");
+        return made;
+        } finally {
+            FrameProfile.leave(profiled, "servicesFor");
+        }
     }
 
     /**

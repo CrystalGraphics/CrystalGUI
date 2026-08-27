@@ -1,5 +1,6 @@
 package com.crystalgui.ui.input;
 
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.data.CacheCell;
 import com.crystalgui.core.data.ReadOnlyVec2f;
 import com.crystalgui.core.signal.Signal;
@@ -785,7 +786,14 @@ public final class UIInputHandler implements CgSystemInput.Keyboard, CgSystemInp
      */
     private void emitMouseScroll(UIElement target) {
         MouseEvent.Scroll event = new MouseEvent.Scroll(target, hoverFrameData.eventPosition(), scrollDelta);
+        // WHAT ONE NOTCH COSTS, from the dispatch alone. A wheel event is synchronous and lands inside
+        // `input` -- everything it triggers that is deferred (the window update, the reprojection, the
+        // repaint) shows up in the phases after it, so the split between this and those is what says
+        // whether a scroll is expensive to RECEIVE or expensive to react to.
+        long timed = FrameProfile.begin();
         sendInputEvent(target, event);
+        FrameProfile.step(timed, "input.scroll " + scrollDelta + " -> "
+                + (target == null ? "nothing" : target.tagName()));
         // THE WHEEL RESOLVES THROUGH THE KEYMAP TOO, and after dispatch for exactly the reason a keystroke
         // does: a widget under the pointer gets first refusal on its own wheel, and only what nothing
         // wanted becomes a shortcut. That is what lets ScrollerView keep plain and Shift+wheel while

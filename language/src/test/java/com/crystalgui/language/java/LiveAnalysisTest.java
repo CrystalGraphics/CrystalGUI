@@ -4,6 +4,7 @@ import com.crystalgui.language.engine.EngineBand;
 import com.crystalgui.language.engine.EngineSource;
 import com.crystalgui.language.engine.JavaEngine;
 import com.crystalgui.language.engine.bridge.SourceAnalyzer;
+import com.crystalgui.language.engine.bridge.ScriptCompiler;
 import com.crystalgui.language.java.classpath.HostClasspath;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.lang.CompletionItem;
@@ -76,6 +77,23 @@ public class LiveAnalysisTest {
                 "java/lang/Object", null);
         writer.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null).visitEnd();
         writer.visitMethod(Opcodes.ACC_PUBLIC, "greeting", "()Ljava/lang/String;", null, null).visitEnd();
+        writer.visitInnerClass(OWNER + "$Mode", OWNER, "Mode",
+                Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC);
+        writer.visitEnd();
+        return writer.toByteArray();
+    }
+
+    /** A member type of {@link #OWNER}, spelled the way a class file spells one. */
+    private static final String NESTED = OWNER + "$Mode";
+
+    /** The nested class, with the {@code InnerClasses} entry that makes it a member rather than a name. */
+    private static byte[] nestedInMemory() {
+        ClassWriter writer = new ClassWriter(0);
+        writer.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC | Opcodes.ACC_SUPER, NESTED, null,
+                "java/lang/Object", null);
+        writer.visitInnerClass(NESTED, OWNER, "Mode", Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC);
+        writer.visitField(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC | Opcodes.ACC_FINAL,
+                "SURVIVAL", "L" + NESTED + ";", null, null).visitEnd();
         writer.visitEnd();
         return writer.toByteArray();
     }
@@ -84,7 +102,10 @@ public class LiveAnalysisTest {
         CgPlatform.provide(ScriptServices.SERVICE, new ScriptService() {
             @Override
             public ReadableView.ByteSource liveBytes() {
-                return name -> OWNER.equals(name) ? onlyInMemory() : null;
+                return name -> {
+                    if (OWNER.equals(name)) return onlyInMemory();
+                    return NESTED.equals(name) ? nestedInMemory() : null;
+                };
             }
 
             @Override
@@ -126,6 +147,69 @@ public class LiveAnalysisTest {
     public void closeEngine() throws Exception {
         if (engine != null) engine.close();
         engine = null;
+    }
+
+    /**
+     * <b>Importing a live-only NESTED type — through the COMPILER, not the analyser.</b>
+     *
+     * <p>Measured in an obfuscated client: {@code import net.minecraft.world.WorldSettings.GameType}
+     * fails with <i>"The import … cannot be resolved"</i> while {@code net.minecraft.client.Minecraft}
+     * imports and runs. Four instrumented runs showed the name environment receives essentially no
+     * questions about {@code net} — three {@code findType} calls in a whole process, all
+     * {@code java/lang} — so ECJ gives up on the import before asking for a type.</p>
+     *
+     * <p>Through {@code compiler()} rather than {@code analyzer()} because that is the path the failure
+     * was measured on, and the two build their environments separately. The top-level import is asserted
+     * beside it, since a fixture where NEITHER resolves proves nothing about nesting.</p>
+     */
+    /**
+     * <b>Importing a live-only NESTED type, on EVERY staged band.</b>
+     *
+     * <p>Measured in an obfuscated client: {@code import net.minecraft.world.WorldSettings.GameType}
+     * fails with <i>"The import ... cannot be resolved"</i> while {@code net.minecraft.client.Minecraft}
+     * imports and runs. Instrumented runs showed the name environment receives almost no questions about
+     * {@code net} at all -- three {@code findType} calls in a whole process, every one {@code java/lang}
+     * -- so ECJ abandons the import before ever asking for a type.</p>
+     *
+     * <p><b>Every band, because this class already documents a defect that splits by one.</b>
+     * {@code getModulesDeclaringPackage} is the module-aware spelling of {@code isPackage}, and which of
+     * the two ECJ calls depends on the compliance level: band 8 asks {@code isPackage}, band 9 and above
+     * ask the other. A 1.7.10 client compiles at 8 and this suite runs on whatever the developer's JVM
+     * is, so a single-band test is a coin toss about which half of that seam it covers -- which is how
+     * the last one passed here and failed in the client.</p>
+     *
+     * <p>Through {@code compiler()} rather than {@code analyzer()}, because that is the path the failure
+     * was measured on and the two build their environments separately. The top-level import is asserted
+     * beside it: a fixture where NEITHER resolves proves nothing about nesting.</p>
+     */
+    @Test
+    public void aScriptMayImportALiveOnlyNestedType() throws Exception {
+        registerPlatform();
+        int exercised = 0;
+        for (EngineBand band : EngineBand.values()) {
+            String paths = System.getProperty("cgui.test.engineBand" + band.minimumFeatureVersion());
+            if (paths == null || EngineSource.ofPathList(paths).jarsFor(band).isEmpty()) continue;
+            exercised++;
+            JavaEngine opened = JavaEngine.open(band, EngineSource.ofPathList(paths));
+            try {
+                ScriptCompiler.Result topLevel = opened.compiler().compile("TopLevel", ""
+                        + "import demo.live.OnlyInMemory;\n"
+                        + "public class TopLevel { OnlyInMemory it; }\n",
+                        HostClasspath.detect(), opened.releaseLevel());
+                assertTrue(band + ": the top-level control did not compile, so this proves nothing"
+                        + " about nesting: " + topLevel.messages(), topLevel.successful());
+
+                ScriptCompiler.Result nested = opened.compiler().compile("Nested", ""
+                        + "import demo.live.OnlyInMemory.Mode;\n"
+                        + "public class Nested { Mode it; }\n",
+                        HostClasspath.detect(), opened.releaseLevel());
+                assertTrue(band + ": a live-only nested type could not be imported: "
+                        + nested.messages(), nested.successful());
+            } finally {
+                opened.close();
+            }
+        }
+        Assume.assumeTrue("no engine bands staged; run :language:stageEngines", exercised > 0);
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements;
 
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgraphics.api.text.CgShapedRun;
 import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.api.font.CgFontFamilyGroup;
@@ -747,7 +748,13 @@ public final class UIText extends UIElement {
         float contentY = getRuntimeCache().getY() + layout.border().top + layout.padding().top
                 + general.textOffsetY().resolve(getRuntimeCache().getHeight());
 
+        // EVERY FRAME, PER LABEL, and `paint:overlay` -- which is where a UIText draws -- measured at
+        // 6.5ms of a 9ms client frame across ~130 of them. That is ~50us each for something whose
+        // javadoc says calling it again at the same width "re-runs no real line-breaking work", so the
+        // split below is what says whether that is true.
+        long timed = FrameProfile.begin();
         CgFontFamily family = resolveFamily();
+        FrameProfile.end(timed, "text:resolveFamily");
         // Deliberately 0f (unbounded) maxHeight, matching recompute()'s call — NOT
         // layout.contentBoxHeight(). UIText has no max-height/max-lines feature yet, so there's no
         // legitimate bounded height to constrain against; passing the measured content height back in
@@ -759,9 +766,11 @@ public final class UIText extends UIElement {
         // the trailing line at all — not clipped, just silently dropped. Known upstream CrystalGraphics
         // issue; revisit once UIText actually needs a bounded maxHeight (max-lines/ellipsis support).
         boolean wraps = general.whiteSpace().wraps();
+        timed = FrameProfile.begin();
         CgTextLayout textLayout = wraps
                 ? ensureShaped().layout(contentWidth, 0f)
                 : truncatedIfNeeded(family, contentWidth);
+        FrameProfile.end(timed, wraps ? "text:layout(wrap)" : "text:layout(truncate)");
 
         // `text-align`: distribute the leftover width. Clamped at zero so overflowing text always
         // starts at the leading edge rather than being pushed negative — centring something wider than
@@ -784,11 +793,46 @@ public final class UIText extends UIElement {
         // per-instance data. Batched, the two passes coalesce into a single draw call. The `try` matters:
         // an unclosed batch makes the *next* beginBatch throw, so one bad frame would take down all
         // subsequent text rather than just this label.
+        timed = FrameProfile.begin();
         paintHighlightBands(ctx, textLayout, contentX, contentY);
+        FrameProfile.end(timed, "text:highlightBands");
+
+        // NOTHING TO DRAW MUST NOT COST A PATH SWITCH.
+        //
+        // ctx.text() flushes whatever the quad path has queued and binds the text material, and the
+        // return to quads flushes again -- so an EMPTY label costs two flushes and two buffer maps to
+        // draw no glyphs at all. A blank line in a document is a UIText with an empty string, and a
+        // viewport full of them (the tail of any file, every gap between methods) pays for every one.
+        //
+        // It matters more than the count suggests because the stream buffer's ring advances per SUBMIT
+        // over three slots: every avoidable submit is one fewer chance to wait on a fence that has not
+        // been signalled. @see MapAndSyncStreamBuffer
+        if (textLayout.lines().isEmpty() || text.get().isEmpty()) return;
 
         boolean shadow = general.textShadow();
+        // THE SWITCH AND THE SUBMIT, apart. ctx.text() flushes the quad path and binds the text
+        // material; the submit is glyph work. text:draw measured at 93% of paint:overlay and ~61us per
+        // label across ~130 labels a frame, with 73 renderer switches -- and a material bind is exactly
+        // that order of cost, so which half this is decides whether the answer is batching or the glyph
+        // pipeline. They have nothing in common.
+        // WHAT IS ACTUALLY BEING SUBMITTED, in characters and labels.
+        //
+        // text:submit is 93% of paint time, and the two explanations for that need opposite fixes: a
+        // renderer that is slow per glyph, or a caller handing it far more glyphs than are on screen.
+        // The editor virtualises to ~26 realised lines, so a viewport is a couple of thousand
+        // characters -- if this counts far more than that, the submission is the fault and no amount of
+        // renderer work would have helped.
+        FrameProfile.count("text-labels", 1);
+        FrameProfile.count("text-chars", text.get().length());
+        long switched = FrameProfile.begin();
         CgTextRenderer renderer = ctx.text();
-        if (shadow) renderer.beginBatch();
+        FrameProfile.end(switched, "text:switchRenderer");
+        long drawn = FrameProfile.begin();
+        // NO BATCH OF ITS OWN ANY MORE. This used to open one so the shadow pass and the main pass
+        // coalesced instead of paying two material binds for the same atlas and shader -- a real saving
+        // when each label was on its own. CgUiPaintContext now holds ONE batch open for the whole text
+        // path, which subsumes it and coalesces across LABELS as well; opening a second inside it throws,
+        // which is exactly what kept that batch disabled. @see CgUiPaintContext#beginTextPath
         try {
             if (shadow) {
                 // A span's own colour BEATS the draw colour downstream
@@ -810,7 +854,11 @@ public final class UIText extends UIElement {
                     .pose(ctx.getPoseStack())
                     .submit();
         } finally {
-            if (shadow) renderer.endBatch();
+            // AND NO endBatch EITHER -- closing the path-level batch here would end it for every label
+            // after this one, restoring the quad path and reintroducing the per-label switching this
+            // change exists to remove. The batch is closed by endTextPath, which is the only place that
+            // knows the text path is being left. @see CgUiPaintContext#beginTextPath
+            FrameProfile.end(drawn, "text:submit");
         }
     }
 

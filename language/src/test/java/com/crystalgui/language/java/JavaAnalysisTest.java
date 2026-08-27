@@ -1019,4 +1019,48 @@ public class JavaAnalysisTest {
         }
         return false;
     }
+
+    /**
+     * <b>A Throwable is an EXCEPTION, not a class.</b>
+     *
+     * <p>{@code TypeIndex.kindOf} reads this off the class file, so Go To File drew
+     * {@code WrongMinecraftVersionException} with the throwable glyph — while the tab that OPENED it
+     * drew a plain class, because the resolved-binding path had no such case and fell through to
+     * {@code CLASS}. One type, two glyphs, in the same session.</p>
+     *
+     * <p>Everything the engine answers about a type kind comes through here, so the tab is only where it
+     * happened to show: completion rows and hovers were reporting the same wrong thing.</p>
+     */
+    @Test
+    public void aThrowableIsReportedAsAnException() {
+        String source = "public class Script { java.io.IOException e = null; }\n";
+        SourceAnalyzer.Analysis analysis = analyze(source);
+        try {
+            SymbolInfo symbol = analysis.resolveAt(source.indexOf("IOException"));
+            assertNotNull(symbol);
+            assertEquals(SymbolKind.EXCEPTION, symbol.kind());
+        } finally {
+            analysis.close();
+        }
+    }
+
+    /**
+     * ...and an ordinary class is still a class, which is the counter-assertion.
+     *
+     * <p>A walk written as "anything with a superclass" would report every type in the file as an
+     * exception and satisfy the test above perfectly.</p>
+     */
+    @Test
+    public void anOrdinaryClassIsStillAClass() {
+        String source = "public class Script { java.util.zip.CRC32 c = null; }\n";
+        SourceAnalyzer.Analysis analysis = analyze(source);
+        try {
+            SymbolInfo symbol = analysis.resolveAt(source.indexOf("CRC32"));
+            assertNotNull(symbol);
+            assertEquals(SymbolKind.CLASS, symbol.kind());
+        } finally {
+            analysis.close();
+        }
+    }
+
 }

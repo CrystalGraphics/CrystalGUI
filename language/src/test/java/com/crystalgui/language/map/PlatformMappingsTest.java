@@ -21,6 +21,7 @@ import java.nio.file.Path;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -140,6 +141,49 @@ public class PlatformMappingsTest {
 
         MappingSet mappings = PlatformMappings.current();
         assertFalse("an obfuscated runtime was left on the identity mapping", mappings.isIdentity());
+        assertEquals("getBlock", mappings.readableMethod(WORLD, "func_147439_a"));
+    }
+
+    /**
+     * <b>A CLAIM turns the lazy path off, and only the claimer can turn the mapping on.</b>
+     *
+     * <h3>The trap, and why it cost a production run</h3>
+     *
+     * <p>{@link PlatformMappings#claim} exists so a host with a UI can draw a progress bar instead of
+     * letting whichever caller happened to ask first spawn a silent daemon thread. The cost is that it
+     * marks the work as owned: {@code current()} then stops starting anything, and answers the identity
+     * until the claimer follows through. The class javadoc says so — <i>"a claim is a promise to do
+     * it"</i> — and this is that sentence as an assertion.</p>
+     *
+     * <p>{@code mc1710} claimed at mod init and put the whole of the acquisition in a
+     * {@code JobScheduler} job, which only starts when something drains the scheduler, which only
+     * {@code UIWindow.advanceFrame} does. So the mapping was owed to a frame. On {@code runObfClient} it
+     * was never paid: {@code mcp_stable/12} sat complete in the config directory, no branch of
+     * {@code decideClaimed} ever ran in any log of any run, every compiled script cached under a key
+     * ending {@code -identity-8}, and a script calling {@code Minecraft.getMinecraft()} met a runtime
+     * that has only {@code func_71410_x}.</p>
+     *
+     * <p>The second half is the fix and the reason the two are asserted together: reading an already
+     * downloaded mapping is a parse, so a claimer can always discharge it <b>on the thread it claimed
+     * on</b>, with no job, no frame and no daemon. Only a genuine download is worth deferring.</p>
+     */
+    @Test
+    public void aClaimIsDischargedOnTheClaimingThread() throws Exception {
+        Path cache = folder.newFolder("cache").toPath();
+        MappingCoordinates coordinates = upstream();
+        assertEquals(MappingCache.State.FETCHED, MappingCache.load(coordinates, cache).state());
+        register("func_147439_a", cache, coordinates);
+
+        assertTrue("nothing had claimed yet", PlatformMappings.claim());
+        assertTrue("a claim must stop current() doing the work itself -- that is what claiming MEANS,"
+                        + " and it is why failing to follow through is permanent",
+                PlatformMappings.current().isIdentity());
+
+        // No job, no frame, no daemon thread: the same thread that claimed discharges it.
+        assertNull("a complete cache owes no network fetch", PlatformMappings.decideClaimed());
+
+        MappingSet mappings = PlatformMappings.current();
+        assertFalse("a claimed acquisition left the runtime on identity names", mappings.isIdentity());
         assertEquals("getBlock", mappings.readableMethod(WORLD, "func_147439_a"));
     }
 

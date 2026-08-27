@@ -230,7 +230,7 @@ editor scheme's.
 | `--dock-insertion-bg` | `#7EB6FF30` | crystal-dark.css |
 | `--dock-insertion-border` | `var(--accent)` | base.css |
 | `--dock-missing-bg` | `var(--surface-raised)` | base.css |
-| `--editor-bg` | `#00000000` | dark-plus.css |
+| `--editor-bg` | `#191A1C` | dark-plus.css |
 | `--editor-caret` | `#FF0000` | dark-plus.css |
 | `--editor-current-line` | `#1F2124` | dark-plus.css |
 | `--editor-fg` | `#D4D4D4` | dark-plus.css |

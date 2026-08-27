@@ -391,8 +391,18 @@ public class Popover extends UIElement {
     private void applyOpenState() {
         StyleGroup.importantPipeline(getStyle().getLayoutGroup(),
                 l -> l.display(open ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
-        if (open) addClass(OPEN_CLASS);
-        else removeClass(OPEN_CLASS);
+        if (open) {
+            // RECURSES, and must: a rule keyed through .__open__ decides what every descendant looks
+            // like, and they are about to be visible.
+            addClass(OPEN_CLASS);
+        } else {
+            // AND CLOSING DOES NOT. The subtree is display:none by the line above, so nothing will read
+            // a descendant's computed style before the next open re-adds the class and re-matches them
+            // all. A picker with a full result list is 345 elements, and re-matching them on the way out
+            // cost 443 rematches and 566 layout nodes on the frame that dismisses it.
+            // @see UIElement#removeClassWithoutRematchingSubtree
+            removeClassWithoutRematchingSubtree(OPEN_CLASS);
+        }
     }
 
     // ── Placement ───────────────────────────────────────────────────────────

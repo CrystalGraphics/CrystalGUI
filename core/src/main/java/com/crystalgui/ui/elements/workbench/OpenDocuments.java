@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.workbench;
 
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.dispose.Disposable;
@@ -236,15 +237,19 @@ final class OpenDocuments {
         if (entry == null) return;
         // A CLOSED FILE'S PROBLEMS ARE NOT THE WORKSPACE'S, and the index holds a listener on every set in
         // it — so skipping this keeps the document, its diagnostics and the listener alive.
+        long timed = FrameProfile.begin();
         if (markers != null && entry.document.resource() != null) {
             markers.detach(entry.document.resource());
         }
+        FrameProfile.step(timed, "close.markers.detach");
         // BEFORE disposing. A listener told about a document whose dispose() has already run will ask it
         // something -- and encode() on a released graph is exactly the question dirtiness asks.
         if (entry.changes != null) entry.changes.disconnect();
+        timed = FrameProfile.begin();
         if (entry.document instanceof Disposable disposable) {
             Disposer.dispose(disposable);
         }
+        FrameProfile.step(timed, "close.Disposer.dispose");
     }
 
     /**

@@ -65,6 +65,27 @@ public final class ScriptCommands {
         /** @param script the file to compile, or null for "whatever is current" */
         @Nullable
         ScriptRuntime.Compiled compile(@Nullable Resource script);
+
+        /**
+         * The same question, answered when it can be — which for a real host is not immediately.
+         *
+         * <h3>Why a compile cannot be synchronous</h3>
+         *
+         * <p>A script may name a project file nobody has open, and reading one is a round trip to the
+         * workspace. On an in-memory workspace — the harness, every test — that read completes inside the
+         * call and a synchronous answer is correct, which is why this defaults to {@link #compile}. On a
+         * real host it is a message to a server, delivered by the frame loop; a compile running ON the
+         * frame thread is therefore waiting for an answer only it can deliver, and can only time out.
+         * That is the whole of the difference between the two hosts: the harness resolved a cold file and
+         * mc1710 reported {@code cannot be resolved} for it, forever.</p>
+         *
+         * <p>{@code onReady} is called on the UI thread — a caller opens tool windows from it — and is
+         * called exactly once, with null for every ordinary refusal ({@link #compile}'s own contract).</p>
+         */
+        default void compileAsync(@Nullable Resource script,
+                                  java.util.function.Consumer<ScriptRuntime.Compiled> onReady) {
+            onReady.accept(compile(script));
+        }
     }
 
     /**
@@ -99,8 +120,7 @@ public final class ScriptCommands {
         // a stylesheet reload — a binding that silently loses to an existing one is worse than none.
         registry.register(Command.of(RUN, "Run Script")
                 .binding("Shift+F10")
-                .run(context -> {
-                    ScriptRuntime.Compiled compiled = source.compile(subjectOf(context));
+                .run(context -> source.compileAsync(subjectOf(context), compiled -> {
                     if (compiled == null || !compiled.successful()) return;
                     // AFTER the compile check, so a file that did not build does not summon an empty
                     // console -- its errors belong to Problems, which is where both references send them.
@@ -119,7 +139,7 @@ public final class ScriptCommands {
                     } catch (Throwable failed) {
                         if (onFailure != null) onFailure.accept(compiled.ref(), failed);
                     }
-                }));
+                })));
 
         registry.register(Command.of(STOP, "Stop Script")
                 .binding("Mod+F2")

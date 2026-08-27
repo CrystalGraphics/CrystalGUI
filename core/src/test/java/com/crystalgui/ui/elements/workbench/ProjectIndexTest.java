@@ -1,6 +1,7 @@
 package com.crystalgui.ui.elements.workbench;
 
 import com.crystalgui.fs.CgPath;
+import com.crystalgui.core.async.UiThread;
 import com.crystalgui.fs.SourceRoots;
 import org.junit.Test;
 
@@ -14,6 +15,7 @@ import java.util.function.Consumer;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -218,4 +220,62 @@ public class ProjectIndexTest {
         deliverReads();
         assertEquals("class Main { int second; }", index.sourceOf("Main"));
     }
+
+    /**
+     * <b>A read that lands after the wait gave up is still the file's text.</b>
+     *
+     * <p>{@code awaitSourceOf} stored the content only on the waiting side, so a late answer arrived with
+     * nowhere to go and the next attempt asked all over again. That is what made a run fail identically
+     * however many times it was pressed — in flat contradiction of this class's own note that "running a
+     * second time makes it work", which was the fallback this method was written to replace and had
+     * quietly lost.</p>
+     */
+    @Test
+    public void aLateReadIsStillCached() {
+        CgPath file = add("p:src/main/java/com/example/Late.java",
+                "package com.example;\npublic class Late { }\n");
+        onDisk.put(file, "package com.example;\npublic class Late { }\n");
+
+        // Nothing delivers while this waits, so it times out -- exactly as it does against a frame thread
+        // that cannot pump because this call is blocking it.
+        assertNull("a read that never landed must not invent an answer",
+                index.awaitSourceOf("com.example.Late"));
+
+        deliverReads();
+        readsRequested.clear();
+
+        assertNotNull("the late answer was thrown away", index.awaitSourceOf("com.example.Late"));
+        assertTrue("the cached text should not have been re-read", readsRequested.isEmpty());
+    }
+
+    /**
+     * <b>It never blocks the frame thread</b>, because there the wait cannot succeed — only stall.
+     *
+     * <p>The workspace connection is pumped by the frame loop, so the read's callback is delivered BY the
+     * thread this would block: waiting on it is a deadlock against its own answer, ended only by the
+     * timeout. A run needing a file nobody had open froze the UI for the full bound and failed anyway,
+     * reporting it as a compiler error — and worked the moment the file was opened in a tab, because then
+     * the buffer answers and no read happens at all.</p>
+     *
+     * <p>The read is still ISSUED, which is what makes the next attempt succeed.</p>
+     */
+    @Test
+    public void theFrameThreadIsNeverBlocked() {
+        CgPath file = add("p:src/main/java/com/example/Cold.java",
+                "package com.example;\npublic class Cold { }\n");
+        onDisk.put(file, "package com.example;\npublic class Cold { }\n");
+
+        UiThread.markCurrent();
+        try {
+            long before = System.nanoTime();
+            assertNull(index.awaitSourceOf("com.example.Cold"));
+            long tookMillis = (System.nanoTime() - before) / 1_000_000L;
+            assertTrue("it waited " + tookMillis + "ms on the frame thread", tookMillis < 500L);
+            assertFalse("the read must still be issued, or nothing ever arrives",
+                    readsRequested.isEmpty());
+        } finally {
+            UiThread.forgetForTesting();
+        }
+    }
+
 }
