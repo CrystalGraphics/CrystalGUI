@@ -99,11 +99,11 @@ public final class MachineDemo {
 
         // ── 1. Open ─────────────────────────────────────────────────────────
         say("1. The server opens the window -- one call, and the host does the rest");
-        ServerWindow server = ServerWindows.of(serverEnd).open(MachinePanel.TYPE.serve(machine));
+        ServerWindow<MachinePanel> server = ServerWindows.of(serverEnd).open(MachinePanel.TYPE, machine);
         pump(link, serverEnd, clientEnd, 4);
         // The CLIENT's panel -- a MachinePanel bound to the rebuilt tree. Same class as the server's,
         // same field names, different object over a different tree.
-        MachinePanel client = MachinePanel.TYPE.windowType().bind(mounted(clientEnd).root());
+        MachinePanel client = (MachinePanel) mounted(clientEnd).root();
 
         // The handshake is two round trips at most, and the second one is skipped once the client
         // has the hash cached -- which is what makes re-opening a large GUI cost one small packet.
@@ -181,7 +181,7 @@ public final class MachineDemo {
          * destroyed. The only close anything ever noticed was the player disconnecting.
          */
         say("10. THE USER closes a window, and the server hears about it  [n only]");
-        ServerWindows.of(serverEnd).open(MachinePanel.TYPE.serve(machine));
+        ServerWindows.of(serverEnd).open(MachinePanel.TYPE, machine);
         pump(link, serverEnd, clientEnd, 4);
         ClientWindows.of(clientEnd).windows().get(0).userClosed();
         pump(link, serverEnd, clientEnd, 2);

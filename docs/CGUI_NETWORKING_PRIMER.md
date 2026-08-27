@@ -1127,36 +1127,44 @@ c.notify("mything/tick", args);                       // notification — you do
 WindowProtocol.register();
 
 // wherever you have something to show. No id, no session, no tick, no teardown.
-ServerWindows.of(c).open(new MyWindow(model));
+ServerWindows.of(c).open(MyPanel.TYPE, model);
 
-public final class MyWindow extends ServerWindow {
-    @Override public String type()    { return "mymod:panel"; }   // client dispatches on this
-    @Override public String title()   { return "My panel"; }      // the frame's caption
-    @Override public String key()     { return "mymod:panel"; }   // dedup + remembered geometry
-    @Override public UIElement root() { return panel.root; }
+// ONE class is the whole UI — widgets as fields, both halves as methods:
+public final class MyPanel extends UIElement implements Networked<MyModel> {
+    public static final UiType<MyPanel, MyModel> TYPE = UiType.of("mymod:panel", MyPanel::new);
 
-    @Override protected void bind(WindowScope io) {              // before open(), enforced
+    public Button save;                      // created and NAMED for you: the field name is the id
+    public UIText status = new UIText("");   // ctor arguments? just write the initializer
+    public EnginePanel engines;              // a nested Networked panel — composition is nesting
+
+    @Override public void layout(MyModel m) {                    // structure. SERVER, once
+        addChild(save); addChild(status);
+        engines = EnginePanel.TYPE.build(m.engines());           // the parent knows the slice
+        addChild(engines);
+    }
+    @Override public void serve(MyModel m, ServerScope io) {     // before open(), enforced
         io.sheet(SheetRef.ofResource("mymod:theme", hash), css);
-        io.onActivate(panel.button, ctx -> doThing());
+        io.onActivate(save, ctx -> m.save());
         io.onCall  ("save",  (args, respond) -> respond.ok(null)); // window-scoped
         io.onNotify("ping",  payload -> noted());                  // window-scoped
-        io.attach(new MyFragment(model.part()), "part");           // composition
+        io.attach(engines, m.engines());     // child's "save" becomes "engines/save", both sides
     }
+    @Override public void tick(MyModel m) { status.setText(m.summary()); }  // mirror; host flushes
+    @Override public boolean stillValid(MyModel m, Object viewer) { return m.exists(); }
+    @Override public String title(MyModel m) { return "My panel"; }
+    @Override public String key(MyModel m)   { return "mymod:panel"; } // dedup + remembered geometry
 
-    @Override protected void tick() { panel.status.setText(model.summary()); }
-    @Override protected boolean stillValid(Object viewer) { return model.exists(); }
-    @Override protected void onClosed(CloseReason why) { … }       // SERVER/CLIENT/NOT_VALID/CONNECTION_LOST
+    @Override public void bound()                { /* widget listeners */ }  // CLIENT, every bind
+    @Override public void client(ClientScope io) { /* onCall/onNotify  */ }  // CLIENT, once
+    @Override public void closed(String why)     { }   // both sides: SERVER/CLIENT/NOT_VALID/CONNECTION_LOST
 }
 
-// …or with no class at all, for a window that is one screenful of handlers:
-ServerWindows.of(c).open(ServerWindow.of("mymod:panel", MyPanel::new, p -> p.root)
-        .key("mymod:panel")
-        .wire((p, io) -> io.onActivate(p.button, ctx -> doThing())));
-
 // ── Receive a UI ──────────────────────────────────────────────────────────
-// once, at init. OPTIONAL: a window with no factory still opens, renders and
-// reports every event the server asked for — it just has no local extras.
-ClientWindows.register("mymod:panel", MyBehaviour::new);
+// once, at init — the client's ONE line: registers the panel's tag for decode
+// and runs its client half when a window of the type mounts. A decodable type
+// with no registration still opens, renders and reports every event; it just
+// runs no local behaviour.
+ClientWindows.register(MyPanel.TYPE);
 
 // once per platform, not per mod — CgUiScreen does this on 1.7.10:
 ClientWindows.of(c).setMount(myWindowMount);

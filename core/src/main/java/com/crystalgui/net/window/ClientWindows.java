@@ -6,8 +6,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.BiFunction;
-import java.util.function.Function;
 
 import javax.annotation.Nullable;
 
@@ -27,35 +25,33 @@ import com.crystalgui.ui.UIElement;
  * window can open, because a miss there is silent), and reconciling that against a place to put a
  * window, which may not exist yet.</p>
  *
- * <h3>What it replaces</h3>
+ * <h3>One line per UI</h3>
  *
- * <p>Forty lines per client mod: track whether the connection has been replaced, tear down on
- * disconnect, install {@code ClientUiSessions.onSession} at exactly the right moment, and poll every
- * client tick for "is there a screen yet and is there a window yet". The poll existed because the two
- * orderings are genuinely independent — a window can arrive before the screen has ever been opened, and
- * the screen can be opened before any window arrives. Here whichever happens second completes the
- * mount, deterministically, and the queue is the whole mechanism.</p>
+ * <pre>{@code
+ * ClientWindows.register(MachinePanel.TYPE);
+ * }</pre>
  *
- * <h3>Dispatch by type, and an unknown type still works</h3>
+ * <p>{@code MenuScreens.register}, except there is no screen class to write: referencing the type
+ * initialises the panel class, which registers its tag — so a description whose root says
+ * {@code "machinepanel"} decodes into a {@code MachinePanel} — and when a window of the type mounts,
+ * the host binds the panel's fields, runs {@link Networked#bound} and {@link Networked#client}, and
+ * does the same for every {@link Networked} element nested anywhere in the tree.</p>
  *
- * <p>{@link #register} is {@code MenuScreens.register}: a factory per window type, consulted when a
- * window of that type opens. Before the wire carried a type, a client host adopted <em>every</em>
- * window on the connection and ran its own {@code querySelector}s against whatever arrived — so the day
- * a second mod opened a window, its tree was handed to the first mod's behaviour: a silent no-op where
- * the ids missed, and a listener on somebody else's button where they collided.</p>
- *
- * <p>A window whose type nothing registered <b>still mounts and still works</b>. That is not a fallback,
- * it is the architecture: the client rebuilt the tree from a description and wired every reported event
- * from the description itself, so a behaviour only ever adds things this client wants for itself.</p>
+ * <p><b>This line is the client's one obligation, and forgetting it is loud.</b> A panel decodes by
+ * its registered tag, so a client where nothing ever touched the class refuses the description with an
+ * error naming the tag — where the old string-paired arrangement produced the worse outcome: a window
+ * that opened, rendered, and was pixel-identical to a working one with every button dead. A type that
+ * <em>is</em> decodable but has no registration still mounts and still reports every event its
+ * description asked for; it simply runs no local behaviour.</p>
  */
 public final class ClientWindows {
 
     /**
-     * type id → local behaviour. Static, because what a client can do about a window type is a fact about
-     * this installation rather than about any one connection — the same reason {@code MenuScreens}'
-     * registry is static and a {@code MenuType} is not per player.
+     * type id → the panel type. Static, because what a client can do about a window type is a fact
+     * about this installation rather than about any one connection — the same reason
+     * {@code MenuScreens}' registry is static and a {@code MenuType} is not per player.
      */
-    private static final Map<String, Registration<?>> FACTORIES = new ConcurrentHashMap<>();
+    private static final Map<String, UiType<?, ?>> TYPES = new ConcurrentHashMap<>();
 
     private final ProtocolConnection<Object> connection;
 
@@ -110,166 +106,38 @@ public final class ClientWindows {
     // ── The type registry ───────────────────────────────────────────────────
 
     /**
-     * Says what this client does locally about a window type, <b>type-checked against its panel</b>.
+     * <b>The whole client side of a panel, in one argument.</b>
      *
-     * <pre>{@code
-     * ClientWindows.register(FurnacePanel.TYPE, FurnaceClient::new);
-     * }</pre>
+     * <p>Called once at mod init. Referencing the type has already registered the panel's tag, so the
+     * description decodes; what this adds is the binding — when a window of the type mounts, the host
+     * resolves the panel's fields out of its own rebuilt tree, calls {@link Networked#bound} (again
+     * after every re-describe) and {@link Networked#client} (once), and walks the tree doing the same
+     * for every nested {@link Networked} element, each under the scope its id path derives.</p>
      *
-     * <p><b>A {@link Panel} does not need this overload</b> — {@link #register(PanelType)} is one
-     * argument and puts the client half on the panel itself. This is the route for a window whose
-     * client behaviour is genuinely a separate object.</p>
+     * <p>Idempotent per type; re-registering replaces. Windows of unregistered types still mount.</p>
      *
-     * <p><b>The pairing is checked by the behaviour's own type.</b> {@code FurnaceClient} declares
-     * {@code implements ClientWindowBehaviour<FurnacePanel>}, so registering it against a
-     * {@code WindowType<SomethingElse>} does not compile — where a pair of strings gave a runtime
-     * no-op that looked exactly like a window with deliberately no behaviour.</p>
-     *
-     * <p>The panel itself arrives at {@link ClientWindowBehaviour#onPanelBound}, {@link WindowType#bind
-     * bound} to the rebuilt tree — at mount and again after every re-describe — so a behaviour reaches
-     * {@code panel.askStats} rather than {@code querySelector("#askStats")} guarded by an
-     * {@code instanceof} that silently does nothing when the id moves.</p>
-     *
-     * <p>Called once at mod init, like {@code MenuScreens.register}. Idempotent per type;
-     * re-registering replaces. Windows of unregistered types are unaffected and still open.</p>
-     *
-     * <p><b>Registered from client code, and that is the loader seam rather than a wart.</b> A shared
-     * descriptor naming the behaviour would be a {@code static final} field whose initialiser resolves
-     * that constructor at class init, loading a client-only class on a dedicated server. @see
-     * WindowType</p>
+     * <p><b>Registered from client code, and that is the loader seam rather than a wart:</b> the
+     * panel's client hooks are method bodies, lazy by the class-loading rule, and this call is the one
+     * place the client says it wants them run.</p>
      */
-    public static <P> void register(WindowType<P> type,
-                                    Function<ClientWindowContext, ClientWindowBehaviour<P>> factory) {
-        if (type == null) throw new IllegalArgumentException("a behaviour needs a type");
-        if (factory == null) throw new IllegalArgumentException("factory is null");
-        FACTORIES.put(type.id(), new Registration<>(type, factory));
-    }
-
-    /**
-     * <b>The whole client side of a {@link Panel}, in one argument.</b>
-     *
-     * <pre>{@code
-     * ClientWindows.register(MachinePanel.TYPE);
-     * }</pre>
-     *
-     * <p>There is no behaviour class to write because the <b>bound panel is the behaviour</b>: the
-     * host binds one from the rebuilt tree and calls {@link Panel#client} on it — at mount and again
-     * after every re-describe — so widget listeners are attached in the one place they can safely
-     * live. {@link Panel#closed} is told when the window ends.</p>
-     *
-     * <p>A fresh panel is bound per re-describe rather than the old one being reused, so anything a
-     * panel remembers <em>outside</em> its widget fields does not survive one. That is the right
-     * default — the widgets it was remembering about are themselves new — and a panel needing more
-     * than that can still register a {@link ClientWindowBehaviour} of its own against
-     * {@link PanelType#windowType()}.</p>
-     */
-    public static <P extends Panel<M>, M> void register(PanelType<P, M> type) {
-        if (type == null) throw new IllegalArgumentException("a behaviour needs a type");
-        register(type.windowType(), PanelBehaviour::new);
-    }
-
-    /** Hands a freshly bound panel its own {@code client()} call. @see #register(PanelType) */
-    private static final class PanelBehaviour<P extends Panel<?>> implements ClientWindowBehaviour<P> {
-
-        /**
-         * Captured once, and that is sound: the same {@link ClientWindowContext} is live for the whole
-         * of a window — a re-describe swaps what it points at, never the object.
-         */
-        private final ClientWindowContext window;
-
-        @Nullable
-        private P panel;
-
-        PanelBehaviour(ClientWindowContext window) {
-            this.window = window;
-        }
-
-        @Override
-        public void onPanelBound(P bound) {
-            if (panel == null) {
-                // FIRST MOUNT: attach listeners, then register on the wire, once.
-                panel = bound;
-                panel.wire();
-                panel.client(window);
-                return;
-            }
-            // A RE-DESCRIBE. The same panel is pointed at the new tree and re-wired -- never rebuilt,
-            // because its session registrations are keyed by method and would be refused a second
-            // time, and anything it remembers would be lost with it.
-            panel.rebind(bound.root());
-            panel.wire();
-        }
-
-        @Override
-        public void onClosed(String reason) {
-            if (panel != null) panel.closed(reason);
-        }
-    }
-
-    /**
-     * The untyped form, for a window with no panel class behind it.
-     *
-     * <p>Equivalent to registering against {@link WindowType#bare} — the tree is its own panel, so
-     * there is nothing to bind and nothing to check.</p>
-     */
-    public static void register(String type,
-                                Function<ClientWindowContext, ClientWindowBehaviour<UIElement>> factory) {
-        if (type == null || type.isEmpty()) throw new IllegalArgumentException("a behaviour needs a type");
-        if (factory == null) throw new IllegalArgumentException("factory is null");
-        register(WindowType.bare(type), factory);
+    public static void register(UiType<?, ?> type) {
+        if (type == null) throw new IllegalArgumentException("a registration needs a type");
+        TYPES.put(type.id(), type);
     }
 
     /** Drops a registration. Tests, and a mod unloading itself. */
     public static void unregister(String type) {
-        FACTORIES.remove(type);
+        TYPES.remove(type);
     }
 
     /** Drops a registration. @see #unregister(String) */
-    public static void unregister(WindowType<?> type) {
-        if (type != null) FACTORIES.remove(type.id());
+    public static void unregister(UiType<?, ?> type) {
+        if (type != null) TYPES.remove(type.id());
     }
 
-    /**
-     * A type and the behaviour registered for it, kept together so binding stays typed.
-     *
-     * <p>The map holds {@code Registration<?>} because the registry is heterogeneous by nature, but
-     * both methods below are written where {@code P} is still known — so the bind and the factory
-     * application need no cast between them. That is the whole reason this is one record rather than
-     * two parallel maps.</p>
-     */
-    private record Registration<P>(WindowType<P> type,
-                                   Function<ClientWindowContext, ClientWindowBehaviour<P>> factory) {
-
-        /**
-         * Builds the behaviour and hands it its panel — <b>in that order, and both here</b>.
-         *
-         * <p>The bind happens after construction rather than as a constructor argument, so that
-         * {@code onPanelBound} is the single place a panel ever arrives. A behaviour that could get one
-         * two ways would put the re-wiring footgun straight back.</p>
-         */
-        ClientWindowBehaviour<P> build(ClientWindowContext context) {
-            ClientWindowBehaviour<P> behaviour = factory.apply(context);
-            behaviour.onPanelBound(type.bind(context.root()));
-            return behaviour;
-        }
-
-        /**
-         * Re-binds, and hands the behaviour its new panel.
-         *
-         * <p>The cast is <b>sound by construction</b>: a {@code Mounted} keeps the registration that
-         * built its behaviour, so the two {@code P}s are the same one — the compiler simply cannot see
-         * it across a heterogeneous map. One suppression here is the price of none in every mod, which
-         * is the right way round.</p>
-         */
-        @SuppressWarnings("unchecked")
-        void replaced(ClientWindowBehaviour<?> behaviour, ClientWindowContext context) {
-            ((ClientWindowBehaviour<P>) behaviour).onPanelBound(type.bind(context.root()));
-        }
-    }
-
-    /** Every type something has registered behaviour for. Diagnostics. */
+    /** Every type something has registered a panel for. Diagnostics. */
     public static List<String> registeredTypes() {
-        return new ArrayList<>(FACTORIES.keySet());
+        return new ArrayList<>(TYPES.keySet());
     }
 
     // ── The mount ───────────────────────────────────────────────────────────
@@ -347,14 +215,15 @@ public final class ClientWindows {
             live.root = root;
             live.handle.contentReplaced(root);
             applySheets(live);
-            if (live.behaviour != null && live.registration != null) {
+            if (live.boundType != null) {
                 try {
-                    // THROUGH THE REGISTRATION, which is the only thing that still knows the panel
-                    // type -- so the host does the binding rather than every behaviour naming its own
-                    // type back at a framework that already knew it.
-                    live.registration.replaced(live.behaviour, live);
+                    // Fresh instances over the fresh tree: fields resolved, bound() run. client() is
+                    // NOT re-run -- session registrations are keyed by method and survive, so running
+                    // them again is a router refusal. (A re-describe is currently unreachable; the
+                    // stale-closure gap this leaves is recorded in plan_ui_host.md.)
+                    live.bindPanels(live.boundType, false);
                 } catch (RuntimeException failed) {
-                    CrystalGuiCore.LOGGER.error("<{}> behaviour failed on a re-describe: {}",
+                    CrystalGuiCore.LOGGER.error("<{}> could not be re-bound after a re-describe: {}",
                             live.type(), failed.getMessage(), failed);
                 }
             }
@@ -379,16 +248,16 @@ public final class ClientWindows {
         }
         applySheets(fresh);
 
-        Registration<?> registration = FACTORIES.get(fresh.type());
-        if (registration == null) return;   // an unknown type is a window with no local extras, not a failure
+        UiType<?, ?> type = TYPES.get(fresh.type());
+        if (type == null) return;   // no local registration: the window still renders and reports its events
         try {
-            fresh.registration = registration;
-            fresh.behaviour = registration.build(fresh);
+            fresh.boundType = type;
+            fresh.bindPanels(type, true);
         } catch (RuntimeException failed) {
-            fresh.registration = null;
+            fresh.boundType = null;
             // The window stays: it is the server's, it renders, and it reports its events. Only the
             // local extras are missing, and saying so is better than taking the window down with them.
-            CrystalGuiCore.LOGGER.error("The behaviour for <{}> could not be built: {}",
+            CrystalGuiCore.LOGGER.error("The panel for <{}> could not be bound: {}",
                     fresh.type(), failed.getMessage(), failed);
         }
     }
@@ -397,6 +266,25 @@ public final class ClientWindows {
         SheetSupply supply = sheets;
         if (supply == null || window.sheets().isEmpty()) return;
         supply.resolve(window.session, window.sheets(), window);
+    }
+
+    /**
+     * Finds every {@link Networked} element under {@code element}, carrying the id-path prefix its
+     * scope derives from — the client half of {@link ServerScope#attach}'s naming rule.
+     */
+    private static void collectNested(UIElement element, String prefix,
+                                      List<Networked<?>> panels, List<String> prefixes) {
+        for (UIElement child : element.getChildren()) {
+            if (child instanceof Networked) {
+                String path = prefix + child.getId() + "/";
+                UiType.bindFields(child);
+                panels.add((Networked<?>) child);
+                prefixes.add(path);
+                collectNested(child, path, panels, prefixes);
+            } else {
+                collectNested(child, prefix, panels, prefixes);
+            }
+        }
     }
 
     // ── Endings ─────────────────────────────────────────────────────────────
@@ -430,12 +318,13 @@ public final class ClientWindows {
 
         @Nullable
         private WindowMount.MountedWindow handle;
-        @Nullable
-        private ClientWindowBehaviour<?> behaviour;
 
-        /** What built {@link #behaviour}, kept so a re-describe can re-bind with the same type. */
+        /** Every bound panel in the tree, root first — who hears {@code closed}. */
+        private final List<Networked<?>> panels = new ArrayList<>();
+
+        /** What bound them, kept so a re-describe re-binds with the same type. */
         @Nullable
-        private Registration<?> registration;
+        private UiType<?, ?> boundType;
 
         private boolean ended;
         private boolean visible = true;
@@ -443,6 +332,30 @@ public final class ClientWindows {
         Mounted(ClientUiSession<Object> session, UIElement root) {
             this.session = session;
             this.root = root;
+        }
+
+        /**
+         * Binds the root panel and every nested one, runs their {@link Networked#bound}, and — first
+         * mount only — their {@link Networked#client}, each under the scope its id path derives.
+         *
+         * <p>Root first, then nested panels in document order, which is also the order the server
+         * attached them in a tree built by the same class.</p>
+         */
+        void bindPanels(UiType<?, ?> type, boolean firstMount) {
+            List<Networked<?>> found = new ArrayList<>();
+            List<String> prefixes = new ArrayList<>();
+            found.add(type.bind(root));
+            prefixes.add("");
+            collectNested(root, "", found, prefixes);
+
+            for (Networked<?> panel : found) panel.bound();
+            if (firstMount) {
+                for (int i = 0; i < found.size(); i++) {
+                    found.get(i).client(new ClientScope(session, this, prefixes.get(i)));
+                }
+            }
+            panels.clear();
+            panels.addAll(found);
         }
 
         @Override
@@ -518,12 +431,13 @@ public final class ClientWindows {
                             type(), failed.getMessage(), failed);
                 }
             }
-            if (behaviour == null) return;
-            try {
-                behaviour.onClosed(reason);
-            } catch (RuntimeException failed) {
-                CrystalGuiCore.LOGGER.error("<{}> behaviour failed on close: {}",
-                        type(), failed.getMessage(), failed);
+            for (Networked<?> panel : panels) {
+                try {
+                    panel.closed(reason);
+                } catch (RuntimeException failed) {
+                    CrystalGuiCore.LOGGER.error("<{}> failed on close: {}",
+                            type(), failed.getMessage(), failed);
+                }
             }
         }
     }

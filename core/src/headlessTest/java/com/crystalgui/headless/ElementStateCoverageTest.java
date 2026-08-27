@@ -1,5 +1,6 @@
 package com.crystalgui.headless;
 
+import com.crystalgui.net.window.Networked;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.ElementRegistry;
@@ -134,6 +135,13 @@ public class ElementStateCoverageTest {
     @Test
     public void everyRegisteredTagHasAnAnswer() {
         Set<String> registered = new TreeSet<>(ElementRegistry.tags());
+        /*
+         * Networked PANELS register their tags through UiType and are exempt by RULE rather than by
+         * entry: a panel is a container by construction -- its whole state IS its described children
+         * -- and panel tags arrive dynamically (any suite that touches a panel class registers one),
+         * so naming them in the map would make this test order-dependent across the suite.
+         */
+        registered.removeIf(tag -> ElementRegistry.create(tag) instanceof Networked);
         Set<String> answered = new TreeSet<>(STATEFUL.keySet());
 
         List<String> unanswered = new ArrayList<>(registered);

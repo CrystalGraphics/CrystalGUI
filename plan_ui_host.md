@@ -1426,3 +1426,87 @@ back into the failure mode the field walk exists to remove.
 client half because most panels want the same teardown twice, and a panel that does want to tell them
 apart already can: only the client half was ever handed a `ClientWindowContext`, so a null one *is* the
 server. `MachinePanel.closed` does exactly that and is the worked example.
+
+## Part VII — `Networked<M>`: the panel IS the element · **SHIPPED**
+
+The second rewrite VI was accumulating toward, shipped whole. Six classes deleted — `Panel`,
+`PanelType`, `WindowType`, `ClientWindowBehaviour`, `ServerFragment`, `WindowScope` — and the package
+settled at: `Networked<M>`, `UiType<P, M>`, `ServerScope`/`ClientScope`, `ServerWindow<P>` (a final
+handle, no longer an authoring surface), `ServerWindows`/`ClientWindows`, plus the unchanged platform
+seams. One class per UI, one line per side:
+
+```java
+ServerWindows.of(connection).open(MachinePanel.TYPE, machine);   // server, at the trigger
+ClientWindows.register(MachinePanel.TYPE);                       // client, once at init
+```
+
+### The decisions, in the order they were made
+
+**The panel is a `UIElement`, not an owner of one.** The engine already chose this side for every
+widget it has — a composite is a self-building element, registered by tag, rebuilt by class on the far
+side — and `UiType.of` is the engine's `customElements.define`. Variant (A) was taken: `layout()` runs
+on the server only and its output is serialized as ordinary described children, so the client still
+draws a tree it did not build and skew degrades as a description always has. What the move buys: the
+mounted root IS the panel, `machinepanel { }` styles it by tag, nesting is ordinary child-hood, and
+the client-side field resolution happens against the panel's own subtree.
+
+**`Networked` is an interface, not a base class.** In element-world the abstract base had nothing left
+to store — the root is `this` and the model became a parameter — and a stateless base is an interface
+by definition. It costs public hooks (interfaces have no `protected`; every `Screen` method in modding
+lives the same way) and buys the superclass slot back. The element requirement moved into an
+intersection bound: `UiType<P extends UIElement & Networked<M>, M>`.
+
+**The model is a parameter to the server hooks, never a field.** `serve(M, io)`, `tick(M)`,
+`stillValid(M, viewer)`, `title(M)`, `key(M)` — the framework holds the model (it was handed to
+`open`) and hands it to the hooks that run where it exists. The side boundary is visible in the
+signatures; the old null-on-client `model()` accessor cannot be spelled. `key(M)` earning the
+parameter was found by the tests: a key names the window's SUBJECT, and the subject is the model.
+
+**Composition is nesting, and the id path is the namespace.** A child panel is a field; the field
+name becomes its id; `ServerScope.attach(child, slice)` prefixes the child's wire methods with that
+id — `"save"` → `"engines/save"` — and `ClientScope` derives the identical prefix from the identical
+tree, so the one string that used to be a coordination hazard is a fact the description already
+synchronizes. Props down (the parent hands the narrowest slice), events up (plain Java callbacks,
+never session messages). `ServerFragment` was exactly this minus the element-ness, so it is gone.
+
+**`WindowScope` → `ServerScope`, paired with a new `ClientScope`.** "Window" was the wrong half — the
+object is per-PANEL, one per nesting level — and the client scope is simultaneously the rename's
+symmetry and the missing piece nested `client()` needed. A scope is a view, not a layer: every call
+from any depth is an envelope with the same window id on the same session on the same connection.
+The client hook `wire()` became `bound()` for the same reason — it attaches local listeners that
+never touch the wire, and a name pointing at the wire pointed exactly wrong.
+
+### What changed on contact
+
+**Nested fields are not auto-created, and their tags must be pre-registered.** Only the parent knows a
+child's slice, so `UiType.build` skips null `Networked` fields — the parent builds them in `layout`
+(`engines = EnginePanel.TYPE.build(m.engines())`) and the framework names them after layout by the
+same field-name rule. And `UiType.of` walks the declared fields recursively, registering every nested
+panel class's tag — without which the CLIENT cannot decode a subtree naming them, because nothing on
+that side touches the child class before the description arrives.
+
+**`ClientWindows.register(TYPE)` became the client's one obligation, and forgetting it is loud.** A
+panel decodes by its registered tag, so a client where nothing touched the class refuses the
+description with an error naming the tag. That trades away "any window renders on a class-less
+client" (which modded 1.7.10 never has anyway — mods install on both sides) for the failure VI.4 was
+written about being impossible: the old forgotten registration produced a pixel-identical dead
+window; the new one produces an error naming what is missing. A decodable type with no registration
+still mounts and reports its events.
+
+**`ElementStateCoverageTest` exempts panels by RULE, not by entry.** Panel tags arrive dynamically
+(any suite touching a panel class registers one), so naming them in the coverage map would have made
+the suite order-dependent — the exact statics-shared-across-a-suite trap the codebase documents. A
+panel is a container by construction; its state IS its described children.
+
+### Open items
+
+- **Re-describe with element panels**: a fresh decode is a fresh panel instance, so `bound()` re-runs
+  on the new one and `client()` is deliberately NOT re-run (session registrations are keyed by method
+  and would be refused) — which leaves `client()`-closures over the previous instance's widgets stale.
+  Unreachable today (nothing re-delivers `ui/openWindow`); the honest fix when it becomes reachable is
+  clearing a window's session registrations on re-describe and re-running `client()`.
+- **Dynamically created nested panels** (built in `layout`, never a field) are invisible to the
+  recursive tag registration: their class must be touched at client init — a `UiType` of their own
+  referenced from anywhere does it. Field children need nothing.
+- A nested panel's `ClientScope` is only created when the ROOT type is registered; an unregistered
+  window binds no panels at any depth, by design.

@@ -1,9 +1,9 @@
 /**
  * <h1>A worked example: one UI, built on a server, drawn on a client.</h1>
  *
- * <p>A domain model, a widget tree, a theme, a {@link com.crystalgui.net.window.ServerWindow}, its
- * {@link com.crystalgui.net.window.ClientWindowBehaviour}, and a {@code main()} that wires the two
- * together over a loopback transport and prints what crossed — plus the Minecraft loader code that
+ * <p>A domain model, one {@link com.crystalgui.net.window.Networked} panel that is the whole UI —
+ * widgets, structure, server half and client half in a single class — a theme, and a {@code main()}
+ * that wires the two ends together over a loopback transport and prints what crossed — plus the Minecraft loader code that
  * puts the same panel in a real world, which is now about forty lines because the lifecycle stopped
  * being each mod's problem. Nothing here is used by the engine. It exists to be read, and to be
  * run.</p>
@@ -84,8 +84,8 @@
  * <p><b>Both pairs are on the session now, and the notification pair used to be somewhere else.</b> It
  * lived on the {@code ProtocolConnection}, which keys handlers by method name alone — so a second
  * window of the same application registering the same notification <em>threw at open</em>, and this
- * example taught exactly that pattern. Through {@link com.crystalgui.net.window.WindowScope} both pairs
- * are window-scoped and two windows may each name the same method. A notification that genuinely
+ * example taught exactly that pattern. Through {@link com.crystalgui.net.window.ServerScope} and
+ * {@link com.crystalgui.net.window.ClientScope} both pairs are window-scoped and two windows may each name the same method. A notification that genuinely
  * belongs to the <em>connection</em> rather than to a window — a workspace, a script runtime — still
  * registers on {@code ProtocolConnection} directly, which is what it wants.</p>
  *

@@ -63,7 +63,7 @@ public class MachineExampleTest {
         final MachineModel machine = new MachineModel();
 
         /** The window the host serves, and the panel behind it — the SERVER's instance. */
-        ServerWindow server;
+        ServerWindow<MachinePanel> server;
         MachinePanel serverPanel;
 
         /**
@@ -90,10 +90,10 @@ public class MachineExampleTest {
         }
 
         Loopback open() {
-            server = ServerWindows.of(serverEnd).open(MachinePanel.TYPE.serve(machine));
-            serverPanel = MachinePanel.TYPE.panelOf(server);
+            server = ServerWindows.of(serverEnd).open(MachinePanel.TYPE, machine);
+            serverPanel = server.panel();
             settle(6);
-            client = MachinePanel.TYPE.windowType().bind(shown().root());
+            client = (MachinePanel) shown().root();
             return this;
         }
 
@@ -155,14 +155,14 @@ public class MachineExampleTest {
     public void theClientRebuildsTheServersTree() {
         Loopback net = new Loopback().open();
 
-        UIElement root = net.client.root();
+        UIElement root = net.client;
         assertNotNull("the client never received a window", root);
 
         // Element COUNT, not a spot check. The two sides derive network ids from a document-order
         // walk and send none, so a structural disagreement of any size mis-addresses every element
         // after it -- which is why ClientUiSession refuses a tree whose count does not match.
         assertEquals("the rebuilt tree is a different shape from the described one",
-                countElements(net.serverPanel.root()), countElements(root));
+                countElements(net.serverPanel), countElements(root));
 
         assertNotNull("the panel's switch did not survive the round trip", root.querySelector("#power"));
         assertNotNull(root.querySelector("#throughput"));
