@@ -10,7 +10,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.WeakHashMap;
 import java.util.function.Consumer;
 
 /**
@@ -40,15 +39,6 @@ import java.util.function.Consumer;
  */
 public final class ClientUiSessions<T> {
 
-    /**
-     * One host per connection, keyed weakly.
-     *
-     * <p>Two would both register {@code ui/openWindow} and the second would throw. Same shape and same
-     * reason as {@link UiWindowMux#of} and {@code WorkspaceClient.forConnection}: "the host for this
-     * connection" has to be a single answer rather than something a caller remembers to share.</p>
-     */
-    private static final Map<ProtocolConnection<?>, ClientUiSessions<?>> BY_CONNECTION = new WeakHashMap<>();
-
     private final ProtocolConnection<T> connection;
     private final Map<Integer, ClientUiSession<T>> sessions = new LinkedHashMap<>();
 
@@ -71,12 +61,11 @@ public final class ClientUiSessions<T> {
      * so keeps one statement of the rule.</p>
      */
     @SuppressWarnings("unchecked")
-    public static synchronized <T> ClientUiSessions<T> forConnection(ProtocolConnection<T> connection) {
-        ClientUiSessions<?> existing = BY_CONNECTION.get(connection);
-        if (existing != null) return (ClientUiSessions<T>) existing;
-        ClientUiSessions<T> created = new ClientUiSessions<>(connection);
-        BY_CONNECTION.put(connection, created);
-        return created;
+    public static <T> ClientUiSessions<T> forConnection(ProtocolConnection<T> connection) {
+        // Held by the connection rather than in a static WeakHashMap here — one statement of
+        // "the X for this connection", and it dies with the connection. @see ProtocolConnection#attachment
+        return (ClientUiSessions<T>) connection.attachment(
+                ClientUiSessions.class, c -> new ClientUiSessions<>(c));
     }
 
     /**
