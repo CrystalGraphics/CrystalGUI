@@ -1004,6 +1004,16 @@ with more ceremony.
 >
 > **VI.6's fork was settled as (A)**, ids as constants used by both the build and the bind path, and
 > it does not foreclose (B): a declare-once base class would not change `WindowType` at all.
+>
+> **And one thing was finished a commit later.** The first cut left exactly one place where a mod
+> still named its own type back at the framework — `MachinePanel.TYPE.bind(context.root())`, in every
+> behaviour's `onContentReplaced`, which is the binding done by hand in the one place the host already
+> knows how to do it. `ClientWindowBehaviour<P>` fixes it: the panel is handed over on a re-describe
+> exactly as it is to the factory. **The parameter is earned by VI.5's own test** — the framework
+> hands you the thing — and it costs nothing outward, because unlike `ServerWindow` a behaviour is
+> never held in a public heterogeneous collection, so the wildcard stays on one private field and one
+> `@SuppressWarnings` inside `ClientWindows`. One suppression in the engine is the price of none in
+> every mod.
 
 `ClientWindows.register(String type, factory)` takes a raw string, and dispatch is
 `FACTORIES.get(fresh.type())` with the miss handled as:

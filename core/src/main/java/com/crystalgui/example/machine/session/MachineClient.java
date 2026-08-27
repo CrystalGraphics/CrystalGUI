@@ -64,7 +64,7 @@ import com.crystalgui.ui.elements.UIText;
  * handed, with the listener staying <b>entirely local</b>. Nothing about it crosses the wire, the server
  * never learns the listener exists, and the description is unchanged.</p>
  */
-public final class MachineClient implements ClientWindowBehaviour {
+public final class MachineClient implements ClientWindowBehaviour<MachinePanel> {
 
     private ClientWindowContext window;
 
@@ -135,11 +135,13 @@ public final class MachineClient implements ClientWindowBehaviour {
      * listeners have to be put back.</p>
      */
     @Override
-    public void onContentReplaced(ClientWindowContext context) {
+    public void onContentReplaced(MachinePanel panel, ClientWindowContext context) {
         this.window = context;
-        // RE-BOUND, because the old panel's fields point into a tree nothing updates any more. The
-        // session's own registrations survive -- those are keyed by method, not by element.
-        this.panel = MachinePanel.TYPE.bind(context.root());
+        // ALREADY RE-BOUND, by the host, through the registration that built this behaviour -- so
+        // nothing here names MachinePanel.TYPE back at a framework that already knew it. The old
+        // panel's fields pointed into a tree nothing updates any more; the session's own registrations
+        // survive untouched, being keyed by method rather than by element.
+        this.panel = panel;
         wire(panel);
     }
 
