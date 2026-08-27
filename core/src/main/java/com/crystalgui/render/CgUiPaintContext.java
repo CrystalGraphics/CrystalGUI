@@ -49,6 +49,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
 
+import com.crystalgui.ui.elements.slot.NativeAnchor;
 import com.crystalgui.ui.elements.slot.NativeProfile;
 import com.crystalgui.ui.elements.slot.NativeSurface;
 
@@ -1468,6 +1469,18 @@ public final class CgUiPaintContext {
      */
     public void nativeContent(NativeProfile profile, float x, float y, float width, float height,
                               Consumer<NativeSurface> body) {
+        nativeContent(profile, NativeAnchor.TOP_LEFT, x, y, width, height, body);
+    }
+
+    /**
+     * As {@link #nativeContent(NativeProfile, float, float, float, float, Consumer)}, with the corner a
+     * tiling implementation should pin its pattern to.
+     *
+     * <p>Separate rather than a sixth positional argument on the common form, because an item — every
+     * caller but one — has no pattern and no opinion. See {@link NativeAnchor}.</p>
+     */
+    public void nativeContent(NativeProfile profile, NativeAnchor anchor, float x, float y,
+                              float width, float height, Consumer<NativeSurface> body) {
         if (!frameActive) {
             throw new IllegalStateException("nativeContent() outside a frame — call between beginFrame/endFrame");
         }
@@ -1485,7 +1498,7 @@ public final class CgUiPaintContext {
         int physH = Math.max(1, (int) Math.ceil(Math.abs(py1 - py0)));
 
         CgFrameBuffer fbo = acquireNativeFbo(physW, physH);
-        NativeSurface surface = new ScratchSurface(physW, physH, width, height, profile);
+        NativeSurface surface = new ScratchSurface(physW, physH, width, height, profile, anchor);
 
         // THE ENGINE'S OWN LAYER PRIMITIVE, not a hand-rolled bind. beginLayerFbo does five things a
         // native draw needs exactly as much as an opacity group does -- flush, save FBO+VIEWPORT, bind,
@@ -1638,7 +1651,7 @@ public final class CgUiPaintContext {
     }
 
     private record ScratchSurface(int width, int height, float logicalWidth, float logicalHeight,
-                                  NativeProfile profile) implements NativeSurface {
+                                  NativeProfile profile, NativeAnchor anchor) implements NativeSurface {
     }
 
     public void blitLayer(CgFrameBuffer fbo, float opacity) {

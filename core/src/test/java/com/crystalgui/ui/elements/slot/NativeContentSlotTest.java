@@ -223,6 +223,97 @@ public class NativeContentSlotTest extends UiTestBase {
         assertEquals(16f, box[3], 0.001f);
     }
 
+    /**
+     * A bucket in a 32-bucket tank is 3% of an 18px slot — half a pixel, which is no pixels. The two
+     * states a reader most needs to tell apart are "empty" and "nearly empty", so a non-empty tank keeps
+     * at least one logical pixel. Tinkers' Construct clamps the same way.
+     *
+     * <p>All four directions, because the clamp has to apply to whichever axis is being narrowed and the
+     * two anchored ones ({@code RIGHT_LEFT}, {@code BOTTOM_UP}) also have to move their origin by the
+     * clamped length rather than the raw one — an off-by-that would put the pixel outside the slot.</p>
+     */
+    @Test
+    public void aTraceAmountStillDrawsOnePixel() {
+        float trace = 0.001f;
+
+        float[] up = FluidSlot.fillBox(FluidSlot.FillDirection.BOTTOM_UP, 0f, 0f, 16f, 16f, trace);
+        assertEquals("one pixel tall", 1f, up[3], 0.001f);
+        assertEquals("sitting on the bottom edge", 15f, up[1], 0.001f);
+
+        float[] down = FluidSlot.fillBox(FluidSlot.FillDirection.TOP_DOWN, 0f, 0f, 16f, 16f, trace);
+        assertEquals(1f, down[3], 0.001f);
+        assertEquals(0f, down[1], 0.001f);
+
+        float[] right = FluidSlot.fillBox(FluidSlot.FillDirection.LEFT_RIGHT, 0f, 0f, 16f, 16f, trace);
+        assertEquals(1f, right[2], 0.001f);
+        assertEquals(0f, right[0], 0.001f);
+
+        float[] left = FluidSlot.fillBox(FluidSlot.FillDirection.RIGHT_LEFT, 0f, 0f, 16f, 16f, trace);
+        assertEquals(1f, left[2], 0.001f);
+        assertEquals("against the right edge", 15f, left[0], 0.001f);
+    }
+
+    /**
+     * The counter-assertion, and it is not a formality: a floor written as an unconditional
+     * {@code Math.max(1, ...)} passes the test above and makes every empty tank draw a pixel of fluid.
+     * {@code applyFill} skips a zero-sized box, so zero is how "nothing" is spelled.
+     */
+    @Test
+    public void anEmptyTankDrawsNothing() {
+        for (FluidSlot.FillDirection direction : FluidSlot.FillDirection.values()) {
+            float[] box = FluidSlot.fillBox(direction, 0f, 0f, 16f, 16f, 0f);
+            assertEquals(direction + " width", 0f, box[2] * box[3], 0.001f);
+        }
+    }
+
+    /**
+     * The tile grid pins to the edge that {@link FluidSlot#fillBox} slides, per direction.
+     *
+     * <p>Asserted as a table because the whole content of the mapping is four one-line answers, and
+     * every one of them is invisible in a screenshot until a tank sits at a level that is not a whole
+     * number of tiles — which is exactly how the {@code BOTTOM_UP} case survived a release.</p>
+     */
+    @Test
+    public void theTileGridPinsToTheEdgeThatMoves() {
+        assertSame("a tank's waterline is its top edge",
+                NativeAnchor.TOP_LEFT, FluidSlot.anchorFor(FluidSlot.FillDirection.BOTTOM_UP));
+        assertSame("a draining reservoir's moving edge is its bottom",
+                NativeAnchor.BOTTOM_LEFT, FluidSlot.anchorFor(FluidSlot.FillDirection.TOP_DOWN));
+        assertSame("a gauge growing rightwards moves its right edge",
+                NativeAnchor.TOP_RIGHT, FluidSlot.anchorFor(FluidSlot.FillDirection.LEFT_RIGHT));
+        assertSame("...and one growing leftwards moves its left edge, which is already the near end",
+                NativeAnchor.TOP_LEFT, FluidSlot.anchorFor(FluidSlot.FillDirection.RIGHT_LEFT));
+    }
+
+    /**
+     * The counter-assertion: the anchored corner has to be on the axis {@code fillBox} actually narrows,
+     * or the fix is pinning the wrong edge and looks identical for every fill that happens to be a whole
+     * number of tiles. Derived from {@code fillBox} rather than restated, so the two cannot drift.
+     */
+    @Test
+    public void theAnchoredAxisIsTheOneThatNarrows() {
+        for (FluidSlot.FillDirection direction : FluidSlot.FillDirection.values()) {
+            float[] half = FluidSlot.fillBox(direction, 0f, 0f, 64f, 64f, 0.5f);
+            boolean narrowsHorizontally = half[2] < 64f;
+            NativeAnchor anchor = FluidSlot.anchorFor(direction);
+            if (narrowsHorizontally) {
+                assertEquals(direction + " narrows width, so only the vertical anchor may be the default",
+                        false, anchor.fromBottom());
+            } else {
+                assertEquals(direction + " narrows height, so only the horizontal anchor may be the default",
+                        false, anchor.fromRight());
+            }
+        }
+    }
+
+    /** The floor is a floor, not an override — a slot thinner than a pixel is not grown out of itself. */
+    @Test
+    public void theOnePixelFloorNeverOverflowsASmallerBox() {
+        float[] box = FluidSlot.fillBox(FluidSlot.FillDirection.BOTTOM_UP, 0f, 0f, 16f, 0.5f, 0.5f);
+        assertEquals(0.5f, box[3], 0.001f);
+        assertEquals("still inside the box it was given", 0f, box[1], 0.001f);
+    }
+
     // ── Fixtures ────────────────────────────────────────────────────────────
 
     private static StateMap<Object> write(UIElement element) {

@@ -131,6 +131,24 @@ public final class CgUiSlotScreen extends GuiScreen implements NativeTooltipHost
         items.addChild(new ItemSlot());
         root.addChild(items);
 
+        // THE MULTI-PASS BRANCH (RenderItem:473), which nothing in this probe reached until now. It is a
+        // third icon path beside the 3D block and the flat sprite, it is the one that manipulates the
+        // destination ALPHA on purpose -- glBlendFunc(0,0,0,0) under glColorMask(F,F,F,T), wiping a 20x20
+        // box so each render pass can rebuild the mask -- and that is precisely the channel this engine
+        // composites with. A fix aimed at the glint that treats alpha as untouchable breaks every one of
+        // these instead, silently and in the other direction.
+        //
+        // The enchanted leather chestplate is the intersection and the one that matters: multi-pass AND
+        // a glint, which is the only case where the alpha wipe and the alpha destroyer are in the same
+        // draw.
+        root.addChild(new UIText("Multi-pass items: potion, spawn egg, leather chestplate, ENCHANTED leather chestplate"));
+        UIElement multiPass = row();
+        multiPass.addChild(itemSlot(stack("minecraft:potion", 1, 8197)));
+        multiPass.addChild(itemSlot(stack("minecraft:spawn_egg", 1, 50)));
+        multiPass.addChild(itemSlot(stack("minecraft:leather_chestplate", 1, 0)));
+        multiPass.addChild(itemSlot(stack("minecraft:leather_chestplate", 1, 0), true));
+        root.addChild(multiPass);
+
         root.addChild(new UIText("Fluid: water 25%, 50%, 100%   then lava 100% -- compare against a real slot"));
         UIElement fluids = row();
         fluids.addChild(fluidSlot("water", 0.25f));
@@ -148,9 +166,13 @@ public final class CgUiSlotScreen extends GuiScreen implements NativeTooltipHost
         // all -- a 16x16 content box runs that loop once and proves none of it.
         //
         // 62% is deliberately not a multiple of a tile: it puts the waterline three quarters of the way
-        // through a row, so a partial tile MUST be drawn and drawn in the right place. The tiles anchor
-        // to the tank's bottom, so the seams should stay put between the four fills and only the top one
-        // should ever be cut.
+        // through a row, so a partial tile MUST be drawn and drawn in the right place.
+        //
+        // What to look for, now that the grid pins to the moving edge: the WATERLINE should look
+        // identical in all four, because it is always a whole tile's top edge. The cut tile is at the
+        // tank FLOOR, against the border, and the seams therefore move with the fill rather than the
+        // waterline moving through them. The previous build was the exact opposite and that is what
+        // was reported.
         root.addChild(new UIText("Tall tanks (4 tiles): water 100%, 62%, 25%, then lava 45%"));
         UIElement tanks = row();
         tanks.addChild(tank("water", 1f));
