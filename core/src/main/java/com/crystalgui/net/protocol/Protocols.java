@@ -6,6 +6,7 @@ import com.crystalgui.serialization.DynamicOps;
 
 import javax.annotation.Nullable;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -37,12 +38,9 @@ import java.util.Set;
  * subsystem still registers exactly once, at init, and never thinks about connections again.</p>
  *
  * <pre>{@code
- * // once, at mod init -- the CNPC+ moment
- * Protocols.contribute("workspace", new Protocols.Contributor() {
- *     @Override public <T> void bind(ProtocolConnection<T> connection) {
- *         new WorkspaceRpc<T>(service, actorFor(connection.peer())).installOn(connection::onRequest);
- *     }
- * });
+ * // once, at mod init -- the whole registration, sided at the call site:
+ * Protocols.server("mymod", wire ->
+ *         wire.onNotify("mymod/open", payload -> ServerWindows.of(wire).open(MyPanel.TYPE, model)));
  *
  * // per connection, wherever a peer appears
  * ProtocolConnection<Object> connection = Protocols.open(transport, PlainOps.INSTANCE, wire::pump, player);
@@ -50,61 +48,123 @@ import java.util.Set;
  * connection.tick();
  * }</pre>
  *
+ * <h3>Sided at the call site</h3>
+ *
+ * <p>{@link #server} binds only where the connection has a peer; {@link #client} only where it does
+ * not; {@link #contribute} binds everywhere. The old shape made every server contributor open with
+ * {@code if (connection.peer() == null) return;} — the most important fact about the contributor,
+ * buried in a guard the reader had to decode. Now it is the method name. One mod may register under
+ * one name on both sides: they are two halves of one protocol.</p>
+ *
+ * <h3>Why {@code bind} takes {@code ProtocolConnection<Object>}</h3>
+ *
+ * <p>It used to be a generic method — {@code <T> void bind(ProtocolConnection<T>)} — on the argument
+ * that a contributor should serve a connection of any ops. Every contributor that ever existed
+ * immediately cast to {@code ProtocolConnection<Object>} with a {@code @SuppressWarnings}: the
+ * genericity forced an anonymous class on every mod and was discarded by its own first line. The cast
+ * is sound for the reason {@code WindowProtocol} has always stated — every {@code StateMap} takes its
+ * ops from {@code connection.ops()}, never from a hardcoded instance, so erasure cannot mis-encode —
+ * and it now lives in {@link #open}, once, instead of in every mod. A contributor is a lambda.</p>
+ *
  * <h3>Method names are namespaced, and that is the whole collision story</h3>
  *
- * <p>{@code ui/*}, {@code workspace/*}, {@code script/*} — LSP's convention, already documented on
+ * <p>{@code ui/*}, {@code workspace/*}, {@code mymod/*} — LSP's convention, already documented on
  * {@link UiMethods}. Two subsystems on one connection cannot collide unless they choose the same prefix,
  * and {@link MessageRouter} refuses a duplicate registration outright rather than letting the second win
- * silently.</p>
+ * silently. Contribute under your modid and prefix your methods with it.</p>
  */
 public final class Protocols {
 
     /**
-     * Binds one subsystem onto a connection.
-     *
-     * <p>A generic <em>method</em> rather than a generic interface, so one contributor serves a
-     * connection of any ops — the real wire is {@code PlainOps}, a headless test may be {@code JsonOps},
-     * and a contributor should not have to care. The cost is that this cannot be a lambda; it is an
-     * anonymous class, which is still one class per <em>subsystem</em> rather than one per message.</p>
+     * Binds one subsystem onto a connection. A lambda — one per subsystem, written once at init.
      */
+    @FunctionalInterface
     public interface Contributor {
-        <T> void bind(ProtocolConnection<T> connection);
+        void bind(ProtocolConnection<Object> connection);
     }
 
-    /** Insertion-ordered so binding order is reproducible, keyed so a double-register is visible. */
-    private static final Map<String, Contributor> CONTRIBUTORS = new LinkedHashMap<>();
+    /** Which ends of the wire a contributor binds to. */
+    private enum Side {
+        EVERY, SERVER, CLIENT;
+
+        boolean matches(@Nullable Object peer) {
+            if (this == EVERY) return true;
+            return this == SERVER ? peer != null : peer == null;
+        }
+    }
+
+    private static final class Registered {
+        final String name;
+        final Side side;
+        final Contributor contributor;
+
+        Registered(String name, Side side, Contributor contributor) {
+            this.name = name;
+            this.side = side;
+            this.contributor = contributor;
+        }
+    }
+
+    /** Keyed (name, side) so a double-register is visible; insertion-ordered so binding is reproducible. */
+    private static final Map<String, Registered> CONTRIBUTORS = new LinkedHashMap<>();
+
+    /** Whether any connection has been opened — after which a new contribution is (loudly) late. */
+    private static boolean opened;
 
     private Protocols() {
     }
 
     /**
-     * Says a subsystem speaks part of the protocol. Called by its own {@code register()}, once.
+     * Says a subsystem speaks part of the protocol, on <b>both</b> ends of the wire. Called by its own
+     * {@code register()}, once. Prefer {@link #server}/{@link #client} when only one side serves.
      *
-     * @param name        what is contributing, for diagnostics — {@code "workspace"}, {@code "script"}
+     * @param name        what is contributing, for diagnostics — a modid: {@code "workspace"}, {@code "mymod"}
      * @param contributor invoked for every connection opened <b>after</b> this call — binding happens
      *                    in {@link #open}, so a connection that already exists does not get it. That is
      *                    why contribution belongs at mod init, before any peer can have arrived, and why
      *                    this is not a hot-swap mechanism
-     * @throws IllegalStateException if {@code name} is already registered, which is a wiring mistake
-     *                               rather than something to resolve silently
+     * @throws IllegalStateException if {@code name} is already registered for these ends, which is a
+     *                               wiring mistake rather than something to resolve silently
      */
-    public static synchronized void contribute(String name, Contributor contributor) {
+    public static void contribute(String name, Contributor contributor) {
+        add(name, Side.EVERY, contributor);
+    }
+
+    /** Like {@link #contribute}, binding only where the connection has a peer — the server's ends. */
+    public static void server(String name, Contributor contributor) {
+        add(name, Side.SERVER, contributor);
+    }
+
+    /** Like {@link #contribute}, binding only where the connection has no peer — the client's end. */
+    public static void client(String name, Contributor contributor) {
+        add(name, Side.CLIENT, contributor);
+    }
+
+    private static synchronized void add(String name, Side side, Contributor contributor) {
         if (name == null || name.isEmpty()) throw new IllegalArgumentException("a contributor needs a name");
         if (contributor == null) throw new IllegalArgumentException("contributor is null");
-        Contributor previous = CONTRIBUTORS.putIfAbsent(name, contributor);
+        Registered previous = CONTRIBUTORS.putIfAbsent(name + '@' + side, new Registered(name, side, contributor));
         if (previous != null) {
             throw new IllegalStateException("'" + name + "' already contributes to the protocol");
         }
-        CrystalGuiCore.LOGGER.debug("Protocol contributor registered: {}", name);
+        if (opened) {
+            // The one silent failure this layer had left: a late contributor binds to nothing that
+            // already exists, and "my handler never runs" points everywhere except at init order.
+            CrystalGuiCore.LOGGER.warn("'{}' contributed after connections were already open; "
+                    + "those connections do not get it — contribute at mod init", name);
+        }
+        CrystalGuiCore.LOGGER.debug("Protocol contributor registered: {} ({})", name, side);
     }
 
     /** What has registered. Diagnostics — the answer to "is my subsystem actually wired". */
     public static synchronized Set<String> contributors() {
-        return Set.copyOf(CONTRIBUTORS.keySet());
+        Set<String> names = new LinkedHashSet<>();
+        for (Registered entry : CONTRIBUTORS.values()) names.add(entry.name);
+        return names;
     }
 
     /**
-     * Opens a connection to one peer and binds every contributor onto it.
+     * Opens a connection to one peer and binds every matching contributor onto it.
      *
      * @param transport the encoded-message transport for this peer
      * @param ops       its representation
@@ -115,13 +175,20 @@ public final class Protocols {
     public static synchronized <T> ProtocolConnection<T> open(
             UITransport<T> transport, DynamicOps<T> ops, Runnable pump, @Nullable Object peer) {
         ProtocolConnection<T> connection = new ProtocolConnection<>(transport, ops, pump, peer);
-        for (Map.Entry<String, Contributor> entry : CONTRIBUTORS.entrySet()) {
+        opened = true;
+        // The ONE unchecked cast, here instead of in every mod. Sound by the ops discipline: every
+        // StateMap a contributor builds takes its ops from connection.ops(), so erasure cannot
+        // mis-encode. @see the class javadoc
+        @SuppressWarnings("unchecked")
+        ProtocolConnection<Object> wire = (ProtocolConnection<Object>) connection;
+        for (Registered entry : CONTRIBUTORS.values()) {
+            if (!entry.side.matches(peer)) continue;
             try {
-                entry.getValue().bind(connection);
+                entry.contributor.bind(wire);
             } catch (RuntimeException failed) {
                 // One broken contributor must not cost the connection every other subsystem on it.
                 CrystalGuiCore.LOGGER.error("Protocol contributor '{}' failed to bind: {}",
-                        entry.getKey(), failed.getMessage(), failed);
+                        entry.name, failed.getMessage(), failed);
             }
         }
         return connection;
@@ -130,5 +197,6 @@ public final class Protocols {
     /** Drops every contributor. <b>Tests only</b> — a live process registers once and never unregisters. */
     public static synchronized void resetForTesting() {
         CONTRIBUTORS.clear();
+        opened = false;
     }
 }

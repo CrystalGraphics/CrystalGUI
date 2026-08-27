@@ -4,7 +4,6 @@ import com.crystalgui.example.machine.MachineModel;
 import com.crystalgui.example.machine.MachineTrace;
 import com.crystalgui.example.machine.ui.MachinePanel;
 import com.crystalgui.net.window.ServerWindows;
-import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 
 import cpw.mods.fml.common.FMLCommonHandler;
@@ -38,19 +37,12 @@ public final class MachineExample {
 
     /** Called from {@code CommonProxy.init()}, after {@code WindowProtocol.register()}. */
     public static void registerCommon() {
-        Protocols.contribute("machine", new Protocols.Contributor() {
-            @Override
-            @SuppressWarnings("unchecked")
-            public <T> void bind(ProtocolConnection<T> connection) {
-                if (connection.peer() == null) return;   // a client end consumes; it does not serve
-                ProtocolConnection<Object> wire = (ProtocolConnection<Object>) connection;
+        Protocols.server("machine", wire ->
                 wire.onNotify(OPEN, payload -> {
                     MachineTrace.log(MachineTrace.SERVER, "the client asked for a panel");
                     // One call. Asking twice brings the existing window forward: the panel names a key.
                     ServerWindows.of(wire).open(MachinePanel.TYPE, MACHINE);
-                });
-            }
-        });
+                }));
         FMLCommonHandler.instance().bus().register(new ServerHandler());
     }
 
