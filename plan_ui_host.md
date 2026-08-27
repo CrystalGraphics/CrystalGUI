@@ -989,7 +989,96 @@ with more ceremony.
 
 ---
 
-## VI.4 — Where a type parameter is earned, and where it is not
+## VI.4 — The two halves are paired by a **string**, and breaking it is silent
+
+`ClientWindows.register(String type, factory)` takes a raw string, and dispatch is
+`FACTORIES.get(fresh.type())` with the miss handled as:
+
+```java
+if (factory == null) return;   // an unknown type is a window with no local extras, not a failure
+```
+
+That line is a deliberate feature — an unregistered type still mounts, renders and reports every
+event, which is the one respect this beats `MenuScreens`. **It is also, exactly, what a typo looks
+like.** Rename the type on one side, misspell it, or move the constant, and the window opens
+normally with no behaviour, no error and no log line. The good outcome and the broken one are
+pixel-identical.
+
+Three things must agree and **nothing checks any of them**: the server window's `type()`, the type
+the client registered, and — once VI.3 lands — the ids the panel builds against and binds against.
+
+### Minecraft does not have this problem, and the reason is the fix
+
+`MenuType<T>` is a **registered object**. `player.openMenu` and `MenuScreens.register` reference the
+same value rather than two copies of a string, so a mismatch cannot be spelled. This plan ported the
+pipeline (Part II) and left the descriptor behind.
+
+### What to couple: a `WindowType<P>` declared on the panel
+
+The panel is the artefact both sides genuinely share, so the descriptor belongs on it — which is
+also what makes it loader-safe (every reference in the initialiser is to the panel itself):
+
+```java
+public final class MachinePanel {
+    public static final WindowType<MachinePanel> TYPE =
+            WindowType.of("crystalgui:machine", MachinePanel::new, MachinePanel::bindTo);
+    …
+}
+```
+
+One declaration carries the id, how the server **builds** it, and how the client **binds** it (VI.3).
+Both sides then reference the value rather than a string:
+
+```java
+ServerWindows.of(c).open(MachinePanel.TYPE.serve(panel)…);      // server
+ClientWindows.register(MachinePanel.TYPE, MachineClient::new);  // client
+```
+
+**The win is the signature, not the tidiness.** `register(WindowType<P>, BiFunction<P,
+ClientWindowContext, ClientWindowBehaviour>)` is type-checked: `MachineClient`'s constructor *must*
+take a `MachinePanel`. A mismatched pair becomes a compile error instead of a runtime no-op — the
+string-typo class of bug removed rather than documented.
+
+It also lets `ServerWindow.type()` return a `WindowType<P>` instead of a `String`, so the server
+half cannot name a type that does not exist either.
+
+### What cannot be coupled, and the reason is hard
+
+**The behaviour registration has to stay in client code.** Not style — the loader seam.
+
+A shared descriptor holding `MachineClient::new` would be a `static final` field. Its initialiser
+runs at class init, the `invokedynamic` bootstrap resolves the constructor, and **`MachineClient`
+loads on a dedicated server** — a `NoClassDefFoundError` at panel class-load for any behaviour that
+reaches a client-only type, and precisely what `:mc1710:serverSmoke` asserts against.
+
+> **The distinction to keep:** a **method-body** reference to a client-only class is lazy and safe; a
+> **static field** holding one is not. Same rule as the `EntityPlayerMP` field that split
+> `MachineExample` from `MachineExampleClient` in the first place — field descriptors and static
+> initialisers resolve eagerly, method bodies do not.
+
+*(The Machine example happens to dodge this: `MachineClient` imports only `core` types, so it is
+**protocol**-client rather than **loader**-client and would load on a server perfectly well. That is
+the exception, and designing around it would be designing around an accident.)*
+
+### The shape, then
+
+Couple **the type and the panel** into one shared value; leave **the behaviour** registered from
+client code, but type-checked against that value instead of matched by string. The coupling lands
+where the silent failures actually are, and the seam stays intact.
+
+### Still open here
+
+- **Should an unregistered-but-*declared* type warn once?** With `WindowType` the client can tell
+  "a type nobody has ever heard of" from "a type this installation declares and did not register",
+  and the second is far more likely to be a mistake. Risk: it is noisy for a window that is
+  deliberately bare, so it probably needs the descriptor to say which it is.
+- **Where does `WindowType` live** — on the panel as above, or in a registry keyed by id? A registry
+  buys enumeration (diagnostics: "what window types does this installation know?") at the cost of
+  registration order mattering again.
+
+---
+
+## VI.5 — Where a type parameter is earned, and where it is not
 
 The test that settles it, and it has now come up three times: **does the framework hand you the thing,
 or do you already hold it?**
@@ -1023,7 +1112,7 @@ has."* Angle brackets staying out of what a mod author writes is a decision, not
 
 ---
 
-## VI.5 — Engine gaps this needs
+## VI.6 — Engine gaps this needs
 
 Small, and each is useful well beyond this plan.
 
@@ -1033,10 +1122,11 @@ Small, and each is useful well beyond this plan.
 | `UIElement.clearReportedEvents()` | VI.2 — without it a re-attached panel advertises events nothing handles, and its content hash drifts | Additive |
 | Refuse a second `ServerWindow` on one tree | VI.2 — the alternative is one window silently going deaf | One check in the attach path |
 | `ServerWindow` builder overload taking an existing tree | VI.1 — the `Supplier` is what forces ownership | Additive overload |
+| `WindowType<P>` + type-checked `ClientWindows.register` | VI.4 — the two halves are paired by a string today, and breaking it is silent | New type; `type()` and `register` change shape |
 
 ---
 
-## VI.6 — Open forks
+## VI.7 — Open forks
 
 **How panel ids get declared.** Both modes need to agree on them, and drift between them is a silent
 failure.
@@ -1062,3 +1152,10 @@ right way round.
 
 **What `onClosed` means after the split** — VI.2's third constraint. Probably two callbacks, but the
 audience for each wants naming before the shape is chosen.
+
+**Whether a declared-but-unregistered type warns** — VI.4. With `WindowType` the client can finally
+tell "never heard of it" from "this installation declares it and did not register a behaviour", and
+only the second is likely to be a mistake. The risk is noise for a deliberately bare window.
+
+**Where `WindowType` lives** — VI.4. On the panel (loader-safe, zero extra classes) or in a registry
+keyed by id (buys enumeration for diagnostics, brings registration order back).
