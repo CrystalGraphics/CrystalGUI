@@ -1,5 +1,6 @@
 package com.crystalgui.language.java.assist;
 
+import javax.annotation.Nullable;
 import com.crystalgui.language.engine.bridge.Analysis;
 import com.crystalgui.language.java.classpath.TypeIndex;
 import com.crystalgui.text.TextBuffer;
@@ -86,6 +87,17 @@ public final class JavaCompletionProvider implements CompletionProvider {
     /** Set by {@link #memberItems} when the receiver did not resolve — see the note there. */
     private boolean unresolvedReceiver;
 
+    /**
+     * Why the member list came back empty, or null when it did not.
+     *
+     * <p>Set by whichever stage gave up and cleared by {@code complete}, so it describes one request and
+     * never leaks into the next. It exists because the four ways to end with no rows are indistinguishable
+     * on screen and were indistinguishable in a test too \u2014 three separate diagnoses of this were
+     * reasoned from the code, were plausible, and were wrong.</p>
+     */
+    @Nullable
+    private String emptyReason;
+
     public JavaCompletionProvider(TextBuffer buffer, Supplier<Analysis> analysis, TypeIndex types,
                            java.util.function.Function<String, Analysis> reanalyse) {
         this.buffer = buffer;
@@ -111,6 +123,13 @@ public final class JavaCompletionProvider implements CompletionProvider {
                 : receiverEndingAt(wordStart) >= 0
                 ? memberItems(current, receiverEndingAt(wordStart), request.offset())
                 : openCodeItems(current, request);
+
+        // SAID OUT LOUD, once per empty member list. @see #emptyReason
+        if (items.isEmpty() && emptyReason != null) {
+            System.err.println("[crystalgui] no members offered after the dot: " + emptyReason
+                    + " (analysis version " + current.version() + ", document " + buffer.version() + ")");
+        }
+        emptyReason = null;
 
         boolean truncated = items.size() > MAX_ITEMS;
         if (truncated) items = items.subList(0, MAX_ITEMS);
@@ -154,7 +173,28 @@ public final class JavaCompletionProvider implements CompletionProvider {
         // Mid-identifier, so resolveAt lands on the receiver's own name rather than between tokens.
         int probe = Math.max(0, nameEnd - 1);
 
-        SymbolInfo receiver = current.resolveAt(probe);
+        // UNDER THE ANALYSIS'S OWN MONITOR, because hover now resolves the SAME live Analysis from a
+        // worker and JDT resolves bindings lazily -- so this call and that one both mutate one JDT tree.
+        // The rule is "hold the analysis to read the analysis".
+        // @see AnalysedLanguageServices.AnalysisResolver#resolveUnderLock
+        SymbolInfo receiver;
+        synchronized (current) {
+            receiver = current.resolveAt(probe);
+        }
+        // WHY, when the answer is nothing. Four states -- the receiver did not resolve, it resolved with
+        // no type, it resolved to something with no members, or the probe could not parse either -- and
+        // ALL FOUR LOOK THE SAME from outside: a box with a hint strip and no rows.
+        //
+        // That is what made this cost three wrong diagnoses. Each one was reasoned from the code, each was
+        // plausible, and each was disproved only by measuring: the provider answers identically for both
+        // trigger kinds, identically for a stale analysis, and identically for the missing-semicolon shape
+        // the report pointed at. A line naming the state is the difference between a fourth guess and a
+        // five-minute answer -- exactly what the unresolvable-import line bought the day it was added.
+        //
+        // Cheap because it is only ever reached when the list is EMPTY, which is the case nobody wants.
+        emptyReason = receiver == null ? "the receiver did not resolve"
+                : receiver.type() == null ? "the receiver resolved with no type (" + receiver.kind() + ")"
+                : null;
         if (receiver == null || receiver.type() == null) {
             // A TRAILING DOT WITH NOTHING AFTER IT IS NOT A PARSEABLE EXPRESSION.
             //
@@ -172,6 +212,9 @@ public final class JavaCompletionProvider implements CompletionProvider {
             return probedMemberItems(caret);
         }
         List<CompletionItem> direct = membersFrom(current, receiver, caret);
+        if (direct.isEmpty()) {
+            emptyReason = "the receiver resolved to " + receiver.type() + " and it reported no members";
+        }
         // AND IF THE RECEIVER RESOLVED TO SOMETHING WITH NOTHING ON IT, ask the probe anyway. A type that
         // resolved from a tree the parser had to recover can be plausible and wrong -- the trailing dot is
         // exactly the state where that happens -- and an empty member list is the one outcome that is never
@@ -192,30 +235,72 @@ public final class JavaCompletionProvider implements CompletionProvider {
     private List<CompletionItem> probedMemberItems(int caret) {
         if (reanalyse == null) {
             unresolvedReceiver = true;
+            emptyReason = "no probe parser is available";
             return List.of();
         }
         String text = buffer.toString();
         int at = Math.max(0, Math.min(caret, text.length()));
-        Analysis probed =
-                reanalyse.apply(text.substring(0, at) + COMPLETION_PROBE + text.substring(at));
-        if (probed == null) {
-            unresolvedReceiver = true;
-            return List.of();
-        }
+
+        List<CompletionItem> items = probeWith(text, at, COMPLETION_PROBE);
+        if (!items.isEmpty()) return items;
+
+        // AND AGAIN WITH A TERMINATOR, because an unterminated statement is read as a DECLARATION.
+        //
+        // This is the whole of the reported bug and the reason it lives on the typing hot path: the
+        // semicolon is the last thing you type, so every line is unterminated while you are writing it.
+        //
+        //     System.out.<probe>
+        //     System.out.println("fa");
+        //
+        // parses as `Type Identifier ...` -- a local variable declaration whose TYPE is `System.out`. So
+        // the receiver resolves perfectly well and resolves to the WRONG KIND: a type rather than a
+        // field. `membersFrom` then takes its static-access branch, correctly offers only static members
+        // of a type that does not exist, and answers nothing. Nothing failed anywhere; every step did its
+        // job on a reading of the text that was never intended.
+        //
+        // The trace said so in one line -- "the receiver resolved to out and it reported no members" --
+        // after three diagnoses reasoned from the code had each been measured and found wrong. A bare
+        // probe name cannot help here, because the name is not what is missing.
+        //
+        // SECOND, never first: a caret inside an expression -- `foo(bar.|)` -- becomes
+        // `foo(bar.<probe>;)` with a terminator, which is broken where the bare name is fine. Trying the
+        // honest text first keeps the good case exact and pays the extra parse only where there was no
+        // answer at all.
+        items = probeWith(text, at, COMPLETION_PROBE + ";");
+        if (items.isEmpty()) unresolvedReceiver = true;
+        return items;
+    }
+
+    /**
+     * One probe parse with {@code inserted} at {@code at}, and the members it can see.
+     *
+     * <p>The probe offset is <em>before</em> the insertion point, so it needs no adjustment — the receiver
+     * is to the left of the dot and the insertion is to the right of it.</p>
+     *
+     * <p>The analysis is closed here rather than retained: it describes text the document does not
+     * contain, and keeping it would mean two analyses claiming to be about one file.</p>
+     */
+    private List<CompletionItem> probeWith(String text, int at, String inserted) {
+        Analysis probed = reanalyse.apply(text.substring(0, at) + inserted + text.substring(at));
+        if (probed == null) return List.of();
         try {
             int dot = receiverEndingAt(at);
-            if (dot < 0) {
-                unresolvedReceiver = true;
-                return List.of();
-            }
+            if (dot < 0) return List.of();
             int nameEnd = dot;
             while (nameEnd > 0 && Character.isWhitespace(text.charAt(nameEnd - 1))) nameEnd--;
             SymbolInfo receiver = probed.resolveAt(Math.max(0, nameEnd - 1));
             if (receiver == null || receiver.type() == null) {
-                unresolvedReceiver = true;
+                emptyReason = (emptyReason == null ? "" : emptyReason + "; ")
+                        + "the probe [" + inserted + "] could not resolve the receiver";
                 return List.of();
             }
-            return membersFrom(probed, receiver, at);
+            List<CompletionItem> found = membersFrom(probed, receiver, at);
+            if (found.isEmpty()) {
+                emptyReason = (emptyReason == null ? "" : emptyReason + "; ")
+                        + "the probe [" + inserted + "] resolved " + receiver.kind() + " "
+                        + receiver.type() + " with no members";
+            }
+            return found;
         } finally {
             probed.close();
         }
@@ -334,9 +419,15 @@ public final class JavaCompletionProvider implements CompletionProvider {
         String row = buffer.line(caret.row());
         String line = row.substring(0, Math.min(Math.max(caret.column(), 0), row.length()));
 
-        String trimmed = line.trim();
-        if (!trimmed.startsWith("import")) return null;
-        String tail = trimmed.substring("import".length());
+        // LEADING whitespace only. `trim()` takes the TRAILING space too, and that space is the whole
+        // signal: at `import |` the line trimmed to "import", the tail was empty, and this answered "not
+        // an import" -- so the popup fell through to open code and offered the KEYWORD list at a caret
+        // where no keyword is legal. It worked the moment one character was typed, which is what made it
+        // read as the package list being slow to arrive rather than as the context being missed.
+        int at = 0;
+        while (at < line.length() && Character.isWhitespace(line.charAt(at))) at++;
+        if (!line.startsWith("import", at)) return null;
+        String tail = line.substring(at + "import".length());
         if (tail.isEmpty() || !Character.isWhitespace(tail.charAt(0))) return null;
         tail = tail.trim();
         // A finished import is not a context any more, and `import static` completes members.
@@ -359,8 +450,10 @@ public final class JavaCompletionProvider implements CompletionProvider {
      */
     private List<CompletionItem> importItems(String typedPrefix) {
         List<CompletionItem> items = new ArrayList<>();
-        if (typedPrefix.isEmpty()) return items;
-
+        // NO EMPTY-PREFIX BAIL. `import ` with nothing typed is the most useful moment there is -- the
+        // answer is every package root, which `childrenOf("", "")` gives -- and returning an empty list
+        // here was the second half of the keyword bug above: even once the context was recognised, an
+        // empty list is still nothing to show.
         int lastDot = typedPrefix.lastIndexOf('.');
         String parent = lastDot < 0 ? "" : typedPrefix.substring(0, lastDot);
         String partial = lastDot < 0 ? typedPrefix : typedPrefix.substring(lastDot + 1);

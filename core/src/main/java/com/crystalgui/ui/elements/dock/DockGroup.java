@@ -248,7 +248,8 @@ public class DockGroup extends UIElement {
                     removeClass(EMPTY_CLASS);
                 }
             }
-            if (!wanted.equals(new ArrayList<>(tabByPanel.keySet()))) {
+            List<DockPanelRef> current = new ArrayList<>(tabByPanel.keySet());
+            if (!wanted.equals(current) && !reconcileStrip(wanted, current)) {
                 rebuildStrip(wanted);
             }
             Tab active = tabByPanel.get(leaf.activePanel());
@@ -285,8 +286,18 @@ public class DockGroup extends UIElement {
         // tooltip per rebuild, forever.
         tabTooltips.clear();
 
-        for (DockPanelRef panel : wanted) {
-            Tab tab = tabs.addTab(area.registry().titleOf(panel));
+        for (int i = 0; i < wanted.size(); i++) buildTabAt(wanted.get(i), i);
+    }
+
+    /**
+     * Builds one tab for {@code panel} and files it — the body {@link #rebuildStrip} used to inline.
+     *
+     * <p>Extracted so {@link #reconcileStrip} can add a single tab without rebuilding the strip around
+     * it. Everything here was already per-tab; nothing about it depended on being inside that loop.</p>
+     */
+    private Tab buildTabAt(DockPanelRef panel, int index) {
+        {
+            Tab tab = tabs.addTabAt(area.registry().titleOf(panel), index);
             // AN ELEMENT FIRST, because a name cannot carry a declaration's static and final marks --
             // those are stacked layers rather than a picture. @see DockPanelRegistry#iconElementOf
             applyIconTo(tab, panel);
@@ -312,7 +323,77 @@ public class DockGroup extends UIElement {
             // AND NO CONTENT. See showContent: a tab is a title until it is looked at.
             tabByPanel.put(panel, tab);
             area.installTabDrag(this, panel, tab);
+            return tab;
         }
+    }
+
+    /**
+     * Brings the strip into line by adding and removing tabs — <b>never by rebuilding it</b>.
+     *
+     * <h3>What a rebuild costs, and why it is paid by panels that did not change</h3>
+     *
+     * <p>{@link #rebuildStrip} opens with {@code tab.content().clearAllChildren()} over every tab, then
+     * destroys and recreates all of them. The detached content is the part that matters: a panel whose
+     * pane is emptied loses its place in the tree, and {@link #showContent} only ever re-attaches the
+     * ACTIVE one — so opening a second file into a group detaches the first one's editor, and it stays
+     * detached until something activates it again.</p>
+     *
+     * <p>The bill then arrives at the wrong moment. Closing a tab activates the survivor, whose editor is
+     * attached from scratch: ~200 elements registered, {@code style:drainDirtyMatch 6,607us},
+     * {@code layout 7,282us} — reported as the cost of CLOSING a file, when the close itself is under
+     * 4ms and the work was caused by an OPEN that happened much earlier.</p>
+     *
+     * <p><b>Adds and removes only.</b> A reorder — the same panels in a different order — still falls
+     * through to the full rebuild, so this narrows what the fast path claims rather than widening what
+     * the slow one must handle. Returns false for "not my case", never for "I did half of it": every
+     * check that can refuse runs before anything is mutated.</p>
+     */
+    private boolean reconcileStrip(List<DockPanelRef> wanted, List<DockPanelRef> current) {
+        // THE SURVIVORS, IN EACH LIST'S OWN ORDER. If those disagree the panels were REORDERED, and
+        // reordering tabs in place is a different operation from adding and removing them.
+        List<DockPanelRef> keptFromCurrent = new ArrayList<>();
+        for (DockPanelRef panel : current) {
+            if (wanted.contains(panel)) keptFromCurrent.add(panel);
+        }
+        List<DockPanelRef> keptFromWanted = new ArrayList<>();
+        for (DockPanelRef panel : wanted) {
+            if (current.contains(panel)) keptFromWanted.add(panel);
+        }
+        if (!keptFromCurrent.equals(keptFromWanted)) return false;
+        // Every survivor still has a tab to keep. Checked before mutating, so a refusal costs nothing.
+        for (DockPanelRef panel : keptFromCurrent) {
+            if (!tabByPanel.containsKey(panel)) return false;
+        }
+
+        for (DockPanelRef panel : current) {
+            if (wanted.contains(panel)) continue;
+            Tab tab = tabByPanel.remove(panel);
+            // ITS content, detached before the tab goes, for the reason rebuildStrip records: removing a
+            // tab takes its subtree with it, and this group may still be caching that element.
+            tab.content().clearAllChildren();
+            tabTooltips.remove(tab);
+            tabs.removeTab(tab);
+        }
+        // AFTER the removals, so an arrival's index is against the strip it is actually joining.
+        for (int i = 0; i < wanted.size(); i++) {
+            if (!tabByPanel.containsKey(wanted.get(i))) buildTabAt(wanted.get(i), i);
+        }
+        // AND EVERY SURVIVOR RE-READS ITS PRESENTATION, in place.
+        //
+        // A rebuild pulled the title, icon and decoration afresh for every tab, and that was load-bearing
+        // rather than incidental: a panel that went dirty while the strip was untouched relied on the next
+        // structural change to show it, which `aRebuiltStripStillHasIconsAndDecoratedTitles` pins. Keeping
+        // the ELEMENT is the point of this method; keeping a stale title with it is not, and re-reading is
+        // a text and an icon rather than a tree.
+        for (DockPanelRef panel : keptFromCurrent) refreshPresentation(panel);
+        // AND THE MAP RE-ORDERED. `sync` compares this map's KEY ORDER against the leaf's panel list, and
+        // a tab inserted in the middle lands at the end of a LinkedHashMap's iteration — so without this
+        // the very next sync would see a mismatch it cannot explain and rebuild the strip anyway.
+        Map<DockPanelRef, Tab> ordered = new LinkedHashMap<>();
+        for (DockPanelRef panel : wanted) ordered.put(panel, tabByPanel.get(panel));
+        tabByPanel.clear();
+        tabByPanel.putAll(ordered);
+        return true;
     }
 
     /**

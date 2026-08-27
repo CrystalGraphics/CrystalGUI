@@ -25,6 +25,7 @@ import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.gl.lifecycle.CgGraphicsLifecycle;
 import com.crystalgraphics.text.cache.CgFontRegistry;
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.render.texture.svg.SvgDocument;
@@ -559,8 +560,12 @@ public final class CgUiPaintContext {
         // and harmless against MC, which sets glClearColor immediately before each of its own clears.
         // Clear DEPTH is never touched: clearColor() passes GL_COLOR_BUFFER_BIT alone, and that one
         // WOULD matter — MC writes glClearDepth once at startup, like the glDepthFunc it sets there.
+        // THE FULL-SCREEN CLEAR, timed apart from the rest of beginFrame. gl:begin was measured at 33ms
+        // in a client, and this is the only thing in it that touches every pixel of the surface.
+        long cleared = FrameProfile.begin();
         msaaFbo.bind();
         msaaFbo.clearColor(0f, 0f, 0f, 0f);
+        FrameProfile.end(cleared, "glbegin:msaaClear");
 
         // Overwritten and deliberately NOT restored — the javadoc used to claim otherwise and was
         // corrected rather than implemented. CgFrameData is per-frame scratch that every consumer
@@ -576,15 +581,28 @@ public final class CgUiPaintContext {
         fd.projMatrix.identity().ortho(0, screenWidth, screenHeight, 0, -1, 1);
         fd.viewportW = screenWidth;
         fd.viewportH = screenHeight;
+        // EACH STEP OF beginFrame TIMED SEPARATELY. `gl:begin` was measured at 19.9ms on the frame after
+        // a tab closes, with `glbegin:msaaClear` -- the only thing in here that touches every pixel --
+        // never even reaching the report threshold. So the cost is one of the four below, and they have
+        // nothing in common: a UBO upload, a projection write plus an atlas tick, a buffer rewind, and a
+        // material bind that compiles on its first use.
+        long timed = FrameProfile.begin();
         pipeline.prepareFrame();
+        FrameProfile.end(timed, "glbegin:prepareFrame");
 
         // Text: projection + atlas LRU frame tick. No beginBatch() here — drawText()
         // deliberately stays standalone-per-call, see docs/CRYSTALGUI_TEXT_RENDERING_PLAN.md §2.3.
+        timed = FrameProfile.begin();
         textRenderer.context().updateOrtho(screenWidth, screenHeight);
+        FrameProfile.end(timed, "glbegin:textOrtho");
 
         poseStack.pushPose();
+        timed = FrameProfile.begin();
         renderer.begin();
+        FrameProfile.end(timed, "glbegin:renderer.begin");
+        timed = FrameProfile.begin();
         bindQuadPath(boxModelMaterial);
+        FrameProfile.end(timed, "glbegin:bindQuadPath");
         currentMaterial = boxModelMaterial;
         currentTexture = null;
         scissorStack.reset();
@@ -632,8 +650,15 @@ public final class CgUiPaintContext {
         // of it anyway, since the pose was baked at submit() time.
         // Text first: it owns a separate renderer whose batch, if a caller left one open, would otherwise
         // flush after the frame's GL scope is torn down. Lenient when no batch is active.
+        // SPLIT, because gl:end is three unrelated things and one of them was measured at 48ms in a
+        // client while every CPU phase in that frame was under 2ms. Draining our own queued draws, the
+        // MSAA resolve blit, and the composite back onto the real target fail for completely different
+        // reasons -- and a resolve that blocks is the GPU being behind, which no amount of tuning our
+        // traversal would ever touch.
+        long timed = FrameProfile.begin();
         textRenderer.endBatch();
         renderer.flush();
+        FrameProfile.end(timed, "glend:flush");
 
         // Resolve the MSAA redirect (see beginFrame/msaaFbo) and composite it back onto whatever the
         // real target was. blitFrom binds its own explicit source/destination ids and needs no
@@ -642,7 +667,9 @@ public final class CgUiPaintContext {
         // beginFrame): blitLayer() right after draws a real quad through the normal quad() path, which
         // needs the real target actually bound, and needs an active frame the same as any other draw
         // call in this class, which is why this whole block still runs before frameActive is cleared.
+        long resolved = FrameProfile.begin();
         msaaResolveFbo.blitFrom(msaaFbo, CgGL.GL_COLOR_BUFFER_BIT, CgGL.GL_NEAREST);
+        FrameProfile.end(resolved, "glend:msaaResolve");
         if (glScope != null) {
             glScope.close();
             glScope = null;
@@ -693,6 +720,11 @@ public final class CgUiPaintContext {
 
     /** Solid-color fill, tint already includes opacity. */
     public void fillRect(float x, float y, float width, float height, int argb) {
+        // ONE FLUSH PER RECTANGLE, and a flush is a draw call. Counted because `gl:draw` measures at
+        // 21-30us per painted element -- far too much for a tree walk, and exactly the shape of
+        // per-element driver overhead. 271 elements after a file is opened (up from 130 with none) at
+        // one or more draw calls each is the whole 8.33ms budget spent submitting.
+        FrameProfile.count("drawcalls", 1);
         bindTexture(whitePixel);
         quad().at(x, y).size(width, height).color(argb).submit();
         flush();
@@ -707,6 +739,7 @@ public final class CgUiPaintContext {
         // texture looking like the recognisable "missing texture" it is, at whatever size it was
         // asked to draw. Was previously enforced centrally in submitQuad; it now lives at the two
         // sites that can actually be handed a fallback (here and CgUiSprite).
+        FrameProfile.count("drawcalls", 1);
         boolean missing = texture == CgTextureManager.get().getFallback();
         CgQuadRenderer.Quad q = quad().at(x, y).size(width, height).color(argb);
         (missing ? q : q.uv(u0, v0, u1, v1)).submit();
@@ -746,6 +779,10 @@ public final class CgUiPaintContext {
      * }</pre>
      */
     public CgTextRenderer text() {
+        // TEXT OWNS A SECOND RENDERER with its own material, so switching to it flushes the quad path
+        // and switching back flushes text -- meaning every alternation between a box and a label is two
+        // draw calls. An editor row is exactly that alternation, repeated per line.
+        FrameProfile.count("textswitches", 1);
         beginTextPath();
         return textRenderer;
     }
@@ -770,6 +807,11 @@ public final class CgUiPaintContext {
      */
     private void beginTextPath() {
         if (activePath == InstancePath.TEXT) return;
+        // A REAL PATH SWITCH, as opposed to a call to text(). The two are wildly different numbers and
+        // only this one costs anything: a frame with 67 labels reports 67 text() calls whether they were
+        // consecutive (one switch, one upload) or interleaved with boxes (67 switches, 67 uploads). The
+        // batch below is worth exactly as much as the gap between them, so the gap has to be visible.
+        FrameProfile.count("textpath-switches", 1);
         renderer.flush();
         activePath = InstancePath.TEXT;
         currentTexture = null;
@@ -783,7 +825,23 @@ public final class CgUiPaintContext {
         // Measured on the icon grid: 59 flushes per frame for 57 labels, 1.21ms in quadRenderer.upload of
         // which 0.88ms was streamBuffer.ssbo.map, plus 1.35ms across 58 glFlush calls -- about 2.5ms/frame,
         // more than every icon's geometry put together.
-        //textRenderer.beginBatch();
+        //
+        // ENABLED, and the counters explain why the disabled version looked pointless. A frame drawing 59
+        // labels reported 59 textpath-switches and only 2 quadpath-switches -- which cannot both be true
+        // of a path that alternates, and is not: Draw.submit() auto-wraps each label in its own
+        // begin/flush/END, and endBatch runs the restoreStateWith hook this class registers, which calls
+        // bindQuadPath and puts activePath back to QUAD. So the switches were 1:1 with labels BECAUSE
+        // there was no batch, and "batching wins nothing because every label switches anyway" had the
+        // causation backwards.
+        //
+        // With one batch open for the whole text path, the auto-wrap stops, the restore runs once per
+        // real switch instead of once per label, and consecutive labels coalesce into one upload.
+        // endTextPath() closes it, and endFrame() closes any that survives a frame.
+        //
+        // UIText must NOT open its own batch underneath this one -- beginBatch throws on a batch that is
+        // already open, which is what made enabling this line unusable before. Its shadow pass wanted a
+        // batch so the two draws coalesce; this batch already gives it that, and more.
+        textRenderer.beginBatch();
     }
 
     public void bindTexture(CgTexture2D texture) {
@@ -878,6 +936,12 @@ public final class CgUiPaintContext {
      */
     private void beginQuadPath() {
         if (activePath == InstancePath.QUAD) return;
+        // ALL THREE SWITCHES COUNTED, because knowing there are 59 text switches for 59 labels says
+        // every label is preceded by something non-text and NOT what. The editor's lines carry no
+        // background (`.__line__` sets none), so consecutive lines ought to batch -- and measurably do
+        // not. Whatever takes the path away between them is the thing to move, and only the counts can
+        // name it: quads (a fill, an image) and curves (every SVG icon) are different problems.
+        FrameProfile.count("quadpath-switches", 1);
         endTextPath();
         renderer.flushCurves();
         // bindQuadPath sets activePath itself — the one place it is assigned for this path.
@@ -888,6 +952,9 @@ public final class CgUiPaintContext {
     /** Makes the curve path current, flushing and unbinding the quad path if it was. */
     private void beginCurvePath() {
         if (activePath == InstancePath.CURVE) return;
+        // @see #beginQuadPath -- every SVG icon draws through here, and an icon beside a label is one
+        // alternation per row in any list.
+        FrameProfile.count("curvepath-switches", 1);
         endTextPath();
         renderer.flushQuads();
         activePath = InstancePath.CURVE;
@@ -919,14 +986,50 @@ public final class CgUiPaintContext {
      * the wrong shader, which renders something rather than failing.</p>
      */
     private void bindQuadPath(CgMaterial material) {
+        // THE TEXT BATCH DIES HERE TOO, not only in endTextPath.
+        //
+        // This method is the one place activePath becomes QUAD, and several callers reach it WITHOUT
+        // going through beginQuadPath: beginFrame, withMaterial, blitLayer, and the restoreStateWith
+        // hook. Each of those left activePath at QUAD while a text batch was still open, so the next
+        // text() saw "not TEXT", opened a second batch, and CgTextRenderer threw
+        // "beginBatch() called without a matching endBatch()". Guarding only the tidy path is guarding
+        // the route nothing takes.
+        //
+        // Re-entrant by construction and safe: endBatch runs the restore hook, which lands back here.
+        // endBatch clears batchActive BEFORE invoking the hook and is documented lenient, so the inner
+        // call returns immediately.
+        if (activePath == InstancePath.TEXT) textRenderer.endBatch();
         renderer.useMaterial(material);
         activePath = InstancePath.QUAD;
     }
 
     /**
-     * Flushes renderer queue and draws all submitted quads
+     * Draws everything submitted and not yet drawn — <b>on every path, text included</b>.
+     *
+     * <h3>The text batch is pending work, and this method is what "pending" is measured against</h3>
+     *
+     * <p>Every caller of this uses it to mean "the GPU has what I gave it, I am about to change
+     * something it would otherwise be drawn under". {@link #pushScissor} and {@link #popScissor} change
+     * the clip rectangle; {@link #withMaterial} binds a different shader; {@link #endLayerFbo} closes a
+     * GL scope and puts the previous render TARGET back. All four flushed the quad renderer and left an
+     * open text batch behind, so its glyphs were drawn later, under whatever state was current then.</p>
+     *
+     * <p>That was invisible until this class started holding a batch open across labels. Before it did,
+     * {@code Draw.submit()} auto-wrapped each label in its own begin/flush/end, so text was never pending
+     * across anything and {@code renderer.flush()} really was the whole of it. Opening one batch for the
+     * text path is what made this method a lie.</p>
+     *
+     * <p>The symptom is not a wrong colour, it is a <b>missing label</b>: a tree row's glyphs queued
+     * inside the list's scissor and flushed after {@code popScissor}, clipped to a rectangle they are no
+     * longer inside. Which rows vanish depends on where the batch happened to end, so it reads as
+     * intermittent — the project tree lost its root one run and a child the next.</p>
+     *
+     * <p>Ending the batch runs the restore hook, which lands in {@link #bindQuadPath} and puts
+     * {@code activePath} back to QUAD; the next {@link #text()} reopens one. Consecutive labels with
+     * nothing between them still coalesce, which is the whole of what the batch was for.</p>
      */
     public void flush() {
+        endTextPath();
         renderer.flush();
     }
 
@@ -1060,6 +1163,10 @@ public final class CgUiPaintContext {
      * rendering has no effect on the separate scissor-test raster stage.</p>
      */
     public void pushScissor(float x, float y, float w, float h) {
+        // A SCISSOR IS A FLUSH TOO, and every element with overflow pushes one. Counted beside the
+        // fills because they add up in the same place: a clipped container costs a draw call to enter
+        // and another to leave, whatever it contains.
+        FrameProfile.count("scissors", 1);
         flush();
         Matrix4f m = poseStack.last().pose();
         float physX0 = m.m00() * x + m.m10() * y + m.m30();

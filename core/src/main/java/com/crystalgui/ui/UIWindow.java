@@ -5,6 +5,8 @@ import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.async.JobScheduler;
+import com.crystalgui.core.async.FrameProfile;
+import com.crystalgui.core.async.UiThread;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.style.StyleEngine;
@@ -204,12 +206,65 @@ public final class UIWindow {
 
         final var rootElement = ui.rootElement;
 
-        if (rootElement.getAttachedWindow() != this)
+        if (rootElement.getAttachedWindow() != this) {
             rootElement.setAttachedWindow(this);
+            // TRACKED FROM THE MOMENT IT HAS A TREE, which is the only state worth shutting down.
+            // @see #shutdownAll
+            LIVE.put(this, Boolean.TRUE);
+        }
 
         rootElement.initScreen(this.screenWidth, this.screenHeight);
         rootElement.getStyle().markTaffyStyleDirty();
         calculateLayout();
+    }
+
+    /**
+     * Every window with a tree, so the process can be told it is ending.
+     *
+     * <p>Weak, and deliberately: a window is owned by whatever built it, and a registry that kept one
+     * alive would turn "the host forgot to close a screen" into a leak of the whole element tree behind
+     * it. Nothing here is iterated per frame — it is read once, at shutdown.</p>
+     */
+    private static final Map<UIWindow, Boolean> LIVE = Collections.synchronizedMap(new WeakHashMap<>());
+
+    
+    public static void shutdownAll() {
+        List<UIWindow> live;
+        synchronized (LIVE) {
+            live = new ArrayList<>(LIVE.keySet());
+        }
+        for (UIWindow window : live) {
+            if (window == null) continue;
+            // ISOLATED, because one window must not take the others with it. This runs at process exit,
+            // where a tree may already be partly torn down by whatever is exiting -- a window whose
+            // content was disposed while still attached has elements with no Taffy node left, and
+            // walking one throws. The other windows still have state worth writing, and an exception
+            // escaping here would reach engine teardown.
+            try {
+                window.shutdown();
+            } catch (Throwable failed) {
+              CrystalGuiCore.LOGGER.warn(
+                        "UIWindow.shutdownAll: a window could not be taken off screen", failed);
+            }
+        }
+    }
+
+    /**
+     * Takes this window's tree off screen — the single-window half of {@link #shutdownAll()}.
+     *
+     * <p>The desktop first, so windows and their contents leave in the ordinary way rather than being
+     * torn off underneath the compositor, and then the root itself for anything living outside it.</p>
+     *
+     * <p>Idempotent: a second call finds nothing attached and does nothing, which matters because a host
+     * that closes its screen cleanly AND exits will reach this twice.</p>
+     */
+    public void shutdown() {
+        LIVE.remove(this);
+        if (!desktopSuspended) suspendDesktop();
+        UIElement rootElement = ui == null ? null : ui.rootElement;
+        if (rootElement != null && rootElement.getAttachedWindow() == this) {
+            rootElement.setAttachedWindow(null);
+        }
     }
 
     /**
@@ -494,25 +549,44 @@ public final class UIWindow {
                 break;
             }
             if (taffyTree.isDirty(ui.rootElement.taffyNodeId)) {
+                long computed = FrameProfile.begin();
                 taffyTree.computeLayout(ui.rootElement.taffyNodeId, availableSpace);
+                // TAFFY ITSELF, apart from the callbacks it triggers. A slow `layout` phase is either the
+                // solver or what the solver wakes up, and those have nothing to do with each other: one is
+                // a third-party constraint pass over the node tree, the other is our own onLayoutChanged
+                // hooks -- UIText re-wrapping and pushing a height back is the standing example, and it
+                // dirties the tree again, which is what makes this loop run more than once.
+                FrameProfile.end(computed, "layout:taffy");
+                FrameProfile.count("layout-nodes-changed", nodesWithNewLayout.size());
 
+                long notified = FrameProfile.begin();
                 for (var nodeId : nodesWithNewLayout) {
                     var element = elementByNode.get(nodeId);
                     if (element != null) {
                         element.onLayoutChanged(nodesWithNewGeometry.contains(nodeId));
                     }
                 }
+                FrameProfile.end(notified, "layout:onLayoutChanged");
                 nodesWithNewLayout.clear();
                 nodesWithNewGeometry.clear();
             }
 
         }
+        // HOW MANY TIMES THE TREE HAD TO SETTLE. A frame that ran eight passes and one that ran one are
+        // completely different findings and report as the same `layout` number; the pass count is the
+        // only thing that separates "the tree is big" from "something re-dirties it after every pass".
+        if (passes > 1) FrameProfile.count("layout-passes", passes);
 
         resolveRootPlacement();
     }
 
     public boolean isLayoutDirty() {
-        return taffyTree.isDirty(ui.rootElement.taffyNodeId);
+        // A WINDOW THAT HAS BEEN SHUT DOWN HAS NO TREE TO BE DIRTY. `shutdown()` detaches the root, which
+        // frees its Taffy node, and anything that ticks the window afterwards asked Taffy about null.
+        // Nothing ticks it again at process exit -- but "nothing does" is not the same as "nothing can",
+        // and the crash would land during teardown where it is least readable. @see #shutdown
+        NodeId root = ui == null ? null : ui.rootElement.taffyNodeId;
+        return root != null && taffyTree.isDirty(root);
     }
 
     /**
@@ -614,6 +688,8 @@ public final class UIWindow {
      */
     public void updateWithoutPainting() {
         advanceFrame();
+        // A HEADLESS FRAME IS OVER HERE, because there is no paint to follow it. @see #paintFrame
+        FrameProfile.frameEnd();
     }
 
     /** Shared prologue of {@link #paintFrame()} and {@link #updateWithoutPainting()}. */
@@ -641,6 +717,11 @@ public final class UIWindow {
     }
 
     private float advanceFrame() {
+        // THIS IS THE THREAD THAT OWNS THE TREE, and from here anything expensive reached on it can be
+        // named rather than merely felt. Marked from the frame itself so it is right whatever drives one
+        // -- a real window, the harness, or a test stepping frames by hand. @see UiThread
+        UiThread.markCurrent();
+        FrameProfile.frameBegin();
         long now = System.nanoTime();
         float deltaSeconds = (now - lastFrameNanos) / 1_000_000_000f;
         lastFrameNanos = now;
@@ -653,12 +734,26 @@ public final class UIWindow {
         // hasShared() rather than shared(): asking whether there is work must never be the thing that
         // spawns a thread pool. A window in a headless test that schedules nothing creates nothing —
         // the same guard, for the same reason, as CgUiPaintContext.hasInstance().
-        if (JobScheduler.hasShared()) JobScheduler.shared().drain();
+        if (JobScheduler.hasShared()) {
+            // HOW MANY WORKERS WERE BUSY THIS FRAME.
+            //
+            // The reported drop is TRANSIENT -- 120 to 50 on the frame a class opens, then straight back
+            // to 120 -- and that rules out every per-frame cost by construction: a constant cannot cause
+            // a transient. What has exactly the right lifetime is the decompiler, which runs ~1,500ms on
+            // a worker, and during that window a quarter of frames miss budget with the frame thread's
+            // own work at ~578us and the time landing in gl:*. Counting the busy workers per frame is
+            // what turns that correlation into evidence or kills it.
+            FrameProfile.count("jobs-busy", JobScheduler.shared().runningCount());
+            JobScheduler.shared().drain();
+        }
+        FrameProfile.mark("drain");
 
         tracePhase("begin");
         styleEngine.calculateStyle(deltaSeconds);
+        FrameProfile.mark("style");
         tracePhase("style cascade");
         tickAnimations(deltaSeconds);
+        FrameProfile.mark("tickers");
         tracePhase("animations");
         // A TICKER MAY HAVE BUILT A SUBTREE, not merely set a class on one — and an element that has
         // never matched a selector must not reach Taffy at all, because the FIRST layout pass is where
@@ -679,7 +774,9 @@ public final class UIWindow {
         // the CSS, the widget or the text; the rows had simply been measured once before they had a
         // style, and one bit of that measurement was permanent.
         if (styleEngine.hasPendingMatches()) styleEngine.calculateStyle(0f);
+        FrameProfile.mark("style");
         calculateLayout();
+        FrameProfile.mark("layout");
 
         // STYLE AND LAYOUT INTERLEAVE UNTIL CLEAN — they are not one pass each in a fixed order.
         //
@@ -706,8 +803,15 @@ public final class UIWindow {
         // inside calculateLayout rather than here.
         for (int pass = 0; pass < MAX_RESTYLE_PASSES && styleEngine.hasPendingMatches(); pass++) {
             styleEngine.calculateStyle(0f);
+            FrameProfile.mark("style");
             calculateLayout();
+            FrameProfile.mark("layout");
+            FrameProfile.count("restyle-passes", 1);
         }
+        // NOT frameEnd(). A frame is not over here -- paintFrame goes on to bind the context, draw the
+        // whole subtree, paint the top layer and dispatch input, and ending the profile at the bottom of
+        // advanceFrame made every one of those INVISIBLE. That is how a reported drop survived three
+        // rounds of fixing things the profile could see. @see #paintFrame
         return deltaSeconds;
     }
 
@@ -732,20 +836,26 @@ public final class UIWindow {
         // definitions drifted before.
         pose.mulPoseMatrix(rootTransform);
 
+        FrameProfile.mark("gl:begin");
         ui.rootElement.drawSubtree(paintContext);
         // FONTS AND ICONS RESOLVE HERE. A glyph atlas is built the first time a string is measured or
         // drawn, and every SVG is parsed the first time it is asked for.
+        FrameProfile.mark("gl:draw");
         tracePhase("drawSubtree (glyph atlases, icon SVGs)");
 
         pose.popPose();
 
         topLayer.paint(paintContext, pose, rootTransform);
+        FrameProfile.mark("gl:toplayer");
 
         paintContext.endFrame();
+        FrameProfile.mark("gl:end");
         inputHandler.beginFrame();
         inputHandler.endFrame();
+        FrameProfile.mark("input");
         tracePhase("top layer + endFrame");
         tracedFirstFrame = true;
+        FrameProfile.frameEnd();
     }
 
 
@@ -756,6 +866,10 @@ public final class UIWindow {
         // session saved afterwards walks a tree the widget has left and writes nothing -- drag the Run
         // panel's divider, close the panel, quit, and the width is gone. The mirror of registerElement.
         if (sessionState != null) sessionState.captureFrom(element);
+        // AND IF THE ROOT ITSELF IS GOING, this window has no tree left to shut down. Without this the
+        // registry keeps every window a host ever built -- weakly, so it is not a leak, but long enough
+        // that a later shutdown walks one whose elements are already gone. @see #shutdownAll
+        if (ui != null && element == ui.rootElement) LIVE.remove(this);
         // A detached element must not linger in the top layer, or it would keep painting and hit-testing
         // after leaving the tree.
         topLayer.remove(element);
@@ -940,12 +1054,22 @@ public final class UIWindow {
     /** Everything that wants a per-frame callback: smooth scrolls plus registered tickers. Driven
      * from {@link #paintFrame()}; call it directly if you drive frames yourself. */
     public void tickAnimations(float deltaSeconds) {
+        // SMOOTH SCROLLING, APART FROM THE TICKERS. A wheel notch does not move the view directly -- it
+        // retargets an animation that then writes a new scrollTop every frame until it arrives, and every
+        // one of those writes is what makes the editor re-place its rows. So a scroll's cost is spread
+        // over the frames AFTER the notch, and this is the only bucket that says how many.
+        long scrolled = FrameProfile.begin();
         tickScrollAnimations(deltaSeconds);
+        FrameProfile.end(scrolled, "anim:scroll");
         if (!tickers.isEmpty()) {
             // Snapshot: a ticker may register another (or itself) while running.
             for (UIFrameTicker ticker : new ArrayList<>(tickers)) {
                 long tickerStart = TRACE_FIRST_FRAME && !tracedFirstFrame ? System.nanoTime() : 0L;
+                // PER TICKER, because "tickers" as one bucket can hide anything: the workbench, an
+                // editor and a dozen widgets all tick from here. @see FrameProfile
+                long profiled = FrameProfile.begin();
                 if (!ticker.tickFrame(deltaSeconds)) tickers.remove(ticker);
+                FrameProfile.end(profiled, "tick:" + ticker.getClass().getSimpleName());
                 if (tickerStart != 0L) {
                     long cost = (System.nanoTime() - tickerStart) / 1_000_000;
                     // ONLY THE ONES WORTH LOOKING AT. A first frame runs dozens of tickers and almost all

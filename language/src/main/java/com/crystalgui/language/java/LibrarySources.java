@@ -1,5 +1,8 @@
 package com.crystalgui.language.java;
 
+import com.crystalgui.core.async.JobKey;
+import com.crystalgui.core.async.JobLane;
+import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.ResourceContentProvider;
 import com.crystalgui.fs.ResourceRegistry;
@@ -7,7 +10,12 @@ import com.crystalgui.language.java.assist.AttachedSources;
 import com.crystalgui.language.java.classpath.HostClasspath;
 
 import com.crystalgui.language.engine.JavaEngine;
+import com.crystalgui.language.map.MappingSet;
+import com.crystalgui.language.map.PlatformMappings;
 import com.crystalgui.language.engine.bridge.Analysis;
+import com.crystalgui.language.engine.bridge.SourceAnalyzer;
+import com.crystalgui.text.TextPoint;
+import com.crystalgui.text.lang.DeclarationSite;
 import com.crystalgui.text.lang.SymbolInfo;
 
 import javax.annotation.Nullable;
@@ -17,6 +25,8 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Serves the text behind {@code library://} — what the viewer shows for a class the workspace lacks.
@@ -144,7 +154,10 @@ public final class LibrarySources implements ResourceContentProvider {
     public SymbolInfo symbolOf(Resource resource) {
         if (resource == null) return null;
         String binaryName = resource.path();
-        List<String> classpath = HostClasspath.detect();
+        // THE CACHE IS CONSULTED BEFORE THE CLASSPATH IS DETECTED, and it used to be the other way round
+        // -- so every answered call still paid for a full classpath probe. This is a PRESENTATION
+        // provider: the dock re-reads it on every strip rebuild, so that cost landed on the frame.
+        //
         // A SOURCE-BACKED TAB GETS ONE TOO, and it used to be refused here on the ground that
         // `ArrayList.java` is a FILE and should take the icon one in the project would. That reasoning
         // inverted the moment a project `.java` started showing what it declares: the two are now the
@@ -153,12 +166,49 @@ public final class LibrarySources implements ResourceContentProvider {
         synchronized (SYMBOLS) {
             if (SYMBOLS.containsKey(binaryName)) return SYMBOLS.get(binaryName);
         }
-        SymbolInfo described = describe(binaryName, classpath);
-        synchronized (SYMBOLS) {
-            SYMBOLS.put(binaryName, described);
-        }
-        return described;
+        scheduleDescribe(resource, binaryName);
+        // NOT YET, rather than an answer bought with a frame. @see ResourceRegistry#onSymbolResolved
+        return null;
     }
+
+    /**
+     * Works out what a class is, <b>off the thread that draws frames</b>, once per name.
+     *
+     * <h3>Measured at 761ms, on a method that reads like a getter</h3>
+     *
+     * <p>{@code describe} compiles a probe unit against the whole classpath, and this is reached from a
+     * tab presentation and a tree row bind — both on the frame thread. So the first time any library
+     * class appeared in the dock the application stopped for the better part of a second, and nothing at
+     * either call site suggested it might: the signature is {@code SymbolInfo symbolOf(Resource)}.</p>
+     *
+     * <p><b>The glyph arrives late instead</b>, which is the trade every IDE makes for the same reason —
+     * a decompiled tab shows a generic icon for a moment and then the right one. The alternative is not
+     * "the correct icon immediately", it is a frozen frame.</p>
+     *
+     * <p>{@code PENDING} is what keeps a run of presentation reads from queueing one job each: the dock
+     * re-reads every tab on every strip rebuild, so an unguarded miss would submit dozens for one class.
+     * The key is the same for all of them, so the scheduler would collapse them anyway — the set makes
+     * that a property of this code rather than of a scheduler detail.</p>
+     */
+    private static void scheduleDescribe(Resource resource, String binaryName) {
+        if (!PENDING.add(binaryName)) return;
+        JobScheduler.shared()
+                .job(JobKey.of(LibrarySources.class, "describe-" + binaryName), JobLane.LATENCY,
+                        context -> describe(binaryName, HostClasspath.detect()))
+                .onDone(described -> {
+                    // ON THE UI THREAD, during drain -- which is what makes storing and announcing safe
+                    // to do together, and what lets the announcement reach a widget directly.
+                    synchronized (SYMBOLS) {
+                        SYMBOLS.put(binaryName, described);
+                    }
+                    PENDING.remove(binaryName);
+                    ResourceRegistry.symbolResolved(resource);
+                })
+                .submit();
+    }
+
+    /** Names a describe is already running for. @see #scheduleDescribe */
+    private static final Set<String> PENDING = ConcurrentHashMap.newKeySet();
 
     /**
      * What the engine says a type is, or null.
@@ -203,6 +253,68 @@ public final class LibrarySources implements ResourceContentProvider {
     }
 
     /**
+     * Where a member is declared in this class's reconstructed text. @see ResourceContentProvider#locate
+     *
+     * <h3>Resolved, never searched — and a USE answers as well as the declaration</h3>
+     *
+     * <p>The obvious version scans the text for the name and takes the first hit, which lands on whatever
+     * calls the member before it is declared and cannot tell two overloads apart. This asks the compiler
+     * instead: every occurrence is offered to {@code resolveAt}, and the first that resolves to a member
+     * of this name reports <b>where its binding is declared in this very document</b>. So hitting a call
+     * is not a near miss, it is an equally good answer — the binding is the same either way, and
+     * {@code declarationOf} answers with the declaration's own position. Overloads resolve to the
+     * overload that was called, which is the one a reader following it wants.</p>
+     *
+     * <p>The scan only supplies candidates; correctness comes entirely from the resolve. Whole-word
+     * matching keeps it from offering the middle of a longer identifier, which would cost a resolve
+     * apiece for answers that can never match.</p>
+     *
+     * <p><b>Off the UI thread by contract</b>, because this parses. The text is whatever
+     * {@link #read} would return — attached source or the cached decompile, banner included — so the
+     * offsets are the ones the viewer is showing.</p>
+     */
+    @Override
+    @Nullable
+    public TextPoint locate(Resource resource, String member) {
+        if (resource == null || member == null || member.isEmpty()) return null;
+        List<String> classpath = HostClasspath.detect();
+        String text = AttachedSources.forClasspath(classpath).textOf(resource.path());
+        if (text == null) text = decompiled(resource.path(), classpath);
+        if (text == null) return null;
+        JavaEngine engine = JavaLanguage.engine();
+        if (engine == null) return null;
+
+        String binaryName = resource.path();
+        int lastDot = binaryName.lastIndexOf('.');
+        String simple = lastDot < 0 ? binaryName : binaryName.substring(lastDot + 1);
+        try (SourceAnalyzer.Analysis analysis =
+                     engine.analyzer().analyze(simple, text, classpath, engine.releaseLevel(), 0L)) {
+            for (int at = text.indexOf(member); at >= 0; at = text.indexOf(member, at + 1)) {
+                if (!isWholeWord(text, at, member.length())) continue;
+                SymbolInfo symbol = analysis.resolveAt(at);
+                if (symbol == null || !member.equals(symbol.name())) continue;
+                DeclarationSite site = symbol.declaration();
+                // SAME DOCUMENT is the whole test: a member of THIS class reports a site with no
+                // resource, and anything resolving into another class -- a call to something else that
+                // happens to share the name -- names that one and is skipped.
+                if (site != null && site.isSameDocument()) return site.start();
+            }
+        } catch (RuntimeException unparseable) {
+            // Reconstructed output that will not analyse is not worth failing a navigation over: the
+            // caller falls back to the top of the file, which is where it landed before this existed.
+            return null;
+        }
+        return null;
+    }
+
+    private static boolean isWholeWord(String text, int at, int length) {
+        int end = at + length;
+        boolean before = at == 0 || !Character.isJavaIdentifierPart(text.charAt(at - 1));
+        boolean after = end >= text.length() || !Character.isJavaIdentifierPart(text.charAt(end));
+        return before && after;
+    }
+
+    /**
      * The decompiled form of a class, cached, or null.
      *
      * <p>Synchronized around the map alone and never around the decompile: two viewers opening different
@@ -212,16 +324,60 @@ public final class LibrarySources implements ResourceContentProvider {
     @Nullable
     private static String decompiled(String binaryName, List<String> classpath) {
         synchronized (DECOMPILED) {
+            forgetIfMappingChanged();
             String cached = DECOMPILED.get(binaryName);
             if (cached != null) return REFUSED.equals(cached) ? null : cached;
         }
         JavaEngine engine = JavaLanguage.engine();
         if (engine == null) return null;
+
+        // THE MAPPING THIS RENDERING IS AGAINST, captured rather than re-read afterwards. A decompile
+        // takes a second or so and the mapping can land inside it, and text rendered through the old one
+        // must not be stored under the new one.
+        MappingSet used = PlatformMappings.current();
         String java = engine.decompile(binaryName, classpath);
         String stored = java == null ? REFUSED : DECOMPILED_BANNER + java;
         synchronized (DECOMPILED) {
-            DECOMPILED.put(binaryName, stored);
+            forgetIfMappingChanged();
+            // STORED ONLY IF IT IS STILL WHAT WE RENDERED THROUGH. Discarding costs one decompile the next
+            // time this class is opened; storing costs runtime names for the life of the process. The
+            // caller still gets this rendering -- one tab showing SRG names is recoverable by reopening it,
+            // and the alternative is showing nothing at all for a race that needs a download to land inside
+            // a single decompile.
+            if (used == decompiledFor) DECOMPILED.put(binaryName, stored);
         }
         return java == null ? null : stored;
+    }
+
+    /** The mapping the cached text above was rendered through. @see #forgetIfMappingChanged */
+    private static MappingSet decompiledFor = MappingSet.IDENTITY;
+
+    /**
+     * Drops the decompiled text when the mapping underneath it has changed.
+     *
+     * <h3>A cache of remapped text keyed only by class name</h3>
+     *
+     * <p>Decompiling goes through {@code JavaEngine.decompile}, which reads {@code types.readable(...)} —
+     * so the text is rendered through whatever {@link PlatformMappings#current} answered at the time, and
+     * on a 1.7.10 client that is the difference between {@code getMinecraft()} and {@code func_71410_x()}.
+     * The key had no mapping component, so the first rendering won for the life of the process.</p>
+     *
+     * <p><b>Only a FIRST launch can reach it, which is what makes it worth a guard rather than a
+     * comment.</b> A cached mapping is applied on the claiming thread during mod init, long before any
+     * viewer opens, so the identity is never current by the time anything is decompiled. A mapping that
+     * must be DOWNLOADED lands whenever the network says — and anything opened before then is cached with
+     * runtime names and stays wrong until the game restarts, at which point the cache is warm and it comes
+     * out right. {@code PlatformTypeBytes.view} carries the same warning about its own captured reference,
+     * in the same words: the symptom is "mappings work on the second launch and never on the first", which
+     * reads as a caching bug rather than as a late arrival.</p>
+     *
+     * <p>One reference comparison per lookup, like {@code view()}'s, and at most one clear per process —
+     * the mapping goes from identity to real once and never moves again.</p>
+     */
+    private static void forgetIfMappingChanged() {
+        MappingSet now = PlatformMappings.current();
+        if (now == decompiledFor) return;
+        DECOMPILED.clear();
+        decompiledFor = now;
     }
 }

@@ -84,6 +84,21 @@ public final class WorkbenchRegions {
         centre.addClass(CENTRE_CLASS);
         centre.setOrientation(SplitView.Orientation.HORIZONTAL);
 
+        // THE FLOORS ARE THE STYLESHEET'S, so the percentage ones have to get out of the way.
+        //
+        // SplitView defaults to LDLib2's 5..95, and `boundsFor` folds that together with each pane's CSS
+        // minimum by taking whichever is LARGER -- which is right, since a pane must satisfy both. The
+        // consequence is that a percentage floor silently wins on any large window: 5% of a 1560px pair is
+        // 78px, so lowering `min-width` below that in `ua/workbench.css` would have changed nothing on
+        // screen and read as the rule not being applied at all.
+        //
+        // A percentage is also the wrong unit for this. "At least 5% of the axis" means the sidebar's
+        // smallest width depends on how wide the game window is, so the same drag bottoms out somewhere
+        // different on a 4K monitor than on a 1080p one. A region's floor is about whether its content is
+        // still worth showing, which is a number of pixels; every pane in these two splits now states one.
+        frame.setLimits(0f, 100f);
+        centre.setLimits(0f, 100f);
+
         for (DockRegion region : DockRegion.values()) {
             if (region == DockRegion.EDITOR) continue;
             hosts.put(region, new RegionHost(region));

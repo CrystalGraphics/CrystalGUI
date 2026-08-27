@@ -368,12 +368,50 @@ public final class CompletionPopup extends Popover {
         showAt(anchorX, anchorY, null);
         newSession.onChanged.connect(this::refresh);
         newSession.onClosed.connect(this::detach);
+        // ON BOTH STACKS, because this popup CANNOT BE REACHED BY A KEY. The four keys it owns are
+        // intercepted on the EDITOR's key listener -- it never holds focus itself, which `TextEditor`
+        // records as the reason the interception lives there. The consequence went unrecorded: the moment
+        // anything else takes focus, the editor stops receiving keys and the list is stranded on screen
+        // with no way to dismiss it. Clicking another tab does it, and so does a panel that restores focus
+        // to a row when diagnostics arrive -- which is why it looked random and why it happened most on an
+        // unresolved type, the case that produces both an empty list and a fresh diagnostic.
+        //
+        // A close watcher is asked for Escape by the WINDOW rather than by whoever has focus, and an auto
+        // popover is dismissed by a press outside it. The second is what makes clicking another tab close
+        // the list rather than merely making Escape work afterwards, and it cannot dismiss a click on a
+        // ROW: light dismiss spares the popover the press landed inside.
+        window.pushCloseWatcher(this);
+        window.pushAutoPopover(this);
         refresh();
+    }
+
+    /**
+     * Escape, and a press outside — both arrive here.
+     *
+     * <p>Closes the SESSION rather than hiding this: the session is what {@code EditorSuggest} and the
+     * editor's key handler ask about, and hiding the box alone would leave a list that still owns Enter,
+     * Tab and the arrow keys while being invisible. {@code onClosed} then detaches this, and
+     * {@code unregisterElement} takes it off both stacks.</p>
+     */
+    @Override
+    public boolean requestClose() {
+        CompletionSession live = session;
+        if (live == null) return false;
+        live.close();
+        return true;
     }
 
     public void detach() {
         session = null;
         rows.clear();
+        // BEFORE HIDING, while this is still in the tree: `hide()` is what takes it out, and
+        // `unregisterElement` pops both stacks on the way. Doing it here as well makes a detach that does
+        // NOT leave the tree -- a popup reused for the next session -- leave no stale registration behind.
+        UIWindow window = getAttachedWindow();
+        if (window != null) {
+            window.popCloseWatcher(this);
+            window.popAutoPopover(this);
+        }
         if (isOpen()) hide();
     }
 
@@ -672,10 +710,24 @@ public final class CompletionPopup extends Popover {
             // SymbolIcon
             row.addChild(row.icon);
 
+            // EVERY PART SIZES TO ITS TEXT, AND SAYS SO. None of the three has a width in the sheet, so
+            // each can only get one by measuring itself -- `UIText` has no Taffy measure function and
+            // pushes its width as an IMPORTANT candidate instead. Whether it does that is decided ONCE,
+            // on the first recompute after attachment, from whether its box was still zero: a part
+            // realised before its row was laid out latches "I size myself" and is right forever, and one
+            // realised after latches "my box sizes me" -- and then nothing sizes it, so it stays ZERO.
+            //
+            // That is a race on when a pooled row happens to be realised, which is why it hit some rows
+            // and not others, differed between this and the harness, and looked like clipping: a
+            // zero-width detail still paints, from the right edge its collapsed box sits at, and the
+            // row's `overflow: hidden` cuts it a dozen pixels later -- about three characters, whatever
+            // the type was. Saying the answer removes the race rather than winning it.
+            row.label.forceSelfSizeWidth();
             row.label.addClass(LABEL_CLASS);
             row.label.setHitTest(false);
             row.addChild(row.label);
 
+            row.params.forceSelfSizeWidth();
             row.params.addClass(PARAMS_CLASS);
             row.params.setHitTest(false);
             row.addChild(row.params);
@@ -685,6 +737,7 @@ public final class CompletionPopup extends Popover {
             row.spacer.setHitTest(false);
             row.addChild(row.spacer);
 
+            row.detail.forceSelfSizeWidth();
             row.detail.addClass(DETAIL_CLASS);
             row.detail.setHitTest(false);
             row.addChild(row.detail);

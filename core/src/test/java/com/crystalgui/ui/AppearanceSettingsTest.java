@@ -1,5 +1,8 @@
 package com.crystalgui.ui;
 
+import com.crystalgui.core.data.DataContext;
+import com.crystalgui.core.data.DataKey;
+import com.crystalgui.core.settings.Settings;
 import com.crystalgui.core.settings.SettingsRegistry;
 import com.crystalgui.style.theme.ThemeRegistry;
 import com.crystalgui.style.theme.UiTheme;
@@ -9,6 +12,8 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNotSame;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -70,5 +75,43 @@ public class AppearanceSettingsTest {
             if (theme.displayName().equals(displayName)) return theme;
         }
         return null;
+    }
+
+    /**
+     * A preference is written to the store the application <b>listens on</b>, which stops being the
+     * window's root element the moment the application is opened as a window.
+     *
+     * <h3>The two expressions agree in every fixture that puts the application at the root</h3>
+     *
+     * <p>Which is the harness — {@code new UIWindow(Ui.of(editor))} — and was every host until a window
+     * compositor arrived. There {@code window.ui.rootElement.settings()} and the application's own store
+     * are the same object and nothing can tell them apart. In a client the editor sits inside a
+     * {@code WindowFrame} inside the desktop and they are two stores: the preference was written to one
+     * while {@code WorkbenchSettings.install} subscribed to the other, so picking a theme stored the
+     * choice, changed nothing on screen, and lost it on restart.</p>
+     *
+     * <p>The {@code assertNotSame} is the load-bearing half. Without it this passes in exactly the flat
+     * topology that hid the bug.</p>
+     */
+    @Test
+    public void theSettingsHostIsTheApplicationsOwnStoreNotTheWindowRoots() {
+        UIElement root = new UIElement();
+        UIElement betweenTheTwo = new UIElement();      // the desktop and its WindowFrame, in miniature
+        UIElement application = new UIElement() {
+            @Override
+            public Object getData(DataKey<?> key) {
+                return key == UiDataKeys.SETTINGS_HOST ? settings() : super.getData(key);
+            }
+        };
+        UIElement somewhereInside = new UIElement();
+        root.addChild(betweenTheTwo);
+        betweenTheTwo.addChild(application);
+        application.addChild(somewhereInside);
+
+        Settings resolved = DataContext.from(somewhereInside).get(UiDataKeys.SETTINGS_HOST);
+        assertSame("a preference must be written where the application listens",
+                application.settings(), resolved);
+        assertNotSame("the fixture is meant to hold TWO stores, or it proves nothing",
+                root.settings(), resolved);
     }
 }

@@ -72,6 +72,46 @@ public class ImportCompletionTest {
         assertTrue(children.packages().contains("concurrent"));
     }
 
+    /**
+     * <b>A package's whole type list, not the first forty of it alphabetically.</b>
+     *
+     * <p>The search cap was applied to the import query, which is a different question: {@link
+     * TypeIndex#matching} samples an unbounded classpath, while {@code java.util.} names a finite closed
+     * set. Forty of them, sorted, stops inside the {@code F}s -- so {@code List}, {@code Map} and {@code
+     * Set} were missing from their own package while every row that WAS shown was correct, which reads
+     * as the index not holding them rather than as a cap.</p>
+     *
+     * <p>Asserted on the short common names deliberately: they are the ones a person types an import for,
+     * and being short they sort late enough to fall outside any small cap. {@code AbstractCollection} is
+     * the counter-assertion -- it is first alphabetically, so a list capped at ONE still contains it, and
+     * a test naming only it passes against every truncation there is.</p>
+     */
+    @Test
+    public void aPackageOffersEveryTypeInIt() {
+        TypeIndex.Children children = index().childrenOf("java.util", "");
+        java.util.Set<String> names = new java.util.HashSet<>();
+        for (TypeIndex.Entry entry : children.types()) names.add(entry.simpleName());
+
+        assertTrue("AbstractCollection missing -- the query itself is broken", names.contains("AbstractCollection"));
+        for (String late : java.util.List.of("List", "Map", "Set", "Optional", "Scanner")) {
+            assertTrue(late + " is in java.util and was not offered (" + names.size() + " types offered)",
+                    names.contains(late));
+        }
+        assertFalse("a complete answer must not report itself truncated", children.truncated());
+    }
+
+    /**
+     * ...and the SEARCH keeps its own, smaller bound, which is what makes the row above a distinction
+     * rather than a blanket raise. {@code matching} is asked about a simple name across every jar on the
+     * classpath, so its answer is a sample by construction and forty is the size of a popup.
+     */
+    @Test
+    public void theSimpleNameSearchIsStillSampled() {
+        TypeIndex.Match hits = index().matching("e");
+        assertTrue("a one-letter search must stay bounded, got " + hits.entries().size(),
+                hits.entries().size() <= 80);
+    }
+
     /** Case-insensitive, because a list is matched the way names are typed rather than spelt. */
     @Test
     public void matchingIgnoresCase() {

@@ -1,5 +1,6 @@
 package com.crystalgui.language.engine;
 
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.async.JobKey;
 import com.crystalgui.core.async.JobLane;
 import com.crystalgui.core.async.JobScheduler;
@@ -16,6 +17,7 @@ import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.lang.LanguageServices;
 import com.crystalgui.text.lang.Resolver;
 import com.crystalgui.text.lang.SemanticTokenProvider;
+import com.crystalgui.language.map.ReadableSymbols;
 import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.text.lang.TypeRef;
 import com.crystalgui.text.lang.Versioned;
@@ -176,7 +178,30 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
         // from another thread. `start()` is the subclass's last line, by contract.
         if (file != null) ATTACHED.put(file, this);
         bufferSubscription = buffer.onChanged.connect(change -> schedule());
-        analyzeNow();
+        // SYNCHRONOUS FOR A DOCUMENT THAT HAS TEXT, SCHEDULED FOR ONE THAT DOES NOT.
+        //
+        // "A document is analysed when the services are created" is a contract with a test named for it
+        // and eight more resting on it, and it is a real one -- those tests hand this class a scheduler
+        // and assert before draining it, so "analysed" means before the constructor returns. Turning the
+        // whole thing into a `schedule()` fails nine of them, which is the contract doing its job.
+        //
+        // The discriminator is not the scheduler, it is whether there is anything to analyse. An EMPTY
+        // buffer's analysis has no tokens and no diagnostics in it; the entire cost is ECJ building a
+        // name environment over the classpath, and that environment travels with the analysis and is
+        // released when the next one replaces it. Measured at 15ms on the frame thread, inside the
+        // keystroke that opens a library viewer -- 15ms whose whole output is discarded.
+        //
+        // And a viewer is exactly that case by construction: `Workbench.viewerFor` builds the editor
+        // empty and `readViewer` fills it from a job, so the text arriving fires `onChanged` and
+        // schedules the analysis that matters. Deferring here does not lose an answer, it coalesces the
+        // empty v0 into the v1 that has the document in it. A document created WITH text -- every test
+        // above, and every path that opens a file whose bytes are already in hand -- still analyses
+        // before this returns, because for it the eager pass is the only one there will be.
+        if (buffer.length() > 0) {
+            analyzeNow();
+        } else {
+            schedule();
+        }
     }
 
     // ── What the engine fills in ────────────────────────────────────────────────────────────────
@@ -285,7 +310,7 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
         bufferSubscription.disconnect();
         if (scheduler != null) scheduler.cancel(analysisKey);
         diagnosticListeners.clear();
-        tokens.adopt(null);
+        tokens.adopt(null, null);
         if (current != null) {
             current.close();
             current = null;
@@ -303,7 +328,21 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
      * stamp exists to measure — reading it here would make every list look fresh and the gate a no-op.</p>
      */
     private Versioned<List<Diagnostic>> announcement(Analysis analysis) {
-        if (analysis.optionalProblemsAnalysed()) remember(analysis.diagnostics());
+        // NOTHING TO RETAIN FOR A DOCUMENT THAT REPORTS NOTHING, and retaining it anyway was measured at
+        // 12ms on the frame that opens a decompiled class.
+        //
+        // The retained lane exists for one purpose: keep the optional warnings alive across a syntax
+        // error so they are not withdrawn and re-announced every time the file stops parsing. That is a
+        // statement about REPORTING, and a library document reports nothing -- compose() returns an empty
+        // list on its very first line for exactly that reason. So this materialised every diagnostic
+        // across the classloader bridge, wrote a tracked range into the buffer for each one, and handed
+        // the result to a method that had already decided to discard it.
+        //
+        // Nothing observable changes: the lane is only ever read back by compose(), down a branch this
+        // document cannot reach. @see #reportsDiagnostics
+        if (reportsDiagnostics() && analysis.optionalProblemsAnalysed()) {
+            remember(analysis.diagnostics());
+        }
         return compose(analysis);
     }
 
@@ -549,10 +588,24 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
         }
         final String source = buffer.document().toString();
         final long version = buffer.version();
-        scheduler.job(analysisKey, JobLane.LATENCY, context -> analyse(source, version))
+        scheduler.job(analysisKey, JobLane.LATENCY, context -> {
+                    Analysis analysed = analyse(source, version);
+                    // AND ITS TOKENS, while this thread still owns it exclusively. @see #semanticTokensOf
+                    return new Analysed(analysed, semanticTokensOf(analysed));
+                })
                 .debounce(DEBOUNCE_MILLIS)
-                .onDone(this::install)
+                .onDone(done -> {
+                    if (done != null) install(done.analysis(), done.tokens());
+                })
                 .submit();
+    }
+
+    /**
+     * An analysis and the work that was done on it before it was published.
+     *
+     * @param tokens every semantic token in the document, or null if the pull failed
+     */
+    private record Analysed(@Nullable Analysis analysis, @Nullable List<SyntaxToken> tokens) {
     }
 
     /** Analyses on the calling thread — construction, and any caller with no scheduler. */
@@ -563,7 +616,51 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
 
     /** UI thread. Swaps in the new analysis, releases the old, and tells everyone watching. */
     private void install(Analysis analysis) {
+        install(analysis, null);
+    }
+
+    private void install(Analysis analysis, @Nullable List<SyntaxToken> materialisedTokens) {
         if (analysis == null) return;
+        long profiled = FrameProfile.enter("install analysis v" + analysis.version() + " (" + id + ")");
+        try {
+            installInternal(analysis, materialisedTokens);
+        } finally {
+            FrameProfile.leave(profiled, "install analysis");
+        }
+    }
+
+    /**
+     * Every semantic token in the document, pulled across the bridge.
+     *
+     * <h3>Called from the WORKER that built the analysis, never from the install</h3>
+     *
+     * <p>It is a pure function of the analysis and it is not small: the engine lives behind a
+     * classloader boundary, so this materialises tens of thousands of tokens for a 2,000-line class,
+     * one crossing at a time. Doing it in {@code install} put all of it on the frame that publishes the
+     * result — measured at <b>18.8ms of a 34ms install</b> on a decompiled class, which is the same
+     * shape as the tree-sitter locals pass one layer down.</p>
+     *
+     * <p><b>Safe for exactly the reason that one is.</b> The analysis has just been built by this worker
+     * and nothing else holds a reference to it yet; it is handed over only after this returns. That is
+     * the whole safety argument, and it is why this belongs here rather than in a second reader thread —
+     * an {@code Analysis} resolves its bindings lazily, so two threads reading one is a native race that
+     * surfaces as a JVM crash rather than an exception.</p>
+     *
+     * <p>Null on failure rather than throwing: {@code adopt} then pulls them on the frame thread exactly
+     * as it always did, which is slow rather than wrong. Colour must not be able to take an analysis
+     * down with it.</p>
+     */
+    @Nullable
+    private static List<SyntaxToken> semanticTokensOf(@Nullable Analysis analysis) {
+        if (analysis == null) return null;
+        try {
+            return analysis.semanticTokens();
+        } catch (RuntimeException failed) {
+            return null;
+        }
+    }
+
+    private void installInternal(Analysis analysis, @Nullable List<SyntaxToken> materialisedTokens) {
         if (closed) {
             // The document closed while this was in flight. Releasing it here rather than leaking is
             // the whole reason close() cannot simply drop the reference and walk away.
@@ -574,16 +671,28 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
         current = analysis;
         if (previous != null) previous.close();
 
-        tokens.adopt(analysis);
+        long timed = FrameProfile.begin();
+        // THE WHOLE DOCUMENT'S TOKENS, MATERIALISED ACROSS THE BRIDGE -- on the WORKER now, handed in.
+        // Cheap for a script; a 2000-line decompiled class is tens of thousands of them, and pulling
+        // them here spent 18.8ms of a 34ms install on the frame thread. @see #semanticTokensOf
+        tokens.adopt(analysis, materialisedTokens);
+        FrameProfile.step(timed, "tokens.adopt (materialised on worker: "
+                + (materialisedTokens != null) + ")");
         // COMPUTED ONCE PER ANALYSIS, not once per listener. announcement() has a side effect -- it
         // replaces the retained-warning lane -- and its inputs are row/column positions that are only
         // meaningful against the document the analysis saw. Recomputing it later, when a listener happens
         // to attach, would map those positions against a buffer that has since been edited and overwrite
         // correctly-tracked ranges with wrong offsets. @see #announcement
+        timed = FrameProfile.begin();
         lastAnnouncement = announcement(analysis);
+        FrameProfile.step(timed, "announcement (retained lane + tracking)");
+        timed = FrameProfile.begin();
         for (Consumer<Versioned<List<Diagnostic>>> listener : new ArrayList<>(diagnosticListeners)) {
             listener.accept(lastAnnouncement);
         }
+        FrameProfile.step(timed, "diagnostics -> "
+                + (lastAnnouncement.value() == null ? 0 : lastAnnouncement.value().size())
+                + " problems, " + diagnosticListeners.size() + " listeners");
     }
 
     // ── Semantic tokens: push, with an invalidation range ───────────────────────────────────────
@@ -622,9 +731,13 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
             this.listener = newListener;
         }
 
-        void adopt(@Nullable Analysis analysis) {
+        /**
+         * @param materialised the analysis's tokens, already pulled across the bridge by whoever built
+         *                     the analysis, or null to pull them here. @see #semanticTokensOf
+         */
+        void adopt(@Nullable Analysis analysis, @Nullable List<SyntaxToken> materialised) {
             this.all = analysis == null ? Collections.<SyntaxToken>emptyList()
-                    : analysis.semanticTokens();
+                    : materialised != null ? materialised : analysis.semanticTokens();
             this.version = analysis == null ? 0 : analysis.version();
             // EVERYTHING, not a computed range. A compile can change any line's colours -- adding a
             // field renames nothing and yet re-colours every use of that name in the file -- so a
@@ -656,7 +769,75 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
                 answer.accept(Versioned.<SymbolInfo>none(buffer.version()));
                 return;
             }
-            answer.accept(Versioned.of(analysis.version(), analysis.resolveAt(offset)));
+            // NOTHING, RATHER THAN A CONFIDENT ANSWER ABOUT TEXT NOBODY WROTE. @see Analysis#recoveredAt
+            //
+            // Applied HERE and deliberately not inside Analysis.resolveAt, which completion also calls.
+            // The two ask the same question for opposite reasons: completion is asked about text that is
+            // INCOMPLETE BY DEFINITION -- that is its whole job -- and it repairs the answer with a probe
+            // re-parse of its own. Hover and go-to are asked about text the user believes is finished, and
+            // have no such repair, so for them a recovered construct is simply not knowledge.
+            if (analysis.recoveredAt(offset)) {
+                answer.accept(Versioned.<SymbolInfo>none(buffer.version()));
+                return;
+            }
+            // OFF THE FRAME THREAD, because answering can mean PARSING A WHOLE COMPILATION UNIT.
+            //
+            // For a symbol whose class has attached source, the answer quotes the real declaration -- so
+            // resolving it parses that source file. Measured by hovering, with no scrolling at all:
+            // `CgFrameBuffer` 159,360us in one frame, `CgBlendState` 29,000us. A class with no attached
+            // source falls back to an assembled signature and costs ~400us, which is why the same gesture
+            // looks free on some symbols and janks on others.
+            //
+            // The contract already allowed this: `Resolver` takes a CALLBACK, a caller is told it may
+            // never fire, and the editor gates every answer on a serial and on buffer freshness. Nothing
+            // at a call site changes.
+            if (scheduler == null) {
+                answer.accept(Versioned.of(analysis.version(), resolveUnderLock(analysis, offset)));
+                return;
+            }
+            // ITS OWN KEY, never the analysis key: single-flight REPLACES, so sharing one would let a
+            // hover cancel the analysis that hover is asking about. Single-flight among resolves is
+            // exactly right, though -- the newest question is the only one anybody is waiting for.
+            scheduler.job(JobKey.of(AnalysedLanguageServices.this, id + "-resolve"), JobLane.LATENCY,
+                            context -> resolveUnderLock(analysis, offset))
+                    .onDone(resolved -> answer.accept(Versioned.of(analysis.version(), resolved)))
+                    .submit();
+        }
+
+        /**
+         * The resolve itself, under the analysis's own monitor.
+         *
+         * <h3>Why a lock and not just a thread</h3>
+         *
+         * <p>JDT resolves bindings <b>lazily</b>, so {@code resolveAt} mutates the analysis as it answers
+         * -- and {@code JavaCompletionProvider.memberItems} reads the same live {@code Analysis} from the
+         * frame thread. Moving hover to a worker without this would be two threads mutating one JDT tree,
+         * which is a crash rather than an exception.</p>
+         *
+         * <p>The monitor is the {@code Analysis} itself rather than a field here, so every reader can take
+         * it without being handed anything: the rule is "hold the analysis to read the analysis", and it
+         * is enforceable at any call site that has one.</p>
+         *
+         * <p>The frame thread therefore blocks only when a completion collides with a hover in flight --
+         * typing and resting are close to mutually exclusive gestures, and the collision costs one
+         * resolve rather than one per hover.</p>
+         */
+        private SymbolInfo resolveUnderLock(Analysis analysis, int offset) {
+            long timed = FrameProfile.begin();
+            SymbolInfo resolved;
+            synchronized (analysis) {
+                resolved = analysis.resolveAt(offset);
+            }
+            FrameProfile.step(timed, "engine.resolveAt" + (scheduler == null ? "" : " [worker]") + " -> "
+                    + (resolved == null ? "nothing"
+                            : resolved.kind() + " " + resolved.container() + "." + resolved.name()));
+            // IN THE READABLE NAMESPACE, whatever the author spelled. The compile view declares a mapped
+            // member under both names so a legacy script builds, and an engine quotes whichever
+            // declaration it resolved -- so a script naming `func_71203_ab` got a popup saying exactly
+            // that, where the whole point was to read it as `getConfigurationManager`. Free for anything
+            // already readable, and here rather than in either engine because which namespace a
+            // platform's members are SHOWN in is a fact about the runtime. @see ReadableSymbols
+            return ReadableSymbols.of(resolved);
         }
 
         @Override

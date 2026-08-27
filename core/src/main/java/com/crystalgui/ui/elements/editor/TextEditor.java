@@ -6,6 +6,7 @@ import com.crystalgraphics.api.text.CgTextLayout;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.search.SearchMatcher;
@@ -47,6 +48,7 @@ import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.text.HighlightRegistry;
 import com.crystalgui.ui.text.SyntaxHighlighting;
 import com.crystalgui.ui.text.TextRange;
+import dev.vfyjxf.taffy.style.TaffyDisplay;
 import dev.vfyjxf.taffy.style.LengthPercentageAuto;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 import lombok.Getter;
@@ -310,6 +312,12 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private int highlightedFrom = -1;
     private int highlightedTo = -1;
     private boolean highlightsDirty = true;
+
+    /**
+     * The viewport moved, so {@link #refreshHighlights} must run — but every row it still shows keeps the
+     * bands it has. Distinct from {@link #highlightsDirty}, which means the bands themselves are wrong.
+     */
+    private boolean highlightWindowMoved = true;
 
     /**
      * Says the published {@code ::highlight()} ranges no longer describe the document.
@@ -703,19 +711,27 @@ public class TextEditor extends ScrollerView implements UndoScope {
         addInternalChild(gutter);
 
         buffer.onChanged.connect(change -> {
+            long changed = FrameProfile.enter("buffer.onChanged");
             // The tokenizer hears about the edit BEFORE the next query, so an incremental one can update
             // what it holds. Applying the edit is cheap and must be synchronous; the expensive reparse is
             // the implementation's business. See SyntaxTokenizer#edited.
+            long timed = FrameProfile.begin();
             tokenizer.edited(buffer.document(), change);
+            FrameProfile.step(timed, "tokenizer.edited");
             highlightsDirty = true;
+            FrameProfile.leave(changed, "buffer.onChanged head");
             // BEFORE reprojectAfterEdit, which is what advances previousLineCount -- this needs the count
             // as it was in order to tell a same-row edit from one that shifted every row below it.
+            long piece = FrameProfile.begin();
             invalidateMeasuredRows(change);
+            FrameProfile.step(piece, "ed:invalidateMeasuredRows");
             // Same rule, same reason, and it must read previousLineCount while it still says what it said
             // before this edit -- so it belongs beside the call above rather than anywhere later.
             //
             // MAPPED, not dropped -- see settleSyntaxIfIdle for why those are different things.
+            piece = FrameProfile.begin();
             mapRowSyntaxThroughEdit(change);
+            FrameProfile.step(piece, "ed:mapRowSyntaxThroughEdit");
             // NOT invalidateWindow() unless the line COUNT changed.
             //
             // Recycling every line on every keystroke clears each one's highlights -- recycleLine has to,
@@ -735,9 +751,15 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // recycled every line, and recycling clears highlights that are only republished after the
             // frame's style pass.
             forgetWidestLine();
+            long reprojected = FrameProfile.begin();
             reprojectAfterEdit(change);
+            FrameProfile.step(reprojected, "reprojectAfterEdit");
+            piece = FrameProfile.begin();
             folds.markDirty();
+            FrameProfile.step(piece, "ed:folds.markDirty");
+            long rebound = FrameProfile.begin();
             rebindRealisedLines();
+            FrameProfile.step(rebound, "rebindRealisedLines");
             // A document that shrank can leave a selection pointing past its end, and the caret then
             // indexes a row that is not there. Clamped HERE rather than at the keystroke that caused it,
             // because undo is no longer the only way in: edit.undo from a menu or the palette, a
@@ -749,13 +771,23 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // undo and redo -- and offsets found against the old text describe the new one wrongly: the
             // count went stale and the highlights sat over whatever had moved into their place. Re-running
             // from this one signal is what makes undo correct without the undo path knowing about search.
+            piece = FrameProfile.begin();
             find.refreshAfterEdit();
+            FrameProfile.step(piece, "ed:find.refreshAfterEdit");
             // A HOVER BOX DESCRIBES AN OFFSET, and typing moves it. Dismissed rather than re-resolved,
             // because what is on screen is now about a position that has shifted underneath it and the
             // pointer has not asked about wherever the text ended up. A Ctrl+Q popup is left alone: it was
             // asked for deliberately, and hideHoverDocumentation is what tells the two apart.
             langFeatures.hover().hide();
-            onChanged.emit(buffer.toString());
+            // THE WHOLE DOCUMENT AS A STRING, on every edit -- flattening a 108KB rope to hand to
+            // listeners that may not want it. Named so the log says whether anybody is paying for it.
+            // FLATTENED ONLY IF SOMEBODY IS LISTENING. `buffer.toString()` materialises the whole rope --
+            // 73KB for an ordinary class, 108KB for Minecraft.class -- and it was built unconditionally,
+            // as the argument to an emit with, measured, ZERO connections on every path that opens a file.
+            // A signal with no listeners costs nothing; the argument handed to it does not.
+            piece = FrameProfile.begin();
+            if (onChanged.connectionCount() > 0) onChanged.emit(buffer.toString());
+            FrameProfile.step(piece, "ed:onChanged.emit -> " + onChanged.connectionCount() + " listeners");
         });
 
         // AN UNDO THAT MOVES THE TEXT BACK AND NOT THE CARET has moved the text out from under your
@@ -855,8 +887,34 @@ public class TextEditor extends ScrollerView implements UndoScope {
         }
         // `load`, not `replace`: it normalises AND remembers the ending, so a save writes back what the
         // file came with. It breaks undo coalescing itself.
+        long timed = FrameProfile.begin();
         buffer.load(text == null ? "" : text);
+        FrameProfile.step(timed, "buffer.load (rope build, " + buffer.lineCount() + " lines)");
+        timed = FrameProfile.begin();
         setSelection(0, 0);
+        FrameProfile.step(timed, "setSelection");
+        return this;
+    }
+
+    /**
+     * {@link #setText(String)} for text a worker has already normalised and roped.
+     *
+     * <p>Same early-out, against the prepared text rather than a freshly normalised copy — which is also
+     * one fewer 100KB pass on the frame. @see TextBuffer#prepare</p>
+     */
+    public TextEditor setText(TextBuffer.Prepared prepared) {
+        if (prepared == null) return setText("");
+        String next = prepared.normalised();
+        if (buffer.length() == next.length() && next.contentEquals(getText())
+                && buffer.lineEnding() == prepared.ending()) {
+            return this;
+        }
+        long timed = FrameProfile.begin();
+        buffer.load(prepared);
+        FrameProfile.step(timed, "buffer.load (PREPARED, " + buffer.lineCount() + " lines)");
+        timed = FrameProfile.begin();
+        setSelection(0, 0);
+        FrameProfile.step(timed, "setSelection");
         return this;
     }
 
@@ -2189,19 +2247,25 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * plausibly arrive from both ends.</p>
      */
     public void disposeLanguage() {
+        long timed = FrameProfile.begin();
         tokenizer.setInvalidationListener(null);
         tokenizer.close();
         tokenizer = SyntaxTokenizer.NONE;
+        FrameProfile.step(timed, "close.tokenizer.close (frees the native trees)");
         if (languageDiagnostics != null) {
             languageDiagnostics.disconnect();
             languageDiagnostics = null;
         }
         if (languageServices != null) {
+            timed = FrameProfile.begin();
             languageServices.semanticTokens().setInvalidationListener(null);
             languageServices.close();
             languageServices = null;
+            FrameProfile.step(timed, "close.languageServices.close");
         }
+        timed = FrameProfile.begin();
         rowSyntax.clear();
+        FrameProfile.step(timed, "close.rowSyntax.clear");
     }
 
     /**
@@ -2228,15 +2292,41 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
         int from = viewLineStartOffset(Math.max(0, firstViewLine));
         int to = viewLineEndOffset(Math.max(0, Math.min(lastViewLine, viewLineCount() - 1)));
-        if (!highlightsDirty && from == highlightedFrom && to == highlightedTo) return;
+        if (!highlightsDirty && !highlightWindowMoved && from == highlightedFrom && to == highlightedTo) {
+            return;
+        }
+        highlightWindowMoved = false;
+        // WHY WE ARE HERE, captured before the flag is cleared.
+        //
+        // The early-out above is all-or-nothing on the visible OFFSET RANGE, and a scroll changes that
+        // range every single frame -- so scrolling rebuilt every realised row's bands, every frame, from
+        // scratch. Measured on a 2,020-line class: `ed:highlightBands x34` at 3.3ms typical and 14ms
+        // worst, inside an `ed:updateWindow` of which it was 57-90%, with 61 of 107 frames over budget
+        // for the length of the scroll.
+        //
+        // But scrolling does not change what any row's bands ARE. It changes which rows are on screen,
+        // and moving the viewport by one line leaves 33 of 34 rows showing exactly the view line they
+        // were already showing. So a pure range change rebuilds only what genuinely moved, and anything
+        // that changes the CONTENT of a row's bands -- a reparse, a new selection, a search, a fold, an
+        // edit -- goes on setting `highlightsDirty` and rebuilds the lot, exactly as before.
+        boolean rebuildEveryRow = highlightsDirty;
         highlightedFrom = from;
         highlightedTo = to;
         highlightsDirty = false;
 
+        long syntaxTimed = FrameProfile.begin();
         ensureRowSyntax(firstViewLine, lastViewLine);
+        FrameProfile.end(syntaxTimed, "ed:ensureRowSyntax");
+        long bandsTimed = FrameProfile.begin();
+        int rebuilt = 0;
         for (Map.Entry<Integer, UIElement> entry : realisedLines.entrySet()) {
             int viewLine = entry.getKey();
             if (viewLine < 0 || viewLine >= viewLineCount()) continue;
+            // ALREADY SHOWING THIS VIEW LINE, and nothing about its content changed. @see #bandsShownFor
+            if (!rebuildEveryRow && Integer.valueOf(viewLine).equals(bandsShownFor.get(entry.getValue()))) {
+                continue;
+            }
+            rebuilt++;
             // Ranges are offsets into the UIText this line owns, and that text is one VIEW line -- so a
             // wrapped row's second half must publish ranges relative to where IT starts. Using the row's
             // start would push every colour on a continuation line left by the width of everything above
@@ -2361,7 +2451,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
             for (Map.Entry<String, List<TextRange>> named : byName.entrySet()) {
                 highlights.set(named.getKey(), named.getValue());
             }
+            bandsShownFor.put(entry.getValue(), viewLine);
         }
+        FrameProfile.end(bandsTimed, "ed:highlightBands " + rebuilt + "/" + realisedLines.size());
     }
 
     /**
@@ -2483,20 +2575,39 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * Moves a row's tokens through an edit instead of discarding them.
      *
      * <p>Row-relative, so only the edited row's own tokens move — and a token <b>touching</b> the edit
-     * point is dropped rather than moved, because it is the one being written. That is what draws the
+     * is dropped rather than moved, because it is the one being written. That is what draws the
      * identifier under the caret in the plain foreground: typing at the end of {@code value} extends that
      * token rather than following it, so keeping it would colour a name that no longer exists.</p>
+     *
+     * <h3>An edit is a RANGE, and treating it as a point crashed the editor</h3>
+     *
+     * <p>This took only {@code column} and the net {@code delta}, and asked whether each token was before
+     * or after that one offset. For an insertion the two are the same thing — nothing is consumed, so the
+     * point IS the range. For a REPLACEMENT they are not, and typing a character while text is selected is
+     * a replacement: {@code delta} is {@code 1 - selectionLength} and hugely negative, while every token
+     * that lived <em>inside</em> the selection still answers {@code start() > column} and gets shifted by
+     * it. {@code SyntaxToken} then refuses the result — {@code bad token range -2..1}, out of a keystroke,
+     * on the frame thread, taking the game down with it.</p>
+     *
+     * <p>So the extent is passed rather than folded into the delta, and anything overlapping the consumed
+     * range goes with it. A kept token is then provably in range: it starts past {@code column + replaced},
+     * so its new start is at least {@code column + inserted + 1}. With {@code replaced == 0} this is
+     * exactly the old behaviour, which is why plain typing was never affected and why the bug needed a
+     * selection to show at all.</p>
      */
-    private void shiftRowSyntax(int row, int column, int delta) {
+    private void shiftRowSyntax(int row, int column, int replaced, int inserted) {
         List<SyntaxToken> tokens = rowSyntax.get(row);
         if (tokens == null || tokens.isEmpty()) return;
+        int consumedTo = column + replaced;
+        int delta = inserted - replaced;
         List<SyntaxToken> moved = new ArrayList<>(tokens.size());
         for (SyntaxToken token : tokens) {
             if (token.end() < column) moved.add(token);
-            else if (token.start() > column) {
+            else if (token.start() > consumedTo) {
                 moved.add(new SyntaxToken(token.start() + delta, token.end() + delta, token.name()));
             }
-            // Touching the edit -- it is being written, so it has no colour until the text settles.
+            // Touching or inside the edited range -- it is being written, so it has no colour until the
+            // text settles.
         }
         rowSyntax.put(row, moved);
     }
@@ -2547,8 +2658,17 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // ADOPTED HERE AND NOWHERE ELSE. Everything upstream only ever RECORDS that a row's answer has
         // changed; this is the one place a new one replaces what is on screen, and it runs only once
         // typing has settled. See settleSyntaxIfIdle.
+        //
+        // AND THE RECOVERY GUARD APPLIES HERE TOO. It was written on the other way into this cache -- the
+        // else-branch of invalidateRowSyntax, which is the path an announcement takes when the user is NOT
+        // typing -- and settling dropped every stale row unconditionally. That is the path a keystroke
+        // actually takes: the analysis debounce and this settle are both 300ms, so an ordinary pause at
+        // the end of a word lands the parse while `editing` is still true. So the guard was installed on
+        // one of two doors and the traffic came through the other. @see #keepsColoursThroughRecovery
         if (!editing && !staleRows.isEmpty()) {
-            for (int row : staleRows) rowSyntax.remove(row);
+            for (int row : staleRows) {
+                if (!keepsColoursThroughRecovery(row)) rowSyntax.remove(row);
+            }
             staleRows.clear();
         }
         SemanticTokenProvider semantic = languageServices == null
@@ -2592,7 +2712,13 @@ public class TextEditor extends ScrollerView implements UndoScope {
         }
         if (filling.isEmpty()) return;
 
-        for (SyntaxToken token : tokenizer.tokenize(buffer.document(), spanStart, spanEnd)) {
+        long grammarTimed = FrameProfile.begin();
+        List<SyntaxToken> grammarTokens = tokenizer.tokenize(buffer.document(), spanStart, spanEnd);
+        FrameProfile.end(grammarTimed, "ed:tokenize");
+        FrameProfile.step(grammarTimed, "ed:tokenize rows " + firstMissing + ".." + lastMissing
+                + " (" + (lastMissing - firstMissing + 1) + " of " + lineCount + "), span "
+                + (spanEnd - spanStart) + " chars -> " + grammarTokens.size() + " tokens");
+        for (SyntaxToken token : grammarTokens) {
             distributeToRows(token, firstMissing, lastMissing, filling);
         }
 
@@ -2611,7 +2737,11 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // token would make each semantic token displace the previous one, and they are deliberately
         // allowed to overlap each other: `count` being a field and `count` being deprecated are two
         // true things about one range, drawn as a colour and a strike-through by two different rules.
+        long semanticTimed = FrameProfile.begin();
         List<SyntaxToken> semanticTokens = semantic.tokensIn(spanStart, spanEnd);
+        FrameProfile.end(semanticTimed, "ed:semanticTokens");
+        FrameProfile.step(semanticTimed, "ed:semanticTokens span " + (spanEnd - spanStart)
+                + " chars -> " + semanticTokens.size() + " tokens");
         for (SyntaxToken token : semanticTokens) {
             clearGrammarUnder(token, firstMissing, lastMissing, filling);
         }
@@ -2754,7 +2884,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             staleRows.clear();
             return;
         }
-        shiftRowSyntax(firstRow, start - rowStart, inserted - replaced);
+        shiftRowSyntax(firstRow, start - rowStart, replaced, inserted);
         staleRows.add(firstRow);
     }
 
@@ -3147,6 +3277,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // nothing, which is why it looked like an empty member list and why Ctrl+Space -- which has no such
         // guard -- worked on the very same text.
         if (language.isCompletionTrigger(typed)) {
+            if (EditorSuggest.TRACE) EditorSuggest.trace("typed '" + typed + "' -> TRIGGER CHARACTER");
             closeCompletion();
             openCompletion(CompletionProvider.TriggerKind.CHARACTER, String.valueOf(typed));
             return;
@@ -3154,7 +3285,10 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
         // The autopopup half still defers: every character of a word would otherwise restart the session and
         // throw away the list it is narrowing.
-        if (suggest.isLive()) return;
+        if (suggest.isLive()) {
+            if (EditorSuggest.TRACE) EditorSuggest.trace("typed '" + typed + "' -> deferred, a list is already live");
+            return;
+        }
         // TYPING A NAME OPENS THE LIST TOO -- IntelliJ's autopopup, and without it the only way in was
         // Ctrl+Space, which is a thing you have to remember rather than a thing that helps.
         //
@@ -3943,12 +4077,45 @@ public class TextEditor extends ScrollerView implements UndoScope {
      *
      * <p>At {@code IMPORTANT}, because the sheet's own rule for these classes would otherwise win and the
      * decoration would size itself independently of the text it is describing.</p>
+     *
+     * <h3>"It is cheap" was measured and is not true</h3>
+     *
+     * <p>Five callers reach this per element per frame — every realised line, every line number, every
+     * whitespace marker, every fold glyph — so an editor viewport is ~100 calls a frame. Measured on the
+     * frame that opens a class: <b>{@code ed:fonts} 13.3ms and {@code ln:pushFont} 4.5ms</b>, and on an
+     * earlier build {@code ln:pushFont} alone reached 30ms. {@code replaceOrPutCandidate} does no-op on an
+     * unchanged value, but reaching it costs a pipeline, two {@code StyleSlot}s and two candidate-list
+     * walks — and on the one frame that matters the value has genuinely changed (the gutter pushes a new
+     * size), so every write resolves, fires the {@code FONT_SIZE} listener and drops each label's shaped
+     * paragraph.</p>
+     *
+     * <p>So the guard is here rather than in each caller: the value is the same for every element, so
+     * "has this element already got the current font" is one membership test. The set is cleared when
+     * the editor's own font moves, which is the only thing that can invalidate it, and it is weakly held
+     * so a pooled line that goes away does not pin it.</p>
      */
     void pushEditorFontTo(UIElement element) {
         var general = getStyle().getGeneralGroup();
+        float size = general.fontSize();
+        List<String> family = general.fontFamily();
+        if (size != pushedFontSize || !family.equals(pushedFontFamily)) {
+            pushedFontSize = size;
+            pushedFontFamily = family;
+            fontUpToDate.clear();
+        }
+        // add() answers false when it was already there -- one hash lookup instead of two style writes.
+        if (!fontUpToDate.add(element)) return;
         StyleGroup.importantPipeline(element.getStyle().getGeneralGroup(),
-                g -> g.fontSize(general.fontSize()).fontFamily(general.fontFamily()));
+                g -> g.fontSize(size).fontFamily(family));
     }
+
+    /** Elements already carrying {@link #pushedFontSize}/{@link #pushedFontFamily}. @see #pushEditorFontTo */
+    private final Set<UIElement> fontUpToDate =
+            Collections.newSetFromMap(new WeakHashMap<UIElement, Boolean>());
+
+    private float pushedFontSize = Float.NaN;
+
+    private List<String> pushedFontFamily;
 
     /**
      * Starts the horizontal scrollbar after the gutter rather than under it.
@@ -4698,7 +4865,12 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
         List<Change> changes = change.changes();
         if (changes.size() != 1) {
+            long whole = FrameProfile.begin();
             projections.rebuild(buffer.document());
+            // THE WHOLE-DOCUMENT PATH, named apart from the incremental one. Which of the two ran is the
+            // first question about any reprojection cost, and both used to report as one number.
+            FrameProfile.step(whole, "ed:projections.rebuild (WHOLE DOC, " + lineCount + " lines, "
+                    + changes.size() + " changes)");
             return;
         }
         Change edit = changes.get(0);
@@ -4730,10 +4902,20 @@ public class TextEditor extends ScrollerView implements UndoScope {
         int removed = added - delta;
         if (removed < 1) {
             // Not a shape rowsChanged can express. Rebuilding is always correct, only slower.
+            long whole = FrameProfile.begin();
             projections.rebuild(buffer.document());
+            FrameProfile.step(whole, "ed:projections.rebuild (WHOLE DOC, unexpressible shape, "
+                    + lineCount + " lines)");
             return;
         }
+        long some = FrameProfile.begin();
         projections.rowsChanged(buffer.document(), row, removed, added);
+        // A FULL LOAD LANDS HERE, not on the rebuild branch: TextBuffer.load is ONE change that replaces
+        // everything, so `added` is the whole new document and this is a whole-document reprojection
+        // wearing the incremental path's name. Worth reporting the row count, or a 2,208-row reprojection
+        // reads as an ordinary keystroke.
+        FrameProfile.step(some, "ed:projections.rowsChanged at " + row
+                + " (-" + removed + " +" + added + " of " + lineCount + ")");
     }
 
     private CgFontFamily resolveFamily() {
@@ -4923,14 +5105,23 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     /** Re-reads the text of every realised line without recycling it, so highlights survive the edit. */
     private void rebindRealisedLines() {
+        // THE PER-LINE SPLIT, because this runs over every realised row on every frame and the two things
+        // it does are unrelated: placing a row is style writes that no-op when nothing moved, while
+        // re-reading its text is a rope read plus a UIText that may re-shape. A scroll changes both for
+        // every row at once, which is why this is the shape of frame the wheel produces.
+        long placed = 0L;
+        int rows = 0;
         for (Map.Entry<Integer, UIElement> entry : realisedLines.entrySet()) {
             int viewLine = entry.getKey();
             if (viewLine < 0 || viewLine >= viewLineCount()) continue;
+            rows++;
             // The FULL layout, not just the text. An edit or a reflow can turn a continuation line into a
             // first line or the reverse, which moves its carried indent and its width -- and after a
             // resize it moves every one of them.
             String before = textOf(entry.getValue()).getText();
+            long t0 = FrameProfile.begin();
             layOutLine(viewLine, entry.getValue());
+            if (t0 != 0L) placed += System.nanoTime() - t0;
             // A ROW WHOSE TEXT CHANGED HAS STALE HIGHLIGHTS, and nothing else says so.
             //
             // refreshHighlights below early-outs on `!highlightsDirty && from == highlightedFrom && to ==
@@ -4948,6 +5139,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // nothing writes nothing: setText no-ops on an unchanged string, and so does this.
             if (!before.equals(textOf(entry.getValue()).getText())) highlightsDirty = true;
         }
+        FrameProfile.report(placed, "ed:rebind.layOutLine x" + rows);
         // NO markTreeDirty() HERE, and its absence is the point.
         //
         // This method's own contract, three lines up in updateWindow, is that it is safe to call every
@@ -5013,13 +5205,25 @@ public class TextEditor extends ScrollerView implements UndoScope {
             pendingReveal = false;
             revealCaretCentred();
         }
+        long profiled = FrameProfile.begin();
         updateWindow();
+        FrameProfile.end(profiled, "ed:updateWindow");
+        // THE REST OF THE TICK, named. A frame measured `tick:TextEditor 35,010us` with `ed:updateWindow`
+        // absent from the same line -- so 35ms was in one of the four calls below and nothing said which.
+        profiled = FrameProfile.begin();
         viewCursorsPart.advanceBlink(deltaSeconds);
+        FrameProfile.end(profiled, "ed:blink");
+        profiled = FrameProfile.begin();
         zoomIndicatorPart.tick(deltaSeconds);
+        FrameProfile.end(profiled, "ed:zoomIndicator");
+        profiled = FrameProfile.begin();
         autoScrollDuringDrag(deltaSeconds);
+        FrameProfile.end(profiled, "ed:autoScrollDuringDrag");
         // A REST TIMER, so it belongs on the heartbeat rather than on the move event: what it measures is
         // the pointer NOT moving, and the last move is the one event that will not be followed by another.
+        profiled = FrameProfile.begin();
         langFeatures.hover().tick(deltaSeconds);
+        FrameProfile.end(profiled, "ed:hoverTick");
         return true;
     }
 
@@ -5066,7 +5270,15 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // exist, so asking first would realise rows against a count that is about to move -- and a
         // reprojection resets visibility whenever the row count changed, so the hidden rows have to be
         // reapplied on the far side of it rather than the near side.
-        if (folds.refreshFolding()) {
+        // THE TOP OF THE METHOD, and the last thing in it with no bucket. Folding is computed over the
+        // WHOLE document rather than the viewport -- a fold can start above the screen and end below it,
+        // which is stated on FoldingRegions itself -- so it is the one call in here whose cost scales
+        // with the file rather than with what is visible. ed:updateWindow reports 33.6ms on the frame
+        // that opens a 2,000-line class while everything named inside it sums to 8ms.
+        long folded = FrameProfile.begin();
+        boolean foldingChanged = folds.refreshFolding();
+        FrameProfile.step(folded, "ed:refreshFolding (" + viewLineCount() + " view lines)");
+        if (foldingChanged) {
             firstRealised = -1;
             lastRealised = -1;
             rebindRealisedLines();
@@ -5082,6 +5294,11 @@ public class TextEditor extends ScrollerView implements UndoScope {
                 : Math.min(count - 1, (int) ((getScrollTop() + viewport) / height) + OVERSCAN);
 
         if (first != firstRealised || last != lastRealised) {
+            // THE REALISE LOOP, which nothing has ever timed. ed:updateWindow measured at 33.2ms on the
+            // frame that opens a class while every named sub-item inside it summed to 9.8ms -- so 23ms
+            // was landing here, in creating and placing the viewport's line elements and in whatever
+            // onWindowChanged wakes up.
+            long recycled = FrameProfile.begin();
             for (var iterator = realisedLines.entrySet().iterator(); iterator.hasNext(); ) {
                 var entry = iterator.next();
                 if (entry.getKey() < first || entry.getKey() > last) {
@@ -5089,15 +5306,33 @@ public class TextEditor extends ScrollerView implements UndoScope {
                     iterator.remove();
                 }
             }
+            FrameProfile.step(recycled, "ed:recycleLines");
+            long realised = FrameProfile.begin();
+            int created = 0;
             for (int viewLine = first; viewLine <= last; viewLine++) {
                 if (!realisedLines.containsKey(viewLine)) {
                     realisedLines.put(viewLine, realiseLine(viewLine));
+                    created++;
                 }
             }
+            FrameProfile.step(realised, "ed:realiseLines x" + created);
             firstRealised = first;
             lastRealised = last;
-            highlightsDirty = true;
+            // THE WINDOW MOVED, WHICH IS NOT THE SAME AS THE CONTENT CHANGING.
+            //
+            // This set `highlightsDirty`, and that flag means "every row's bands are wrong" -- so a
+            // scroll, which moves the window on every frame, forced a full rebuild of every realised
+            // row's bands on every frame. It is the reason the per-row skip in refreshHighlights could
+            // never fire: the counter read 34/34 throughout.
+            //
+            // What the realise loop actually knows is that the VIEWPORT moved, so refreshHighlights must
+            // run rather than early-out on an unchanged range. Which rows within it still hold good bands
+            // is a per-row question, and `bandsShownFor` is what answers it.
+            highlightWindowMoved = true;
+            long announced = FrameProfile.begin();
             onWindowChanged.emit();
+            FrameProfile.step(announced, "ed:onWindowChanged -> "
+                    + onWindowChanged.connectionCount() + " listeners");
         }
         // EVERY FRAME, not only when the realised set changes. The lines live in a scroll-exempt viewport
         // now, so they no longer get the scroll translate for free -- their `top` is baked in by
@@ -5108,26 +5343,47 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // replaceOrPutCandidate no-ops on an unchanged value, so a frame that did not scroll writes
         // nothing. It is also the rebinding path, not the recycling one -- recycling every frame is what
         // cleared highlights and made the colours flicker.
+        long profiled = FrameProfile.begin();
         rebindRealisedLines();
+        FrameProfile.end(profiled, "ed:rebind");
         // BEFORE anything reads the scroll extent, and exactly once. getScrollWidth is a pure accessor
         // over the mark this grows; see its note for why it must not do the scan itself.
+        profiled = FrameProfile.begin();
         measureWidestRealisedLine();
+        FrameProfile.end(profiled, "ed:measure");
+        profiled = FrameProfile.begin();
         syncLineFonts();
+        FrameProfile.end(profiled, "ed:fonts");
+        profiled = FrameProfile.begin();
         refreshHighlights(first, last);
+        FrameProfile.end(profiled, "ed:highlights");
+        profiled = FrameProfile.begin();
         layOutTextViewport();
+        FrameProfile.end(profiled, "ed:viewport");
         // Every extracted part, in one pass. Monaco gates each on a dirty flag; this does not, and that is
         // now stated where the flag used to be rather than implied by a field nobody set. See
         // EditorViewPart.
         for (EditorViewPart part : viewParts) {
+            long partStart = FrameProfile.begin();
             part.render(first, last);
+            FrameProfile.end(partStart, "part:" + part.getClass().getSimpleName());
         }
+        // THE TAIL WAS NEVER TIMED, and ed:updateWindow reports 40ms while everything named inside it
+        // sums to 22. Four calls sat past the parts loop with no bucket of their own, which is exactly
+        // how a cost stays invisible while the number above it is read over and over.
+        profiled = FrameProfile.begin();
         insetHorizontalBarPastGutter();
+        FrameProfile.end(profiled, "ed:insetBar");
         // AFTER the parts have rendered, so a layer built on this frame is moved on this frame rather
         // than drawing once at the unscrolled origin. It is a transform, so nothing below it re-lays out.
+        profiled = FrameProfile.begin();
         syncScrollLayers();
+        FrameProfile.end(profiled, "ed:syncScrollLayers");
         // The pause that finishes a word, checked once a frame -- there is no other timer in the editor
         // and adding one for this would be a thread to keep in step with the frame it reports to.
+        profiled = FrameProfile.begin();
         settleSyntaxIfIdle();
+        FrameProfile.end(profiled, "ed:settleSyntax");
         // THE POPUP RE-ANCHORS HERE, once a frame, and not only when the caret moves.
         //
         // The anchor is derived from measured row widths, and those are computed in this very method --
@@ -5136,7 +5392,9 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // origin, and it drew neatly over the editor's top-left corner: plausible enough to look like a
         // placement policy rather than an unmeasured read. Re-anchoring per frame also keeps it correct
         // through a scroll, which no caret-driven update would have caught either.
+        profiled = FrameProfile.begin();
         suggest.updateAnchor();
+        FrameProfile.end(profiled, "ed:suggestAnchor");
     }
 
     /**
@@ -5178,6 +5436,10 @@ public class TextEditor extends ScrollerView implements UndoScope {
         }
         layOutLine(viewLine, line);
         if (line.getParent() == null) linesLayer().addInternalChild(line);
+        // AND SHOWN, by the same route and for the same reason. @see #recycleLine
+        StyleGroup.importantPipeline(line.getStyle().getLayoutGroup(),
+                l -> l.display(TaffyDisplay.FLEX));
+        line.getStyle().taffyBridge.setDisplay(TaffyDisplay.FLEX);
         return line;
     }
 
@@ -5216,11 +5478,66 @@ public class TextEditor extends ScrollerView implements UndoScope {
         ((UIText) line.getChildren().get(0)).setText(viewLineDisplayText(viewLine));
     }
 
+    /**
+     * Which view line each realised element last published highlight bands for.
+     *
+     * <p>The memo behind {@link #refreshHighlights}'s per-row skip. Keyed by ELEMENT rather than by view
+     * line, because a scroll is exactly the case where the same view line is shown by a different element
+     * and the same element shows a different view line -- so the question worth asking is "is this element
+     * still showing what it published for", and the view line alone cannot answer it.</p>
+     *
+     * <p>Identity-keyed and weak, so a line element that is dropped for good takes its entry with it. It
+     * never needs invalidating by content: anything that changes what a row's bands ARE sets
+     * {@code highlightsDirty}, and that rebuilds every row regardless of what is recorded here.</p>
+     */
+    private final Map<UIElement, Integer> bandsShownFor =
+            java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
+
     private void recycleLine(UIElement line) {
+        // IT IS ABOUT TO SHOW SOMETHING ELSE. The highlights are cleared just below, so the record of what
+        // they were must go with them or the next row to land on this element is skipped as up to date.
+        bandsShownFor.remove(line);
         // A pooled line reused for a different row would otherwise keep the old row's highlights, which
         // is worse than none: the ranges are offsets into a string that has been replaced.
         textOf(line).highlights().clear();
-        linesLayer().removeInternalChild(line);
+        // HIDDEN, NOT DETACHED -- the pool/hide idiom `DecorationPool` already uses one layer up.
+        //
+        // This pooled the Java objects and threw away their tree membership, which is the expensive half:
+        // `removeInternalChild` unregisters the whole subtree, destroying a Taffy node for the line and
+        // one for its UIText, and the matching `addInternalChild` on the way back registers them again --
+        // and a registration invalidates the style match, so the cascade re-runs over every line that
+        // came back.
+        //
+        // It is paid on every SCROLL, and in bulk whenever a viewport's worth turns over at once. The
+        // case that made it visible is a tab switch: an unselected pane is `display: none`, a hidden box
+        // measures zero, and the windowing above reads zero as "one line is on screen" -- so switching
+        // away recycles the whole viewport and switching back realises it again. Measured on the frame
+        // after closing one of two open tabs, which is a switch to the survivor:
+        // `UIWindow.registerElement x181`, `style:drainDirtyMatch 6,607us`, `layout 7,282us`.
+        //
+        // Hiding costs one IMPORTANT-origin display write, and `replaceOrPutCandidate` no-ops when the
+        // value is unchanged. A hidden element takes no layout and paints nothing, so a pool of them is
+        // bounded by the largest viewport this editor has ever shown -- which is what it would hold
+        // detached anyway.
+        // THROUGH THE CASCADE, at IMPORTANT origin -- NOT `taffyBridge.setDisplay`, which is immediate
+        // and was tried first. A direct Taffy write leaves no candidate behind, so the next thing to
+        // re-match this element resolves `display` to its INITIAL value and pops the pooled line back
+        // into layout. Re-matching a line is ordinary: `invalidateStyleMatch` recurses, so any class
+        // change on the editor reaches every line under it, pool included.
+        //
+        // Immediate in practice all the same. `display` is transitionable and its DISPLAY_ALLOW_DISCRETE
+        // interpolator holds the visible end until the very end -- but only while a transition is
+        // RUNNING, and nothing declares one on a line.
+        StyleGroup.importantPipeline(line.getStyle().getLayoutGroup(),
+                l -> l.display(TaffyDisplay.NONE));
+        // AND STRAIGHT AT TAFFY TOO, which is not belt-and-braces -- the two do different halves. The
+        // candidate is what SURVIVES: without it the next re-match resolves `display` to its initial
+        // value and pops the pooled line back into layout, and re-matching a line is ordinary, since
+        // `invalidateStyleMatch` recurses and any class change on the editor reaches the whole pool. The
+        // direct write is what makes it take effect NOW: this runs from a ticker, after the frame's
+        // cascade has already drained, so a candidate alone leaves the line laid out and painted for one
+        // more frame -- a ghost row wherever the viewport just turned over.
+        line.getStyle().taffyBridge.setDisplay(TaffyDisplay.NONE);
         linePool.addLast(line);
     }
 

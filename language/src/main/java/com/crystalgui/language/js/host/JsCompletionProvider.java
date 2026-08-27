@@ -135,16 +135,91 @@ public final class JsCompletionProvider implements CompletionProvider {
         sampled = false;
 
         int wordStart = Math.max(0, request.offset() - request.prefix().length());
-        int dot = receiverEndingAt(wordStart);
-        List<CompletionItem> items = dot >= 0
-                ? memberItems(current, dot, request.offset())
-                : openCodeItems(current, request);
+        // AN IMPORT IS ITS OWN CONTEXT, and it is asked FIRST because nothing else may answer there.
+        // @see #importItems
+        List<CompletionItem> imported = importItems(request.offset());
+        int dot = imported != null ? -1 : receiverEndingAt(wordStart);
+        List<CompletionItem> items = imported != null
+                ? imported
+                : dot >= 0
+                        ? memberItems(current, dot, request.offset())
+                        : openCodeItems(current, request);
 
         boolean truncated = items.size() > MAX_ITEMS;
         if (truncated) items = items.subList(0, MAX_ITEMS);
         boolean partial = truncated || sampled;
         answer.accept(Versioned.of(current.version(),
                 partial ? CompletionList.partial(items) : CompletionList.complete(items)));
+    }
+
+    /**
+     * Packages and types under an {@code import}, or null when the caret is not in one.
+     *
+     * <h3>An import names a TYPE, so the JavaScript scope is not a candidate list</h3>
+     *
+     * <p>Nothing declared in the file, and none of the runtime's globals, is a legal continuation of
+     * {@code import }. Without a context of its own the popup fell through to open code, so typing
+     * {@code import j} offered a local named {@code jj}, and {@code JSON}, {@code Java} and {@code
+     * Object} from Rhino -- three of them being things you cannot import and one of them a variable.
+     * The package roots {@code java} and {@code javax} were in there too, which is what made it read as
+     * a list with rubbish in it rather than as the wrong list.</p>
+     *
+     * <p>It answered correctly only after the first dot, because {@code packageMembersAt} hangs off a
+     * dot and a bare {@code j} has none. Asked here instead, the whole qualified name is handled by one
+     * branch: {@code childrenOf("", "j")} for a root and {@code childrenOf("java.util", "Li")} for a
+     * segment, which is the same query the Java side has used since it stopped slicing {@code allUnder}
+     * by hand.</p>
+     *
+     * <p>Null rather than an empty list, because the two mean opposite things: null is "not an import,
+     * carry on", and empty is "an import with nothing to offer" -- and falling through on the second
+     * would put the scope back in exactly the list this exists to keep it out of.</p>
+     */
+    @Nullable
+    private List<CompletionItem> importItems(int caret) {
+        if (types == null) return null;
+        String typed = importPrefixAt(buffer.toString(), caret);
+        if (typed == null) return null;
+
+        int lastDot = typed.lastIndexOf('.');
+        String parent = lastDot < 0 ? "" : typed.substring(0, lastDot);
+        String partial = lastDot < 0 ? typed : typed.substring(lastDot + 1);
+        return childrenRows(parent, partial);
+    }
+
+    /**
+     * What has been typed of the name in {@code import <name>}, or null when this is not that line.
+     *
+     * <p>Read off the TEXT rather than the tree, and it has to be: {@code JsImports} blanks every import
+     * statement before Rhino parses one -- Rhino reads {@code import a.b.C;} as an ES module declaration
+     * and the error poisons the file -- so there is no node here to ask.</p>
+     *
+     * <p>A finished import is not a context any more, which is what the {@code ;} test is for: the caret
+     * sitting after {@code import java.util.List;} is in open code on that line.</p>
+     */
+    @Nullable
+    private String importPrefixAt(String text, int caret) {
+        if (caret <= 0 || caret > text.length()) return null;
+        // The caret must be PAST 0 to have a preceding character. Searching from `max(0, -1)`
+        // finds a newline AT index 0, which puts the line start one past the caret and throws --
+        // reachable from any document whose first character is a newline.
+        int lineStart = text.lastIndexOf('\n', caret - 1) + 1;
+        if (lineStart > caret) return null;
+        String line = text.substring(lineStart, caret);
+
+        int at = 0;
+        while (at < line.length() && Character.isWhitespace(line.charAt(at))) at++;
+        if (!line.startsWith("import", at)) return null;
+
+        String tail = line.substring(at + "import".length());
+        // The space is required: `imported` starts with `import` and is an ordinary identifier.
+        if (tail.isEmpty() || !Character.isWhitespace(tail.charAt(0))) return null;
+        tail = tail.trim();
+        if (tail.indexOf(';') >= 0) return null;
+        // Whitespace inside the name means a second token has begun -- no longer one qualified name.
+        for (int i = 0; i < tail.length(); i++) {
+            if (Character.isWhitespace(tail.charAt(i))) return null;
+        }
+        return tail;
     }
 
     /**
@@ -248,30 +323,48 @@ public final class JsCompletionProvider implements CompletionProvider {
         String chain = packageChainEndingAt(text, dotOffset);
         if (chain == null) return null;
 
-        ScriptPolicy current = policy.get();
-        if (!current.allowsPackage(chain)) return List.of();
+        return childrenRows(chain, "");
+    }
 
-        // THE SIMPLE NAME OF EVERY CLASS UNDER THE PREFIX, and the next segment of every package under it.
-        // Asked of the index by the LAST segment, because that is the only thing it is keyed by -- the
-        // qualified name is then filtered here, which is one pass over a bounded answer.
+    /**
+     * The rows for what sits directly under {@code chain} -- its types, then its sub-package segments.
+     *
+     * <p>Its own method because both callers build the identical list and only differ in how they found
+     * the chain: a dot in open code, or an {@code import} line. A second transcription would be a second
+     * place for the kind lookup and the policy filter to drift.</p>
+     */
+    private List<CompletionItem> childrenRows(String chain, String partial) {
+        ScriptPolicy current = policy.get();
+        // The ROOT is not a package and has no name to refuse; asking would refuse every import.
+        if (!chain.isEmpty() && !current.allowsPackage(chain)) return List.of();
+
+        // `childrenOf`, WHICH IS THE QUERY FOR THIS, rather than `allUnder` sliced by hand.
+        //
+        // This used to walk everything recursively under the prefix and derive both lists from it, which
+        // is the alphabet-truncation `childrenOf` was written to end: that answer is capped, so
+        // `java.util.` stopped inside the F's and offered neither `List` nor `Map` -- and the sub-package
+        // segments were whatever those first forty happened to mention, so `function`, `jar` and
+        // `logging` were absent too. Java stopped doing this and JavaScript went on doing it, against the
+        // same index. @see TypeIndex#childrenOf
         List<CompletionItem> items = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
-        String prefix = chain + ".";
-        for (TypeIndex.Entry entry : types.filtered(current::allowsClass).allUnder(prefix).entries()) {
-            String rest = entry.qualifiedName().substring(prefix.length());
-            int dot = rest.indexOf('.');
-            if (dot < 0) {
-                if (seen.add(rest)) {
-                    items.add(CompletionItem.builder(rest, SymbolKind.CLASS)
-                            .detail(chain).filterText(rest).insertText(rest).build());
-                }
-            } else {
-                String segment = rest.substring(0, dot);
-                if (seen.add(segment)) {
-                    items.add(CompletionItem.builder(segment, SymbolKind.PACKAGE)
-                            .detail(chain).filterText(segment).insertText(segment)
-                            .sortText("~" + segment).build());
-                }
+        TypeIndex.Filtered filtered = types.filtered(current::allowsClass);
+        TypeIndex.Children children = filtered.childrenOf(chain, partial);
+        for (TypeIndex.Entry entry : children.types()) {
+            String simple = entry.simpleName();
+            if (!seen.add(simple)) continue;
+            // WHAT IT IS, read from the class file. Every row was built as a CLASS, so an interface, an
+            // enum and an annotation all drew a class glyph -- in the one popup whose whole content is
+            // types. The Java side has asked `kindOf` since its rows were built.
+            TypeIndex.Kind kind = filtered.kindOf(entry);
+            items.add(CompletionItem.builder(simple, kind.kind())
+                    .detail(chain).filterText(simple).insertText(simple).build());
+        }
+        for (String segment : children.packages()) {
+            if (seen.add(segment)) {
+                items.add(CompletionItem.builder(segment, SymbolKind.PACKAGE)
+                        .detail(chain).filterText(segment).insertText(segment)
+                        .sortText("~" + segment).build());
             }
         }
         // AN INDEX-BACKED LIST IS A SAMPLE, so the session must ask again as the query narrows.

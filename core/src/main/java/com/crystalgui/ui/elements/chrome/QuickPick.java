@@ -1,6 +1,7 @@
 package com.crystalgui.ui.elements.chrome;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.property.ObservableList;
 import com.crystalgui.core.search.SearchQuery;
 import com.crystalgui.core.signal.Signal;
@@ -271,14 +272,15 @@ public class QuickPick extends Popover {
         // hostFor, not the root: a root that refuses public children -- any composite, CrystalEditor
         // included -- would throw here. Null `near` means "window level", which the palette is.
         window.addOverlay(this, null);
-        if (retainQuery && !search.getText().isEmpty()) {
-            // SELECTED, not merely present. An unselected restored query is the "filtered with no visible
-            // indication" complaint this used to answer by clearing; selected, the first character
-            // replaces the lot and the box reads as a fresh one that happens to be pre-filled.
-            search.field().selectAll();
-        } else {
-            search.setText("");
-        }
+        // SELECTED, not merely present -- but not here. An unselected restored query is the "filtered
+        // with no visible indication" complaint this used to answer by clearing; selected, the first
+        // character replaces the lot and the box reads as a fresh one that happens to be pre-filled.
+        //
+        // The selection is made in `onOpened` instead, because `showAt` below is what opens the popover
+        // and opening is what takes focus -- and `requestFocus` puts a caret in the field, which collapses
+        // any selection made before it. Selecting here therefore ran, and was undone one call later: the
+        // query came back, the caret sat at the end of it, and typing APPENDED. @see #onOpened
+        if (!retainQuery || search.getText().isEmpty()) search.setText("");
         // Point-anchored with a null invoker: reposition() below overrides placement entirely, and a null
         // invoker is correct because a palette is not a toggle -- naming a trigger surface as the invoker
         // would exempt that whole surface from light dismiss.
@@ -363,6 +365,8 @@ public class QuickPick extends Popover {
     protected void onOpened() {
         UIWindow window = getAttachedWindow();
         if (window != null) window.getInputHandler().requestFocus(search.field());
+        // AFTER the focus, which is the whole reason this is not in `open`. @see #open
+        if (retainQuery && !search.getText().isEmpty()) search.field().selectAll();
     }
 
     /**
@@ -429,13 +433,21 @@ public class QuickPick extends Popover {
 
     /** Re-asks the source and rebuilds the row model. */
     public void refresh() {
+        // ONCE PER KEYSTROKE. Typing "Minecraft" runs this nine times, and every run re-asks the source.
+        long profiled = FrameProfile.enter("QuickPick.refresh '" + search.getText() + "'");
+        long timed = FrameProfile.begin();
         QuickPickSource.Batch batch =
                 QuickPickSource.drain(source, SearchQuery.of(search.getText()), MAX_RESULTS);
+        FrameProfile.step(timed, "source.drain");
         List<QuickPickEntry> entries = batch.entries();
+        timed = FrameProfile.begin();
         results.clear();
         for (QuickPickEntry entry : entries) results.add(entry);
+        FrameProfile.step(timed, "results.replace " + entries.size() + " rows");
         setTruncated(batch.truncated());
+        timed = FrameProfile.begin();
         sizeListToContent(entries.size());
+        FrameProfile.step(timed, "sizeListToContent");
         // Land on the best row that can actually be chosen, so Enter on an untouched query does the obvious
         // thing. This is why the source's ORDER is a contract rather than a suggestion -- and why the search
         // is for the first ENABLED row rather than simply index 0, which may be dimmed.
@@ -456,6 +468,7 @@ public class QuickPick extends Popover {
             list.setFocusedIndex(-1);
             list.clearSelection();
         }
+        FrameProfile.leave(profiled, "QuickPick.refresh");
     }
 
     /**

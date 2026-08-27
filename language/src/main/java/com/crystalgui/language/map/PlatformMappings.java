@@ -156,17 +156,55 @@ public final class PlatformMappings {
     }
 
     /**
-     * The DECISION, always synchronous. Returns the platform when a network fetch is still needed.
+     * The DECISION of a {@link #claim()}, <b>on the calling thread</b>. Returns the platform when a network
+     * fetch is still owed, and null when there is nothing left to do.
+     *
+     * <h3>Why a caller must run this itself rather than let a job do it</h3>
      *
      * <p>Split from the fetch because a mapping already in the cache must be applied <b>before the first
      * analysis</b>, on whatever thread asked — otherwise the editor shows runtime names and then silently
      * changes its mind a moment later, which reads as the names being unstable rather than as a load
      * having completed. Only the network half is worth moving off the caller.</p>
+     *
+     * <p>Putting the whole of {@link #acquireClaimed} in a job puts this half in there too, and that is
+     * <b>not</b> merely late — it makes a cached mapping depend on the job running at all. Measured on
+     * {@code runObfClient}: {@code mcp_stable/12} was complete on disk, the claim was made at mod init, the
+     * job was submitted, and no branch of this method ever executed — no mapping line in any log of any run,
+     * and every compiled script cached under a key ending {@code -identity-8}. The script then called
+     * {@code Minecraft.getMinecraft()} against a runtime that only has {@code func_71410_x} and died with
+     * {@code NoSuchMethodError}. A cache read is a parse and costs nothing; there is no reason for it to be
+     * anywhere but here.</p>
+     *
+     * @see #fetchClaimed
      */
+    public static ScriptService decideClaimed() {
+        return decide();
+    }
+
+    /**
+     * The network half of a {@link #claim()}, for a caller that ran {@link #decideClaimed} itself.
+     *
+     * <p>Pass whatever {@code decideClaimed} handed back; it is never null there.</p>
+     */
+    public static void fetchClaimed(ScriptService platform, Progress progress,
+                                    java.util.function.BooleanSupplier cancelled) {
+        fetch(platform, progress == null ? Progress.NONE : progress, cancelled);
+    }
+
     private static ScriptService decide() {
 
         ScriptService platform = CgPlatform.get(ScriptServices.SERVICE);
-        if (platform == ScriptService.NONE) return null;
+        if (platform == ScriptService.NONE) {
+            // SAID, because this was the one branch out of five that returned in silence -- and silence
+            // here is indistinguishable from every other way of ending up with identity names. It is also
+            // the branch a THREADING or CLASSLOADER fault arrives through: a worker that cannot see a
+            // service the client thread provided, or a second copy of this class defined inside the engine
+            // band, both present exactly as "no platform" and neither leaves any other trace.
+            System.err.println("[crystalgui] mappings: NOT_CONFIGURED — no script platform is registered"
+                    + " (asked from " + Thread.currentThread().getName() + ")"
+                    + "; runtime names will be shown as they are");
+            return null;
+        }
 
         NamespaceProbe probe = platform.namespaceProbe();
         MappingCoordinates coordinates = platform.mappings();

@@ -27,10 +27,10 @@
 
 theme {
     /* ── Surfaces ──
-     * TRANSPARENT document fill, for the reason dark-plus.css records at length: an opaque fill is a
-     * SQUARE painted over the rounded island beneath it, which is how the editor loses its corners. A
-     * scheme whose paper genuinely differs from the panel sets a colour and accepts square corners. */
-    --editor-bg: #00000000;
+     * OPAQUE document fill, for the reason dark-plus.css now records at length: the corner cost it was
+     * avoiding no longer exists (the editor carries its own bottom radius), and a transparent paper is
+     * only "the same pixels" on a DARK theme -- on a light one this scheme's ink lands on white. */
+    --editor-bg: #191A1C;
     --editor-fg: #BCBEC4;
     --editor-caret: #CED0D6;
     --editor-current-line: #1F2024;

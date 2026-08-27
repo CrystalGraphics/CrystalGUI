@@ -114,6 +114,63 @@ public class EditorViewTest extends EditorTestBase {
     }
 
     /**
+     * <b>Typing over a SELECTION must not throw.</b>
+     *
+     * <h3>An edit is a range, and the shift treated it as a point</h3>
+     *
+     * <p>{@code shiftRowSyntax} took the edit's offset and its net delta, and asked of each token whether
+     * it began before or after that one offset. For an insertion those are the same thing — nothing is
+     * consumed, so the point IS the range — and every other test here types at a caret, so the difference
+     * never appeared.</p>
+     *
+     * <p>Replacing a selection is where they part. The delta is {@code inserted - selectionLength} and
+     * hugely negative, while a token that lived <em>inside</em> the selection still answers "after the
+     * offset" and is shifted by it. {@code SyntaxToken}'s constructor refuses the result, so one keystroke
+     * threw {@code IllegalArgumentException: bad token range -2..1} out of the buffer's change signal, on
+     * the frame thread — which on a Minecraft host is a crash report titled "Rendering screen", two layers
+     * away from anything about syntax.</p>
+     *
+     * <h3>The fixture has to put a TOKEN inside the selection, and the obvious one does not</h3>
+     *
+     * <p>Selecting {@code value} in {@code int value = 1;} reproduces nothing: {@link KeywordTokenizer}
+     * emits keywords, types, strings and numbers, and an identifier is none of those — so the selection
+     * covers no token and both branches behave identically. Measured, not assumed: that fixture passed
+     * against the unfixed build.</p>
+     *
+     * <p>So the selection starts at column 1 and swallows the {@code int} at column 2, which is the shape
+     * the crash needs — a token whose start is past the edit's offset and inside its extent. The second
+     * {@code int} sits beyond the selection and must survive, which exercises the other branch: the one
+     * that still has to shift, and by the right amount.</p>
+     *
+     * <p>Driven through {@code insertAtCaret}, which is what {@code typeCharacter} calls — it builds a
+     * {@code Change(selection.start(), selection.end(), text)} per caret, so a selection makes it the
+     * replacement path exactly as a keystroke does.</p>
+     */
+    @Test
+    public void typingOverASelectionDoesNotThrow() {
+        build("x int value; int z;" + NL + "int y = 2;");
+        editor.setTokenizer(com.crystalgui.text.syntax.KeywordTokenizer.java());
+        settle();
+        editor.updateWindow();
+        settle();
+
+        // Columns 1..7 -- " int v" -- which starts BEFORE the `int` token at column 2 and ends inside the
+        // identifier after it. Six characters out, one in.
+        editor.setSelection(editor.buffer().pointToOffset(new TextPoint(0, 1)),
+                editor.buffer().pointToOffset(new TextPoint(0, 7)));
+        editor.insertAtCaret("v");
+
+        assertEquals("the row's text must be what was typed over it",
+                "xvalue; int z;", editor.buffer().line(0));
+
+        settle();
+        editor.updateWindow();
+        settle();
+        assertFalse("the row lost its colours entirely",
+                ((UIText) linesOf().get(0).getChildren().get(0)).highlights().get("type").isEmpty());
+    }
+
+    /**
      * <b>Pressing Enter must not drop the highlights either.</b> The first fix spared edits that kept the
      * line count and still rebuilt on one that changed it — so typing was smooth and Enter still flashed.
      * The realised map is keyed by row index, so rebinding by row is correct however far the rows shifted.
