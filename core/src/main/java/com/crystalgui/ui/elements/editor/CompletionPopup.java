@@ -544,6 +544,16 @@ public final class CompletionPopup extends Popover {
 
     private void refresh() {
         if (session == null) return;
+        // A LIST WITH NOTHING IN IT IS NOT A LIST. An empty answer that is still flagged incomplete keeps
+        // the session ALIVE on purpose -- narrowing may reach rows the provider never sent -- but there is
+        // nothing to put on screen meanwhile, and what showed was a bare hint strip floating over the line
+        // being typed. Hidden rather than closed, so a re-query that does find something can simply show
+        // it again without reopening a session the caret never left.
+        StyleGroup.importantPipeline(getStyle().getLayoutGroup(), l -> l.display(
+                session.visibleRows().isEmpty()
+                        ? dev.vfyjxf.taffy.style.TaffyDisplay.NONE
+                        : dev.vfyjxf.taffy.style.TaffyDisplay.FLEX));
+        if (session.visibleRows().isEmpty()) return;
         rows.clear();
         for (CompletionSession.Row row : session.visibleRows()) rows.add(row);
         sizeToContent(rows.size());
