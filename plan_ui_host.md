@@ -1341,15 +1341,29 @@ method bodies, both lazy, both invoked only on their own side. A concrete `Machi
 would not be, which is why the base is `Panel<M>` — **a generic field erases to `Object`** in the
 descriptor, so the type never appears there, and `model()` casts inside a method body.
 
-### What must be measured, not assumed
+### Measured, not assumed — **and it holds**
 
-Whether HotSpot's verifier forces class loading for types referenced in **method bodies**. It should
-not — the split verifier trusts the `StackMapTable` rather than resolving assignability — but this
-design rests on it, so it gets an experiment rather than a belief.
+Whether HotSpot forces class loading for types named only in **method bodies** is the one thing this
+design rests on, so it was run rather than reasoned about.
 
-`:mc1710:serverSmoke` already asserts *"no client-only class was loaded"*, so the test is cheap: put a
-deliberately client-only reference inside a `client()` method body, boot a dedicated server, and see
-whether it loads. **That is the one thing standing between this and being obviously correct.**
+A scratch `VerifierProbe` was loaded on a real dedicated server (`:mc1710:serverSmoke`) while naming
+`org.lwjgl.input.Keyboard` in both a method **body** and a method **signature**. It loaded, its other
+method ran, and the smoke test still reported *no client-only class loaded*.
+
+**The first attempt was worthless and is worth recording as a trap.** It named
+`net.minecraft.client.Minecraft` — and a dev dedicated server has Minecraft's client classes on the
+classpath, so resolution could not have failed and the experiment proved nothing. LWJGL is
+*genuinely* absent there, and the same run says so out loud:
+`NoClassDefFoundError: org/lwjgl/LWJGLException` from `CgPlatform.register`. **An experiment against
+a class that is present is not an experiment.**
+
+So the rule is confirmed on the actual target JVM:
+
+| | Resolves | So |
+|---|---|---|
+| field descriptor | at **class load** | a side-specific field breaks the other side |
+| method body | lazily, on first execution | `serve()` may name a server type, `client()` a client one |
+| method signature / return type | lazily | same |
 
 ### Costs, accepted
 
