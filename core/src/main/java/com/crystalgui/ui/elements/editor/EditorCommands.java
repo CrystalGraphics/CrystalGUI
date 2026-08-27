@@ -80,6 +80,33 @@ public final class EditorCommands {
     }
 
     /**
+     * An editor, and nothing more — the floor every command here needs and half of them lacked.
+     *
+     * <h3>Why a command that takes no state of its own still needs a guard</h3>
+     *
+     * <p>{@link #on} returns without doing anything when no editor resolves, so an unguarded command is
+     * already a no-op away from an editor — it simply says so nowhere. That makes it a white row in a
+     * menu opened over the file tree which does nothing when pressed, and this codebase has twice decided
+     * that is worse than a greyed one. {@code selectAll} was fixed by hand for exactly this and carried
+     * the whole argument in a comment; {@code GO_TO_DEFINITION}'s comment claimed it was "enabled
+     * whenever an editor is focused" while having no predicate at all, so it was enabled everywhere.</p>
+     *
+     * <p>It also decides where a command <b>ranks</b>. The palette measures whether a row is available
+     * because of where it was opened by asking each command twice — once against the focused element,
+     * once against the root — so a command with no predicate is indistinguishable from one that genuinely
+     * works anywhere, and sorts among Reload from Disk and Restore Window Layout rather than with the
+     * editor's own verbs. The signal is only as honest as the commands are.</p>
+     */
+    private static Predicate<CommandContext> whenEditor() {
+        return when(editor -> true);
+    }
+
+    /** {@code Command.of} with the floor above already applied. @see #whenEditor */
+    private static Command editorCommand(String id, String label) {
+        return Command.of(id, label).enabledWhen(whenEditor());
+    }
+
+    /**
      * The nearest {@code TextEditor} at or above {@code from}.
      *
      * <p>Walks up rather than requiring the source to <em>be</em> the editor, because a command invoked
@@ -174,7 +201,7 @@ public final class EditorCommands {
         // that InputDialog lived in `chrome` -- which put an editor action in the shell's command set and
         // made `chrome` depend on `editor` for the first time. InputDialog imports nothing from chrome,
         // so it moved to `ui.elements` beside Popover and TextField, and this came home.
-        registry.register(Command.of(GO_TO_LINE, "Go To Line…")
+        registry.register(editorCommand(GO_TO_LINE, "Go To Line…")
                 .binding("Mod+G")
                 .menu(MenuId.MAIN_VIEW, "1_appearance", 20)
                 .run(on(editor -> InputDialog.ask(editor, "Go To Line", "[Line][:column]", "",
@@ -185,7 +212,7 @@ public final class EditorCommands {
         // only answer it from a cached previous resolve -- and a menu row that greys and ungreys as
         // compiles land is worse than one that is always live and sometimes does nothing. Both references
         // keep this entry enabled. @see TextEditor#goToDefinition
-        registry.register(Command.of(GO_TO_DEFINITION, "Go To Declaration")
+        registry.register(editorCommand(GO_TO_DEFINITION, "Go To Declaration")
                 .binding("Mod+B")
                 .menu(MenuId.MAIN_VIEW, "1_appearance", 10)
                 .run(on(TextEditor::goToDefinition)));
@@ -193,7 +220,7 @@ public final class EditorCommands {
         // NAMED FOR THE FEATURE, not for the trigger. Hovering is a setting on this popup rather than a
         // separate affordance, and pressing the key again promotes the same content into a tool window --
         // an id called `editor.hover` would make both of those look like new features when they land.
-        registry.register(Command.of(QUICK_DOCUMENTATION, "Quick Documentation")
+        registry.register(editorCommand(QUICK_DOCUMENTATION, "Quick Documentation")
                 .binding("Mod+Q")
                 .menu(MenuId.MAIN_VIEW, "1_appearance", 30)
                 .run(on(TextEditor::showQuickDocumentation)));
@@ -201,7 +228,7 @@ public final class EditorCommands {
         // ALT+ENTER, which is IntelliJ's and is deliberately not Mod+. VS Code puts code actions on
         // Ctrl+. and IntelliJ on Alt+Enter; the editor's own key handler returns false for any Alt chord
         // precisely so bindings like this one can exist, while Ctrl+Enter it has to keep.
-        registry.register(Command.of(SHOW_CODE_ACTIONS, "Show Context Actions")
+        registry.register(editorCommand(SHOW_CODE_ACTIONS, "Show Context Actions")
                 .binding("Alt+Enter")
                 .menu(MenuId.MAIN_VIEW, "1_appearance", 40)
                 .run(on(editor -> editor.showCodeActionsAt(editor.getCaret()))));
@@ -211,19 +238,19 @@ public final class EditorCommands {
         // it could not be rebound, could not be listed in the palette, and did not appear in a keymap
         // anybody read -- the single exception in a widget whose section header says its named actions
         // are commands. It is one now, and the handler asks the keymap like every other binding.
-        registry.register(Command.of(PREFIX + "triggerSuggest", "Trigger Suggest")
+        registry.register(editorCommand(PREFIX + "triggerSuggest", "Trigger Suggest")
                 .run(on(TextEditor::triggerSuggest)));
-        registry.register(Command.of(PREFIX + "addCaretAtNextOccurrence", "Add Caret At Next Occurrence")
+        registry.register(editorCommand(PREFIX + "addCaretAtNextOccurrence", "Add Caret At Next Occurrence")
                 .run(on(TextEditor::addCaretAtNextOccurrence)));
-        registry.register(Command.of(PREFIX + "selectAllOccurrences", "Select All Occurrences")
+        registry.register(editorCommand(PREFIX + "selectAllOccurrences", "Select All Occurrences")
                 .run(on(TextEditor::selectAllOccurrences)));
-        registry.register(Command.of(PREFIX + "addCaretAbove", "Add Caret Above")
+        registry.register(editorCommand(PREFIX + "addCaretAbove", "Add Caret Above")
                 .run(on(editor -> editor.addCaretOnAdjacentLine(-1))));
-        registry.register(Command.of(PREFIX + "addCaretBelow", "Add Caret Below")
+        registry.register(editorCommand(PREFIX + "addCaretBelow", "Add Caret Below")
                 .run(on(editor -> editor.addCaretOnAdjacentLine(1))));
 
         // ── Line operations ─────────────────────────────────────────────────────────────────────
-        registry.register(Command.of(PREFIX + "selectLine", "Select Line")
+        registry.register(editorCommand(PREFIX + "selectLine", "Select Line")
                 .run(on(TextEditor::selectLine)));
         registry.register(Command.of(PREFIX + "deleteLines", "Delete Line")
                 .run(on(TextEditor::deleteLines)).enabledWhen(whenEditable()));
@@ -263,13 +290,13 @@ public final class EditorCommands {
                 // white row in an Edit menu opened over the file tree -- and pressing it did nothing,
                 // because `on` returns when there is no editor. "A command that does nothing visible is
                 // worse than one that is greyed out" is already stated on DockCommands.TOGGLE_MAXIMIZE.
-                .enabledWhen(when(editor -> true))
+                .enabledWhen(whenEditor())
                 .run(on(editor -> editor.setSelection(0, editor.getText().length()))));
         // WITH NO SELECTION, BOTH TAKE THE LINE -- which is what both references do and what makes these
         // the chords people actually use. Requiring a selection to ENABLE them meant Ctrl+X on an
         // unselected line did nothing whatever, which reads as the editor ignoring the key rather than as
         // a disabled command. @see TextEditor#selectionOrTouchedLines
-        registry.register(Command.of(PREFIX + "copy", "Copy")
+        registry.register(editorCommand(PREFIX + "copy", "Copy")
                 .run(on(editor -> CgPlatform.input().setClipboard(editor.selectionOrTouchedLines()))));
         registry.register(Command.of(PREFIX + "cut", "Cut")
                 .run(on(editor -> {
@@ -291,23 +318,23 @@ public final class EditorCommands {
                 .enabledWhen(whenEditable()));
 
         // ── Search ──────────────────────────────────────────────────────────────────────────────
-        registry.register(Command.of(PREFIX + "find", "Find…")
+        registry.register(editorCommand(PREFIX + "find", "Find…")
                 .menu(MenuId.MAIN_EDIT, "4_find", 5)
                 .run(on(TextEditor::openFind)));
-        registry.register(Command.of(PREFIX + "replace", "Replace…")
+        registry.register(editorCommand(PREFIX + "replace", "Replace…")
                 .menu(MenuId.MAIN_EDIT, "4_find", 6)
                 .run(on(TextEditor::openReplace)));
         // THE BAR'S OWN CHORDS, as commands. They were listeners on its text fields -- six shortcuts in a
         // place no keymap could see and nobody could rebind, in an application that has a command layer and
         // an element-scoped resolver for exactly this. Every one resolves from the focused element, so they
         // only mean anything while the bar (which lives inside the editor) holds the caret.
-        registry.register(Command.of(PREFIX + "toggleMatchCase", "Match Case")
+        registry.register(editorCommand(PREFIX + "toggleMatchCase", "Match Case")
                 .run(on(e -> e.searchBar().toggleMatchCase())));
-        registry.register(Command.of(PREFIX + "toggleWholeWords", "Words")
+        registry.register(editorCommand(PREFIX + "toggleWholeWords", "Words")
                 .run(on(e -> e.searchBar().toggleWholeWords())));
-        registry.register(Command.of(PREFIX + "toggleRegex", "Regex")
+        registry.register(editorCommand(PREFIX + "toggleRegex", "Regex")
                 .run(on(e -> e.searchBar().toggleRegex())));
-        registry.register(Command.of(PREFIX + "togglePreserveCase", "Preserve Case")
+        registry.register(editorCommand(PREFIX + "togglePreserveCase", "Preserve Case")
                 .run(on(e -> e.searchBar().togglePreserveCase())));
         registry.register(Command.of(PREFIX + "replaceCurrent", "Replace")
                 .menu(MenuId.MAIN_EDIT, "4_find", 7)
@@ -321,7 +348,7 @@ public final class EditorCommands {
                 .run(on(e -> e.searchBar().toggleExclude()))
                 .enabledWhen(when(editor -> editor.matchCount() > 0)));
 
-        registry.register(Command.of(PREFIX + "find.close", "Close Find Bar")
+        registry.register(editorCommand(PREFIX + "find.close", "Close Find Bar")
                 .run(on(e -> e.searchBar().close())));
 
         registry.register(Command.of(PREFIX + "findNext", "Find Next")
@@ -330,7 +357,7 @@ public final class EditorCommands {
         registry.register(Command.of(PREFIX + "findPrevious", "Find Previous")
                 .menu(MenuId.MAIN_EDIT, "4_find", 20)
                 .run(on(TextEditor::findPrevious)).enabledWhen(when(editor -> editor.matchCount() > 0)));
-        registry.register(Command.of(PREFIX + "findWordUnderCaret", "Find Word Under Caret")
+        registry.register(editorCommand(PREFIX + "findWordUnderCaret", "Find Word Under Caret")
                 .run(on(TextEditor::findWordUnderCaret)));
 
         // ── Problems ────────────────────────────────────────────────────────────────────────────
@@ -356,11 +383,11 @@ public final class EditorCommands {
                 .menu(MenuId.MAIN_VIEW, "3_editor", 20)
                 .run(on(editor -> editor.zoomBy(-1)))
                 .enabledWhen(when(editor -> editor.getFontSize() > TextEditor.MIN_FONT_SIZE)));
-        registry.register(Command.of(PREFIX + "zoomReset", "Reset Zoom")
+        registry.register(editorCommand(PREFIX + "zoomReset", "Reset Zoom")
                 .menu(MenuId.MAIN_VIEW, "3_editor", 30)
                 .run(on(TextEditor::resetZoom)));
 
-        registry.register(Command.of(PREFIX + "toggleSoftWrap", "Toggle Soft Wrap")
+        registry.register(editorCommand(PREFIX + "toggleSoftWrap", "Toggle Soft Wrap")
                 .menu(MenuId.MAIN_VIEW, "3_editor", 40)
                 // A CHECKMARK, stated by the command rather than by whoever draws the row. The renderer
                 // asks; nothing about the View menu knows what soft wrap is. Read live, so the tick is
@@ -372,21 +399,21 @@ public final class EditorCommands {
 
         // FOLDING. Not undoable either, and for the same reason: which blocks are closed is how you are
         // looking at the file, not what the file says.
-        registry.register(Command.of(PREFIX + "fold", "Fold")
+        registry.register(editorCommand(PREFIX + "fold", "Fold")
                 .run(on(TextEditor::fold)));
-        registry.register(Command.of(PREFIX + "unfold", "Unfold")
+        registry.register(editorCommand(PREFIX + "unfold", "Unfold")
                 .run(on(TextEditor::unfold)));
-        registry.register(Command.of(PREFIX + "foldRecursively", "Fold Recursively")
+        registry.register(editorCommand(PREFIX + "foldRecursively", "Fold Recursively")
                 .run(on(TextEditor::foldRecursively)));
-        registry.register(Command.of(PREFIX + "foldAll", "Fold All")
+        registry.register(editorCommand(PREFIX + "foldAll", "Fold All")
                 .menu(MenuId.MAIN_VIEW, "4_folding", 10)
                 .run(on(TextEditor::foldAll)));
-        registry.register(Command.of(PREFIX + "unfoldAll", "Unfold All")
+        registry.register(editorCommand(PREFIX + "unfoldAll", "Unfold All")
                 .menu(MenuId.MAIN_VIEW, "4_folding", 20)
                 .run(on(TextEditor::unfoldAll)));
         for (int level = 1; level <= 7; level++) {
             final int foldLevel = level;
-            registry.register(Command.of(PREFIX + "foldLevel" + level, "Fold Level " + level)
+            registry.register(editorCommand(PREFIX + "foldLevel" + level, "Fold Level " + level)
                     .run(on(editor -> editor.foldLevel(foldLevel))));
         }
     }
