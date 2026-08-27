@@ -17,6 +17,7 @@ import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.lang.LanguageServices;
 import com.crystalgui.text.lang.Resolver;
 import com.crystalgui.text.lang.SemanticTokenProvider;
+import com.crystalgui.language.map.ReadableSymbols;
 import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.text.lang.TypeRef;
 import com.crystalgui.text.lang.Versioned;
@@ -830,7 +831,13 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
             FrameProfile.step(timed, "engine.resolveAt" + (scheduler == null ? "" : " [worker]") + " -> "
                     + (resolved == null ? "nothing"
                             : resolved.kind() + " " + resolved.container() + "." + resolved.name()));
-            return resolved;
+            // IN THE READABLE NAMESPACE, whatever the author spelled. The compile view declares a mapped
+            // member under both names so a legacy script builds, and an engine quotes whichever
+            // declaration it resolved -- so a script naming `func_71203_ab` got a popup saying exactly
+            // that, where the whole point was to read it as `getConfigurationManager`. Free for anything
+            // already readable, and here rather than in either engine because which namespace a
+            // platform's members are SHOWN in is a fact about the runtime. @see ReadableSymbols
+            return ReadableSymbols.of(resolved);
         }
 
         @Override

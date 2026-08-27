@@ -567,8 +567,14 @@ public final class RhinoSourceAnalyzer implements JsSourceAnalyzer {
                 // AND THE RESOLVER, so a Java member is coloured for what it IS rather than for the dot
                 // in front of it. Lazy like everything here, and the resolver caches per class, so a
                 // file mentioning one Java type asks about it once. @see RhinoSemanticTokens#markJavaMembers
-                tokens = root == null ? List.of()
-                        : RhinoSemanticTokens.of(root, scopes, hostBindings, imports, resolution::memberCaptureAt);
+                // MARKED EVEN WITH NO TREE, because an import line is readable in a file that does not
+                // parse -- and that is exactly when colour is worth most. The kind lookup is asked once
+                // per import rather than per use.
+                tokens = root == null
+                        ? RhinoSemanticTokens.of(null, scopes, hostBindings, imports, null,
+                                resolution::typeCaptureFor)
+                        : RhinoSemanticTokens.of(root, scopes, hostBindings, imports,
+                                resolution::memberCaptureAt, resolution::typeCaptureFor);
             }
             return tokens;
         }

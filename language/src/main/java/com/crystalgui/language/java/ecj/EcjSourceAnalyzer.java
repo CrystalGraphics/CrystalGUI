@@ -1325,10 +1325,16 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
             }
             if (binding instanceof ITypeBinding) {
                 ITypeBinding type = (ITypeBinding) binding;
+                // THE THROWABLE TEST IS SHARED, not repeated. This chain and `JavaSignatures.kindOf`
+                // genuinely disagree about annotations -- that one answers CLASS on purpose, because what
+                // reaches it is a declaration -- so they cannot be collapsed into one call. The rule for
+                // a Throwable has no such split, and duplicating it is how Go To File and the tab that
+                // opened the same file came to draw two different glyphs for one type.
                 SymbolKind kind = type.isInterface() ? SymbolKind.INTERFACE
                         : type.isEnum() ? SymbolKind.ENUM
                         : type.isAnnotation() ? SymbolKind.ANNOTATION
                         : type.isTypeVariable() ? SymbolKind.TYPE_PARAMETER
+                        : JavaSignatures.isThrowable(type) ? SymbolKind.EXCEPTION
                         : SymbolKind.CLASS;
                 return new SymbolInfo(name.getIdentifier(), kind, typeRef(type),
                         type.getPackage() == null ? null : type.getPackage().getName(), null,

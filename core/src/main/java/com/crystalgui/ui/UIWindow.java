@@ -209,12 +209,65 @@ public final class UIWindow {
 
         final var rootElement = ui.rootElement;
 
-        if (rootElement.getAttachedWindow() != this)
+        if (rootElement.getAttachedWindow() != this) {
             rootElement.setAttachedWindow(this);
+            // TRACKED FROM THE MOMENT IT HAS A TREE, which is the only state worth shutting down.
+            // @see #shutdownAll
+            LIVE.put(this, Boolean.TRUE);
+        }
 
         rootElement.initScreen(this.screenWidth, this.screenHeight);
         rootElement.getStyle().markTaffyStyleDirty();
         calculateLayout();
+    }
+
+    /**
+     * Every window with a tree, so the process can be told it is ending.
+     *
+     * <p>Weak, and deliberately: a window is owned by whatever built it, and a registry that kept one
+     * alive would turn "the host forgot to close a screen" into a leak of the whole element tree behind
+     * it. Nothing here is iterated per frame — it is read once, at shutdown.</p>
+     */
+    private static final Map<UIWindow, Boolean> LIVE = Collections.synchronizedMap(new WeakHashMap<>());
+
+    
+    public static void shutdownAll() {
+        List<UIWindow> live;
+        synchronized (LIVE) {
+            live = new ArrayList<>(LIVE.keySet());
+        }
+        for (UIWindow window : live) {
+            if (window == null) continue;
+            // ISOLATED, because one window must not take the others with it. This runs at process exit,
+            // where a tree may already be partly torn down by whatever is exiting -- a window whose
+            // content was disposed while still attached has elements with no Taffy node left, and
+            // walking one throws. The other windows still have state worth writing, and an exception
+            // escaping here would reach engine teardown.
+            try {
+                window.shutdown();
+            } catch (Throwable failed) {
+              CrystalGuiCore.LOGGER.warn(
+                        "UIWindow.shutdownAll: a window could not be taken off screen", failed);
+            }
+        }
+    }
+
+    /**
+     * Takes this window's tree off screen — the single-window half of {@link #shutdownAll()}.
+     *
+     * <p>The desktop first, so windows and their contents leave in the ordinary way rather than being
+     * torn off underneath the compositor, and then the root itself for anything living outside it.</p>
+     *
+     * <p>Idempotent: a second call finds nothing attached and does nothing, which matters because a host
+     * that closes its screen cleanly AND exits will reach this twice.</p>
+     */
+    public void shutdown() {
+        LIVE.remove(this);
+        if (!desktopSuspended) suspendDesktop();
+        UIElement rootElement = ui == null ? null : ui.rootElement;
+        if (rootElement != null && rootElement.getAttachedWindow() == this) {
+            rootElement.setAttachedWindow(null);
+        }
     }
 
     /**
@@ -689,7 +742,12 @@ public final class UIWindow {
     }
 
     public boolean isLayoutDirty() {
-        return taffyTree.isDirty(ui.rootElement.taffyNodeId);
+        // A WINDOW THAT HAS BEEN SHUT DOWN HAS NO TREE TO BE DIRTY. `shutdown()` detaches the root, which
+        // frees its Taffy node, and anything that ticks the window afterwards asked Taffy about null.
+        // Nothing ticks it again at process exit -- but "nothing does" is not the same as "nothing can",
+        // and the crash would land during teardown where it is least readable. @see #shutdown
+        NodeId root = ui == null ? null : ui.rootElement.taffyNodeId;
+        return root != null && taffyTree.isDirty(root);
     }
 
     /**
@@ -938,6 +996,10 @@ public final class UIWindow {
         // session saved afterwards walks a tree the widget has left and writes nothing -- drag the Run
         // panel's divider, close the panel, quit, and the width is gone. The mirror of registerElement.
         if (sessionState != null) sessionState.captureFrom(element);
+        // AND IF THE ROOT ITSELF IS GOING, this window has no tree left to shut down. Without this the
+        // registry keeps every window a host ever built -- weakly, so it is not a leak, but long enough
+        // that a later shutdown walks one whose elements are already gone. @see #shutdownAll
+        if (ui != null && element == ui.rootElement) LIVE.remove(this);
         // A detached element must not linger in the top layer, or it would keep painting and hit-testing
         // after leaving the tree.
         topLayer.remove(element);

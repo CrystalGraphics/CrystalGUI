@@ -91,6 +91,13 @@ public class QuickPickQueryRetentionTest extends UiTestBase {
                 pick.searchField().field().hasSelection());
         assertEquals(0, pick.searchField().field().getSelectionStart());
         assertEquals("Alph".length(), pick.searchField().field().getSelectionEnd());
+
+        // AND TYPING REPLACES IT, which is the whole point and the only thing the user can see. The
+        // assertions above describe a selection; this one describes what happens next, and a selection
+        // that is present but not honoured by the insert looks exactly like no selection at all.
+        pick.searchField().field().insertChar('B');
+        assertEquals("typing appended to the retained query instead of replacing it",
+                "B", pick.searchField().getText());
     }
 
     /**

@@ -125,6 +125,45 @@ public final class InteropResolver {
         return readable == null || readable.equals(member.name()) ? member : member.withName(readable);
     }
 
+    /**
+     * Whether {@code typed} names this member — under the name it is SHOWN by, or the runtime one it was
+     * renamed from.
+     *
+     * <h3>An obfuscated script deserves the same answer as a readable one</h3>
+     *
+     * <p>{@link #asReadable} renames every member on the way out, so {@code membersOf} offers
+     * {@code getServer} and a script spelling {@code func_71276_C} matched nothing in it. It still RAN —
+     * the runtime has that member under that name, so nothing needed translating — and the editor simply
+     * had no idea what it was: no signature, no javadoc, no semantic colour, a documentation popup with a
+     * bare word in it.</p>
+     *
+     * <p><b>This is not inherited from the Java-side work, which was measured rather than assumed.</b>
+     * The compile view teaching ECJ both spellings does not help here, because everything the Java engine
+     * reports comes back through {@code asReadable} and collapses onto the readable name — so both
+     * spellings arrive as {@code getServer} and the typed identifier matches neither. And
+     * {@code ReadableSymbols} can only rename what already resolved. The matching has to be done by the
+     * engine that did the renaming.</p>
+     *
+     * <p>Asked as "is this member called {@code typed}" rather than by translating the typed name first,
+     * and the direction matters: a mapping names the type that DECLARES a member, and at the call site
+     * all that is known is the receiver. {@code asReadable} already has the declaring class — the Java
+     * engine reported it as {@code container()} — so going back through the same owner is exact, where
+     * guessing an owner from the receiver would miss every inherited member.</p>
+     *
+     * <p>The readable name is tried first and costs one string comparison, so a readable script pays
+     * nothing for this.</p>
+     */
+    public boolean isCalled(String binaryName, SymbolInfo member, String typed) {
+        if (member == null || typed == null) return false;
+        if (typed.equals(member.name())) return true;
+        MemberNameMapper mapper = memberNames;
+        if (mapper == null) return false;
+        String owner = member.container() == null ? binaryName : member.container();
+        String internal = owner.replace('.', '/');
+        if (!mapper.mapsAnythingIn(internal)) return false;
+        return typed.equals(mapper.runtimeName(internal, member.name()));
+    }
+
     public void restrictMembersTo(@Nullable BiPredicate<String, String> policy) {
         this.allowsMember = policy;
         // The member caches go, for the reason the class half gives below: a cached list describes the

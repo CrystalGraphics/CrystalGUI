@@ -9,6 +9,7 @@ import com.crystalgraphics.platform.gl.state.CgGlSlot;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.ui.UIWindow;
 
 import java.util.concurrent.ConcurrentLinkedQueue;
 
@@ -160,6 +161,11 @@ public final class CgUiLifecycle implements CgLifecycleListener {
      */
     @Override
     public void onDestroy() {
+        try {
+            UIWindow.shutdownAll();
+        } catch (Throwable t) {
+            CrystalGuiCore.LOGGER.warn("CgUiLifecycle: failed to take the windows off screen", t);
+        }
         try {
             CgUiPaintContext.destroy();
         } catch (Throwable t) {

@@ -61,6 +61,7 @@ public class DecompiledMemberSiteTest {
             + "    void run() {\n"
             + "        TextBuffer buffer = new TextBuffer(\"x\");\n"
             + "        long v = buffer.version();\n"
+            + "        com.crystalgui.text.lang.TypeSearch.Result nested = null;\n"
             + "    }\n"
             + "}\n";
 
@@ -89,7 +90,26 @@ public class DecompiledMemberSiteTest {
         assertEquals("the member the reader asked for is not recorded", "version", site.member());
     }
 
-    /** ...and a TYPE names none, because the top of the file is where a class declaration is. */
+    /**
+     * <b>A NESTED type names itself</b>, because it is not at the top of the file it lives in.
+     *
+     * <p>The rule was "a type needs no member", which is true of a top-level class and false of a member
+     * one: {@code TypeSearch.Result} is declared partway down the file {@code TypeSearch} owns, so naming
+     * no member sends the reader to line 1 of the enclosing class. Ctrl+B opened the right file and
+     * stopped there, while the same key on one of that type's FIELDS landed correctly — a field is a
+     * member and always took the other branch.</p>
+     */
+    @Test
+    public void aSourcelessNestedTypeSiteNamesTheMember() {
+        SymbolInfo symbol = resolve("Result nested");
+        assertNotNull("nothing resolved for a nested classpath type", symbol);
+        DeclarationSite site = symbol.declaration();
+        assertNotNull("a nested type was given nowhere to go", site);
+        assertTrue(site.isLibrary());
+        assertEquals("a nested type must say which member to land on", "Result", site.member());
+    }
+
+    /** ...and a TOP-LEVEL type names none, because the top of the file is where its declaration is. */
     @Test
     public void aSourcelessTypeSiteCarriesNoMember() {
         SymbolInfo symbol = resolve("TextBuffer buffer");

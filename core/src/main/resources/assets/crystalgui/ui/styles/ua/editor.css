@@ -1127,7 +1127,8 @@ completionpopup {
     font-size: 10px;
     font-weight: bold;
     color: var(--completion-label, #D4D4D4);
-    flex-shrink: 1;
+    /* SECOND. @see .__completion-params__ */
+    flex-shrink: 100;
     min-width: 0;
     white-space: nowrap;
     text-overflow: ellipsis;
@@ -1138,7 +1139,10 @@ completionpopup {
 .__completion-params__ {
     font-size: 10px;
     color: var(--completion-params, #808080);
-    flex-shrink: 1;
+    /* GIVES FIRST, and the number says so. flex-shrink is a RATIO, not an order -- every shrinkable item
+     * gives at once, in proportion -- so "params, then the label, then the type" is spelled as three
+     * factors an order of magnitude apart rather than as three booleans. @see .__completion-detail__ */
+    flex-shrink: 1000;
     min-width: 0;
     white-space: nowrap;
     text-overflow: ellipsis;
@@ -1165,7 +1169,38 @@ completionpopup {
 .__completion-detail__ {
     font-size: 10px;
     color: var(--completion-detail, #808080);
-    flex-shrink: 0;
+    /* LAST, NOT NEVER -- and that one word is the fix.
+     *
+     * `flex-shrink: 0` was chosen so the type could never be shaved to a stub, and the reasoning above
+     * still holds: `String` must not come out as `Str`. But "never gives" is not the same claim as
+     * "gives last", and the difference only shows once the row cannot fit at all. With the label already
+     * at zero there was nothing left to give, so the row simply exceeded the popup and the type column
+     * was PAINTED OUTSIDE IT, over the editor behind -- past the scrollbar, on rows whose details were
+     * short enough to have fit anywhere.
+     *
+     * A factor a thousandth of the params' means it is untouched while anything else can still give,
+     * which preserves every case the rigid version was protecting: a squeeze is spent on the tail and
+     * then on the name, and the type only starts to ellipsise once the row has run out of everything
+     * else. `min-width: 0` is what lets the ellipsis happen at all -- without it the box cannot go below
+     * its content and the shrink factor is inert. */
+    flex-shrink: 1;
+    min-width: 0;
+    /* AND NO `max-width` HERE. A `max-width: 50%` lived here briefly, to stop a very long type crowding
+     * out a very short name, and it is the reason every type column in the game was cut to a stub: a
+     * PERCENTAGE resolves against the containing block, the row's width is not definite at the moment it
+     * is resolved, and half of an indefinite base is nothing. The detail came out about fourteen pixels
+     * wide whatever it held -- `Co`, `Pri`, `voi`, `Str` -- which reads as clipping rather than as a cap,
+     * because the box is the wrong SIZE rather than in the wrong PLACE.
+     *
+     * It looked host-specific and was not. The harness settles in a different number of passes, so its
+     * base happened to be definite by the time this resolved; that is luck rather than a difference in
+     * kind, and a percentage here is unsafe in both.
+     *
+     * The case it was written for survives without it. The factors above already spend a squeeze on the
+     * tail, then the name, and only then the type -- and a name short enough to be crowded is also short
+     * enough to survive, because a 5px label cannot give up much before the type has to start giving
+     * instead. A pixel cap is the other tempting answer and is worse: this popup is resizable, so one is
+     * either pointless at its widest or crippling at its narrowest. */
     white-space: nowrap;
     text-overflow: ellipsis;
 }

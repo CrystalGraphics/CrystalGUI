@@ -1034,13 +1034,24 @@ public final class JavaSignatures {
     /**
      * The member to look for in reconstructed output — null when the binding <b>is</b> the type.
      *
-     * <p>A type needs no member: the reader is going to the class and the top of the file is where the
-     * class declaration is. A constructor is named after its type and would find the type's own
-     * declaration, which is the same place a reader wants for it anyway.</p>
+     * <p>A TOP-LEVEL type needs no member: the reader is going to the class and the top of the file is
+     * where the class declaration is. A MEMBER type is the opposite — it is declared inside the file its
+     * enclosing class owns, so naming it is the only way to land on it rather than at the top. A
+     * constructor is named after its type and would find the type's own declaration, which is the same
+     * place a reader wants for it anyway.</p>
      */
     @Nullable
     private static String memberNameOf(IBinding binding) {
-        if (binding instanceof ITypeBinding) return null;
+        if (binding instanceof ITypeBinding) {
+            // A NESTED TYPE IS A MEMBER, and this is where saying otherwise costs a jump. A top-level
+            // class really is at the top of its file, so naming no member is right for one -- but
+            // `WorldSettings.GameType` is declared partway down `WorldSettings`, and the file it lives
+            // in is not the same question as where in it. Ctrl+B opened the class and stopped, while the
+            // same key on one of that enum's CONSTANTS landed correctly, because a field is a member and
+            // took the branch below.
+            ITypeBinding type = (ITypeBinding) binding;
+            return type.isMember() ? type.getName() : null;
+        }
         if (binding instanceof IMethodBinding && ((IMethodBinding) binding).isConstructor()) return null;
         String name = binding.getName();
         return name == null || name.isEmpty() ? null : name;
@@ -1841,7 +1852,29 @@ public final class JavaSignatures {
         if (type.isAnnotation()) return SymbolKind.CLASS;
         if (type.isInterface()) return SymbolKind.INTERFACE;
         if (type.isRecord()) return SymbolKind.RECORD;
+        // A THROWABLE IS ITS OWN KIND, and this is the only place that decides it for a resolved binding.
+        // `TypeIndex.kindOf` reads the same fact off the class file, so Go To File drew
+        // `WrongMinecraftVersionException` with the throwable glyph while the tab that OPENED it drew a
+        // plain class -- one type, two glyphs, in the same session. Everything else the engine answers
+        // about a type kind comes through here, so the tab is only where it showed.
+        if (isThrowable(type)) return SymbolKind.EXCEPTION;
         return SymbolKind.CLASS;
+    }
+
+    /**
+     * Whether {@code type}'s hierarchy reaches {@code java.lang.Throwable}.
+     *
+     * <p>The superclass chain only: an interface cannot be throwable, and {@code getSuperclass()} answers
+     * null at {@code Object} and for anything with no superclass, which ends the walk without a guard of
+     * its own. The ERASURE is compared, because a generic exception's qualified name carries its type
+     * arguments and would never equal the bare name.</p>
+     */
+    public static boolean isThrowable(ITypeBinding type) {
+        for (ITypeBinding at = type.getSuperclass(); at != null; at = at.getSuperclass()) {
+            ITypeBinding erased = at.getErasure() == null ? at : at.getErasure();
+            if ("java.lang.Throwable".equals(erased.getQualifiedName())) return true;
+        }
+        return false;
     }
 
     private static String declarationKeyword(ITypeBinding type) {

@@ -195,6 +195,27 @@ public final class MappingSet {
         return mapped == null ? runtimeName : mapped;
     }
 
+    /**
+     * The owner-keyed answer only — no unqualified fallback. @see #runtimeMethodOfOwner
+     *
+     * <p>The two tiers carry different authority in this direction too, and the difference shows the
+     * moment a caller has a receiver rather than a declaring class. A JavaScript chain ending in
+     * {@code list.get(0)} infers {@code java.lang.Object}, and the unqualified tier renamed
+     * {@code field_71075_bZ} on it anyway — so a hover reported a member called {@code capabilities}
+     * belonging to {@code Object}, which declares nothing of the sort. The name was right and the type it
+     * was attributed to was invented.</p>
+     */
+    public String readableMethodOfOwner(String runtimeOwner, String runtimeName) {
+        String mapped = methods.get(key(runtimeOwner, runtimeName));
+        return mapped == null ? runtimeName : mapped;
+    }
+
+    /** @see #readableMethodOfOwner */
+    public String readableFieldOfOwner(String runtimeOwner, String runtimeName) {
+        String mapped = fields.get(key(runtimeOwner, runtimeName));
+        return mapped == null ? runtimeName : mapped;
+    }
+
     // ── readable → runtime (the "out" direction) ────────────────────────────────────────────────
 
     public String runtimeClass(String internalName) {

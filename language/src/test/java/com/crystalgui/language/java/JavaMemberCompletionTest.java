@@ -875,4 +875,53 @@ public class JavaMemberCompletionTest {
         assertTrue("no members behind a dot inside a call: " + offered.size(),
                 offered.contains("println"));
     }
+
+    /**
+     * <b>{@code import } with nothing typed offers every package root</b>, not the keyword list.
+     *
+     * <h3>Two bugs on one path, and either alone keeps the keywords</h3>
+     *
+     * <p>{@code importPrefixAt} trimmed the whole line before testing it, which takes the TRAILING space
+     * as well -- so {@code import |} trimmed to {@code "import"}, the tail was empty, and it answered
+     * "not an import". The popup fell through to open code and offered {@code assert}, {@code boolean},
+     * {@code break} ... at a caret where no keyword is legal. And {@code importItems} bailed on an empty
+     * prefix with an empty list, so recognising the context alone would still have shown nothing.</p>
+     *
+     * <p>It came right the instant one character was typed, which is what made it read as the package
+     * list being slow rather than as the context being missed entirely.</p>
+     */
+    @Test
+    public void aBareImportOffersPackageRoots() {
+        List<String> offered = labelsOf(completeAtEndOf("import ", "import \nclass Demo {}\n"));
+        assertTrue("no package root offered at a bare `import `, got " + offered,
+                offered.contains("java"));
+        assertFalse("a keyword is not importable: " + offered, offered.contains("class"));
+        assertFalse("a keyword is not importable: " + offered, offered.contains("assert"));
+    }
+
+    /** ...and a FINISHED import is open code again, so the keywords must come back. */
+    @Test
+    public void aFinishedImportIsOpenCodeAgain() {
+        List<String> offered = labelsOf(
+                completeAtEndOf("import java.util.List;", "import java.util.List;\nclass Demo {}\n"));
+        assertFalse("a caret past the semicolon was offered nothing at all", offered.isEmpty());
+    }
+
+    /** Completes at the end of the first occurrence of {@code upTo}. */
+    private List<CompletionItem> completeAtEndOf(String upTo, String source) {
+        TextBuffer buffer = new TextBuffer(source);
+        LanguageServices services = new JavaLanguageServices(
+                buffer, engine, null, "Demo", HostClasspath.detect());
+        try {
+            int caret = source.indexOf(upTo) + upTo.length();
+            AtomicReference<CompletionList> answered = new AtomicReference<>(CompletionList.EMPTY);
+            services.completion().complete(
+                    CompletionProvider.Request.explicit(caret, ""),
+                    (Versioned<CompletionList> v) -> answered.set(v.orElse(CompletionList.EMPTY)));
+            return answered.get().items();
+        } finally {
+            services.close();
+        }
+    }
+
 }
