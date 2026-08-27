@@ -68,6 +68,10 @@ public final class ServerUiSession<T> implements UITreeObserver {
     /** What to call it on screen. @see #setTitle */
     private String title = "";
 
+    /** The panel's class name, or null. @see UiMethods#UI_CLASS */
+    @Nullable
+    private String uiClass;
+
     /** Uniqueness and persistence key, or null. @see #setKey */
     @Nullable
     private String key;
@@ -348,6 +352,12 @@ public final class ServerUiSession<T> implements UITreeObserver {
      * than applied to every window), and the client's frame takes it so the desktop can restore its
      * geometry.</p>
      */
+    /** Names the panel class the far side should initialise before decoding. @see UiMethods#UI_CLASS */
+    public ServerUiSession<T> setUiClass(@Nullable String uiClass) {
+        this.uiClass = uiClass;
+        return this;
+    }
+
     public ServerUiSession<T> setKey(@Nullable String key) {
         this.key = key;
         return this;
@@ -431,6 +441,7 @@ public final class ServerUiSession<T> implements UITreeObserver {
         // OMITTED rather than written empty when absent: "" is a legal key and would be indistinguishable
         // from "this window has none", which is the difference between deduping and not.
         if (key != null) out.putString(UiMethods.KEY, key);
+        if (uiClass != null) out.putString(UiMethods.UI_CLASS, uiClass);
         List<T> encodedSheets = new ArrayList<>(sheets.size());
         for (SheetRef ref : sheets) encodedSheets.add(SheetRef.CODEC.encode(ops, ref));
         out.putRaw("sheets", ops.createList(encodedSheets));

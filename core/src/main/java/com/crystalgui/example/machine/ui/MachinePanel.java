@@ -114,6 +114,14 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
     private int heartbeats;
     private boolean dirty = true;
 
+    /**
+     * Undoes the {@code onChanged} subscription {@link #serve} made. The model is <b>shared</b> — it
+     * outlives this window and other players' panels watch it too — so a closed window must not leave
+     * a listener behind.
+     */
+    @Nullable
+    private Runnable unsubscribe;
+
     /** The CLIENT half's scope, stored by {@link #client}. Null on the server — which is the tell. */
     @Nullable
     private ClientScope io;
@@ -370,7 +378,7 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
          */
         io.sheet(MachineStyles.SHEET, MachineStyles.CSS);
 
-        model.onChanged(() -> dirty = true);
+        unsubscribe = model.onChanged(() -> dirty = true);
 
         io.on(power, UiEventKinds.TOGGLE, ctx -> {
             boolean on = ctx.payload().getBool("checked", false);
@@ -675,6 +683,7 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
          * ever handed a scope. Worth knowing before writing anything side-specific in a panel: the
          * hook is not split per side, because most panels genuinely want the same teardown twice.
          */
+        if (unsubscribe != null) unsubscribe.run();
         MachineTrace.log(io == null ? MachineTrace.SERVER : MachineTrace.CLIENT,
                 "window closed: " + reason);
     }

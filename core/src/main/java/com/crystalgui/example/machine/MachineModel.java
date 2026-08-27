@@ -1,5 +1,8 @@
 package com.crystalgui.example.machine;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * <b>Step 1 — the truth the server owns.</b>
  *
@@ -19,7 +22,9 @@ package com.crystalgui.example.machine;
  *
  * <p>The one concession to the UI is {@link #onChanged}, and note what it is: a bare
  * {@link Runnable}. The model announces that <em>something</em> moved. It does not know what a
- * "state delta" is, and it never names a widget.</p>
+ * "state delta" is, and it never names a widget. Listeners are a <b>list</b> with an unsubscribe
+ * handle, because one machine may have any number of panels watching it at once — every player who
+ * opened the GUI has one.</p>
  */
 public final class MachineModel {
 
@@ -38,11 +43,21 @@ public final class MachineModel {
 
     private int completedCycles;
 
-    /** Fired whenever anything above changes. See the class javadoc for why it is a bare Runnable. */
-    private Runnable onChanged = () -> { };
+    /** Fired whenever anything above changes. See the class javadoc for why these are bare Runnables. */
+    private final List<Runnable> onChanged = new ArrayList<>();
 
-    public void onChanged(Runnable listener) {
-        this.onChanged = listener == null ? () -> { } : listener;
+    /**
+     * Subscribes, and returns the <b>unsubscribe</b> — a panel holds it and runs it when its window
+     * closes, or a machine that outlives its viewers accumulates listeners for windows long gone.
+     */
+    public Runnable onChanged(Runnable listener) {
+        if (listener == null) return () -> { };
+        onChanged.add(listener);
+        return () -> onChanged.remove(listener);
+    }
+
+    private void changed() {
+        for (Runnable listener : new ArrayList<>(onChanged)) listener.run();
     }
 
     public boolean isRunning() {
@@ -68,28 +83,28 @@ public final class MachineModel {
     public void setRunning(boolean value) {
         if (running == value) return;
         running = value;
-        onChanged.run();
+        changed();
     }
 
     public void setThroughput(float value) {
         float clamped = Math.max(0f, Math.min(1f, value));
         if (clamped == throughput) return;
         throughput = clamped;
-        onChanged.run();
+        changed();
     }
 
     public void setLabel(String value) {
         String cleaned = value == null ? "" : value;
         if (cleaned.equals(label)) return;
         label = cleaned;
-        onChanged.run();
+        changed();
     }
 
     /** Abandons the current cycle. What the panel's Purge button is wired to. */
     public void purge() {
         if (progress == 0f) return;
         progress = 0f;
-        onChanged.run();
+        changed();
     }
 
     /**
@@ -106,6 +121,6 @@ public final class MachineModel {
             progress = 0f;
             completedCycles++;
         }
-        onChanged.run();
+        changed();
     }
 }

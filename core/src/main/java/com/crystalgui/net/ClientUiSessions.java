@@ -45,6 +45,20 @@ public final class ClientUiSessions<T> {
     @Nullable
     private Consumer<ClientUiSession<T>> onSession;
 
+    /**
+     * Told the panel class an {@code ui/openWindow} names, BEFORE the session sees the message — so
+     * the installer can initialise the class while the description is still in flight (a cache hit
+     * decodes synchronously inside {@code acceptOpenWindow}, so later is too late). Static, because
+     * which classes this installation can show is a fact about the installation, not a connection.
+     */
+    @Nullable
+    private static Consumer<String> uiClassLoader;
+
+    /** Installs the UI-class loader. One consumer; the window layer owns it. @see UiMethods#UI_CLASS */
+    public static void setUiClassLoader(@Nullable Consumer<String> loader) {
+        uiClassLoader = loader;
+    }
+
     private ClientUiSessions(ProtocolConnection<T> connection) {
         this.connection = connection;
         connection.router().onNotify(UiMethods.OPEN_WINDOW, payload -> accept(
@@ -101,6 +115,10 @@ public final class ClientUiSessions<T> {
             CrystalGuiCore.LOGGER.warn("Ignoring an openWindow with no window id");
             return;
         }
+
+        String uiClass = in.getString(UiMethods.UI_CLASS, "");
+        Consumer<String> loader = uiClassLoader;
+        if (!uiClass.isEmpty() && loader != null) loader.accept(uiClass);
 
         ClientUiSession<T> session = sessions.get(id);
         if (session == null) {

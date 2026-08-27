@@ -23,12 +23,15 @@ import com.crystalgui.ui.UIElement;
  *         UiType.of("mymod:machine", MachinePanel::new);
  * }</pre>
  *
- * <p>From there the whole of the wiring is two call sites:</p>
+ * <p>From there the whole of the wiring is one call site:</p>
  *
  * <pre>{@code
  * ServerWindows.of(connection).open(MachinePanel.TYPE, machine);   // server, at the trigger
- * ClientWindows.register(MachinePanel.TYPE);                       // client, once at init
  * }</pre>
+ *
+ * <p>The client needs nothing: the open names the panel class on the wire ({@code UiMethods.UI_CLASS}),
+ * and {@code ClientWindows} initialises it — guarded — which runs this declaration and registers the
+ * tag before the description arrives.</p>
  *
  * <h3>What declaring one does</h3>
  *
@@ -140,7 +143,7 @@ public final class UiType<P extends UIElement & Networked<M>, M> {
     }
 
     /** The panel class. */
-    public Class<P> panelClass() {
+    public Class<P> uiClass() {
         return type;
     }
 

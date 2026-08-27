@@ -1437,8 +1437,9 @@ seams. One class per UI, one line per side:
 
 ```java
 ServerWindows.of(connection).open(MachinePanel.TYPE, machine);   // server, at the trigger
-ClientWindows.register(MachinePanel.TYPE);                       // client, once at init
 ```
+
+The client writes **nothing** — see the addendum below.
 
 ### The decisions, in the order they were made
 
@@ -1485,13 +1486,9 @@ same field-name rule. And `UiType.of` walks the declared fields recursively, reg
 panel class's tag — without which the CLIENT cannot decode a subtree naming them, because nothing on
 that side touches the child class before the description arrives.
 
-**`ClientWindows.register(TYPE)` became the client's one obligation, and forgetting it is loud.** A
-panel decodes by its registered tag, so a client where nothing touched the class refuses the
-description with an error naming the tag. That trades away "any window renders on a class-less
-client" (which modded 1.7.10 never has anyway — mods install on both sides) for the failure VI.4 was
-written about being impossible: the old forgotten registration produced a pixel-identical dead
-window; the new one produces an error naming what is missing. A decodable type with no registration
-still mounts and reports its events.
+**`ClientWindows.register(TYPE)` was briefly the client's one obligation, and then became nobody's**
+— see the Part VII addendum: `ui/openWindow` now names the panel class, so the client initialises it
+itself and the registry was deleted.
 
 **`ElementStateCoverageTest` exempts panels by RULE, not by entry.** Panel tags arrive dynamically
 (any suite touching a panel class registers one), so naming them in the coverage map would have made
@@ -1508,5 +1505,30 @@ panel is a container by construction; its state IS its described children.
 - **Dynamically created nested panels** (built in `layout`, never a field) are invisible to the
   recursive tag registration: their class must be touched at client init — a `UiType` of their own
   referenced from anywhere does it. Field children need nothing.
-- A nested panel's `ClientScope` is only created when the ROOT type is registered; an unregistered
-  window binds no panels at any depth, by design.
+- A nested panel's `ClientScope` is only created when the root binds; a root whose binding failed
+  binds no panels at any depth, by design.
+
+## Part VII addendum — auto-registration, and the example goes multi-viewer · **SHIPPED**
+
+**The client's registration line is gone, engine-wide.** `ui/openWindow` carries the panel's class
+name (`UiMethods.UI_CLASS` — additive, older peers ignore it), and `ClientUiSessions` hands it to a
+loader `ClientWindows` installs BEFORE the session sees the message — which matters because a cached
+description decodes synchronously inside `acceptOpenWindow`, so any later hook is too late. The load
+is **guarded**: `Class.forName(name, false, …)` first — resolved, nothing run — then refused unless
+the class implements `Networked`, and only then initialised. So a misbehaving server can cause
+nothing to run but a UI declaration's own `UiType.of`, which registers the tag that lets the
+description decode. Failures log once per name and the window plainly fails to decode.
+
+**The type registry went with it.** `ClientWindows` no longer keeps a `TYPES` map at all: the decoded
+root being `instanceof Networked` IS the opt-in — the panel author wrote `bound()`/`client()` on the
+panel, so of course they run; a separate registration was a vestige of the behaviour-class era.
+`register`/`unregister`/`registeredTypes` are deleted, and `MenuScreens.register` finally has no
+CrystalGUI counterpart because there is nothing left to say.
+
+**The Machine example is now one machine, many viewers.** `MachineModel` is a server singleton ticked
+with the world; every player's F8 opens their own window (keys are per-connection) over the same
+model, so flipping the switch on one client moves every open panel. That exposed a latent bug the
+per-player shape had been hiding: `MachineModel.onChanged` was a single-slot `Runnable`, so a second
+viewer's `serve()` would have silently evicted the first viewer's dirty-listener. It is a list now,
+and `onChanged` returns the **unsubscribe**, which `MachinePanel` runs in `closed()` — a shared model
+outlives its windows, and a closed window must not leave a listener behind.

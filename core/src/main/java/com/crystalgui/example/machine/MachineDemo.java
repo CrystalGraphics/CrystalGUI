@@ -86,13 +86,6 @@ public final class MachineDemo {
         // and opening one does not start it.
         MachineModel machine = new MachineModel();
 
-        // What this client does about a window of that type, said once. Delete this line and the panel
-        // still opens, still renders and still reports every event the server asked for; only the three
-        // buttons THIS side drives would go quiet.
-        // ONE ARGUMENT. The bound panel is the behaviour: the host binds a MachinePanel from the
-        // rebuilt tree and calls its wire() and client() methods. There is no behaviour class.
-        ClientWindows.register(MachinePanel.TYPE);
-
         // Where windows land. A real host wraps the tree in a WindowFrame on the desktop; here it is a
         // println. That is the whole platform surface for networked UI.
         ClientWindows.of(clientEnd).setMount(new PrintingMount());
