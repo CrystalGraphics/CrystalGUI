@@ -11,6 +11,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -334,7 +335,64 @@ public class NativeContentSlotTest extends UiTestBase {
     private static final class RecordingService implements NativeContentService {
         @Override public boolean isAvailable() { return true; }
         @Override public NativeContent resolve(String d) { return d.isEmpty() ? NativeContent.EMPTY : descriptor(d); }
+        @Override public NativeContent wrap(Object nativeValue) { return NativeContent.EMPTY; }
+        @Override public Object unwrap(NativeContent content) { return null; }
         @Override public void draw(NativeSurface surface, NativeContent content) { }
         @Override public void drawTooltip(NativeContent c, float x, float y, int w, int h) { }
+    }
+
+    // ── kind() / isBinding() — the derived defaults, end to end ─────────────
+
+    /**
+     * The interface DEFAULTS answer both questions from the descriptor alone, so every content
+     * implementation that never overrides them — harness fixtures, test doubles, a loader's minimal
+     * handle — is correct for free. The fixture here is exactly such an implementation ({@code
+     * descriptor(...)} overrides nothing but the string), which is what makes this an assertion about
+     * the defaults rather than about anyone's override.
+     */
+    @Test
+    public void kindAndBindingDeriveFromTheDescriptor() {
+        NativeContent bound = descriptor("slot:12");
+        assertSame("a slot binding CONTAINS an item", NativeContentKind.ITEM, bound.kind());
+        assertTrue("...and is the one kind of content that reads through", bound.isBinding());
+
+        NativeContent item = descriptor("item:minecraft:stone:0:64");
+        assertSame(NativeContentKind.ITEM, item.kind());
+        assertFalse("a display value holds; it does not read through", item.isBinding());
+
+        NativeContent fluid = descriptor("fluid:water:620:1000");
+        assertSame(NativeContentKind.FLUID, fluid.kind());
+        assertFalse(fluid.isBinding());
+
+        assertSame("EMPTY displays nothing", NativeContentKind.NONE, NativeContent.EMPTY.kind());
+        assertFalse(NativeContent.EMPTY.isBinding());
+    }
+
+    // ── The wrap/unwrap contract at its floor ───────────────────────────────
+
+    /**
+     * The two service states every platform passes through -- UNSUPPORTED and never-provided -- must
+     * answer wrap with EMPTY and unwrap with null, never throw and never null-for-wrap. The wrap half
+     * is the counter-assertion that keeps a null out of bind() on a platform that draws nothing; the
+     * unwrap half is what lets generic glue probe "is there a value here" without a platform check
+     * first. The identity unwrap(wrap(v)) == v needs a REAL service and is exercised by the in-game
+     * probe, where a copied stack would visibly lose its enchantment glint.
+     */
+    @Test
+    public void wrapAndUnwrapDegradeToNothingWithoutARealPlatform() {
+        // Back to genuinely absent (the @After restores UNSUPPORTED) -- get() then answers the slot's
+        // absent-value, which is the second floor implementation and otherwise unreachable.
+        CgPlatform.provide(NativeContentService.SERVICE, null);
+        NativeContentService[] floors = {
+                NativeContentService.UNSUPPORTED,
+                CgPlatform.get(NativeContentService.SERVICE),
+        };
+        for (NativeContentService service : floors) {
+            assertSame(service + " wrap(Object)", NativeContent.EMPTY, service.wrap(new Object()));
+            assertSame(service + " wrap(null)", NativeContent.EMPTY, service.wrap(null));
+            assertNull(service + " unwrap(EMPTY)", service.unwrap(NativeContent.EMPTY));
+            assertNull(service + " unwrap(null)", service.unwrap(null));
+            assertNull(service + " unwrap(foreign)", service.unwrap(descriptor("slot:3")));
+        }
     }
 }

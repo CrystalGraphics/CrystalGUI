@@ -27,6 +27,8 @@ import net.minecraftforge.client.MinecraftForgeClient;
 import net.minecraftforge.fluids.Fluid;
 import net.minecraftforge.fluids.FluidRegistry;
 import net.minecraftforge.fluids.FluidStack;
+import net.minecraftforge.fluids.FluidTankInfo;
+import net.minecraftforge.fluids.IFluidTank;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL12;
 import org.lwjgl.opengl.GL20;
@@ -153,10 +155,19 @@ public final class Mc1710NativeContentService implements NativeContentService {
         Minecraft mc = Minecraft.getMinecraft();
         if (mc == null) return;
 
-        if (surface.profile() == NativeProfile.MODEL) {
-            drawItem(mc, surface, content);
-        } else {
-            drawFluid(mc, surface, content);
+        // Dispatched on KIND, not on profile. The profile is the GL contract the paint context set up,
+        // and it merely correlates with what is being drawn -- an entity would also be MODEL, at which
+        // point a profile dispatch draws it as an item. Kind is the honest discriminator.
+        switch (content.kind()) {
+            case ITEM:
+                drawItem(mc, surface, content);
+                break;
+            case FLUID:
+                drawFluid(mc, surface, content);
+                break;
+            case NONE:
+            default:
+                break;
         }
     }
 
@@ -597,6 +608,53 @@ public final class Mc1710NativeContentService implements NativeContentService {
     private static ItemStack stackOf(NativeContent content) {
         if (content instanceof Mc1710Content.BoundSlot) return ((Mc1710Content.BoundSlot) content).stack();
         if (content instanceof Mc1710Content.DisplayItem) return ((Mc1710Content.DisplayItem) content).stack();
+        return null;
+    }
+
+    /**
+     * What this loader recognises: its item stack, and its tank types. The tanks are the detail that
+     * earns the method -- a fluid's fill fraction needs a capacity, and {@code IFluidTank} /
+     * {@code FluidTankInfo} are where 1.7.10 keeps one. A bare {@code FluidStack} carries none, so it
+     * shows as a full tank, which is the only honest reading of "here is some fluid" with no tank
+     * around it; a caller with a real tank passes the tank and gets the real fill.
+     */
+    @Override
+    public NativeContent wrap(Object value) {
+        if (value instanceof ItemStack) {
+            return new Mc1710Content.DisplayItem((ItemStack) value);
+        }
+        if (value instanceof IFluidTank) {
+            return wrapTank(((IFluidTank) value).getInfo());
+        }
+        if (value instanceof FluidTankInfo) {
+            return wrapTank((FluidTankInfo) value);
+        }
+        if (value instanceof FluidStack) {
+            FluidStack fluid = (FluidStack) value;
+            return new Mc1710Content.DisplayFluid(fluid, Math.max(1, fluid.amount));
+        }
+        return NativeContent.EMPTY;
+    }
+
+    private static NativeContent wrapTank(FluidTankInfo info) {
+        // An EMPTY tank is still a tank: null fluid wraps to empty content, which paints a bare well --
+        // exactly what an empty tank looks like -- rather than being refused as unrecognisable.
+        if (info == null) return NativeContent.EMPTY;
+        return new Mc1710Content.DisplayFluid(info.fluid, info.capacity);
+    }
+
+    /**
+     * The inverse of {@link #wrap}, sharing {@link #stackOf} so "which content types carry a stack" has
+     * one definition. A wrapped value round-trips identically; a BINDING answers its live occupant,
+     * which is the read-through semantics the binding exists for.
+     */
+    @Override
+    public Object unwrap(NativeContent content) {
+        ItemStack stack = stackOf(content);
+        if (stack != null) return stack;
+        if (content instanceof Mc1710Content.DisplayFluid) {
+            return ((Mc1710Content.DisplayFluid) content).fluid();
+        }
         return null;
     }
 

@@ -4,9 +4,9 @@ package com.crystalgui.ui.elements.slot;
  * <b>What a slot shows — an opaque handle minted by the platform, never a value {@code core} understands.</b>
  *
  * <p>A handle is either a <em>binding</em> onto something the host owns (an inventory slot, a tank) or a
- * standalone display value. The distinction matters and is deliberately invisible from here: a bound
- * handle reads through to live contents every frame, so the host's own synchronisation keeps it current
- * and CrystalGUI never carries item data over its own wire.</p>
+ * standalone display value. Which it is can be <em>asked</em> ({@link #isBinding()}) but never looked
+ * inside: a bound handle reads through to live contents every frame, so the host's own synchronisation
+ * keeps it current and CrystalGUI never carries item data over its own wire.</p>
  *
  * <h3>Binding rather than owning is the whole design</h3>
  *
@@ -25,6 +25,7 @@ public interface NativeContent {
     /** A handle that shows nothing. What a slot holds until something binds it. */
     NativeContent EMPTY = new NativeContent() {
         @Override public String descriptor() { return ""; }
+        @Override public NativeContentKind kind() { return NativeContentKind.NONE; }
         @Override public NativeProfile profile() { return NativeProfile.FLAT; }
         @Override public boolean isEmpty() { return true; }
         @Override public String toString() { return "NativeContent.EMPTY"; }
@@ -43,6 +44,34 @@ public interface NativeContent {
      * server and read on a client with no renderer still survives re-encoding intact.</p>
      */
     String descriptor();
+
+    /**
+     * What this content displays — the question abstract code asks to pick an element shape, filter a
+     * drop target, or dispatch a renderer, without sniffing the descriptor at every call site.
+     *
+     * <p>Defaulted from the descriptor's prefix ({@link NativeDescriptors#kindOf}), so every
+     * implementation answers correctly for free. A platform handle whose descriptor can be empty while
+     * it genuinely holds a value — a wrapped stack whose item is not in the registry — overrides this
+     * to say what it knows. Deliberately not the same axis as {@link #profile()}: that is the GL
+     * contract a draw needs, and it merely <em>correlates</em> with kind (an entity will also be
+     * {@code MODEL}).</p>
+     */
+    default NativeContentKind kind() {
+        return NativeDescriptors.kindOf(descriptor());
+    }
+
+    /**
+     * Whether this handle reads through to a live location rather than holding a value — the other
+     * axis from {@link #kind()}: a {@code slot:12} binding is {@link NativeContentKind#ITEM} <em>and</em>
+     * a binding.
+     *
+     * <p>A binding's contents belong to the host and change under it (which is why {@link #isEmpty()}
+     * is re-read every frame), while a display value is frozen the moment it was wrapped or resolved.
+     * Anything caching what it {@code unwrap}s should ask this first.</p>
+     */
+    default boolean isBinding() {
+        return descriptor().startsWith(NativeDescriptors.SLOT_PREFIX);
+    }
 
     /** The GL contract this content needs. @see NativeProfile */
     NativeProfile profile();

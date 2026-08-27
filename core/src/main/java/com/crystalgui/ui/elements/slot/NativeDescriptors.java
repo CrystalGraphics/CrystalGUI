@@ -65,6 +65,24 @@ public final class NativeDescriptors {
     /** {@code fluid:} — a standalone display fluid plus its tank capacity. */
     public static final String FLUID_PREFIX = "fluid:";
 
+    /**
+     * The descriptor's <b>claimed</b> kind, from its prefix alone.
+     *
+     * <p>Prefix rather than full parse on purpose: kind is UI-dispatch intent — "which element shape
+     * does this belong in" — and validity stays resolution's job. A malformed {@code item:xyz} still
+     * <em>means</em> item, and resolving it to {@link NativeContent#EMPTY} is a separate, later
+     * answer. {@code slot:} claims {@link NativeContentKind#ITEM}, because a container slot holds
+     * items — whether content is a <em>binding</em> is the other axis, {@link NativeContent#isBinding()}.</p>
+     */
+    public static NativeContentKind kindOf(String descriptor) {
+        if (descriptor == null) return NativeContentKind.NONE;
+        if (descriptor.startsWith(SLOT_PREFIX) || descriptor.startsWith(ITEM_PREFIX)) {
+            return NativeContentKind.ITEM;
+        }
+        if (descriptor.startsWith(FLUID_PREFIX)) return NativeContentKind.FLUID;
+        return NativeContentKind.NONE;
+    }
+
     // ── Formatting — the canonical spellings ────────────────────────────────
 
     /** {@code slot:<index>}. */

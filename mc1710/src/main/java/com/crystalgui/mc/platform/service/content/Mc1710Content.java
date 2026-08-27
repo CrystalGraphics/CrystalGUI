@@ -1,6 +1,7 @@
 package com.crystalgui.mc.platform.service.content;
 
 import com.crystalgui.ui.elements.slot.NativeContent;
+import com.crystalgui.ui.elements.slot.NativeContentKind;
 import com.crystalgui.ui.elements.slot.NativeDescriptors;
 import com.crystalgui.ui.elements.slot.NativeProfile;
 import net.minecraft.client.Minecraft;
@@ -102,6 +103,14 @@ public final class Mc1710Content {
             return NativeProfile.MODEL;
         }
 
+        // Unconditionally, not derived: the one edge the descriptor default misses is a wrapped stack
+        // whose item is not in the registry -- its descriptor is "" and would answer NONE while this
+        // handle genuinely holds an item.
+        @Override
+        public NativeContentKind kind() {
+            return NativeContentKind.ITEM;
+        }
+
         @Override
         public boolean isEmpty() {
             return stack == null || stack.getItem() == null || stack.stackSize <= 0;
@@ -136,6 +145,13 @@ public final class Mc1710Content {
             // testing OFF -- give it MODEL's depth-tested, lit contract and it is not merely wasteful,
             // it is the wrong state for what is being drawn.
             return NativeProfile.FLAT;
+        }
+
+        // Same reasoning as DisplayItem's override: a wrapped EMPTY TANK has a null fluid and an
+        // empty descriptor, and is still fluid-shaped content in a fluid-shaped slot.
+        @Override
+        public NativeContentKind kind() {
+            return NativeContentKind.FLUID;
         }
 
         @Override

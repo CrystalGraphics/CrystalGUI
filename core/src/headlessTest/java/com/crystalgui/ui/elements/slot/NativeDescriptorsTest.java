@@ -4,6 +4,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.fail;
 
 /**
@@ -91,6 +92,35 @@ public class NativeDescriptorsTest {
                 NativeDescriptors.parseFluid("fluid:water:620:1000"));
         assertEquals(new NativeDescriptors.FluidRef("minecraft:water", 620, 1000),
                 NativeDescriptors.parseFluid("fluid:minecraft:water:620:1000"));
+    }
+
+    // ── kindOf — the claimed kind, from the prefix alone ────────────────────
+
+    /**
+     * `slot:` claims ITEM (a container slot holds items); whether content is a BINDING is the other
+     * axis and deliberately not a kind — see NativeContentKind's javadoc for why folding them breaks
+     * on the first tank binding.
+     */
+    @Test
+    public void kindIsClaimedByThePrefix() {
+        assertSame(NativeContentKind.ITEM, NativeDescriptors.kindOf("slot:12"));
+        assertSame(NativeContentKind.ITEM, NativeDescriptors.kindOf("item:minecraft:stone:0:64"));
+        assertSame(NativeContentKind.FLUID, NativeDescriptors.kindOf("fluid:water:620:1000"));
+        assertSame(NativeContentKind.NONE, NativeDescriptors.kindOf(""));
+        assertSame(NativeContentKind.NONE, NativeDescriptors.kindOf(null));
+        assertSame(NativeContentKind.NONE, NativeDescriptors.kindOf("entity:minecraft:creeper"));
+    }
+
+    /**
+     * CLAIMED, not validated: a malformed `item:xyz` still means item — kind is UI-dispatch intent
+     * ("which element shape does this belong in"), and resolving it to EMPTY is a separate, later
+     * answer. A kindOf that ran the full parser would flicker a slot's shape on a typo.
+     */
+    @Test
+    public void aMalformedDescriptorStillClaimsItsKind() {
+        assertSame(NativeContentKind.ITEM, NativeDescriptors.kindOf("item:xyz"));
+        assertSame(NativeContentKind.FLUID, NativeDescriptors.kindOf("fluid:water"));
+        assertSame(NativeContentKind.ITEM, NativeDescriptors.kindOf("slot:notanumber"));
     }
 
     // ── Malformed input answers null, never a throw ─────────────────────────

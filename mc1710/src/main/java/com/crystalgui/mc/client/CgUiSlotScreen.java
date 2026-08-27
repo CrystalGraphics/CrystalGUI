@@ -3,7 +3,7 @@ package com.crystalgui.mc.client;
 import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.mc.platform.service.content.Mc1710Content;
+
 import com.crystalgui.mc.platform.service.content.Mc1710NativeContentService;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.Ui;
@@ -12,6 +12,7 @@ import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.elements.slot.FluidSlot;
 import com.crystalgui.ui.elements.slot.ItemSlot;
+import com.crystalgui.ui.elements.slot.NativeContentService;
 import com.crystalgui.ui.elements.slot.NativeDescriptors;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import net.minecraft.client.Minecraft;
@@ -233,10 +234,17 @@ public final class CgUiSlotScreen extends GuiScreen implements NativeTooltipHost
         return slot;
     }
 
+    /**
+     * The WRAP route — a stack the platform already holds, NBT and identity intact, crossed through
+     * the service with no per-loader content class named anywhere. This is also the in-game assertion
+     * of {@code unwrap(wrap(v)) == v}'s premise: wrap must hold the CALLER'S reference, because a
+     * copied stack would lose the {@code ench} tag written below and the glint with it — a wrong wrap
+     * is visible in the slot.
+     */
     private static ItemSlot itemSlot(ItemStack stack, boolean enchant) {
         ItemSlot slot = new ItemSlot();
-        if (stack != null) slot.bind(new Mc1710Content.DisplayItem(stack));
         if (enchant) enchant(stack);
+        if (stack != null) slot.bind(NativeContentService.require().wrap(stack));
         return slot;
     }
 
