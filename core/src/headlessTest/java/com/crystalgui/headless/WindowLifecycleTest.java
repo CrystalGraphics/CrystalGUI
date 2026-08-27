@@ -21,6 +21,8 @@ import com.crystalgui.net.window.WindowScope;
 import com.crystalgui.net.window.WindowProtocol;
 import com.crystalgui.net.window.WindowMount;
 import com.crystalgui.net.window.WindowType;
+import com.crystalgui.net.window.PanelType;
+import com.crystalgui.ui.elements.Switch;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
@@ -702,6 +704,72 @@ public class WindowLifecycleTest {
         assertEquals(1, window.fragment.presses.get());
     }
 
+    // ── Panel: one class, both sides ────────────────────────────────────────
+
+    /**
+     * The whole of a networked UI in one class — no {@code ServerWindow}, no
+     * {@code ClientWindowBehaviour}, no id strings, and no {@code bindTo}.
+     *
+     * <p>What is asserted is that the <b>three lifetimes land on the right sides</b>: the fields are
+     * created and named from their own declarations, the server's handlers reach the server's panel,
+     * and the client's listeners reach the client's — which are different objects over different
+     * trees, and the easiest thing in this design to get subtly wrong.</p>
+     */
+    @Test
+    public void aPanelDeclaresItsWidgetsItsServerHalfAndItsClientHalfInOneClass() {
+        TestPanel.served.set(0);
+        TestPanel.clicked.set(0);
+        ClientWindows.register(TestPanel.TYPE);
+
+        ServerWindow window = server.open(TestPanel.TYPE.serve("a-model"));
+        settle();
+
+        // The field NAME became the id, on both sides, without anybody writing the string.
+        UIElement shown = mount.mounted.get(0).root();
+        assertNotNull("the field name is the id", shown.querySelector("#power"));
+        assertNotNull(shown.querySelector("#press"));
+
+        // serve() ran on the server: a press crosses the wire and reaches its handler.
+        ((Button) shown.querySelector("#press")).onPressed.emit();
+        settle();
+        assertEquals("serve() wired the server half", 1, TestPanel.served.get());
+
+        // client() ran on the client: a local listener, attached to the REBUILT tree.
+        ((Switch) shown.querySelector("#power")).setChecked(true);
+        settle();
+        assertEquals("client() wired the client half", 1, TestPanel.clicked.get());
+
+        // And the two panels are genuinely different objects over different trees.
+        TestPanel served = TestPanel.TYPE.panelOf(window);
+        assertNotNull(served);
+        assertNotSame("the server's tree is not the client's", served.root(), shown);
+        assertEquals("only the server sees the model", "a-model", served.modelForTest());
+    }
+
+    /** A widget whose constructor takes arguments keeps its initializer; the base only fills nulls. */
+    @Test
+    public void aFieldWithAnInitializerIsKeptAndStillNamed() {
+        TestPanel panel = TestPanel.TYPE.build("m");
+        assertEquals("press", panel.press.getId());
+        assertEquals("the initializer's own label survived", "press-label", panel.press.getText());
+        assertNotNull("and the null field was created for us", panel.power);
+        assertEquals("power", panel.power.getId());
+    }
+
+    /** Binding resolves every declared field out of the rebuilt tree, by name and by type. */
+    @Test
+    public void aBoundPanelResolvesItsFieldsFromTheRebuiltTree() {
+        server.open(TestPanel.TYPE.serve("m"));
+        settle();
+
+        TestPanel bound = TestPanel.TYPE.windowType().bind(mount.mounted.get(0).root());
+        assertNotNull(bound.power);
+        assertNotNull(bound.press);
+        assertSame("resolved from the tree, not created afresh",
+                mount.mounted.get(0).root().querySelector("#power"), bound.power);
+        assertNull("a bound panel has no model", bound.modelForTest());
+    }
+
     // ── The builder ─────────────────────────────────────────────────────────
 
     /**
@@ -1016,6 +1084,48 @@ public class WindowLifecycleTest {
             if (scope == null) throw new IllegalStateException("not bound yet");
             panel.root.addChild(fragment.root());
             scope.attach(fragment, "late");
+        }
+    }
+
+    /**
+     * One class: widgets, layout, server half, client half.
+     *
+     * <p>Fully qualified because this test already has a nested {@code Panel} fixture of its own from
+     * the earlier cases, and a nested type shadows an import.</p>
+     *
+     * @see com.crystalgui.net.window.Panel
+     */
+    public static final class TestPanel extends com.crystalgui.net.window.Panel<String> {
+
+        static final PanelType<TestPanel, String> TYPE =
+                PanelType.of("test:panel-base", TestPanel::new);
+
+        /** Static because the two sides are different INSTANCES, which is the point being asserted. */
+        static final AtomicInteger served = new AtomicInteger();
+        static final AtomicInteger clicked = new AtomicInteger();
+
+        public Switch power;                                  // created and named for us
+        public Button press = new Button("press-label");      // ctor argument, so we write it
+
+        @Override
+        protected void layout() {
+            add(power);
+            add(press);
+        }
+
+        @Override
+        protected void serve(WindowScope io) {
+            io.onActivate(press, ctx -> served.incrementAndGet());
+        }
+
+        @Override
+        protected void client(ClientWindowContext window) {
+            power.attachListener(checked -> clicked.incrementAndGet());
+        }
+
+        @Nullable
+        String modelForTest() {
+            return model();
         }
     }
 

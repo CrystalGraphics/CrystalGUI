@@ -142,6 +142,57 @@ public final class ClientWindows {
     }
 
     /**
+     * <b>The whole client side of a {@link Panel}, in one argument.</b>
+     *
+     * <pre>{@code
+     * ClientWindows.register(MachinePanel.TYPE);
+     * }</pre>
+     *
+     * <p>There is no behaviour class to write because the <b>bound panel is the behaviour</b>: the
+     * host binds one from the rebuilt tree and calls {@link Panel#client} on it — at mount and again
+     * after every re-describe — so widget listeners are attached in the one place they can safely
+     * live. {@link Panel#closed} is told when the window ends.</p>
+     *
+     * <p>A fresh panel is bound per re-describe rather than the old one being reused, so anything a
+     * panel remembers <em>outside</em> its widget fields does not survive one. That is the right
+     * default — the widgets it was remembering about are themselves new — and a panel needing more
+     * than that can still register a {@link ClientWindowBehaviour} of its own against
+     * {@link PanelType#windowType()}.</p>
+     */
+    public static <P extends Panel<M>, M> void register(PanelType<P, M> type) {
+        if (type == null) throw new IllegalArgumentException("a behaviour needs a type");
+        register(type.windowType(), PanelBehaviour::new);
+    }
+
+    /** Hands a freshly bound panel its own {@code client()} call. @see #register(PanelType) */
+    private static final class PanelBehaviour<P extends Panel<?>> implements ClientWindowBehaviour<P> {
+
+        /**
+         * Captured once, and that is sound: the same {@link ClientWindowContext} is live for the whole
+         * of a window — a re-describe swaps what it points at, never the object.
+         */
+        private final ClientWindowContext window;
+
+        @Nullable
+        private P panel;
+
+        PanelBehaviour(ClientWindowContext window) {
+            this.window = window;
+        }
+
+        @Override
+        public void onPanelBound(P panel) {
+            this.panel = panel;
+            panel.client(window);
+        }
+
+        @Override
+        public void onClosed(String reason) {
+            if (panel != null) panel.closed(reason);
+        }
+    }
+
+    /**
      * The untyped form, for a window with no panel class behind it.
      *
      * <p>Equivalent to registering against {@link WindowType#bare} — the tree is its own panel, so
