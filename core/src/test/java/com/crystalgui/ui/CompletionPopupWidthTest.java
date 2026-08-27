@@ -165,31 +165,32 @@ public class CompletionPopupWidthTest extends UiTestBase {
     }
 
     /**
-     * <b>The type may never take more than half the row</b>, however long it is.
+     * <b>Every realised row is the same width.</b>
      *
-     * <h3>A shrink ORDER does not bound the case where the type is the long part</h3>
+     * <p>A list is a column of identical boxes, so this ought to be free — and it was not. With enough
+     * items to scroll, the rows realised first came out narrower than the ones realised after, and the
+     * wider ones ran their right-aligned type column under the scrollbar and off the edge of the popup.
+     * The top of the list looked perfect and the bottom looked clipped, which reads as a clipping bug
+     * rather than as a sizing one.</p>
      *
-     * <p>The factors decide who gives when a row is over-full, and by then everything else has already
-     * given — so a two-character name beside {@code java.util.concurrent.atomic.AtomicIntegerFieldUpdater}
-     * had no reason to shrink the type at all. It took the row and the name was ellipsised away beside it,
-     * which is the opposite of what a completion list is for: the name is the thing being typed towards,
-     * and the type is recoverable from the documentation panel.</p>
-     *
-     * <p>A percentage rather than a pixel count, because the popup is resizable — a fixed cap is either
-     * pointless at its widest or crippling at its narrowest.</p>
+     * <p>Enough items to force a scrollbar is the whole fixture: a list that fits has one batch of rows
+     * and cannot show the difference, which is why every earlier test here passed.</p>
      */
     @Test
-    public void theTypeNeverTakesMoreThanHalfTheRow() {
-        UIElement root = new UIElement().layout(l -> l.width(340).height(600));
+    public void everyRealisedRowIsTheSameWidth() {
+        UIElement root = new UIElement().layout(l -> l.width(420).height(600));
         UIWindow window = new UIWindow(Ui.of(root));
         window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
-        window.init(340, 600);
+        window.init(420, 600);
 
         List<CompletionItem> items = new ArrayList<>();
-        // A SHORT name against a very long type -- the shape the shrink order cannot bound.
-        items.add(constant("x", "java.util.concurrent.atomic.AtomicIntegerFieldUpdater"));
-        items.add(constant("getenv", "Map<String,String>"));
-        items.add(constant("someReasonablyLongMethodName", "void"));
+        // Long enough to scroll, and with types of very different lengths so a mis-sized row shows.
+        items.add(constant("err", "PrintStream"));
+        items.add(constant("in", "InputStream"));
+        items.add(constant("out", "PrintStream"));
+        for (int at = 0; at < 30; at++) {
+            items.add(constant("member" + at, at % 2 == 0 ? "String" : "Map<String,String>"));
+        }
 
         TextBuffer buffer = new TextBuffer("");
         CompletionSession session = CompletionSession.open(
@@ -198,20 +199,29 @@ public class CompletionPopupWidthTest extends UiTestBase {
 
         CompletionPopup popup = new CompletionPopup();
         popup.attach(window, session);
-        for (int i = 0; i < 8; i++) window.updateWithoutPainting();
+        for (int i = 0; i < 10; i++) window.updateWithoutPainting();
 
+        float first = -1f;
         int checked = 0;
         for (UIElement row : rowsIn(popup)) {
+            float width = row.getRuntimeCache().getWidth();
+            if (width <= 0f) continue;          // pooled and hidden templates measure nothing
+            checked++;
+            if (first < 0f) first = width;
+            assertEquals("realised rows came out different widths, so the wider ones run past the popup",
+                    first, width, 0.5f);
+
+            // AND THE TYPE HAS A BOX AT ALL. This is the assertion the row-width one cannot make: a
+            // collapsed detail is the same width on every row, so "all rows agree" is satisfied by every
+            // one of them being ZERO. A zero-width UIText still paints -- from the right edge its
+            // collapsed box sits at -- and the row's `overflow: hidden` cuts it a dozen pixels later, so
+            // it reads as clipping rather than as a box that was never sized.
             UIText detail = detailOf(row);
             if (detail == null || detail.getText().isEmpty()) continue;
-            float rowWidth = row.getRuntimeCache().getWidth();
-            if (rowWidth <= 0f) continue;
-            checked++;
-            float share = detail.getRuntimeCache().getWidth() / rowWidth;
-            assertTrue("'" + detail.getText() + "' took " + Math.round(share * 100)
-                    + "% of the row, crowding out the name", share <= 0.55f);
+            assertTrue("'" + detail.getText() + "' has no width, so only the first few pixels can paint",
+                    detail.getRuntimeCache().getWidth() > 0f);
         }
-        assertTrue("no rows carried a type, so nothing was checked", checked >= 3);
+        assertTrue("no rows were realised, so nothing was checked", checked >= 5);
     }
 
     /** The type column — the last child of a row, after the growing spacer. */

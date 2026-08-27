@@ -710,10 +710,24 @@ public final class CompletionPopup extends Popover {
             // SymbolIcon
             row.addChild(row.icon);
 
+            // EVERY PART SIZES TO ITS TEXT, AND SAYS SO. None of the three has a width in the sheet, so
+            // each can only get one by measuring itself -- `UIText` has no Taffy measure function and
+            // pushes its width as an IMPORTANT candidate instead. Whether it does that is decided ONCE,
+            // on the first recompute after attachment, from whether its box was still zero: a part
+            // realised before its row was laid out latches "I size myself" and is right forever, and one
+            // realised after latches "my box sizes me" -- and then nothing sizes it, so it stays ZERO.
+            //
+            // That is a race on when a pooled row happens to be realised, which is why it hit some rows
+            // and not others, differed between this and the harness, and looked like clipping: a
+            // zero-width detail still paints, from the right edge its collapsed box sits at, and the
+            // row's `overflow: hidden` cuts it a dozen pixels later -- about three characters, whatever
+            // the type was. Saying the answer removes the race rather than winning it.
+            row.label.forceSelfSizeWidth();
             row.label.addClass(LABEL_CLASS);
             row.label.setHitTest(false);
             row.addChild(row.label);
 
+            row.params.forceSelfSizeWidth();
             row.params.addClass(PARAMS_CLASS);
             row.params.setHitTest(false);
             row.addChild(row.params);
@@ -723,6 +737,7 @@ public final class CompletionPopup extends Popover {
             row.spacer.setHitTest(false);
             row.addChild(row.spacer);
 
+            row.detail.forceSelfSizeWidth();
             row.detail.addClass(DETAIL_CLASS);
             row.detail.setHitTest(false);
             row.addChild(row.detail);
