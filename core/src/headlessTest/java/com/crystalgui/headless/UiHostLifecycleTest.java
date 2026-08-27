@@ -588,6 +588,48 @@ public class UiHostLifecycleTest {
         assertEquals(".a { color: #111111; }", applied.get(0).get(0));
     }
 
+    /**
+     * The correctness argument behind suppressing the <b>whole</b> flush rather than only the send.
+     *
+     * <p>A tree delta renumbers both sides. Suppress the send while still renumbering here and the two
+     * peers disagree about every id past the change, so the next state delta lands on the wrong
+     * elements — silently, because an id is just an int and every one of them still resolves to
+     * something. Gating above both means the tree is simply not re-described while nobody is looking,
+     * and the client's numbering stays the one it was last told.</p>
+     *
+     * <p>Reshaping a hidden window is not a corner case: it is a background job adding a row to a panel
+     * somebody has minimised.</p>
+     */
+    @Test
+    public void aWindowReshapedWhileHiddenComesBackWithItsNumberingIntact() {
+        LateFragmentWindow window = server.open(new LateFragmentWindow());
+        settle();
+        ClientWindowContext shown = mount.mounted.get(0);
+
+        shown.visibilityChanged(false);
+        settle();
+
+        // THE SHAPE CHANGES while nobody is looking, and then the state does.
+        window.attachNow();
+        window.panel.label.setText("changed while hidden");
+        settle();
+
+        assertNull("nothing was re-described", shown.root().querySelector("#late"));
+
+        shown.visibilityChanged(true);
+        settle();
+
+        assertNotNull("the new subtree arrived", shown.root().querySelector("#late"));
+        assertEquals("and the state landed on the RIGHT element, not on whatever took its number",
+                "changed while hidden", textOf(shown.root().querySelector("#label")));
+
+        // ...and the delta that brought the fragment carried its reported events, so the new widget
+        // reports back exactly as one described at open would.
+        ((Button) shown.root().querySelector("#late")).onPressed.emit();
+        settle();
+        assertEquals(1, window.fragment.presses.get());
+    }
+
     // ── The builder ─────────────────────────────────────────────────────────
 
     /**
@@ -864,7 +906,7 @@ public class UiHostLifecycleTest {
     }
 
     private static final class LateFragmentWindow extends ServerWindow {
-        private final Panel panel = new Panel();
+        final Panel panel = new Panel();
         final SaveFragment fragment = new SaveFragment();
         @Nullable
         private SessionScope scope;
