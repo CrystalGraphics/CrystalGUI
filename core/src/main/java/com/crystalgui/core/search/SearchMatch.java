@@ -103,6 +103,24 @@ public record SearchMatch(int score, Kind kind, int fieldWeight, List<Range> ran
      * "a category-only hit outranked an exact name hit". */
     public static final int FIELD_CONTEXT = 1000;
 
+    /**
+     * How <b>well</b> this matched, without the within-tier tiebreaks — field weight plus kind.
+     *
+     * <p>{@link #score} is this plus earliness, brevity and the subsequence matcher's quality bonus. Those
+     * exist to order rows that matched equally well, and folding them into the ranking makes them
+     * outrank anything a consumer wants to say for itself: the completion list found that comparing on
+     * {@code score} ranked a local {@code precision} below a class {@code Printer} purely because
+     * {@code Printer} is two characters shorter.</p>
+     *
+     * <p>So a consumer with a signal of its own — proximity for completion, availability for the command
+     * palette — sorts by this first, then by its own signal, then by {@code score}. A consumer with no
+     * such signal can go on comparing {@link SearchMatch}es directly and gets the same answer, since
+     * within one tier the score <em>is</em> the tiebreak.</p>
+     */
+    public int tier() {
+        return fieldWeight + kind.score();
+    }
+
     /** Best of two, either of which may be null. */
     @Nullable
     public static SearchMatch best(@Nullable SearchMatch a, @Nullable SearchMatch b) {
