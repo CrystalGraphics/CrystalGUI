@@ -127,6 +127,13 @@ public final class UiMethods {
     public static final String KEY = "key";
 
     /** The window id, on every {@code ui/*} payload. @see UiMethods */
+    /**
+     * The panel's class name, on {@code ui/openWindow} — what lets the client initialise the class
+     * (and so register its tag) before the description arrives, with no registration call anywhere.
+     * Additive with a fallback, like {@link #TYPE}: an older peer omits or ignores it.
+     */
+    public static final String UI_CLASS = "uiClass";
+
     public static final String WINDOW = "w";
 
     private UiMethods() {

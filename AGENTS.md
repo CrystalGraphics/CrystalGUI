@@ -1738,8 +1738,11 @@ com.crystalgui.net             UITransport, InMemoryTransport,
                                is the namespace, and the child panel is built by the PARENT's layout
                                with the slice only it knows), ServerWindow<P> (the final HANDLE
                                open() returns — session, key dedup, close matrix; NOT an authoring
-                               surface any more), ServerWindows.open(TYPE, model) /
-                               ClientWindows.register(TYPE) (one line per side), WindowMount +
+                               surface any more), ServerWindows.open(TYPE, model) — the WHOLE
+                               wiring: the open names the panel class on the wire
+                               (UiMethods.UI_CLASS) and the client initialises it, GUARDED (loaded
+                               without running anything, must be Networked, only then initialised),
+                               so there is no client registration at all — WindowMount +
                                ClientWindowContext (the platform seam), SheetSupply (local resolver →
                                cache → ui/sheet). plan_ui_host.md
 

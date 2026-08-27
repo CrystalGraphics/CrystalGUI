@@ -1160,11 +1160,10 @@ public final class MyPanel extends UIElement implements Networked<MyModel> {
 }
 
 // ── Receive a UI ──────────────────────────────────────────────────────────
-// once, at init — the client's ONE line: registers the panel's tag for decode
-// and runs its client half when a window of the type mounts. A decodable type
-// with no registration still opens, renders and reports every event; it just
-// runs no local behaviour.
-ClientWindows.register(MyPanel.TYPE);
+// NOTHING. The open names the panel class on the wire; the engine initialises
+// it (guarded: it must be a Networked) and runs the client half. A window whose
+// binding fails still renders and reports its events -- only the local extras
+// go quiet, loudly, in the log.
 
 // once per platform, not per mod — CgUiScreen does this on 1.7.10:
 ClientWindows.of(c).setMount(myWindowMount);

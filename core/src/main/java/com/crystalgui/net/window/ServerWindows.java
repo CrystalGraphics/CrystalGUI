@@ -156,7 +156,10 @@ public final class ServerWindows {
         ServerUiSession<Object> session = new ServerUiSession<>(id, panel, connection)
                 .setType(type.id())
                 .setTitle(title)
-                .setKey(key);
+                .setKey(key)
+                // What makes the client need NO registration call: the open names the class, the
+                // client initialises it (guarded), and initialising it registers its tag.
+                .setUiClass(type.uiClass().getName());
 
         ServerWindow<P> window = new ServerWindow<>(type, panel,
                 io -> panel.serve(model, io),

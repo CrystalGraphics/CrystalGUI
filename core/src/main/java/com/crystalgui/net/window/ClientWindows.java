@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import javax.annotation.Nullable;
@@ -25,33 +26,29 @@ import com.crystalgui.ui.UIElement;
  * window can open, because a miss there is silent), and reconciling that against a place to put a
  * window, which may not exist yet.</p>
  *
- * <h3>One line per UI</h3>
+ * <h3>Zero lines per UI</h3>
  *
- * <pre>{@code
- * ClientWindows.register(MachinePanel.TYPE);
- * }</pre>
+ * <p>{@code MenuScreens.register} with nothing left to register: {@code ui/openWindow} names the
+ * panel's class, this host initialises it — <b>guarded</b>: loaded without running anything, checked
+ * to be a {@link Networked}, and only then initialised — which registers its tag, so the description
+ * decodes. When the tree mounts, the host binds the panel's fields, runs {@link Networked#bound} and
+ * {@link Networked#client}, and does the same for every {@link Networked} element nested anywhere in
+ * it. The panel declared everything; a mod's client init has nothing left to say.</p>
  *
- * <p>{@code MenuScreens.register}, except there is no screen class to write: referencing the type
- * initialises the panel class, which registers its tag — so a description whose root says
- * {@code "machinepanel"} decodes into a {@code MachinePanel} — and when a window of the type mounts,
- * the host binds the panel's fields, runs {@link Networked#bound} and {@link Networked#client}, and
- * does the same for every {@link Networked} element nested anywhere in the tree.</p>
- *
- * <p><b>This line is the client's one obligation, and forgetting it is loud.</b> A panel decodes by
- * its registered tag, so a client where nothing ever touched the class refuses the description with an
- * error naming the tag — where the old string-paired arrangement produced the worse outcome: a window
- * that opened, rendered, and was pixel-identical to a working one with every button dead. A type that
- * <em>is</em> decodable but has no registration still mounts and still reports every event its
- * description asked for; it simply runs no local behaviour.</p>
+ * <p>The guard is the safety story: a server can only cause classes that are genuinely
+ * {@code Networked} panels to initialise — UI declarations by construction — and a name that is
+ * absent or fails the check is logged once and skipped, leaving a window that plainly did not decode
+ * rather than one that subtly misbehaves.</p>
  */
 public final class ClientWindows {
 
-    /**
-     * type id → the panel type. Static, because what a client can do about a window type is a fact
-     * about this installation rather than about any one connection — the same reason
-     * {@code MenuScreens}' registry is static and a {@code MenuType} is not per player.
-     */
-    private static final Map<String, UiType<?, ?>> TYPES = new ConcurrentHashMap<>();
+    /** Class names already handed to {@link #ensureUiClass}, so a bad one is logged once. */
+    private static final Set<String> NAMED = ConcurrentHashMap.newKeySet();
+
+    static {
+        // The moment the window layer is loaded on a client, openWindow panel names start resolving.
+        ClientUiSessions.setUiClassLoader(ClientWindows::ensureUiClass);
+    }
 
     private final ProtocolConnection<Object> connection;
 
@@ -103,41 +100,30 @@ public final class ClientWindows {
         of(connection);
     }
 
-    // ── The type registry ───────────────────────────────────────────────────
+    // ── Panel classes, from the wire ────────────────────────────────────────
 
     /**
-     * <b>The whole client side of a panel, in one argument.</b>
-     *
-     * <p>Called once at mod init. Referencing the type has already registered the panel's tag, so the
-     * description decodes; what this adds is the binding — when a window of the type mounts, the host
-     * resolves the panel's fields out of its own rebuilt tree, calls {@link Networked#bound} (again
-     * after every re-describe) and {@link Networked#client} (once), and walks the tree doing the same
-     * for every nested {@link Networked} element, each under the scope its id path derives.</p>
-     *
-     * <p>Idempotent per type; re-registering replaces. Windows of unregistered types still mount.</p>
-     *
-     * <p><b>Registered from client code, and that is the loader seam rather than a wart:</b> the
-     * panel's client hooks are method bodies, lazy by the class-loading rule, and this call is the one
-     * place the client says it wants them run.</p>
+     * Initialises the panel class an {@code ui/openWindow} named — <b>guarded</b>: loaded without
+     * running anything, and initialised only if it is genuinely a {@link Networked}, so a misbehaving
+     * server can start nothing but a UI declaration. Initialising it runs the panel's {@code UiType}
+     * declaration, which registers its tag (and its nested field types), which is what lets the
+     * description decode. Failures are logged once per name; the window then plainly fails to decode
+     * rather than subtly misbehaving.
      */
-    public static void register(UiType<?, ?> type) {
-        if (type == null) throw new IllegalArgumentException("a registration needs a type");
-        TYPES.put(type.id(), type);
-    }
-
-    /** Drops a registration. Tests, and a mod unloading itself. */
-    public static void unregister(String type) {
-        TYPES.remove(type);
-    }
-
-    /** Drops a registration. @see #unregister(String) */
-    public static void unregister(UiType<?, ?> type) {
-        if (type != null) TYPES.remove(type.id());
-    }
-
-    /** Every type something has registered a panel for. Diagnostics. */
-    public static List<String> registeredTypes() {
-        return new ArrayList<>(TYPES.keySet());
+    private static void ensureUiClass(String name) {
+        if (!NAMED.add(name)) return;
+        try {
+            Class<?> named = Class.forName(name, false, ClientWindows.class.getClassLoader());
+            if (!Networked.class.isAssignableFrom(named)) {
+                CrystalGuiCore.LOGGER.error("openWindow named {} as its panel, which is not a "
+                        + "Networked element; refusing to initialise it", name);
+                return;
+            }
+            Class.forName(name, true, ClientWindows.class.getClassLoader());
+        } catch (ClassNotFoundException | LinkageError absent) {
+            CrystalGuiCore.LOGGER.error("openWindow named panel class {} but this client cannot "
+                    + "load it: {}", name, absent.toString());
+        }
     }
 
     // ── The mount ───────────────────────────────────────────────────────────
@@ -215,13 +201,13 @@ public final class ClientWindows {
             live.root = root;
             live.handle.contentReplaced(root);
             applySheets(live);
-            if (live.boundType != null) {
+            if (live.panelsBound) {
                 try {
                     // Fresh instances over the fresh tree: fields resolved, bound() run. client() is
                     // NOT re-run -- session registrations are keyed by method and survive, so running
                     // them again is a router refusal. (A re-describe is currently unreachable; the
                     // stale-closure gap this leaves is recorded in plan_ui_host.md.)
-                    live.bindPanels(live.boundType, false);
+                    live.bindPanels(false);
                 } catch (RuntimeException failed) {
                     CrystalGuiCore.LOGGER.error("<{}> could not be re-bound after a re-describe: {}",
                             live.type(), failed.getMessage(), failed);
@@ -248,13 +234,12 @@ public final class ClientWindows {
         }
         applySheets(fresh);
 
-        UiType<?, ?> type = TYPES.get(fresh.type());
-        if (type == null) return;   // no local registration: the window still renders and reports its events
+        if (!(root instanceof Networked)) return;   // a bare tree still renders and reports its events
         try {
-            fresh.boundType = type;
-            fresh.bindPanels(type, true);
+            fresh.bindPanels(true);
+            fresh.panelsBound = true;
         } catch (RuntimeException failed) {
-            fresh.boundType = null;
+            fresh.panelsBound = false;
             // The window stays: it is the server's, it renders, and it reports its events. Only the
             // local extras are missing, and saying so is better than taking the window down with them.
             CrystalGuiCore.LOGGER.error("The panel for <{}> could not be bound: {}",
@@ -322,9 +307,8 @@ public final class ClientWindows {
         /** Every bound panel in the tree, root first — who hears {@code closed}. */
         private final List<Networked<?>> panels = new ArrayList<>();
 
-        /** What bound them, kept so a re-describe re-binds with the same type. */
-        @Nullable
-        private UiType<?, ?> boundType;
+        /** Whether the first bind succeeded, so a re-describe knows to re-bind. */
+        private boolean panelsBound;
 
         private boolean ended;
         private boolean visible = true;
@@ -341,10 +325,11 @@ public final class ClientWindows {
          * <p>Root first, then nested panels in document order, which is also the order the server
          * attached them in a tree built by the same class.</p>
          */
-        void bindPanels(UiType<?, ?> type, boolean firstMount) {
+        void bindPanels(boolean firstMount) {
             List<Networked<?>> found = new ArrayList<>();
             List<String> prefixes = new ArrayList<>();
-            found.add(type.bind(root));
+            UiType.bindFields(root);
+            found.add((Networked<?>) root);
             prefixes.add("");
             collectNested(root, "", found, prefixes);
 

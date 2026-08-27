@@ -97,9 +97,6 @@ public class WindowLifecycleTest {
 
     @After
     public void tearDown() {
-        // Registration is static; the suite shares a JVM. Sweep it clean rather than naming ids,
-        // so a fixture added later cannot leak into an unrelated test.
-        for (String type : ClientWindows.registeredTypes()) ClientWindows.unregister(type);
         Protocols.resetForTesting();
         WindowProtocol.resetForTesting();
     }
@@ -322,14 +319,14 @@ public class WindowLifecycleTest {
     // ── The client half, by type ────────────────────────────────────────────
 
     /**
-     * One registered line runs the whole client half: fields resolved out of the panel's own tree,
-     * {@code bound()} for the widget listeners, {@code client()} handed its scope, {@code closed()}
-     * told at the end — on the CLIENT's instance, which is not the server's.
+     * The client half runs with <b>no registration anywhere</b>: the open message named the panel
+     * class, the engine initialised it, and the decoded root being {@code Networked} is the whole
+     * opt-in — fields resolved out of the panel's own tree, {@code bound()} for the widget listeners,
+     * {@code client()} handed its scope, {@code closed()} told at the end — on the CLIENT's instance,
+     * which is not the server's.
      */
     @Test
-    public void aRegisteredPanelIsBoundWiredAndToldWhenTheWindowEnds() {
-        ClientWindows.register(TestPanel.TYPE);
-
+    public void aPanelsClientHalfRunsWithNoRegistrationAnywhere() {
         ServerWindow<TestPanel> window = server.open(TestPanel.TYPE, null);
         settle();
 
@@ -353,7 +350,6 @@ public class WindowLifecycleTest {
      */
     @Test
     public void aBoundPanelsFieldsAreTheTreesOwnElements() {
-        ClientWindows.register(TestPanel.TYPE);
         ServerWindow<TestPanel> window = server.open(TestPanel.TYPE, null);
         settle();
 
@@ -368,46 +364,6 @@ public class WindowLifecycleTest {
     }
 
     /**
-     * The improvement over {@code MenuScreens}, where an unregistered type is a broken screen: a type
-     * with no registration still mounts, renders, and reports every event its description asked for.
-     * It simply runs no local behaviour.
-     */
-    @Test
-    public void aWindowOfAnUnknownTypeStillMountsAndStillReportsItsEvents() {
-        ServerWindow<TestPanel> window = server.open(TestPanel.TYPE, null);
-        settle();
-
-        assertEquals("it is on screen", 1, mount.mounted.size());
-
-        Button pressMe = (Button) mount.mounted.get(0).root().querySelector("#press");
-        assertNotNull("and its widgets came through", pressMe);
-        pressMe.onPressed.emit();
-        settle();
-
-        assertEquals("and the server heard the press", 1, window.panel().presses.get());
-        assertEquals("but no local binding ran",
-                0, ((TestPanel) mount.mounted.get(0).root()).bounds.get());
-    }
-
-    /**
-     * The window's type is what stops one mod's behaviour adopting another mod's tree — which is what
-     * happened when every client host took every window on the connection.
-     */
-    @Test
-    public void aRegistrationForOneTypeNeverSeesAnother() {
-        ClientWindows.register(TestPanel.TYPE);
-
-        server.open(OtherPanel.TYPE, null);
-        settle();
-        assertEquals("a window of another type is none of its business",
-                0, ((OtherPanel) mount.mounted.get(0).root()).bounds.get());
-
-        server.open(TestPanel.TYPE, null);
-        settle();
-        assertEquals(1, ((TestPanel) mount.mounted.get(1).root()).bounds.get());
-    }
-
-    /**
      * A binding fails <b>loudly</b> when the tree is not the shape it expects.
      *
      * <p>The whole point of binding over searching: a declared part missing from the tree is an error
@@ -416,14 +372,18 @@ public class WindowLifecycleTest {
      */
     @Test
     public void aBindingThatCannotFindItsPartsFailsAtMountRatherThanAtPressTime() {
-        ClientWindows.register(SabotagedPanel.TYPE);
-
-        server.open(SabotagedPanel.TYPE, null);
+        ServerWindow<SabotagedPanel> window = server.open(SabotagedPanel.TYPE, null);
         settle();
 
         assertEquals("the window is still on screen", 1, mount.mounted.size());
         assertEquals("but the binding never completed, so bound() never ran",
                 0, ((SabotagedPanel) mount.mounted.get(0).root()).bounds.get());
+
+        // A failed binding takes only the LOCAL extras with it: the description already wired the
+        // reported events, so the widgets that did come through still reach the server.
+        ((Button) mount.mounted.get(0).root().querySelector("#press")).onPressed.emit();
+        settle();
+        assertEquals(1, window.panel().presses.get());
     }
 
     // ── Window-scoped notifications ─────────────────────────────────────────
@@ -493,7 +453,6 @@ public class WindowLifecycleTest {
     @Test
     public void aNestedPanelIsBoundOnTheClientUnderItsOwnScope() {
         AtomicReference<String> answered = new AtomicReference<>();
-        ClientWindows.register(ParentPanel.TYPE);
         ServerWindow<ParentPanel> window = server.open(ParentPanel.TYPE, null);
         settle();
 
@@ -829,10 +788,16 @@ public class WindowLifecycleTest {
         public Button orphan = new Button("orphan");   // declared, never added to the tree
 
         final AtomicInteger bounds = new AtomicInteger();
+        final AtomicInteger presses = new AtomicInteger();
 
         @Override
         public void layout(String model) {
             addChild(press);   // orphan forgotten
+        }
+
+        @Override
+        public void serve(String model, ServerScope io) {
+            io.onActivate(press, ctx -> presses.incrementAndGet());
         }
 
         @Override

@@ -36,9 +36,10 @@ import com.crystalgui.ui.UIElement;
  * }
  * }</pre>
  *
- * <p>Opened with {@code ServerWindows.of(connection).open(MachinePanel.TYPE, machine)} and enabled on
- * the client with {@code ClientWindows.register(MachinePanel.TYPE)}. There is no window subclass, no
- * behaviour class, no {@code bindTo}, and no id strings.</p>
+ * <p>Opened with {@code ServerWindows.of(connection).open(MachinePanel.TYPE, machine)} — and that is
+ * the <b>whole</b> wiring: the open names the panel class on the wire, the client initialises it
+ * (guarded) and runs its client half. There is no window subclass, no behaviour class, no
+ * registration call, no {@code bindTo}, and no id strings.</p>
  *
  * <h3>The panel IS an element</h3>
  *
