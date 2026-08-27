@@ -1,4 +1,4 @@
-package com.crystalgui.net.host;
+package com.crystalgui.net.window;
 
 import java.util.List;
 

@@ -1,4 +1,4 @@
-package com.crystalgui.net.host;
+package com.crystalgui.net.window;
 
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -40,7 +40,7 @@ import com.crystalgui.ui.UIElement;
  * fragment that needs a client counterpart. Most do not: reported events are element-keyed, and that is
  * already isolated.</p>
  */
-public final class SessionScope {
+public final class WindowScope {
 
     private final ServerUiSession<Object> session;
     private final ServerWindow window;
@@ -51,7 +51,7 @@ public final class SessionScope {
     /** Names already attached under this scope, so two fragments cannot claim one. */
     private final Set<String> childScopes = new LinkedHashSet<>();
 
-    SessionScope(ServerUiSession<Object> session, ServerWindow window, String prefix) {
+    WindowScope(ServerUiSession<Object> session, ServerWindow window, String prefix) {
         this.session = session;
         this.window = window;
         this.prefix = prefix;
@@ -68,20 +68,20 @@ public final class SessionScope {
      *
      * <p>Not prefixed, and does not need to be: the element <em>is</em> the key.</p>
      */
-    public SessionScope on(UIElement element, String kind, Consumer<ServerUiSession.UiEventContext<Object>> handler) {
+    public WindowScope on(UIElement element, String kind, Consumer<ServerUiSession.UiEventContext<Object>> handler) {
         session.on(element, kind, handler);
         return this;
     }
 
     /** A press, a toggle, or a commit — whatever the widget considers "the user did the thing". */
-    public SessionScope onActivate(UIElement element, Consumer<ServerUiSession.UiEventContext<Object>> handler) {
+    public WindowScope onActivate(UIElement element, Consumer<ServerUiSession.UiEventContext<Object>> handler) {
         return on(element, UiEventKinds.ACTIVATE, handler);
     }
 
     // ── Wire methods ────────────────────────────────────────────────────────
 
     /** Serves a method the client may call, under this scope's name. */
-    public SessionScope onCall(String method, Call.Handler<Object> handler) {
+    public WindowScope onCall(String method, Call.Handler<Object> handler) {
         session.onCall(qualify(method), handler);
         return this;
     }
@@ -93,7 +93,7 @@ public final class SessionScope {
     }
 
     /** Listens for a notification on this window, under this scope's name. */
-    public SessionScope onNotify(String method, Consumer<StateMap<Object>> handler) {
+    public WindowScope onNotify(String method, Consumer<StateMap<Object>> handler) {
         session.onNotify(qualify(method), handler);
         return this;
     }
@@ -125,7 +125,7 @@ public final class SessionScope {
      * host is about to send, and adding one afterwards would be naming a theme the client will never
      * hear about.</p>
      */
-    public SessionScope sheet(com.crystalgui.net.SheetRef ref) {
+    public WindowScope sheet(com.crystalgui.net.SheetRef ref) {
         session.addSheet(ref);
         return this;
     }
@@ -136,13 +136,13 @@ public final class SessionScope {
      * <p>Use this for a sheet the server authored. The one-argument form is right for a theme the
      * client is expected to already ship, where sending bytes both sides hold is waste.</p>
      */
-    public SessionScope sheet(com.crystalgui.net.SheetRef ref, @Nullable String css) {
+    public WindowScope sheet(com.crystalgui.net.SheetRef ref, @Nullable String css) {
         session.addSheet(ref, css);
         return this;
     }
 
     /** Whether the engine's own sheet goes underneath. On by default, and almost always right. */
-    public SessionScope useUserAgentSheet(boolean use) {
+    public WindowScope useUserAgentSheet(boolean use) {
         session.setUseUserAgentSheet(use);
         return this;
     }
@@ -162,7 +162,7 @@ public final class SessionScope {
      *                               claiming one namespace is a wiring mistake, not something to
      *                               resolve by letting the second win
      */
-    public SessionScope attach(ServerFragment fragment, String name) {
+    public WindowScope attach(ServerFragment fragment, String name) {
         if (fragment == null) throw new IllegalArgumentException("fragment is null");
         if (name == null || name.isEmpty()) throw new IllegalArgumentException("a fragment needs a name");
         if (name.indexOf('/') >= 0) {
@@ -173,7 +173,7 @@ public final class SessionScope {
             throw new IllegalStateException("'" + name + "' is already attached to this scope");
         }
         window.fragments.add(fragment);
-        fragment.bind(new SessionScope(session, window, prefix + name + "/"));
+        fragment.bind(new WindowScope(session, window, prefix + name + "/"));
         return this;
     }
 

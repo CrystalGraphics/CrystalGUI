@@ -59,7 +59,7 @@ below it.
 
 ```
       ┌──────────────────────────────────────────────────────────────┐
-  8   │  ServerUiHost / ClientUiHost    ServerWindow, WindowMount    │  a window's LIFETIME
+  8   │  ServerWindows / ClientWindows    ServerWindow, WindowMount    │  a window's LIFETIME
       ├──────────────────────────────────────────────────────────────┤
   7   │  ServerUiSession / ClientUiSession   WorkspaceRpc / Client   │  what a message MEANS
       │  RemoteCommands                       (the "tenants")        │
@@ -795,15 +795,15 @@ it's a fact about the UI protocol and the envelope isn't allowed to know one.
 > LDLib2 resolves incoming packets against *"whatever menu the player has open"*, so a packet in
 > flight when a GUI closes lands on the **next** one. Four bytes makes that impossible.
 
-### `ServerUiHost` / `ClientUiHost` — a window's lifetime
+### `ServerWindows` / `ClientWindows` — a window's lifetime
 
 **The layer above the sessions, and the one you actually use.** A session is the *protocol* for one
 window; a host is what opens one, ticks it, and ends it — the id allocation, the `bind`-then-`open`
 ordering, the per-tick validity sweep and flush, and all four ways a window can end.
 
 ```java
-UiHosts.register();                                  // once, at init
-ServerUiHost.of(connection).open(new MyWindow(model));   // whenever you have something to show
+WindowProtocol.register();                                  // once, at init
+ServerWindows.of(connection).open(new MyWindow(model));   // whenever you have something to show
 ```
 
 It is ported from `ServerPlayer.openMenu` (both MC versions): allocate the next id, construct, tell
@@ -816,7 +816,7 @@ divergences, both deliberate:
   same subject", and keeps its scroll position and whatever is half-typed in it.
 - **Close is a request.** The frame asks, the client decides, then tells the server via `ui/close`.
 
-On the client, `ClientUiHost` adopts each session as it arrives and hands the rebuilt tree to a
+On the client, `ClientWindows` adopts each session as it arrives and hands the rebuilt tree to a
 **`WindowMount`** — the one thing a platform implements (on 1.7.10, a `WindowFrame` on the desktop).
 Local behaviour is looked up **by window type**, which is `MenuScreens.register` — with one
 improvement over it: **a window whose type nothing registered still mounts and still works**, because
@@ -1067,8 +1067,8 @@ not build, from widget classes it already had.
 | `channel.setInboundHandler` | once, at init | — | Frames arrive and go nowhere |
 | `FrameMultiplexer.onFrameReceived` | the channel adapter | **Netty** | — (it only enqueues) |
 | `ProtocolConnection.tick()` | the loader, per tick | server / client thread | **Silence.** Nothing arrives, nothing sends, nothing times out |
-| `ProtocolConnection.onTick` hooks | `tick()`, after the drain | server / client thread | Whatever registered one stops running. `ServerUiHost` is one |
-| `ServerUiSession.tick()` | **`ServerUiHost`**, per tick | server thread | Session stays live, answers calls, **never sends another state update** |
+| `ProtocolConnection.onTick` hooks | `tick()`, after the drain | server / client thread | Whatever registered one stops running. `ServerWindows` is one |
+| `ServerUiSession.tick()` | **`ServerWindows`**, per tick | server thread | Session stays live, answers calls, **never sends another state update** |
 | `ClientUiSession.tick()` | nobody needs to | client thread | Nothing — it's a genuine no-op while riding a connection |
 
 > ⚠️ **The two session `tick()`s are not symmetric, and they read alike.** `ClientUiSession.tick()`
@@ -1076,7 +1076,7 @@ not build, from widget classes it already had.
 > subsystem on it. But `ServerUiSession.tick()` **still flushes**, because it is the observer holding
 > that tick's dirty set and *nothing else knows the set exists*.
 >
-> **You no longer call either.** `ServerUiHost` ticks every window on a connection from that
+> **You no longer call either.** `ServerWindows` ticks every window on a connection from that
 > connection's own `onTick` hook, which is most of the reason a mod stopped needing a tick handler at
 > all. Forgetting the server's used to be a live session that answered calls and silently never sent
 > another state update; it is now unforgettable.
@@ -1124,10 +1124,10 @@ c.notify("mything/tick", args);                       // notification — you do
 
 // ── Serve a UI ────────────────────────────────────────────────────────────
 // once, at init, beside the contributor above:
-UiHosts.register();
+WindowProtocol.register();
 
 // wherever you have something to show. No id, no session, no tick, no teardown.
-ServerUiHost.of(c).open(new MyWindow(model));
+ServerWindows.of(c).open(new MyWindow(model));
 
 public final class MyWindow extends ServerWindow {
     @Override public String type()    { return "mymod:panel"; }   // client dispatches on this
@@ -1135,7 +1135,7 @@ public final class MyWindow extends ServerWindow {
     @Override public String key()     { return "mymod:panel"; }   // dedup + remembered geometry
     @Override public UIElement root() { return panel.root; }
 
-    @Override protected void bind(SessionScope io) {              // before open(), enforced
+    @Override protected void bind(WindowScope io) {              // before open(), enforced
         io.sheet(SheetRef.ofResource("mymod:theme", hash), css);
         io.onActivate(panel.button, ctx -> doThing());
         io.onCall  ("save",  (args, respond) -> respond.ok(null)); // window-scoped
@@ -1149,17 +1149,17 @@ public final class MyWindow extends ServerWindow {
 }
 
 // …or with no class at all, for a window that is one screenful of handlers:
-ServerUiHost.of(c).open(UiWindows.window("mymod:panel", MyPanel::new, p -> p.root)
+ServerWindows.of(c).open(ServerWindow.of("mymod:panel", MyPanel::new, p -> p.root)
         .key("mymod:panel")
         .wire((p, io) -> io.onActivate(p.button, ctx -> doThing())));
 
 // ── Receive a UI ──────────────────────────────────────────────────────────
 // once, at init. OPTIONAL: a window with no factory still opens, renders and
 // reports every event the server asked for — it just has no local extras.
-ClientUiHost.register("mymod:panel", MyBehaviour::new);
+ClientWindows.register("mymod:panel", MyBehaviour::new);
 
 // once per platform, not per mod — CgUiScreen does this on 1.7.10:
-ClientUiHost.of(c).setMount(myWindowMount);
+ClientWindows.of(c).setMount(myWindowMount);
 ```
 
 ## 25. Where to look next

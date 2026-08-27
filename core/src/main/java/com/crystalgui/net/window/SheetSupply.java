@@ -1,4 +1,4 @@
-package com.crystalgui.net.host;
+package com.crystalgui.net.window;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -97,7 +97,7 @@ public final class SheetSupply {
     /**
      * Resolves every ref for one window, then applies them together.
      *
-     * <p>Package-private: a host does not call this, {@link ClientUiHost} does, once per mount and
+     * <p>Package-private: a host does not call this, {@link ClientWindows} does, once per mount and
      * again on a re-describe.</p>
      */
     void resolve(ClientUiSession<Object> session, List<SheetRef> refs, ClientWindowContext window) {

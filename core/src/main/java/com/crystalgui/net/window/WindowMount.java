@@ -1,4 +1,4 @@
-package com.crystalgui.net.host;
+package com.crystalgui.net.window;
 
 import com.crystalgui.ui.UIElement;
 
@@ -12,7 +12,7 @@ import com.crystalgui.ui.UIElement;
  *
  * <h3>Installed once, per connection-independent host</h3>
  *
- * <p>{@code ClientUiHost.setMount} takes it, and windows that arrive before a mount exists are queued and
+ * <p>{@code ClientWindows.setMount} takes it, and windows that arrive before a mount exists are queued and
  * drained when one does. That is not a nicety: a server can open a window before the player has ever
  * opened the screen the desktop lives on, and the two orderings are genuinely independent. The alternative
  * — a poll from a tick handler asking "is there a screen yet, is there a window yet" — is what this
@@ -45,7 +45,7 @@ public interface WindowMount {
          */
         void closedByServer(String reason);
 
-        /** Bring it forward. What re-opening an already-open window means. @see UiWindows */
+        /** Bring it forward. What re-opening an already-open window means. @see ServerWindows#open */
         void focus();
 
         /**

@@ -482,7 +482,7 @@ public final class CgUiScreen extends GuiScreen {
         ProtocolConnection<Object> live = CgUiConnections.client();
         // WHERE A SERVER'S WINDOWS GO. Re-asked per frame for the same reason the workspace client is:
         // free when the wire has not moved, and a rebind nothing re-asks for can never fire. Windows
-        // that arrived before this point were queued by ClientUiHost and land on the next tick.
+        // that arrived before this point were queued by ClientWindows and land on the next tick.
         CgUiWindowMount.bind(live);
         if (live != null && live != projectsAskedOn) {
             projectsAskedOn = live;

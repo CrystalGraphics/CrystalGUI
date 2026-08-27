@@ -1,4 +1,4 @@
-package com.crystalgui.net.host;
+package com.crystalgui.net.window;
 
 import com.crystalgui.ui.UIElement;
 
@@ -54,8 +54,8 @@ public abstract class ServerFragment {
     /** This fragment's subtree. The parent adds it wherever it belongs before attaching. */
     public abstract UIElement root();
 
-    /** Registers this fragment's behaviour, through its own scope. @see SessionScope#attach */
-    protected abstract void bind(SessionScope io);
+    /** Registers this fragment's behaviour, through its own scope. @see WindowScope#attach */
+    protected abstract void bind(WindowScope io);
 
     /** One world tick, after the window's own and in attach order. */
     protected void tick() {

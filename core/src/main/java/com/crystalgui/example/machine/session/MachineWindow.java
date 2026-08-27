@@ -7,9 +7,9 @@ import com.crystalgui.example.machine.MachineTrace;
 import com.crystalgui.example.machine.ui.MachinePanel;
 import com.crystalgui.example.machine.ui.MachineStyles;
 import com.crystalgui.net.UiEventKinds;
-import com.crystalgui.net.host.ServerUiHost;
-import com.crystalgui.net.host.ServerWindow;
-import com.crystalgui.net.host.SessionScope;
+import com.crystalgui.net.window.ServerWindows;
+import com.crystalgui.net.window.ServerWindow;
+import com.crystalgui.net.window.WindowScope;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.UIElement;
 
@@ -18,8 +18,8 @@ import com.crystalgui.ui.UIElement;
  *
  * <p>Compare what is <em>not</em> here. No session construction, no window id, no
  * {@code session.open()}, no tick loop, no player map, no close handling, no logout hook. All of that
- * belongs to {@link ServerUiHost}, which is the whole point: opening a UI is
- * {@code ServerUiHost.of(connection).open(new MachineWindow(model))}, and everything after it is the
+ * belongs to {@link ServerWindows}, which is the whole point: opening a UI is
+ * {@code ServerWindows.of(connection).open(new MachineWindow(model))}, and everything after it is the
  * engine's.</p>
  *
  * <h3>This window is a VIEW of the machine; it is not the machine</h3>
@@ -35,7 +35,7 @@ import com.crystalgui.ui.UIElement;
  *
  * <h3>The session holds the behaviour; the element holds only a name</h3>
  *
- * <p>{@link SessionScope#on} does two separate things, and the split is the design:</p>
+ * <p>{@link WindowScope#on} does two separate things, and the split is the design:</p>
  *
  * <ul>
  *   <li>the lambda is stored <b>on the session</b>, keyed by element and kind — it never goes near the
@@ -175,7 +175,7 @@ public final class MachineWindow extends ServerWindow {
      * here.</p>
      */
     @Override
-    protected void bind(SessionScope io) {
+    protected void bind(WindowScope io) {
         /*
          * NAMED, AND OFFERED. The ref is a content hash the client may already hold; the CSS beside it
          * is what a client that does not can fetch with ui/sheet. Before that message existed, a host

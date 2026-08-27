@@ -1,4 +1,4 @@
-package com.crystalgui.net.host;
+package com.crystalgui.net.window;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -19,7 +19,7 @@ import com.crystalgui.ui.ElementRegistry;
 import com.crystalgui.ui.UIElement;
 
 /**
- * Every window this client is showing over one connection — <b>the mirror of {@link ServerUiHost}</b>.
+ * Every window this client is showing over one connection — <b>the mirror of {@link ServerWindows}</b>.
  *
  * <p>Owns the two things a host used to leave to each mod, both of which are races when written by
  * hand: adopting each session as it arrives (and installing the listener <em>before</em> the first
@@ -47,7 +47,7 @@ import com.crystalgui.ui.UIElement;
  * it is the architecture: the client rebuilt the tree from a description and wired every reported event
  * from the description itself, so a behaviour only ever adds things this client wants for itself.</p>
  */
-public final class ClientUiHost {
+public final class ClientWindows {
 
     /**
      * type → local behaviour. Static, because what a client can do about a window type is a fact about
@@ -79,7 +79,7 @@ public final class ClientUiHost {
     @Nullable
     private SheetSupply sheets;
 
-    private ClientUiHost(ProtocolConnection<Object> connection) {
+    private ClientWindows(ProtocolConnection<Object> connection) {
         this.connection = connection;
         // A description addresses widgets by tag, and an unregistered tag THROWS on decode rather than
         // degrading to a styleless div. Idempotent, and every lookup would trigger it anyway; it is here
@@ -98,11 +98,11 @@ public final class ClientUiHost {
     }
 
     /** The host for this connection, created on first use. */
-    public static ClientUiHost of(ProtocolConnection<Object> connection) {
-        return connection.attachment(ClientUiHost.class, ClientUiHost::new);
+    public static ClientWindows of(ProtocolConnection<Object> connection) {
+        return connection.attachment(ClientWindows.class, ClientWindows::new);
     }
 
-    /** Builds the host so it starts listening for windows. @see UiHosts */
+    /** Builds the host so it starts listening for windows. @see WindowProtocol */
     static void install(ProtocolConnection<Object> connection) {
         of(connection);
     }
@@ -140,7 +140,7 @@ public final class ClientUiHost {
      * <p>A host installs this once — {@code CgUiScreen} does it while building the desktop. Setting a
      * second one does not move windows already on screen: they belong to the mount that made them.</p>
      */
-    public ClientUiHost setMount(@Nullable WindowMount mount) {
+    public ClientWindows setMount(@Nullable WindowMount mount) {
         this.mount = mount;
         if (mount == null || waiting.isEmpty()) return this;
         List<ClientUiSession<Object>> pending = new ArrayList<>(waiting);
@@ -160,7 +160,7 @@ public final class ClientUiHost {
      * <p>Optional. Without one, sheets are simply not applied and the window renders on the user-agent
      * sheet alone — visibly plain, never broken. @see SheetSupply</p>
      */
-    public ClientUiHost setSheetSupply(@Nullable SheetSupply supply) {
+    public ClientWindows setSheetSupply(@Nullable SheetSupply supply) {
         this.sheets = supply;
         return this;
     }
