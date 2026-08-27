@@ -60,6 +60,46 @@
  *   session.tick()          ───────── ui/stateDelta ─────────►   apply it to element 3
  * </pre>
  *
+ * <h2>The three contract shapes — the part worth memorising</h2>
+ *
+ * <p>There are only two message kinds, and each has a register-side and a send-side. <b>They are on
+ * different classes, and that is the thing everybody trips on once:</b></p>
+ *
+ * <table>
+ *   <tr><th>Shape</th><th>Register</th><th>Send</th><th>Lives on</th></tr>
+ *   <tr><td>Request → Response</td><td>{@code onCall(method, handler)}</td>
+ *       <td>{@code call(method, args, onResult, onError)}</td>
+ *       <td>the <b>session</b></td></tr>
+ *   <tr><td>Notification</td><td>{@code onNotify(method, handler)}</td>
+ *       <td>{@code notify(method, payload)}</td>
+ *       <td>the <b>connection</b></td></tr>
+ *   <tr><td>Widget event</td><td>{@code session.on(element, kind, handler)}</td>
+ *       <td>— the client sends it for you</td><td>the <b>session</b></td></tr>
+ * </table>
+ *
+ * <p>A session gives you {@code onCall}/{@code call} and nothing else. Notifications are one layer
+ * down on the {@code ProtocolConnection}, where every subsystem sharing the wire meets. Same wire,
+ * different class — so anything that wants to send something unanswered holds both.</p>
+ *
+ * <p><b>Choosing between them has one question behind it: is anybody waiting?</b> If the caller needs
+ * an answer, or needs to know it <em>failed</em>, it is a request. If it is "here is a thing that
+ * happened", it is a notification, and making it a request buys a round trip for a reply nobody
+ * reads.</p>
+ *
+ * <p>The panel has a <b>five-button demo strip</b> so all four directions are reachable by pressing
+ * something, plus a request the server refuses:</p>
+ *
+ * <table>
+ *   <tr><th></th><th>Server → Client</th><th>Client → Server</th></tr>
+ *   <tr><td><b>Request</b></td><td>{@code Ping client}</td><td>{@code Ask stats}</td></tr>
+ *   <tr><td><b>Notification</b></td><td>{@code Announce}</td><td>{@code Heartbeat}</td></tr>
+ * </table>
+ *
+ * <p>Two of those buttons are wired by the <b>server</b> ({@code session.on}, so a press crosses the
+ * wire as {@code ui/event}) and three by the <b>client</b> ({@code attachListener}, so the listener
+ * is purely local and the server never learns it exists). The button cannot tell the difference, and
+ * neither can the stylesheet — a described tree is an ordinary tree once it has been rebuilt.</p>
+ *
  * <h2>The five things people get wrong first</h2>
  *
  * <ol>

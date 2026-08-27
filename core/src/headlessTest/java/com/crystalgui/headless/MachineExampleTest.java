@@ -2,6 +2,7 @@ package com.crystalgui.headless;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -15,9 +16,11 @@ import com.crystalgui.net.UiEventKinds;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
+import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.ProgressBar;
 import com.crystalgui.ui.elements.Switch;
+import com.crystalgui.ui.elements.UIText;
 
 /**
  * The worked example in {@code com.crystalgui.example}, run end to end.
@@ -155,6 +158,152 @@ public class MachineExampleTest {
         assertTrue("the server did not advance", net.server.model().progress() > 0f);
         assertEquals("the bar froze at the value it opened with",
                 net.server.model().progress(), bar.fraction(), 1e-4);
+    }
+
+    // ── The other two contract shapes ───────────────────────────────────────
+
+    /**
+     * A <b>notification</b> arrives, and nothing is sent back.
+     *
+     * <p>Asserted through an effect rather than through the wire, because that is the only thing a
+     * notification leaves behind: there is no response to inspect. If this ever regresses it will be
+     * because the handler was registered on the SESSION instead of the CONNECTION — the session has
+     * no {@code onNotify}, so that version does not compile, which is the good kind of failure.</p>
+     */
+    @Test
+    public void aNotificationReachesTheServerWithNothingComingBack() {
+        Loopback net = new Loopback().open();
+
+        net.client.sendHeartbeat();
+        net.settle(1);      // the notification crosses and the server's handler runs
+
+        /*
+         * AND THEN A WORLD TICK, WHICH IS NOT A FORMALITY. The handler above wrote into a widget,
+         * which marked it dirty on the session -- and a dirty set is only ever flushed by
+         * ServerUiSession.tick(). settle() pumps the CONNECTION, which is a different thing.
+         *
+         * The first version of this test omitted it and failed, with the server's handler having run
+         * perfectly. That is the exact production failure mode of forgetting the server tick: a live
+         * session that answers calls and never sends another state update.
+         */
+        net.tickWorld(1);
+
+        // The server writes the count into its own readout, which travels back as an ordinary state
+        // delta -- so seeing it on the CLIENT proves both halves of the round trip.
+        assertTrue("the server never saw the heartbeat, or never flushed it",
+                wireText(net).contains("heartbeat #1"));
+    }
+
+    /**
+     * A <b>refused</b> request runs the error callback, not the result one.
+     *
+     * <p>The half a happy-path example never shows, and the reason a request takes two lambdas.
+     * {@code respond.fail} is an ordinary answer that happens to say no — same envelope kind as a
+     * success — so a caller must be able to tell "refused" from "never came back". Only one of those
+     * is worth retrying.</p>
+     */
+    @Test
+    public void aRefusedRequestRunsTheErrorCallbackWithACode() {
+        Loopback net = new Loopback().open();
+
+        String[] result = { null };
+        String[] failure = { null };
+        net.client.session().call("machine/rename",
+                new StateMap<Object>(PlainOps.INSTANCE).putString("name", "   "),
+                ok -> result[0] = "accepted",
+                error -> failure[0] = error);
+        net.settle(2);
+
+        assertNull("a refusal must not run the result callback", result[0]);
+        // The CODE, not prose. A client branches on a value; it cannot branch on a message, and
+        // matching message text is a coupling nobody remembers making.
+        assertEquals("EMPTY_NAME", failure[0]);
+    }
+
+    /** And the same call succeeds when the argument is good — the positive control. */
+    @Test
+    public void thatSameCallSucceedsWithAUsableName() {
+        Loopback net = new Loopback().open();
+
+        String[] failure = { null };
+        boolean[] accepted = { false };
+        net.client.session().call("machine/rename",
+                new StateMap<Object>(PlainOps.INSTANCE).putString("name", "Furnace"),
+                ok -> accepted[0] = true,
+                error -> failure[0] = error);
+        net.settle(2);
+
+        assertNull(failure[0]);
+        assertTrue("the result callback never ran", accepted[0]);
+        assertEquals("and the model was actually renamed", "Furnace", net.server.model().label());
+    }
+
+    /**
+     * <b>Each side's line is written only by that side</b>, and the two say different things about
+     * one exchange.
+     *
+     * <p>This is the assertion that would have caught the readout bug the two-line layout replaced.
+     * There was one line with a badge naming its last author, and pressing Announce produced the
+     * CLIENT badge above the SERVER's sentence — because {@code Property.set} returns early on an
+     * equal value, so the server rewriting "SERVER" over "SERVER" marked nothing dirty and never
+     * entered the delta, while the text beside it did.</p>
+     *
+     * <p>The rule it taught is worth more than the fix: <b>a state delta carries what CHANGED on the
+     * server, never what DIFFERS between the two sides.</b> A client that writes into a server-owned
+     * widget has desynchronised it, and the server cannot put it right, because from where the server
+     * is standing nothing happened.</p>
+     */
+    @Test
+    public void eachSideWritesItsOwnResultLineAndOnlyItsOwn() {
+        Loopback net = new Loopback().open();
+
+        net.client.sendHeartbeat();     // the client says "sent", locally and immediately
+        net.settle(1);
+        net.tickWorld(1);               // the server says "received", and flushes it
+
+        assertTrue("the client's line should say it SENT one, got: " + clientLine(net),
+                clientLine(net).contains("NOTIFY sent"));
+        assertTrue("the server's line should say it RECEIVED one, got: " + serverLine(net),
+                serverLine(net).contains("NOTIFY received"));
+        assertTrue(serverLine(net).contains("heartbeat #1"));
+    }
+
+    /**
+     * And the server's own line survives a client-side write, because the client never touches it.
+     *
+     * <p>The negative control for the row above: if the two lines were ever collapsed back into one,
+     * the client's write would land on the server's sentence and this fails.</p>
+     */
+    @Test
+    public void aClientWriteDoesNotDisturbTheServersLine() {
+        Loopback net = new Loopback().open();
+
+        net.client.sendHeartbeat();
+        net.settle(1);
+        net.tickWorld(1);
+        String afterServerWrote = serverLine(net);
+
+        net.client.requestStats();      // a purely client-side write, no round trip completed yet
+        assertEquals("the client must not be able to overwrite the server's line",
+                afterServerWrote, serverLine(net));
+    }
+
+    private static String serverLine(Loopback net) {
+        return textOf(net, "#result-server");
+    }
+
+    private static String clientLine(Loopback net) {
+        return textOf(net, "#result-client");
+    }
+
+    private static String textOf(Loopback net, String selector) {
+        UIElement found = net.client.root().querySelector(selector);
+        return found instanceof UIText ? ((UIText) found).getText() : "";
+    }
+
+    /** Reads the panel's protocol readout out of the CLIENT's tree. */    /** Reads the panel's protocol readout out of the CLIENT's tree. */
+    private static String wireText(Loopback net) {
+        return serverLine(net);
     }
 
     // ── The rule that is easiest to break ───────────────────────────────────

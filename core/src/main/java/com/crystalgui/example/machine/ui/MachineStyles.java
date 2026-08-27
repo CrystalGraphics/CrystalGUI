@@ -82,6 +82,20 @@ public final class MachineStyles {
     public static final String LABEL_CLASS = "machine-label";
     public static final String TITLE_CLASS = "machine-title";
     public static final String STATUS_CLASS = "machine-status";
+    public static final String WIRE_CLASS = "machine-wire";
+
+    /** The protocol demo's own vocabulary. See {@code MachinePanel.demoEntry}. */
+    public static final String HINT_CLASS = "machine-hint";
+    public static final String DEMO_CLASS = "machine-demo";
+    public static final String KIND_CLASS = "machine-kind";
+    public static final String KIND_REQUEST_CLASS = "machine-kind-request";
+    public static final String KIND_NOTIFY_CLASS = "machine-kind-notify";
+    public static final String KIND_REFUSED_CLASS = "machine-kind-refused";
+    public static final String DIRECTION_CLASS = "machine-direction";
+    public static final String METHOD_CLASS = "machine-method";
+    public static final String OUTCOME_CLASS = "machine-outcome";
+    public static final String WHO_SERVER_CLASS = "machine-who-server";
+    public static final String WHO_CLIENT_CLASS = "machine-who-client";
 
     /** Resolved against this class's own package, which is what keeps the name unqualified. */
     private static final String FILE = "machine.css";
