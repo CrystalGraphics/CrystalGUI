@@ -81,7 +81,15 @@ final class EditorSuggest {
         completion = opened;
         opened.caretMoved(editor.getCaret());
         opened.onClosed.connect(() -> {
-            if (completion == opened) completion = null;
+            if (completion != opened) return;
+            completion = null;
+            // AND THE POPUP GOES WITH IT. A session closes ITSELF -- a refilter that leaves no rows ends
+            // one -- and forgetting the field is not the same as taking the widget off screen: the popup
+            // stayed, empty but for its hint strip, over the line being typed. Escape then did nothing,
+            // which reads as a second bug and is this one: `handleKey` returns early once the session is
+            // gone, so the key that exists to dismiss it could no longer reach it. Only the explicit
+            // `close()` path hid the popup, and that is the path this case never takes.
+            if (popup != null) popup.detach();
         });
 
         if (TRACE) trace("  opened rows=" + opened.visibleRows().size() + " closed=" + opened.isClosed());
