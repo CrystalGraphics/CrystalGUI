@@ -1722,17 +1722,26 @@ com.crystalgui.net             UITransport, InMemoryTransport,
                                ServerUiSession, ClientUiSession, ClientUiSessions, UiWindowMux,
                                NetworkIds, SheetRef, UiEventKinds
   .window                      A WINDOW'S LIFETIME — the layer above the sessions, and the one a mod
-                               uses. ServerWindow (what you write: a tree, some behaviour, and three
-                               questions — type/title/key, stillValid, onClosed; ServerWindow.of(…)
-                               builds the same thing from lambdas for a window that needs no class),
-                               ServerFragment + WindowScope (composition; a scope namespaces wire
-                               methods by path while widget handlers stay keyed by the ELEMENT, so a
-                               parent cannot override a child), ServerWindows / ClientWindows (one per
-                               connection, installed by the WindowProtocol contributor), WindowMount +
-                               ClientWindowContext + ClientWindowBehaviour (the platform seam and the
-                               by-type behaviour registry — MenuScreens, except an unregistered type
-                               still WORKS), SheetSupply (local resolver → cache → ui/sheet).
-                               plan_ui_host.md
+                               uses. Networked<M> (ONE class per UI: a UIElement whose widgets are
+                               FIELDS — the field name becomes the id — with layout/serve/tick/
+                               stillValid/title/key on the server, bound/client on the client, closed
+                               on both; the panel IS the tree's root on both sides, so the mounted
+                               root is the panel and `machinepanel { }` styles it by tag), UiType (the
+                               identity both sides reference AND the engine's customElements.define —
+                               registers the panel's tag so a description decodes into the class;
+                               build() on the server, bind() on the client, nested field types
+                               registered recursively), ServerScope / ClientScope (what serve() and
+                               client() are handed — a VIEW of the window's one session, prefixed by
+                               the panel's element-id path, so a nested panel's "save" is
+                               "engines/save" on both sides with nobody writing the string;
+                               composition is ServerScope.attach(child, slice) — props down, the id
+                               is the namespace, and the child panel is built by the PARENT's layout
+                               with the slice only it knows), ServerWindow<P> (the final HANDLE
+                               open() returns — session, key dedup, close matrix; NOT an authoring
+                               surface any more), ServerWindows.open(TYPE, model) /
+                               ClientWindows.register(TYPE) (one line per side), WindowMount +
+                               ClientWindowContext (the platform seam), SheetSupply (local resolver →
+                               cache → ui/sheet). plan_ui_host.md
 
                                NOTE the three senses of "window", which is why these live in their own
                                package: UIWindow is the ENGINE for one surface (and is the one genuine
@@ -1823,7 +1832,7 @@ three-phase event types are in `ui/event/` — there is no `core/event/` package
 | `plan_windowing.md` (repo root) | **live** | CrystalOS — the window compositor: multiple visible, resizable, stacking windows as element subtrees under one `UIWindow` (the desktop), a taskbar, a switcher, and the hide/close/destroy lifecycle with window-scoped modality. Researched against Win32, X11, Cocoa, Swing MDI, the Page Lifecycle API and bfcache — a window is an element, close is a *request* everywhere, and a hidden thing must stop working |
 | `plan_phase5.md` (repo root) | **live** | Networking, the workspace and UI over the wire, after Phase 4 shipped and was verified on a real dedicated server. The whole 15-method server surface, what decides a command's side (nothing — the client has no filesystem to misuse), and and the ten items between "served over a socket" and "usable without losing work" — led by a window lifecycle (hide is not close, close is not destroy) and the strip that makes minimise safe |
 | `plan_phase6.md` (repo root) | **live** | The remote file made honest: the wire's speed, external change, and disagreement. A real OS filesystem watcher (and why the etag poll survives as its reconciliation — OVERFLOW loses events by design and macOS's `WatchService` is a poll wearing an interface), the client end of a change nobody wired up, pipelining the serial chunked read, a histogram differ as the substrate under both a diff viewer and delta reads, and a probe that runs with the editor OPEN — argued for by a bug every existing probe missed because they all close the GUI |
-| `plan_ui_host.md` (repo root) | **I–V shipped 2026-08-27 · VI live** | The UI host — a lifecycle engine for networked windows, from an audit of the Machine example's setup. **Seventeen findings**, of which the sharpest are: per-mod tick polls opening sessions; **no client→server close message at all**, so the shipped example resurrected its own closed window on the next tick; the peer map keyed on a mortal `EntityPlayerMP`, so one respawn silently drops every inbound frame *while outbound keeps working*; no window type or title on the wire, so one mod's behaviour adopted another mod's tree; notifications unscopeable per window, so a second window of one application threw at open; `session.on` silently replacing a duplicate handler; and a **state delta that races the description being dropped permanently**. MC's own `Container`/`openMenu` pipeline and LDLib2's holders are the port sources. Shipped as `com.crystalgui.net.window` — `ServerWindow`/`ServerFragment`/`ServerWindows`/`ClientWindows` + a `WindowMount` SPI — with the full close matrix, and the example collapsed to a window class plus one registration line. **Part VI is live design for a second, larger rewrite**: inverting ownership so a window is ATTACHED to a panel rather than owning one (with the two hard engine limits that constrains — one observer per tree, and reported events being add-only so a re-attached panel advertises events nothing handles and its content hash drifts), a typed client-side panel BINDING rather than `querySelector` + `instanceof` (which silently does nothing when an id moves), and the rule that settles every "should this be generic" question — does the framework hand it to you, or do you already hold it |
+| `plan_ui_host.md` (repo root) | **I–V shipped 2026-08-27 · VI live** | The UI host — a lifecycle engine for networked windows, from an audit of the Machine example's setup. **Seventeen findings**, of which the sharpest are: per-mod tick polls opening sessions; **no client→server close message at all**, so the shipped example resurrected its own closed window on the next tick; the peer map keyed on a mortal `EntityPlayerMP`, so one respawn silently drops every inbound frame *while outbound keeps working*; no window type or title on the wire, so one mod's behaviour adopted another mod's tree; notifications unscopeable per window, so a second window of one application threw at open; `session.on` silently replacing a duplicate handler; and a **state delta that races the description being dropped permanently**. MC's own `Container`/`openMenu` pipeline and LDLib2's holders are the port sources. Shipped as `com.crystalgui.net.window` — `ServerWindow`/`ServerFragment`/`ServerWindows`/`ClientWindows` + a `WindowMount` SPI — with the full close matrix, and the example collapsed to a window class plus one registration line. **Part VI designed and Part VII shipped the second rewrite (2026-08-28)**: `Networked<M>` — the panel IS the element, one interface per UI, model handed to the server hooks as a parameter so the side boundary is visible in the signatures — with `UiType` (identity + tag registration), `ServerScope`/`ClientScope` (the id-path-prefixed views that make nesting compose), and SIX classes deleted: `Panel`, `PanelType`, `WindowType`, `ClientWindowBehaviour`, `ServerFragment`, `WindowScope`. The rule that settles every "should this be generic" question — does the framework hand it to you, or do you already hold it — decided all of it |
 
 These six are the only docs under `docs/` — the first three audited against the code on
 2026-07-29, `CGUI_THEMING.md` added 2026-08-10 with its token table machine-checked against the

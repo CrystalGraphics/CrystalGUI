@@ -15,12 +15,17 @@ import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.ui.UIElement;
 
 /**
- * Every window one peer is being shown — <b>the lifecycle {@code Protocols} left to each mod</b>.
+ * Every window one peer is being shown — <b>the server host, and the whole server side of showing a
+ * UI</b>.
  *
- * <p>{@code Protocols} gave a subsystem a seat at the connection. This gives a <em>window</em> a
- * lifecycle on it: allocate an id, build the session, bind, open, tick, sweep validity, and end the
- * window whichever of the four ways it ends. A mod writes a {@link ServerWindow} and calls
- * {@link #open}; there is nothing else to remember and nothing to poll.</p>
+ * <pre>{@code
+ * ServerWindows.of(connection).open(MachinePanel.TYPE, machine);
+ * }</pre>
+ *
+ * <p>That is the entire call site: allocate an id, build the panel, run its {@link Networked#serve}
+ * against a fresh {@link ServerScope}, open the session, tick it every world tick, sweep its
+ * validity, and end it whichever of the four ways it ends. A mod writes a {@link Networked} panel and
+ * this line; there is nothing else to remember and nothing to poll.</p>
  *
  * <h3>What it replaces</h3>
  *
@@ -56,7 +61,7 @@ public final class ServerWindows {
     private final ProtocolConnection<Object> connection;
 
     /** Insertion-ordered, so ticking and closing are both reproducible. */
-    private final Map<Integer, ServerWindow> windows = new LinkedHashMap<>();
+    private final Map<Integer, ServerWindow<?>> windows = new LinkedHashMap<>();
 
     /**
      * The next id to hand out, per connection.
@@ -104,47 +109,61 @@ public final class ServerWindows {
     // ── Opening ─────────────────────────────────────────────────────────────
 
     /**
-     * Opens a window: allocate, build, bind, open.
+     * Opens a window serving a fresh panel over {@code model}: build, bind, open.
      *
-     * <p>If {@code window} has a {@link ServerWindow#key() key} and a window is already open under it,
-     * <b>the existing one is brought forward and returned</b> — the new one is never bound and never
-     * opened. That keeps its tree, its scroll position and whatever is half-typed in it, which is the
-     * whole reason to prefer this over Minecraft's close-and-reopen.</p>
+     * <p>The panel is {@linkplain UiType#build built} — fields created and named, {@code layout} run
+     * against the model — then its {@link Networked#serve} registers everything it can do, <b>before</b>
+     * the session opens, so the handlers-before-open rule cannot be broken from a panel's own code.
+     * The intersection bound is what makes the whole call typed without a cast anywhere: the one place
+     * both {@code P} and {@code M} are in scope is the one place the panel's server hooks are captured
+     * with their model.</p>
      *
-     * @throws IllegalStateException if the key is held by a window of a different {@link
-     *                               ServerWindow#type() type}, which is a wiring mistake rather than
-     *                               something to resolve silently
+     * <p>If the panel answers a {@link Networked#key key} and a window is already open under it,
+     * <b>the existing one is brought forward and returned</b> — the fresh panel is discarded, never
+     * bound and never opened. That keeps the open window's tree, its scroll position and whatever is
+     * half-typed in it, which is the whole reason to prefer this over Minecraft's close-and-reopen.</p>
+     *
+     * @throws IllegalStateException if the key is held by a window of a different type, which is a
+     *                               wiring mistake rather than something to resolve silently
      */
-    @SuppressWarnings("unchecked")
-    public <W extends ServerWindow> W open(W window) {
-        if (window == null) throw new IllegalArgumentException("window is null");
-        if (window.live) throw new IllegalStateException("that window is already open");
+    public <P extends UIElement & Networked<M>, M> ServerWindow<P> open(UiType<P, M> type, @Nullable M model) {
+        if (type == null) throw new IllegalArgumentException("type is null");
 
-        String key = window.key();
+        P panel = type.build(model);
+        String key = panel.key(model);
         if (key != null) {
-            ServerWindow existing = byKey(key);
+            ServerWindow<?> existing = byKey(key);
             if (existing != null) {
-                if (!existing.type().id().equals(window.type().id())) {
+                if (existing.uiType != type) {
                     throw new IllegalStateException("key '" + key + "' is already held by a <"
-                            + existing.type() + ">, so a <" + window.type() + "> cannot take it");
+                            + existing.typeId() + ">, so a <" + type.id() + "> cannot take it");
                 }
                 // BRING IT FORWARD rather than rebuild. A re-sent ui/openWindow would also work and
-                // would throw away exactly the state the window was retained for.
+                // would throw away exactly the state the window was retained for. The panel built
+                // above is discarded, unopened.
                 ServerUiSession<Object> open = existing.session;
                 if (open != null) open.notify(UiMethods.FOCUS_WINDOW, null);
-                return (W) existing;
+                @SuppressWarnings("unchecked")   // same UiType instance → same P, by construction
+                ServerWindow<P> same = (ServerWindow<P>) existing;
+                return same;
             }
         }
 
-        UIElement root = window.root();
-        if (root == null) throw new IllegalStateException("<" + window.type() + "> has no root");
+        String title = panel.title(model);
+        if (title == null) title = type.id();
 
         int id = nextWindowId++;
-        ServerUiSession<Object> session = new ServerUiSession<>(id, root, connection)
-                .setType(window.type().id())
-                .setTitle(window.title())
+        ServerUiSession<Object> session = new ServerUiSession<>(id, panel, connection)
+                .setType(type.id())
+                .setTitle(title)
                 .setKey(key);
 
+        ServerWindow<P> window = new ServerWindow<>(type, panel,
+                io -> panel.serve(model, io),
+                () -> panel.tick(model),
+                viewer -> panel.stillValid(model, viewer),
+                reason -> panel.closed(reason.name()),
+                title, key);
         window.host = this;
         window.session = session;
         window.windowId = id;
@@ -153,8 +172,8 @@ public final class ServerWindows {
 
         try {
             // BEFORE open(), which is what makes the handlers-before-open rule unbreakable from a
-            // window's own code rather than a thing every author has to remember.
-            window.bind(new WindowScope(session, window, ""));
+            // panel's own code rather than a thing every author has to remember.
+            window.binder.accept(new ServerScope(session, window, ""));
             session.onClientClosed(reason -> finish(window, ServerWindow.CloseReason.CLIENT, reason));
             session.open();
         } catch (RuntimeException | Error failed) {
@@ -162,50 +181,39 @@ public final class ServerWindows {
              * ROLLED BACK, or a window that refused to bind is left half-open: in the map, marked live,
              * holding an id, with its (method, window) pairs claimed on the mux -- so the next open in
              * that id throws about a window nobody has ever seen. Binding is exactly where a wiring
-             * mistake is raised (a duplicate handler, two fragments under one name), which makes this
+             * mistake is raised (a duplicate handler, two children under one id), which makes this
              * the ordinary path for a mistake rather than a theoretical one.
              */
             windows.remove(id);
             window.live = false;
             window.host = null;
             window.session = null;
-            window.fragments.clear();
+            window.attached.clear();
             session.abandon("failed to open");
             throw failed;
         }
         return window;
     }
 
-    /**
-     * Opens a window described by lambdas. @see ServerWindow#of(String, java.util.function.Supplier, java.util.function.Function)
-     *
-     * <p>An overload rather than making the caller write {@code .build()}: the builder has exactly one
-     * destination, and a fluent chain that ends in a call nobody needs is a call somebody will forget
-     * and then wonder why nothing opened.</p>
-     */
-    public ServerWindow open(ServerWindow.Builder<?> builder) {
-        return open(builder.build());
-    }
-
     // ── Closing ─────────────────────────────────────────────────────────────
 
     /** Ends a window and tells the client. Safe for one that has already ended. */
-    public void close(ServerWindow window, String reason) {
+    public void close(ServerWindow<?> window, String reason) {
         finish(window, ServerWindow.CloseReason.SERVER, reason);
     }
 
     /** The window open under {@code key}, or {@code null}. */
     @Nullable
-    public ServerWindow byKey(String key) {
+    public ServerWindow<?> byKey(String key) {
         if (key == null) return null;
-        for (ServerWindow window : windows.values()) {
+        for (ServerWindow<?> window : windows.values()) {
             if (key.equals(window.key())) return window;
         }
         return null;
     }
 
     /** Every window currently open, in the order they opened. */
-    public List<ServerWindow> windows() {
+    public List<ServerWindow<?>> windows() {
         return Collections.unmodifiableList(new ArrayList<>(windows.values()));
     }
 
@@ -229,17 +237,17 @@ public final class ServerWindows {
         // COPIED, because a handler may open or close a window from inside its own tick and both
         // mutate this map. Opening from a tick is ordinary (a button that spawns a dialog), so a
         // ConcurrentModificationException there would be a crash caused by using the feature.
-        List<ServerWindow> live = new ArrayList<>(windows.values());
+        List<ServerWindow<?>> live = new ArrayList<>(windows.values());
         Object viewer = connection.peer();
 
-        for (ServerWindow window : live) {
+        for (ServerWindow<?> window : live) {
             if (!window.live) continue;
             boolean valid;
             try {
-                valid = window.stillValid(viewer);
+                valid = window.validity.test(viewer);
             } catch (RuntimeException failed) {
                 CrystalGuiCore.LOGGER.error("<{}>.stillValid failed; closing it: {}",
-                        window.type(), failed.getMessage(), failed);
+                        window.typeId(), failed.getMessage(), failed);
                 valid = false;
             }
             if (!valid) {
@@ -247,17 +255,18 @@ public final class ServerWindows {
             }
         }
 
-        for (ServerWindow window : live) {
+        for (ServerWindow<?> window : live) {
             if (!window.live) continue;
             try {
-                window.tick();
-                for (ServerFragment fragment : window.fragments) fragment.tick();
+                window.ticker.run();
+                // Nested panels, each with the slice it was attached with, in attach order.
+                for (ServerWindow.Attached child : window.attached) child.ticker.run();
             } catch (RuntimeException failed) {
                 // One window's broken tick must not stop every other window on this connection --
                 // the frozen ones would show no error of their own, which is what gets diagnosed as a
                 // network fault. Same rule CgUiConnections.tickSafely applies one layer down.
                 CrystalGuiCore.LOGGER.error("<{}>.tick failed: {}",
-                        window.type(), failed.getMessage(), failed);
+                        window.typeId(), failed.getMessage(), failed);
             }
             ServerUiSession<Object> session = window.session;
             // REQUIRED, and it is the one thing only the session can do: it holds this tick's dirty
@@ -277,7 +286,7 @@ public final class ServerWindows {
     private void onConnectionClosed(String reason) {
         closing = true;
         try {
-            for (ServerWindow window : new ArrayList<>(windows.values())) {
+            for (ServerWindow<?> window : new ArrayList<>(windows.values())) {
                 finish(window, ServerWindow.CloseReason.CONNECTION_LOST, reason);
             }
         } finally {
@@ -293,9 +302,10 @@ public final class ServerWindows {
      * dead <em>first</em>, so a listener that reacts by opening another window (or by closing this one
      * again) cannot re-enter this. Only then is the session ended — with a message for every reason
      * except a lost connection, where there is nobody to tell and the send would reach FML's own
-     * outbound validation before it reached nothing.</p>
+     * outbound validation before it reached nothing. The panel is told last — root first, then every
+     * attached child in attach order.</p>
      */
-    private void finish(ServerWindow window, ServerWindow.CloseReason reason, String detail) {
+    private void finish(ServerWindow<?> window, ServerWindow.CloseReason reason, String detail) {
         if (window == null || !window.live) return;
         window.live = false;
         if (!closing) windows.remove(window.windowId);
@@ -313,17 +323,25 @@ public final class ServerWindows {
             }
         }
 
-        // The session goes before the callback (it is dead, and handing over a dead one invites its
-        // use); the HOST stays until after, so onClosed can still ask who was watching -- which is most
-        // of what a teardown wants to know.
+        // The session goes before the callbacks (it is dead, and handing over a dead one invites its
+        // use); the HOST stays until after, so a teardown can still ask who was watching -- which is
+        // most of what a teardown wants to know.
         window.session = null;
         try {
-            window.onClosed(reason);
+            window.closer.accept(reason);
         } catch (RuntimeException failed) {
-            CrystalGuiCore.LOGGER.error("<{}>.onClosed failed: {}",
-                    window.type(), failed.getMessage(), failed);
+            CrystalGuiCore.LOGGER.error("<{}>.closed failed: {}",
+                    window.typeId(), failed.getMessage(), failed);
+        }
+        for (ServerWindow.Attached child : window.attached) {
+            try {
+                child.closer.accept(reason.name());
+            } catch (RuntimeException failed) {
+                CrystalGuiCore.LOGGER.error("A nested panel of <{}> failed on close: {}",
+                        window.typeId(), failed.getMessage(), failed);
+            }
         }
         window.host = null;
-        window.fragments.clear();
+        window.attached.clear();
     }
 }

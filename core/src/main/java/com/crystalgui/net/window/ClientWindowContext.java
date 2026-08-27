@@ -10,7 +10,9 @@ import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.ui.UIElement;
 
 /**
- * Everything a {@link WindowMount} or a {@link ClientWindowBehaviour} is told about one window.
+ * Everything a {@link WindowMount} is told about one window — <b>the platform seam</b>. A panel is
+ * handed a {@link ClientScope} instead, and reaches this through {@code io.window()} when it wants
+ * the frame-level facts.
  *
  * <p>Handed over at mount and again whenever the tree is rebuilt, so a consumer never has to remember
  * which of its fields have gone stale.</p>

@@ -3,10 +3,10 @@ package com.crystalgui.example.machine.ui;
 import com.crystalgui.example.machine.MachineModel;
 import com.crystalgui.example.machine.MachineTrace;
 import com.crystalgui.net.UiEventKinds;
-import com.crystalgui.net.window.ClientWindowContext;
-import com.crystalgui.net.window.Panel;
-import com.crystalgui.net.window.PanelType;
-import com.crystalgui.net.window.WindowScope;
+import com.crystalgui.net.window.ClientScope;
+import com.crystalgui.net.window.Networked;
+import com.crystalgui.net.window.ServerScope;
+import com.crystalgui.net.window.UiType;
 import com.crystalgui.serialization.StateMap;
 
 import javax.annotation.Nullable;
@@ -37,7 +37,7 @@ import com.crystalgui.ui.elements.UIText;
  * {@code INLINE} origin, which outranks every stylesheet rule at any specificity, so the theme
  * author's rule is not overridden — it never applies at all, and nothing reports that.</p>
  *
- * <h3>Why the fields are public and final</h3>
+ * <h3>Why the widgets are public fields</h3>
  *
  * <p>{@link #serve} needs handles on individual widgets to attach behaviour and to write
  * state into. Hunting them back out with {@code querySelector} would work and would be worse: a
@@ -51,22 +51,20 @@ import com.crystalgui.ui.elements.UIText;
  * element from a document-order walk on both sides and sends nothing. The id is for the cascade;
  * the network id is for the protocol; they are unrelated and it is worth not confusing them.</p>
  */
-public final class MachinePanel extends Panel<MachineModel> {
+public final class MachinePanel extends UIElement implements Networked<MachineModel> {
 
     /**
      * <b>What ties the two halves together.</b> Declared here because the panel is the artefact both
      * sides genuinely share — and because every reference in this initialiser points at this class,
      * which is what keeps it loadable on a dedicated server.
      *
-     * <p>The server's window answers with it, and the client registers against it. Being a value
-     * rather than a string, a mismatched pair is a compile error instead of a window that opens
-     * perfectly and silently has no behaviour. @see WindowType</p>
+     * <p>The server opens with it, and the client registers against it. Being a value rather than a
+     * string, a mismatched pair is a compile error instead of a window that opens perfectly and
+     * silently has no behaviour. Declaring it also registers this class's tag, so the description's
+     * {@code <machinepanel>} decodes into this class on the far side. @see UiType</p>
      */
-    public static final PanelType<MachinePanel, MachineModel> TYPE =
-            PanelType.of("crystalgui:machine", MachinePanel::new);
-
-
-    /** The root the description is taken from, and the root the client rebuilds. */
+    public static final UiType<MachinePanel, MachineModel> TYPE =
+            UiType.of("crystalgui:machine", MachinePanel::new);
 
 
     /** On/off. Reports {@code toggle}. */
@@ -111,22 +109,22 @@ public final class MachinePanel extends Panel<MachineModel> {
     public Button badRename = new Button("Rename to ''");
 
     /**
-     * State the SERVER half keeps. Ordinary fields — the base only ever touches widget ones.
+     * State the SERVER half keeps. Ordinary fields — the framework only ever touches widget ones.
      */
     private int heartbeats;
     private boolean dirty = true;
 
-    /** The CLIENT half's handle on its window, stored by {@link #client}. Null on the server. */
+    /** The CLIENT half's scope, stored by {@link #client}. Null on the server — which is the tell. */
     @Nullable
-    private ClientWindowContext window;
+    private ClientScope io;
 
     @Override
-    protected String title() {
+    public String title(MachineModel model) {
         return "Machine control";
     }
 
     @Override
-    protected String key() {
+    public String key(MachineModel model) {
         return "crystalgui:machine";
     }
 
@@ -134,32 +132,31 @@ public final class MachinePanel extends Panel<MachineModel> {
      * Structure only. <b>Build side.</b>
      *
      * <p>Every widget already exists and already carries its field name as its id by the time this
-     * runs — the base did that — so what is left is genuinely the arrangement, which is the one thing
-     * no amount of reflection could infer.</p>
+     * runs — the framework did that — so what is left is genuinely the arrangement, which is the one
+     * thing no amount of reflection could infer. {@code this} is the root: a panel is an element.</p>
      */
     @Override
-    protected void layout() {
-        UIElement root = root();
-        root.addClass(MachineStyles.PANEL_CLASS);
+    public void layout(MachineModel model) {
+        addClass(MachineStyles.PANEL_CLASS);
 
         UIText title = new UIText("Machine control");
         title.addClass(MachineStyles.TITLE_CLASS);
-        root.addChild(title);
+        addChild(title);
 
-        root.addChild(row("Power", power));
+        addChild(row("Power", power));
 
         throughput.setRange(0f, 1f);
-        root.addChild(row("Throughput", throughput));
+        addChild(row("Throughput", throughput));
 
         label.setPlaceholder("name this machine");
-        root.addChild(row("Label", label));
+        addChild(row("Label", label));
 
-        root.addChild(row("Cycle", progress));
+        addChild(row("Cycle", progress));
 
         status.addClass(MachineStyles.STATUS_CLASS);
-        root.addChild(status);
+        addChild(status);
 
-        root.addChild(purge);
+        addChild(purge);
 
         /*
          * THE PROTOCOL DEMO STRIP.
@@ -185,37 +182,37 @@ public final class MachinePanel extends Panel<MachineModel> {
          */
         UIText demoTitle = new UIText("Protocol demo");
         demoTitle.addClass(MachineStyles.TITLE_CLASS);
-        root.addChild(demoTitle);
+        addChild(demoTitle);
 
         UIText demoHint = new UIText(
                 "Press one. The result appears at the bottom, and every step is in the game log.");
         demoHint.addClass(MachineStyles.HINT_CLASS);
-        root.addChild(demoHint);
+        addChild(demoHint);
 
-        root.addChild(demoEntry(pingClient, KIND_REQUEST, "server asks client",
+        addChild(demoEntry(pingClient, KIND_REQUEST, "server asks client",
                 "machine/clientInfo",
                 "The server asks who is drawing this. The client answers; the reply shows below."));
 
-        root.addChild(demoEntry(announce, KIND_NOTIFY, "server tells client",
+        addChild(demoEntry(announce, KIND_NOTIFY, "server tells client",
                 "machine/announce",
                 "The server sends a message. Nothing comes back, and nothing is waiting for one."));
 
-        root.addChild(demoEntry(askStats, KIND_REQUEST, "client asks server",
+        addChild(demoEntry(askStats, KIND_REQUEST, "client asks server",
                 "machine/stats",
                 "The client asks for the cycle and heartbeat counts. The server answers."));
 
-        root.addChild(demoEntry(heartbeat, KIND_NOTIFY, "client tells server",
+        addChild(demoEntry(heartbeat, KIND_NOTIFY, "client tells server",
                 "machine/heartbeat",
                 "The client reports in. The server counts it and replies with nothing."));
 
-        root.addChild(demoEntry(badRename, KIND_REFUSED, "client asks server",
+        addChild(demoEntry(badRename, KIND_REFUSED, "client asks server",
                 "machine/rename",
                 "Asks for a blank name. The server REFUSES with the code EMPTY_NAME -- which is a "
                         + "normal answer, not an error and not a timeout."));
 
         UIText wireLabel = new UIText("Result");
         wireLabel.addClass(MachineStyles.LABEL_CLASS);
-        root.addChild(wireLabel);
+        addChild(wireLabel);
 
         /*
          * TWO LINES, ONE PER SIDE, AND EACH HAS EXACTLY ONE AUTHOR.
@@ -245,9 +242,9 @@ public final class MachinePanel extends Panel<MachineModel> {
          * bonus is that BOTH HALVES OF EVERY EXCHANGE ARE NOW ON SCREEN AT ONCE: press Heartbeat and
          * the client line says it sent one while the server line says it received one.
          */
-        root.addChild(resultRow(MachineStyles.WHO_SERVER_CLASS, "SERVER", serverLine));
+        addChild(resultRow(MachineStyles.WHO_SERVER_CLASS, "SERVER", serverLine));
 
-        root.addChild(resultRow(MachineStyles.WHO_CLIENT_CLASS, "CLIENT", clientLine));
+        addChild(resultRow(MachineStyles.WHO_CLIENT_CLASS, "CLIENT", clientLine));
     }
 
     /** A fixed side badge and the line only that side writes. */
@@ -358,7 +355,7 @@ public final class MachinePanel extends Panel<MachineModel> {
      *
      * <p>May freely name {@link MachineModel} — this is a method body, and a method body resolves
      * lazily. A <em>field</em> of that type would not, which is the one rule that lets both halves
-     * live in one class. @see Panel</p>
+     * live in one class. @see Networked</p>
      *
      * <p>Every lambda below runs on the <b>server thread</b>, because that is the thread that drained
      * the connection. That is the whole reason they may touch the model at all. Watch the console when
@@ -366,36 +363,36 @@ public final class MachinePanel extends Panel<MachineModel> {
      * follows it is on the server thread, from one gesture.</p>
      */
     @Override
-    protected void serve(WindowScope io) {
+    public void serve(MachineModel model, ServerScope io) {
         /*
          * NAMED, AND OFFERED. The ref is a content hash the client may already hold; the CSS beside it
          * is what a client that does not can fetch with ui/sheet.
          */
         io.sheet(MachineStyles.SHEET, MachineStyles.CSS);
 
-        model().onChanged(() -> dirty = true);
+        model.onChanged(() -> dirty = true);
 
         io.on(power, UiEventKinds.TOGGLE, ctx -> {
             boolean on = ctx.payload().getBool("checked", false);
             MachineTrace.log(MachineTrace.SERVER, "event: power -> " + on);
-            model().setRunning(on);
+            model.setRunning(on);
         });
 
         io.on(throughput, UiEventKinds.VALUE, ctx -> {
             float value = ctx.payload().getFloat("value", 0f);
             MachineTrace.log(MachineTrace.SERVER, String.format("event: throughput -> %.2f", value));
-            model().setThroughput(value);
+            model.setThroughput(value);
         });
 
         io.on(label, UiEventKinds.TEXT, ctx -> {
             String text = ctx.payload().getString("text", "");
             MachineTrace.log(MachineTrace.SERVER, "event: label -> '" + text + "'");
-            model().setLabel(text);
+            model.setLabel(text);
         });
 
         io.onActivate(purge, ctx -> {
             MachineTrace.log(MachineTrace.SERVER, "event: purge pressed");
-            model().purge();
+            model.purge();
         });
 
         /*
@@ -431,8 +428,8 @@ public final class MachinePanel extends Panel<MachineModel> {
          */
         io.onActivate(announce, ctx -> {
             StateMap<Object> out = io.newMap();
-            out.putString("text", model().label() + " says hello");
-            out.putInt("cycles", model().completedCycles());
+            out.putString("text", model.label() + " says hello");
+            out.putInt("cycles", model.completedCycles());
             MachineTrace.log(MachineTrace.SERVER, "-> notifying machine/announce (no answer wanted)");
             io.notify("machine/announce", out);
             // No "waiting" line, because there is nothing to wait for. That absence is the difference
@@ -457,8 +454,8 @@ public final class MachinePanel extends Panel<MachineModel> {
         io.onCall("machine/stats", (args, respond) -> {
             MachineTrace.log(MachineTrace.SERVER, "<- answering machine/stats");
             StateMap<Object> out = io.newMap();
-            out.putInt("cycles", model().completedCycles());
-            out.putString("label", model().label());
+            out.putInt("cycles", model.completedCycles());
+            out.putString("label", model.label());
             out.putInt("heartbeats", heartbeats);
             respond.ok(out);
             say("REQUEST answered - the client asked for our numbers and got them");
@@ -480,14 +477,14 @@ public final class MachinePanel extends Panel<MachineModel> {
                 return;
             }
             MachineTrace.log(MachineTrace.SERVER, "<- machine/rename -> '" + name + "'");
-            model().setLabel(name);
+            model.setLabel(name);
             respond.ok(null);   // an answer with no body is still an answer, and still exactly once
             say("REQUEST answered - renamed to '" + name + "'");
         });
 
         // The very first tree the client builds is already correct, rather than correct one state
         // delta later. Safe here because serve() runs before the description is taken.
-        mirror();
+        mirror(model);
     }
 
     /**
@@ -497,9 +494,9 @@ public final class MachinePanel extends Panel<MachineModel> {
      * send.</p>
      */
     @Override
-    protected void tick() {
+    public void tick(MachineModel model) {
         if (!dirty) return;
-        mirror();
+        mirror(model);
         dirty = false;
     }
 
@@ -510,13 +507,13 @@ public final class MachinePanel extends Panel<MachineModel> {
      * dirty — so calling this more often than necessary costs a few comparisons, not traffic, and
      * there is no need to work out which field moved.</p>
      */
-    private void mirror() {
-        power.setChecked(model().isRunning());
-        throughput.setValue(model().throughput());
-        progress.setFraction(model().progress());
-        label.setText(model().label());
-        status.setText((model().isRunning() ? "running" : "stopped")
-                + " - " + model().completedCycles() + " cycles");
+    private void mirror(MachineModel model) {
+        power.setChecked(model.isRunning());
+        throughput.setValue(model.throughput());
+        progress.setFraction(model.progress());
+        label.setText(model.label());
+        status.setText((model.isRunning() ? "running" : "stopped")
+                + " - " + model.completedCycles() + " cycles");
     }
 
     /**
@@ -541,7 +538,7 @@ public final class MachinePanel extends Panel<MachineModel> {
      * between this and a server-wired one, and neither can the stylesheet.</p>
      */
     @Override
-    protected void wire() {
+    public void bound() {
         askStats.attachListener(this::requestStats);
         heartbeat.attachListener(this::sendHeartbeat);
         // Deliberately blank -- the server refuses it, which is the only way to watch the error
@@ -552,13 +549,13 @@ public final class MachinePanel extends Panel<MachineModel> {
     /**
      * What this client answers on the wire. <b>Once</b>, at mount.
      *
-     * <p>Separate from {@link #wire()} because a session registration is keyed by method and survives
-     * a re-describe untouched — running it twice would be refused by the router, not merely
+     * <p>Separate from {@link #bound()} because a session registration is keyed by method and
+     * survives a re-describe untouched — running it twice would be refused by the router, not merely
      * duplicated.</p>
      */
     @Override
-    protected void client(ClientWindowContext window) {
-        this.window = window;
+    public void client(ClientScope io) {
+        this.io = io;
 
         /*
          * ── S -> C NOTIFICATION, the receiving half ───────────────────────────────────────────
@@ -567,7 +564,7 @@ public final class MachinePanel extends Panel<MachineModel> {
          * than per message, because the usual cause is a peer one version ahead sending something at
          * frame rate, and a log line per frame buries whatever else is wrong.
          */
-        window.session().onNotify("machine/announce", payload -> {
+        io.onNotify("machine/announce", payload -> {
             String text = payload.getString("text", "");
             MachineTrace.log(MachineTrace.CLIENT, "<- announcement: \"" + text + "\" (after "
                     + payload.getInt("cycles", 0) + " cycles) -- nothing to answer");
@@ -579,11 +576,11 @@ public final class MachinePanel extends Panel<MachineModel> {
          * request/response envelope. This one is answered from nothing but the client's own state,
          * which is the honest use of the direction.
          */
-        window.session().onCall("machine/clientInfo", (args, respond) -> {
+        io.onCall("machine/clientInfo", (args, respond) -> {
             MachineTrace.log(MachineTrace.CLIENT, "-> answering machine/clientInfo");
-            StateMap<Object> out = new StateMap<>(window.session().ops());
+            StateMap<Object> out = io.newMap();
             out.putString("renderer", "example-client");
-            out.putBool("cachedDescription", window.session().cacheSize() > 0);
+            out.putBool("cachedDescription", io.session().cacheSize() > 0);
             respond.ok(out);
             show("REQUEST answered - the server asked who we are, and we told it");
         });
@@ -599,7 +596,7 @@ public final class MachinePanel extends Panel<MachineModel> {
     private void requestStats() {
         MachineTrace.log(MachineTrace.CLIENT, "-> asking the server machine/stats");
         show("REQUEST sent to the server - waiting for an answer...");
-        window.session().call("machine/stats", null,
+        io.call("machine/stats", null,
                 stats -> {
                     String text = stats.getInt("cycles", -1) + " cycles, "
                             + stats.getInt("heartbeats", 0) + " heartbeats, label '"
@@ -620,10 +617,10 @@ public final class MachinePanel extends Panel<MachineModel> {
      * visibly would be a request.</b></p>
      */
     private void sendHeartbeat() {
-        StateMap<Object> out = new StateMap<>(window.session().ops());
+        StateMap<Object> out = io.newMap();
         out.putString("from", "example-client");
         MachineTrace.log(MachineTrace.CLIENT, "-> notifying machine/heartbeat (no answer expected)");
-        window.session().notify("machine/heartbeat", out);
+        io.notify("machine/heartbeat", out);
         // No "waiting" line: nothing is coming. The server's own readout will replace this one a tick
         // later, which is itself worth watching -- that line is the AUTHORITATIVE one.
         show("NOTIFY sent to the server - nothing will come back");
@@ -638,11 +635,11 @@ public final class MachinePanel extends Panel<MachineModel> {
      * "never came back", and only one of those is worth retrying.</p>
      */
     private void rename(String name) {
-        StateMap<Object> args = new StateMap<>(window.session().ops());
+        StateMap<Object> args = io.newMap();
         args.putString("name", name);
         MachineTrace.log(MachineTrace.CLIENT, "-> asking the server machine/rename('" + name + "')");
         show("REQUEST sent to the server - waiting for an answer...");
-        window.session().call("machine/rename", args,
+        io.call("machine/rename", args,
                 ok -> {
                     MachineTrace.log(MachineTrace.CLIENT, "<- rename accepted");
                     show("REQUEST answered - renamed to \"" + name + "\"");
@@ -671,14 +668,14 @@ public final class MachinePanel extends Panel<MachineModel> {
     }
 
     @Override
-    protected void closed(String reason) {
+    public void closed(String reason) {
         /*
          * ONE METHOD, BOTH SIDES. The server's own close and the client hearing about one arrive
-         * here, on two different instances -- and `window` is the tell, because only the client half
-         * was ever handed one. Worth knowing before writing anything side-specific in a panel: the
-         * base does not split this hook, because most panels genuinely want the same teardown twice.
+         * here, on two different instances -- and `io` is the tell, because only the client half was
+         * ever handed a scope. Worth knowing before writing anything side-specific in a panel: the
+         * hook is not split per side, because most panels genuinely want the same teardown twice.
          */
-        MachineTrace.log(window == null ? MachineTrace.SERVER : MachineTrace.CLIENT,
+        MachineTrace.log(io == null ? MachineTrace.SERVER : MachineTrace.CLIENT,
                 "window closed: " + reason);
     }
 

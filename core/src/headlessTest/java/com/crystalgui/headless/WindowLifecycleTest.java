@@ -11,18 +11,16 @@ import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.SheetRef;
 import com.crystalgui.net.window.SheetSupply;
 import com.crystalgui.net.protocol.UiMethods;
-import com.crystalgui.net.window.ClientWindows;
-import com.crystalgui.net.window.ClientWindowBehaviour;
+import com.crystalgui.net.window.ClientScope;
 import com.crystalgui.net.window.ClientWindowContext;
-import com.crystalgui.net.window.ServerFragment;
-import com.crystalgui.net.window.ServerWindows;
+import com.crystalgui.net.window.ClientWindows;
+import com.crystalgui.net.window.Networked;
+import com.crystalgui.net.window.ServerScope;
 import com.crystalgui.net.window.ServerWindow;
-import com.crystalgui.net.window.WindowScope;
+import com.crystalgui.net.window.ServerWindows;
+import com.crystalgui.net.window.UiType;
 import com.crystalgui.net.window.WindowProtocol;
 import com.crystalgui.net.window.WindowMount;
-import com.crystalgui.net.window.WindowType;
-import com.crystalgui.net.window.PanelType;
-import com.crystalgui.ui.elements.Switch;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
@@ -30,6 +28,8 @@ import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.ElementRegistry;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.Button;
+import com.crystalgui.ui.elements.Switch;
+import com.crystalgui.ui.elements.UIText;
 
 import org.junit.After;
 import org.junit.Before;
@@ -59,15 +59,12 @@ import static org.junit.Assert.fail;
  * <p>Every close test asserts <b>both sides</b>: that the reason reached the server exactly once, and
  * that the other end actually stopped. Asserting one alone passes against a teardown that only ever
  * runs on the side you looked at, which is precisely the shape of the bug being fixed.</p>
+ *
+ * <p>Every fixture is a {@link Networked} element — one class per UI, with per-<b>instance</b>
+ * counters, because the server's panel and the client's are different instances over different trees
+ * and which one a counter moved on is usually the thing under test.</p>
  */
 public class WindowLifecycleTest {
-
-    /** The shared descriptor both halves reference, so a mismatch cannot be spelled. */
-    private static final WindowType<Panel> PANEL = WindowType.of("test:panel", Panel::bindTo);
-    private static final WindowType<Panel> OTHER_PANEL = WindowType.of("test:other", Panel::bindTo);
-
-    /** A third type, for the builder — it needs no behaviour, so binding is never asked for. */
-    private static final WindowType<Panel> BUILT = WindowType.of("test:built", Panel::bindTo);
 
     private static final String TYPE = "test:panel";
     private static final String OTHER_TYPE = "test:other";
@@ -100,8 +97,9 @@ public class WindowLifecycleTest {
 
     @After
     public void tearDown() {
-        ClientWindows.unregister(TYPE);
-        ClientWindows.unregister(OTHER_TYPE);
+        // Registration is static; the suite shares a JVM. Sweep it clean rather than naming ids,
+        // so a fixture added later cannot leak into an unrelated test.
+        for (String type : ClientWindows.registeredTypes()) ClientWindows.unregister(type);
         Protocols.resetForTesting();
         WindowProtocol.resetForTesting();
     }
@@ -125,7 +123,7 @@ public class WindowLifecycleTest {
 
     @Test
     public void aWindowOpensAndTheClientMountsItWithItsTypeAndTitle() {
-        server.open(new TestWindow());
+        server.open(TestPanel.TYPE, null);
         settle();
 
         assertEquals("one window on screen", 1, mount.mounted.size());
@@ -139,8 +137,8 @@ public class WindowLifecycleTest {
 
     @Test
     public void theHostAllocatesWindowIdsSoNobodyPicksAConstant() {
-        ServerWindow first = server.open(new TestWindow());
-        ServerWindow second = server.open(new OtherWindow());
+        ServerWindow<TestPanel> first = server.open(TestPanel.TYPE, null);
+        ServerWindow<OtherPanel> second = server.open(OtherPanel.TYPE, null);
         settle();
 
         assertNotSame(first.windowId(), second.windowId());
@@ -148,18 +146,28 @@ public class WindowLifecycleTest {
         assertEquals("both are on screen", 2, mount.mounted.size());
     }
 
+    /** The decoded root IS the panel — the parallel object beside the tree is gone. */
+    @Test
+    public void theMountedRootIsAnInstanceOfThePanelClass() {
+        server.open(TestPanel.TYPE, null);
+        settle();
+
+        assertTrue("the tree's root decoded as the panel class itself",
+                mount.mounted.get(0).root() instanceof TestPanel);
+    }
+
     // ── The close matrix ────────────────────────────────────────────────────
 
     @Test
     public void theServerClosingAWindowEndsBothSides() {
-        TestWindow window = server.open(new TestWindow());
+        ServerWindow<TestPanel> window = server.open(TestPanel.TYPE, null);
         settle();
 
         server.close(window, "the block was broken");
         settle();
 
-        assertEquals(1, window.closes.size());
-        assertEquals(ServerWindow.CloseReason.SERVER, window.closes.get(0));
+        assertEquals(1, window.panel().closes.size());
+        assertEquals("SERVER", window.panel().closes.get(0));
         assertFalse("the session stopped serving", window.isOpen());
         assertEquals("the client took it off screen", 1, mount.closedByServer.size());
         assertEquals("the block was broken", mount.closedByServer.get(0));
@@ -173,14 +181,14 @@ public class WindowLifecycleTest {
      */
     @Test
     public void theUserClosingAWindowReachesTheServerAndEndsTheSession() {
-        TestWindow window = server.open(new TestWindow());
+        ServerWindow<TestPanel> window = server.open(TestPanel.TYPE, null);
         settle();
 
         mount.mounted.get(0).userClosed();
         settle();
 
-        assertEquals("the server heard about it exactly once", 1, window.closes.size());
-        assertEquals(ServerWindow.CloseReason.CLIENT, window.closes.get(0));
+        assertEquals("the server heard about it exactly once", 1, window.panel().closes.size());
+        assertEquals("CLIENT", window.panel().closes.get(0));
         assertFalse(window.isOpen());
         assertEquals("the server stopped serving it", 0, server.windowCount());
         assertEquals("and did not echo the close back at a frame that has gone",
@@ -190,15 +198,14 @@ public class WindowLifecycleTest {
 
     @Test
     public void aWindowThatStopsBeingValidClosesItself() {
-        TestWindow window = new TestWindow();
-        server.open(window);
+        ServerWindow<TestPanel> window = server.open(TestPanel.TYPE, null);
         settle();
 
-        window.valid = false;
+        window.panel().valid = false;
         settle();
 
-        assertEquals(1, window.closes.size());
-        assertEquals(ServerWindow.CloseReason.NOT_VALID, window.closes.get(0));
+        assertEquals(1, window.panel().closes.size());
+        assertEquals("NOT_VALID", window.panel().closes.get(0));
         assertEquals("the client was told", 1, mount.closedByServer.size());
     }
 
@@ -208,16 +215,16 @@ public class WindowLifecycleTest {
      */
     @Test
     public void losingTheConnectionEndsEveryWindowOnBothSidesAndSendsNothing() {
-        TestWindow one = server.open(new TestWindow());
-        OtherWindow two = server.open(new OtherWindow());
+        ServerWindow<TestPanel> one = server.open(TestPanel.TYPE, null);
+        ServerWindow<OtherPanel> two = server.open(OtherPanel.TYPE, null);
         settle();
         int before = link[0].sent().size();
 
         serverSide.close("player left");
 
-        assertEquals(1, one.closes.size());
-        assertEquals(ServerWindow.CloseReason.CONNECTION_LOST, one.closes.get(0));
-        assertEquals(ServerWindow.CloseReason.CONNECTION_LOST, two.closes.get(0));
+        assertEquals(1, one.panel().closes.size());
+        assertEquals("CONNECTION_LOST", one.panel().closes.get(0));
+        assertEquals("CONNECTION_LOST", two.panel().closes.get(0));
         assertEquals("nothing is sent to a peer that has gone", before, link[0].sent().size());
         assertEquals(0, server.windowCount());
 
@@ -232,7 +239,7 @@ public class WindowLifecycleTest {
      */
     @Test
     public void aWindowEndsExactlyOnceHoweverManyTimesItIsAsked() {
-        TestWindow window = server.open(new TestWindow());
+        ServerWindow<TestPanel> window = server.open(TestPanel.TYPE, null);
         settle();
         ClientWindowContext shown = mount.mounted.get(0);
 
@@ -244,18 +251,21 @@ public class WindowLifecycleTest {
         shown.userClosed();
         settle();
 
-        assertEquals(1, window.closes.size());
+        assertEquals(1, window.panel().closes.size());
     }
 
     // ── Keys ────────────────────────────────────────────────────────────────
+    //
+    // TestPanel answers key(model) with the MODEL, which is the honest general shape anyway: a key
+    // names the window's SUBJECT, and the subject is what the model is.
 
     @Test
     public void openingUnderAKeyThatIsAlreadyOpenBringsTheExistingWindowForward() {
-        TestWindow first = server.open(new TestWindow().withKey("test:one"));
+        ServerWindow<TestPanel> first = server.open(TestPanel.TYPE, "test:one");
         settle();
         UIElement firstRoot = mount.mounted.get(0).root();
 
-        ServerWindow again = server.open(new TestWindow().withKey("test:one"));
+        ServerWindow<TestPanel> again = server.open(TestPanel.TYPE, "test:one");
         settle();
 
         assertSame("the same window, not a second one", first, again);
@@ -268,10 +278,10 @@ public class WindowLifecycleTest {
 
     @Test
     public void aKeyHeldByADifferentTypeIsAWiringMistakeAndSaysSo() {
-        server.open(new TestWindow().withKey("test:shared"));
+        server.open(TestPanel.TYPE, "test:shared");
         settle();
         try {
-            server.open(new OtherWindow().withKey("test:shared"));
+            server.open(OtherPanel.TYPE, "test:shared");
             fail("expected the clash to be refused");
         } catch (IllegalStateException expected) {
             assertTrue(expected.getMessage().contains("test:shared"));
@@ -280,8 +290,8 @@ public class WindowLifecycleTest {
 
     @Test
     public void aWindowWithNoKeyOpensAsManyTimesAsItIsAsked() {
-        server.open(new TestWindow());
-        server.open(new TestWindow());
+        server.open(TestPanel.TYPE, null);
+        server.open(TestPanel.TYPE, null);
         settle();
         assertEquals(2, server.windowCount());
         assertEquals(2, mount.mounted.size());
@@ -299,7 +309,7 @@ public class WindowLifecycleTest {
         client.setMount(null);
         RecordingMount later = new RecordingMount();
 
-        server.open(new TestWindow());
+        server.open(TestPanel.TYPE, null);
         settle();
         assertEquals("nowhere to put it yet", 0, later.mounted.size());
         assertEquals(1, client.waitingCount());
@@ -309,41 +319,62 @@ public class WindowLifecycleTest {
         assertEquals(0, client.waitingCount());
     }
 
-    // ── Behaviour by type ───────────────────────────────────────────────────
+    // ── The client half, by type ────────────────────────────────────────────
 
+    /**
+     * One registered line runs the whole client half: fields resolved out of the panel's own tree,
+     * {@code bound()} for the widget listeners, {@code client()} handed its scope, {@code closed()}
+     * told at the end — on the CLIENT's instance, which is not the server's.
+     */
     @Test
-    public void behaviourIsBuiltForTheRegisteredTypeAndToldWhenTheWindowEnds() {
-        List<String> closed = new ArrayList<>();
-        AtomicReference<ClientWindowContext> got = new AtomicReference<>();
-        ClientWindows.register(TYPE, context -> {
-            got.set(context);
-            return new ClientWindowBehaviour<UIElement>() {
-                @Override
-                public void onClosed(String reason) {
-                    closed.add(reason);
-                }
-            };
-        });
+    public void aRegisteredPanelIsBoundWiredAndToldWhenTheWindowEnds() {
+        ClientWindows.register(TestPanel.TYPE);
 
-        TestWindow window = server.open(new TestWindow());
+        ServerWindow<TestPanel> window = server.open(TestPanel.TYPE, null);
         settle();
-        assertNotNull("the behaviour was built", got.get());
-        assertEquals(TYPE, got.get().type());
+
+        TestPanel shown = (TestPanel) mount.mounted.get(0).root();
+        assertNotSame("two instances over two trees", window.panel(), shown);
+        assertEquals("bound() ran at mount", 1, shown.bounds.get());
+        assertNotNull("client() was handed its scope", shown.net);
+        assertEquals("and neither ran on the SERVER's instance", 0, window.panel().bounds.get());
+        assertNull(window.panel().net);
 
         server.close(window, "done");
         settle();
-        assertEquals(1, closed.size());
-        assertEquals("done", closed.get(0));
+        assertEquals(1, shown.closes.size());
+        assertEquals("done", shown.closes.get(0));
     }
 
     /**
-     * The improvement over {@code MenuScreens}, where an unregistered type is a broken screen. A
-     * description is self-sufficient, so an unknown window renders and interacts and merely has no
-     * local extras.
+     * The binding hands the panel its <b>own tree's elements</b> as fields — what used to be three
+     * lines of {@code querySelector} guarded by {@code instanceof}, silently doing nothing when an id
+     * moved. A press through the field reaches the server exactly as the searched version did.
+     */
+    @Test
+    public void aBoundPanelsFieldsAreTheTreesOwnElements() {
+        ClientWindows.register(TestPanel.TYPE);
+        ServerWindow<TestPanel> window = server.open(TestPanel.TYPE, null);
+        settle();
+
+        TestPanel shown = (TestPanel) mount.mounted.get(0).root();
+        assertSame("the field IS the queried element", shown.querySelector("#press"), shown.press);
+        assertNotSame("bound to the CLIENT's rebuilt tree, not the server's object",
+                window.panel().press, shown.press);
+
+        shown.press.onPressed.emit();
+        settle();
+        assertEquals(1, window.panel().presses.get());
+    }
+
+    /**
+     * The improvement over {@code MenuScreens}, where an unregistered type is a broken screen: a type
+     * with no registration still mounts, renders, and reports every event its description asked for.
+     * It simply runs no local behaviour.
      */
     @Test
     public void aWindowOfAnUnknownTypeStillMountsAndStillReportsItsEvents() {
-        TestWindow window = server.open(new TestWindow());
+        ServerWindow<TestPanel> window = server.open(TestPanel.TYPE, null);
         settle();
 
         assertEquals("it is on screen", 1, mount.mounted.size());
@@ -353,7 +384,9 @@ public class WindowLifecycleTest {
         pressMe.onPressed.emit();
         settle();
 
-        assertEquals("and the server heard the press", 1, window.presses.get());
+        assertEquals("and the server heard the press", 1, window.panel().presses.get());
+        assertEquals("but no local binding ran",
+                0, ((TestPanel) mount.mounted.get(0).root()).bounds.get());
     }
 
     /**
@@ -361,85 +394,36 @@ public class WindowLifecycleTest {
      * happened when every client host took every window on the connection.
      */
     @Test
-    public void behaviourRegisteredForOneTypeNeverSeesAnother() {
-        List<String> seen = new ArrayList<>();
-        ClientWindows.register(TYPE, context -> {
-            seen.add(context.type());
-            return new ClientWindowBehaviour<UIElement>() { };
-        });
+    public void aRegistrationForOneTypeNeverSeesAnother() {
+        ClientWindows.register(TestPanel.TYPE);
 
-        server.open(new OtherWindow());
+        server.open(OtherPanel.TYPE, null);
         settle();
-        assertTrue("a window of another type is none of its business", seen.isEmpty());
+        assertEquals("a window of another type is none of its business",
+                0, ((OtherPanel) mount.mounted.get(0).root()).bounds.get());
 
-        server.open(new TestWindow());
+        server.open(TestPanel.TYPE, null);
         settle();
-        assertEquals(1, seen.size());
-    }
-
-    /**
-     * The typed registration hands a behaviour its <b>bound panel</b>, not a tree to search.
-     *
-     * <p>What it replaces is three lines of {@code querySelector} guarded by {@code instanceof} —
-     * which silently do nothing when an id moves, and are indistinguishable from a window that is
-     * deliberately inert. Here the parts are resolved once, up front, and a press reaches the server
-     * through a field.</p>
-     */
-    @Test
-    public void aTypedRegistrationHandsTheBehaviourThePanelRatherThanTheTree() {
-        AtomicReference<Panel> bound = new AtomicReference<>();
-        ClientWindows.register(PANEL, context -> new ClientWindowBehaviour<Panel>() {
-            @Override
-            public void onPanelBound(Panel panel) {
-                bound.set(panel);
-            }
-        });
-
-        TestWindow window = server.open(new TestWindow());
-        settle();
-
-        assertNotNull("the behaviour was handed a panel", bound.get());
-        assertNotSame("bound to the CLIENT's rebuilt tree, not the server's object",
-                window.panel.root, bound.get().root);
-
-        // A field, not a lookup -- and it reaches the server exactly as the searched version did.
-        bound.get().press.onPressed.emit();
-        settle();
-        assertEquals(1, window.presses.get());
+        assertEquals(1, ((TestPanel) mount.mounted.get(1).root()).bounds.get());
     }
 
     /**
      * A binding fails <b>loudly</b> when the tree is not the shape it expects.
      *
-     * <p>The whole point of binding over searching: a missing part is an error at mount rather than a
-     * control that looks wired and does nothing. Contained, too — the window itself still mounts,
-     * because a broken behaviour must not take the server's UI down with it.</p>
+     * <p>The whole point of binding over searching: a declared part missing from the tree is an error
+     * at mount rather than a control that looks wired and does nothing. Contained, too — the window
+     * itself still mounts, because a broken binding must not take the server's UI down with it.</p>
      */
     @Test
     public void aBindingThatCannotFindItsPartsFailsAtMountRatherThanAtPressTime() {
-        WindowType<Panel> wrong = WindowType.of(TYPE, root -> {
-            root.require("#nothing-like-this", Button.class);
-            throw new AssertionError("require should have thrown first");
-        });
-        ClientWindows.register(wrong, context -> new ClientWindowBehaviour<Panel>() { });
+        ClientWindows.register(SabotagedPanel.TYPE);
 
-        server.open(new TestWindow());
+        server.open(SabotagedPanel.TYPE, null);
         settle();
 
         assertEquals("the window is still on screen", 1, mount.mounted.size());
-        assertNull("but it has no local behaviour", clientBehaviourOf(mount.mounted.get(0)));
-    }
-
-    /** There is no accessor for it, and there should not be — this is the test peeking. */
-    @Nullable
-    private static ClientWindowBehaviour clientBehaviourOf(ClientWindowContext context) {
-        try {
-            java.lang.reflect.Field field = context.getClass().getDeclaredField("behaviour");
-            field.setAccessible(true);
-            return (ClientWindowBehaviour) field.get(context);
-        } catch (ReflectiveOperationException impossible) {
-            throw new AssertionError(impossible);
-        }
+        assertEquals("but the binding never completed, so bound() never ran",
+                0, ((SabotagedPanel) mount.mounted.get(0).root()).bounds.get());
     }
 
     // ── Window-scoped notifications ─────────────────────────────────────────
@@ -451,8 +435,8 @@ public class WindowLifecycleTest {
      */
     @Test
     public void twoWindowsMayNameTheSameNotificationAndEachHearsOnlyItsOwn() {
-        NotifyingWindow one = server.open(new NotifyingWindow("one"));
-        NotifyingWindow two = server.open(new NotifyingWindow("two"));
+        ServerWindow<NotifyingPanel> one = server.open(NotifyingPanel.TYPE, null);
+        ServerWindow<NotifyingPanel> two = server.open(NotifyingPanel.TYPE, null);
         settle();
 
         StateMap<Object> payload = new StateMap<>(PlainOps.INSTANCE);
@@ -460,41 +444,81 @@ public class WindowLifecycleTest {
         mount.mounted.get(1).session().notify("ping", payload);
         settle();
 
-        assertEquals("only the window it was addressed to", 0, one.heard.size());
-        assertEquals(1, two.heard.size());
-        assertEquals("the client", two.heard.get(0));
+        assertEquals("only the window it was addressed to", 0, one.panel().heard.size());
+        assertEquals(1, two.panel().heard.size());
+        assertEquals("the client", two.panel().heard.get(0));
     }
 
-    // ── Fragments ───────────────────────────────────────────────────────────
+    // ── Nested panels ───────────────────────────────────────────────────────
 
+    /**
+     * Composition is nesting: a child panel is a field, its id is the field name, and its wire
+     * methods are qualified by that id — {@code "save"} inside the child is {@code "save/save"} on
+     * the wire, with nobody having written the string on either side.
+     */
     @Test
-    public void aFragmentsMethodsAreNamespacedByItsScope() {
+    public void aNestedPanelsMethodsAreNamespacedByItsId() {
         AtomicReference<String> answered = new AtomicReference<>();
-        FragmentWindow window = server.open(new FragmentWindow());
+        ServerWindow<ParentPanel> window = server.open(ParentPanel.TYPE, null);
         settle();
 
-        // The QUALIFIED name is what crosses the wire -- "save" belongs to the fragment's namespace,
+        // The QUALIFIED name is what crosses the wire -- "save" belongs to the child's namespace,
         // not to the window's.
-        mount.mounted.get(0).session().call("panel/save", null,
+        mount.mounted.get(0).session().call("save/save", null,
                 result -> answered.set(result.getString("by", "")), error -> answered.set("!" + error));
         settle();
-        assertEquals("the fragment", answered.get());
+        assertEquals("the child", answered.get());
 
-        // ...and the bare name is not served, which is what makes two fragments unable to collide.
+        // ...and the bare name is not served, which is what makes two children unable to collide.
         mount.mounted.get(0).session().call("save", null,
                 result -> answered.set("unexpected"), error -> answered.set("refused"));
         settle();
         assertEquals("refused", answered.get());
-        assertEquals(1, window.fragment.saves.get());
+        assertEquals(1, window.panel().save.saves.get());
+    }
+
+    /** The child's server half sees its SLICE, handed down at attach — never the parent's model. */
+    @Test
+    public void aNestedPanelIsServedItsSliceAndTickedWithIt() {
+        ServerWindow<ParentPanel> window = server.open(ParentPanel.TYPE, "the-slice");
+        settle();
+
+        assertEquals("serve() got the slice the parent handed down",
+                "the-slice", window.panel().save.servedWith);
+        assertTrue("and the host ticks the child with the same slice",
+                window.panel().save.ticks.get() > 0);
+    }
+
+    /** A registered parent's client walk reaches the nested panel too: fields, bound(), scope. */
+    @Test
+    public void aNestedPanelIsBoundOnTheClientUnderItsOwnScope() {
+        AtomicReference<String> answered = new AtomicReference<>();
+        ClientWindows.register(ParentPanel.TYPE);
+        ServerWindow<ParentPanel> window = server.open(ParentPanel.TYPE, null);
+        settle();
+
+        SavePanel shownChild = (SavePanel) mount.mounted.get(0).root().querySelector("#save");
+        assertNotNull(shownChild);
+        assertEquals("the child's bound() ran", 1, shownChild.bounds.get());
+        assertSame("its fields resolved out of its own subtree",
+                shownChild.querySelector("#late"), shownChild.late);
+        assertNotNull("client() handed it a scope", shownChild.net);
+
+        // The child's ClientScope speaks the SAME qualified name the server registered.
+        shownChild.net.call("save", null,
+                result -> answered.set(result.getString("by", "")), error -> answered.set("!" + error));
+        settle();
+        assertEquals("the child", answered.get());
+        assertEquals(1, window.panel().save.saves.get());
     }
 
     @Test
-    public void twoFragmentsUnderOneScopeIsAWiringMistake() {
+    public void twoChildrenUnderOneIdIsAWiringMistake() {
         try {
-            server.open(new DoubleAttachWindow());
+            server.open(DoubleAttachPanel.TYPE, null);
             fail("expected the second attach to be refused");
         } catch (IllegalStateException expected) {
-            assertTrue(expected.getMessage().contains("panel"));
+            assertTrue(expected.getMessage(), expected.getMessage().contains("save"));
         }
     }
 
@@ -505,7 +529,7 @@ public class WindowLifecycleTest {
     @Test
     public void aParentCannotOverrideAHandlerItsChildAlreadyRegistered() {
         try {
-            server.open(new OverridingWindow());
+            server.open(OverridingPanel.TYPE, null);
             fail("expected the duplicate handler to be refused");
         } catch (IllegalStateException expected) {
             assertTrue(expected.getMessage(), expected.getMessage().contains("already handled"));
@@ -514,30 +538,30 @@ public class WindowLifecycleTest {
 
     /**
      * The relaxation F16 needed. The old rule refused every registration after {@code open()}, which
-     * would have made a fragment attached to a live window impossible — and a tree delta re-describes
-     * the new elements' reported events, so the client wires them exactly as it would at open.
+     * would have made attaching to a live window impossible — and a tree delta re-describes the new
+     * elements' reported events, so the client wires them exactly as it would at open.
      */
     @Test
-    public void aFragmentMayBeAttachedToAWindowThatIsAlreadyOpen() {
-        LateFragmentWindow window = server.open(new LateFragmentWindow());
+    public void aChildMayBeAttachedToAWindowThatIsAlreadyOpen() {
+        ServerWindow<LateChildPanel> window = server.open(LateChildPanel.TYPE, null);
         settle();
-        assertEquals("nothing extra yet", 0, window.fragment.saves.get());
+        assertNull("nothing extra yet", window.panel().child);
 
-        window.attachNow();
+        window.panel().attachNow();
         settle();
 
         AtomicReference<String> answered = new AtomicReference<>();
-        mount.mounted.get(0).session().call("late/save", null,
+        mount.mounted.get(0).session().call("child/save", null,
                 result -> answered.set("ok"), error -> answered.set("!" + error));
         settle();
         assertEquals("ok", answered.get());
 
         // The new element came across in a tree delta, WITH its reported event, so it reports back.
         Button added = (Button) mount.mounted.get(0).root().querySelector("#late");
-        assertNotNull("the delta brought the fragment's tree", added);
+        assertNotNull("the delta brought the child's tree", added);
         added.onPressed.emit();
         settle();
-        assertEquals(1, window.fragment.presses.get());
+        assertEquals(1, window.panel().child.presses.get());
     }
 
     // ── Visibility ──────────────────────────────────────────────────────────
@@ -549,14 +573,14 @@ public class WindowLifecycleTest {
      */
     @Test
     public void aHiddenWindowStopsCostingTraffic() {
-        TestWindow window = server.open(new TestWindow());
+        ServerWindow<TestPanel> window = server.open(TestPanel.TYPE, null);
         settle();
 
         mount.mounted.get(0).visibilityChanged(false);
         settle();
 
         int quiet = link[0].sent().size();
-        window.panel.label.setText("changed while nobody was looking");
+        window.panel().label.setText("changed while nobody was looking");
         settle();
         assertEquals("nothing was sent", quiet, link[0].sent().size());
 
@@ -576,18 +600,14 @@ public class WindowLifecycleTest {
      * and permanently, because {@code Property.set} returns early on an unchanged value, so the server
      * never marks that widget dirty again. A window whose first tick writes a status line lost that
      * line for the life of the window.</p>
-     *
-     * <p>The first tick is exactly when a window mirrors its model, so this is the common case rather
-     * than a corner: it is what {@code ServerWindow.tick} is for.</p>
      */
     @Test
     public void aStateChangeMadeWhileTheDescriptionIsStillInFlightIsNotLost() {
-        TestWindow window = new TestWindow();
-        server.open(window);
+        ServerWindow<TestPanel> window = server.open(TestPanel.TYPE, null);
 
         // BEFORE a single message has crossed: the client has not seen ui/openWindow, let alone asked
         // for the tree behind its hash.
-        window.panel.label.setText("written before the client could hear it");
+        window.panel().label.setText("written before the client could hear it");
         serverSide.tick();
 
         settle();
@@ -611,7 +631,7 @@ public class WindowLifecycleTest {
         List<List<String>> applied = new ArrayList<>();
         client.setSheetSupply(new SheetSupply((window, css) -> applied.add(css)));
 
-        server.open(new StyledWindow());
+        server.open(StyledPanel.TYPE, null);
         settle();
 
         assertEquals("the sheets arrived as one batch", 1, applied.size());
@@ -635,7 +655,7 @@ public class WindowLifecycleTest {
         client.setSheetSupply(new SheetSupply((window, css) -> applied.add(css))
                 .addResolver(ref -> "local:" + ref.id()));
 
-        server.open(new StyledWindow());
+        server.open(StyledPanel.TYPE, null);
         settle();
 
         assertEquals(1, applied.size());
@@ -654,7 +674,7 @@ public class WindowLifecycleTest {
         List<List<String>> applied = new ArrayList<>();
         client.setSheetSupply(new SheetSupply((window, css) -> applied.add(css)));
 
-        server.open(new HalfStyledWindow());
+        server.open(HalfStyledPanel.TYPE, null);
         settle();
 
         assertEquals(1, applied.size());
@@ -670,13 +690,10 @@ public class WindowLifecycleTest {
      * elements — silently, because an id is just an int and every one of them still resolves to
      * something. Gating above both means the tree is simply not re-described while nobody is looking,
      * and the client's numbering stays the one it was last told.</p>
-     *
-     * <p>Reshaping a hidden window is not a corner case: it is a background job adding a row to a panel
-     * somebody has minimised.</p>
      */
     @Test
     public void aWindowReshapedWhileHiddenComesBackWithItsNumberingIntact() {
-        LateFragmentWindow window = server.open(new LateFragmentWindow());
+        ServerWindow<LateChildPanel> window = server.open(LateChildPanel.TYPE, null);
         settle();
         ClientWindowContext shown = mount.mounted.get(0);
 
@@ -684,8 +701,8 @@ public class WindowLifecycleTest {
         settle();
 
         // THE SHAPE CHANGES while nobody is looking, and then the state does.
-        window.attachNow();
-        window.panel.label.setText("changed while hidden");
+        window.panel().attachNow();
+        window.panel().label.setText("changed while hidden");
         settle();
 
         assertNull("nothing was re-described", shown.root().querySelector("#late"));
@@ -697,435 +714,331 @@ public class WindowLifecycleTest {
         assertEquals("and the state landed on the RIGHT element, not on whatever took its number",
                 "changed while hidden", textOf(shown.root().querySelector("#label")));
 
-        // ...and the delta that brought the fragment carried its reported events, so the new widget
+        // ...and the delta that brought the child carried its reported events, so the new widget
         // reports back exactly as one described at open would.
         ((Button) shown.root().querySelector("#late")).onPressed.emit();
         settle();
-        assertEquals(1, window.fragment.presses.get());
+        assertEquals(1, window.panel().child.presses.get());
     }
 
-    // ── Panel: one class, both sides ────────────────────────────────────────
+    // ── The field walk ──────────────────────────────────────────────────────
 
-    /**
-     * The whole of a networked UI in one class — no {@code ServerWindow}, no
-     * {@code ClientWindowBehaviour}, no id strings, and no {@code bindTo}.
-     *
-     * <p>What is asserted is that the <b>three lifetimes land on the right sides</b>: the fields are
-     * created and named from their own declarations, the server's handlers reach the server's panel,
-     * and the client's listeners reach the client's — which are different objects over different
-     * trees, and the easiest thing in this design to get subtly wrong.</p>
-     */
-    @Test
-    public void aPanelDeclaresItsWidgetsItsServerHalfAndItsClientHalfInOneClass() {
-        TestPanel.served.set(0);
-        TestPanel.clicked.set(0);
-        ClientWindows.register(TestPanel.TYPE);
-
-        ServerWindow window = server.open(TestPanel.TYPE.serve("a-model"));
-        settle();
-
-        // The field NAME became the id, on both sides, without anybody writing the string.
-        UIElement shown = mount.mounted.get(0).root();
-        assertNotNull("the field name is the id", shown.querySelector("#power"));
-        assertNotNull(shown.querySelector("#press"));
-
-        // serve() ran on the server: a press crosses the wire and reaches its handler.
-        ((Button) shown.querySelector("#press")).onPressed.emit();
-        settle();
-        assertEquals("serve() wired the server half", 1, TestPanel.served.get());
-
-        // client() ran on the client: a local listener, attached to the REBUILT tree.
-        ((Switch) shown.querySelector("#power")).setChecked(true);
-        settle();
-        assertEquals("client() wired the client half", 1, TestPanel.clicked.get());
-
-        // And the two panels are genuinely different objects over different trees.
-        TestPanel served = TestPanel.TYPE.panelOf(window);
-        assertNotNull(served);
-        assertNotSame("the server's tree is not the client's", served.root(), shown);
-        assertEquals("only the server sees the model", "a-model", served.modelForTest());
-    }
-
-    /** A widget whose constructor takes arguments keeps its initializer; the base only fills nulls. */
+    /** A widget whose constructor takes arguments keeps its initializer; the framework fills nulls. */
     @Test
     public void aFieldWithAnInitializerIsKeptAndStillNamed() {
-        TestPanel panel = TestPanel.TYPE.build("m");
+        DeclaredPanel panel = DeclaredPanel.TYPE.build(null);
         assertEquals("press", panel.press.getId());
         assertEquals("the initializer's own label survived", "press-label", panel.press.getText());
         assertNotNull("and the null field was created for us", panel.power);
         assertEquals("power", panel.power.getId());
     }
 
-    /** Binding resolves every declared field out of the rebuilt tree, by name and by type. */
-    @Test
-    public void aBoundPanelResolvesItsFieldsFromTheRebuiltTree() {
-        server.open(TestPanel.TYPE.serve("m"));
-        settle();
-
-        TestPanel bound = TestPanel.TYPE.windowType().bind(mount.mounted.get(0).root());
-        assertNotNull(bound.power);
-        assertNotNull(bound.press);
-        assertSame("resolved from the tree, not created afresh",
-                mount.mounted.get(0).root().querySelector("#power"), bound.power);
-        assertNull("a bound panel has no model", bound.modelForTest());
-    }
-
-    // ── The builder ─────────────────────────────────────────────────────────
-
-    /**
-     * The same lifecycle without a class. A window that is one screenful of handlers should not have to
-     * declare a type to hold them.
-     */
-    @Test
-    public void aWindowBuiltFromLambdasBehavesExactlyLikeOne() {
-        AtomicInteger pressed = new AtomicInteger();
-        List<ServerWindow.CloseReason> closes = new ArrayList<>();
-
-        ServerWindow window = server.open(ServerWindow.of(BUILT, Panel::new, panel -> panel.root)
-                .key("test:built")
-                .title(panel -> "Built")
-                .wire((panel, io) -> io.onActivate(panel.press, ctx -> pressed.incrementAndGet()))
-                .tick((panel, io) -> panel.label.setText("tick"))
-                .onClosed(closes::add));
-        settle();
-
-        assertEquals("Built", mount.mounted.get(0).title());
-        Button pressMe = (Button) mount.mounted.get(0).root().querySelector("#press");
-        pressMe.onPressed.emit();
-        settle();
-        assertEquals(1, pressed.get());
-        assertEquals("tick", textOf(mount.mounted.get(0).root().querySelector("#label")));
-
-        mount.mounted.get(0).userClosed();
-        settle();
-        assertEquals(1, closes.size());
-        assertEquals(ServerWindow.CloseReason.CLIENT, closes.get(0));
-        assertFalse(window.isOpen());
-    }
-
     // ── Fixtures ────────────────────────────────────────────────────────────
 
     private static String textOf(@Nullable UIElement element) {
-        return element instanceof com.crystalgui.ui.elements.UIText
-                ? ((com.crystalgui.ui.elements.UIText) element).getText() : null;
+        return element instanceof UIText ? ((UIText) element).getText() : null;
     }
 
-    /** A tree with one button and one label, which is all any of these need. */
-    private static final class Panel {
-        final UIElement root;
-        final Button press;
-        final com.crystalgui.ui.elements.UIText label;
+    /**
+     * The workhorse: one class, both sides, per-instance counters. Its MODEL is its key — which is
+     * the honest general shape anyway, a key naming the window's subject.
+     */
+    public static class TestPanel extends UIElement implements Networked<String> {
 
-        Panel() {
-            root = new UIElement();
-            press = new Button("press");
-            press.setId("press");
-            label = new com.crystalgui.ui.elements.UIText("");
-            label.setId("label");
-            root.addChild(press);
-            root.addChild(label);
-        }
+        static final UiType<TestPanel, String> TYPE = UiType.of("test:panel", TestPanel::new);
 
-        /** The client's half: typed hold of a tree that was rebuilt from a description. */
-        private Panel(UIElement rebuilt) {
-            root = rebuilt;
-            press = rebuilt.require("#press", Button.class);
-            label = rebuilt.require("#label", com.crystalgui.ui.elements.UIText.class);
-        }
+        public Button press = new Button("press");
+        public UIText label = new UIText("");
 
-        static Panel bindTo(UIElement rebuilt) {
-            return new Panel(rebuilt);
-        }
-    }
-
-    private static class TestWindow extends ServerWindow {
-        final Panel panel = new Panel();
         final AtomicInteger presses = new AtomicInteger();
-        final List<CloseReason> closes = new ArrayList<>();
+        final AtomicInteger bounds = new AtomicInteger();
+        final List<String> closes = new ArrayList<>();
         boolean valid = true;
-        @Nullable
-        String key;
-
-        TestWindow withKey(String key) {
-            this.key = key;
-            return this;
-        }
-
-        @Override
-        public WindowType<Panel> type() {
-            return PANEL;
-        }
-
-        @Override
-        public String title() {
-            return "Test panel";
-        }
 
         @Nullable
+        ClientScope net;
+
         @Override
-        public String key() {
-            return key;
+        public void layout(String key) {
+            addChild(press);
+            addChild(label);
         }
 
         @Override
-        public UIElement root() {
-            return panel.root;
+        public void serve(String key, ServerScope io) {
+            io.onActivate(press, ctx -> presses.incrementAndGet());
         }
 
         @Override
-        protected void bind(WindowScope io) {
-            io.onActivate(panel.press, ctx -> presses.incrementAndGet());
-        }
-
-        @Override
-        protected boolean stillValid(@Nullable Object viewer) {
+        public boolean stillValid(String key, @Nullable Object viewer) {
             return valid;
         }
 
         @Override
-        protected void onClosed(CloseReason reason) {
+        public String title(String key) {
+            return "Test panel";
+        }
+
+        @Override
+        public String key(String key) {
+            return key;
+        }
+
+        @Override
+        public void bound() {
+            bounds.incrementAndGet();
+        }
+
+        @Override
+        public void client(ClientScope io) {
+            net = io;
+        }
+
+        @Override
+        public void closed(String reason) {
             closes.add(reason);
         }
     }
 
+    /** A second TYPE over the same shape, for the dispatch tests. Its own tag, its own id. */
+    public static class OtherPanel extends TestPanel {
+        static final UiType<OtherPanel, String> TYPE = UiType.of("test:other", OtherPanel::new);
+    }
+
+    /** The auto-creation case: a null field the framework instantiates and names. */
+    public static class DeclaredPanel extends UIElement implements Networked<String> {
+
+        static final UiType<DeclaredPanel, String> TYPE = UiType.of("test:declared", DeclaredPanel::new);
+
+        public Switch power;                                  // created and named for us
+        public Button press = new Button("press-label");      // ctor argument, so we write it
+
+        @Override
+        public void layout(String model) {
+            addChild(power);
+            addChild(press);
+        }
+    }
+
+    /** A declared part its layout forgot to add — the shape a binding must refuse loudly. */
+    public static class SabotagedPanel extends UIElement implements Networked<String> {
+
+        static final UiType<SabotagedPanel, String> TYPE = UiType.of("test:sabotaged", SabotagedPanel::new);
+
+        public Button press = new Button("press");
+        public Button orphan = new Button("orphan");   // declared, never added to the tree
+
+        final AtomicInteger bounds = new AtomicInteger();
+
+        @Override
+        public void layout(String model) {
+            addChild(press);   // orphan forgotten
+        }
+
+        @Override
+        public void bound() {
+            bounds.incrementAndGet();
+        }
+    }
+
+    public static class NotifyingPanel extends UIElement implements Networked<String> {
+
+        static final UiType<NotifyingPanel, String> TYPE = UiType.of("test:notifying", NotifyingPanel::new);
+
+        public Button press = new Button("press");
+
+        final List<String> heard = new ArrayList<>();
+
+        @Override
+        public void layout(String model) {
+            addChild(press);
+        }
+
+        @Override
+        public void serve(String model, ServerScope io) {
+            io.onNotify("ping", payload -> heard.add(payload.getString("from", "?")));
+        }
+    }
+
+    /**
+     * A nested panel: its own subtree, its own handlers, its own namespace — attached as a field of
+     * whoever holds it. No {@code UiType} of its own needed for the field case: the parent's
+     * registration registers its tag.
+     */
+    public static class SavePanel extends UIElement implements Networked<String> {
+
+        public Button late = new Button("late");
+
+        final AtomicInteger saves = new AtomicInteger();
+        final AtomicInteger presses = new AtomicInteger();
+        final AtomicInteger ticks = new AtomicInteger();
+        final AtomicInteger bounds = new AtomicInteger();
+
+        @Nullable
+        String servedWith;
+
+        @Nullable
+        ClientScope net;
+
+        @Override
+        public void layout(String slice) {
+            addChild(late);
+        }
+
+        @Override
+        public void serve(String slice, ServerScope io) {
+            servedWith = slice;
+            io.onCall("save", (args, respond) -> {
+                saves.incrementAndGet();
+                StateMap<Object> out = io.newMap();
+                out.putString("by", "the child");
+                respond.ok(out);
+            });
+            io.onActivate(late, ctx -> presses.incrementAndGet());
+        }
+
+        @Override
+        public void tick(String slice) {
+            ticks.incrementAndGet();
+        }
+
+        @Override
+        public void bound() {
+            bounds.incrementAndGet();
+        }
+
+        @Override
+        public void client(ClientScope io) {
+            net = io;
+        }
+    }
+
+    /** A parent with a nested panel. The child is BUILT in layout, with the slice only it knows. */
+    public static class ParentPanel extends UIElement implements Networked<String> {
+
+        static final UiType<ParentPanel, String> TYPE = UiType.of("test:parent", ParentPanel::new);
+        static final UiType<SavePanel, String> CHILD = UiType.of("test:save", SavePanel::new);
+
+        public Button press = new Button("press");
+        public SavePanel save;
+
+        @Override
+        public void layout(String model) {
+            addChild(press);
+            save = CHILD.build(sliceOf(model));
+            addChild(save);   // the field name becomes its id, after layout, by the same rule
+        }
+
+        @Override
+        public void serve(String model, ServerScope io) {
+            io.attach(save, sliceOf(model));
+        }
+
+        private static String sliceOf(String model) {
+            return model == null ? null : model;   // the whole model IS the slice, in this fixture
+        }
+    }
+
+    /** Attaches the same child id twice — the collision the scope set exists to refuse. */
+    public static class DoubleAttachPanel extends UIElement implements Networked<String> {
+
+        static final UiType<DoubleAttachPanel, String> TYPE =
+                UiType.of("test:double", DoubleAttachPanel::new);
+
+        public SavePanel save;
+
+        @Override
+        public void layout(String model) {
+            save = ParentPanel.CHILD.build(model);
+            addChild(save);
+        }
+
+        @Override
+        public void serve(String model, ServerScope io) {
+            io.attach(save, model);
+            io.attach(save, model);
+        }
+    }
+
+    /** A parent reaching into a child's element — the boundary that used to be silently crossed. */
+    public static class OverridingPanel extends UIElement implements Networked<String> {
+
+        static final UiType<OverridingPanel, String> TYPE =
+                UiType.of("test:overriding", OverridingPanel::new);
+
+        public SavePanel save;
+
+        @Override
+        public void layout(String model) {
+            save = ParentPanel.CHILD.build(model);
+            addChild(save);
+        }
+
+        @Override
+        public void serve(String model, ServerScope io) {
+            io.attach(save, model);
+            io.onActivate(save.late, ctx -> { });
+        }
+    }
+
+    /** A child that arrives AFTER the window opened — dynamic content, named by hand. */
+    public static class LateChildPanel extends UIElement implements Networked<String> {
+
+        static final UiType<LateChildPanel, String> TYPE =
+                UiType.of("test:late-parent", LateChildPanel::new);
+
+        public Button press = new Button("press");
+        public UIText label = new UIText("");
+
+        /** Not a declared part: null until {@link #attachNow}, so the client binding never asks for it. */
+        @Nullable
+        SavePanel child;
+
+        @Nullable
+        private ServerScope scope;
+
+        @Override
+        public void layout(String model) {
+            addChild(press);
+            addChild(label);
+        }
+
+        @Override
+        public void serve(String model, ServerScope io) {
+            this.scope = io;
+        }
+
+        void attachNow() {
+            if (scope == null) throw new IllegalStateException("not served yet");
+            child = ParentPanel.CHILD.build("late-slice");
+            child.setId("child");   // dynamic content names itself; a field would have been named for it
+            addChild(child);
+            scope.attach(child, "late-slice");
+        }
+    }
+
     /** Two sheets, both offered with their text — what a server-authored theme looks like. */
-    private static final class StyledWindow extends ServerWindow {
-        private final Panel panel = new Panel();
+    public static class StyledPanel extends TestPanel {
+
+        static final UiType<StyledPanel, String> TYPE = UiType.of("test:styled", StyledPanel::new);
 
         @Override
-        public WindowType<Panel> type() {
-            return PANEL;
-        }
-
-        @Override
-        public UIElement root() {
-            return panel.root;
-        }
-
-        @Override
-        protected void bind(WindowScope io) {
+        public void serve(String key, ServerScope io) {
             io.sheet(SheetRef.ofResource("test:a", "hash-a"), ".a { color: #111111; }");
             io.sheet(SheetRef.ofResource("test:b", "hash-b"), ".b { color: #222222; }");
         }
     }
 
     /** One sheet offered with its text, one NAMED only — a theme the client is expected to ship. */
-    private static final class HalfStyledWindow extends ServerWindow {
-        private final Panel panel = new Panel();
+    public static class HalfStyledPanel extends TestPanel {
+
+        static final UiType<HalfStyledPanel, String> TYPE =
+                UiType.of("test:half-styled", HalfStyledPanel::new);
 
         @Override
-        public WindowType<Panel> type() {
-            return PANEL;
-        }
-
-        @Override
-        public UIElement root() {
-            return panel.root;
-        }
-
-        @Override
-        protected void bind(WindowScope io) {
+        public void serve(String key, ServerScope io) {
             io.sheet(SheetRef.ofResource("test:a", "hash-a"), ".a { color: #111111; }");
             io.sheet(SheetRef.ofResource("test:missing", "hash-missing"));
-        }
-    }
-
-    private static final class OtherWindow extends TestWindow {
-        @Override
-        public WindowType<Panel> type() {
-            return OTHER_PANEL;
-        }
-    }
-
-    private static final class NotifyingWindow extends ServerWindow {
-        private final Panel panel = new Panel();
-        private final String name;
-        final List<String> heard = new ArrayList<>();
-
-        NotifyingWindow(String name) {
-            this.name = name;
-        }
-
-        @Override
-        public WindowType<Panel> type() {
-            return PANEL;
-        }
-
-        @Override
-        public UIElement root() {
-            return panel.root;
-        }
-
-        @Override
-        protected void bind(WindowScope io) {
-            io.onNotify("ping", payload -> heard.add(payload.getString("from", "?")));
-        }
-    }
-
-    /** A fragment: its own subtree, its own handlers, its own namespace. */
-    private static final class SaveFragment extends ServerFragment {
-        final UIElement root = new UIElement();
-        final Button press = new Button("late");
-        final AtomicInteger saves = new AtomicInteger();
-        final AtomicInteger presses = new AtomicInteger();
-
-        SaveFragment() {
-            press.setId("late");
-            root.addChild(press);
-        }
-
-        @Override
-        public UIElement root() {
-            return root;
-        }
-
-        @Override
-        protected void bind(WindowScope io) {
-            io.onCall("save", (args, respond) -> {
-                saves.incrementAndGet();
-                StateMap<Object> out = io.newMap();
-                out.putString("by", "the fragment");
-                respond.ok(out);
-            });
-            io.onActivate(press, ctx -> presses.incrementAndGet());
-        }
-    }
-
-    private static final class FragmentWindow extends ServerWindow {
-        private final Panel panel = new Panel();
-        final SaveFragment fragment = new SaveFragment();
-
-        @Override
-        public WindowType<Panel> type() {
-            return PANEL;
-        }
-
-        @Override
-        public UIElement root() {
-            return panel.root;
-        }
-
-        @Override
-        protected void bind(WindowScope io) {
-            panel.root.addChild(fragment.root());
-            io.attach(fragment, "panel");
-        }
-    }
-
-    private static final class DoubleAttachWindow extends ServerWindow {
-        private final Panel panel = new Panel();
-
-        @Override
-        public WindowType<Panel> type() {
-            return PANEL;
-        }
-
-        @Override
-        public UIElement root() {
-            return panel.root;
-        }
-
-        @Override
-        protected void bind(WindowScope io) {
-            SaveFragment one = new SaveFragment();
-            SaveFragment two = new SaveFragment();
-            panel.root.addChild(one.root());
-            panel.root.addChild(two.root());
-            io.attach(one, "panel");
-            io.attach(two, "panel");
-        }
-    }
-
-    /** A parent reaching into a child's element — the boundary that used to be silently crossed. */
-    private static final class OverridingWindow extends ServerWindow {
-        private final Panel panel = new Panel();
-
-        @Override
-        public WindowType<Panel> type() {
-            return PANEL;
-        }
-
-        @Override
-        public UIElement root() {
-            return panel.root;
-        }
-
-        @Override
-        protected void bind(WindowScope io) {
-            SaveFragment fragment = new SaveFragment();
-            panel.root.addChild(fragment.root());
-            io.attach(fragment, "panel");
-            io.onActivate(fragment.press, ctx -> { });
-        }
-    }
-
-    private static final class LateFragmentWindow extends ServerWindow {
-        final Panel panel = new Panel();
-        final SaveFragment fragment = new SaveFragment();
-        @Nullable
-        private WindowScope scope;
-
-        @Override
-        public WindowType<Panel> type() {
-            return PANEL;
-        }
-
-        @Override
-        public UIElement root() {
-            return panel.root;
-        }
-
-        @Override
-        protected void bind(WindowScope io) {
-            this.scope = io;
-        }
-
-        void attachNow() {
-            if (scope == null) throw new IllegalStateException("not bound yet");
-            panel.root.addChild(fragment.root());
-            scope.attach(fragment, "late");
-        }
-    }
-
-    /**
-     * One class: widgets, layout, server half, client half.
-     *
-     * <p>Fully qualified because this test already has a nested {@code Panel} fixture of its own from
-     * the earlier cases, and a nested type shadows an import.</p>
-     *
-     * @see com.crystalgui.net.window.Panel
-     */
-    public static final class TestPanel extends com.crystalgui.net.window.Panel<String> {
-
-        static final PanelType<TestPanel, String> TYPE =
-                PanelType.of("test:panel-base", TestPanel::new);
-
-        /** Static because the two sides are different INSTANCES, which is the point being asserted. */
-        static final AtomicInteger served = new AtomicInteger();
-        static final AtomicInteger clicked = new AtomicInteger();
-
-        public Switch power;                                  // created and named for us
-        public Button press = new Button("press-label");      // ctor argument, so we write it
-
-        @Override
-        protected void layout() {
-            add(power);
-            add(press);
-        }
-
-        @Override
-        protected void serve(WindowScope io) {
-            io.onActivate(press, ctx -> served.incrementAndGet());
-        }
-
-        @Override
-        protected void client(ClientWindowContext window) {
-            power.attachListener(checked -> clicked.incrementAndGet());
-        }
-
-        @Nullable
-        String modelForTest() {
-            return model();
         }
     }
 

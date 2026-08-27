@@ -111,7 +111,7 @@ public final class MachineExample {
                     // ONE CALL. The id, the session, the description, the tick and every way this window
                     // can end are the host's. Asking twice brings the first one forward, because the
                     // window names a key. @see ServerWindows#open
-                    ServerWindows.of(wire).open(MachinePanel.TYPE.serve(machine));
+                    ServerWindows.of(wire).open(MachinePanel.TYPE, machine);
                 });
 
                 // The machine goes when its owner does. A real mod's machine lives in the world and
