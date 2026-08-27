@@ -132,17 +132,58 @@ public abstract class Panel<M> {
     }
 
     /**
-     * Registers what this panel does <b>locally on a client</b> — at mount, and again after every
-     * re-describe.
+     * Attaches listeners to this panel's own widgets — <b>at mount, and again after every
+     * re-describe</b>.
      *
-     * <p>Widget listeners belong here rather than anywhere else, because they die with the tree that
-     * carried them. May freely name client-only types. @see Panel</p>
+     * <p>Widget listeners belong here and nowhere else, because they die with the tree that carried
+     * them: a re-describe replaces every widget this panel holds, so anything attached to the old ones
+     * went with them.</p>
+     */
+    protected void wire() {
+    }
+
+    /**
+     * Registers what this panel answers <b>on the wire, on the client</b>. Once, at mount.
+     *
+     * <p>Separate from {@link #wire()} because the two have different lifetimes and the difference is
+     * not cosmetic: a session registration is keyed by <em>method</em> and survives a re-describe
+     * untouched, so running it twice is not a duplicate listener but a
+     * <b>{@code MessageRouter} refusal</b> — the same (method, window) pair registered twice throws.
+     * Widget listeners are the opposite and must run every time.</p>
+     *
+     * <p>May freely name client-only types: this is a method body. @see Panel</p>
      */
     protected void client(ClientWindowContext window) {
     }
 
     /** Told when the window ends, on whichever side this instance is. */
     protected void closed(String reason) {
+    }
+
+    /**
+     * One world tick while this panel's window is open. <b>Server side only.</b>
+     *
+     * <p>Mirror the model into widgets and stop: the host flushes whatever that dirtied, as one
+     * message, after this returns. Nothing here has to know which fields moved.</p>
+     */
+    protected void tick() {
+    }
+
+    /** What to call the window on screen, or {@code null} to let the type's id stand in. */
+    @Nullable
+    protected String title() {
+        return null;
+    }
+
+    /**
+     * Uniqueness and persistence key, or {@code null} for "always a new window".
+     *
+     * <p>A key makes re-opening free: the host brings the existing window forward rather than
+     * building a second one, keeping its scroll position and whatever is half-typed in it.</p>
+     */
+    @Nullable
+    protected String key() {
+        return null;
     }
 
     // ── What a panel reads ──────────────────────────────────────────────────
@@ -204,12 +245,23 @@ public abstract class Panel<M> {
      */
     static <P extends Panel<M>, M> P bind(java.util.function.Supplier<P> create, UIElement rebuilt) {
         P panel = create.get();
-        Panel<M> base = panel;
-        base.root = rebuilt;
-        for (Field part : partsOf(panel.getClass())) {
-            write(panel, part, rebuilt.require("#" + part.getName(), asElement(part.getType())));
-        }
+        panel.rebind(rebuilt);
         return panel;
+    }
+
+    /**
+     * Points this panel at a tree, resolving every declared part out of it.
+     *
+     * <p>Called again on a re-describe, <b>on the same instance</b>, which is what lets
+     * {@link #client} be a once-only hook while {@link #wire()} runs every time. Rebuilding the panel
+     * instead would lose anything it remembers and would re-run the session registrations that must
+     * not run twice.</p>
+     */
+    final void rebind(UIElement rebuilt) {
+        this.root = rebuilt;
+        for (Field part : partsOf(getClass())) {
+            write(this, part, rebuilt.require("#" + part.getName(), asElement(part.getType())));
+        }
     }
 
     // ── Reflection, once per class ──────────────────────────────────────────

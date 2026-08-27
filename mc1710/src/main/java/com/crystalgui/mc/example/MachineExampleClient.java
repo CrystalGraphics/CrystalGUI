@@ -4,8 +4,6 @@ import org.lwjgl.input.Keyboard;
 
 import com.crystalgui.example.machine.MachineTrace;
 import com.crystalgui.example.machine.ui.MachinePanel;
-import com.crystalgui.example.machine.session.MachineClient;
-import com.crystalgui.example.machine.session.MachineWindow;
 import com.crystalgui.mc.client.CgUiScreen;
 import com.crystalgui.mc.net.CgUiConnections;
 import com.crystalgui.net.window.ClientWindows;
@@ -74,7 +72,7 @@ public final class MachineExampleClient {
         // WHAT THIS CLIENT DOES LOCALLY about a machine panel. Once, at init -- there is no connection
         // to wait for and no session to adopt, because a window type is a fact about this installation
         // rather than about any one wire. @see ClientWindows#register
-        ClientWindows.register(MachinePanel.TYPE, MachineClient::new);
+        ClientWindows.register(MachinePanel.TYPE);
 
         openPanel = new KeyBinding("key.crystalgui.machine", Keyboard.KEY_F8,
                 "key.categories.crystalgui");

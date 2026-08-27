@@ -4,8 +4,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import com.crystalgui.example.machine.MachineModel;
+import com.crystalgui.example.machine.ui.MachinePanel;
 import com.crystalgui.example.machine.MachineTrace;
-import com.crystalgui.example.machine.session.MachineWindow;
 import com.crystalgui.mc.net.CgUiConnections;
 import com.crystalgui.net.window.ServerWindows;
 import com.crystalgui.net.protocol.ProtocolConnection;
@@ -19,7 +19,7 @@ import cpw.mods.fml.common.gameevent.TickEvent;
  * The worked example's <b>server half</b>, in game.
  *
  * <p>{@code com.crystalgui.example} is the stack with no Minecraft in it; this is the loader code that
- * gives it a world. Nothing about the panel changes between the two — the same {@link MachineWindow}
+ * gives it a world. Nothing about the panel changes between the two — the same {@link MachinePanel}
  * that runs against a loopback transport in {@code MachineDemo} runs here against a real socket, and
  * this class never mentions a widget.</p>
  *
@@ -48,7 +48,7 @@ import cpw.mods.fml.common.gameevent.TickEvent;
  * interesting half: a client <em>asking</em> for a UI is the direction Minecraft's own model has no
  * message for, and it is what every "right-click to open" actually needs.</p>
  *
- * <p>The window's {@link MachineWindow#KEY key} makes repeat asks free: the second F8 brings the
+ * <p>The window's {@link MachinePanel#key() key} makes repeat asks free: the second F8 brings the
  * existing panel forward rather than stacking a second one, keeping its scroll position and whatever is
  * half-typed in it.</p>
  *
@@ -111,7 +111,7 @@ public final class MachineExample {
                     // ONE CALL. The id, the session, the description, the tick and every way this window
                     // can end are the host's. Asking twice brings the first one forward, because the
                     // window names a key. @see ServerWindows#open
-                    ServerWindows.of(wire).open(new MachineWindow(machine));
+                    ServerWindows.of(wire).open(MachinePanel.TYPE.serve(machine));
                 });
 
                 // The machine goes when its owner does. A real mod's machine lives in the world and
@@ -130,7 +130,7 @@ public final class MachineExample {
          *
          * <p>This is the one tick handler the example needs, and it is about machines rather than about
          * windows: no player list, no map of sessions, no flush. A window that is open mirrors its
-         * machine from {@code MachineWindow.tick}, which {@link ServerWindows} calls from the
+         * machine from {@code MachinePanel.tick}, which {@link ServerWindows} calls from the
          * connection's own tick, and the flush after it belongs to the session.</p>
          *
          * <p><b>Everything here runs on the server thread</b>, which is why it may touch the world at

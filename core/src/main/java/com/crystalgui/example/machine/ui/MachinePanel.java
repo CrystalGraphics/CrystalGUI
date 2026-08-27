@@ -1,7 +1,15 @@
 package com.crystalgui.example.machine.ui;
 
-import com.crystalgui.example.machine.session.MachineWindow;
-import com.crystalgui.net.window.WindowType;
+import com.crystalgui.example.machine.MachineModel;
+import com.crystalgui.example.machine.MachineTrace;
+import com.crystalgui.net.UiEventKinds;
+import com.crystalgui.net.window.ClientWindowContext;
+import com.crystalgui.net.window.Panel;
+import com.crystalgui.net.window.PanelType;
+import com.crystalgui.net.window.WindowScope;
+import com.crystalgui.serialization.StateMap;
+
+import javax.annotation.Nullable;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.ProgressBar;
@@ -31,7 +39,7 @@ import com.crystalgui.ui.elements.UIText;
  *
  * <h3>Why the fields are public and final</h3>
  *
- * <p>{@link MachineWindow} needs handles on individual widgets to attach behaviour and to write
+ * <p>{@link #serve} needs handles on individual widgets to attach behaviour and to write
  * state into. Hunting them back out with {@code querySelector} would work and would be worse: a
  * typo in a selector is a lookup that finds nothing at runtime, where a field is a compile error.
  * The tree is built once in the constructor and never reshaped, so the handles cannot go stale.</p>
@@ -43,7 +51,7 @@ import com.crystalgui.ui.elements.UIText;
  * element from a document-order walk on both sides and sends nothing. The id is for the cascade;
  * the network id is for the protocol; they are unrelated and it is worth not confusing them.</p>
  */
-public final class MachinePanel {
+public final class MachinePanel extends Panel<MachineModel> {
 
     /**
      * <b>What ties the two halves together.</b> Declared here because the panel is the artefact both
@@ -54,105 +62,103 @@ public final class MachinePanel {
      * rather than a string, a mismatched pair is a compile error instead of a window that opens
      * perfectly and silently has no behaviour. @see WindowType</p>
      */
-    public static final WindowType<MachinePanel> TYPE =
-            WindowType.of("crystalgui:machine", MachinePanel::bindTo);
+    public static final PanelType<MachinePanel, MachineModel> TYPE =
+            PanelType.of("crystalgui:machine", MachinePanel::new);
 
-    /*
-     * THE IDS, WRITTEN ONCE. The build path stamps them on; the bind path looks them up. Two copies of
-     * a string that must agree is exactly the failure WindowType exists to remove one level up, and it
-     * would be odd to remove it there and reintroduce it here.
-     */
-    private static final String ID_POWER = "power";
-    private static final String ID_THROUGHPUT = "throughput";
-    private static final String ID_LABEL = "label";
-    private static final String ID_PROGRESS = "progress";
-    private static final String ID_STATUS = "status";
-    private static final String ID_PURGE = "purge";
-    private static final String ID_PING_CLIENT = "ping-client";
-    private static final String ID_ANNOUNCE = "announce";
-    private static final String ID_ASK_STATS = "ask-stats";
-    private static final String ID_HEARTBEAT = "heartbeat";
-    private static final String ID_BAD_RENAME = "bad-rename";
-    private static final String ID_RESULT_SERVER = "result-server";
-    private static final String ID_RESULT_CLIENT = "result-client";
 
     /** The root the description is taken from, and the root the client rebuilds. */
-    public final UIElement root;
+
 
     /** On/off. Reports {@code toggle}. */
-    public final Switch power;
+    public Switch power;
 
     /** 0..1 throughput. Reports {@code value}. */
-    public final Slider throughput;
+    public Slider throughput;
 
     /** The machine's name. Reports {@code text}. */
-    public final TextField label;
+    public TextField label;
 
     /** Cycle progress. Server-driven only — the client never writes to it. */
-    public final ProgressBar progress;
+    public ProgressBar progress;
 
     /** Abandons the cycle. Reports {@code activate}. */
-    public final Button purge;
+    public Button purge = new Button("Purge");
 
     /** A line of server-written text. Also server-driven only. */
-    public final UIText status;
+    public UIText status = new UIText("");
 
     /** The last thing the SERVER did. Nothing else may write it. */
-    public final UIText serverLine;
+    public UIText serverLine = new UIText("nothing yet");
 
     /** The last thing the CLIENT did. Nothing else may write it. */
-    public final UIText clientLine;
+    public UIText clientLine = new UIText("nothing yet");
 
-    // ── The four protocol directions, one button each. See MachineWindow's table. ──
+    // ── The four protocol directions, one button each. See the table on #layout. ──
 
     /** SERVER-side handler → a REQUEST to the client, answered. */
-    public final Button pingClient;
+    public Button pingClient = new Button("Ping client");
 
     /** SERVER-side handler → a NOTIFICATION to the client, unanswered. */
-    public final Button announce;
+    public Button announce = new Button("Announce");
 
     /** CLIENT-side listener → a REQUEST to the server, answered. */
-    public final Button askStats;
+    public Button askStats = new Button("Ask stats");
 
     /** CLIENT-side listener → a NOTIFICATION to the server, unanswered. */
-    public final Button heartbeat;
+    public Button heartbeat = new Button("Heartbeat");
 
     /** CLIENT-side listener → a REQUEST the server REFUSES, so the error path is visible. */
-    public final Button badRename;
+    public Button badRename = new Button("Rename to ''");
 
-    public MachinePanel() {
-        root = new UIElement();
+    /**
+     * State the SERVER half keeps. Ordinary fields — the base only ever touches widget ones.
+     */
+    private int heartbeats;
+    private boolean dirty = true;
+
+    /** The CLIENT half's handle on its window, stored by {@link #client}. Null on the server. */
+    @Nullable
+    private ClientWindowContext window;
+
+    @Override
+    protected String title() {
+        return "Machine control";
+    }
+
+    @Override
+    protected String key() {
+        return "crystalgui:machine";
+    }
+
+    /**
+     * Structure only. <b>Build side.</b>
+     *
+     * <p>Every widget already exists and already carries its field name as its id by the time this
+     * runs — the base did that — so what is left is genuinely the arrangement, which is the one thing
+     * no amount of reflection could infer.</p>
+     */
+    @Override
+    protected void layout() {
+        UIElement root = root();
         root.addClass(MachineStyles.PANEL_CLASS);
 
         UIText title = new UIText("Machine control");
         title.addClass(MachineStyles.TITLE_CLASS);
         root.addChild(title);
 
-        power = new Switch();
-        power.setId(ID_POWER);
         root.addChild(row("Power", power));
 
-        throughput = new Slider();
         throughput.setRange(0f, 1f);
-        throughput.setId(ID_THROUGHPUT);
         root.addChild(row("Throughput", throughput));
 
-        label = new TextField();
         label.setPlaceholder("name this machine");
-        label.setId(ID_LABEL);
         root.addChild(row("Label", label));
 
-        progress = new ProgressBar();
-        progress.setId(ID_PROGRESS);
         root.addChild(row("Cycle", progress));
 
-        status = new UIText("");
-        status.setId(ID_STATUS);
         status.addClass(MachineStyles.STATUS_CLASS);
         root.addChild(status);
 
-        purge = new Button("Purge");
-        purge.setId(ID_PURGE);
         root.addChild(purge);
 
         /*
@@ -173,7 +179,7 @@ public final class MachinePanel {
          * The other thing worth noticing is WHO LISTENS, and it is deliberately mixed. Ping client
          * and Announce are wired on the SERVER through session.on(...), so pressing them sends a
          * ui/event and the server's lambda runs. The last three are wired on the CLIENT, in
-         * MachineClient, by finding them in this tree and calling attachListener -- purely local,
+         * #wire, by calling attachListener on the very same fields -- purely local,
          * never crossing the wire. The button cannot tell which happened to it, and neither can the
          * stylesheet.
          */
@@ -186,32 +192,22 @@ public final class MachinePanel {
         demoHint.addClass(MachineStyles.HINT_CLASS);
         root.addChild(demoHint);
 
-        pingClient = new Button("Ping client");
-        pingClient.setId(ID_PING_CLIENT);
         root.addChild(demoEntry(pingClient, KIND_REQUEST, "server asks client",
                 "machine/clientInfo",
                 "The server asks who is drawing this. The client answers; the reply shows below."));
 
-        announce = new Button("Announce");
-        announce.setId(ID_ANNOUNCE);
         root.addChild(demoEntry(announce, KIND_NOTIFY, "server tells client",
                 "machine/announce",
                 "The server sends a message. Nothing comes back, and nothing is waiting for one."));
 
-        askStats = new Button("Ask stats");
-        askStats.setId(ID_ASK_STATS);
         root.addChild(demoEntry(askStats, KIND_REQUEST, "client asks server",
                 "machine/stats",
                 "The client asks for the cycle and heartbeat counts. The server answers."));
 
-        heartbeat = new Button("Heartbeat");
-        heartbeat.setId(ID_HEARTBEAT);
         root.addChild(demoEntry(heartbeat, KIND_NOTIFY, "client tells server",
                 "machine/heartbeat",
                 "The client reports in. The server counts it and replies with nothing."));
 
-        badRename = new Button("Rename to ''");
-        badRename.setId(ID_BAD_RENAME);
         root.addChild(demoEntry(badRename, KIND_REFUSED, "client asks server",
                 "machine/rename",
                 "Asks for a blank name. The server REFUSES with the code EMPTY_NAME -- which is a "
@@ -249,55 +245,12 @@ public final class MachinePanel {
          * bonus is that BOTH HALVES OF EVERY EXCHANGE ARE NOW ON SCREEN AT ONCE: press Heartbeat and
          * the client line says it sent one while the server line says it received one.
          */
-        serverLine = new UIText("nothing yet");
-        serverLine.setId(ID_RESULT_SERVER);
         root.addChild(resultRow(MachineStyles.WHO_SERVER_CLASS, "SERVER", serverLine));
 
-        clientLine = new UIText("nothing yet");
-        clientLine.setId(ID_RESULT_CLIENT);
         root.addChild(resultRow(MachineStyles.WHO_CLIENT_CLASS, "CLIENT", clientLine));
     }
 
     /** A fixed side badge and the line only that side writes. */
-    /**
-     * Typed hold of a tree a <b>client</b> rebuilt from this panel's description.
-     *
-     * <p>The client has no {@code MachinePanel} and cannot have one: its tree is decoded from a
-     * description that carries tags, not classes, which is exactly what lets an old client draw a new
-     * panel. What this produces is a <b>binding</b> — the same class, over the rebuilt tree, with the
-     * same field names. Android's View Binding and JavaFX's {@code @FXML} injection solve the same
-     * problem the same way.</p>
-     *
-     * <p>So the two panels are different instances over different trees. A client-side
-     * {@code panel.power.setChecked(…)} is a local write that the next state delta overwrites — the
-     * preview-not-a-fact rule, unchanged.</p>
-     *
-     * <p><b>{@code require} rather than {@code find}</b>, because every part of this panel is in every
-     * description of it. {@code find} is for a part that may be absent — a widget a newer server added
-     * that this client has never heard of — and using it here would trade a loud failure for the
-     * silent skip the binding exists to remove.</p>
-     */
-    public static MachinePanel bindTo(UIElement rebuilt) {
-        return new MachinePanel(rebuilt);
-    }
-
-    /** @see #bindTo */
-    private MachinePanel(UIElement rebuilt) {
-        root = rebuilt;
-        power = rebuilt.require("#" + ID_POWER, Switch.class);
-        throughput = rebuilt.require("#" + ID_THROUGHPUT, Slider.class);
-        label = rebuilt.require("#" + ID_LABEL, TextField.class);
-        progress = rebuilt.require("#" + ID_PROGRESS, ProgressBar.class);
-        status = rebuilt.require("#" + ID_STATUS, UIText.class);
-        purge = rebuilt.require("#" + ID_PURGE, Button.class);
-        pingClient = rebuilt.require("#" + ID_PING_CLIENT, Button.class);
-        announce = rebuilt.require("#" + ID_ANNOUNCE, Button.class);
-        askStats = rebuilt.require("#" + ID_ASK_STATS, Button.class);
-        heartbeat = rebuilt.require("#" + ID_HEARTBEAT, Button.class);
-        badRename = rebuilt.require("#" + ID_BAD_RENAME, Button.class);
-        serverLine = rebuilt.require("#" + ID_RESULT_SERVER, UIText.class);
-        clientLine = rebuilt.require("#" + ID_RESULT_CLIENT, UIText.class);
-    }
 
     private static UIElement resultRow(String badgeClass, String side, UIText line) {
         UIElement row = new UIElement();
@@ -398,6 +351,337 @@ public final class MachinePanel {
      * box is the standing idiom for keeping a column of labels aligned; every harness scene in the
      * repository does the same thing for the same reason.</p>
      */
+    // ── The SERVER half ─────────────────────────────────────────────────────
+
+    /**
+     * Everything this panel does on the server. Once, before the client is told anything.
+     *
+     * <p>May freely name {@link MachineModel} — this is a method body, and a method body resolves
+     * lazily. A <em>field</em> of that type would not, which is the one rule that lets both halves
+     * live in one class. @see Panel</p>
+     *
+     * <p>Every lambda below runs on the <b>server thread</b>, because that is the thread that drained
+     * the connection. That is the whole reason they may touch the model at all. Watch the console when
+     * you flip the switch in game: the CLIENT line is on the client thread and the SERVER line that
+     * follows it is on the server thread, from one gesture.</p>
+     */
+    @Override
+    protected void serve(WindowScope io) {
+        /*
+         * NAMED, AND OFFERED. The ref is a content hash the client may already hold; the CSS beside it
+         * is what a client that does not can fetch with ui/sheet.
+         */
+        io.sheet(MachineStyles.SHEET, MachineStyles.CSS);
+
+        model().onChanged(() -> dirty = true);
+
+        io.on(power, UiEventKinds.TOGGLE, ctx -> {
+            boolean on = ctx.payload().getBool("checked", false);
+            MachineTrace.log(MachineTrace.SERVER, "event: power -> " + on);
+            model().setRunning(on);
+        });
+
+        io.on(throughput, UiEventKinds.VALUE, ctx -> {
+            float value = ctx.payload().getFloat("value", 0f);
+            MachineTrace.log(MachineTrace.SERVER, String.format("event: throughput -> %.2f", value));
+            model().setThroughput(value);
+        });
+
+        io.on(label, UiEventKinds.TEXT, ctx -> {
+            String text = ctx.payload().getString("text", "");
+            MachineTrace.log(MachineTrace.SERVER, "event: label -> '" + text + "'");
+            model().setLabel(text);
+        });
+
+        io.onActivate(purge, ctx -> {
+            MachineTrace.log(MachineTrace.SERVER, "event: purge pressed");
+            model().purge();
+        });
+
+        /*
+         * ── S -> C REQUEST ────────────────────────────────────────────────────────────────────
+         *
+         * Two lambdas, never one nullable result: "the client renders with example-client" and "the
+         * client never answered" are different facts, and a UI that shows them the same way is lying
+         * about one of them. The answer lands on the SERVER thread some ticks later, so writing it
+         * into a widget is an ordinary state change and travels back as an ordinary state delta.
+         */
+        io.onActivate(pingClient, ctx -> {
+            MachineTrace.log(MachineTrace.SERVER, "-> asking the client machine/clientInfo");
+            // WRITTEN BEFORE THE CALL, and this is the point of the readout: a request has a gap
+            // between asking and knowing, and a notification does not.
+            say("REQUEST sent to the client - waiting for an answer...");
+            io.call("machine/clientInfo", null,
+                    info -> {
+                        String renderer = info.getString("renderer", "?");
+                        MachineTrace.log(MachineTrace.SERVER, "<- client answered: " + renderer);
+                        say("REQUEST answered - the client says it is '" + renderer + "'");
+                    },
+                    error -> {
+                        MachineTrace.log(MachineTrace.SERVER, "<- client refused: " + error);
+                        say("REQUEST failed - " + error);
+                    });
+        });
+
+        /*
+         * ── S -> C NOTIFICATION ───────────────────────────────────────────────────────────────
+         *
+         * The same wire, no answer. There is no callback to pass because there is nothing to call back
+         * with -- a notification that could fail visibly would be a request.
+         */
+        io.onActivate(announce, ctx -> {
+            StateMap<Object> out = io.newMap();
+            out.putString("text", model().label() + " says hello");
+            out.putInt("cycles", model().completedCycles());
+            MachineTrace.log(MachineTrace.SERVER, "-> notifying machine/announce (no answer wanted)");
+            io.notify("machine/announce", out);
+            // No "waiting" line, because there is nothing to wait for. That absence is the difference
+            // between the two shapes, and it is the one thing this readout exists to make visible.
+            say("NOTIFY sent to the client - nothing will come back");
+        });
+
+        /*
+         * ── C -> S NOTIFICATION, the receiving half ───────────────────────────────────────────
+         *
+         * On the SCOPE, so it is window-scoped. On the connection it would be keyed by method name
+         * alone, and a second Machine window on one wire would throw at open.
+         */
+        io.onNotify("machine/heartbeat", payload -> {
+            heartbeats++;
+            MachineTrace.log(MachineTrace.SERVER,
+                    "<- heartbeat #" + heartbeats + " from " + payload.getString("from", "?"));
+            say("NOTIFY received - heartbeat #" + heartbeats
+                    + " from the client, nothing sent back");
+        });
+
+        io.onCall("machine/stats", (args, respond) -> {
+            MachineTrace.log(MachineTrace.SERVER, "<- answering machine/stats");
+            StateMap<Object> out = io.newMap();
+            out.putInt("cycles", model().completedCycles());
+            out.putString("label", model().label());
+            out.putInt("heartbeats", heartbeats);
+            respond.ok(out);
+            say("REQUEST answered - the client asked for our numbers and got them");
+        });
+
+        /*
+         * ── A REQUEST THAT CAN FAIL ───────────────────────────────────────────────────────────
+         *
+         * FAIL WITH A CODE, NEVER A MESSAGE. A client branches on a value; it cannot branch on prose,
+         * and matching on message text is a coupling nobody remembers making. respond.fail is not an
+         * exception: it is a normal answer that happens to say no, on the same envelope as a success.
+         */
+        io.onCall("machine/rename", (args, respond) -> {
+            String name = args.getString("name", "");
+            if (name.trim().isEmpty()) {
+                MachineTrace.log(MachineTrace.SERVER, "<- refusing machine/rename: EMPTY_NAME");
+                respond.fail("EMPTY_NAME");
+                say("REQUEST refused - the client asked for a blank name, so we answered EMPTY_NAME");
+                return;
+            }
+            MachineTrace.log(MachineTrace.SERVER, "<- machine/rename -> '" + name + "'");
+            model().setLabel(name);
+            respond.ok(null);   // an answer with no body is still an answer, and still exactly once
+            say("REQUEST answered - renamed to '" + name + "'");
+        });
+
+        // The very first tree the client builds is already correct, rather than correct one state
+        // delta later. Safe here because serve() runs before the description is taken.
+        mirror();
+    }
+
+    /**
+     * One world tick — <b>mirror only</b>. The model advanced somewhere else.
+     *
+     * <p>The host flushes after this returns, so there is nothing to send and nothing to remember to
+     * send.</p>
+     */
+    @Override
+    protected void tick() {
+        if (!dirty) return;
+        mirror();
+        dirty = false;
+    }
+
+    /**
+     * The model is the truth; the widgets are a view of it.
+     *
+     * <p>Every setter here is idempotent — an unchanged value writes no candidate and marks nothing
+     * dirty — so calling this more often than necessary costs a few comparisons, not traffic, and
+     * there is no need to work out which field moved.</p>
+     */
+    private void mirror() {
+        power.setChecked(model().isRunning());
+        throughput.setValue(model().throughput());
+        progress.setFraction(model().progress());
+        label.setText(model().label());
+        status.setText((model().isRunning() ? "running" : "stopped")
+                + " - " + model().completedCycles() + " cycles");
+    }
+
+    /**
+     * Writes the SERVER's result line. <b>Nothing else in the process may write it.</b>
+     *
+     * <p>That exclusivity is the whole design, not tidiness — see the comment where the two lines are
+     * built. Two authors on one element produced a readout with the client's badge above the server's
+     * sentence, and no amount of care at the call sites could have prevented it.</p>
+     */
+    private void say(String message) {
+        serverLine.setText(message);
+    }
+
+    // ── The CLIENT half ─────────────────────────────────────────────────────
+
+    /**
+     * Listeners on this panel's own widgets. <b>Every bind</b> — at mount and after a re-describe.
+     *
+     * <p>These are the other thing a client may do: {@code attachListener} on a widget it was handed,
+     * with the listener staying <b>entirely local</b>. Nothing about it crosses the wire, the server
+     * never learns it exists, and the description is unchanged. The button cannot tell the difference
+     * between this and a server-wired one, and neither can the stylesheet.</p>
+     */
+    @Override
+    protected void wire() {
+        askStats.attachListener(this::requestStats);
+        heartbeat.attachListener(this::sendHeartbeat);
+        // Deliberately blank -- the server refuses it, which is the only way to watch the error
+        // callback fire. See the machine/rename handler above.
+        badRename.attachListener(() -> rename("   "));
+    }
+
+    /**
+     * What this client answers on the wire. <b>Once</b>, at mount.
+     *
+     * <p>Separate from {@link #wire()} because a session registration is keyed by method and survives
+     * a re-describe untouched — running it twice would be refused by the router, not merely
+     * duplicated.</p>
+     */
+    @Override
+    protected void client(ClientWindowContext window) {
+        this.window = window;
+
+        /*
+         * ── S -> C NOTIFICATION, the receiving half ───────────────────────────────────────────
+         *
+         * If nothing registered this method, the router would log it ONCE and drop it. Once rather
+         * than per message, because the usual cause is a peer one version ahead sending something at
+         * frame rate, and a log line per frame buries whatever else is wrong.
+         */
+        window.session().onNotify("machine/announce", payload -> {
+            String text = payload.getString("text", "");
+            MachineTrace.log(MachineTrace.CLIENT, "<- announcement: \"" + text + "\" (after "
+                    + payload.getInt("cycles", 0) + " cycles) -- nothing to answer");
+            show("NOTIFY received - the server said \"" + text + "\", nothing sent back");
+        });
+
+        /*
+         * Symmetric with the server's onCall: either peer may call the other, and both use the same
+         * request/response envelope. This one is answered from nothing but the client's own state,
+         * which is the honest use of the direction.
+         */
+        window.session().onCall("machine/clientInfo", (args, respond) -> {
+            MachineTrace.log(MachineTrace.CLIENT, "-> answering machine/clientInfo");
+            StateMap<Object> out = new StateMap<>(window.session().ops());
+            out.putString("renderer", "example-client");
+            out.putBool("cachedDescription", window.session().cacheSize() > 0);
+            respond.ok(out);
+            show("REQUEST answered - the server asked who we are, and we told it");
+        });
+    }
+
+    /**
+     * ── C → S REQUEST ── Asks the server for its numbers.
+     *
+     * <p>Both callbacks run on the thread that ticked the connection, some frames later. Nothing here
+     * blocks, and there is no version of this that could: a round trip is a round trip, and an API
+     * that hid that would be lying about where the latency is.</p>
+     */
+    private void requestStats() {
+        MachineTrace.log(MachineTrace.CLIENT, "-> asking the server machine/stats");
+        show("REQUEST sent to the server - waiting for an answer...");
+        window.session().call("machine/stats", null,
+                stats -> {
+                    String text = stats.getInt("cycles", -1) + " cycles, "
+                            + stats.getInt("heartbeats", 0) + " heartbeats, label '"
+                            + stats.getString("label", "?") + "'";
+                    MachineTrace.log(MachineTrace.CLIENT, "<- server answered: " + text);
+                    show("REQUEST answered - " + text);
+                },
+                error -> {
+                    MachineTrace.log(MachineTrace.CLIENT, "<- server refused: " + error);
+                    show("REQUEST failed - " + error);
+                });
+    }
+
+    /**
+     * ── C → S NOTIFICATION ── Tells the server we are here. Nothing comes back.
+     *
+     * <p>There is no callback to pass, and that is not an omission — <b>a notification that could fail
+     * visibly would be a request.</b></p>
+     */
+    private void sendHeartbeat() {
+        StateMap<Object> out = new StateMap<>(window.session().ops());
+        out.putString("from", "example-client");
+        MachineTrace.log(MachineTrace.CLIENT, "-> notifying machine/heartbeat (no answer expected)");
+        window.session().notify("machine/heartbeat", out);
+        // No "waiting" line: nothing is coming. The server's own readout will replace this one a tick
+        // later, which is itself worth watching -- that line is the AUTHORITATIVE one.
+        show("NOTIFY sent to the server - nothing will come back");
+    }
+
+    /**
+     * ── C → S REQUEST THAT FAILS ── Asks the server to rename the machine.
+     *
+     * <p>Call it with a blank name and the server answers {@code EMPTY_NAME}. That is an ordinary
+     * answer that happens to say no — same envelope as a success, same thread, same latency — not an
+     * exception and not a timeout. The distinction matters because a UI must tell "refused" apart from
+     * "never came back", and only one of those is worth retrying.</p>
+     */
+    private void rename(String name) {
+        StateMap<Object> args = new StateMap<>(window.session().ops());
+        args.putString("name", name);
+        MachineTrace.log(MachineTrace.CLIENT, "-> asking the server machine/rename('" + name + "')");
+        show("REQUEST sent to the server - waiting for an answer...");
+        window.session().call("machine/rename", args,
+                ok -> {
+                    MachineTrace.log(MachineTrace.CLIENT, "<- rename accepted");
+                    show("REQUEST answered - renamed to \"" + name + "\"");
+                },
+                error -> {
+                    MachineTrace.log(MachineTrace.CLIENT, "<- rename REFUSED: " + error);
+                    show("REQUEST REFUSED - the server answered \"" + error
+                            + "\". A normal answer that says no: not an error, not a timeout.");
+                });
+    }
+
+    /**
+     * Writes the CLIENT's result line — <b>and only ever that one</b>.
+     *
+     * <p>The <em>other</em> line belongs to the server: it is in the description, the server pushes it
+     * through {@code ui/stateDelta}, and the next delta touching it overwrites whatever this wrote. So
+     * a client-side write to a server-owned widget is a <em>preview</em>, not a fact — which is why the
+     * two sides have a line each rather than sharing one.</p>
+     *
+     * <p>Note that this instance's {@code clientLine} and the server's are <b>different objects over
+     * different trees</b>, which is the architecture in miniature: one class, one set of field names,
+     * and no object shared between the halves.</p>
+     */
+    private void show(String text) {
+        clientLine.setText(text);
+    }
+
+    @Override
+    protected void closed(String reason) {
+        /*
+         * ONE METHOD, BOTH SIDES. The server's own close and the client hearing about one arrive
+         * here, on two different instances -- and `window` is the tell, because only the client half
+         * was ever handed one. Worth knowing before writing anything side-specific in a panel: the
+         * base does not split this hook, because most panels genuinely want the same teardown twice.
+         */
+        MachineTrace.log(window == null ? MachineTrace.SERVER : MachineTrace.CLIENT,
+                "window closed: " + reason);
+    }
+
     private static UIElement row(String caption, UIElement control) {
         UIElement row = new UIElement();
         row.addClass(MachineStyles.ROW_CLASS);

@@ -113,17 +113,21 @@ public final class ClientWindows {
      * Says what this client does locally about a window type, <b>type-checked against its panel</b>.
      *
      * <pre>{@code
-     * ClientWindows.register(MachinePanel.TYPE, MachineClient::new);
+     * ClientWindows.register(FurnacePanel.TYPE, FurnaceClient::new);
      * }</pre>
      *
-     * <p><b>The pairing is checked by the behaviour's own type.</b> {@code MachineClient} declares
-     * {@code implements ClientWindowBehaviour<MachinePanel>}, so registering it against a
+     * <p><b>A {@link Panel} does not need this overload</b> — {@link #register(PanelType)} is one
+     * argument and puts the client half on the panel itself. This is the route for a window whose
+     * client behaviour is genuinely a separate object.</p>
+     *
+     * <p><b>The pairing is checked by the behaviour's own type.</b> {@code FurnaceClient} declares
+     * {@code implements ClientWindowBehaviour<FurnacePanel>}, so registering it against a
      * {@code WindowType<SomethingElse>} does not compile — where a pair of strings gave a runtime
      * no-op that looked exactly like a window with deliberately no behaviour.</p>
      *
      * <p>The panel itself arrives at {@link ClientWindowBehaviour#onPanelBound}, {@link WindowType#bind
      * bound} to the rebuilt tree — at mount and again after every re-describe — so a behaviour reaches
-     * {@code panel.askStats} rather than {@code querySelector("#ask-stats")} guarded by an
+     * {@code panel.askStats} rather than {@code querySelector("#askStats")} guarded by an
      * {@code instanceof} that silently does nothing when the id moves.</p>
      *
      * <p>Called once at mod init, like {@code MenuScreens.register}. Idempotent per type;
@@ -181,9 +185,19 @@ public final class ClientWindows {
         }
 
         @Override
-        public void onPanelBound(P panel) {
-            this.panel = panel;
-            panel.client(window);
+        public void onPanelBound(P bound) {
+            if (panel == null) {
+                // FIRST MOUNT: attach listeners, then register on the wire, once.
+                panel = bound;
+                panel.wire();
+                panel.client(window);
+                return;
+            }
+            // A RE-DESCRIBE. The same panel is pointed at the new tree and re-wired -- never rebuilt,
+            // because its session registrations are keyed by method and would be refused a second
+            // time, and anything it remembers would be lost with it.
+            panel.rebind(bound.root());
+            panel.wire();
         }
 
         @Override
