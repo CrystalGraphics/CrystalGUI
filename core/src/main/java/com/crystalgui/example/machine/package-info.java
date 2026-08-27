@@ -1,10 +1,12 @@
 /**
  * <h1>A worked example: one UI, built on a server, drawn on a client.</h1>
  *
- * <p>A domain model, a widget tree, a theme, a {@link com.crystalgui.net.ServerUiSession}, a
- * {@link com.crystalgui.net.ClientUiSession}, and a {@code main()} that wires the two together over a
- * loopback transport and prints what crossed — plus fifty lines of Minecraft loader that put the same
- * panel in a real world. Nothing here is used by the engine. It exists to be read, and to be run.</p>
+ * <p>A domain model, a widget tree, a theme, a {@link com.crystalgui.net.host.ServerWindow}, its
+ * {@link com.crystalgui.net.host.ClientWindowBehaviour}, and a {@code main()} that wires the two
+ * together over a loopback transport and prints what crossed — plus the Minecraft loader code that
+ * puts the same panel in a real world, which is now about forty lines because the lifecycle stopped
+ * being each mod's problem. Nothing here is used by the engine. It exists to be read, and to be
+ * run.</p>
  *
  * <h2>Read them in this order</h2>
  *
@@ -16,8 +18,8 @@
  *       <td>The widget tree. Structure and names — no sizes, no colours.</td></tr>
  *   <tr><td>3</td><td>{@link com.crystalgui.example.machine.ui.MachineStyles}</td>
  *       <td>Where the sizes and colours went, and why they travel separately.</td></tr>
- *   <tr><td>4</td><td>{@link com.crystalgui.example.machine.session.MachineServer}</td>
- *       <td>Opening a session, holding the behaviour, pushing state.</td></tr>
+ *   <tr><td>4</td><td>{@link com.crystalgui.example.machine.session.MachineWindow}</td>
+ *       <td>A tree, some behaviour, three questions — and <b>no lifecycle at all</b>.</td></tr>
  *   <tr><td>5</td><td>{@link com.crystalgui.example.machine.session.MachineClient}</td>
  *       <td>Receiving a tree that was never built here, and drawing it.</td></tr>
  *   <tr><td>6</td><td>{@link com.crystalgui.example.machine.session.MachineDemo}</td>
@@ -46,9 +48,9 @@
  *   SERVER                                                       CLIENT
  *   ------                                                       ------
  *   new Switch(), new Slider(), …          build a tree
- *   session.on(power, TOGGLE, handler)     record the lambda HERE,
+ *   io.on(power, TOGGLE, handler)          record the lambda HERE,
  *                                          stamp the event NAME on the element
- *   session.open()          ── ui/openWindow (hash, count) ──►   never seen this hash?
+ *   host.open(window)       ── ui/openWindow (type, hash) ──►    never seen this hash?
  *                           ◄──── ui/description (request) ───   ask for the bytes
  *                           ───── ui/description (answer) ───►   rebuild the same tree,
  *                                                                attach listeners for exactly
@@ -57,7 +59,11 @@
  *                                                                user flips the switch
  *   handler runs, model changes  ◄──────── ui/event ─────────    {nid: 3, kind: "toggle"}
  *   widget state written
- *   session.tick()          ───────── ui/stateDelta ─────────►   apply it to element 3
+ *   (the host flushes)      ───────── ui/stateDelta ─────────►   apply it to element 3
+ *
+ *                                                                user closes the frame
+ *   window.onClosed(CLIENT)      ◄──────── ui/close ─────────    the direction that used to
+ *                                                                have no message at all
  * </pre>
  *
  * <h2>The three contract shapes — the part worth memorising</h2>
@@ -72,14 +78,18 @@
  *       <td>the <b>session</b></td></tr>
  *   <tr><td>Notification</td><td>{@code onNotify(method, handler)}</td>
  *       <td>{@code notify(method, payload)}</td>
- *       <td>the <b>connection</b></td></tr>
- *   <tr><td>Widget event</td><td>{@code session.on(element, kind, handler)}</td>
+ *       <td>the <b>session</b> — see below</td></tr>
+ *   <tr><td>Widget event</td><td>{@code io.on(element, kind, handler)}</td>
  *       <td>— the client sends it for you</td><td>the <b>session</b></td></tr>
  * </table>
  *
- * <p>A session gives you {@code onCall}/{@code call} and nothing else. Notifications are one layer
- * down on the {@code ProtocolConnection}, where every subsystem sharing the wire meets. Same wire,
- * different class — so anything that wants to send something unanswered holds both.</p>
+ * <p><b>Both pairs are on the session now, and the notification pair used to be somewhere else.</b> It
+ * lived on the {@code ProtocolConnection}, which keys handlers by method name alone — so a second
+ * window of the same application registering the same notification <em>threw at open</em>, and this
+ * example taught exactly that pattern. Through {@link com.crystalgui.net.host.SessionScope} both pairs
+ * are window-scoped and two windows may each name the same method. A notification that genuinely
+ * belongs to the <em>connection</em> rather than to a window — a workspace, a script runtime — still
+ * registers on {@code ProtocolConnection} directly, which is what it wants.</p>
  *
  * <p><b>Choosing between them has one question behind it: is anybody waiting?</b> If the caller needs
  * an answer, or needs to know it <em>failed</em>, it is a request. If it is "here is a thing that
@@ -103,9 +113,12 @@
  * <h2>The five things people get wrong first</h2>
  *
  * <ol>
- *   <li><b>Handlers must be registered before {@code open()}.</b> The set of reported events is part
- *       of the description the client has already been sent — registering one afterwards throws,
- *       because the client would never report it.</li>
+ *   <li><b>Handlers are registered in {@code bind()}, before the client is told anything.</b> The set
+ *       of reported events is part of the description, so a handler added for an element the client
+ *       has <em>already been described</em> throws. The host calls {@code bind} and then opens, so
+ *       there is no way to get the ordering wrong from inside a window — and an element added
+ *       <em>later</em> (a fragment, a new row) may be wired at any time, because a tree delta
+ *       re-describes its reported events too.</li>
  *   <li><b>Nothing sends element ids.</b> Both sides derive them from a document-order walk of the
  *       same tree. That is why a structural change must go through {@code ui/treeDelta} rather than
  *       an ad-hoc mutation: everything after an insertion renumbers.</li>
@@ -116,12 +129,16 @@
  *   <li><b>A server path may not touch {@code CgIO}, fonts or GL.</b> Read
  *       {@link com.crystalgui.example.machine.ui.MachineStyles} for the one that catches everybody:
  *       {@code StyleSheet} is unloadable on a server.</li>
- *   <li><b>The two sessions' {@code tick()} methods are not symmetric, and they read alike.</b>
- *       {@code ClientUiSession.tick()} genuinely does nothing while it rides a connection — the
- *       connection has already drained the mailbox for every subsystem on it. But
- *       {@code ServerUiSession.tick()} still <em>flushes</em>, because it is the observer holding
- *       that tick's dirty set and nothing else knows the set exists. Stop calling the server's and
- *       you keep a live session that answers calls and never sends another state update.</li>
+ *   <li><b>A window is a VIEW of world state, not the state itself.</b> {@link
+ *       com.crystalgui.example.machine.MachineModel} ticks with the world, in {@code MachineExample};
+ *       {@code MachineWindow.tick} mirrors it into widgets and stops. Fusing the two is invisible
+ *       until you ask what happens when the last viewer leaves — and the answer was that the machine
+ *       stopped existing, which is the opposite of what a server-authoritative UI is for.</li>
+ *   <li><b>Nothing here calls {@code session.tick()}.</b> It used to, and forgetting to was a live
+ *       session that answered calls and never sent another state update. {@link
+ *       com.crystalgui.net.host.ServerUiHost} does it now, from the connection's own tick, for every
+ *       window on it — which is most of why this example lost a tick handler, a player map and a
+ *       logout hook.</li>
  * </ol>
  *
  * <h2>Why this lives in {@code src/main} and not in a docs folder</h2>
@@ -140,14 +157,25 @@
  * claim on the input pump, the GL state handoff, the desktop's persistence and the modal stack, with
  * only one of them able to be in front.</p>
  *
+ * <p><b>Press F8 twice</b> and nothing stacks: the window names a key, so the server brings the
+ * existing panel forward rather than building a second one — which keeps its scroll position and
+ * whatever is half-typed in it. <b>Close it with the X</b> and the server is told, ends the session
+ * and stops describing a tree nobody is drawing. Both of those are new: before {@code ui/close}
+ * existed, closing the panel destroyed the frame and the client's per-tick poll re-wrapped the
+ * still-live session's tree in a fresh one on the very next tick. Close meant blink.</p>
+ *
  * <p>What to watch is the console, not the screen. Every line names its thread, and the two columns
  * must never cross — the machine ticks on {@code Server thread} and the window redraws on
  * {@code Client thread}, from one process, in single player, which is the one configuration where
  * getting that wrong still appears to work.</p>
  *
- * <p>The server opens the panel on login rather than waiting to be asked, which makes F8 a pure client
- * action and demonstrates the point of the whole arrangement: the machine has been running whether or
- * not anybody had the window open, because the model is not the UI.</p>
+ * <p>F8 <b>asks</b> for the panel — {@code machine/open}, a notification, because nobody is waiting
+ * and the window arriving <em>is</em> the answer. A real mod would open on a block being right-clicked,
+ * which is the same one line from a different trigger. That direction is the one Minecraft's own model
+ * has no message for, and it is what every "right-click to open" actually needs.</p>
+ *
+ * <p>And the machine has been running the whole time, whether or not anybody had the window open,
+ * because the model is not the UI.</p>
  *
  * <h2>Where to go next</h2>
  *

@@ -9,7 +9,13 @@ import static org.junit.Assert.fail;
 import org.junit.Test;
 
 import com.crystalgui.example.machine.session.MachineClient;
-import com.crystalgui.example.machine.session.MachineServer;
+import com.crystalgui.example.machine.MachineModel;
+import com.crystalgui.example.machine.session.MachineWindow;
+import com.crystalgui.net.host.ClientUiHost;
+import com.crystalgui.net.host.ClientWindowContext;
+import com.crystalgui.net.host.ServerUiHost;
+import com.crystalgui.net.host.UiHosts;
+import com.crystalgui.net.host.WindowMount;
 import com.crystalgui.example.machine.ui.MachineStyles;
 import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.UiEventKinds;
@@ -50,17 +56,34 @@ public class MachineExampleTest {
 
     /** Server end, client end, and the two transports between them. */
     private static final class Loopback {
-        final InMemoryTransport<Object>[] link = InMemoryTransport.pair();
-        final ProtocolConnection<Object> serverEnd =
-                Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "player");
-        final ProtocolConnection<Object> clientEnd =
-                Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
+        final InMemoryTransport<Object>[] link;
+        final ProtocolConnection<Object> serverEnd;
+        final ProtocolConnection<Object> clientEnd;
 
-        final MachineServer server = new MachineServer();
-        final MachineClient client = new MachineClient(clientEnd);
+        /** World state. Ticked by {@link #tickWorld}, never by the window. */
+        final MachineModel machine = new MachineModel();
+
+        MachineWindow server;
+        MachineClient client;
+
+        Loopback() {
+            // The contributor is what puts a ServerUiHost on one end and a ClientUiHost on the other,
+            // decided by whether the connection names a peer. Reset first, because a suite shares
+            // statics and Protocols refuses a duplicate contributor outright.
+            Protocols.resetForTesting();
+            UiHosts.resetForTesting();
+            UiHosts.register();
+
+            link = InMemoryTransport.pair();
+            serverEnd = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "player");
+            clientEnd = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
+
+            ClientUiHost.register(MachineWindow.TYPE, context -> client = new MachineClient(context));
+            ClientUiHost.of(clientEnd).setMount(new SilentMount());
+        }
 
         Loopback open() {
-            server.open(serverEnd);
+            server = ServerUiHost.of(serverEnd).open(new MachineWindow(machine));
             settle(6);
             return this;
         }
@@ -78,9 +101,42 @@ public class MachineExampleTest {
         /** A world tick plus the delivery it produces. */
         void tickWorld(int times) {
             for (int i = 0; i < times; i++) {
-                server.tick();
+                /*
+                 * THREE STEPS THAT USED TO BE ONE CALL, and the split is the point of the rewrite.
+                 *
+                 * The model advances (world state, owned by nobody's window). The connection ticks,
+                 * which is where the host runs window.tick() -- mirroring the model into widgets --
+                 * and then flushes whatever that dirtied. Only then is there anything to deliver.
+                 */
+                machine.tick();
+                serverEnd.tick();
                 settle(1);
             }
+        }
+
+        /** The window on screen, for the tests that drive a close from the client's side. */
+        ClientWindowContext shown() {
+            return ClientUiHost.of(clientEnd).windows().get(0);
+        }
+    }
+
+    /** A mount that draws nothing. What a platform implements, minus the platform. */
+    private static final class SilentMount implements WindowMount {
+        @Override
+        public MountedWindow mount(ClientWindowContext context) {
+            return new MountedWindow() {
+                @Override
+                public void closedByServer(String reason) {
+                }
+
+                @Override
+                public void focus() {
+                }
+
+                @Override
+                public void contentReplaced(UIElement newRoot) {
+                }
+            };
         }
     }
 
@@ -108,11 +164,11 @@ public class MachineExampleTest {
     public void theThemeIsNamedRatherThanSent() {
         Loopback net = new Loopback().open();
 
-        assertEquals(1, net.client.sheets().size());
+        assertEquals(1, net.shown().sheets().size());
         assertEquals("the sheet's identity is its hash", MachineStyles.SHEET.hash(),
-                net.client.sheets().get(0).hash());
+                net.shown().sheets().get(0).hash());
         assertTrue("the engine's own sheet has to go underneath, or nothing is styled",
-                net.client.useUserAgentSheet());
+                net.shown().useUserAgentSheet());
     }
 
     @Test

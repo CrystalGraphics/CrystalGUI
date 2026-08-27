@@ -1,6 +1,6 @@
 package com.crystalgui.example.machine.ui;
 
-import com.crystalgui.example.machine.session.MachineServer;
+import com.crystalgui.example.machine.session.MachineWindow;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.ProgressBar;
@@ -30,7 +30,7 @@ import com.crystalgui.ui.elements.UIText;
  *
  * <h3>Why the fields are public and final</h3>
  *
- * <p>{@link MachineServer} needs handles on individual widgets to attach behaviour and to write
+ * <p>{@link MachineWindow} needs handles on individual widgets to attach behaviour and to write
  * state into. Hunting them back out with {@code querySelector} would work and would be worse: a
  * typo in a selector is a lookup that finds nothing at runtime, where a field is a compile error.
  * The tree is built once in the constructor and never reshaped, so the handles cannot go stale.</p>
@@ -71,7 +71,7 @@ public final class MachinePanel {
     /** The last thing the CLIENT did. Nothing else may write it. */
     public final UIText clientLine;
 
-    // ── The four protocol directions, one button each. See MachineServer's table. ──
+    // ── The four protocol directions, one button each. See MachineWindow's table. ──
 
     /** SERVER-side handler → a REQUEST to the client, answered. */
     public final Button pingClient;

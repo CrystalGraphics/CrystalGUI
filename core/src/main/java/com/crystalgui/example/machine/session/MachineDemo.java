@@ -5,7 +5,13 @@ import java.util.Map;
 
 import com.crystalgui.example.machine.MachineTrace;
 import com.crystalgui.example.machine.ui.MachineStyles;
+import com.crystalgui.example.machine.MachineModel;
 import com.crystalgui.net.InMemoryTransport;
+import com.crystalgui.net.host.ClientUiHost;
+import com.crystalgui.net.host.ClientWindowContext;
+import com.crystalgui.net.host.ServerUiHost;
+import com.crystalgui.net.host.UiHosts;
+import com.crystalgui.net.host.WindowMount;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
@@ -65,25 +71,36 @@ public final class MachineDemo {
          * one -- the UI here, plus the workspace file protocol and a script runtime on a real
          * server -- which is why a session takes a connection rather than a transport.
          */
+        // ONE CALL, and it is what puts a host on every connection opened afterwards. In game this
+        // sits beside CgUiWorkspaceHost.register() in CommonProxy.init().
+        UiHosts.register();
+
         InMemoryTransport<Object>[] link = InMemoryTransport.pair();
         ProtocolConnection<Object> serverEnd =
                 Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "a-player-handle");
         ProtocolConnection<Object> clientEnd =
                 Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
 
-        MachineServer server = new MachineServer();
-        MachineClient client = new MachineClient(clientEnd);
+        // THE MACHINE, which is world state and belongs to no window. It is ticked below, in this
+        // method, exactly as a TileEntity ticks with the world -- so closing the panel does not stop it
+        // and opening one does not start it.
+        MachineModel machine = new MachineModel();
 
-        client.onReady(root -> {
-            System.out.println("  [client] window rebuilt: " + count(root) + " elements, "
-                    + client.sheets().size() + " sheet(s), ua=" + client.useUserAgentSheet());
-        });
-        client.onClosed(reason -> System.out.println("  [client] window closed: " + reason));
+        // What this client does about a window of that type, said once. Delete this line and the panel
+        // still opens, still renders and still reports every event the server asked for; only the three
+        // buttons THIS side drives would go quiet.
+        MachineClient[] behaviour = new MachineClient[1];
+        ClientUiHost.register(MachineWindow.TYPE, context -> behaviour[0] = new MachineClient(context));
+
+        // Where windows land. A real host wraps the tree in a WindowFrame on the desktop; here it is a
+        // println. That is the whole platform surface for networked UI.
+        ClientUiHost.of(clientEnd).setMount(new PrintingMount());
 
         // ── 1. Open ─────────────────────────────────────────────────────────
-        say("1. The server opens the window");
-        server.open(serverEnd);
+        say("1. The server opens the window -- one call, and the host does the rest");
+        MachineWindow server = ServerUiHost.of(serverEnd).open(new MachineWindow(machine));
         pump(link, serverEnd, clientEnd, 4);
+        MachineClient client = behaviour[0];
 
         // The handshake is two round trips at most, and the second one is skipped once the client
         // has the hash cached -- which is what makes re-opening a large GUI cost one small packet.
@@ -96,17 +113,19 @@ public final class MachineDemo {
         clientPower.setChecked(true);
         pump(link, serverEnd, clientEnd, 1);
 
-        System.out.println("  [server] model.isRunning() == " + server.model().isRunning()
+        System.out.println("  [server] model.isRunning() == " + machine.isRunning()
                 + "   <- the server's lambda ran; the client never knew what the switch meant");
 
         // ── 3. The machine runs ─────────────────────────────────────────────
-        say("3. Twenty world ticks. The model advances and the panel follows it");
+        say("3. Twenty WORLD ticks. The machine advances; the window is only a view of it");
         for (int i = 0; i < 20; i++) {
-            server.tick();
+            // THE MODEL, not the window. Nothing here ticks a session or flushes anything -- the
+            // connection's own tick does that, through the host, after this. @see ServerUiHost
+            machine.tick();
             pumpQuietly(link, serverEnd, clientEnd);
         }
         System.out.printf("  [server] progress=%.2f cycles=%d%n",
-                server.model().progress(), server.model().completedCycles());
+                machine.progress(), machine.completedCycles());
         System.out.printf("  [client] progress=%.2f status=%s%n",
                 ((com.crystalgui.ui.elements.ProgressBar) client.root().querySelector("#progress"))
                         .fraction(),
@@ -150,8 +169,23 @@ public final class MachineDemo {
 
         // ── 9. Close ────────────────────────────────────────────────────────
         say("9. The server puts the window away, and says why");
-        server.close("the block was broken");
+        ServerUiHost.of(serverEnd).close(server, "the block was broken");
         pump(link, serverEnd, clientEnd, 1);
+
+        /*
+         * 10: THE DIRECTION THAT USED TO HAVE NO MESSAGE AT ALL.
+         *
+         * There was no ui/close, so a user closing a window told the server nothing: the session stayed
+         * open, kept observing its tree, and kept flushing state deltas into a frame that had been
+         * destroyed. The only close anything ever noticed was the player disconnecting.
+         */
+        say("10. THE USER closes a window, and the server hears about it  [n only]");
+        ServerUiHost.of(serverEnd).open(new MachineWindow(machine));
+        pump(link, serverEnd, clientEnd, 4);
+        ClientUiHost.of(clientEnd).windows().get(0).userClosed();
+        pump(link, serverEnd, clientEnd, 2);
+        System.out.println("  [server] windows still open: "
+                + ServerUiHost.of(serverEnd).windowCount());
 
         System.out.println();
         System.out.println("Nothing above sent a pixel, a colour or a layout. The client drew a tree "
@@ -230,6 +264,39 @@ public final class MachineDemo {
         // in order, on this thread, exactly as the input handler would have.
         if (found instanceof Button) ((Button) found).onPressed.emit();
         else System.out.println("  !! no button at " + selector);
+    }
+
+    /**
+     * Where a window lands in a process with no screen.
+     *
+     * <p>A {@link WindowMount} is the one thing a platform implements. On 1.7.10 it wraps the tree in a
+     * {@code WindowFrame} on the desktop; here it prints. Everything above it — sessions, ids, the
+     * close matrix, dispatch by type — is the engine's and is written once.</p>
+     */
+    private static final class PrintingMount implements WindowMount {
+
+        @Override
+        public MountedWindow mount(ClientWindowContext context) {
+            System.out.println("  [client] mounted <" + context.type() + "> \"" + context.title()
+                    + "\": " + count(context.root()) + " elements, " + context.sheets().size()
+                    + " sheet(s), ua=" + context.useUserAgentSheet());
+            return new MountedWindow() {
+                @Override
+                public void closedByServer(String reason) {
+                    System.out.println("  [client] window closed by the server: " + reason);
+                }
+
+                @Override
+                public void focus() {
+                    System.out.println("  [client] brought forward");
+                }
+
+                @Override
+                public void contentReplaced(UIElement newRoot) {
+                    System.out.println("  [client] the server re-described this window");
+                }
+            };
+        }
     }
 
     private static int count(UIElement element) {
