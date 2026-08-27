@@ -230,7 +230,12 @@ public final class CgUiServerSmoke {
             // provide one names RenderItem. If this ever throws, the elements have stopped being
             // headless and the server half is gone.
             com.crystalgui.ui.elements.slot.ItemSlot slot = new com.crystalgui.ui.elements.slot.ItemSlot();
-            slot.setDescriptor("slot:12");
+            // Authored through the CORE formatter and asserted below against the LITERAL string. The
+            // pair is the point: the formatter is the cross-version authoring path (NativeDescriptors,
+            // the grammar every loader parses), and the literal is the wire format -- if the formatter
+            // ever changes its spelling, this smoke fails naming a wire-format change, on a server,
+            // with no renderer anywhere in sight.
+            slot.setDescriptor(com.crystalgui.ui.elements.slot.NativeDescriptors.slot(12));
             root.addChild(slot);
 
             Object encoded = UIDescriptionCodec.CODEC.encode(PlainOps.INSTANCE, root);

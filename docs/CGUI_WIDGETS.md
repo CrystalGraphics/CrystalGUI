@@ -794,6 +794,24 @@ read for shape only: LDLib2 is **LGPL-3.0** and nothing is ported from it.
 > press and asks the platform to perform a slot action — no mixin, at the cost of owing vanilla's
 > slot-click *semantics*. The binding handle is the seam that keeps it a follow-up.
 
+### Descriptors — the cross-version authoring surface
+
+A slot serialises its **descriptor**, and the grammar is `NativeDescriptors`' — core's, never a
+loader's — so a UI authored once, with zero platform imports, means the same thing on every client:
+
+```
+slot:<index>                                 a container slot BINDING, resolved live
+item:<namespace>:<path>[:damage[:count]]     a display item,  e.g. item:minecraft:stone:0:64
+fluid:<name>:<amount>:<capacity>             a display fluid, e.g. fluid:water:620:1000
+```
+
+Numerics are counted from the **right** (the id itself contains a colon), formatting is canonical
+(a description is content-addressed), parsing answers null rather than throwing (a descriptor is
+wire data), and **NBT is deliberately outside the grammar** — a display stack that needs one is
+authored through a loader handle, which is a boundary, not a gap. The `-PcgSlotProbe` screen
+demonstrates both routes side by side, and the harness stand-in parses the same grammar as the real
+loader, so drift between implementations shows up in a scene that boots in seconds.
+
 ### `FluidSlot` fills by narrowing the box, and pins the tiling to the edge that moves
 
 `fillFraction()` becomes geometry here, not alpha: `applyFill` narrows the content box to the filled

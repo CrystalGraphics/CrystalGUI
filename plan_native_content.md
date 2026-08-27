@@ -1,7 +1,12 @@
 # plan_native_content.md — NativeContent as a cross-version contract
 
 *Written 2026-08-27, on branch `native-content-slots`, after the 1.7.10 renderer landed
-(`0f7d4fe3`). Status: **planned, not started.***
+(`0f7d4fe3`). Status: **steps 1–4 implemented** — the grammar (`NativeDescriptors`, pinned in
+`headlessTest`), descriptor-only authoring in the probe and `serverSmoke`, the UV fractions on
+`NativeTileGrid`, and the docs. One deviation from the written plan, for the better: an item id is
+required to be **exactly** `ns:path` (a registry path cannot contain a colon on any version), so
+`item:a:b:c:1:2` is refused rather than guessed at. Step "interaction" remains out of scope as
+planned. In-game re-verification of the probe (pixel-identical to `0f7d4fe3`) is the open item.*
 
 ## Context
 

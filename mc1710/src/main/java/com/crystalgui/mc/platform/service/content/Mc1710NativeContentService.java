@@ -7,6 +7,7 @@ import com.crystalgraphics.platform.gl.state.CgGlSlot;
 import com.crystalgui.mc.client.NativeTooltipHost;
 import com.crystalgui.ui.elements.slot.NativeContent;
 import com.crystalgui.ui.elements.slot.NativeContentService;
+import com.crystalgui.ui.elements.slot.NativeDescriptors;
 import com.crystalgui.ui.elements.slot.NativeProfile;
 import com.crystalgui.ui.elements.slot.NativeSurface;
 import com.crystalgui.ui.elements.slot.NativeTileGrid;
@@ -71,53 +72,49 @@ public final class Mc1710NativeContentService implements NativeContentService {
     public NativeContent resolve(String descriptor) {
         if (descriptor == null || descriptor.isEmpty()) return NativeContent.EMPTY;
         try {
-            if (descriptor.startsWith(Mc1710Content.SLOT_PREFIX)) {
-                return new Mc1710Content.BoundSlot(
-                        Integer.parseInt(descriptor.substring(Mc1710Content.SLOT_PREFIX.length())));
-            }
-            if (descriptor.startsWith(Mc1710Content.ITEM_PREFIX)) {
-                return resolveItem(descriptor.substring(Mc1710Content.ITEM_PREFIX.length()));
-            }
-            if (descriptor.startsWith(Mc1710Content.FLUID_PREFIX)) {
-                return resolveFluid(descriptor.substring(Mc1710Content.FLUID_PREFIX.length()));
-            }
-        } catch (RuntimeException malformed) {
-            // Unrecognised is ORDINARY: a descriptor can name a mod that is no longer installed, or a
-            // container this client never opened. Answering empty draws a bare well, where throwing would
-            // turn a stale layout into a crash on the paint path.
+            // The grammar is core's (NativeDescriptors), so this method contains no string knowledge at
+            // all -- only the mapping from parsed refs onto 1.7.10's registries. The parsers answer null
+            // rather than throwing, so the dispatch is three questions.
+            NativeDescriptors.SlotRef slot = NativeDescriptors.parseSlot(descriptor);
+            if (slot != null) return new Mc1710Content.BoundSlot(slot.index());
+
+            NativeDescriptors.ItemRef item = NativeDescriptors.parseItem(descriptor);
+            if (item != null) return resolveItem(item);
+
+            NativeDescriptors.FluidRef fluid = NativeDescriptors.parseFluid(descriptor);
+            if (fluid != null) return resolveFluid(fluid);
+        } catch (RuntimeException foreign) {
+            // The parsers cannot throw, but the REGISTRY lookups behind resolveItem/resolveFluid are
+            // foreign code reached from the paint path -- a backstop here is what keeps a misbehaving
+            // mod registry a bare well rather than a crash mid-frame.
             return NativeContent.EMPTY;
         }
+        // Unrecognised is ORDINARY: a descriptor can name a kind this version has no renderer for --
+        // `entity:` someday -- or arrive from a description written by a newer server.
         return NativeContent.EMPTY;
     }
 
-    private NativeContent resolveItem(String body) {
-        // name:damage:count, and the name may itself contain a colon (`minecraft:stone`), so the two
-        // numeric fields are taken from the END rather than by splitting forwards.
-        int lastColon = body.lastIndexOf(':');
-        if (lastColon < 0) return NativeContent.EMPTY;
-        int prevColon = body.lastIndexOf(':', lastColon - 1);
-        if (prevColon < 0) return NativeContent.EMPTY;
-
-        String name = body.substring(0, prevColon);
-        int damage = Integer.parseInt(body.substring(prevColon + 1, lastColon));
-        int count = Integer.parseInt(body.substring(lastColon + 1));
-
-        Item item = (Item) Item.itemRegistry.getObject(name);
+    /** A parsed item ref against 1.7.10's registry — the only knowledge left on this side of the seam. */
+    private NativeContent resolveItem(NativeDescriptors.ItemRef ref) {
+        Item item = (Item) Item.itemRegistry.getObject(ref.id());
         if (item == null) return NativeContent.EMPTY;
-        return new Mc1710Content.DisplayItem(new ItemStack(item, count, damage));
+        return new Mc1710Content.DisplayItem(new ItemStack(item, ref.count(), ref.damage()));
     }
 
-    private NativeContent resolveFluid(String body) {
-        int lastColon = body.lastIndexOf(':');
-        if (lastColon < 0) return NativeContent.EMPTY;
-        int prevColon = body.lastIndexOf(':', lastColon - 1);
-        if (prevColon < 0) return NativeContent.EMPTY;
-
-        Fluid fluid = FluidRegistry.getFluid(body.substring(0, prevColon));
+    /**
+     * A parsed fluid ref against the 1.7.10 registry, which takes BARE names ({@code water}). A
+     * namespaced name from a modern description is retried with its namespace stripped, because a
+     * server on a newer version legitimately describes {@code minecraft:water} and the fluid it means
+     * is the one this registry calls {@code water}.
+     */
+    private NativeContent resolveFluid(NativeDescriptors.FluidRef ref) {
+        Fluid fluid = FluidRegistry.getFluid(ref.name());
+        if (fluid == null) {
+            int colon = ref.name().lastIndexOf(':');
+            if (colon >= 0) fluid = FluidRegistry.getFluid(ref.name().substring(colon + 1));
+        }
         if (fluid == null) return NativeContent.EMPTY;
-        int amount = Integer.parseInt(body.substring(prevColon + 1, lastColon));
-        int capacity = Integer.parseInt(body.substring(lastColon + 1));
-        return new Mc1710Content.DisplayFluid(new FluidStack(fluid, amount), capacity);
+        return new Mc1710Content.DisplayFluid(new FluidStack(fluid, ref.amount()), ref.capacity());
     }
 
     // ── Drawing ─────────────────────────────────────────────────────────────
@@ -518,45 +515,21 @@ public final class Mc1710NativeContentService implements NativeContentService {
      * <p>A scissor would be the other way to cut a tile, and it is worse here: the enclosing scissor is
      * already doing real work for whatever scroller the slot sits in, and nesting a second one inside a
      * foreign-GL bracket means restoring state the shadow cannot see.</p>
+     *
+     * <p><b>Which slice a cut tile shows is decided in core</b> — {@link NativeTileGrid#uvLo}/{@code uvHi}
+     * carry the "sprite aligns to the anchored end" rule and the account of why (including where
+     * Tinkers' Construct gets one axis of it wrong, and why this reverts {@code 0ec3db71}'s vMax
+     * anchoring, which was right for the floor-pinned loop it was written against). What is left here is
+     * only the mechanical map from those {@code [0..1]} fractions into this sprite's own UV interval.</p>
      */
     private static void addTile(Tessellator tessellator, IIcon icon, float x, float y, float w, float h,
                                 boolean fromRight, boolean fromBottom) {
-        // THE SPRITE IS ALIGNED TO THE ANCHORED END OF ITS OWN TILE, per axis. Which is only "repeat
-        // from the anchor and clip at the far end" -- and it is what makes the tiling SEAMLESS: a full
-        // tile ends on maxV, the cut tile beyond it starts on minV, so the pattern crosses that join
-        // exactly as it crosses every other one. The sprite is interrupted in precisely one place, the
-        // far edge, which is where the slot's own border is.
-        //
-        // TINKERS' CONSTRUCT DOES THE OPPOSITE VERTICALLY and it is deliberately not copied here.
-        // drawLiquidRect pins the cut tile to getMaxV() -- the tank floor -- which puts a texture
-        // discontinuity one tile ABOVE the floor. Its own horizontal axis disagrees with it
-        // (getMinU() to getInterpolatedU(w), aligned to the grid end, as below), and it never exercises
-        // that horizontal cut because SmelteryGui always passes endU = 16. So the vertical spelling is
-        // the odd one out rather than half of a considered pair, and the horizontal one is the rule.
-        //
-        // This does mean reverting 0ec3db71's vMax anchoring, which was correct for the loop it was
-        // written against -- that loop pinned the grid to the floor, so the cut tile was at the
-        // WATERLINE and anchoring vMax was what kept the join seamless there. The grid has since moved
-        // to the waterline, which moves the cut tile to the floor, which moves the anchoring with it.
-        double uMin;
-        double uMax;
-        if (fromRight) {
-            uMax = icon.getMaxU();
-            uMin = uMax - (uMax - icon.getMinU()) * (w / TILE);
-        } else {
-            uMin = icon.getMinU();
-            uMax = uMin + (icon.getMaxU() - uMin) * (w / TILE);
-        }
-
-        double vMin;
-        double vMax;
-        if (fromBottom) {
-            vMax = icon.getMaxV();
-            vMin = vMax - (vMax - icon.getMinV()) * (h / TILE);
-        } else {
-            vMin = icon.getMinV();
-            vMax = vMin + (icon.getMaxV() - vMin) * (h / TILE);
-        }
+        double uSpan = icon.getMaxU() - icon.getMinU();
+        double vSpan = icon.getMaxV() - icon.getMinV();
+        double uMin = icon.getMinU() + uSpan * NativeTileGrid.uvLo(w / TILE, fromRight);
+        double uMax = icon.getMinU() + uSpan * NativeTileGrid.uvHi(w / TILE, fromRight);
+        double vMin = icon.getMinV() + vSpan * NativeTileGrid.uvLo(h / TILE, fromBottom);
+        double vMax = icon.getMinV() + vSpan * NativeTileGrid.uvHi(h / TILE, fromBottom);
 
         tessellator.addVertexWithUV(x, y + h, 0d, uMin, vMax);
         tessellator.addVertexWithUV(x + w, y + h, 0d, uMax, vMax);

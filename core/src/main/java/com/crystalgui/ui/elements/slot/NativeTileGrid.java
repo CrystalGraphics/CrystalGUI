@@ -66,6 +66,41 @@ public final class NativeTileGrid {
         return fromFar ? extent - index * tile - size : index * tile;
     }
 
+    /**
+     * The low edge of the {@code [0..1]} slice of the sprite a tile of this size fraction shows,
+     * per axis. {@link #uvHi} is its pair.
+     *
+     * <p><b>The sprite aligns to the anchored end of its own tile</b> — "repeat from the anchor, clip
+     * at the far end" — which is what keeps every join seamless: a full tile ends where the cut tile
+     * beyond it begins, so the pattern crosses that join exactly as it crosses every other one, and
+     * the single discontinuity lands on the far edge, where the slot's border is.</p>
+     *
+     * <p>This is <em>not</em> the obvious reading. A tile truncated at its bottom edge "naturally"
+     * keeps its top slice — that was the 1.7.10 renderer's first bug — and Tinkers' Construct itself
+     * pins its vertical cut to {@code getMaxV()} while its own horizontal axis does the opposite
+     * (and is never exercised, since {@code SmelteryGui} always passes a full-width tile). The rule
+     * lives here so no loader gets a third chance to re-derive it.</p>
+     *
+     * <p>A consumer maps the fractions into its sprite's own interval:
+     * {@code u = minU + (maxU - minU) * uv}. A full tile is {@code [0, 1]} under either anchor.</p>
+     *
+     * @param fraction the tile's size over the full tile size — {@code sizeOf(...) / tile}
+     * @param fromFar  whether this axis's grid is anchored at the far edge ({@link NativeAnchor})
+     */
+    public static float uvLo(float fraction, boolean fromFar) {
+        return fromFar ? 1f - clampFraction(fraction) : 0f;
+    }
+
+    /** The high edge of the slice — see {@link #uvLo}. */
+    public static float uvHi(float fraction, boolean fromFar) {
+        return fromFar ? 1f : clampFraction(fraction);
+    }
+
+    private static float clampFraction(float fraction) {
+        if (!(fraction > 0f)) return 0f;
+        return Math.min(1f, fraction);
+    }
+
     private static void requirePositiveTile(float tile) {
         if (!(tile > 0f)) {
             throw new IllegalArgumentException("tile size must be positive, was " + tile);
