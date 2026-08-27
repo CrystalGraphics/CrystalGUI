@@ -157,13 +157,6 @@ public final class ServerWindow<P extends UIElement> {
     }
 
     /** A nested panel's server hooks, captured with its slice at {@link ServerScope#attach}. */
-    static final class Attached {
-        final Runnable ticker;
-        final Consumer<String> closer;
-
-        Attached(Runnable ticker, Consumer<String> closer) {
-            this.ticker = ticker;
-            this.closer = closer;
-        }
+    record Attached(Runnable ticker, Consumer<String> closer) {
     }
 }
