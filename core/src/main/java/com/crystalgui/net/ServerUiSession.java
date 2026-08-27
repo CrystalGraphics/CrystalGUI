@@ -53,6 +53,37 @@ public final class ServerUiSession<T> implements UITreeObserver {
     private final List<SheetRef> sheets = new ArrayList<>();
     private boolean useUserAgentSheet = true;
 
+    /**
+     * The CSS behind each sheet this session named, by hash — what {@code ui/sheet} answers with.
+     *
+     * <p>Only for sheets whose text was actually handed over. A {@link SheetRef} naming a theme the
+     * client is expected to have locally carries no text and is not in here, which is the difference
+     * between "here is a sheet" and "you already have this one".</p>
+     */
+    private final Map<String, String> sheetSource = new LinkedHashMap<>();
+
+    /** What kind of window this is — the client dispatches its local behaviour on it. @see #setType */
+    private String type = "";
+
+    /** What to call it on screen. @see #setTitle */
+    private String title = "";
+
+    /** Uniqueness and persistence key, or null. @see #setKey */
+    @Nullable
+    private String key;
+
+    /**
+     * Whether the client is actually showing this window.
+     *
+     * <p>False suppresses the <b>entire</b> flush — structure as well as state, and that is not an
+     * optimisation detail but the correctness argument. A tree delta renumbers both sides, so
+     * suppressing the send while still renumbering here would leave the two peers disagreeing about
+     * every id past the change, and the next state delta would land on the wrong elements. Gating above
+     * both means the server's tree is simply not re-described while nobody is looking at it, and the
+     * client's numbering stays the one it was last told. @see #setViewerVisible</p>
+     */
+    private boolean viewerVisible = true;
+
     /** Arrives on the transport's thread, drained on ours. See {@link UITransport}. */
     private final Deque<T> mailbox = new ArrayDeque<>();
 
@@ -125,6 +156,9 @@ public final class ServerUiSession<T> implements UITreeObserver {
      * code would explain.</p>
      */
     private final Map<String, Call.Handler<T>> serverMethods = new LinkedHashMap<>();
+
+    /** Every notification {@link #onNotify} listened for, replayed onto a viewer that joins later. */
+    private final Map<String, Consumer<StateMap<T>>> serverNotifications = new LinkedHashMap<>();
 
     /**
      * How long a call waits before its error handler is told.
@@ -263,9 +297,73 @@ public final class ServerUiSession<T> implements UITreeObserver {
         return this;
     }
 
+    /**
+     * Names a sheet <b>and offers its text</b>, so a client that cannot resolve the ref locally can ask
+     * for it over {@code ui/sheet}.
+     *
+     * <p>Use this for a sheet the server authored. {@link #addSheet(SheetRef)} alone is right for a
+     * sheet the client is expected to already have — a shipped theme named by id — where sending the
+     * bytes would be sending something both sides already hold.</p>
+     */
+    public ServerUiSession<T> addSheet(SheetRef sheet, @Nullable String css) {
+        sheets.add(sheet);
+        if (css != null) sheetSource.put(sheet.hash(), css);
+        return this;
+    }
+
     public ServerUiSession<T> setUseUserAgentSheet(boolean use) {
         this.useUserAgentSheet = use;
         return this;
+    }
+
+    /**
+     * What kind of window this is — {@code "mymod:machine"}. Travels on {@code ui/openWindow}.
+     *
+     * <p>What {@code S2DPacketOpenWindow}'s inventory type and {@code ClientboundOpenScreenPacket}'s
+     * {@code MenuType} carry, and what a client dispatches its local behaviour on. Without it every
+     * window on a connection looks alike to a client, so whichever subscriber ran first took all of
+     * them — including another mod's.</p>
+     *
+     * <p><b>A client that does not recognise the type still shows the window.</b> That is the one place
+     * this is better than Minecraft's, where an unknown {@code MenuType} is a broken screen: a
+     * description is self-sufficient, so an unknown type renders and interacts correctly and merely has
+     * no local extras.</p>
+     */
+    public ServerUiSession<T> setType(@Nullable String type) {
+        this.type = type == null ? "" : type;
+        return this;
+    }
+
+    /** What to call it on screen. The side that opens a window is the side that knows what it is. */
+    public ServerUiSession<T> setTitle(@Nullable String title) {
+        this.title = title == null ? "" : title;
+        return this;
+    }
+
+    /**
+     * Uniqueness and persistence key, or {@code null} for "always a new window".
+     *
+     * <p>Two things at once, and they agree: a host refuses to open a second window under a key already
+     * open (Minecraft's close-the-previous-container rule, narrowed to the same <em>subject</em> rather
+     * than applied to every window), and the client's frame takes it so the desktop can restore its
+     * geometry.</p>
+     */
+    public ServerUiSession<T> setKey(@Nullable String key) {
+        this.key = key;
+        return this;
+    }
+
+    public String type() {
+        return type;
+    }
+
+    public String title() {
+        return title;
+    }
+
+    @Nullable
+    public String key() {
+        return key;
     }
 
     /**
@@ -314,6 +412,13 @@ public final class ServerUiSession<T> implements UITreeObserver {
         out.putString("hash", descHash);
         out.putInt("count", elementCount);
         out.putBool("ua", useUserAgentSheet);
+        // ADDITIVE, and every reader takes a fallback -- so an older client ignores these and an older
+        // server sends none, with no version bump and no negotiation. @see UiMethods#TYPE
+        out.putString(UiMethods.TYPE, type);
+        out.putString(UiMethods.TITLE, title);
+        // OMITTED rather than written empty when absent: "" is a legal key and would be indistinguishable
+        // from "this window has none", which is the difference between deduping and not.
+        if (key != null) out.putString(UiMethods.KEY, key);
         List<T> encodedSheets = new ArrayList<>(sheets.size());
         for (SheetRef ref : sheets) encodedSheets.add(SheetRef.CODEC.encode(ops, ref));
         out.putRaw("sheets", ops.createList(encodedSheets));
@@ -366,6 +471,39 @@ public final class ServerUiSession<T> implements UITreeObserver {
         serverMethods.put(method, handler);
         for (Viewer<T> viewer : viewers) registerCall(viewer, method, handler);
         return this;
+    }
+
+    /**
+     * Listens for a notification <b>on this window</b>.
+     *
+     * <p>The half of the vocabulary a session did not have, and its absence pushed every caller onto
+     * {@link ProtocolConnection#onNotify} — which is keyed by method name alone, so two windows of the
+     * same application listening for the same thing meant the second one <em>threw at open</em>. The
+     * worked example taught exactly that pattern, in a codebase whose whole point since 5.7 is that a
+     * connection carries several windows.</p>
+     *
+     * <p>Window-scoped through {@link UiWindowMux}, so two windows may each name {@code app/ping} and
+     * each hear only their own. A notification that belongs to the <em>connection</em> rather than to a
+     * window — a workspace, a script runtime — still registers on {@code ProtocolConnection} directly
+     * and is shared by every window, which is what it wants.</p>
+     */
+    public ServerUiSession<T> onNotify(String method, Consumer<StateMap<T>> handler) {
+        // Remembered so a viewer added later gets it, exactly as onCall's methods are. A handler served
+        // to whoever connected first and missing for everyone else is the shape of bug that only appears
+        // on a busy server.
+        serverNotifications.put(method, handler);
+        for (Viewer<T> viewer : viewers) registerNotification(viewer, method, handler);
+        return this;
+    }
+
+    /**
+     * Tells every viewer of this window. Nothing comes back — that is what makes it a notification.
+     *
+     * <p>Stamped with the window on the way out, so the far side's mux can route it and a second window
+     * of the same application hears nothing of it.</p>
+     */
+    public void notify(String method, @Nullable StateMap<T> payload) {
+        notifyClient(method, payload == null ? new StateMap<>(ops) : payload);
     }
 
     /**
@@ -422,12 +560,43 @@ public final class ServerUiSession<T> implements UITreeObserver {
      * learns the event's <em>name</em> so the client knows to report it; nothing else.</p>
      */
     public ServerUiSession<T> on(UIElement element, String kind, Consumer<UiEventContext<T>> handler) {
-        if (open) {
-            throw new IllegalStateException("Handlers must be registered before open() — the set of "
-                    + "reported events is part of the description the client has already been sent");
+        /*
+         * THE RULE IS NARROWER THAN IT USED TO BE, and the old one was broader than its own reason.
+         *
+         * It refused every registration after open(), justified by "the set of reported events is part
+         * of the description the client has already been sent". True of an element the client HAS been
+         * sent -- and a tree delta re-describes a subtree in full, reported events included, and
+         * ClientUiSession.wireReportedEvents runs over every element a delta brings. So an element that
+         * has never been numbered has not been described, and wiring it is not late at all.
+         *
+         * getNetworkId() < 0 is exactly that test: NetworkIds.assign numbers what open() and every
+         * flushStructure describe, and a freshly built element reports -1 until it is in one of those.
+         * Without this relaxation nothing could ever be added to a live window -- no fragment, no row,
+         * no lazily-built page -- which is a much bigger prohibition than the sentence justifying it.
+         */
+        if (open && element.getNetworkId() >= 0) {
+            throw new IllegalStateException("Handlers for an element the client has already been "
+                    + "described must be registered before open() — the set of reported events is part "
+                    + "of that description. An element added since (network id -1) may be wired now.");
+        }
+        Map<String, Consumer<UiEventContext<T>>> byKind =
+                handlers.computeIfAbsent(element, e -> new LinkedHashMap<>());
+        /*
+         * REFUSED rather than replaced. This was a bare put: a second registration for the same
+         * (element, kind) silently won, and which lambda ran was decided by registration order -- the
+         * exact failure MessageRouter's duplicate check exists to prevent one layer down.
+         *
+         * It matters most for composition, where it is not a typo but a boundary: a parent that wires an
+         * element its child already wired has reached inside the child, and the two behaviours cannot
+         * both run. A parent that wants to KNOW rather than to intercept takes a plain Java callback
+         * from the child instead.
+         */
+        if (byKind.containsKey(kind)) {
+            throw new IllegalStateException("'" + kind + "' on <" + element.tagName()
+                    + "> is already handled by this session; one handler per element and kind");
         }
         element.addReportedEvent(kind);
-        handlers.computeIfAbsent(element, e -> new LinkedHashMap<>()).put(kind, handler);
+        byKind.put(kind, handler);
         return this;
     }
 
@@ -448,6 +617,15 @@ public final class ServerUiSession<T> implements UITreeObserver {
      * preserves order within a stream, so the client applies them the same way round.</p>
      */
     private void flush() {
+        /*
+         * NOBODY IS LOOKING, so nothing is sent -- and nothing is RECOMPUTED either, which is the part
+         * that has to be got right. Suppressing only the send while still running flushStructure would
+         * renumber this side and not the other, and every state delta after the window came back would
+         * address the wrong elements. Both halves stay pending: dirtyState and structuralAnchors keep
+         * accumulating, and the flush that runs when the window comes back describes the tree as it is
+         * then, in one pass. @see #setViewerVisible
+         */
+        if (!viewerVisible) return;
         flushStructure();
         if (dirtyState.isEmpty()) return;
         List<T> entries = new ArrayList<>(dirtyState.size());
@@ -545,11 +723,38 @@ public final class ServerUiSession<T> implements UITreeObserver {
      */
     public void close(String reason) {
         if (!open) return;
+        // NOT through the visibility gate. A close is the one message a hidden window must still be
+        // told, because it is what ends the window rather than describing it.
+        boolean wasVisible = viewerVisible;
+        viewerVisible = true;
+        try {
+            closeInternal(reason, true);
+        } finally {
+            viewerVisible = wasVisible;
+        }
+    }
+
+    /**
+     * Stops serving this window <b>without telling the peer</b> — because the peer has gone.
+     *
+     * <p>What a connection-lost teardown calls. Everything {@link #close} does except the message:
+     * observing stops, the window's slots on the mux are handed back, and the session is no longer
+     * open. Sending would be encoding a packet into a wire whose far end is a disconnected player, and
+     * on 1.7.10 that reaches FML's own outbound validation before it reaches nothing.</p>
+     */
+    public void abandon(String reason) {
+        if (!open) return;
+        closeInternal(reason, false);
+    }
+
+    private void closeInternal(String reason, boolean tellPeer) {
         open = false;
         root.setObserver(null);
-        StateMap<T> out = new StateMap<>(ops);
-        out.putString("reason", reason == null ? "" : reason);
-        notifyClient(UiMethods.CLOSE_WINDOW, out);
+        if (tellPeer) {
+            StateMap<T> out = new StateMap<>(ops);
+            out.putString("reason", reason == null ? "" : reason);
+            notifyClient(UiMethods.CLOSE_WINDOW, out);
+        }
 
         // Hands the (method, window) pairs back, so the id may be reused and a message still in flight
         // for this window is refused rather than applied to whatever takes its place. That second half
@@ -590,6 +795,56 @@ public final class ServerUiSession<T> implements UITreeObserver {
         for (Map.Entry<String, Call.Handler<T>> entry : serverMethods.entrySet()) {
             registerCall(viewer, entry.getKey(), entry.getValue());
         }
+        for (Map.Entry<String, Consumer<StateMap<T>>> entry : serverNotifications.entrySet()) {
+            registerNotification(viewer, entry.getKey(), entry.getValue());
+        }
+
+        // THE USER CLOSED IT. The direction that did not exist -- see UiMethods.CLOSE. Handled here
+        // rather than by whatever opened the window, so a session cannot be left open by a host that
+        // forgot to listen; the callback is what a host reacts to.
+        bindNotify(viewer, UiMethods.CLOSE, payload -> {
+            StateMap<T> in = read(payload);
+            if (!mine(in)) return;
+            String reason = in.getString("reason", "closed by the user");
+            // The window is already gone on the far side, so there is nothing to tell it. Ending the
+            // session with a message would be answering a report of a departure.
+            abandon(reason);
+            if (onClientClosed != null) onClientClosed.accept(reason);
+        });
+
+        // IS ANYBODY LOOKING. @see UiMethods#VISIBILITY
+        bindNotify(viewer, UiMethods.VISIBILITY, payload -> {
+            StateMap<T> in = read(payload);
+            if (!mine(in)) return;
+            setViewerVisible(in.getBool("visible", true));
+        });
+
+        /*
+         * THE SHEET BEHIND A HASH, answered exactly as a description is and for the same reasons:
+         * content-addressed, so it is fetched once however many windows name it; refused rather than
+         * dropped when we do not have it, so a client learns instead of waiting out a deadline.
+         *
+         * A ref with no text behind it is not a failure -- it names a theme the client is expected to
+         * hold locally -- so the refusal says which of the two it is.
+         */
+        bindRequest(viewer, UiMethods.SHEET, (payload, respond) -> {
+            StateMap<T> in = read(payload);
+            if (!mine(in)) {
+                respond.fail("wrong window");
+                return;
+            }
+            String wanted = in.getString("hash", "");
+            String css = sheetSource.get(wanted);
+            if (css == null) {
+                respond.fail("this session offers no source for sheet " + wanted);
+                return;
+            }
+            StateMap<T> out = new StateMap<>(ops);
+            out.putInt(UiMethods.WINDOW, windowId);
+            out.putString("hash", wanted);
+            out.putString("css", css);
+            respond.ok(out.encode());
+        });
         bindRequest(viewer, UiMethods.DESCRIPTION, (payload, respond) -> {
             StateMap<T> in = read(payload);
             if (!mine(in)) {
@@ -662,6 +917,42 @@ public final class ServerUiSession<T> implements UITreeObserver {
         T encoded = payload.encode();
         for (Viewer<T> viewer : viewers) viewer.router.notify(method, encoded);
     }
+
+    private void registerNotification(Viewer<T> viewer, String method, Consumer<StateMap<T>> handler) {
+        bindNotify(viewer, method, payload -> handler.accept(read(payload)));
+    }
+
+    /**
+     * Whether the client is showing this window, and therefore whether anything is flushed at all.
+     *
+     * <p>Driven by {@code ui/visibility} from the client, or set directly by a test. Turning it back on
+     * flushes immediately rather than waiting for the next tick, so a window that comes back is correct
+     * on the frame it comes back rather than one behind.</p>
+     */
+    public ServerUiSession<T> setViewerVisible(boolean visible) {
+        if (viewerVisible == visible) return this;
+        viewerVisible = visible;
+        if (visible && open) flush();
+        return this;
+    }
+
+    public boolean isViewerVisible() {
+        return viewerVisible;
+    }
+
+    /**
+     * Told when the <b>client</b> closed this window, with the reason it gave.
+     *
+     * <p>The session has already stopped serving by the time this runs — it is a report, not a veto. A
+     * window is gone on the side that closed it, so there is nothing here that could refuse.</p>
+     */
+    public ServerUiSession<T> onClientClosed(Consumer<String> handler) {
+        this.onClientClosed = handler;
+        return this;
+    }
+
+    @Nullable
+    private Consumer<String> onClientClosed;
 
     private void registerCall(Viewer<T> viewer, String method, Call.Handler<T> handler) {
         // WINDOW-SCOPED like the rest, so two windows of the same application may each offer `app/save`.

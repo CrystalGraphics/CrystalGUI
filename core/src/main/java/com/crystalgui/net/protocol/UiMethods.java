@@ -58,8 +58,73 @@ public final class UiMethods {
     /** Server → client: this window is finished. Notification. */
     public static final String CLOSE_WINDOW = "ui/closeWindow";
 
+    /**
+     * Client → server: <b>the user closed this window.</b> Notification.
+     *
+     * <p>The direction that did not exist, and its absence was not a gap in a feature — it was half the
+     * lifecycle missing. Minecraft has had it since alpha ({@code C0DPacketCloseWindow} →
+     * {@code processCloseWindow} → {@code closeContainer}, and {@code ServerboundContainerClosePacket}
+     * → {@code doCloseContainer} on 1.20), because a server holding a window's model needs to know when
+     * nobody is looking at it any more. Without it a closed window left its session open, observing,
+     * and flushing state deltas into a frame that had been destroyed — and the only close anything ever
+     * noticed was the player disconnecting.</p>
+     *
+     * <p>A notification rather than a request: nobody is waiting. The window is already gone on the
+     * side that sent this, so there is nothing an answer could change.</p>
+     */
+    public static final String CLOSE = "ui/close";
+
+    /**
+     * Server → client: <b>bring this window forward.</b> Notification.
+     *
+     * <p>What re-opening an already-open window means. Minecraft's answer is to close the previous
+     * container and open a fresh one; ours keeps the window (its tree, its scroll position, whatever is
+     * half-typed in it) and asks the compositor to raise it, because re-opening the same subject should
+     * not cost the user their place in it.</p>
+     *
+     * <p>Deliberately not spelled as a re-sent {@code ui/openWindow}. That works — the client treats an
+     * open as authoritative and would rebuild — but rebuilding a whole tree to answer "look at this
+     * one" throws away exactly the state the window was kept for.</p>
+     */
+    public static final String FOCUS_WINDOW = "ui/focusWindow";
+
+    /**
+     * Client → server: <b>this window is / is not on screen.</b> Notification.
+     *
+     * <p>Hiding a window is not closing it — a hidden window is retained, detached, and expected to
+     * come back exactly as it was. But the server does not know, so it goes on computing and sending
+     * state deltas to a tree nobody is drawing. This says so, and the session suppresses its whole
+     * flush until the window comes back.</p>
+     *
+     * <p>Payload: {@code {w, visible}}.</p>
+     */
+    public static final String VISIBILITY = "ui/visibility";
+
+    /**
+     * Client → server: <b>send me the stylesheet behind this hash.</b> A request.
+     *
+     * <p>The counterpart of {@link #DESCRIPTION}, and for the same reason: a {@link
+     * com.crystalgui.net.SheetRef} crossed the wire from the day sheets did, and there was no way to
+     * <em>fetch</em> one — so a client confronted with a hash it did not recognise had nothing to call,
+     * and every host resolved refs from a constant in its own jar instead. That works for a UI whose
+     * mod is installed on both sides and is a wall for anything a server authors.</p>
+     *
+     * <p>Content-addressed like a description, so a sheet is fetched once per hash however many windows
+     * name it, and a changed sheet is simply a different key.</p>
+     */
+    public static final String SHEET = "ui/sheet";
+
     /** Client → server: the user did something to an element. Notification. */
     public static final String EVENT = "ui/event";
+
+    /** {@code ui/openWindow}: the window's <b>type</b> — what a client dispatches local behaviour on. */
+    public static final String TYPE = "type";
+
+    /** {@code ui/openWindow}: the window's title, decided by the side that knows what it is. */
+    public static final String TITLE = "title";
+
+    /** {@code ui/openWindow}: the window's uniqueness and persistence key, or absent. */
+    public static final String KEY = "key";
 
     /** The window id, on every {@code ui/*} payload. @see UiMethods */
     public static final String WINDOW = "w";
