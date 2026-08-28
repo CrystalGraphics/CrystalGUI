@@ -386,8 +386,42 @@ public final class ClientUiSession<T> {
         }
     }
 
+    /**
+     * True only while {@link #applyStateDelta} is running — the one window in which a widget's change
+     * signal is the server's doing rather than the user's.
+     */
+    private boolean applyingDelta;
+
     /** @see #registerWindowMethods */
     private void applyStateDelta(StateMap<T> in) {
+        /*
+         * NOTHING APPLIED HERE IS A USER INTERACTION, and saying so is the whole of the guard.
+         *
+         * Applying a delta calls the widget's ordinary setter, which fires the widget's ordinary
+         * change signal -- and that signal is precisely what wireReportedEvents hung the report on. So
+         * the server moving a slider made every client receiving it tell the server that the USER had
+         * moved it, one report per viewer, for a gesture nobody made.
+         *
+         * It stayed invisible because it is harmless in the common case and only there: the echo
+         * carries the value the server just sent, so the handler writes the model back to what it
+         * already holds and Property.set returns early. It stops being harmless the moment a handler
+         * COUNTS anything or records who did it -- and with two viewers it is attributed to the wrong
+         * player, which is the version that cannot be shrugged off.
+         *
+         * shouldSuppress below is this same loop noticed from the one place it was visible: a delta
+         * landing on a focused text field and resetting the caret mid-word. It stays -- it stops the
+         * VALUE arriving, which is a different problem from the report leaving.
+         */
+        boolean wasApplying = applyingDelta;
+        applyingDelta = true;
+        try {
+            applyEntries(in);
+        } finally {
+            applyingDelta = wasApplying;
+        }
+    }
+
+    private void applyEntries(StateMap<T> in) {
         for (StateMap<T> entry : in.getList("entries", e -> e)) {
             int nid = entry.getInt("nid", -1);
             UIElement target = NetworkIds.find(root, nid);
@@ -561,6 +595,9 @@ public final class ClientUiSession<T> {
     }
 
     private void report(UIElement element, String kind, @Nullable StateMap<T> payload) {
+        // A report means "the user did this". A write we were just handed by the server is the one
+        // thing that certainly is not. @see #applyStateDelta
+        if (applyingDelta) return;
         StateMap<T> out = new StateMap<>(ops);
         out.putInt(UiMethods.WINDOW, windowId);
         out.putInt("nid", element.getNetworkId());

@@ -105,6 +105,19 @@ import com.crystalgui.ui.UIElement;
  *       <td>A session registration is keyed by method and refused a second time</td></tr>
  * </table>
  *
+ * <h3>Nesting, and the three hooks a child is never asked</h3>
+ *
+ * <p>A panel holds another panel as an ordinary field, builds it with its slice in {@link #layout},
+ * and wires it with {@link ServerScope#attach} — after which the host ticks it and closes it with the
+ * window, and the client's own walk binds it, {@link #bound()}s it and hands it a {@link ClientScope}
+ * prefixed by its element id. Six of the hooks above run for a nested panel exactly as for a root one.
+ * <b>{@link #title}, {@link #key} and {@link #stillValid} are WINDOW-level questions and are only ever
+ * put to the root</b>, so a child overriding them is writing code nothing calls.</p>
+ *
+ * <p>{@code com.crystalgui.example.machine} is the worked version: an {@code EnginePanel} inside a
+ * {@code MachinePanel}, with the slice, the derived {@code engine/tune} prefix and the plain callback
+ * back to the parent.</p>
+ *
  * <h3>Public hooks, acknowledged</h3>
  *
  * <p>An interface cannot have protected members, so these are callable by hand. Nothing sane calls

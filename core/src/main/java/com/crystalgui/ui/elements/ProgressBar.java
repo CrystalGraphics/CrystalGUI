@@ -50,6 +50,10 @@ public class ProgressBar extends UIElement implements UIFrameTicker {
     private final UIElement fill;
 
     private float fraction = -1f;
+
+    /** Whether {@link #setFraction} has ever run, so the constructor's own call is never elided. */
+    private boolean applied;
+
     private float sweep;
     private boolean ticking;
 
@@ -77,7 +81,32 @@ public class ProgressBar extends UIElement implements UIFrameTicker {
      */
     public void setFraction(float value) {
         boolean nowIndeterminate = value < 0f;
-        this.fraction = nowIndeterminate ? -1f : Math.min(1f, value);
+        float resolved = nowIndeterminate ? -1f : Math.min(1f, value);
+
+        /*
+         * IDEMPOTENT, AND THE GUARD IS NOT A MICRO-OPTIMISATION.
+         *
+         * Every other state setter in the engine already early-returns on an unchanged value --
+         * Slider.setValue by hand, UIText/TextField/Switch through Property.set -- and the engine
+         * relies on it: MachinePanel.mirror's javadoc states the consequence as a rule, that "calling
+         * this more often than necessary costs a few comparisons, not traffic". This setter was the
+         * one exception, so that rule was simply FALSE for any panel mirroring a bar every tick.
+         * notifyStateChanged() marked the bar dirty on every call, so an IDLE window sent a
+         * ui/stateDelta per tick, forever, carrying a value that had not moved -- and invalidateStyleMatch()
+         * beside it put a full selector re-match on the element every frame.
+         *
+         * Invisible for as long as every server-side mirror was gated behind a dirty flag of its own,
+         * which is what MachinePanel does and why the worked example never showed it. The first panel
+         * to mirror unconditionally -- on the honest grounds that the setters are idempotent -- turned
+         * a quiet window into constant traffic, and nothing failed.
+         *
+         * `applied` rather than a bare equality test, because the CONSTRUCTOR's own setFraction(-1f)
+         * has to run: the field starts at -1, so a plain guard would skip the class and the ticker
+         * that make an indeterminate bar indeterminate.
+         */
+        if (applied && resolved == this.fraction) return;
+        applied = true;
+        this.fraction = resolved;
 
         if (nowIndeterminate) {
             addClass(INDETERMINATE_CLASS);

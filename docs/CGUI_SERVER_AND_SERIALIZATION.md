@@ -232,6 +232,17 @@ methods it is `UIPacket` again with different syntax.
 > that asks twice cannot confuse the answers, and a server that no longer serves that window **refuses**
 > instead of staying silent, so the client learns rather than waiting out a timeout.
 
+> **A `ui/stateDelta` never comes back as a `ui/event`.** Applying a delta runs the widget's ordinary
+> setter, which fires the widget's ordinary change signal — which is exactly what the client hung the
+> event report on. So the server moving a slider used to make every client that received it report that
+> the *user* had moved it: one `ui/event` per viewer, for a gesture nobody made. Harmless in the common
+> case and only there — the echo carries the value the server just sent, so the handler writes the model
+> back to what it already holds and `Property.set` returns early — and wrong the moment a handler counts
+> anything or records who did it, which with two viewers attributes it to the wrong player.
+> `ClientUiSession` suppresses reporting for the duration of a delta. `shouldSuppress`, which stops a
+> delta landing on a focused text field and resetting the caret mid-word, is the narrow ancestor of the
+> same loop and stays: it stops the *value* arriving, not the *report* leaving.
+
 **Every `ui/*` payload carries `w`, the window id** — in the payload rather than the envelope, because it
 is a fact about the UI protocol and the envelope is not allowed to know one. LDLib2 resolves incoming
 packets against "whatever menu the player has open", so a packet in flight when a GUI closes lands on
