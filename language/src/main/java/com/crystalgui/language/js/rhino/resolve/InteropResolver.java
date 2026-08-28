@@ -463,9 +463,46 @@ public final class InteropResolver {
     /** What each cached class's workspace file looked like when it was cached. @see #forgetIfProjectSourceChanged */
     private final Map<String, Integer> projectStamps = new HashMap<>();
 
+    /**
+     * What KIND of type this is — <b>for colouring, which needs nothing else</b>.
+     *
+     * <p>{@link #describe} answers the same question and also resolves the declaration site, the quoted
+     * signature and the javadoc, each of which parses the whole source file the type was declared in.
+     * That is the right price for a hover and the wrong one for a semantic-token pass, which asks about
+     * every Java name on screen and reads only the kind. @see Analysis#kindAt</p>
+     *
+     * <p>Shares the probe cache with {@code describe}, so a name that is coloured and then hovered pays
+     * for the probe once and only adds the source parse when somebody actually asks to read it.</p>
+     */
+    @Nullable
+    synchronized SymbolKind kindOf(String binaryName) {
+        if (binaryName == null || binaryName.isEmpty()) return null;
+        forgetIfProjectSourceChanged(binaryName);
+        if (!permits(binaryName)) return null;
+        Probe probe = probeFor(binaryName);
+        if (probe == null || probe.type() == null) return null;
+        SymbolKind kind = probe.kind();
+        // A TYPE THAT RESOLVED IS AT LEAST A CLASS. The probe answering null means it could not name the
+        // kind, not that the type is absent -- `describe` makes the same substitution, and a name that
+        // resolves must not lose its colour over a missing refinement.
+        return kind == null ? SymbolKind.CLASS : kind;
+    }
+
     /** What the class itself is, for a hover over {@code java.util.ArrayList}. */
     @Nullable
     synchronized SymbolInfo describe(String binaryName, boolean staticSide) {
+        return describe(binaryName, staticSide, true);
+    }
+
+    /**
+     * @param detailed whether to ask the probe for its DECLARATION — the kind, modifiers, quoted
+     *                 signature, javadoc and declaration site, all at once and all from one
+     *                 {@code resolveAt}, which for a classpath type parses the whole source file it was
+     *                 declared in. False leaves the type, the container and a plain {@code CLASS} kind,
+     *                 which is everything a colour is derived from. @see #kindOf
+     */
+    @Nullable
+    synchronized SymbolInfo describe(String binaryName, boolean staticSide, boolean detailed) {
         if (binaryName == null || binaryName.isEmpty()) return null;
         forgetIfProjectSourceChanged(binaryName);
         if (!permits(binaryName)) return null;
@@ -485,7 +522,7 @@ public final class InteropResolver {
         // popup's yellow while the identical hover in a .java file read
         // `public interface List<E> extends SequencedCollection<E>` in the code colours. Same widget,
         // same session, two answers.
-        SymbolInfo declared = probe == null ? null : probe.declaration();
+        SymbolInfo declared = probe == null || !detailed ? null : probe.declaration();
         SymbolInfo described = new SymbolInfo(simple,
                 declared == null ? SymbolKind.CLASS : declared.kind(),
                 staticSide ? JsTypeRef.javaClass(binaryName) : type,
@@ -575,6 +612,8 @@ public final class InteropResolver {
         @Nullable private List<SymbolInfo> members;
         @Nullable private SymbolInfo declaration;
         private boolean declarationAsked;
+        @Nullable private SymbolKind kind;
+        private boolean kindAsked;
         private boolean closed;
 
         Probe(Analysis analysis, @Nullable TypeRef type, int offset, int typeOffset) {
@@ -590,6 +629,23 @@ public final class InteropResolver {
          * <p>The flag rather than a null check, because "no declaration" is a real answer for a type with
          * no source beside it and re-asking on every hover would defeat the cache the whole class is.</p>
          */
+        /**
+         * The type's KIND, without its declaration site, signature or javadoc. @see Analysis#kindAt
+         *
+         * <p>Cached on the same terms as {@link #declaration()} and for the same reason — null is a real
+         * answer — but separately, because the two are asked by different callers for different reasons.
+         * Colouring asks this one, on every Java name on screen; a hover asks the other, once.</p>
+         */
+        @Nullable
+        SymbolKind kind() {
+            if (!isUsable()) return null;
+            if (!kindAsked) {
+                kindAsked = true;
+                kind = analysis.kindAt(typeOffset);
+            }
+            return kind;
+        }
+
         @Nullable
         SymbolInfo declaration() {
             if (!isUsable()) return null;

@@ -3,6 +3,7 @@ package com.crystalgui.language.engine.bridge;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.lang.CodeAction;
 import com.crystalgui.text.lang.SymbolInfo;
+import com.crystalgui.text.lang.SymbolKind;
 import com.crystalgui.text.lang.TypeRef;
 import com.crystalgui.text.syntax.SyntaxToken;
 
@@ -77,6 +78,33 @@ public interface Analysis extends AutoCloseable {
 
     /** What the name at {@code offset} refers to, or null. */
     SymbolInfo resolveAt(int offset);
+
+    /**
+     * What KIND of thing is at {@code offset} — <b>and deliberately nothing else</b>.
+     *
+     * <h3>Because a colour is a kind, and {@link #resolveAt} charges for a great deal more</h3>
+     *
+     * <p>A semantic-token pass asks one question of every Java name it meets: is this a class, an
+     * interface, an enum? {@code resolveAt} answers that and also works out the declaration SITE, the
+     * quoted signature and the javadoc — and for a classpath binding each of those reaches the attached
+     * source, which means parsing the entire compilation unit the symbol was declared in. Measured:
+     * 76KB of {@code CgTextRenderer} at 83ms, 173KB of {@code UIElement} at 565ms, roughly 1-3µs a
+     * character with nothing to warm away.</p>
+     *
+     * <p>So a file's first colouring waited on a source parse per type it named, which is why a script
+     * naming a few Minecraft classes sat readable but unmarked for seconds. Nothing about a colour needed
+     * any of it.</p>
+     *
+     * <p><b>Not a cheaper {@code resolveAt}</b> — a strictly smaller question. Anything wanting a
+     * signature, a javadoc or somewhere to navigate to still asks {@code resolveAt} and still pays,
+     * which is right: those are gestures a person made, and this is one every name on screen provokes.</p>
+     *
+     * <p>Null when nothing resolves, exactly as {@code resolveAt} answers null — and by default here, so
+     * an engine that has not implemented it degrades to no colour rather than to a wrong one.</p>
+     */
+    default SymbolKind kindAt(int offset) {
+        return null;
+    }
 
     /**
      * Whether the construct at {@code offset} was <b>invented by error recovery</b> rather than written.
