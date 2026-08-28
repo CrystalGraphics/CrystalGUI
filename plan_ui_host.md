@@ -1532,3 +1532,47 @@ per-player shape had been hiding: `MachineModel.onChanged` was a single-slot `Ru
 viewer's `serve()` would have silently evicted the first viewer's dirty-listener. It is a list now,
 and `onChanged` returns the **unsubscribe**, which `MachinePanel` runs in `closed()` — a shared model
 outlives its windows, and a closed window must not leave a listener behind.
+
+## Part VII, second addendum — composition, exercised · **SHIPPED**
+
+Nesting was designed in Part VII (`ServerScope.attach`, the id-path prefix, the `collectNested` walk)
+and pinned by `WindowLifecycleTest`'s fixtures. **It had never been used by anything real**, which is a
+different claim: a fixture can be shaped around the mechanism it is testing, and an example cannot.
+
+`EngineModel` + `EnginePanel` are that use. The machine now owns an engine; the panel holds an
+`EnginePanel` as an ordinary field, built with `model.engine()` and attached with the same slice; a
+button opens the section. **The mechanism needed no changes** — three lines on the parent, nothing at
+all on the client — and four things came out of driving it.
+
+**The slice is a modelling decision, and it is enforced by the package.** `EngineModel`'s constructor
+and `tick` are package-private, so what a child panel one package over can actually reach is the
+operator's surface: set the load, restart it, read the dials. "The narrowest slice it honestly needs"
+turned out to have a second axis nobody had written down — not just *which object*, but *which of its
+methods* — and the compiler holds both.
+
+**The derived prefix is worth SHOWING, not asserting.** The child prints `io.qualify("tune")` from both
+scopes into two lines with SERVER and CLIENT badges, and they read `engine/tune`. That is the claim the
+whole id-path design rests on, and a comment saying so is exactly as convincing as the comment it
+replaced.
+
+**A nested panel is asked six of the nine hooks.** `title`, `key` and `stillValid` are *window*-level
+questions and are only ever put to the root, so overriding them on a child is writing code nothing
+calls. Now stated on `Networked`'s nested consumer rather than left to be discovered.
+
+**And it found a live defect two layers down** — see the new AGENTS.md row. Applying a state delta runs
+the widget's ordinary setter, which fires the widget's ordinary signal, which is what
+`wireReportedEvents` hung the report on: **the server moving a slider made every client report back
+that the user had moved it.** One `ui/event` per viewer, for a gesture nobody made.
+
+It was unreachable until now, and precisely: every server-side write in the codebase went either to a
+widget that reports nothing (`ProgressBar`, `UIText`) or wrote back a value the client had just sent,
+where the setter no-ops. `engine/tune` is the first thing that makes the server move a *reporting*
+widget on its own initiative — so 1421 headless tests, a worked example and a shipped in-game panel all
+missed it, and it showed up as one stray `WARN` line in the demo transcript.
+
+`ClientUiSession.applyingDelta` is the fix, and `shouldSuppress` — which stops a delta resetting the
+caret in a focused text field — is its narrow ancestor: the same loop, noticed years earlier from the
+one place it was visible. Both stay; one stops the value arriving, the other stops the report leaving.
+The covering test is in `MultiViewerTest`, with two viewers *and* a positive control, because a fix
+written as "never report" passes every assertion about the echo and makes every control in the
+application dead.

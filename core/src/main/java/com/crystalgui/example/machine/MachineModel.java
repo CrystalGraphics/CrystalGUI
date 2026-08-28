@@ -10,6 +10,11 @@ import java.util.List;
  * chooses, it works through a cycle, and it has a name. Whether anybody is <em>looking</em> at it is
  * none of its business.</p>
  *
+ * <p>It also has an {@link EngineModel}, which it <b>owns</b> — made here, ticked here, announcing
+ * through here. That object exists as a separate thing for a reason worth reading before writing a
+ * second one: it is the <b>slice</b> a nested UI is handed, and carving it in the model is what lets
+ * the child panel be unable to name the rest of the machine rather than merely asked not to.</p>
+ *
  * <h3>Read the import list</h3>
  *
  * <p>There isn't one. That is the whole point of this class and the reason it is first.</p>
@@ -42,6 +47,15 @@ public final class MachineModel {
     private String label = "Machine 01";
 
     private int completedCycles;
+
+    /**
+     * The machine's engine — <b>owned here</b>, and the slice a nested UI is handed.
+     *
+     * <p>It announces through this machine's own {@link #changed()}, so a watcher subscribes once and
+     * hears about both. That is what lets {@link EngineModel} have no listener list of its own, and it
+     * is why the constructor is package-private: an engine is made by the machine it belongs to.</p>
+     */
+    private final EngineModel engine = new EngineModel(this::changed);
 
     /** Fired whenever anything above changes. See the class javadoc for why these are bare Runnables. */
     private final List<Runnable> onChanged = new ArrayList<>();
@@ -80,6 +94,16 @@ public final class MachineModel {
         return completedCycles;
     }
 
+    /**
+     * The engine — <b>the slice a nested panel is served with</b>.
+     *
+     * <p>{@code MachinePanel.serve} passes exactly this to {@code io.attach(engine, model.engine())},
+     * and from there the child's every hook takes an {@link EngineModel} and nothing wider.</p>
+     */
+    public EngineModel engine() {
+        return engine;
+    }
+
     public void setRunning(boolean value) {
         if (running == value) return;
         running = value;
@@ -113,10 +137,21 @@ public final class MachineModel {
      * <p>Returns without firing when the machine is stopped, which matters more than it looks: this
      * is called every tick forever, and a model that announced a change each time would hand the
      * session a dirty set on every single tick and turn a quiet panel into constant traffic.</p>
+     *
+     * <p>The engine is ticked <b>either way</b> — a stopped machine's engine is cooling, which is
+     * something happening — and it keeps the same rule for itself, announcing only when a reading
+     * actually moved and going silent once it has cooled to nothing.</p>
      */
     public void tick() {
+        engine.tick(running);
         if (!running) return;
-        progress += CYCLE_SPEED * (0.25f + throughput);
+        if (engine.isStalled()) {
+            // The engine tripped, so the machine stops. setRunning announces, and does nothing at all
+            // if something else already stopped us this tick.
+            setRunning(false);
+            return;
+        }
+        progress += CYCLE_SPEED * (0.25f + throughput) * engine.output();
         if (progress >= 1f) {
             progress = 0f;
             completedCycles++;

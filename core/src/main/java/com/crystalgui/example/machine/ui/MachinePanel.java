@@ -50,6 +50,13 @@ import com.crystalgui.ui.elements.UIText;
  * addressing scheme — see {@link com.crystalgui.net.NetworkIds}, which derives a number for every
  * element from a document-order walk on both sides and sends nothing. The id is for the cascade;
  * the network id is for the protocol; they are unrelated and it is worth not confusing them.</p>
+ *
+ * <h3>And one of the fields is a whole other UI</h3>
+ *
+ * <p>{@link #engine} is an {@link EnginePanel} — a {@link Networked} panel of its own, nested here as
+ * an ordinary field, because a panel <em>is</em> an element and elements have always nested. Read that
+ * class for the composition rules; the three lines it costs on this side are in {@link #layout} and
+ * {@link #serve}, and the reason the button that opens it sends nothing is in {@link #toggleEngine}.</p>
  */
 public final class MachinePanel extends UIElement implements Networked<MachineModel> {
 
@@ -84,6 +91,35 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
 
     /** A line of server-written text. Also server-driven only. */
     public UIText status = new UIText("");
+
+    // ── The nested UI. See EnginePanel, and #toggleEngine for the half that does not travel. ──
+
+    /** The two captions {@link #showEngine} alternates between. Plain words: no glyph can be missing. */
+    private static final String SHOW_ENGINE = "Show engine";
+    private static final String HIDE_ENGINE = "Hide engine";
+
+    /**
+     * Opens and closes the engine section.
+     *
+     * <p>Wired on the <b>client</b>, in {@link #bound()}, and the server is never told: whether a
+     * section is expanded is view state, exactly like a scroll position. @see #toggleEngine</p>
+     */
+    public Button showEngine = new Button(SHOW_ENGINE);
+
+    /**
+     * <b>A whole UI, as a field.</b>
+     *
+     * <p>That is the entire cost of composing here, because a {@link Networked} panel <em>is</em> an
+     * element: it goes in the tree with {@code addChild}, it is described and rebuilt like anything
+     * else, and the field name becomes its element id — which is also what namespaces its wire
+     * methods, so this one's {@code "tune"} is {@code "engine/tune"} on both sides.</p>
+     *
+     * <p>Left null rather than initialised, because {@link UiType#build} deliberately does <b>not</b>
+     * auto-create a nested panel: building one needs its slice of the model, and only this class knows
+     * which slice that is. It is built in {@link #layout} and wired in {@link #serve}, one line
+     * each.</p>
+     */
+    public EnginePanel engine;
 
     /** The last thing the SERVER did. Nothing else may write it. */
     public UIText serverLine = new UIText("nothing yet");
@@ -151,20 +187,38 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
         title.addClass(MachineStyles.TITLE_CLASS);
         addChild(title);
 
-        addChild(row("Power", power));
+        addChild(MachineRows.row("Power", power));
 
         throughput.setRange(0f, 1f);
-        addChild(row("Throughput", throughput));
+        addChild(MachineRows.row("Throughput", throughput));
 
         label.setPlaceholder("name this machine");
-        addChild(row("Label", label));
+        addChild(MachineRows.row("Label", label));
 
-        addChild(row("Cycle", progress));
+        addChild(MachineRows.row("Cycle", progress));
 
         status.addClass(MachineStyles.STATUS_CLASS);
         addChild(status);
 
         addChild(purge);
+
+        /*
+         * THE NESTED PANEL, and the two lines are the whole of it.
+         *
+         * EnginePanel is a Networked element, so it goes into the tree exactly as the rows above did.
+         * What is NOT here is as informative as what is: no registration, no id string, no wire
+         * contract, and nothing on the client at all. The field name becomes the element id, the
+         * element id becomes the scope prefix, and MachinePanel.TYPE's own declaration already
+         * registered <enginepanel> so the far side can decode one.
+         *
+         * build() rather than `new`: constructing a panel is create-fill-name-then-layout, and the
+         * slice -- model.engine() -- is the input only this class can supply. That is exactly why
+         * UiType.build fills every null widget field for you and deliberately leaves a nested PANEL
+         * alone: it has no way to know which part of the model belongs to it.
+         */
+        addChild(showEngine);
+        engine = EnginePanel.TYPE.build(model.engine());
+        addChild(engine);
 
         /*
          * THE PROTOCOL DEMO STRIP.
@@ -250,31 +304,9 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
          * bonus is that BOTH HALVES OF EVERY EXCHANGE ARE NOW ON SCREEN AT ONCE: press Heartbeat and
          * the client line says it sent one while the server line says it received one.
          */
-        addChild(resultRow(MachineStyles.WHO_SERVER_CLASS, "SERVER", serverLine));
+        addChild(MachineRows.authored(MachineStyles.WHO_SERVER_CLASS, "SERVER", serverLine));
 
-        addChild(resultRow(MachineStyles.WHO_CLIENT_CLASS, "CLIENT", clientLine));
-    }
-
-    /** A fixed side badge and the line only that side writes. */
-
-    private static UIElement resultRow(String badgeClass, String side, UIText line) {
-        UIElement row = new UIElement();
-        row.addClass(MachineStyles.ROW_CLASS);
-
-        UIText badge = new UIText(side);
-        badge.addClass(MachineStyles.KIND_CLASS);
-        badge.addClass(badgeClass);
-        badge.neverSelfSizeWidth();
-        row.addChild(badge);
-
-        // neverSelfSizeWidth for the opposite reason to the method names above: this is in a ROW and
-        // its text is long, so sizing itself would push the row past the panel edge. Sized by the
-        // sheet, it wraps inside its box.
-        line.addClass(MachineStyles.WIRE_CLASS);
-        line.neverSelfSizeWidth();
-        row.addChild(line);
-
-        return row;
+        addChild(MachineRows.authored(MachineStyles.WHO_CLIENT_CLASS, "CLIENT", clientLine));
     }
 
     // ── The three badges an entry can carry ─────────────────────────────────
@@ -347,15 +379,6 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
         return entry;
     }
 
-    /**
-     * A label beside a control.
-     *
-     * <p>The fixed-width slot is the one pixel value in this class, and it is here because
-     * {@link UIText} measures itself after layout and writes its own width back at {@code IMPORTANT}
-     * origin — so a stylesheet {@code width} on the text loses to the text. Wrapping it in a sized
-     * box is the standing idiom for keeping a column of labels aligned; every harness scene in the
-     * repository does the same thing for the same reason.</p>
-     */
     // ── The SERVER half ─────────────────────────────────────────────────────
 
     /**
@@ -490,6 +513,24 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
             say("REQUEST answered - renamed to '" + name + "'");
         });
 
+        /*
+         * ── THE NESTED PANEL'S SERVER HALF ────────────────────────────────────────────────────
+         *
+         * PROPS DOWN, EVENTS UP, and neither of them is a message.
+         *
+         * attach() hands the child its SLICE -- model.engine(), not model -- and a scope prefixed by
+         * the child's element id, so the "tune" it registers is "engine/tune" on the wire. The child
+         * is then ticked with that slice after this panel's own tick and told closed() when the window
+         * ends, both by the host. Nothing else here has to remember it exists.
+         *
+         * The callback is the other direction and it is an ORDINARY JAVA CALL. Both server halves are
+         * objects in one process on one thread; routing this through the session would be a round trip
+         * to the room we are standing in, and would invent a wire contract no client ever sees.
+         */
+        engine.onRestarted(() -> say("the engine panel restarted the engine - a plain Java callback, "
+                + "not a message: both halves are in this process"));
+        io.attach(engine, model.engine());
+
         // The very first tree the client builds is already correct, rather than correct one state
         // delta later. Safe here because serve() runs before the description is taken.
         mirror(model);
@@ -552,6 +593,33 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
         // Deliberately blank -- the server refuses it, which is the only way to watch the error
         // callback fire. See the machine/rename handler above.
         badRename.attachListener(() -> rename("   "));
+        showEngine.attachListener(this::toggleEngine);
+    }
+
+    /**
+     * Opens and closes the engine section — <b>and this is the whole of it, on the client, in
+     * three lines that send nothing</b>.
+     *
+     * <p>Whether a section is expanded is <b>view state</b>, the same category as a scroll position or
+     * a selection, and this codebase draws that line everywhere else already: document state goes
+     * through an edit, view state is mutated directly. Sending it would make the server the authority
+     * on something it cannot possibly have an opinion about — and would mean two players sharing one
+     * machine could fold each other's panels.</p>
+     *
+     * <p>Done with a <b>class</b> rather than by writing {@code display} from Java, for the reason the
+     * whole example keeps repeating: a value written in Java lands at {@code INLINE} origin and no
+     * stylesheet rule could ever move it again. {@code machine.css} owns the hiding; this owns the
+     * state. And it is a class rather than a pseudo-class because the engine re-evaluates a
+     * pseudo-class on its own terms and a class on yours.</p>
+     *
+     * <p>The one honest cost: a re-describe rebuilds the tree, so the section comes back closed. That
+     * is what "view state" means, and it is the same thing that happens to a scroll position.</p>
+     */
+    private void toggleEngine() {
+        boolean opening = !engine.hasClass(MachineStyles.ENGINE_OPEN_CLASS);
+        if (opening) engine.addClass(MachineStyles.ENGINE_OPEN_CLASS);
+        else engine.removeClass(MachineStyles.ENGINE_OPEN_CLASS);
+        showEngine.setText(opening ? HIDE_ENGINE : SHOW_ENGINE);
     }
 
     /**
@@ -686,19 +754,5 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
         if (unsubscribe != null) unsubscribe.run();
         MachineTrace.log(io == null ? MachineTrace.SERVER : MachineTrace.CLIENT,
                 "window closed: " + reason);
-    }
-
-    private static UIElement row(String caption, UIElement control) {
-        UIElement row = new UIElement();
-        row.addClass(MachineStyles.ROW_CLASS);
-
-        UIElement slot = new UIElement().layout(l -> l.width(90));
-        UIText text = new UIText(caption);
-        text.addClass(MachineStyles.LABEL_CLASS);
-        slot.addChild(text);
-
-        row.addChild(slot);
-        row.addChild(control);
-        return row;
     }
 }

@@ -163,3 +163,64 @@
 #purge {
     width: 90px;
 }
+
+/*
+ * -- THE NESTED ENGINE PANEL -------------------------------------------------------------------
+ *
+ * EnginePanel is a Networked element, so `enginepanel` is a real tag the cascade can match: the
+ * same registration that lets a description decode into the class makes it styleable by type. It is
+ * matched by CLASS here anyway, because the class is what MachinePanel toggles.
+ *
+ * HIDDEN BY DEFAULT, and this file is the only thing that decides so. The client adds
+ * .machine-engine-open when the button is pressed, and nothing about that crosses the wire. Nothing
+ * in Java writes `display` either -- a display written from Java would land at INLINE origin, and no
+ * stylesheet rule could ever move it again.
+ *
+ * Two classes on one element beat one (specificity 20 against 10), which is what lets the open rule
+ * win with no !important anywhere.
+ */
+.machine-engine {
+    display: none;
+    flex-direction: column;
+    gap-all: 6px;
+    padding: 8px;
+    margin-left: 12px;
+    background-color: #232323;
+}
+
+.machine-engine.machine-engine-open {
+    display: flex;
+}
+
+/*
+ * The result lines are narrower in here than in the panel around them: this box is inset by a
+ * margin and its own padding, and .machine-wire is a fixed 440px because these lines are sized by
+ * the sheet rather than by their text. Left alone, the badge plus the line overhangs the box by a
+ * couple of pixels -- and an overhang is not clipped, it is drawn over whatever is beside it.
+ */
+.machine-engine .machine-wire {
+    width: 400px;
+}
+
+/*
+ * IDS ARE DOCUMENT-WIDE, and a nested panel does not get a namespace for them.
+ *
+ * The scope prefixes WIRE METHODS -- engine/tune -- and deliberately nothing else. An element id is
+ * for the cascade, so #load below matches the engine slider wherever it happens to be nested, and a
+ * field named `progress` on both panels would be one selector matching two widgets. Worth knowing
+ * before naming a child field after a parent one: the BIND still resolves correctly, because each
+ * panel searches its own subtree, and the stylesheet does not.
+ */
+#showEngine {
+    width: 120px;
+}
+
+#load,
+#heat {
+    width: 160px;
+}
+
+#restart,
+#tune {
+    width: 120px;
+}

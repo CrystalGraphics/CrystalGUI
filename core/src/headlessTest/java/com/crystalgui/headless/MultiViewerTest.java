@@ -3,6 +3,7 @@ package com.crystalgui.headless;
 import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.ServerUiSession;
+import com.crystalgui.net.UiEventKinds;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
@@ -186,6 +187,51 @@ public class MultiViewerTest {
         ((Button) viewerB.root().getChildren().get(0)).onPressed.emit();
         settle();
         assertEquals("and bob's", 2, presses.get());
+    }
+
+    /**
+     * <b>A server-driven state delta must not come back as a user interaction.</b>
+     *
+     * <p>Applying a delta calls the widget's ordinary setter, which fires the widget's ordinary change
+     * signal — and that signal is exactly what {@code wireReportedEvents} attached the report to. So
+     * the server moving a slider made every client that received it tell the server the user had moved
+     * it, one report per viewer, on a gesture nobody made.</p>
+     *
+     * <p>It survived because it is <b>harmless in the common case and only in the common case</b>: the
+     * echo carries the value the server just sent, so the handler sets the model to what it already
+     * holds and {@code Property.set} returns early. It stops being harmless the moment a handler
+     * <em>counts</em> anything, logs who did it, or charges for it — and with two viewers it is
+     * attributed to the wrong player, which is the version that cannot be shrugged off.</p>
+     *
+     * <p>{@code ClientUiSession.shouldSuppress} was the narrow ancestor of this fix: it stops a delta
+     * landing on a focused text field and resetting the caret, which is the same loop noticed from the
+     * one place it was visible.</p>
+     */
+    @Test
+    public void aServerDrivenChangeIsNotReportedBackAsAnInteraction() {
+        AtomicInteger reports = new AtomicInteger();
+        // Before open(), because the set of reported events is part of the description.
+        server.on(slider, UiEventKinds.VALUE, ctx -> reports.incrementAndGet());
+        server.addViewer(serverB);
+        server.open();
+        settle();
+
+        slider.setValue(7f);        // THE SERVER moved it. Nobody touched anything.
+        settle();
+
+        assertEquals("the delta never arrived", 7f, sliderOf(viewerA).getValue(), 1e-3f);
+        assertEquals(7f, sliderOf(viewerB).getValue(), 1e-3f);
+        assertEquals("a state delta was reported back as if a user had done it", 0, reports.get());
+
+        // The positive control, and it is not a formality: a fix written as "never report" passes
+        // every line above and makes every control in the application dead.
+        sliderOf(viewerA).setValue(3f);
+        settle();
+        assertEquals("a real interaction must still be reported", 1, reports.get());
+    }
+
+    private static Slider sliderOf(ClientUiSession<Object> viewer) {
+        return (Slider) viewer.root().getChildren().get(1);
     }
 
     /**

@@ -1,8 +1,9 @@
 /**
  * <h1>A worked example: one UI, built on a server, drawn on a client.</h1>
  *
- * <p>A domain model, one {@link com.crystalgui.net.window.Networked} panel that is the whole UI —
- * widgets, structure, server half and client half in a single class — a theme, and a {@code main()}
+ * <p>A domain model, a {@link com.crystalgui.net.window.Networked} panel that is the whole UI —
+ * widgets, structure, server half and client half in a single class — a second panel <em>nested
+ * inside</em> the first with its own slice of that model, a theme, and a {@code main()}
  * that wires the two ends together over a loopback transport and prints what crossed — plus the Minecraft loader code that
  * puts the same panel in a real world, which is now about forty lines because the lifecycle stopped
  * being each mod's problem. Nothing here is used by the engine. It exists to be read, and to be
@@ -14,10 +15,16 @@
  *   <tr><th>#</th><th>Class</th><th>What it teaches</th></tr>
  *   <tr><td>1</td><td>{@link com.crystalgui.example.machine.MachineModel}</td>
  *       <td>The truth the server owns. <b>Not a single UI import.</b></td></tr>
+ *   <tr><td>1b</td><td>{@link com.crystalgui.example.machine.EngineModel}</td>
+ *       <td>A <b>slice</b> of that truth, owned by the machine — and why carving one is a modelling
+ *           decision rather than a UI convenience.</td></tr>
  *   <tr><td>2</td><td>{@link com.crystalgui.example.machine.ui.MachinePanel}</td>
  *       <td><b>The whole UI, in one class.</b> Widgets as fields, {@code layout()} to arrange them,
  *           {@code serve()} for the server half and {@code wire()}/{@code client()} for the client
  *           half. Read it in that order — the file is written in it.</td></tr>
+ *   <tr><td>2b</td><td>{@link com.crystalgui.example.machine.ui.EnginePanel}</td>
+ *       <td><b>A UI inside a UI.</b> A nested panel with its own slice, its own wire method and a
+ *           plain callback back to its parent — see the section below.</td></tr>
  *   <tr><td>3</td><td>{@link com.crystalgui.example.machine.ui.MachineStyles}</td>
  *       <td>Where the sizes and colours went, and why they travel separately.</td></tr>
  *   <tr><td>4</td><td>{@link com.crystalgui.example.machine.MachineDemo}</td>
@@ -107,6 +114,54 @@
  * wire as {@code ui/event}) and three by the <b>client</b> ({@code attachListener}, so the listener
  * is purely local and the server never learns it exists). The button cannot tell the difference, and
  * neither can the stylesheet — a described tree is an ordinary tree once it has been rebuilt.</p>
+ *
+ * <h2>Composing: a UI inside a UI</h2>
+ *
+ * <p>{@link com.crystalgui.example.machine.ui.EnginePanel} is a second {@code Networked} panel living
+ * inside the first one as an ordinary field. On the parent that is <b>three lines</b>, and there is no
+ * fourth anywhere:</p>
+ *
+ * <pre>{@code
+ * public EnginePanel engine;                                  // a panel is an element
+ *
+ * public void layout(MachineModel m) {
+ *     engine = EnginePanel.TYPE.build(m.engine());            // built WITH its slice
+ *     addChild(engine);
+ * }
+ * public void serve(MachineModel m, ServerScope io) {
+ *     engine.onRestarted(() -> …);                            // events UP: a plain Java callback
+ *     io.attach(engine, m.engine());                          // props DOWN: the SLICE, not the model
+ * }
+ * }</pre>
+ *
+ * <p><b>Nothing is added on the client.</b> No registration, no id string, no wire contract. The
+ * client's copy of the panel is decoded, bound and given its own {@code client()} scope by the same
+ * walk that handled the root.</p>
+ *
+ * <table>
+ *   <tr><th>The rule</th><th>Why, and what it looks like when it is broken</th></tr>
+ *   <tr><td>The child is handed <b>a slice</b>, and its hooks take that type</td>
+ *       <td>{@code EnginePanel} takes an {@code EngineModel} everywhere, so it <em>cannot name</em> the
+ *           machine around it — the compiler is the boundary. Handing over the whole model compiles,
+ *           works, and quietly makes the child a second place that knows everything.</td></tr>
+ *   <tr><td>Wire methods are prefixed by the child's <b>element id</b></td>
+ *       <td>The child registers {@code "tune"}; it is {@code engine/tune} on both sides, because the
+ *           field name became the id and the description already carries ids. Nobody types the prefix,
+ *           so nothing can drift — and two instances of one child class are two namespaces.</td></tr>
+ *   <tr><td>Widget events are <b>not</b> prefixed</td>
+ *       <td>{@code io.on(element, kind, …)} is keyed by the element, and a panel's elements are its
+ *           own. Only strings need a namespace.</td></tr>
+ *   <tr><td>The parent hears the child through <b>a plain callback</b></td>
+ *       <td>Both server halves are objects in one process on one thread. A session message here is a
+ *           round trip to the room you are standing in, plus a wire contract no client ever sees.</td></tr>
+ *   <tr><td>Ids are <b>document-wide</b>; the scope does not namespace them</td>
+ *       <td>{@code #load} in the sheet matches the child's slider wherever it is nested. Binding is
+ *           unaffected — each panel resolves its fields from its own subtree — but a child field named
+ *           after a parent one is one selector matching two widgets.</td></tr>
+ *   <tr><td>Whether the section is <b>open</b> never crosses the wire</td>
+ *       <td>Expansion is view state, like a scroll position: the client adds a class, the server is
+ *           never told, and two players sharing one machine cannot fold each other's panels.</td></tr>
+ * </table>
  *
  * <h2>The five things people get wrong first</h2>
  *

@@ -161,19 +161,40 @@ public final class MachineDemo {
         press(client.badRename);
         pump(link, serverEnd, clientEnd, 2);
 
-        // ── 9. Close ────────────────────────────────────────────────────────
-        say("9. The server puts the window away, and says why");
+        /*
+         * ── 9: A UI INSIDE A UI ───────────────────────────────────────────────
+         *
+         * The engine panel is a Networked element nested in MachinePanel as an ordinary field, served
+         * with model.engine() rather than the machine. Watch the envelope below: the method is
+         * engine/tune, and NEITHER SIDE WROTE THAT STRING. The child registered "tune"; both scopes
+         * prefixed it with the child's element id, which is the parent's field name, which the
+         * description already carries. There is nothing to keep in step.
+         */
+        say("9. A UI INSIDE A UI -- its own slice, and its own method  [q then r]");
+        System.out.println("  [server] says the method is  \"" + client.engine.serverWire.getText()
+                + "\"   <- arrived in the description");
+        System.out.println("  [client] derived             \"" + client.engine.clientWire.getText()
+                + "\"   <- computed here, from the same element id");
+        press(client.engine.tune);
+        pump(link, serverEnd, clientEnd, 2);
+        System.out.printf("  [server] engine load %.2f, heat %.0f%%   <- the CHILD wrote the slice; "
+                        + "it cannot name the machine around it%n",
+                machine.engine().load(), machine.engine().temperature() * 100f);
+        System.out.println("  [client] " + client.engine.result.getText());
+
+        // ── 10. Close ───────────────────────────────────────────────────────
+        say("10. The server puts the window away, and says why");
         ServerWindows.of(serverEnd).close(server, "the block was broken");
         pump(link, serverEnd, clientEnd, 1);
 
         /*
-         * 10: THE DIRECTION THAT USED TO HAVE NO MESSAGE AT ALL.
+         * 11: THE DIRECTION THAT USED TO HAVE NO MESSAGE AT ALL.
          *
          * There was no ui/close, so a user closing a window told the server nothing: the session stayed
          * open, kept observing its tree, and kept flushing state deltas into a frame that had been
          * destroyed. The only close anything ever noticed was the player disconnecting.
          */
-        say("10. THE USER closes a window, and the server hears about it  [n only]");
+        say("11. THE USER closes a window, and the server hears about it  [n only]");
         ServerWindows.of(serverEnd).open(MachinePanel.TYPE, machine);
         pump(link, serverEnd, clientEnd, 4);
         ClientWindows.of(clientEnd).windows().get(0).userClosed();

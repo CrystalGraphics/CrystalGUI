@@ -1,13 +1,21 @@
 package com.crystalgui.headless;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import org.junit.Test;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import com.crystalgui.example.machine.ui.EnginePanel;
 import com.crystalgui.example.machine.ui.MachinePanel;
 import com.crystalgui.example.machine.MachineModel;
 import com.crystalgui.net.window.ClientWindows;
@@ -373,6 +381,226 @@ public class MachineExampleTest {
     /** Reads the panel's protocol readout out of the CLIENT's tree. */
     private static String wireText(Loopback net) {
         return serverLine(net);
+    }
+
+    // ── Composition: a UI inside a UI ───────────────────────────────────────
+
+    /*
+     * MachinePanel holds an EnginePanel as an ordinary field. These assert the four things that
+     * separate "it compiles" from "it works", and each of them fails in a way that reads like a
+     * different feature being broken:
+     *
+     *   the child DECODES        -- or the client shows a bare <element> where a panel should be
+     *   the child gets its SLICE -- or a child quietly holds the whole model
+     *   the PREFIX agrees        -- or both halves are correct and the method never routes
+     *   the child TICKS          -- or its readouts freeze at whatever they opened with
+     */
+
+    /**
+     * The nested panel survives the round trip as <b>a panel</b>, not as a bare element.
+     *
+     * <p>Nothing on the client registered {@code EnginePanel}: {@code MachinePanel.TYPE}'s own
+     * declaration walks its fields and registers the tag of every nested panel it finds, which is what
+     * lets a description saying {@code <enginepanel>} decode into the class. Without that the tree
+     * would still rebuild — as a {@link UIElement} — and every field on it would be null.</p>
+     */
+    @Test
+    public void theClientRebuildsTheNestedPanelToo() {
+        Loopback net = new Loopback().open();
+
+        EnginePanel child = net.client.engine;
+        assertNotNull("the nested panel did not survive the round trip", child);
+        assertNotSame("the client must hold its OWN instance over its own tree",
+                net.serverPanel.engine, child);
+
+        // Bound out of the child's own subtree, by field name and type -- the same walk the root got.
+        assertNotNull("the child's fields were never bound", child.load);
+        assertSame("the bound field must BE the widget in the rebuilt tree",
+                child.querySelector("#load"), child.load);
+    }
+
+    /**
+     * The child is served {@code model.engine()} and <b>could not name the machine if it wanted to</b>.
+     *
+     * <p>Asserted from the outside, which is the only place it is visible: the child's slider reaches
+     * the engine, and nothing else on the machine moves. The compiler is what actually enforces this —
+     * every hook on {@code EnginePanel} takes an {@code EngineModel} — so what this test protects is
+     * the wiring, {@code io.attach(engine, model.engine())}, where passing {@code model} instead would
+     * compile on the day somebody widens the child's type parameter to make it "simpler".</p>
+     */
+    @Test
+    public void theChildIsServedItsSliceAndNothingWider() {
+        Loopback net = new Loopback().open();
+
+        net.client.engine.load.setValue(0.9f);
+        net.settle(2);
+
+        assertEquals("the child's own handler never ran",
+                0.9f, net.machine.engine().load(), 1e-4);
+        assertEquals("the child reached past its slice",
+                0.5f, net.machine.throughput(), 1e-4);
+    }
+
+    /**
+     * <b>Both sides spell the method the same way, and neither one wrote the prefix.</b>
+     *
+     * <p>The child's source says {@code "tune"} once on each side. It is {@code engine/tune} on the
+     * wire because the panel is the parent's field named {@code engine}, so its element id is
+     * {@code engine}, so both scopes derive the same prefix from the tree the description already
+     * synchronizes. That is the whole reason the prefix is an id path rather than a string somebody
+     * declares: there is nothing to keep in step.</p>
+     *
+     * <p>Both halves are asserted because either alone passes against a broken build — a name that is
+     * printed but does not route, or a call that routes to a name nobody can see.</p>
+     */
+    @Test
+    public void bothSidesDeriveTheSameWireNameAndNeitherTypedIt() {
+        Loopback net = new Loopback().open();
+
+        assertEquals("the SERVER's scope did not qualify the child's method",
+                "engine/tune", net.serverPanel.engine.serverWire.getText());
+        assertEquals("the CLIENT derived a different prefix from the same tree",
+                net.serverPanel.engine.serverWire.getText(), net.client.engine.clientWire.getText());
+
+        // ...and it is not merely printed: the call has to arrive at the child's handler.
+        net.client.engine.tune.onPressed.emit();
+        net.settle(2);
+
+        assertEquals("engine/tune never reached the child", 1f, net.machine.engine().load(), 1e-4);
+        assertTrue("the answer never came back: " + net.client.engine.result.getText(),
+                net.client.engine.result.getText().contains("REQUEST answered"));
+    }
+
+    /**
+     * The child ticks with the window, and its writes flush through the one session.
+     *
+     * <p>Same shape as the progress-bar regression above and for the same reason: a value that
+     * <b>moved after the window opened</b> is the only thing that can tell a live child from one whose
+     * opening description happened to be right. A child that was attached but never ticked shows
+     * correct numbers at open and freezes.</p>
+     */
+    @Test
+    public void theChildTicksWithTheWindowItIsIn() {
+        Loopback net = new Loopback().open();
+        assertEquals("nothing has run yet", 0f, net.client.engine.heat.fraction(), 1e-4);
+
+        net.machine.setRunning(true);
+        net.tickWorld(10);
+
+        assertTrue("the engine never heated", net.machine.engine().temperature() > 0f);
+        assertEquals("the child's bar froze at what it opened with",
+                net.machine.engine().temperature(), net.client.engine.heat.fraction(), 1e-4);
+    }
+
+    /**
+     * The parent hears the child through <b>a plain Java callback</b>, and the child's own
+     * element-keyed handler is what raises it.
+     *
+     * <p>Both server halves are objects in one process on one thread, so this direction is a method
+     * call. Making it a session message would be a round trip to the room you are standing in — and
+     * would invent a wire contract for something no client ever sees.</p>
+     */
+    @Test
+    public void theParentHearsTheChildWithoutAMessage() {
+        Loopback net = new Loopback().open();
+
+        net.client.engine.restart.onPressed.emit();   // a SERVER-wired button, on the CHILD
+        net.settle(1);
+        net.tickWorld(1);                             // the parent's write flushes
+
+        assertTrue("the parent never heard the child: " + serverLine(net),
+                serverLine(net).contains("engine panel restarted"));
+    }
+
+    /**
+     * Opening the section is <b>view state</b> and never reaches the server.
+     *
+     * <p>The same line this codebase draws everywhere else — document state goes through an edit, view
+     * state is mutated directly — applied to a disclosure toggle. Sending it would make the server the
+     * authority on something it cannot have an opinion about, and two players sharing one machine
+     * would fold each other's panels.</p>
+     *
+     * <p>The negative half is the load-bearing one: a version that wrote the class on the SERVER would
+     * pass every "the section opened" assertion and be wrong.</p>
+     */
+    @Test
+    public void openingTheEngineSectionNeverReachesTheServer() {
+        Loopback net = new Loopback().open();
+        assertFalse("the section must start closed",
+                net.client.engine.hasClass(MachineStyles.ENGINE_OPEN_CLASS));
+
+        net.client.showEngine.onPressed.emit();
+        net.settle(2);
+        net.tickWorld(1);
+
+        assertTrue("the client's own section never opened",
+                net.client.engine.hasClass(MachineStyles.ENGINE_OPEN_CLASS));
+        assertFalse("view state must not cross the wire",
+                net.serverPanel.engine.hasClass(MachineStyles.ENGINE_OPEN_CLASS));
+        assertEquals("the button should say what it will do next",
+                "Hide engine", net.client.showEngine.getText());
+    }
+
+    /**
+     * The domain half: an engine that trips stops the machine, and the child's readout says so.
+     *
+     * <p>Here because it is the only assertion that the slice is a real part of the model rather than
+     * an object invented for the UI to have something to nest. The machine stopping is
+     * {@link MachineModel}'s own decision, made in its tick; the panel finds out the way it finds out
+     * about everything else.</p>
+     */
+    @Test
+    public void aStalledEngineStopsTheMachineAndTheChildSaysSo() {
+        Loopback net = new Loopback().open();
+        net.machine.setRunning(true);
+        net.machine.engine().setLoad(1f);
+
+        for (int i = 0; i < 200 && !net.machine.engine().isStalled(); i++) net.tickWorld(1);
+        net.tickWorld(1);   // and one more, so the readout it just wrote is delivered
+
+        assertTrue("the engine never tripped", net.machine.engine().isStalled());
+        assertFalse("a stalled engine must stop the machine", net.machine.isRunning());
+        assertTrue("the child never reported it: " + net.client.engine.reading.getText(),
+                net.client.engine.reading.getText().contains("STALLED"));
+    }
+
+    /**
+     * <b>An idle window sends nothing, however often it is ticked.</b>
+     *
+     * <p>The property every "just mirror the model each tick" panel in this codebase is written
+     * against, stated as a rule in {@code MachinePanel.mirror}: an unchanged value writes no candidate
+     * and marks nothing dirty, so mirroring more often than necessary costs comparisons rather than
+     * traffic.</p>
+     *
+     * <p>It was <b>false</b>, and this test is here because the false half was invisible.
+     * {@code ProgressBar.setFraction} called {@code notifyStateChanged()} unconditionally, so a panel
+     * that mirrored a bar every tick sent a {@code ui/stateDelta} per tick describing a value nobody
+     * had moved. Every existing panel hid it behind a dirty flag of its own; {@code EnginePanel}, which
+     * mirrors unconditionally on exactly the grounds quoted above, is what exposed it — as four state
+     * deltas in the demo transcript, not as a failure anywhere.</p>
+     *
+     * <p>Asserted on <b>traffic</b> rather than on state, which is the only place it is visible: every
+     * one of those deltas carried the correct value, so nothing about the window was ever wrong.</p>
+     */
+    @Test
+    public void anIdleWindowSendsNothingHoweverOftenItTicks() {
+        Loopback net = new Loopback().open();
+        net.link[0].clearSent();
+
+        net.tickWorld(5);   // the machine is stopped, so nothing about it moves
+
+        assertEquals("an idle window put traffic on the wire", List.of(), methodsSent(net));
+    }
+
+    /** What the SERVER put on the wire since the last clear. A {@code PlainOps} envelope is a map. */
+    private static List<String> methodsSent(Loopback net) {
+        List<String> methods = new ArrayList<>();
+        for (Object raw : net.link[0].sent()) {
+            if (raw instanceof Map<?, ?> envelope && envelope.get("m") != null) {
+                methods.add(String.valueOf(envelope.get("m")));
+            }
+        }
+        return methods;
     }
 
     // ── The rule that is easiest to break ───────────────────────────────────

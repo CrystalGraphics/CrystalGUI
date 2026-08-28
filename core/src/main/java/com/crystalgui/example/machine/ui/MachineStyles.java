@@ -97,6 +97,18 @@ public final class MachineStyles {
     public static final String WHO_SERVER_CLASS = "machine-who-server";
     public static final String WHO_CLIENT_CLASS = "machine-who-client";
 
+    /** The nested {@link EnginePanel}'s own box. Hidden by the sheet until the section is opened. */
+    public static final String ENGINE_CLASS = "machine-engine";
+
+    /**
+     * Added and removed by {@code MachinePanel.toggleEngine}, <b>on the client only</b>.
+     *
+     * <p>A class rather than a pseudo-class because the engine re-evaluates a pseudo-class on its own
+     * terms and a class on yours — the standing rule for state a widget flips from its own listener,
+     * and one this repository has paid for three times.</p>
+     */
+    public static final String ENGINE_OPEN_CLASS = "machine-engine-open";
+
     /** Resolved against this class's own package, which is what keeps the name unqualified. */
     private static final String FILE = "machine.css";
 
