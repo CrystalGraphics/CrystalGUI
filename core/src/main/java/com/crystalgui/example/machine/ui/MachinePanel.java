@@ -46,8 +46,8 @@ import com.crystalgui.ui.elements.UIText;
  * <h3>The ids are not decoration</h3>
  *
  * <p>{@code setId} is what {@code #power} in a stylesheet matches. It does <b>not</b> travel as an
- * addressing scheme — see {@link com.crystalgui.net.NetworkIds}, which derives a number for every
- * element from a document-order walk on both sides and sends nothing. The id is for the cascade;
+ * addressing scheme — that is {@code ui.dom.ElementTreeSource}, which allocates a separate, stable
+ * number per element and keeps it through a reparent and a sibling insert. The id is for the cascade;
  * the network id is for the protocol; they are unrelated and it is worth not confusing them.</p>
  *
  * <h3>And one of the fields is a whole other UI</h3>

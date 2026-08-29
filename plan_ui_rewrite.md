@@ -224,7 +224,65 @@ All twelve state-carrying widgets get contracts; the five that could not report 
 **Accepts:** a coverage test enumerates every `ui.elements.**` class and fails on one that is neither
 contracted nor marked `LocalOnly` with a reason; contract round-trip tests per widget.
 
-### M2 — The mirror · L · after: M0, M1
+### M2 — The mirror · L · after: M0, M1 · **SHIPPED 2026-08-29**
+
+#### What M2 delivered
+
+| | |
+|---|---|
+| Stable ids (D6) | `ElementTreeSource` owns the table; `UIElement.networkId` is gone, so nothing can number an element positionally any more |
+| The edit script | `net/TreeOps` — `insert`/`remove`/`move`, `ui/treeOps` replacing `ui/treeDelta`, `EnvelopeCodec.VERSION` 1 → 2 |
+| The deltas that never travelled | attributes (`a`) and inline style (`y`) beside state (`s`), on both halves |
+| Late viewers | `UIDescriptionCodec.encodeLive`/`decodeLive` — a reshaped window serves a description with ids written into it |
+| Integrity | per-`insert` `base`+`count`, and `expectedElementCount` recomputed on every reshape |
+| The mirror itself | `net/mirror/` — `ServerTreeMirror<N,T>`, `ClientTreeMirror<N,T>`, the `NodeMirror<N,T>` seam, `ElementNodeMirror`, `TreeOps` |
+| Acceptance | `MirrorIdentityTest` (11), `MirrorIsEngineAgnosticTest` (7), `TreeOpsTest` |
+
+#### The seam was widened, because it was missing the half a mirror needs
+
+`TreeSource` declared identity's READING (`idOf`/`peekId`/`byId`) and not its LIFECYCLE, so a mirror —
+whose whole job is to allocate a number when a subtree arrives and let it go when it leaves — had
+nowhere to stand but the concrete class. `allocate`/`release`/`assignAt`/`resetIds` are now on the
+interface, with `assignInDocumentOrder` and `describedCount` as defaults derived from `childrenOf`.
+`ElementTreeSource` lost three methods nothing called.
+
+#### Three defects the acceptance suite found, all of them silent
+
+- **Identity never reached the client at all.** `onIdentityDirty` fired, the session collected the
+  element into `dirtyIdentity`, and the flush **cleared that set without encoding it**. So
+  `setEnabled(false)` on a live window was correct on the server, absent on the client, and produced no
+  error anywhere; the same hole swallowed every class change and every inline style write. Encoding it
+  was half the fix — the client had no branch to apply it either, so both ends were written blind.
+- **A subtree added and removed in one tick still shipped a ghost insert.** An id is allocated at
+  *flush* time, not at insert time, so that ops can hand a whole subtree one contiguous `base`+`count`
+  rather than an id per node. `removed()` tested "does this have an id?" *above* the coalescing scan,
+  answered no for a just-inserted element, and returned — leaving the `insert` standing with no
+  `remove` to follow it. The client dutifully builds the subtree, so it shows as a row that outlives
+  whatever briefly created it.
+- **A late viewer was refused after any reshape.** `elementCount` was computed once at `open()`, so a
+  window that had since gained a row described more elements than the count it was still quoting, and
+  the joining client refused the whole window rather than one row of it.
+
+#### Three deviations from the spec, each deliberate
+
+- **`dirtyIdentity` was kept, not deleted.** The spec listed it under *Deletes*, on the reading that it
+  was dead weight. It was the opposite: the set was right and the *flush* was wrong, so deleting it
+  would have removed the record of what needed sending rather than the bug. It now encodes.
+- **The mirror was EXTRACTED, and the sessions keep their names.** This was first recorded here as a
+  deviation — *"the rename touches every call site for no behavioural gain"* — which misread the spec:
+  `ServerMirror`/`ClientMirror` was an **extraction**, not a rename, and the extraction is what makes
+  M5 cheap. Written inline, `ServerUiSession implements TreeObserver<UIElement>` held a concrete
+  `ElementTreeSource`, so the mirror was pinned to this engine and §0's promise — *"the mirror is
+  written once; the engine swap underneath it is a port of the seam's implementation, not of the
+  mirror"* — was **false while every test passed**. `net/mirror/` now holds `ServerTreeMirror<N,T>`,
+  `ClientTreeMirror<N,T>`, the `NodeMirror<N,T>` seam and `ElementNodeMirror` over today's tree; the
+  sessions own one and keep their names, which really is the cosmetic half.
+- **`shouldSuppress` stays.** The spec expected rate policy to replace it. It cannot yet: rate policy is
+  declared per `Event` and is applied at M3, and `shouldSuppress` is doing a different job in the
+  meantime — stopping a delta landing on a focused text field and resetting the caret. Removing it now
+  would reintroduce that.
+
+#### The original M2 specification
 
 Appendix A of the network audit, built once against the seam: stable ids (D6), `insert/remove/move`
 ops from the observer, attribute and inline-style deltas, state deltas from contracts, per-op
@@ -338,7 +396,9 @@ equivalent, with the harness able to run either engine.
 **Ships:** nothing user-visible until M6 — this is the one milestone that adds without shipping,
 and it is why S1/S2 gate it.
 **Deletes:** nothing yet (D2).
-**Accepts:** the seam suite passes on the new tree unchanged; the 38 focus rows and the 20
+**Accepts:** the seam suite passes on the new tree unchanged — including
+`MirrorIsEngineAgnosticTest`, which already proves the mirror runs over a non-`UIElement` tree, so the
+networking half of this milestone is a `TreeSource` and a `NodeMirror` and nothing else; the 38 focus rows and the 20
 hit-test rows become acceptance tests against the new services; layout runs in one pass on the
 gallery's trees.
 
