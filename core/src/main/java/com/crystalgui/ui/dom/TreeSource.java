@@ -1,5 +1,7 @@
 package com.crystalgui.ui.dom;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.List;
 
 import javax.annotation.Nullable;
@@ -62,6 +64,82 @@ public interface TreeSource<N> {
     /** The node holding {@code id}, or null if nothing does. */
     @Nullable
     N byId(int id);
+
+    // ── Identity's LIFECYCLE ─────────────────────────────────────────────────
+    //
+    // Reading an id and MANAGING one are different halves, and for one milestone this interface
+    // declared only the first. That was not a small omission: a mirror's whole job is to allocate a
+    // number when a subtree arrives and let it go when the subtree leaves, so with the lifecycle
+    // missing there was nowhere for the mirror to stand except on the concrete implementation -- which
+    // is exactly what happened, and it quietly voided this seam's reason to exist (§0: "the mirror is
+    // written once; the engine swap underneath it is a port of the seam's implementation, not of the
+    // mirror"). The four primitives below are what a mirror actually needs.
+
+    /**
+     * Numbers a subtree that has just joined, as one contiguous block, and answers its base.
+     *
+     * <p>Contiguous is what lets one {@code insert} op name a whole subtree as {@code base}+{@code
+     * count} rather than carrying an id per node.</p>
+     *
+     * <p><b>Allocation happens when the op is ENCODED, not when the node is inserted.</b> A caller
+     * relying on the opposite has a subtle bug available to it: a subtree added and removed inside one
+     * tick has no id at the moment it is removed, so an "is this described?" test asked too early
+     * answers no for something that is about to be described.</p>
+     */
+    int allocate(N subtreeRoot);
+
+    /** Forgets a subtree's ids. An id is never reissued, so a stale reference resolves to nothing. */
+    void release(N subtreeRoot);
+
+    /**
+     * Records {@code node} under an id the OTHER side chose.
+     *
+     * <p>The receiving half of a block allocation: an insert carries its base and the receiver numbers
+     * its own decoded copy the same way, rather than allocating from a counter of its own. That is what
+     * makes two sides agree on ids without either renumbering anything.</p>
+     */
+    void assignAt(N node, int id);
+
+    /** Drops every id. Used when a numbering is about to be replaced wholesale. */
+    void resetIds();
+
+    /**
+     * Numbers {@code from}'s subtree in document order from zero, and answers how many it numbered.
+     *
+     * <p>What a PRISTINE description is numbered by: it carries no ids, so both sides run this same
+     * walk and arrive at the same answer -- which is what keeps such a description content-addressed
+     * and shareable between windows showing the same thing. From the first structural change onward
+     * the numbering is the server's to state, not to re-derive.</p>
+     */
+    default int assignInDocumentOrder(N from) {
+        resetIds();
+        int next = 0;
+        Deque<N> pending = new ArrayDeque<>();
+        pending.push(from);
+        while (!pending.isEmpty()) {
+            N node = pending.pop();
+            assignAt(node, next++);
+            List<N> children = childrenOf(node);
+            // Pushed in reverse so they pop in order: a pre-order walk, which is what "document order"
+            // means and what the other side is going to reproduce.
+            for (int i = children.size() - 1; i >= 0; i--) pending.push(children.get(i));
+        }
+        return next;
+    }
+
+    /**
+     * How many described nodes {@code from}'s subtree holds, <b>numbering nothing</b>.
+     *
+     * <p>The integrity check an {@code insert} carries: the sender states what it described and the
+     * receiver counts what it decoded. It answers for a subtree that is not in this source at all,
+     * which is the case that matters -- a client counts a subtree it has just decoded and not yet
+     * attached.</p>
+     */
+    default int describedCount(N from) {
+        int total = 1;
+        for (N child : childrenOf(from)) total += describedCount(child);
+        return total;
+    }
 
     // ── Structure ────────────────────────────────────────────────────────────
 
