@@ -203,10 +203,8 @@ public final class ClientWindows {
             applySheets(live);
             if (live.panelsBound) {
                 try {
-                    // Fresh instances over the fresh tree: fields resolved, bound() run. client() is
-                    // NOT re-run -- session registrations are keyed by method and survive, so running
-                    // them again is a router refusal. (A re-describe is currently unreachable; the
-                    // stale-closure gap this leaves is recorded in plan_ui_host.md.)
+                    // Fresh instances over the fresh tree, and client() re-run over them -- which is
+                    // what closes the stale-closure gap this comment used to record.
                     live.bindPanels(false);
                 } catch (RuntimeException failed) {
                     CrystalGuiCore.LOGGER.error("<{}> could not be re-bound after a re-describe: {}",
@@ -334,11 +332,22 @@ public final class ClientWindows {
             prefixes.add("");
             collectNested(root, "", found, prefixes);
 
-            for (Networked<?> panel : found) panel.bindWidgets();
-            if (firstMount) {
-                for (int i = 0; i < found.size(); i++) {
-                    found.get(i).client(new ClientScope(session, this, prefixes.get(i)));
-                }
+            /*
+             * ONE HOOK, RUN ON EVERY BIND -- and running it again is the point rather than a cost.
+             *
+             * A re-describe builds FRESH PANEL INSTANCES over the fresh tree. So a client() that ran
+             * only on the first mount left every wire handler closed over a panel that is now
+             * detached: it runs, it writes widgets nothing draws, and nothing anywhere reports a
+             * problem. That was a known gap, recorded in plan_ui_host.md and worked around here with a
+             * comment rather than fixed.
+             *
+             * What blocked the fix was the router refusing a second registration of the same method.
+             * ClientUiSession now routes each method once and dispatches through a swappable delegate,
+             * so re-running replaces the handler instead of colliding -- see its callHandlers field for
+             * why that is not a weakening of the duplicate rule.
+             */
+            for (int i = 0; i < found.size(); i++) {
+                found.get(i).client(new ClientScope(session, this, prefixes.get(i)));
             }
             panels.clear();
             panels.addAll(found);

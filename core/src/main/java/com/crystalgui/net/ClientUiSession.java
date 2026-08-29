@@ -774,11 +774,31 @@ public final class ClientUiSession<T> {
      * window — a workspace, a script runtime — registers on {@link ProtocolConnection} directly and is
      * shared by every window, which is what it wants.</p>
      */
+    /**
+     * The handler currently installed for each wire method this session owns.
+     *
+     * <p>An indirection, and the reason for it is the whole of why {@code client(io)} can run more than
+     * once. A re-describe builds <b>fresh panel instances</b> over the fresh tree, so handlers
+     * registered by the previous instance close over a panel that is now detached — they run, they
+     * write widgets nothing draws, and nothing reports a problem. Re-running {@code client(io)} is the
+     * fix, and it was blocked by the router refusing a second registration of the same method.</p>
+     *
+     * <p>So the ROUTER is registered once per method and dispatches through this map; re-registering
+     * replaces the delegate. <b>That is not a weakening of the router's duplicate refusal</b>, which
+     * exists to catch two different owners colliding on one name — within one session a repeated
+     * qualified method is by construction the same panel rebinding itself, since nested panels are
+     * prefixed by ids {@code ServerScope.attach} keeps unique.</p>
+     */
+    private final Map<String, Call.Handler<T>> callHandlers = new LinkedHashMap<>();
+
+    private final Map<String, Consumer<StateMap<T>>> notifyHandlers = new LinkedHashMap<>();
+
     public ClientUiSession<T> onCall(String method, Call.Handler<T> handler) {
+        if (callHandlers.put(method, handler) != null) return this;   // already routed; delegate swapped
         // Same handler type, so nothing that calls this moves; underneath, an RPC is now an ordinary
         // REQUEST and its correlation is the router's rather than a second id space of its own.
         MessageRouter.RequestHandler<T> bound = (payload, respond) ->
-                handler.invoke(read(payload), new Call.Responder<T>() {
+                callHandlers.get(method).invoke(read(payload), new Call.Responder<T>() {
                     @Override
                     public void ok(@Nullable StateMap<T> value) {
                         respond.ok(value == null ? null : value.encode());
@@ -824,7 +844,8 @@ public final class ClientUiSession<T> {
      * own.</p>
      */
     public ClientUiSession<T> onNotify(String method, Consumer<StateMap<T>> handler) {
-        bindNotify(method, payload -> handler.accept(read(payload)));
+        if (notifyHandlers.put(method, handler) != null) return this;   // already routed
+        bindNotify(method, payload -> notifyHandlers.get(method).accept(read(payload)));
         return this;
     }
 
