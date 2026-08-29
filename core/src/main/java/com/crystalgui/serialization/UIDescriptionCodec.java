@@ -41,7 +41,108 @@ public final class UIDescriptionCodec {
     private static final int FLAG_HIT_TEST = 2;
     private static final int DEFAULT_FLAGS = FLAG_ENABLED | FLAG_HIT_TEST;
 
+    /**
+     * Where a live description's ids go while one is being decoded.
+     *
+     * <p>A thread-local rather than a parameter because {@link Codec#decode} has a fixed shape and this
+     * is the one caller that needs more than it offers. Set for the length of one
+     * {@link #decodeLive} call and always cleared -- decoding is on the frame thread, which owns the
+     * tree, so there is exactly one decode in flight.</p>
+     */
+    private static final ThreadLocal<java.util.function.ObjIntConsumer<UIElement>> LIVE_IDS =
+            new ThreadLocal<>();
+
+    /** Decodes a live description, reporting each element's id to {@code idSink}. */
+    public static <T> UIElement decodeLive(DynamicOps<T> ops, T input,
+                                           java.util.function.ObjIntConsumer<UIElement> idSink) {
+        LIVE_IDS.set(idSink);
+        try {
+            return CODEC.decode(ops, input);
+        } finally {
+            LIVE_IDS.remove();
+        }
+    }
+
     private UIDescriptionCodec() {
+    }
+
+    /**
+     * Encodes {@code element}'s subtree with each described element's <b>id written into it</b>.
+     *
+     * <p>A <b>live</b> description, as opposed to the pristine one {@link #CODEC} produces. Two
+     * encodings exist because they answer different questions:</p>
+     *
+     * <ul>
+     *   <li><b>Pristine</b> — no ids, so it is a pure description of a UI. That is what makes it
+     *       content-addressable: two windows showing the same thing hash the same, so re-opening costs
+     *       one small packet instead of a tree. It is what {@code open()} sends.</li>
+     *   <li><b>Live</b> — carries {@code nid}, for a viewer joining a window that has already been
+     *       reshaped. Ids stopped being derivable from position, so a newcomer cannot compute the ones
+     *       the existing viewers hold; it has to be told them, or every id it derived would name a
+     *       different element and no message would land where it was meant to.</li>
+     * </ul>
+     *
+     * <p>A live description hashes to something no pristine one will match, which is correct rather
+     * than unfortunate: a reshaped window was never going to share another window's cache entry.</p>
+     */
+    public static <T> T encodeLive(DynamicOps<T> ops, UIElement element,
+                                   java.util.function.ToIntFunction<UIElement> idOf) {
+        T encoded = CODEC.encode(ops, element);
+        return withIds(ops, encoded, element, idOf);
+    }
+
+    private static <T> T withIds(DynamicOps<T> ops, T encoded, UIElement element,
+                                 java.util.function.ToIntFunction<UIElement> idOf) {
+        java.util.Map<T, T> fields = new java.util.LinkedHashMap<>(ops.getMapValue(encoded));
+        fields.put(ops.createString("nid"), ops.createNumber(idOf.applyAsInt(element)));
+
+        java.util.List<UIElement> children = element.describedChildrenFor();
+        if (!children.isEmpty()) {
+            T rawChildren = fields.get(ops.createString("children"));
+            if (rawChildren != null) {
+                java.util.List<T> encodedChildren = ops.getListValue(rawChildren);
+                java.util.List<T> rebuilt = new java.util.ArrayList<>(encodedChildren.size());
+                for (int i = 0; i < encodedChildren.size() && i < children.size(); i++) {
+                    rebuilt.add(withIds(ops, encodedChildren.get(i), children.get(i), idOf));
+                }
+                fields.put(ops.createString("children"), ops.createList(rebuilt));
+            }
+        }
+        return ops.createMap(fields);
+    }
+
+    /**
+     * The identity fields, on their own — id, classes, enabled, hit-test, focus policy.
+     *
+     * <p>Exists so an <b>attribute delta</b> and a description agree by construction rather than by two
+     * people remembering the same five fields. These are the inputs to the far side's cascade, and
+     * before M2 they were collected into a dirty set and <em>never sent at all</em> — so disabling a
+     * button after the window opened did nothing on the other side, forever.</p>
+     */
+    public static <T> T encodeAttributes(DynamicOps<T> ops, UIElement element) {
+        Codecs.MapCodecBuilder<T> out = Codecs.map(ops);
+        out.optional("id", Codecs.STRING, element.getId(), "");
+        out.optionalList("class", Codecs.STRING, publicClassesOf(element));
+        int flags = (element.isEnabled() ? FLAG_ENABLED : 0) | (element.isHitTest() ? FLAG_HIT_TEST : 0);
+        out.optional("flags", Codecs.INT, flags, DEFAULT_FLAGS);
+        out.optional("focus", Codecs.enumOf(FocusPolicy.class), element.getFocusPolicy(), FocusPolicy.NONE);
+        return out.build();
+    }
+
+    /** Applies what {@link #encodeAttributes} wrote. Classes are REPLACED, not merged. */
+    public static <T> void applyAttributes(DynamicOps<T> ops, T value, UIElement element) {
+        Codecs.MapCodecReader<T> in = Codecs.read(ops, value);
+        element.setId(in.optional("id", Codecs.STRING, ""));
+
+        // Replaced wholesale: a class REMOVED on the server has to come off here, and a delta carrying
+        // only what is present cannot express a removal any other way.
+        for (String existing : publicClassesOf(element)) element.removeClass(existing);
+        for (String cls : in.optionalList("class", Codecs.STRING)) element.addClass(cls);
+
+        int flags = in.optional("flags", Codecs.INT, DEFAULT_FLAGS);
+        element.setEnabled((flags & FLAG_ENABLED) != 0);
+        element.setHitTest((flags & FLAG_HIT_TEST) != 0);
+        element.setFocusPolicy(in.optional("focus", Codecs.enumOf(FocusPolicy.class), FocusPolicy.NONE));
     }
 
     public static final Codec<UIElement> CODEC = new Codec<UIElement>() {
@@ -89,6 +190,9 @@ public final class UIDescriptionCodec {
             } catch (IllegalArgumentException e) {
                 throw new CodecException("Cannot rebuild element with tag '" + tag + "'", e);
             }
+
+            int nid = in.optional("nid", Codecs.INT, -1);
+            if (nid >= 0 && LIVE_IDS.get() != null) LIVE_IDS.get().accept(element, nid);
 
             String id = in.optional("id", Codecs.STRING, "");
             if (!id.isEmpty()) element.setId(id);

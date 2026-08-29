@@ -31,7 +31,7 @@ import static org.junit.Assert.assertTrue;
  * construction, so both simply renumber afterwards. Nothing carries an id table, and the description
  * stays a pure description, which were the two properties the original design was protecting.</p>
  */
-public class TreeDeltaTest {
+public class TreeOpsTest {
 
     private UIElement root;
     private InMemoryTransport<Object> serverLink;
@@ -84,7 +84,7 @@ public class TreeDeltaTest {
 
         assertEquals("the new child must arrive", 3, client.root().getChildren().size());
         assertEquals("second", ((UIText) client.root().getChildren().get(2)).getText());
-        assertEquals("as a tree delta", 1, countMethod(serverLink, UiMethods.TREE_DELTA));
+        assertEquals("as one treeOps message", 1, countMethod(serverLink, UiMethods.TREE_OPS));
         assertEquals("and NOT as a re-open", 0, countMethod(serverLink, UiMethods.OPEN_WINDOW));
     }
 
@@ -172,7 +172,7 @@ public class TreeDeltaTest {
         settle();
 
         assertEquals("one delta, not one per changed parent",
-                1, countMethod(serverLink, UiMethods.TREE_DELTA));
+                1, countMethod(serverLink, UiMethods.TREE_OPS));
         assertEquals(4, client.root().getChildren().size());
     }
 
@@ -205,7 +205,7 @@ public class TreeDeltaTest {
 
         settle();
 
-        assertEquals(0, countMethod(serverLink, UiMethods.TREE_DELTA));
+        assertEquals(0, countMethod(serverLink, UiMethods.TREE_OPS));
     }
 
     /** Opening does not immediately emit a delta restating the tree it just described. */
@@ -216,6 +216,6 @@ public class TreeDeltaTest {
 
         assertNotNull(client.root());
         assertEquals("setObserver reports every element as attached; that must not become a delta",
-                0, countMethod(serverLink, UiMethods.TREE_DELTA));
+                0, countMethod(serverLink, UiMethods.TREE_OPS));
     }
 }

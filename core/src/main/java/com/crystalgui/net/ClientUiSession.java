@@ -1,34 +1,20 @@
 package com.crystalgui.net;
 
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.net.protocol.Call;
-import com.crystalgui.net.protocol.Envelope;
-import com.crystalgui.net.protocol.EnvelopeCodec;
-import com.crystalgui.net.protocol.MessageRouter;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.UiMethods;
+import com.crystalgui.net.mirror.ClientTreeMirror;
+import com.crystalgui.net.mirror.ElementNodeMirror;
+import com.crystalgui.net.mirror.NodeMirror;
+import com.crystalgui.net.protocol.*;
 import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.serialization.UIDescriptionCodec;
 import com.crystalgui.ui.UIElement;
-import java.util.Set;
-
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.dom.ElementTreeSource;
-import com.crystalgui.ui.elements.Button;
-import com.crystalgui.ui.elements.Checkbox;
-import com.crystalgui.ui.elements.Slider;
-import com.crystalgui.ui.elements.Switch;
-import com.crystalgui.ui.elements.TextField;
 
 import javax.annotation.Nullable;
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Deque;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
@@ -92,6 +78,18 @@ public final class ClientUiSession<T> {
      * on. Null exactly when {@link #root} is.</p>
      */
     private ElementTreeSource ids;
+
+    /**
+     * <b>The mirror.</b> Applying an edit script and a delta lives there, written against the
+     * {@code ui.dom} seam and naming no widget, no session and no transport.
+     *
+     * <p>Rebuilt whenever the tree is, since a mirror is about one tree. Null until a window opens,
+     * which is also when {@link #ids} appears.</p>
+     */
+    @Nullable private ClientTreeMirror<UIElement, T> mirror;
+
+    /** How a {@code UIElement} is described. Outlives any one tree, so it is built once. */
+    private final NodeMirror<UIElement, T> nodes;
     private List<SheetRef> sheets = List.of();
     private boolean useUserAgentSheet = true;
 
@@ -109,6 +107,7 @@ public final class ClientUiSession<T> {
     /** Owns its own transport, router and mailbox — the shape every test and the in-memory pair use. */
     public ClientUiSession(UITransport<T> transport, DynamicOps<T> ops) {
         this.ops = ops;
+        this.nodes = new ElementNodeMirror<>(this.ops);
         this.ownsConnection = true;
         this.router = new MessageRouter<>(envelope -> transport.send(EnvelopeCodec.encode(ops, envelope)));
         registerUiMethods();
@@ -136,6 +135,7 @@ public final class ClientUiSession<T> {
      */
     public ClientUiSession(ProtocolConnection<T> connection) {
         this.ops = connection.ops();
+        this.nodes = new ElementNodeMirror<>(this.ops);
         this.ownsConnection = false;
         this.router = connection.router();
         registerUiMethods();
@@ -152,6 +152,7 @@ public final class ClientUiSession<T> {
      */
     ClientUiSession(ProtocolConnection<T> connection, int windowId) {
         this.ops = connection.ops();
+        this.nodes = new ElementNodeMirror<>(this.ops);
         this.ownsConnection = false;
         this.router = connection.router();
         this.mux = UiWindowMux.of(connection);
@@ -329,11 +330,15 @@ public final class ClientUiSession<T> {
          * versions, which no description can reveal -- and it is refused rather than misapplied,
          * because every id past the divergence would be off by one.
          */
-        bindNotify(UiMethods.TREE_DELTA, payload -> {
+        bindNotify(UiMethods.TREE_OPS, payload -> {
             StateMap<T> in = read(payload);
             if (in.getInt(UiMethods.WINDOW, windowId) != windowId) return;
-            if (defer(() -> applyTreeDelta(in))) return;
-            applyTreeDelta(in);
+            // Queued, never dropped, if it beats the description: the open carries a hash, so a
+            // client without the tree has to ask for it, and nothing tells the server the far side is
+            // not ready. A dropped delta is permanent -- Property.set returns early on an unchanged
+            // value, so a widget the server has already written is never marked dirty again.
+            if (defer(() -> applyTreeOps(in))) return;
+            applyTreeOps(in);
         });
 
         bindNotify(UiMethods.STATE_DELTA, payload -> {
@@ -358,6 +363,7 @@ public final class ClientUiSession<T> {
             String reason = in.getString("reason", "");
             root = null;
             ids = null;
+            mirror = null;
             deferred.clear();
             release();
             if (onWindowClosed != null) onWindowClosed.accept(reason);
@@ -365,44 +371,6 @@ public final class ClientUiSession<T> {
     }
 
     /** @see #registerWindowMethods */
-    private void applyTreeDelta(StateMap<T> in) {
-        {
-            for (StateMap<T> entry : in.getList("entries", e -> e)) {
-                int nid = entry.getInt("nid", -1);
-                UIElement anchor = NetworkIds.find(ids, nid);
-                if (anchor == null) {
-                    CrystalGuiCore.LOGGER.warn("Tree delta for unknown element {}", nid);
-                    continue;
-                }
-                anchor.clearDescribedChildrenFor();
-                T children = entry.getRaw("children");
-                if (children == null) continue;
-                for (T child : ops.getListValue(children)) {
-                    UIElement decoded = UIDescriptionCodec.CODEC.decode(ops, child);
-                    anchor.addDescribedChildFrom(decoded);
-                    // WIRE THE NEW SUBTREE. A reported event is a listener this side attaches because
-                    // the description asked for it, and a delta brings elements that have never been
-                    // through buildFrom -- so without this a widget added after open renders correctly,
-                    // responds to the mouse, and reports nothing at all to the server.
-                    wireReportedEvents(decoded);
-                }
-            }
-
-            int assigned = NetworkIds.assign(ids, root);
-            int expected = in.getInt("count", assigned);
-            if (assigned != expected) {
-                CrystalGuiCore.LOGGER.error("Refusing a tree delta: the server numbered {} elements and "
-                        + "this client derived {} — the two sides are building different structure, so "
-                        + "every id past the divergence would be wrong", expected, assigned);
-                root = null;
-            ids = null;
-                release();
-                return;
-            }
-            expectedElementCount = assigned;
-        }
-    }
-
     /**
      * True only while {@link #applyStateDelta} is running — the one window in which a widget's change
      * signal is the server's doing rather than the user's.
@@ -438,24 +406,18 @@ public final class ClientUiSession<T> {
         }
     }
 
+    /**
+     * Applies one delta batch, skipping anything the user is mid-edit in.
+     *
+     * <p>The three kinds an entry can carry, and what each is for, are on {@link NodeMirror}.</p>
+     */
+    /** @see ClientTreeMirror#applyStructure */
+    private void applyTreeOps(StateMap<T> in) {
+        if (mirror != null) mirror.applyStructure(in);
+    }
+
     private void applyEntries(StateMap<T> in) {
-        for (StateMap<T> entry : in.getList("entries", e -> e)) {
-            int nid = entry.getInt("nid", -1);
-            UIElement target = NetworkIds.find(ids, nid);
-            if (target == null) {
-                CrystalGuiCore.LOGGER.warn("State update for unknown element {}", nid);
-                continue;
-            }
-            if (shouldSuppress(target)) continue;
-            T state = entry.getRaw("s");
-            if (state == null) continue;
-            try {
-                target.readStateFrom(new StateMap<>(ops, state));
-            } catch (RuntimeException bad) {
-                // Per-entry, so one malformed update cannot take the rest of the batch with it.
-                CrystalGuiCore.LOGGER.warn("Bad state for element {}: {}", nid, bad.getMessage());
-            }
-        }
+        if (mirror != null) mirror.applyState(in, this::shouldSuppress);
     }
 
     /**
@@ -493,6 +455,22 @@ public final class ClientUiSession<T> {
      * closed.</p>
      */
     private final Deque<Runnable> deferred = new ArrayDeque<>();
+
+    /**
+     * Told about each subtree an insert brings, so the mount can bind any nested panels inside it.
+     *
+     * <p>The session cannot bind panels itself -- it knows nothing about {@code Networked} -- and the
+     * mount used to bind by walking from the ROOT, which is why a panel arriving through a delta was
+     * never bound at all: the walk had already run, and nothing re-ran it. Per subtree, at the op, is
+     * both cheaper and the only version that is correct.</p>
+     */
+    @Nullable
+    private java.util.function.Consumer<UIElement> onSubtreeInserted;
+
+    /** @see #onSubtreeInserted */
+    public void setOnSubtreeInserted(@Nullable java.util.function.Consumer<UIElement> listener) {
+        this.onSubtreeInserted = listener;
+    }
 
     /**
      * Holds {@code apply} until the tree exists, and says whether it did.
@@ -542,19 +520,44 @@ public final class ClientUiSession<T> {
         return target.isFocused() && target.consumesTextInput();
     }
 
+    /**
+     * Builds the tree from a description, and takes its numbering from whichever kind it is.
+     *
+     * <p>A <b>pristine</b> description carries no ids, so both sides derive them from the same
+     * document-order walk — which is what keeps it content-addressed and shareable between windows
+     * showing the same thing. A <b>live</b> one carries each element's id, and is what a viewer joining
+     * an already-reshaped window gets: ids stopped being derivable from position, so a newcomer cannot
+     * compute the ones the existing viewers hold and has to be told them.</p>
+     *
+     * <p>The mirror is rebuilt with the source, both being about <em>this</em> tree.</p>
+     */
     private void buildFrom(T encoded) {
-        UIElement rebuilt = UIDescriptionCodec.CODEC.decode(ops, encoded);
+        Map<UIElement, Integer> carried = new java.util.LinkedHashMap<>();
+        UIElement rebuilt = nodes.decodeLive(encoded, carried::put);
         ElementTreeSource rebuiltIds = new ElementTreeSource(rebuilt);
-        int actual = NetworkIds.assign(rebuiltIds, rebuilt);
+        ClientTreeMirror<UIElement, T> rebuiltMirror = new ClientTreeMirror<>(rebuiltIds, nodes, ops);
 
-        // Ids are positions in a document-order walk, so they only agree if both sides built the same
-        // structure. Internals are never serialized, so a client whose widget constructors differ from
-        // the server's would shift every id past the difference and apply updates to the wrong
-        // elements — silently. The count is the cheapest thing that catches it.
+        for (Map.Entry<UIElement, Integer> entry : carried.entrySet()) {
+            rebuiltIds.assignAt(entry.getKey(), entry.getValue());
+        }
+        int actual = rebuiltMirror.number(rebuilt, carried.size());
+
+        /*
+         * THE COUNT, AND WHAT IT NOW MEANS.
+         *
+         * It counts DESCRIBED elements, not every element. It used to count both, so a client whose
+         * widget constructor built one more internal child than the server's refused the whole window
+         * -- and the description could not reveal why, because internals are never serialized. Since
+         * internals are no longer numbered on either side, that skew is now invisible and harmless,
+         * which is what it always should have been.
+         *
+         * What survives is the skew that genuinely breaks addressing: a registry or codec
+         * disagreement, where the two sides build a different number of DESCRIBED elements.
+         */
         if (actual != expectedElementCount) {
-            CrystalGuiCore.LOGGER.error("Refusing window {}: server described {} elements but rebuilding "
-                    + "produced {}. The two sides' widget constructors disagree — check for a version "
-                    + "mismatch.", windowId, expectedElementCount, actual);
+            CrystalGuiCore.LOGGER.error("Refusing window {}: the server described {} elements but "
+                    + "rebuilding produced {}. The two sides disagree about the described tree — check "
+                    + "for a version mismatch or an unregistered tag.", windowId, expectedElementCount, actual);
             windowId = -1;
             // Nothing to apply them to, and they describe a tree this client refused to build.
             deferred.clear();
@@ -563,6 +566,16 @@ public final class ClientUiSession<T> {
 
         root = rebuilt;
         ids = rebuiltIds;
+        mirror = rebuiltMirror;
+        mirror.onIrrecoverable(this::release);
+        // ONE hook, doing both jobs a newly arrived subtree needs. Binding used to walk from the root,
+        // so a nested panel arriving through a delta was never bound at all -- it drew correctly and
+        // answered nothing.
+        mirror.onSubtreeInserted(subtree -> {
+            wireReportedEvents(subtree);
+            if (onSubtreeInserted != null) onSubtreeInserted.accept(subtree);
+        });
+
         wireReportedEvents(root);
         // BEFORE the callback, so a host mounting the tree sees the state the server has already sent
         // rather than the description's and one frame of catching up. @see #deferred
