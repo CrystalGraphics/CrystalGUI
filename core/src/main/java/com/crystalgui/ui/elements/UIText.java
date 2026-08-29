@@ -1,5 +1,9 @@
 package com.crystalgui.ui.elements;
 
+import com.crystalgui.ui.contract.WidgetContracts;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.State;
 import com.crystalgui.core.async.FrameProfile;
 import com.crystalgraphics.api.text.CgShapedRun;
 import com.crystalgraphics.api.font.CgFontFamily;
@@ -125,6 +129,15 @@ import java.util.Set;
  * every single frame, forever.</p>
  */
 public final class UIText extends UIElement {
+
+    public static final State<UIText, String> TEXT =
+            State.<UIText, String>of("text", StateTypes.STRING, UIText::getText, UIText::setText, "")
+                    .omittedWhen("");
+
+    public static final WidgetContract<UIText> CONTRACT = WidgetContracts.register(
+            WidgetContract.of(UIText.class, "text")
+                    .state(TEXT)
+                    .build());
 
     /**
      * Marks a text run as <b>coloured by a syntax scheme</b> — what every {@code ::highlight(<capture>)}
@@ -338,16 +351,6 @@ public final class UIText extends UIElement {
             // composite whose own writeState actually carries the text.
             notifyStateChanged();
         });
-    }
-
-    @Override
-    protected <T> void writeState(StateMap<T> out) {
-        out.putStringIfNot("text", getText(), "");
-    }
-
-    @Override
-    protected <T> void readState(StateMap<T> in) {
-        setText(in.getString("text", ""));
     }
 
     public String getText() {
@@ -874,7 +877,6 @@ public final class UIText extends UIElement {
             FrameProfile.end(drawn, "text:submit");
         }
     }
-
 
     /**
      * The source character at a point in this element's own coordinates, or {@code -1}.

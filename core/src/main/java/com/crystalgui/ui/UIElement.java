@@ -33,6 +33,8 @@ import com.crystalgui.style.property.visual.ScrollBehavior;
 import com.crystalgui.style.property.visual.border.BorderRadiusProperties;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.core.async.UiThread;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.dom.TreeObserver;
 import com.crystalgui.ui.event.DOMEvent;
 import com.crystalgui.ui.event.FocusEvent;
@@ -721,6 +723,7 @@ public class UIElement implements SettingsScope, DataProvider {
      * (see {@code StateMap.putBoolIfNot}) so a default-valued widget carries nothing.</p>
      */
     protected <T> void writeState(StateMap<T> out) {
+        WidgetContracts.writeState(this, out);
     }
 
     /**
@@ -734,6 +737,7 @@ public class UIElement implements SettingsScope, DataProvider {
      * <p>Every read takes a default, so a description written before a key existed still decodes.</p>
      */
     protected <T> void readState(StateMap<T> in) {
+        WidgetContracts.readState(this, in);
     }
 
     /** Codec-facing entry points — {@link #writeState}/{@link #readState} stay protected so they
@@ -848,18 +852,56 @@ public class UIElement implements SettingsScope, DataProvider {
     // to the source rather than to the element, two sessions over one tree can each keep their own
     // numbering instead of overwriting one field. See plan_ui_rewrite.md M0.
 
-    /** Null on every element in a local UI. Lazily created — most elements report nothing. */
+
+    /**
+     * Which kinds this element's <b>kind of widget</b> is capable of reporting — its contract's.
+     *
+     * <p>A fact about the class, so it is answered by the class. Which interactions a {@code Slider}
+     * reports is a fact about sliders, and it used to be re-stated per instance in a lazily-created
+     * {@code Set<String>} field on every {@code UIElement} in the engine.</p>
+     */
+    public Set<String> getReportableEvents() {
+        WidgetContract<?> contract = WidgetContracts.of(this);
+        return contract == null ? Set.of() : contract.eventKinds();
+    }
+
+    /**
+     * Which kinds this element was <b>asked</b> to report. Null until something asks.
+     *
+     * <p>Not the same question as {@link #getReportableEvents()}, and collapsing the two would make
+     * every client report everything its widgets are capable of: a session subscribes to what it has a
+     * handler for, and the description carries that subset so a client attaches no listener nobody is
+     * listening to.</p>
+     *
+     * <p><b>Still per-instance, and M2 is where it stops being.</b> The request belongs to a session --
+     * it is already in {@code ServerUiSession.handlers} -- but the encoder that has to write it is a
+     * context-free {@code Codec<UIElement>}, so today the element is the only place both halves can
+     * reach. The mirror owns the description and closes this.</p>
+     */
     @Nullable
     private Set<String> reportedEvents;
 
     /**
-     * Declares that this element's {@code kind} interactions should be reported to whoever owns the
-     * session — the client half installs a listener for each of these when it rebuilds the tree.
+     * Records that this element should report {@code kind}.
      *
-     * <p>Only the <em>name</em> lives here. The handler itself stays on the server session, which is
-     * what lets behaviour be a lambda that never leaves the JVM it was written in.</p>
+     * <p><b>Refused unless the contract declares it.</b> Before contracts a session could ask for any
+     * string: the request was recorded, written into the description, and the client's wiring hit a
+     * {@code default} arm that logged "which this client cannot observe" and carried on -- so a typo,
+     * or a kind the widget simply had no signal for, produced a UI that looked wired and reported
+     * nothing. There is now no way to ask for something that cannot happen.</p>
      */
     public UIElement addReportedEvent(String kind) {
+        WidgetContract<?> contract = WidgetContracts.of(this);
+        if (contract == null) {
+            throw new IllegalStateException("<" + tagName() + "> has no WidgetContract, so it cannot "
+                    + "report '" + kind + "'. Give it one, or mark it local-only with a reason "
+                    + "(see WidgetContracts).");
+        }
+        if (contract.event(kind) == null) {
+            throw new IllegalArgumentException("<" + tagName() + "> cannot report '" + kind
+                    + "'. Its contract declares " + contract.eventKinds() + ", and a kind that is not "
+                    + "declared has no way to be listened for.");
+        }
         if (reportedEvents == null) reportedEvents = new LinkedHashSet<>();
         reportedEvents.add(kind);
         return this;

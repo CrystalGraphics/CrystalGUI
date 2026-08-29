@@ -1,5 +1,9 @@
 package com.crystalgui.ui.elements.config.control;
 
+import com.crystalgui.ui.elements.config.ConfigControlContracts;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.ui.elements.Slider;
 import com.crystalgui.ui.elements.config.ConfigDescriptor;
 import com.crystalgui.ui.elements.config.ValueControl;
@@ -25,6 +29,11 @@ import javax.annotation.Nullable;
  * that guard is on the base class rather than reimplemented per control.</p>
  */
 public class SliderControl extends ValueControl<Double> {
+
+    /** A drag from end to end would otherwise be a packet per pixel. */
+    public static final WidgetContract<SliderControl> CONTRACT = ConfigControlContracts.register(
+            SliderControl.class, "slidercontrol", StateTypes.DOUBLE, 0d, RatePolicy.DRAGGING);
+
 
     private final Slider slider = new Slider();
     private final NumberControl number;

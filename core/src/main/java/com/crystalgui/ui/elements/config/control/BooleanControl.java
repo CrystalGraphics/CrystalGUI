@@ -1,5 +1,9 @@
 package com.crystalgui.ui.elements.config.control;
 
+import com.crystalgui.ui.elements.config.ConfigControlContracts;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.ui.elements.Checkbox;
 import com.crystalgui.ui.elements.config.ConfigDescriptor;
 import com.crystalgui.ui.elements.config.ValueControl;
@@ -18,6 +22,11 @@ import javax.annotation.Nullable;
  * wrong, and the reason the kit's sizing rule carves it out by name.</p>
  */
 public class BooleanControl extends ValueControl<Boolean> {
+
+    /** A checkbox: discrete, so every flip travels. */
+    public static final WidgetContract<BooleanControl> CONTRACT = ConfigControlContracts.register(
+            BooleanControl.class, "booleancontrol", StateTypes.BOOL, Boolean.FALSE, RatePolicy.IMMEDIATE);
+
 
     private final Checkbox checkbox = new Checkbox("");
 

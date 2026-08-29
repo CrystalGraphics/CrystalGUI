@@ -1,5 +1,12 @@
 package com.crystalgui.ui.elements;
 
+import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgui.ui.contract.EventKind;
+import com.crystalgui.ui.contract.Event;
+import com.crystalgui.ui.contract.WidgetContracts;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.State;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.serialization.StateMap;
@@ -38,6 +45,33 @@ import com.crystalgraphics.platform.CgPlatform;
  */
 public class Switch extends UIElement {
 
+    public static final State<Switch, Boolean> CHECKED =
+            State.<Switch, Boolean>of("checked", StateTypes.BOOL,
+                            Switch::isChecked, Switch::setChecked, false)
+                    .omittedWhen(false);
+
+    public static final Event<Switch, Boolean> TOGGLE = Event.of(EventKind.TOGGLE,
+            (toggle, sink) -> toggle.attachListener(sink::accept),
+            new Event.Payload<Boolean>() {
+                @Override public <T> void write(StateMap<T> out, Boolean value) {
+                    out.putBool(EventKind.PAYLOAD_CHECKED, value);
+                }
+                @Override public <T> Boolean read(StateMap<T> in) {
+                    return in.getBool(EventKind.PAYLOAD_CHECKED, false);
+                }
+            }, RatePolicy.IMMEDIATE);
+
+    public static final WidgetContract<Switch> CONTRACT = WidgetContracts.register(
+            WidgetContract.of(Switch.class, "switch")
+                    .state(CHECKED)
+                    .event(TOGGLE)
+                    .build());
+
+    @Override
+    public boolean acceptsPublicChildren() {
+        return false;
+    }
+
     public static final String SPACER_CLASS = "__spacer__";
     public static final String KNOB_CLASS = "__knob__";
 
@@ -75,21 +109,6 @@ public class Switch extends UIElement {
                 setChecked(!checked);
             }
         });
-    }
-
-    @Override
-    public boolean acceptsPublicChildren() {
-        return false;
-    }
-
-    @Override
-    protected <T> void writeState(StateMap<T> out) {
-        out.putBoolIfNot("checked", isChecked(), false);
-    }
-
-    @Override
-    protected <T> void readState(StateMap<T> in) {
-        setChecked(in.getBool("checked", false));
     }
 
     /** Drives the {@code :checked} pseudo-class — {@code UIElement}'s hook is documented as reserved

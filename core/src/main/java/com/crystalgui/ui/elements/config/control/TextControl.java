@@ -1,5 +1,9 @@
 package com.crystalgui.ui.elements.config.control;
 
+import com.crystalgui.ui.elements.config.ConfigControlContracts;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.ui.elements.TextField;
 import com.crystalgui.ui.elements.config.ConfigDescriptor;
 import com.crystalgui.ui.elements.config.ValueControl;
@@ -26,6 +30,11 @@ import java.util.function.Predicate;
  * looks like.</p>
  */
 public class TextControl extends ValueControl<String> {
+
+    /** Debounced, and committed on blur or Enter. */
+    public static final WidgetContract<TextControl> CONTRACT = ConfigControlContracts.register(
+            TextControl.class, "textcontrol", StateTypes.STRING, "", RatePolicy.TYPING);
+
 
     private final TextField field = new TextField();
 

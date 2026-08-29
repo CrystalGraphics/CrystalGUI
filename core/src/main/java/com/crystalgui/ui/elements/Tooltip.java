@@ -1,5 +1,9 @@
 package com.crystalgui.ui.elements;
 
+import com.crystalgui.ui.contract.WidgetContracts;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.State;
 import com.crystalgui.core.data.ReadOnlyVec2f;
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.style.StyleGroup;
@@ -43,6 +47,22 @@ import java.util.Objects;
  * write geometry.</p>
  */
 public class Tooltip extends UIElement {
+
+    public static final State<Tooltip, String> TEXT =
+            State.<Tooltip, String>of("text", StateTypes.STRING,
+                            Tooltip::getBaseText, Tooltip::setText, "")
+                    .omittedWhen("");
+
+    /**
+     * Reads {@code getBaseText} and not {@code getText}, and the difference matters: the displayed text
+     * has the resolved accelerator appended, so writing it would send a client its own decoration back
+     * and a round trip would append it twice.
+     */
+    public static final WidgetContract<Tooltip> CONTRACT = WidgetContracts.register(
+            WidgetContract.of(Tooltip.class, "tooltip")
+                    .state(TEXT)
+                    .build());
+
 
     public static final String LABEL_CLASS = "__label__";
 

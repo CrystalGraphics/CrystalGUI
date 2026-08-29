@@ -1,5 +1,9 @@
 package com.crystalgui.ui.elements;
 
+import com.crystalgui.ui.contract.WidgetContracts;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.State;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.core.signal.Signal;
@@ -46,6 +50,17 @@ import java.util.List;
  * {@code TabView} and {@code SplitView} use.</p>
  */
 public class Menu extends Popover {
+
+    /**
+     * A menu's items are described CHILDREN, not state -- each is a {@code MenuItem} with a contract of
+     * its own. Its own mode is a {@code Popover} concern and is not inherited, because
+     * {@link WidgetContracts#of(com.crystalgui.ui.UIElement)} is an exact-class lookup.
+     */
+    public static final WidgetContract<Menu> CONTRACT = WidgetContracts.register(
+            WidgetContract.of(Menu.class, "menu")
+                    .withDescribedChildren()
+                    .build());
+
 
     public static final String ITEMS_CLASS = "__items__";
 

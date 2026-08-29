@@ -28,6 +28,12 @@ import static org.junit.Assert.fail;
  * rather than a missing method on the server. Nothing links {@code ElementRegistry} to
  * {@code writeState}, so the gap is invisible from either file.</p>
  *
+ * <p><b>Superseded in part by {@code WidgetContractCoverageTest} (M1).</b> That one walks the
+ * widget CLASSES rather than the registered tags, so it asks all 87 of them rather than the
+ * quarter that happen to have a tag, and it requires a written REASON for every one that does not
+ * travel. What survives here is the half it does not do: a behavioural check that a widget marked
+ * stateless actually writes nothing, run against a real {@code StateMap}.</p>
+ *
  * <p>So this is the same anti-rot shape {@code AGENTS.md} already prescribes for the CSS property list —
  * <i>"This list goes stale silently … If you add a property, add it here in the same edit."</i> The map
  * below must name <b>every</b> registered tag. Adding a tag fails this test until somebody writes down
@@ -62,13 +68,16 @@ public class ElementStateCoverageTest {
 
         // Carries none, and why.
         STATEFUL.put("element", false);        // the base container: structure only
-        STATEFUL.put("dialog", false);         // open/closed is imperative, like top-layer promotion
+        STATEFUL.put("dialog", true);          // its TITLE, as of M1. Open/closed stays imperative
         STATEFUL.put("scroller", false);       // scroll position is VIEW state and must not travel
         STATEFUL.put("scrollerview", false);   // ditto
-        STATEFUL.put("tooltip", false);        // its text is its child's, and it is transient
-        STATEFUL.put("popover", false);        // shown/hidden is imperative and transient
+        STATEFUL.put("tooltip", true);         // its BASE text, as of M1 -- not the resolved one,
+                                               // which has the accelerator appended
+        STATEFUL.put("popover", true);         // its MODE (auto/manual), as of M1. Shown/hidden
+                                               // stays imperative
         STATEFUL.put("menu", false);           // built by its owner each time it opens
-        STATEFUL.put("menuitem", false);       // label is structure; enablement is resolved live
+        STATEFUL.put("menuitem", true);        // label, accelerator, checkable, selected, as of M1.
+                                               // Enablement is still resolved live
         // CrystalOS. The desktop is engine-owned compositor host -- an internal child of the window's
         // root, which UIDescriptionCodec skips by construction, so it is never described at all.
         STATEFUL.put("desktop", false);
@@ -119,6 +128,13 @@ public class ElementStateCoverageTest {
         MUTATORS.put("tabview", e -> { });
         MUTATORS.put("text", e -> ((com.crystalgui.ui.elements.UIText) e).setText("hello"));
         MUTATORS.put("textfield", e -> ((com.crystalgui.ui.elements.TextField) e).setText("typed"));
+
+        // Gained state at M1, when contracts made "what does this carry" a declaration.
+        MUTATORS.put("dialog", e -> ((com.crystalgui.ui.elements.Dialog) e).setTitle("Confirm"));
+        MUTATORS.put("tooltip", e -> ((com.crystalgui.ui.elements.Tooltip) e).setText("Explains it"));
+        MUTATORS.put("popover", e -> ((com.crystalgui.ui.elements.Popover) e)
+                .setMode(com.crystalgui.ui.elements.Popover.Mode.MANUAL));
+        MUTATORS.put("menuitem", e -> ((com.crystalgui.ui.elements.MenuItem) e).setCheckable(true));
     }
 
     @BeforeClass

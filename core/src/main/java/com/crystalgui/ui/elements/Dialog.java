@@ -1,5 +1,13 @@
 package com.crystalgui.ui.elements;
 
+import com.crystalgui.serialization.StateMap;
+import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgui.ui.contract.EventKind;
+import com.crystalgui.ui.contract.Event;
+import com.crystalgui.ui.contract.WidgetContracts;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.State;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgraphics.platform.input.CgKeyCodes;
@@ -54,6 +62,27 @@ import javax.annotation.Nullable;
  * author's {@code !important} can still pin a dialog in place.</p>
  */
 public class Dialog extends UIElement {
+
+    public static final State<Dialog, String> TITLE =
+            State.<Dialog, String>of("title", StateTypes.STRING, Dialog::getTitle, Dialog::setTitle, "")
+                    .omittedWhen("");
+
+    /**
+     * The user asked to close it. The veto path -- M4 is where the answer travels back, and until then
+     * a server hears the request and decides what to do about it.
+     */
+    public static final Event<Dialog, Void> CLOSE_REQUESTED =
+            Event.signal(EventKind.CLOSE_REQUESTED,
+                    (dialog, sink) -> dialog.getCloseButton().attachListener(sink));
+
+    /** A dialog is a container: its content is described children, not internals. */
+    public static final WidgetContract<Dialog> CONTRACT = WidgetContracts.register(
+            WidgetContract.of(Dialog.class, "dialog")
+                    .state(TITLE)
+                    .event(CLOSE_REQUESTED)
+                    .withDescribedChildren()
+                    .build());
+
 
     public static final String TITLE_BAR_CLASS = "__title-bar__";
     /** On the title text, so a theme can reach it — the same {@code __label__} hook Button and

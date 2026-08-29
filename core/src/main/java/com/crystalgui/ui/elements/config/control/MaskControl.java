@@ -1,5 +1,9 @@
 package com.crystalgui.ui.elements.config.control;
 
+import com.crystalgui.ui.elements.config.ConfigControlContracts;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Button;
@@ -36,6 +40,29 @@ import java.util.Set;
  * quietly.</p>
  */
 public class MaskControl extends ValueControl<Set<String>> {
+
+    /**
+     * A set of flag names. Carried as a LIST because a wire format has no set, and re-read into one --
+     * so two descriptions of the same mask hash the same only if the control iterates deterministically,
+     * which is why it keeps a {@code LinkedHashSet}.
+     */
+    public static final WidgetContract<MaskControl> CONTRACT = ConfigControlContracts.register(
+            MaskControl.class, "maskcontrol",
+            new com.crystalgui.ui.contract.StateType<java.util.Set<String>>() {
+                @Override public <T> void put(com.crystalgui.serialization.StateMap<T> out, String key,
+                                              java.util.Set<String> value) {
+                    StateTypes.stringListUnder("f").put(out, key,
+                            new java.util.ArrayList<>(value == null ? java.util.Set.of() : value));
+                }
+                @Override public <T> java.util.Set<String> get(com.crystalgui.serialization.StateMap<T> in,
+                                                               String key, java.util.Set<String> fallback) {
+                    java.util.List<String> read =
+                            StateTypes.stringListUnder("f").get(in, key, java.util.List.of());
+                    return read.isEmpty() ? fallback : new java.util.LinkedHashSet<>(read);
+                }
+            },
+            java.util.Set.of(), RatePolicy.IMMEDIATE);
+
 
     public static final String TOGGLE_CLASS = "__toggle__";
     public static final String CHEVRON_CLASS = "__chevron__";

@@ -1,5 +1,13 @@
 package com.crystalgui.ui.elements;
 
+import com.crystalgui.serialization.StateMap;
+import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgui.ui.contract.EventKind;
+import com.crystalgui.ui.contract.Event;
+import com.crystalgui.ui.contract.WidgetContracts;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.State;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
 import javax.annotation.Nullable;
@@ -28,6 +36,44 @@ import dev.vfyjxf.taffy.style.TaffyDisplay;
  * false for the same reason every other composite's is.</p>
  */
 public class SearchField extends UIElement {
+
+    public static final State<SearchField, String> TEXT =
+            State.<SearchField, String>of("text", StateTypes.STRING,
+                            SearchField::getText, SearchField::setText, "")
+                    .omittedWhen("");
+
+    public static final State<SearchField, String> PLACEHOLDER =
+            State.<SearchField, String>of("placeholder", StateTypes.STRING,
+                            SearchField::getPlaceholder, SearchField::setPlaceholder, "")
+                    .omittedWhen("");
+
+    /** The "no results" state, which is the server's answer to a query and not the client's. */
+    public static final State<SearchField, Boolean> NOT_FOUND =
+            State.<SearchField, Boolean>of("notFound", StateTypes.BOOL,
+                            SearchField::isNotFound, SearchField::setNotFound, false)
+                    .omittedWhen(false);
+
+    /** Every keystroke, debounced -- a search box is the archetype the policy was written for. */
+    public static final Event<SearchField, String> QUERY = Event.of(EventKind.TEXT,
+            // onQueryChanged is a bare Action, so the text is read at emit time rather than carried.
+            (field, sink) -> field.onQueryChanged.connect(() -> sink.accept(field.getText())),
+            new Event.Payload<String>() {
+                @Override public <T> void write(StateMap<T> out, String value) {
+                    out.putString(EventKind.PAYLOAD_TEXT, value == null ? "" : value);
+                }
+                @Override public <T> String read(StateMap<T> in) {
+                    return in.getString(EventKind.PAYLOAD_TEXT, "");
+                }
+            }, RatePolicy.TYPING);
+
+    public static final WidgetContract<SearchField> CONTRACT = WidgetContracts.register(
+            WidgetContract.of(SearchField.class, "searchfield")
+                    .state(PLACEHOLDER)
+                    .state(TEXT)
+                    .state(NOT_FOUND)
+                    .event(QUERY)
+                    .build());
+
 
     public static final String SEARCH_FIELD_CLASS = "__search-field__";
     public static final String ICON_CLASS = "__icon__";
@@ -137,6 +183,11 @@ public class SearchField extends UIElement {
         return this;
     }
 
+    /** The prompt shown while the box is empty. @see MenuItem#getAccelerator() on why this exists. */
+    public String getPlaceholder() {
+        return field.getPlaceholder();
+    }
+
     public SearchField setPlaceholder(String placeholder) {
         field.setPlaceholder(placeholder);
         return this;
@@ -205,6 +256,11 @@ public class SearchField extends UIElement {
      * <p>One flag rather than two: "no results" and "that pattern will not compile" are the same thing to
      * look at, and IntelliJ draws them the same way.</p>
      */
+    /** Whether the box is showing its "no results" state. Stored as a class, so read back from one. */
+    public boolean isNotFound() {
+        return hasClass(NOT_FOUND_CLASS);
+    }
+
     public SearchField setNotFound(boolean notFound) {
         if (notFound) addClass(NOT_FOUND_CLASS);
         else removeClass(NOT_FOUND_CLASS);

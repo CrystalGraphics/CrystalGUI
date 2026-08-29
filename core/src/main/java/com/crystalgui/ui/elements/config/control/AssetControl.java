@@ -1,5 +1,9 @@
 package com.crystalgui.ui.elements.config.control;
 
+import com.crystalgui.ui.elements.config.ConfigControlContracts;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.TextField;
@@ -23,6 +27,11 @@ import javax.annotation.Nullable;
  * a legitimate way to set an asset reference whether or not a picker exists yet.</p>
  */
 public class AssetControl extends ValueControl<String> {
+
+    /** An asset id -- picked, not typed. */
+    public static final WidgetContract<AssetControl> CONTRACT = ConfigControlContracts.register(
+            AssetControl.class, "assetcontrol", StateTypes.STRING, "", RatePolicy.IMMEDIATE);
+
 
     public static final String FIELD_CLASS = "__field__";
     public static final String BROWSE_CLASS = "__browse__";

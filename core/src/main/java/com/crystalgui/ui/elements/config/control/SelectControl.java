@@ -1,5 +1,9 @@
 package com.crystalgui.ui.elements.config.control;
 
+import com.crystalgui.ui.elements.config.ConfigControlContracts;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.ui.elements.Dropdown;
 import com.crystalgui.ui.elements.config.ConfigDescriptor;
 import com.crystalgui.ui.elements.config.ValueControl;
@@ -21,6 +25,11 @@ import java.util.List;
  * nothing says so.</p>
  */
 public class SelectControl extends ValueControl<String> {
+
+    /** A discrete choice from a list. */
+    public static final WidgetContract<SelectControl> CONTRACT = ConfigControlContracts.register(
+            SelectControl.class, "selectcontrol", StateTypes.STRING, "", RatePolicy.IMMEDIATE);
+
 
     private final Dropdown dropdown = new Dropdown("");
     private final List<String> options;

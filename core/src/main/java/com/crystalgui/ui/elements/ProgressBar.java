@@ -1,5 +1,9 @@
 package com.crystalgui.ui.elements;
 
+import com.crystalgui.ui.contract.WidgetContracts;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.State;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
@@ -34,6 +38,20 @@ import dev.vfyjxf.taffy.style.FlexDirection;
  * a widget that is usually determinate is a frame cost paid by every screen that shows one.</p>
  */
 public class ProgressBar extends UIElement implements UIFrameTicker {
+
+    /**
+     * The filled fraction, where a negative value means indeterminate.
+     *
+     * <p>Written unconditionally rather than omitted at a default, because {@code -1} IS a meaningful
+     * value here (indeterminate) and omitting it would be indistinguishable from a bar nobody has set.
+     */
+    public static final State<ProgressBar, Float> FRACTION =
+            State.of("fraction", StateTypes.FLOAT, ProgressBar::fraction, ProgressBar::setFraction, -1f);
+
+    public static final WidgetContract<ProgressBar> CONTRACT = WidgetContracts.register(
+            WidgetContract.of(ProgressBar.class, "progressbar")
+                    .state(FRACTION)
+                    .build());
 
     /** The moving part. Themed through this class, never sized here. */
     public static final String FILL_CLASS = "__fill__";
@@ -205,25 +223,6 @@ public class ProgressBar extends UIElement implements UIFrameTicker {
         float widthPercent = width * 100f;
         StyleGroup.importantPipeline(fill.getStyle().getLayoutGroup(),
                 l -> l.marginLeftPercent(marginPercent).widthPercent(widthPercent));
-    }
-
-    /**
-     * The fraction, and nothing else.
-     *
-     * <p>Everything else about a progress bar is appearance, which the cascade already carries. This is
-     * the one thing a server knows and a client cannot derive — C4's whole point: a stateful widget with
-     * no {@code writeState} does not fail, it <b>arrives blank</b>, which reads as a rendering bug.</p>
-     */
-    @Override
-    protected <T> void writeState(StateMap<T> out) {
-        out.putFloat("fraction", fraction);
-    }
-
-    @Override
-    protected <T> void readState(StateMap<T> in) {
-        // -1 is INDETERMINATE, not "empty". Defaulting to 0 would turn a spinner into a bar stuck
-        // at zero, which looks like a stalled operation rather than an unknown one.
-        setFraction(in.getFloat("fraction", -1f));
     }
 
 }

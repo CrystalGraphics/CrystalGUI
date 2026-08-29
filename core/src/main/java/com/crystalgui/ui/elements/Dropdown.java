@@ -1,5 +1,12 @@
 package com.crystalgui.ui.elements;
 
+import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgui.ui.contract.EventKind;
+import com.crystalgui.ui.contract.Event;
+import com.crystalgui.ui.contract.WidgetContracts;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.State;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.UIElement;
@@ -33,6 +40,53 @@ import java.util.List;
  * instead.</p>
  */
 public class Dropdown extends Button {
+
+    /**
+     * The option labels.
+     *
+     * <p>Written as {@code [{label: ...}]} rather than a bare array because that is what has always
+     * been on the wire, and the description is content-hashed -- changing the shape changes the hash of
+     * every description holding a dropdown.</p>
+     */
+    public static final State<Dropdown, java.util.List<String>> OPTIONS =
+            State.of("options", StateTypes.stringListUnder(EventKind.PAYLOAD_LABEL),
+                    Dropdown::getOptions,
+                    // Cleared and refilled, and GUARDED ON NON-EMPTY exactly as the hand-written
+                    // readState was: an absent options list means "leave what is there" rather than
+                    // "empty the dropdown", which is what an older peer's description looks like.
+                    (dropdown, labels) -> {
+                        if (labels == null || labels.isEmpty()) return;
+                        dropdown.clearOptions();
+                        for (String label : labels) dropdown.addOption(label);
+                    },
+                    java.util.List.of());
+
+    public static final State<Dropdown, Integer> SELECTED =
+            State.of("selected", StateTypes.INT, Dropdown::getSelectedIndex, Dropdown::select, -1);
+
+    /**
+     * What was chosen. {@code plan_ui_rewrite.md} M1 -- a dropdown could not tell a server ANYTHING
+     * before this, which is the sharpest of the E-series findings: the one widget whose entire purpose
+     * is to answer a question had no way to give the answer.
+     */
+    public static final Event<Dropdown, Integer> SELECTION = Event.of(EventKind.SELECT,
+            (dropdown, sink) -> dropdown.onSelectionChanged.connect(sink::accept),
+            new Event.Payload<Integer>() {
+                @Override public <T> void write(StateMap<T> out, Integer value) {
+                    out.putInt(EventKind.PAYLOAD_INDEX, value);
+                }
+                @Override public <T> Integer read(StateMap<T> in) {
+                    return in.getInt(EventKind.PAYLOAD_INDEX, -1);
+                }
+            }, RatePolicy.IMMEDIATE);
+
+    /** Options before the index, or the index is one into a list that is not there yet. */
+    public static final WidgetContract<Dropdown> CONTRACT = WidgetContracts.register(
+            WidgetContract.of(Dropdown.class, "dropdown")
+                    .state(OPTIONS)
+                    .state(SELECTED)
+                    .event(SELECTION)
+                    .build());
 
     public static final String MENU_CLASS = "__menu__";
     public static final String CHEVRON_CLASS = "__chevron__";
@@ -146,37 +200,4 @@ public class Dropdown extends Button {
         setText(selectedIndex < 0 ? placeholder : options.get(selectedIndex));
     }
 
-    /**
-     * The selection, not the label.
-     *
-     * <p>{@link Button#writeState} would record the <em>text</em>, which here is derived from the
-     * selection — restoring it would put the right words on a control that still believes nothing is
-     * selected. So the selection travels as an INDEX.</p>
-     *
-     * <p><b>And the options travel with it.</b> This used to say the option list was "structure, rebuilt
-     * by the caller", which is true of a caller that constructs the widget in Java and false of the one
-     * that matters here: {@code UIDescriptionCodec} carries tag, id, classes, style, flags, focus, state
-     * and children, and an option list is <em>none of those</em> — it is a field. So a dropdown crossing
-     * the wire arrived with zero options, at which point {@link #select} refuses every index as
-     * out-of-range and the control renders empty and unselectable. Nothing threw; it just did not
-     * work.</p>
-     *
-     * <p>Order is load-bearing on the way back in, for the same reason it is on {@code Slider}: the
-     * options must exist before an index into them can mean anything.</p>
-     */
-    @Override
-    protected <T> void writeState(StateMap<T> out) {
-        out.putList("options", options, (entry, label) -> entry.putString("label", label));
-        out.putInt("selected", selectedIndex);
-    }
-
-    @Override
-    protected <T> void readState(StateMap<T> in) {
-        List<String> restored = in.getList("options", entry -> entry.getString("label", ""));
-        if (!restored.isEmpty()) {
-            clearOptions();
-            for (String label : restored) addOption(label);
-        }
-        select(in.getInt("selected", -1));
-    }
 }
