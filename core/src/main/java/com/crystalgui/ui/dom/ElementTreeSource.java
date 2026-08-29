@@ -171,23 +171,45 @@ public final class ElementTreeSource implements TreeSource<UIElement> {
     // ── Contract ─────────────────────────────────────────────────────────────
 
     /**
-     * <p>Two halves with different lifetimes, and the split is temporary. The <b>name</b> and whether
-     * children may be described are per-class and cached. <b>Reported events are still per-instance</b>
-     * today — {@code ServerUiSession.on} adds them to individual elements and the client reads them back
-     * off the wire per element — so they are read from the element and merged. M1 makes them a
-     * declaration on the widget class and this method stops merging anything.</p>
+     * The widget's own {@link com.crystalgui.ui.contract.WidgetContract}, or a minimal stand-in for an
+     * element that has none.
+     *
+     * <p>M0 built this by hand from the element -- a name, an empty event set, and a per-instance merge
+     * of whatever {@code addReportedEvent} had been called with. M1 moved the answer to where a widget
+     * can declare it, so this is now a lookup, and the fallback below is what an <b>uncontracted</b>
+     * element gets: a plain {@code UIElement} used as a container, which is most of a tree and has
+     * nothing to say.</p>
      */
     @Override
     public NodeContract contractOf(UIElement node) {
-        NodeContract base = contracts.get(node.getClass());
-        if (base == null) {
-            base = new NodeContract(node.tagName(), java.util.Set.of(), node.acceptsDescribedChildrenFor());
-            contracts.put(node.getClass(), base);
+        NodeContract declared = com.crystalgui.ui.contract.WidgetContracts.of(node);
+        if (declared != null) return declared;
+        return contracts.computeIfAbsent(node.getClass(), type -> new PlainNode(
+                node.tagName(), node.acceptsDescribedChildrenFor()));
+    }
+
+    /** What an element with no declared contract is, structurally. */
+    private static final class PlainNode implements NodeContract {
+        private final String name;
+        private final boolean acceptsChildren;
+
+        private PlainNode(String name, boolean acceptsChildren) {
+            this.name = name;
+            this.acceptsChildren = acceptsChildren;
         }
 
-        java.util.Set<String> reported = node.getReportedEvents();
-        if (reported.isEmpty()) return base;
-        return new NodeContract(base.name(), reported, base.acceptsDescribedChildren());
+        @Override public String name() {
+            return name;
+        }
+        @Override public java.util.Set<String> eventKinds() {
+            return java.util.Set.of();
+        }
+        @Override public boolean acceptsDescribedChildren() {
+            return acceptsChildren;
+        }
+        @Override public boolean carriesState() {
+            return false;
+        }
     }
 
     // ── Observation ──────────────────────────────────────────────────────────

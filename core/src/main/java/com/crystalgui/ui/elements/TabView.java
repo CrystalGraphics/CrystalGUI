@@ -1,5 +1,12 @@
 package com.crystalgui.ui.elements;
 
+import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgui.ui.contract.EventKind;
+import com.crystalgui.ui.contract.Event;
+import com.crystalgui.ui.contract.WidgetContracts;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.State;
 import com.crystalgui.serialization.StateMap;
 import javax.annotation.Nullable;
 import com.crystalgraphics.platform.input.CgKeyCodes;
@@ -50,6 +57,27 @@ import java.util.List;
  * its own content. The selection travels as state, applied after the tabs exist.</p>
  */
 public class TabView extends UIElement {
+
+    public static final State<TabView, Integer> SELECTED =
+            State.of("selected", StateTypes.INT, TabView::getSelectedIndex, TabView::selectIndex, -1);
+
+    /** Which tab is showing. M1: a TabView could not say, so a server could not follow a user's page. */
+    public static final Event<TabView, Integer> SELECTION = Event.of(EventKind.SELECT,
+            (view, sink) -> view.onTabSelected.connect(tab -> sink.accept(view.getSelectedIndex())),
+            new Event.Payload<Integer>() {
+                @Override public <T> void write(StateMap<T> out, Integer value) {
+                    out.putInt(EventKind.PAYLOAD_INDEX, value);
+                }
+                @Override public <T> Integer read(StateMap<T> in) {
+                    return in.getInt(EventKind.PAYLOAD_INDEX, -1);
+                }
+            }, RatePolicy.IMMEDIATE);
+
+    public static final WidgetContract<TabView> CONTRACT = WidgetContracts.register(
+            WidgetContract.of(TabView.class, "tabview")
+                    .state(SELECTED)
+                    .event(SELECTION)
+                    .build());
 
     /** Which edge the header strip sits on. */
     public enum TabSide {
@@ -252,22 +280,6 @@ public class TabView extends UIElement {
     @Override
     protected void clearDescribedChildren() {
         for (Tab tab : new ArrayList<>(tabs)) removeTab(tab);
-    }
-
-    /**
-     * Which tab is selected — a TabView-wide invariant, so it belongs here and not on {@code Tab}.
-     *
-     * <p>Applied after the tabs arrive, which the codec now guarantees. Before that ordering existed this
-     * would have been an index into an empty view: refused as out-of-range, and lost without a word.</p>
-     */
-    @Override
-    protected <T> void writeState(StateMap<T> out) {
-        out.putInt("selected", getSelectedIndex());
-    }
-
-    @Override
-    protected <T> void readState(StateMap<T> in) {
-        selectIndex(in.getInt("selected", -1));
     }
 
     // ── Tabs ────────────────────────────────────────────────────────────────

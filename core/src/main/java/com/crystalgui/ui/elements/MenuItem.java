@@ -1,5 +1,13 @@
 package com.crystalgui.ui.elements;
 
+import com.crystalgui.serialization.StateMap;
+import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgui.ui.contract.EventKind;
+import com.crystalgui.ui.contract.Event;
+import com.crystalgui.ui.contract.WidgetContracts;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.State;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.input.FocusPolicy;
 import lombok.Getter;
@@ -29,6 +37,41 @@ import javax.annotation.Nullable;
  * reserved gutter and checkmark shape.</p>
  */
 public class MenuItem extends Button {
+
+    public static final State<MenuItem, String> TEXT =
+            State.<MenuItem, String>of("text", StateTypes.STRING,
+                            MenuItem::getText, MenuItem::setText, "")
+                    .omittedWhen("");
+
+    /** The shortcut shown on the right. Presentation, but the SERVER knows what it bound. */
+    public static final State<MenuItem, String> ACCELERATOR =
+            State.<MenuItem, String>of("accelerator", StateTypes.STRING,
+                            MenuItem::getAccelerator, MenuItem::setAccelerator, "")
+                    .omittedWhen("");
+
+    public static final State<MenuItem, Boolean> CHECKABLE =
+            State.<MenuItem, Boolean>of("checkable", StateTypes.BOOL,
+                            MenuItem::isCheckable, MenuItem::setCheckable, false)
+                    .omittedWhen(false);
+
+    public static final State<MenuItem, Boolean> SELECTED =
+            State.<MenuItem, Boolean>of("selected", StateTypes.BOOL,
+                            MenuItem::isSelected, MenuItem::setSelected, false)
+                    .omittedWhen(false);
+
+    public static final Event<MenuItem, Void> ACTIVATE =
+            Event.signal(EventKind.ACTIVATE, (item, sink) -> item.attachListener(sink));
+
+    /** CHECKABLE before SELECTED: an item that is not checkable has nothing to select. */
+    public static final WidgetContract<MenuItem> CONTRACT = WidgetContracts.register(
+            WidgetContract.of(MenuItem.class, "menuitem")
+                    .state(TEXT)
+                    .state(ACCELERATOR)
+                    .state(CHECKABLE)
+                    .state(SELECTED)
+                    .event(ACTIVATE)
+                    .build());
+
 
     /** On an item that owns a submenu, so a theme can lay it out differently — label left, arrow right. */
     public static final String HAS_SUBMENU_CLASS = "__has-submenu__";
@@ -113,6 +156,17 @@ public class MenuItem extends Button {
      * application-wide Delete are different chords and each item shows the one that would actually
      * fire.</p>
      */
+    /**
+     * The shortcut text currently shown, or {@code ""}.
+     *
+     * <p>Added with the contract, and it had to be: a state slot needs a getter, and a slot whose
+     * getter is a stub is <b>write-only</b> -- settable by a server and never written to the wire, so
+     * it looks declared and does nothing. The coverage test found exactly that.</p>
+     */
+    public String getAccelerator() {
+        return accelerator == null ? "" : accelerator.getText();
+    }
+
     public MenuItem setAccelerator(@Nullable String text) {
         if (text == null || text.isEmpty()) {
             if (accelerator != null) {
@@ -156,6 +210,11 @@ public class MenuItem extends Button {
      * currently does. Separating them is what lets a toggle reserve its gutter while switched off, so the
      * label does not shift sideways the first time it is checked.</p>
      */
+    /** Whether this item shows a check mark slot. Stored as a class, so read back from one. */
+    public boolean isCheckable() {
+        return hasClass(CHECKABLE_CLASS);
+    }
+
     public MenuItem setCheckable(boolean value) {
         if (value) addClass(CHECKABLE_CLASS);
         else removeClass(CHECKABLE_CLASS);

@@ -1,5 +1,9 @@
 package com.crystalgui.ui.elements.config.control;
 
+import com.crystalgui.ui.elements.config.ConfigControlContracts;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.config.ConfigDescriptor;
 import com.crystalgui.ui.elements.config.ValueControl;
@@ -28,6 +32,11 @@ import java.util.List;
  * avoids — every cell is the same control VectorControl and NumberControl already are.</p>
  */
 public class MatrixControl extends ValueControl<double[]> {
+
+    /** As the vector control, with more cells. */
+    public static final WidgetContract<MatrixControl> CONTRACT = ConfigControlContracts.register(
+            MatrixControl.class, "matrixcontrol", StateTypes.doubleArrayUnder("v"), new double[0], RatePolicy.TYPING);
+
 
     public static final String ROW_CLASS = "__matrix-row__";
     public static final String CELL_CLASS = "__matrix-cell__";

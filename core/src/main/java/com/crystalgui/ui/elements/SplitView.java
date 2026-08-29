@@ -1,5 +1,12 @@
 package com.crystalgui.ui.elements;
 
+import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgui.ui.contract.EventKind;
+import com.crystalgui.ui.contract.Event;
+import com.crystalgui.ui.contract.WidgetContracts;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.State;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.serialization.StateMap;
@@ -77,6 +84,60 @@ import java.util.List;
  * not add one.</p>
  */
 public class SplitView extends UIElement {
+
+    // Declared ABOVE the contract that reads them: a static initialiser may not read a static
+    // field declared later in the file, and these are wire names rather than implementation.
+    private static final String KEY_WEIGHTS = "weights";
+    private static final String KEY_WEIGHT = "w";
+
+    /**
+     * The divider weights.
+     *
+     * <p>Geometry, and the one case where that is document state rather than view state: where a user
+     * put a divider is a decision they expect back, which is why a workbench session records it. An
+     * absent list means "leave the split alone", so it is not omitted at a default -- there is no
+     * default weight array to compare against.</p>
+     */
+    public static final State<SplitView, float[]> WEIGHTS =
+            State.of(KEY_WEIGHTS, StateTypes.floatArrayUnder(KEY_WEIGHT),
+                    SplitView::getWeights,
+                    (split, weights) -> {
+                        if (weights == null || weights.length == 0) return;
+                        split.setWeights(weights);
+                    },
+                    new float[0]);
+
+    /**
+     * A divider was dragged. {@code plan_ui_rewrite.md} M1.
+     *
+     * <p>Reported on the SETTLED weights rather than the raw percentage the signal carries, because
+     * a percentage is meaningless without knowing which divider moved and how many there are.
+     * Throttled, and the released position always travels -- a drag that stopped between ticks
+     * otherwise reports a layout the user is not looking at.</p>
+     */
+    public static final Event<SplitView, float[]> RESIZED = Event.of(EventKind.VALUE,
+            (split, sink) -> split.attachListener(percentage -> sink.accept(split.getWeights())),
+            new Event.Payload<float[]>() {
+                @Override public <T> void write(StateMap<T> out, float[] value) {
+                    java.util.List<Float> boxed = new java.util.ArrayList<>();
+                    if (value != null) for (float weight : value) boxed.add(weight);
+                    out.putList(EventKind.PAYLOAD_WEIGHTS, boxed,
+                            (entry, weight) -> entry.putFloat(KEY_WEIGHT, weight));
+                }
+                @Override public <T> float[] read(StateMap<T> in) {
+                    java.util.List<Float> boxed =
+                            in.getList(EventKind.PAYLOAD_WEIGHTS, entry -> entry.getFloat(KEY_WEIGHT, 0f));
+                    float[] out = new float[boxed.size()];
+                    for (int i = 0; i < out.length; i++) out[i] = boxed.get(i);
+                    return out;
+                }
+            }, RatePolicy.DRAGGING);
+
+    public static final WidgetContract<SplitView> CONTRACT = WidgetContracts.register(
+            WidgetContract.of(SplitView.class, "splitview")
+                    .state(WEIGHTS)
+                    .event(RESIZED)
+                    .build());
 
     public enum Orientation {
         HORIZONTAL,
@@ -478,48 +539,6 @@ public class SplitView extends UIElement {
         if (pairSum <= 0f) return;
         setPercentageAt(index, percentageAt(index) + deltaWeight / pairSum * 100f);
     }
-
-    /**
-     * {@inheritDoc}
-     *
-     * <p>The weights, which is the whole of a split's authored geometry -- and it belongs here rather
-     * than in whatever happens to own the split. Two callers want it and neither should have to know how
-     * a pane stores its share: {@code UIDescriptionCodec}, so a server can describe a split at 30%, and
-     * {@link com.crystalgui.ui.SessionState}, so a divider somebody dragged is still there tomorrow.</p>
-     *
-     * <p>Every pane, not the two-pane {@code percentage} facade: an N-pane split is not recoverable from
-     * one number, and the facade would silently flatten the others on the way back.</p>
-     */
-    @Override
-    protected <T> void writeState(StateMap<T> out) {
-        super.writeState(out);
-        float[] weights = getWeights();
-        if (weights.length == 0) return;
-        List<Float> values = new ArrayList<>(weights.length);
-        for (float weight : weights) values.add(weight);
-        out.putList(KEY_WEIGHTS, values, (entry, weight) -> entry.putFloat(KEY_WEIGHT, weight));
-    }
-
-    /**
-     * {@inheritDoc}
-     *
-     * <p>Through {@link #setWeights}, which already says what a length mismatch means: extra values
-     * ignored, missing ones left alone. A record describing three panes arriving at a split that now has
-     * two is an ordinary consequence of the layout changing between builds, and it must cost the panes
-     * that still match nothing.</p>
-     */
-    @Override
-    protected <T> void readState(StateMap<T> in) {
-        super.readState(in);
-        List<Float> values = in.getList(KEY_WEIGHTS, entry -> entry.getFloat(KEY_WEIGHT, 0f));
-        if (values.isEmpty()) return;
-        float[] weights = new float[values.size()];
-        for (int i = 0; i < weights.length; i++) weights[i] = values.get(i);
-        setWeights(weights);
-    }
-
-    private static final String KEY_WEIGHTS = "weights";
-    private static final String KEY_WEIGHT = "w";
 
     /**
      * Every pane's weight, in order.

@@ -1,5 +1,9 @@
 package com.crystalgui.ui.elements.config.control;
 
+import com.crystalgui.ui.elements.config.ConfigControlContracts;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
@@ -40,6 +44,11 @@ import java.util.Locale;
  * consumer writes it again.</p>
  */
 public class NumberControl extends ValueControl<Double> {
+
+    /** Typed into, and scrubbed. Debounced like any field; the scrub commits on release. */
+    public static final WidgetContract<NumberControl> CONTRACT = ConfigControlContracts.register(
+            NumberControl.class, "numbercontrol", StateTypes.DOUBLE, 0d, RatePolicy.TYPING);
+
 
     /** Marks an element that has been made a scrub handle — the hook {@code default.css} hangs the
      * cursor on, so no Java here names a cursor. */

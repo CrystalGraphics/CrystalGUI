@@ -1,5 +1,12 @@
 package com.crystalgui.ui.elements;
 
+import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgui.ui.contract.EventKind;
+import com.crystalgui.ui.contract.Event;
+import com.crystalgui.ui.contract.WidgetContracts;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.State;
 import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgraphics.api.text.CgTextLayout;
@@ -66,6 +73,78 @@ import com.crystalgraphics.platform.CgPlatform;
  * complete control uses {@link Mode#STRING}.</p>
  */
 public class TextField extends UIElement implements UIFrameTicker {
+
+    public static final State<TextField, Mode> MODE =
+            State.of("mode", StateTypes.enumOf(Mode.class), TextField::getMode, TextField::setMode, Mode.STRING);
+
+    public static final State<TextField, UpdateMode> UPDATE_MODE =
+            State.of("updateMode", StateTypes.enumOf(UpdateMode.class),
+                    TextField::getUpdateMode, TextField::setUpdateMode, UpdateMode.ON_COMMIT);
+
+    public static final State<TextField, String> PLACEHOLDER =
+            State.<TextField, String>of("placeholder", StateTypes.STRING,
+                            TextField::getPlaceholder, TextField::setPlaceholder, "")
+                    .omittedWhen("");
+
+    public static final State<TextField, String> TEXT =
+            State.<TextField, String>of("text", StateTypes.STRING,
+                            TextField::getText, TextField::setText, "")
+                    .omittedWhen("");
+
+    /**
+     * The value as PARSED by the mode, written and never read back.
+     *
+     * <p>Derived from {@link #TEXT}, so applying it would be applying the same thing twice -- the
+     * hand-written pair wrote it and did not read it either, which is easy to mistake for an
+     * oversight. It travels because a server reading a numeric field wants the number rather than the
+     * string the user is halfway through typing.</p>
+     */
+    public static final State<TextField, String> VALUE =
+            State.<TextField, String>of("value", StateTypes.STRING,
+                            TextField::getValue, (field, ignored) -> { }, "")
+                    .omittedWhen("");
+
+    /** Every keystroke, debounced. @see RatePolicy#TYPING */
+    public static final Event<TextField, String> TEXT_CHANGED = Event.of(EventKind.TEXT,
+            (field, sink) -> field.attachListener(sink::accept),
+            new Event.Payload<String>() {
+                @Override public <T> void write(StateMap<T> out, String value) {
+                    out.putString(EventKind.PAYLOAD_TEXT, value == null ? "" : value);
+                }
+                @Override public <T> String read(StateMap<T> in) {
+                    return in.getString(EventKind.PAYLOAD_TEXT, "");
+                }
+            }, RatePolicy.TYPING);
+
+    /**
+     * The edit was MEANT -- Enter, or focus leaving the field.
+     *
+     * <p>The pair with {@link #TEXT_CHANGED} is what lets a server take a cheap running view of an edit
+     * and an expensive one only when the user commits. {@code UpdateMode} has drawn this distinction
+     * locally since it existed and had no way to say it over a wire.</p>
+     */
+    public static final Event<TextField, String> COMMITTED = Event.of(EventKind.COMMIT,
+            (field, sink) -> field.onSubmit.connect(sink::accept),
+            new Event.Payload<String>() {
+                @Override public <T> void write(StateMap<T> out, String value) {
+                    out.putString(EventKind.PAYLOAD_TEXT, value == null ? "" : value);
+                }
+                @Override public <T> String read(StateMap<T> in) {
+                    return in.getString(EventKind.PAYLOAD_TEXT, "");
+                }
+            }, RatePolicy.IMMEDIATE);
+
+    /** Mode first: it decides how the text is parsed, so text applied before it is parsed by the old one. */
+    public static final WidgetContract<TextField> CONTRACT = WidgetContracts.register(
+            WidgetContract.of(TextField.class, "textfield")
+                    .state(MODE)
+                    .state(UPDATE_MODE)
+                    .state(PLACEHOLDER)
+                    .state(TEXT)
+                    .state(VALUE)
+                    .event(TEXT_CHANGED)
+                    .event(COMMITTED)
+                    .build());
 
     /** What the content is expected to be. Drives parsing, the auto-constraints and {@code :invalid}. */
     public enum Mode {
@@ -262,26 +341,6 @@ public class TextField extends UIElement implements UIFrameTicker {
     }
 
     // ── Value ───────────────────────────────────────────────────────────────
-
-    @Override
-    protected <T> void writeState(StateMap<T> out) {
-        // Both strings: they legitimately differ mid-edit, and sending only the published value
-        // would discard whatever the user has half-typed.
-        out.putStringIfNot("text", getText(), "");
-        out.putStringIfNot("value", getValue(), "");
-        out.putStringIfNot("placeholder", getPlaceholder(), "");
-        out.putEnum("mode", getMode());
-        out.putEnum("updateMode", getUpdateMode());
-    }
-
-    @Override
-    protected <T> void readState(StateMap<T> in) {
-        // Configuration before content, so the constraints are in place when the text is validated.
-        setMode(in.getEnum("mode", Mode.class, Mode.STRING));
-        setUpdateMode(in.getEnum("updateMode", UpdateMode.class, UpdateMode.ON_COMMIT));
-        setPlaceholder(in.getString("placeholder", ""));
-        setText(in.getString("text", ""));
-    }
 
     /** Exactly what's in the box, including content that doesn't currently validate. */
     public String getText() {

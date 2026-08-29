@@ -1,5 +1,9 @@
 package com.crystalgui.ui.elements.config.control;
 
+import com.crystalgui.ui.elements.config.ConfigControlContracts;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.render.texture.CgUiQuad;
 import com.crystalgui.ui.UIElement;
@@ -29,6 +33,11 @@ import javax.annotation.Nullable;
  * control never needs to know that spelling exists.</p>
  */
 public class ColorControl extends ValueControl<Integer> {
+
+    /** A colour wheel has a drag behind it, so it is throttled and the released colour always travels. */
+    public static final WidgetContract<ColorControl> CONTRACT = ConfigControlContracts.register(
+            ColorControl.class, "colorcontrol", StateTypes.INT, 0xFFFFFFFF, RatePolicy.DRAGGING);
+
 
     public static final String SWATCH_CLASS = "__swatch__";
     public static final String COLOR_BAR_CLASS = "__color-bar__";

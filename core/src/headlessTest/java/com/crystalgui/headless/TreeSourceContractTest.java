@@ -6,11 +6,13 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.util.ArrayList;
 import java.util.List;
 
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.dom.ElementTreeSource;
 import com.crystalgui.ui.dom.NodeContract;
 import com.crystalgui.ui.dom.TreeObserver;
@@ -228,20 +230,47 @@ public class TreeSourceContractTest {
         assertFalse(contract.reportsAnything());
     }
 
+    /**
+     * <b>Changed at M1, and the change is the feature.</b> This used to call
+     * {@code addReportedEvent("activate")} on a bare {@code UIElement} — which now throws, because a
+     * plain element has no contract and therefore nothing it can report. Before contracts a session
+     * could ask any element for any string: the request was recorded, written into the description, and
+     * the client's wiring hit a {@code default} arm that logged and carried on. A widget that reports
+     * what it is capable of is the point.
+     */
     @Test
     public void aContractCarriesWhatTheNodeReports() {
         UIElement root = node();
-        UIElement reporting = node();
+        Button reporting = new Button("go");
         root.addChild(reporting);
-        reporting.addReportedEvent("activate");
 
         TreeSource<UIElement> source = sourceOver(root);
-        NodeContract contract = source.contractOf(reporting);
 
-        assertTrue(contract.reportsAnything());
-        assertTrue(contract.reportedEvents().contains("activate"));
-        assertFalse("and a node that reports nothing says so",
+        assertTrue("a Button declares that it can be activated",
+                source.contractOf(reporting).eventKinds().contains("activate"));
+        assertFalse("...and a plain container declares nothing",
                 source.contractOf(root).reportsAnything());
+    }
+
+    @Test
+    public void anElementCannotBeAskedToReportWhatItCannotObserve() {
+        UIElement plain = node();
+        try {
+            plain.addReportedEvent("activate");
+            fail("a plain UIElement has no contract, so there is no way for it to report anything -- "
+                    + "this used to be recorded, described, and silently dropped by the client");
+        } catch (IllegalStateException expected) {
+            assertTrue(expected.getMessage(), expected.getMessage().contains("WidgetContract"));
+        }
+
+        Button button = new Button("go");
+        button.addReportedEvent("activate");           // declared, so accepted
+        try {
+            button.addReportedEvent("wheel");
+            fail("a Button declares no wheel event and must refuse to be asked for one");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage(), expected.getMessage().contains("cannot report"));
+        }
     }
 
     // ── Observation ──────────────────────────────────────────────────────────

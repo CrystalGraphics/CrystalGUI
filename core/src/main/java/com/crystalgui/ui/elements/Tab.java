@@ -1,5 +1,11 @@
 package com.crystalgui.ui.elements;
 
+import com.crystalgui.ui.contract.EventKind;
+import com.crystalgui.ui.contract.Event;
+import com.crystalgui.ui.contract.WidgetContracts;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.State;
 import com.crystalgui.core.signal.Signal;
 import javax.annotation.Nullable;
 import java.util.List;
@@ -46,6 +52,27 @@ import dev.vfyjxf.taffy.style.TaffyDisplay;
  * either.</p>
  */
 public class Tab extends Button {
+
+    public static final State<Tab, String> TEXT =
+            State.<Tab, String>of("text", StateTypes.STRING, Tab::getText, Tab::setText, "")
+                    .omittedWhen("");
+
+    /**
+     * The close button was pressed.
+     *
+     * <p>{@code plan_ui_rewrite.md} M1 asked for {@code Tab.SELECTED} here. A tab has no selection
+     * signal of its own -- selection belongs to the strip, and {@code TabView.SELECT} reports it with
+     * the index, which is what a server can act on. What a tab genuinely owns is its close REQUEST,
+     * and that is the veto path M4 needs, so it is the one declared.</p>
+     */
+    public static final Event<Tab, Void> CLOSE_REQUESTED =
+            Event.signal(EventKind.CLOSE_REQUESTED, (tab, sink) -> tab.onCloseRequested.connect(sink));
+
+    public static final WidgetContract<Tab> CONTRACT = WidgetContracts.register(
+            WidgetContract.of(Tab.class, "tab")
+                    .state(TEXT)
+                    .event(CLOSE_REQUESTED)
+                    .build());
 
     /** On the content pane, not on the tab itself. */
     public static final String PANE_CLASS = "__pane__";
@@ -163,21 +190,6 @@ public class Tab extends Button {
     /** @see #setClosable */
     public boolean isClosable() {
         return close != null;
-    }
-
-    /**
-     * Only the label. Selection is deliberately absent: it is a TabView-wide invariant (exactly one
-     * tab), so it belongs to the TabView's own state, and a Tab restoring {@code selected} on its own
-     * could leave two tabs checked at once.
-     */
-    @Override
-    protected <T> void writeState(StateMap<T> out) {
-        out.putStringIfNot("text", getText(), "");
-    }
-
-    @Override
-    protected <T> void readState(StateMap<T> in) {
-        setText(in.getString("text", ""));
     }
 
     /** Drives {@code tab:checked}. */

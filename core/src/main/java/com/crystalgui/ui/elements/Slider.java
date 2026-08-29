@@ -1,5 +1,12 @@
 package com.crystalgui.ui.elements;
 
+import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgui.ui.contract.EventKind;
+import com.crystalgui.ui.contract.Event;
+import com.crystalgui.ui.contract.WidgetContracts;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.State;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
@@ -47,10 +54,55 @@ import dev.vfyjxf.taffy.style.FlexDirection;
  */
 public class Slider extends UIElement {
 
+    public static final State<Slider, Float> MIN =
+            State.of("min", StateTypes.FLOAT, Slider::getMin, (s, v) -> s.setRange(v, s.getMax()), 0f);
+
+    public static final State<Slider, Float> MAX =
+            State.of("max", StateTypes.FLOAT, Slider::getMax, (s, v) -> s.setRange(s.getMin(), v), 1f);
+
+    public static final State<Slider, Float> STEP =
+            State.of("step", StateTypes.FLOAT, Slider::getStep, Slider::setStep, 0f);
+
+    /**
+     * Sanitized on the way in, and this is the slot that most needs it: a value is the one piece of a
+     * slider a PEER sends, and "the setter will cope" is a hope rather than a guarantee. NaN is the
+     * case that matters -- it fails every comparison, so a range check written the obvious way lets it
+     * through and it then poisons every layout it reaches.
+     */
+    public static final State<Slider, Float> VALUE =
+            State.of("value", StateTypes.FLOAT, Slider::getValue, Slider::setValue, 0f)
+                    .sanitizedBy(v -> v == null || Float.isNaN(v) ? 0f : v);
+
+    /** A drag. Throttled, and the released value always travels. @see RatePolicy */
+    public static final Event<Slider, Float> VALUE_CHANGED = Event.of(EventKind.VALUE,
+            (slider, sink) -> slider.attachListener(sink::accept),
+            new Event.Payload<Float>() {
+                @Override public <T> void write(StateMap<T> out, Float value) {
+                    out.putFloat(EventKind.PAYLOAD_VALUE, value);
+                }
+                @Override public <T> Float read(StateMap<T> in) {
+                    return in.getFloat(EventKind.PAYLOAD_VALUE, 0f);
+                }
+            }, RatePolicy.DRAGGING);
+
+    /**
+     * RANGE BEFORE VALUE, and that is why a contract applies slots in declaration order. Taking the
+     * value first clamps it against the OLD bounds, so a slider arriving with range 0-100 and value 80
+     * would land at 1 if the previous range was 0-1 -- silently, and only for a widget whose range the
+     * server had also changed.
+     */
+    public static final WidgetContract<Slider> CONTRACT = WidgetContracts.register(
+            WidgetContract.of(Slider.class, "slider")
+                    .state(MIN)
+                    .state(MAX)
+                    .state(STEP)
+                    .state(VALUE)
+                    .event(VALUE_CHANGED)
+                    .build());
+
     public static final String FILL_CLASS = "__fill__";
     public static final String THUMB_CLASS = "__thumb__";
     public static final String SPACER_CLASS = "__spacer__";
-
 
     /** Fires whenever the value actually changes, from any source. */
     public final Signal.Value<Float> onValueChanged = new Signal.Value<>();
@@ -135,24 +187,6 @@ public class Slider extends UIElement {
     }
 
     // ── Value ───────────────────────────────────────────────────────────────
-
-    @Override
-    protected <T> void writeState(StateMap<T> out) {
-        // Range and step before value, because readState has to apply them in that order.
-        out.putFloat("min", min);
-        out.putFloat("max", max);
-        out.putFloat("step", getStep());
-        out.putFloat("value", getValue());
-    }
-
-    @Override
-    protected <T> void readState(StateMap<T> in) {
-        // Order matters: setValue clamps and snaps against the current range and step, so restoring
-        // the value first would clamp it against the defaults (0..1) and silently lose it.
-        setRange(in.getFloat("min", 0f), in.getFloat("max", 1f));
-        setStep(in.getFloat("step", 0f));
-        setValue(in.getFloat("value", 0f));
-    }
 
     public float getValue() {
         return value;

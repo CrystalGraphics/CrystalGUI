@@ -1,5 +1,9 @@
 package com.crystalgui.ui.elements;
 
+import com.crystalgui.ui.contract.WidgetContracts;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.State;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.AnchoredPlacement;
@@ -43,6 +47,16 @@ import javax.annotation.Nullable;
  * target's innermost popover ancestor — see there for why the invoker counts as part of the popover.</p>
  */
 public class Popover extends UIElement {
+
+    public static final State<Popover, Mode> MODE =
+            State.of("mode", StateTypes.enumOf(Mode.class), Popover::getMode, Popover::setMode, Mode.AUTO);
+
+    public static final WidgetContract<Popover> CONTRACT = WidgetContracts.register(
+            WidgetContract.of(Popover.class, "popover")
+                    .state(MODE)
+                    .withDescribedChildren()
+                    .build());
+
 
     /**
      * Present exactly while the popover is open, so a stylesheet can style — and <b>transition</b> — the open

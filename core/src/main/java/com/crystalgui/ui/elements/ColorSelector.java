@@ -1,5 +1,12 @@
 package com.crystalgui.ui.elements;
 
+import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgui.ui.contract.EventKind;
+import com.crystalgui.ui.contract.Event;
+import com.crystalgui.ui.contract.WidgetContracts;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.State;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.core.signal.Signal;
@@ -38,6 +45,54 @@ import java.util.Locale;
  * rather than as four unrelated bars, and it falls out of rebuilding them from the model.</p>
  */
 public class ColorSelector extends UIElement {
+
+    public static final State<ColorSelector, Mode> MODE =
+            State.of("mode", StateTypes.enumOf(Mode.class),
+                    ColorSelector::getMode, ColorSelector::setMode, Mode.values()[0]);
+
+    /** What Reset goes back to. Applied BEFORE the live colour -- see the contract below. */
+    public static final State<ColorSelector, Integer> ORIGINAL =
+            State.of("original", StateTypes.INT,
+                    ColorSelector::getOriginalColor, ColorSelector::setInitialColor, 0xFFFFFFFF);
+
+    public static final State<ColorSelector, Integer> COLOR =
+            State.of("color", StateTypes.INT, ColorSelector::getColor, ColorSelector::setColor, 0xFFFFFFFF);
+
+    /**
+     * The colour moved. {@code plan_ui_rewrite.md} M1: a ColorSelector could not report at all, so a
+     * server-side colour picker was a control that showed a colour and could never be told one.
+     *
+     * <p>{@link EventKind#CHANGE} rather than {@link EventKind#VALUE}: there is a drag here, but what
+     * the user is choosing is discrete -- a colour, not a position along a range -- and a server acting
+     * on every intermediate hue is doing work nobody asked for. Throttled for the drag, and the
+     * released colour always travels.</p>
+     */
+    public static final Event<ColorSelector, Integer> CHANGED = Event.of(EventKind.CHANGE,
+            (selector, sink) -> selector.onColorChanged.connect(sink::accept),
+            new Event.Payload<Integer>() {
+                @Override public <T> void write(StateMap<T> out, Integer value) {
+                    out.putInt(EventKind.PAYLOAD_COLOR, value);
+                }
+                @Override public <T> Integer read(StateMap<T> in) {
+                    return in.getInt(EventKind.PAYLOAD_COLOR, 0xFFFFFFFF);
+                }
+            }, RatePolicy.DRAGGING);
+
+    /**
+     * MODE, then ORIGINAL, then COLOR -- the order the hand-written readState used, in statement order
+     * where nothing could see it.
+     *
+     * <p>Mode first because it decides how a colour is interpreted; original before colour because
+     * {@code setInitialColor} moves the live colour with it, so taking it afterwards would overwrite
+     * the value that was actually sent with the one Reset goes back to.</p>
+     */
+    public static final WidgetContract<ColorSelector> CONTRACT = WidgetContracts.register(
+            WidgetContract.of(ColorSelector.class, "colorselector")
+                    .state(MODE)
+                    .state(ORIGINAL)
+                    .state(COLOR)
+                    .event(CHANGED)
+                    .build());
 
     public static final String WHEEL_CLASS = "__wheel__";
     public static final String RING_CLASS = "__ring__";
@@ -707,39 +762,6 @@ public class ColorSelector extends UIElement {
         } catch (NumberFormatException malformed) {
             return null;
         }
-    }
-
-    /**
-     * The colour, the colour it started as, and the mode.
-     *
-     * <p>{@code originalColor} travels because it is not derivable from the current one and it is what a
-     * "revert" compares against — restoring only the live colour would leave a selector that believes it
-     * was always this colour, so the revert affordance would silently do nothing.</p>
-     *
-     * <p>The mode is written by NAME rather than by ordinal: an ordinal is a number that means something
-     * different the moment a constant is inserted, and a description outlives the build that wrote it.</p>
-     */
-    @Override
-    protected <T> void writeState(StateMap<T> out) {
-        out.putInt("color", getColor());
-        out.putInt("original", getOriginalColor());
-        out.putString("mode", getMode().name());
-    }
-
-    @Override
-    protected <T> void readState(StateMap<T> in) {
-        // Mode first: it decides what the widget shows, and setColor is interpreted against it.
-        // Falls back to the mode it already has, not to a constant: an absent key must leave the
-        // widget alone rather than quietly reset it to whichever mode happens to be declared first.
-        String mode = in.getString("mode", getMode().name());
-        for (Mode candidate : Mode.values()) {
-            if (candidate.name().equals(mode)) {
-                setMode(candidate);
-                break;
-            }
-        }
-        setInitialColor(in.getInt("original", in.getInt("color", 0xFFFFFFFF)));
-        setColor(in.getInt("color", 0xFFFFFFFF));
     }
 
 }

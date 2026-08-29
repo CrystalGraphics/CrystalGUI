@@ -1,5 +1,11 @@
 package com.crystalgui.ui.elements;
 
+import com.crystalgui.ui.contract.EventKind;
+import com.crystalgui.ui.contract.Event;
+import com.crystalgui.ui.contract.WidgetContracts;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.State;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.serialization.StateMap;
@@ -34,9 +40,31 @@ import javax.annotation.Nullable;
  */
 public class Button extends UIElement {
 
+    /**
+     * The label. An internal child, so it never travels as an element of its own -- but its content is
+     * authored state and must.
+     */
+    public static final State<Button, String> TEXT =
+            State.<Button, String>of("text", StateTypes.STRING, Button::getText, Button::setText, "")
+                    .omittedWhen("");
+
+    /** A press. The left button only, and Space/Enter synthesize the same pair. */
+    public static final Event<Button, Void> ACTIVATE =
+            Event.signal(EventKind.ACTIVATE, (button, sink) -> button.attachListener(sink));
+
+    public static final WidgetContract<Button> CONTRACT = WidgetContracts.register(
+            WidgetContract.of(Button.class, "button")
+                    .state(TEXT)
+                    .event(ACTIVATE)
+                    .build());
+
+    @Override
+    public boolean acceptsPublicChildren() {
+        return false;
+    }
+
     public static final String PRE_ICON_CLASS = "__pre-icon__";
     public static final String POST_ICON_CLASS = "__post-icon__";
-
 
     public final Signal.Action onPressed = new Signal.Action();
 
@@ -84,23 +112,6 @@ public class Button extends UIElement {
                 onPressed.emit();
             }
         });
-    }
-
-    @Override
-    public boolean acceptsPublicChildren() {
-        return false;
-    }
-
-    @Override
-    protected <T> void writeState(StateMap<T> out) {
-        // The label is an internal child, so it never travels as an element of its own — but its
-        // content is authored state and must.
-        out.putStringIfNot("text", getText(), "");
-    }
-
-    @Override
-    protected <T> void readState(StateMap<T> in) {
-        setText(in.getString("text", ""));
     }
 
     public String getText() {

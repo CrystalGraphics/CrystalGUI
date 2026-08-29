@@ -1,5 +1,12 @@
 package com.crystalgui.ui.elements;
 
+import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgui.ui.contract.EventKind;
+import com.crystalgui.ui.contract.Event;
+import com.crystalgui.ui.contract.WidgetContracts;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.State;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.serialization.StateMap;
@@ -27,6 +34,42 @@ import com.crystalgraphics.platform.CgPlatform;
  * styling in Java — it only ever sets/reads {@link #isChecked()}.</p>
  */
 public class Checkbox extends UIElement {
+
+    public static final State<Checkbox, Boolean> CHECKED =
+            State.<Checkbox, Boolean>of("checked", StateTypes.BOOL,
+                            Checkbox::isChecked, Checkbox::setChecked, false)
+                    .omittedWhen(false);
+
+    public static final State<Checkbox, String> LABEL =
+            State.<Checkbox, String>of("label", StateTypes.STRING,
+                            Checkbox::getLabel, Checkbox::setLabel, "")
+                    .omittedWhen("");
+
+    public static final Event<Checkbox, Boolean> TOGGLE = Event.of(EventKind.TOGGLE,
+            (checkbox, sink) -> checkbox.attachListener(sink::accept),
+            new Event.Payload<Boolean>() {
+                @Override public <T> void write(StateMap<T> out, Boolean value) {
+                    out.putBool(EventKind.PAYLOAD_CHECKED, value);
+                }
+                @Override public <T> Boolean read(StateMap<T> in) {
+                    return in.getBool(EventKind.PAYLOAD_CHECKED, false);
+                }
+            }, RatePolicy.IMMEDIATE);
+
+    // LABEL BEFORE CHECKED, and the order is the contract's whole reason for being ordered: the
+    // hand-written readState set the label first too, because a group can refuse a check and the
+    // widget has to already look like itself when it does.
+    public static final WidgetContract<Checkbox> CONTRACT = WidgetContracts.register(
+            WidgetContract.of(Checkbox.class, "checkbox")
+                    .state(LABEL)
+                    .state(CHECKED)
+                    .event(TOGGLE)
+                    .build());
+
+    @Override
+    public boolean acceptsPublicChildren() {
+        return false;
+    }
 
     public static final String MARK_CLASS = "__mark__";
 
@@ -67,25 +110,6 @@ public class Checkbox extends UIElement {
                 setChecked(!checked);
             }
         });
-    }
-
-    @Override
-    public boolean acceptsPublicChildren() {
-        return false;
-    }
-
-    @Override
-    protected <T> void writeState(StateMap<T> out) {
-        out.putBoolIfNot("checked", isChecked(), false);
-        out.putStringIfNot("label", getLabel(), "");
-    }
-
-    @Override
-    protected <T> void readState(StateMap<T> in) {
-        setLabel(in.getString("label", ""));
-        // Through setChecked, not the field: it fires onCheckedChanged and invalidateStyleMatch, so
-        // :checked re-matches and the mark repaints. Assigning the field looks right and renders wrong.
-        setChecked(in.getBool("checked", false));
     }
 
     @Override
