@@ -6,6 +6,7 @@ import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.UIElement;
 
@@ -91,7 +92,7 @@ public final class Event<W extends UIElement, P> {
 
     /** Encodes an occurrence, or answers null for a kind that carries nothing. */
     @Nullable
-    public <T> StateMap<T> encode(com.crystalgui.serialization.DynamicOps<T> ops, P value) {
+    public <T> StateMap<T> encode(DynamicOps<T> ops, P value) {
         if (payload == null) return null;
         StateMap<T> out = new StateMap<>(ops);
         payload.write(out, value);

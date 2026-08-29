@@ -165,12 +165,15 @@ selectors, `~`/`+`, `@media`, `@import`.
 ## 4. A networked UI
 
 One class describes the whole thing. It **is** a `UIElement`, so it nests anywhere an element does,
-and `machinepanel { }` styles it.
+and `furnacepanel { }` styles it.
+
+You write it as `Networked<YourDataType>` — a panel is always a **view of something**, and that
+something is your own object.
 
 ```java
-public final class FurnacePanel extends UIElement implements Networked<FurnaceModel> {
+public final class FurnacePanel extends UIElement implements Networked<FurnaceData> {
 
-    public static final UiType<FurnacePanel, FurnaceModel> TYPE =
+    public static final UiType<FurnacePanel, FurnaceData> TYPE =
             UiType.of("mymod:furnace", FurnacePanel::new);
 
     // Every UIElement field is a part of this panel. Declared = created and named for you.
@@ -181,7 +184,7 @@ public final class FurnacePanel extends UIElement implements Networked<FurnaceMo
     public Button purge = new Button("Purge");
 
     @Override
-    public void layout(FurnaceModel model) {        // SERVER, once — the structure
+    public void layout(FurnaceData model) {        // SERVER, once — the structure
         addChild(new UIText("Furnace"));
         addChild(row("Power", power));
         addChild(row("Rate", throughput));
@@ -191,20 +194,96 @@ public final class FurnacePanel extends UIElement implements Networked<FurnaceMo
     }
 
     @Override
-    public void serve(FurnaceModel model, ServerScope io) {   // SERVER, once — the behaviour
+    public void serve(FurnaceData model, ServerScope io) {   // SERVER, once — the behaviour
+        // Switch.TOGGLE is an EVENT: a constant on the Switch class saying "this widget can report
+        // being flipped, and it hands you a Boolean". You get `on` already typed. See below.
         io.on(power,      Switch.TOGGLE,        (ctx, on)    -> model.setRunning(on));
         io.on(throughput, Slider.VALUE_CHANGED, (ctx, value) -> model.setRate(value));
         io.onActivate(purge, ctx -> model.purge());
     }
 
     @Override
-    public void tick(FurnaceModel model) {          // SERVER, every world tick — mirror the model
+    public void tick(FurnaceData model) {          // SERVER, every world tick — mirror the model
         power.setChecked(model.isRunning());
         burn.setFraction(model.burnFraction());
         status.setText(model.isRunning() ? "Running" : "Idle");
     }
 }
 ```
+
+### The model — what the panel is a view of
+
+`Networked<FurnaceData>` says *"this panel shows a `FurnaceData`"*. `FurnaceData` is **yours**: a
+plain class holding whatever the thing being controlled actually is — a furnace's burn time and fuel,
+a shop's stock, a reactor's rods. CrystalGUI never looks inside it.
+
+```java
+public final class FurnaceData {              // no interface to implement, no annotations
+    private boolean running;
+    private float rate;
+
+    public boolean isRunning()   { return running; }
+    public void setRunning(boolean v) { running = v; }
+    …
+}
+```
+
+**One model, one window, handed over at open:**
+
+```java
+ServerWindows.of(connection).open(FurnacePanel.TYPE, furnaceAt(x, y, z));
+//                                                   ^^^^^^^^^^^^^^^^^^
+//                                                   the FurnaceData this window is for
+```
+
+Open the same panel type with a different model and you get a different window showing a different
+furnace. Open it with the *same* model for two players and both see one furnace — the server holds
+one object and every viewer's window mirrors it.
+
+**It lives on the server and nowhere else.** That is why the model is a *parameter* of the
+server-side hooks rather than a field on the panel:
+
+```java
+void layout(FurnaceData model)              // server — has one
+void serve(FurnaceData model, ServerScope)  // server — has one
+void tick(FurnaceData model)                // server — has one
+
+void bound()                                // client — no model, and there never was one
+void client(ClientScope io)                 // client — likewise
+```
+
+The client is showing a *picture* of your furnace, assembled from the description and kept up to date
+by state deltas. It has no `FurnaceData` and cannot get one, which is exactly what you want: there is
+no way to accidentally write logic that reads the model on the wrong side, because there is nothing
+to read it from.
+
+Two practical consequences:
+
+- **`FurnaceData` may be a server-only type.** It appears only in method signatures, which erase, so
+  it can safely name a `TileEntity`, a `World`, or anything else a client does not have.
+- **Need the model in your own helper methods?** Assign it to a field in `serve` — one line,
+  explicitly, on the side that has one.
+
+### Those event constants
+
+`Switch.TOGGLE` and `Slider.VALUE_CHANGED` are `public static final` fields on the widgets
+themselves. Each one says *what the widget can report* and *what it hands you*:
+
+```java
+Switch.TOGGLE           // Event<Switch, Boolean>   — flipped, gives you the new state
+Slider.VALUE_CHANGED    // Event<Slider, Float>     — dragged, gives you the value
+Button.ACTIVATE         // Event<Button, Void>      — pressed, gives you nothing
+```
+
+So `io.on(power, Switch.TOGGLE, (ctx, on) -> …)` reads as *"when this switch is toggled, here is the
+boolean"* — the value arrives decoded, and you never write a key or a default. Type your widget and a
+dot, and your IDE lists what it can report.
+
+Two consequences worth knowing now: you **cannot** subscribe to an event a widget does not have (it
+will not compile), and a widget's tempo is handled for you — a slider throttles its drag, a text
+field debounces its typing, and both always deliver the value you ended on.
+
+[§5](#5-reacting-to-the-user) has the full list and the details.
 
 ### Opening it — where the connection comes from
 
@@ -223,7 +302,7 @@ public boolean onBlockActivated(World world, int x, int y, int z, EntityPlayer p
     if (world.isRemote) return true;            // server decides; the client just gets the window
     ProtocolConnection<Object> connection = CgUiConnections.forPlayer(player);
     if (connection != null) {
-        ServerWindows.of(connection).open(FurnacePanel.TYPE, furnaceAt(x, y, z));
+        ServerWindows.of(connection).open(FurnacePanel.TYPE, furnaceAt(x, y, z)); // FurnaceData in world  at (x,y,z) 
     }
     return true;
 }
@@ -274,8 +353,13 @@ the thing you were going to write anyway.
 
 ### Methods may be side-specific; fields may not
 
-`serve` may name server-only types and `client` may name client-only ones, because a method body
-resolves lazily. A **field** of a client-only type would fail to load the class on a server.
+The same erasure that lets your model be a server-only type applies to method bodies: `serve` may
+name server-only classes and `client` may name client-only ones, because a body resolves only when it
+runs.
+
+**Fields are the exception, and it is not a style rule.** A field's type resolves when the class
+loads, so a panel with a field of a client-only type fails to load on a dedicated server — the whole
+class, not just that field. Keep client-only things inside `client(io)` and `bound()`.
 
 ---
 
@@ -381,7 +465,7 @@ For anything that is not a widget interaction, both sides have a small RPC surfa
 **Server answers a question:**
 
 ```java
-@Override public void serve(FurnaceModel model, ServerScope io) {
+@Override public void serve(FurnaceData model, ServerScope io) {
     io.onCall("history", (args, respond) -> {
         StateMap<Object> out = io.newMap();
         out.putInt("burns", model.burnCount());
@@ -421,12 +505,12 @@ is allowed to see, and attach it:
 ```java
 public EnginePanel engine;
 
-@Override public void layout(FurnaceModel model) {
+@Override public void layout(FurnaceData model) {
     engine = EnginePanel.TYPE.build(model.engine());
     addChild(engine);
 }
 
-@Override public void serve(FurnaceModel model, ServerScope io) {
+@Override public void serve(FurnaceData model, ServerScope io) {
     io.attach(engine, model.engine());        // the child is ticked and closed with this window
 }
 ```
@@ -480,7 +564,7 @@ window.close("the block was broken");           // server
 ```
 
 ```java
-@Override public boolean stillValid(FurnaceModel model, Object viewer) {
+@Override public boolean stillValid(FurnaceData model, Object viewer) {
     return model.isStillThere();                // false closes it
 }
 ```
