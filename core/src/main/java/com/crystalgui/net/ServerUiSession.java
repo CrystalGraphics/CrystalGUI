@@ -153,6 +153,29 @@ public final class ServerUiSession<T> {
 
         boolean opened;
 
+        /**
+         * Whether THIS viewer is watching. One flag per viewer, which was the whole of network audit
+         * finding S7: a single session-wide flag meant any one viewer minimising suppressed everyone's
+         * deltas, so ten players on one window were at the mercy of whichever of them looked away.
+         */
+        boolean visible = true;
+
+        /** Reports refused from this viewer. @see #refuse */
+        int refusals;
+
+        /** Set once {@link #refusalThreshold} is reached: this viewer is no longer listened to. */
+        boolean refused;
+
+        /**
+         * Set while hidden, and what makes coming back correct rather than merely quiet.
+         *
+         * <p>State deltas are skipped for a hidden viewer, so it misses them; on return it needs the
+         * current state and not the next change. Re-describing is how it gets it -- the same path a
+         * LATE viewer takes, and correct for the same reason, since a live description carries the ids
+         * the server is already using so nothing renumbers.</p>
+         */
+        boolean missedState;
+
         Viewer(MessageRouter<T> router, @Nullable Object peer, @Nullable UiWindowMux<T> mux) {
             this.router = router;
             this.peer = peer;
@@ -693,7 +716,11 @@ public final class ServerUiSession<T> {
      */
     public <W extends UIElement, P> ServerUiSession<T> on(
             W element, Event<W, P> event, java.util.function.BiConsumer<UiEventContext<T>, P> handler) {
-        return on(element, event.kind(), ctx -> handler.accept(ctx, event.decode(ctx.payload())));
+        // SANITIZED BY THE WIDGET, not by the session: what makes a payload safe is a question about
+        // the widget's own configuration -- a slider's bounds and step, a field's maximum length -- and
+        // nothing outside the widget class knows those.
+        return on(element, event.kind(),
+                ctx -> handler.accept(ctx, event.sanitize(element, event.decode(ctx.payload()))));
     }
 
     /**
@@ -708,8 +735,22 @@ public final class ServerUiSession<T> {
         return on(element, event.kind(), handler);
     }
 
-    /** What a handler is given. Carries no coordinates — see {@link UiMethods#EVENT}. */
-    public record UiEventContext<T>(ServerUiSession<T> session, UIElement element, StateMap<T> payload) {
+    /**
+     * What a handler is given. Carries no coordinates — see {@link UiMethods#EVENT}.
+     *
+     * @param viewer <b>who did it</b> — the peer of the connection the report arrived on, or
+     *               {@code null} for a session with no peer (a test, or a local loopback). Minecraft's
+     *               own container handlers receive the {@code ServerPlayer} and Unreal's RPCs carry the
+     *               owning connection, for the same two reasons: <b>attribution</b> (a handler that
+     *               counts anything, or writes who did it, is otherwise crediting whoever happens to be
+     *               first in the viewer list) and <b>permission</b> (one viewer may be allowed to press
+     *               a button another may not, which cannot even be expressed without knowing which one
+     *               asked). It is also the handle {@link #callViewer} and
+     *               {@link #setViewerVisible(Object, boolean)} take, so a handler can answer the viewer
+     *               that spoke rather than broadcasting.
+     */
+    public record UiEventContext<T>(ServerUiSession<T> session, @Nullable Object viewer,
+                                    UIElement element, StateMap<T> payload) {
     }
 
     /**
@@ -729,11 +770,41 @@ public final class ServerUiSession<T> {
      * not re-described while nobody is looking and the client's numbering stays the one it was last
      * told. @see #setViewerVisible
      */
+    /**
+     * One tick's worth of change: <b>structure to everyone, state to whoever is looking.</b>
+     *
+     * <p>The asymmetry is forced and is worth stating, because the obvious symmetric version is
+     * silently wrong. A tree delta <b>renumbers both sides</b> — so withholding one from a hidden
+     * viewer leaves it addressing elements by numbers the server has moved on from, and every later
+     * message lands somewhere plausible and incorrect. Structure therefore goes to every viewer whether
+     * or not it is watching, which costs nothing in practice: structure changes are rare and state
+     * deltas are the per-tick traffic.</p>
+     *
+     * <p>State is the opposite: it is keyed by id, so skipping it for a hidden viewer costs that viewer
+     * nothing but freshness, and it is re-described on the way back. @see Viewer#missedState</p>
+     *
+     * <p>Nothing is drained at all when NOBODY is watching, which is the older rule and still holds:
+     * the whole flush is gated together, never just the send.</p>
+     */
     private void flush() {
-        if (!viewerVisible) return;
+        if (!anyViewerVisible()) return;
         flushStructure();
         StateMap<T> state = mirror.drainState();
-        if (state != null) notifyClient(UiMethods.STATE_DELTA, state);
+        if (state == null) return;
+        state.putInt(UiMethods.WINDOW, windowId);
+        T encoded = state.encode();
+        for (Viewer<T> viewer : viewers) {
+            if (viewer.visible) viewer.router.notify(UiMethods.STATE_DELTA, encoded);
+            else viewer.missedState = true;
+        }
+    }
+
+    /** Whether anyone at all is watching. What gates the drain, and the projections above it. */
+    public boolean anyViewerVisible() {
+        for (Viewer<T> viewer : viewers) {
+            if (viewer.visible) return true;
+        }
+        return viewers.isEmpty() && viewerVisible;
     }
     /**
      * Sends {@code ui/treeDelta} for every anchor whose children changed, then renumbers.
@@ -753,6 +824,28 @@ public final class ServerUiSession<T> {
      * allocated here too, in send order, so the far side can number its own copy identically.</p>
      */
     /**
+     * Re-encodes what a viewer joining NOW would be handed, from the tree as it stands.
+     *
+     * <p>Called from two places, and the second is easy to miss. A <b>reshape</b> obviously invalidates
+     * the description. So does a plain <b>state change</b> — the description carries each widget's
+     * state, so a window whose slider has moved is no longer described by the payload built at
+     * {@code open()}. That is harmless while nothing re-serves it, and wrong the moment something does:
+     * a viewer coming back from hidden was handed the OPENING tree and quietly resynced to values from
+     * however long ago, which looks exactly like a stale delta rather than a stale description.</p>
+     *
+     * <p>Pristine or live according to whether the window has been reshaped — a reshaped one's ids are
+     * no longer derivable from a walk, so its description has to carry them, and an untouched one stays
+     * content-addressed and shareable.</p>
+     */
+    private void refreshDescription() {
+        elementCount = ids.describedCount(root);
+        encodedDescription = mirror.reshaped() ? nodes.describeLive(root, ids::idOf)
+                : nodes.describe(root);
+        descHash = ContentHash.of(ops, encodedDescription);
+        rebuildOpenPayload();
+    }
+
+    /**
      * Sends the edit script, and re-describes the window for anyone joining later.
      *
      * <p>The re-description is this method's and not the mirror's: what a LATE viewer is handed is a
@@ -762,12 +855,9 @@ public final class ServerUiSession<T> {
         StateMap<T> out = mirror.drainStructure();
         if (out == null) return;
 
-        elementCount = ids.describedCount(root);
-        // A reshaped window's ids are no longer derivable from a walk, so from here on the description
-        // it serves carries them.
-        encodedDescription = nodes.describeLive(root, ids::idOf);
-        descHash = ContentHash.of(ops, encodedDescription);
-        rebuildOpenPayload();
+        // drainStructure() has already flipped the mirror's `reshaped`, which is what decides whether
+        // the refreshed description carries ids.
+        refreshDescription();
 
         notifyClient(UiMethods.TREE_OPS, out);
     }
@@ -786,11 +876,17 @@ public final class ServerUiSession<T> {
         // NOT through the visibility gate. A close is the one message a hidden window must still be
         // told, because it is what ends the window rather than describing it.
         boolean wasVisible = viewerVisible;
+        boolean[] were = new boolean[viewers.size()];
+        for (int i = 0; i < viewers.size(); i++) {
+            were[i] = viewers.get(i).visible;
+            viewers.get(i).visible = true;
+        }
         viewerVisible = true;
         try {
             closeInternal(reason, true);
         } finally {
             viewerVisible = wasVisible;
+            for (int i = 0; i < viewers.size() && i < were.length; i++) viewers.get(i).visible = were[i];
         }
     }
 
@@ -928,6 +1024,7 @@ public final class ServerUiSession<T> {
         });
 
         bindNotify(viewer, UiMethods.EVENT, payload -> {
+            if (viewer.refused) return;
             StateMap<T> in = read(payload);
             if (!mine(in)) return;
             int nid = in.getInt("nid", -1);
@@ -940,16 +1037,83 @@ public final class ServerUiSession<T> {
             var byKind = handlers.get(element);
             var handler = byKind == null ? null : byKind.get(kind);
             if (handler == null) {
-                // A client reporting something nobody asked for. Not fatal, but not normal either --
-                // it means the two sides disagree about the description.
-                CrystalGuiCore.LOGGER.warn("Session {}: no handler for '{}' on element {}",
-                        windowId, kind, nid);
+                // A client reporting something nobody asked for -- the two sides disagree about the
+                // description, or somebody is making it up.
+                refuse(viewer, "no handler for '" + kind + "' on element " + nid);
+                return;
+            }
+
+            /*
+             * WHAT A LEGAL GESTURE COULD NOT HAVE PRODUCED IS REFUSED; what it could have is SANITIZED.
+             *
+             * A disabled control cannot be pressed and an inert one cannot be reached, so a report about
+             * either did not come from a user doing something -- it came from a client that is wrong or
+             * a peer that is lying, and the only safe reading is the same for both. Chromium states the
+             * rule this stack is built on: the browser process must be maximally suspicious of its IPC
+             * inputs, because the renderer may be compromised.
+             *
+             * Note this is the ATTRIBUTE half of inertness only. A server tree has no UIWindow, so there
+             * is no modal stack to consult -- and that is correct rather than a shortcut: modality is a
+             * presentation decision the client makes, and a server that tried to enforce it would be
+             * enforcing a guess about what is on somebody's screen.
+             */
+            if (!element.isEnabled()) {
+                refuse(viewer, "'" + kind + "' on a DISABLED element " + nid);
+                return;
+            }
+            if (element.isInertAttribute()) {
+                refuse(viewer, "'" + kind + "' on an INERT element " + nid);
                 return;
             }
             T carried = in.getRaw("p");
-            handler.accept(new UiEventContext<>(this, element,
+            // viewer.peer, because registerUiMethods runs PER VIEWER -- so this closure already knows
+            // which connection the report arrived on, and attribution costs nothing to carry.
+            handler.accept(new UiEventContext<>(this, viewer.peer, element,
                     carried == null ? new StateMap<>(ops) : new StateMap<>(ops, carried)));
         });
+    }
+
+    /**
+     * Records a report that should not have been sent, and eventually stops listening to the sender.
+     *
+     * <p>One refusal is noise — a delta in flight when a control was disabled is ordinary and racy. A
+     * hundred is not: it is a client that disagrees with the server about the tree, or one that is
+     * being driven by something other than a user. Counting is what separates the two, and it has to be
+     * <b>per viewer</b>, or one bad peer closes a window for everybody watching it.</p>
+     *
+     * <p>The threshold ends that VIEWER's participation and leaves the window standing, because the
+     * window belongs to whoever else is watching it. Minecraft kicks on packet flood and Chromium's
+     * {@code ReportBadMessage} kills the sending renderer; neither takes the document down.</p>
+     */
+    private void refuse(Viewer<T> viewer, String what) {
+        viewer.refusals++;
+        if (viewer.refusals <= REFUSAL_LOG_LIMIT) {
+            CrystalGuiCore.LOGGER.warn("Session {}: refused {} (refusal {} from {})",
+                    windowId, what, viewer.refusals, viewer.peer);
+        }
+        if (viewer.refusals != refusalThreshold) return;
+        CrystalGuiCore.LOGGER.error("Session {}: {} refusals from {} — no longer listening to it. The "
+                + "window stays open for everyone else.", windowId, viewer.refusals, viewer.peer);
+        viewer.refused = true;
+    }
+
+    /** After this many, the log goes quiet: a flood must not become the flood. */
+    private static final int REFUSAL_LOG_LIMIT = 8;
+
+    private int refusalThreshold = 200;
+
+    /** How many refusals a viewer gets before it stops being listened to. */
+    public ServerUiSession<T> setRefusalThreshold(int refusals) {
+        this.refusalThreshold = Math.max(1, refusals);
+        return this;
+    }
+
+    /** How many reports this peer has had refused. */
+    public int refusalsFrom(@Nullable Object peer) {
+        for (Viewer<T> viewer : viewers) {
+            if (java.util.Objects.equals(viewer.peer, peer)) return viewer.refusals;
+        }
+        return 0;
     }
 
     private StateMap<T> read(@Nullable T payload) {
@@ -991,14 +1155,65 @@ public final class ServerUiSession<T> {
      * on the frame it comes back rather than one behind.</p>
      */
     public ServerUiSession<T> setViewerVisible(boolean visible) {
-        if (viewerVisible == visible) return this;
+        for (Viewer<T> viewer : viewers) setVisible(viewer, visible);
         viewerVisible = visible;
-        if (visible && open) flush();
         return this;
     }
 
+    /**
+     * Says whether ONE viewer is watching.
+     *
+     * <p>The fix for network audit finding S7. A window shown to ten players had a single flag, so one
+     * of them minimising stopped deltas for the other nine — and with projections gated on the same
+     * flag it stopped the work being done at all. Which viewer is watching is a fact about a
+     * connection, not about the window.</p>
+     *
+     * @param peer the connection's peer, as carried by {@link UiEventContext#viewer()}
+     * @return whether a viewer with that peer was found
+     */
+    public boolean setViewerVisible(@Nullable Object peer, boolean visible) {
+        boolean found = false;
+        for (Viewer<T> viewer : viewers) {
+            if (!java.util.Objects.equals(viewer.peer, peer)) continue;
+            setVisible(viewer, visible);
+            found = true;
+        }
+        return found;
+    }
+
+    private void setVisible(Viewer<T> viewer, boolean visible) {
+        if (viewer.visible == visible) return;
+        viewer.visible = visible;
+        if (!visible || !open) return;
+
+        /*
+         * COMING BACK NEEDS THE CURRENT STATE, NOT THE NEXT CHANGE.
+         *
+         * A delta only says what moved. A viewer that was away has missed however many of them, so
+         * replaying nothing leaves it showing whatever was true when it looked away -- correct-looking
+         * and stale, which is the failure mode this codebase keeps paying for.
+         *
+         * Re-describing is the LATE VIEWER path, and it is right here for the same reason: a live
+         * description carries the ids the server is already using, so the returning viewer resyncs
+         * completely without anything renumbering. The cost is that its tree is rebuilt, which is
+         * honest -- a hidden window on this engine is a detached one, so there were no instances to
+         * keep.
+         */
+        if (viewer.missedState) {
+            viewer.missedState = false;
+            viewer.opened = false;
+            refreshDescription();
+            sendOpenTo(viewer);
+        }
+        flush();
+    }
+
+    /** Whether EVERY viewer is watching. @see #anyViewerVisible @see #setViewerVisible(Object, boolean) */
     public boolean isViewerVisible() {
-        return viewerVisible;
+        for (Viewer<T> viewer : viewers) {
+            if (!viewer.visible) return false;
+        }
+        return viewers.isEmpty() ? viewerVisible : true;
     }
 
     /**

@@ -61,7 +61,7 @@ public class TabView extends UIElement {
             State.of("selected", StateTypes.INT, TabView::getSelectedIndex, TabView::selectIndex, -1);
 
     /** Which tab is showing. M1: a TabView could not say, so a server could not follow a user's page. */
-    public static final Event<TabView, Integer> SELECTION = Event.of("select",
+    public static final Event<TabView, Integer> SELECTION = Event.<TabView, Integer>of("select",
             (view, sink) -> view.onTabSelected.connect(tab -> sink.accept(view.getSelectedIndex())),
             new Event.Payload<Integer>() {
                 @Override public <T> void write(StateMap<T> out, Integer value) {
@@ -70,7 +70,15 @@ public class TabView extends UIElement {
                 @Override public <T> Integer read(StateMap<T> in) {
                     return in.getInt("index", -1);
                 }
-            }, RatePolicy.IMMEDIATE);
+            }, RatePolicy.IMMEDIATE)
+            .sanitizedBy((tabs, index) -> tabs.clampTabIndex(index));
+
+    /** An index no legal gesture could have produced is pulled back to one that could. */
+    int clampTabIndex(@Nullable Integer index) {
+        int count = getTabs().size();
+        if (index == null || count == 0) return -1;
+        return index < 0 ? -1 : Math.min(index, count - 1);
+    }
 
     public static final WidgetContract<TabView> CONTRACT = WidgetContracts.register(
             WidgetContract.of(TabView.class, "tabview")

@@ -73,7 +73,7 @@ public class Slider extends UIElement {
                     .sanitizedBy(v -> v == null || Float.isNaN(v) ? 0f : v);
 
     /** A drag. Throttled, and the released value always travels. @see RatePolicy */
-    public static final Event<Slider, Float> VALUE_CHANGED = Event.of("value",
+    public static final Event<Slider, Float> VALUE_CHANGED = Event.<Slider, Float>of("value",
             (slider, sink) -> slider.attachListener(sink::accept),
             new Event.Payload<Float>() {
                 @Override public <T> void write(StateMap<T> out, Float value) {
@@ -82,7 +82,9 @@ public class Slider extends UIElement {
                 @Override public <T> Float read(StateMap<T> in) {
                     return in.getFloat("value", 0f);
                 }
-            }, RatePolicy.DRAGGING);
+            }, RatePolicy.DRAGGING)
+            .sanitizedBy((slider, value) -> slider.clampAndSnap(
+                    value == null || Float.isNaN(value) ? slider.getMin() : value));
 
     /**
      * RANGE BEFORE VALUE, and that is why a contract applies slots in declaration order. Taking the
