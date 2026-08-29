@@ -6,3 +6,7 @@
 	path = gl-debug-harness
 	url = https://github.com/CrystalGraphics/gl-debug-harness
 	branch = crystalgui
+[submodule "taffy"]
+	path = taffy
+	url = https://github.com/CrystalGraphics/taffy-java.git
+	branch = master

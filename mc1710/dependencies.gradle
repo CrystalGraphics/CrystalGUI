@@ -66,7 +66,12 @@ dependencies {
     // Taffy: SHADED, because nothing else ships it. CrystalGUI is the only consumer -- UIElement and
     // ElementStyle hold TaffyStyle/NodeId fields and no Taffy type ever crosses into CrystalGraphics --
     // so relocating it can only rewrite references this jar also owns.
-    shadowImplementation("dev.vfyjxf:taffy:${taffy_version}")
+    //
+    // A PROJECT, not the `dev.vfyjxf:taffy:1.1.4` artifact: :taffy is our FORK of those sources, and
+    // the relocation is what makes owning a fork safe -- another mod shipping stock 1.1.4 lands in
+    // `dev.vfyjxf.taffy` while ours lands in `com.crystalgui.shadow.dev.vfyjxf.taffy`, so neither can
+    // silently win and take our measure fix away with it. See taffy/MODIFICATIONS.md.
+    shadowImplementation project(':taffy')
 
     // JOML: compileOnly, and it MUST NOT be shadowImplementation.
     //

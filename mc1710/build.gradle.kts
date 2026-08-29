@@ -53,6 +53,28 @@ version = providers.gradleProperty("modVersion").orElse("1.0.0").get()
 
 apply(from = "repositories.gradle")
 apply(from = "dependencies.gradle")
+
+// ASK shadowImplementation FOR JARS.
+//
+// It carries RetroFuturaGradle's obfuscation attributes, and a PROJECT dependency publishes several
+// variants (classes, resources, the jar) where a Maven artifact publishes one -- so the moment :taffy
+// stopped being `dev.vfyjxf:taffy` and became a module of ours, resolution became ambiguous and
+// shadowJar failed before it started: "we cannot choose between the following variants of project
+// :taffy". Naming the element type is the whole fix; the RFG attributes in that error are unmatched
+// on every variant equally and are not what the resolver is stuck on.
+configurations.named("shadowImplementation") {
+    attributes {
+        attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE,
+                objects.named(LibraryElements::class.java, LibraryElements.JAR))
+    }
+}
+
+// ...and say who PRODUCES that jar. Asking for the JAR element type above makes shadowJar read
+// `taffy/build/libs/taffy.jar` directly, and Gradle cannot infer the producing task through an
+// attribute override -- it fails the build outright rather than racing, which is the good outcome and
+// still needs answering. Solution 2 of the three Gradle offers, because it is the one that states the
+// relationship rather than merely ordering it.
+tasks.named("shadowJar") { dependsOn(":taffy:jar") }
 // Composite build integration — injects CrystalGraphics dev deps + RunMinecraftTask bootstrap.
 // Uses project-relative path (../gradle/...) to avoid Windows URI issues with rootProject.file().
 // Use .toURI() to ensure forward-slash paths on Windows — IntelliJ Gradle sync fails on
