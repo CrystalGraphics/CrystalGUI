@@ -184,7 +184,7 @@ public final class FurnacePanel extends UIElement implements Networked<FurnaceDa
     public Button purge = new Button("Purge");
 
     @Override
-    public void layout(FurnaceData model) {        // SERVER, once — the structure
+    public void build(FurnaceData model) {        // SERVER, once — the structure
         addChild(new UIText("Furnace"));
         addChild(row("Power", power));
         addChild(row("Rate", throughput));
@@ -388,12 +388,12 @@ anyway.
 server-side hooks rather than a field on the panel:
 
 ```java
-void layout(FurnaceData model)              // server — has one
+void build(FurnaceData model)              // server — has one
 void serve(FurnaceData model, ServerScope)  // server — has one
 void tick(FurnaceData model)                // server — has one (and is usually EMPTY: see
                                             // projections, above)
 
-void bound()                                // client — no model, and there never was one
+void bindWidgets()                          // client — no model, and there never was one
 void client(ClientScope io)                 // client — likewise
 ```
 
@@ -472,14 +472,14 @@ second `open` brings the existing window forward instead of building another.
 
 | Hook | Runs | For |
 |---|---|---|
-| `layout(model)` | server, once | structure — `addChild`, rows, classes |
+| `build(model)` | server, once | structure — `addChild`, rows, classes |
 | `serve(model, io)` | server, once | what the UI *does* |
 | `tick(model)` | server, per world tick | copy the model into the widgets |
 | `stillValid(model, viewer)` | server, per tick | `false` closes the window (player walked away) |
 | `title(model)` / `key(model)` | server | what to call it; `key` makes re-opening bring the existing window forward |
-| `bound()` | client, on mount **and after every re-describe** | widget listeners |
+| `bindWidgets()` | client, on mount **and after every re-describe** | widget listeners |
 | `client(io)` | client, once | wire methods |
-| `closed(reason)` | both | teardown |
+| `closed(CloseReason)` | both | teardown — **the same reason on both sides** since M3 |
 
 Two rules that save real debugging:
 
@@ -488,8 +488,8 @@ Two rules that save real debugging:
   for logic of your own, and most panels leave it out entirely. (Earlier versions of this guide taught
   the copy-it-every-tick shape; it works and it is a list you can forget to add a field to, which fails
   by looking correct.)
-- **Widget listeners go in `bound()`, not `client(io)`.** A re-describe replaces the tree, so
-  listeners attached once would be attached to widgets that no longer exist. `bound()` runs again;
+- **Widget listeners go in `bindWidgets()`, not `client(io)`.** A re-describe replaces the tree, so
+  listeners attached once would be attached to widgets that no longer exist. `bindWidgets()` runs again;
   `client(io)` does not.
 
 ### Why fields become widgets
@@ -506,7 +506,7 @@ runs.
 
 **Fields are the exception, and it is not a style rule.** A field's type resolves when the class
 loads, so a panel with a field of a client-only type fails to load on a dedicated server — the whole
-class, not just that field. Keep client-only things inside `client(io)` and `bound()`.
+class, not just that field. Keep client-only things inside `client(io)` and `bindWidgets()`.
 
 ---
 
@@ -680,7 +680,7 @@ is allowed to see, and attach it:
 ```java
 public EnginePanel engine;
 
-@Override public void layout(FurnaceData model) {
+@Override public void build(FurnaceData model) {
     engine = EnginePanel.TYPE.build(model.engine());
     addChild(engine);
 }
@@ -744,7 +744,10 @@ window.close("the block was broken");           // server
 }
 ```
 
-The user pressing the X reaches `closed(reason)` on both sides. Give the panel a `key` and re-opening
+The user pressing the X reaches `closed(CloseReason)` on both sides, with the same value in it —
+`SERVER`, `CLIENT`, `NOT_VALID` or `CONNECTION_LOST`. (It used to be a `String` and the two sides
+disagreed about what was in it: the server got the reason's name, the client got the wire's
+human-readable detail. A teardown that branched on it worked on exactly one side.) Give the panel a `key` and re-opening
 brings the existing window forward — keeping its scroll position and anything half-typed in it —
 instead of building a new one.
 
@@ -943,10 +946,10 @@ window.init(w, h);
 // ── networked ──────────────────────────────────────────────────────────────
 public static final UiType<MyPanel, MyModel> TYPE = UiType.of("mymod:thing", MyPanel::new);
 
-layout(m)      → addChild(...)                       server, once
+build(m)       → addChild(...)                       server, once
 serve(m, io)   → io.on(widget, Widget.EVENT, ...)    server, once
 tick(m)        → widget.setX(m.getX())               server, per tick
-bound()        → widget.attachListener(...)          client, every describe
+bindWidgets()  → widget.attachListener(...)          client, every describe
 client(io)     → io.onCall / io.onNotify             client, once
 
 ServerWindows.of(connection).open(TYPE, model);
@@ -964,5 +967,5 @@ l.flexDirection(FlexDirection.ROW).gapAll(8)     // a row
 | A panel is zero-high | missing `height(0).flexGrow(1)` — `flex-shrink` is `0` here |
 | One widget never updates while the rest do | no projection for it — check `autoProject`'s log, it names what it could not wire |
 | Nothing on screen ever updates | no projections at all, or you wrote a `tick` that copies and expected the engine to call something else |
-| Listeners stop working after an update | they were attached in `client(io)` instead of `bound()` |
+| Listeners stop working after an update | they were attached in `client(io)` instead of `bindWidgets()` |
 | A widget arrives blank over the wire | it has no contract — see §10 |

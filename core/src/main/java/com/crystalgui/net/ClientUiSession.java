@@ -104,7 +104,14 @@ public final class ClientUiSession<T> {
     @Nullable
     private Consumer<UIElement> onWindowOpened;
     @Nullable
-    private Consumer<String> onWindowClosed;
+    /**
+     * Told {@code (code, detail)} when the server ends the window.
+     *
+     * <p>Both, because two consumers want different halves and neither is wrong: a PANEL branches on
+     * the code, which has to mean the same thing on either side of the wire, while a HOST shows the
+     * detail — "the block was broken" is what a player should read, and {@code SERVER} is not.</p>
+     */
+    private java.util.function.BiConsumer<String, String> onWindowClosed;
 
     /** Owns its own transport, router and mailbox — the shape every test and the in-memory pair use. */
     public ClientUiSession(UITransport<T> transport, DynamicOps<T> ops) {
@@ -174,7 +181,7 @@ public final class ClientUiSession<T> {
         return this;
     }
 
-    public ClientUiSession<T> onWindowClosed(Consumer<String> handler) {
+    public ClientUiSession<T> onWindowClosed(java.util.function.BiConsumer<String, String> handler) {
         this.onWindowClosed = handler;
         return this;
     }
@@ -371,14 +378,23 @@ public final class ClientUiSession<T> {
         bindNotify(UiMethods.CLOSE_WINDOW, payload -> {
             StateMap<T> in = read(payload);
             if (in.getInt(UiMethods.WINDOW, windowId) != windowId) return;
-            String reason = in.getString("reason", "");
+            // THE CODE, not the sentence. The detail is a human-readable string for a log; what a
+            // panel branches on has to mean the same thing on both sides, which is what it did not
+            // before -- the server was handed a reason NAME and the client this detail, so the same
+            // teardown saw "NOT_VALID" on one side and "no longer valid" on the other.
+            String code = in.getString("code", "");
+            String detail = in.getString("reason", "");
+            if (!detail.isEmpty()) {
+                CrystalGuiCore.LOGGER.debug("Window {} closed by the server: {} ({})",
+                        windowId, code, detail);
+            }
             commitRates();
             root = null;
             ids = null;
             mirror = null;
             deferred.clear();
             release();
-            if (onWindowClosed != null) onWindowClosed.accept(reason);
+            if (onWindowClosed != null) onWindowClosed.accept(code, detail);
         });
     }
 

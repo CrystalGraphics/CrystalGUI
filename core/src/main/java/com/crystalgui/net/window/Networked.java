@@ -18,7 +18,7 @@ import com.crystalgui.ui.UIElement;
  *     public Switch power;                             // created and named for you
  *     public Button purge = new Button("Purge");       // needs a ctor argument? just write it
  *
- *     @Override public void layout(MachineModel m) {   // BUILD side
+ *     @Override public void build(MachineModel m) {   // BUILD side
  *         addChild(row("Power", power));
  *         addChild(purge);
  *     }
@@ -31,7 +31,7 @@ import com.crystalgui.ui.UIElement;
  *         power.setChecked(m.isRunning());
  *     }
  *
- *     @Override public void bound() {                                 // CLIENT, every bind
+ *     @Override public void bindWidgets() {                                 // CLIENT, every bind
  *         purge.attachListener(() -> …);
  *     }
  * }
@@ -137,7 +137,7 @@ public interface Networked<M> {
      * {@code addChild}, rows, containers, classes, order. The model is available for structure that
      * depends on it — a row per inventory slot — and is ignored by a panel whose shape is fixed.</p>
      */
-    void layout(M model);
+    void build(M model);
 
     /**
      * Registers what this panel does <b>on the server</b>. Once, before the client is told anything —
@@ -191,7 +191,7 @@ public interface Networked<M> {
      * them: a re-describe replaces the panel wholesale, so anything attached to the old widgets went
      * with them. Nothing here touches the wire — that is {@link #client}'s job.</p>
      */
-    default void bound() {
+    default void bindWidgets() {
     }
 
     /**
@@ -210,13 +210,15 @@ public interface Networked<M> {
     }
 
     /**
-     * Told when the window ends, on whichever side this instance is. On the server the reason is a
-     * {@code CloseReason} name — {@code "SERVER"}, {@code "CLIENT"}, {@code "NOT_VALID"},
-     * {@code "CONNECTION_LOST"}; on the client it is the detail string the wire carried.
+     * Told when the window ends, on whichever side this instance is — <b>with the same answer on both</b>.
+     *
+     * <p>It was a {@code String} and the two sides disagreed about what was in it: the server got a
+     * reason NAME and the client got the wire's free-text detail, so a teardown that branched on it
+     * worked on one side only. Now both are handed the {@link CloseReason}.</p>
      *
      * <p>Deliberately not split per side: most panels want the same teardown twice, and one that does
      * not can ask — only the client half was ever handed a {@link ClientWindowContext}.</p>
      */
-    default void closed(String reason) {
+    default void closed(CloseReason reason) {
     }
 }

@@ -165,7 +165,7 @@ public final class ServerWindows {
                 io -> panel.serve(model, io),
                 () -> panel.tick(model),
                 viewer -> panel.stillValid(model, viewer),
-                reason -> panel.closed(reason.name()),
+                panel::closed,
                 title, key);
         window.host = this;
         window.session = session;
@@ -191,7 +191,7 @@ public final class ServerWindows {
              */
             window.runProjections();
 
-            session.onClientClosed(reason -> finish(window, ServerWindow.CloseReason.CLIENT, reason));
+            session.onClientClosed(reason -> finish(window, CloseReason.CLIENT, reason));
             session.open();
         } catch (RuntimeException | Error failed) {
             /*
@@ -216,7 +216,7 @@ public final class ServerWindows {
 
     /** Ends a window and tells the client. Safe for one that has already ended. */
     public void close(ServerWindow<?> window, String reason) {
-        finish(window, ServerWindow.CloseReason.SERVER, reason);
+        finish(window, CloseReason.SERVER, reason);
     }
 
     /** The window open under {@code key}, or {@code null}. */
@@ -268,7 +268,7 @@ public final class ServerWindows {
                 valid = false;
             }
             if (!valid) {
-                finish(window, ServerWindow.CloseReason.NOT_VALID, "no longer valid");
+                finish(window, CloseReason.NOT_VALID, "no longer valid");
             }
         }
 
@@ -321,7 +321,7 @@ public final class ServerWindows {
         closing = true;
         try {
             for (ServerWindow<?> window : new ArrayList<>(windows.values())) {
-                finish(window, ServerWindow.CloseReason.CONNECTION_LOST, reason);
+                finish(window, CloseReason.CONNECTION_LOST, reason);
             }
         } finally {
             closing = false;
@@ -339,21 +339,21 @@ public final class ServerWindows {
      * outbound validation before it reached nothing. The panel is told last — root first, then every
      * attached child in attach order.</p>
      */
-    private void finish(ServerWindow<?> window, ServerWindow.CloseReason reason, String detail) {
+    private void finish(ServerWindow<?> window, CloseReason reason, String detail) {
         if (window == null || !window.live) return;
         window.live = false;
         if (!closing) windows.remove(window.windowId);
 
         ServerUiSession<Object> session = window.session;
         if (session != null) {
-            if (reason == ServerWindow.CloseReason.CONNECTION_LOST) {
+            if (reason == CloseReason.CONNECTION_LOST) {
                 session.abandon(detail);
-            } else if (reason == ServerWindow.CloseReason.CLIENT) {
+            } else if (reason == CloseReason.CLIENT) {
                 // The session has already stood down: this reason exists BECAUSE the client told it to,
                 // through the handler that ends it. Telling the client its own news would be an echo.
                 session.abandon(detail);
             } else {
-                session.close(detail);
+                session.close(detail, reason.name());
             }
         }
 
@@ -369,7 +369,7 @@ public final class ServerWindows {
         }
         for (ServerWindow.Attached child : window.attached) {
             try {
-                child.closer().accept(reason.name());
+                child.closer().accept(reason);
             } catch (RuntimeException failed) {
                 CrystalGuiCore.LOGGER.error("A nested panel of <{}> failed on close: {}",
                         window.typeId(), failed.getMessage(), failed);

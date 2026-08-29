@@ -889,6 +889,22 @@ public final class ServerUiSession<T> {
      * matter to a peer echoing something back, which is exactly the kind of "only under load, only
      * sometimes" fault that is unfindable later.</p>
      */
+    /**
+     * The machine-readable half of the next close, if a caller named one.
+     *
+     * <p>Defaults to the code for a server-initiated close, because that is what a bare
+     * {@link #close(String)} IS: something on this side decided the window was over. The window layer
+     * names a more specific one when it knows better — a client asking, a validity check failing, a
+     * connection dying.</p>
+     */
+    private String closeCode = "SERVER";
+
+    /** As {@link #close(String)}, naming a machine-readable reason the far side can branch on. */
+    public void close(String reason, @Nullable String code) {
+        if (code != null && !code.isEmpty()) this.closeCode = code;
+        close(reason);
+    }
+
     public void close(String reason) {
         if (!open) return;
         // NOT through the visibility gate. A close is the one message a hidden window must still be
@@ -928,6 +944,10 @@ public final class ServerUiSession<T> {
         if (tellPeer) {
             StateMap<T> out = new StateMap<>(ops);
             out.putString("reason", reason == null ? "" : reason);
+            // A CODE beside the human-readable detail, so the far side is told WHY rather than being
+            // handed a sentence. Opaque here on purpose: what the codes mean belongs to net.window, and
+            // this layer naming that enum would point the dependency backwards.
+            out.putString("code", closeCode);
             notifyClient(UiMethods.CLOSE_WINDOW, out);
         }
 

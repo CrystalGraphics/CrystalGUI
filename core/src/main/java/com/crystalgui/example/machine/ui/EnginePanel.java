@@ -4,6 +4,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.example.machine.EngineModel;
 import com.crystalgui.example.machine.MachineTrace;
+import com.crystalgui.net.window.CloseReason;
 import com.crystalgui.net.window.ClientScope;
 import com.crystalgui.net.window.Networked;
 import com.crystalgui.net.window.ServerScope;
@@ -128,7 +129,7 @@ public final class EnginePanel extends UIElement implements Networked<EngineMode
     // ── Structure ───────────────────────────────────────────────────────────
 
     @Override
-    public void layout(EngineModel engine) {
+    public void build(EngineModel engine) {
         addClass(MachineStyles.ENGINE_CLASS);
 
         UIText title = new UIText("Engine");
@@ -221,7 +222,7 @@ public final class EnginePanel extends UIElement implements Networked<EngineMode
     }
 
     @Override
-    public void bound() {
+    public void bindWidgets() {
         tune.attachListener(this::tuneToFull);
     }
 
@@ -246,7 +247,7 @@ public final class EnginePanel extends UIElement implements Networked<EngineMode
     }
 
     @Override
-    public void closed(String reason) {
+    public void closed(CloseReason reason) {
         // A nested panel is told too, on both sides, at the same moment its parent is -- the window is
         // what ended, and everything in it went with it.
         MachineTrace.log(io == null ? MachineTrace.SERVER : MachineTrace.CLIENT,

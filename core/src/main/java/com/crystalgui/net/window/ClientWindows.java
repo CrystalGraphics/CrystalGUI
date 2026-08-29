@@ -178,7 +178,7 @@ public final class ClientWindows {
 
     private void adopt(ClientUiSession<Object> session) {
         session.onWindowOpened(root -> present(session));
-        session.onWindowClosed(reason -> closedByServer(session, reason));
+        session.onWindowClosed((code, detail) -> closedByServer(session, code, detail));
         session.onFocusRequested(() -> {
             Mounted live = mounted.get(session);
             if (live != null && live.handle != null) live.handle.focus();
@@ -274,11 +274,12 @@ public final class ClientWindows {
 
     // ── Endings ─────────────────────────────────────────────────────────────
 
-    private void closedByServer(ClientUiSession<Object> session, String reason) {
+    private void closedByServer(ClientUiSession<Object> session, String code, String detail) {
         Mounted live = mounted.remove(session);
         waiting.remove(session);
         if (live == null) return;
-        live.finish(reason, false);
+        // The DETAIL goes to the host, which shows it, and the CODE to the panel, which branches on it.
+        live.finish(detail, code, false);
     }
 
     /**
@@ -290,7 +291,7 @@ public final class ClientWindows {
         List<Mounted> live = new ArrayList<>(mounted.values());
         mounted.clear();
         waiting.clear();
-        for (Mounted window : live) window.finish(reason, false);
+        for (Mounted window : live) window.finish(reason, CloseReason.CONNECTION_LOST.name(), false);
     }
 
     // ── One window ──────────────────────────────────────────────────────────
@@ -333,7 +334,7 @@ public final class ClientWindows {
             prefixes.add("");
             collectNested(root, "", found, prefixes);
 
-            for (Networked<?> panel : found) panel.bound();
+            for (Networked<?> panel : found) panel.bindWidgets();
             if (firstMount) {
                 for (int i = 0; i < found.size(); i++) {
                     found.get(i).client(new ClientScope(session, this, prefixes.get(i)));
@@ -389,7 +390,7 @@ public final class ClientWindows {
             if (ended) return;   // already gone some other way; a mount need not know which
             mounted.remove(session);
             session.closeFromClient("closed by the user");
-            finish("closed by the user", true);
+            finish("closed by the user", CloseReason.CLIENT.name(), true);
         }
 
         @Override
@@ -405,12 +406,12 @@ public final class ClientWindows {
          * @param userDriven whether the frame is already gone on this side, in which case telling the
          *                   mount to take it off screen would be asking it to remove what it removed
          */
-        void finish(String reason, boolean userDriven) {
+        void finish(String detail, String code, boolean userDriven) {
             if (ended) return;
             ended = true;
             if (!userDriven && handle != null) {
                 try {
-                    handle.closedByServer(reason);
+                    handle.closedByServer(detail);
                 } catch (RuntimeException failed) {
                     CrystalGuiCore.LOGGER.error("A mount failed to close <{}>: {}",
                             type(), failed.getMessage(), failed);
@@ -418,7 +419,7 @@ public final class ClientWindows {
             }
             for (Networked<?> panel : panels) {
                 try {
-                    panel.closed(reason);
+                    panel.closed(CloseReason.parse(code));
                 } catch (RuntimeException failed) {
                     CrystalGuiCore.LOGGER.error("<{}> failed on close: {}",
                             type(), failed.getMessage(), failed);

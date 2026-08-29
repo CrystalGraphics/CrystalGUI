@@ -9,6 +9,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.SheetRef;
+import com.crystalgui.net.window.CloseReason;
 import com.crystalgui.net.window.SheetSupply;
 import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.net.window.ClientScope;
@@ -321,7 +322,7 @@ public class WindowLifecycleTest {
     /**
      * The client half runs with <b>no registration anywhere</b>: the open message named the panel
      * class, the engine initialised it, and the decoded root being {@code Networked} is the whole
-     * opt-in — fields resolved out of the panel's own tree, {@code bound()} for the widget listeners,
+     * opt-in — fields resolved out of the panel's own tree, {@code bindWidgets()} for the widget listeners,
      * {@code client()} handed its scope, {@code closed()} told at the end — on the CLIENT's instance,
      * which is not the server's.
      */
@@ -332,7 +333,7 @@ public class WindowLifecycleTest {
 
         TestPanel shown = (TestPanel) mount.mounted.get(0).root();
         assertNotSame("two instances over two trees", window.panel(), shown);
-        assertEquals("bound() ran at mount", 1, shown.bounds.get());
+        assertEquals("bindWidgets() ran at mount", 1, shown.bounds.get());
         assertNotNull("client() was handed its scope", shown.net);
         assertEquals("and neither ran on the SERVER's instance", 0, window.panel().bounds.get());
         assertNull(window.panel().net);
@@ -340,7 +341,7 @@ public class WindowLifecycleTest {
         server.close(window, "done");
         settle();
         assertEquals(1, shown.closes.size());
-        assertEquals("done", shown.closes.get(0));
+        assertEquals("the client is told WHY, not the server's sentence about it", "SERVER", shown.closes.get(0));
     }
 
     /**
@@ -376,7 +377,7 @@ public class WindowLifecycleTest {
         settle();
 
         assertEquals("the window is still on screen", 1, mount.mounted.size());
-        assertEquals("but the binding never completed, so bound() never ran",
+        assertEquals("but the binding never completed, so bindWidgets() never ran",
                 0, ((SabotagedPanel) mount.mounted.get(0).root()).bounds.get());
 
         // A failed binding takes only the LOCAL extras with it: the description already wired the
@@ -458,7 +459,7 @@ public class WindowLifecycleTest {
 
         SavePanel shownChild = (SavePanel) mount.mounted.get(0).root().querySelector("#save");
         assertNotNull(shownChild);
-        assertEquals("the child's bound() ran", 1, shownChild.bounds.get());
+        assertEquals("the child's bindWidgets() ran", 1, shownChild.bounds.get());
         assertSame("its fields resolved out of its own subtree",
                 shownChild.querySelector("#late"), shownChild.late);
         assertNotNull("client() handed it a scope", shownChild.net);
@@ -718,7 +719,7 @@ public class WindowLifecycleTest {
         ClientScope net;
 
         @Override
-        public void layout(String key) {
+        public void build(String key) {
             addChild(press);
             addChild(label);
         }
@@ -744,7 +745,7 @@ public class WindowLifecycleTest {
         }
 
         @Override
-        public void bound() {
+        public void bindWidgets() {
             bounds.incrementAndGet();
         }
 
@@ -754,8 +755,8 @@ public class WindowLifecycleTest {
         }
 
         @Override
-        public void closed(String reason) {
-            closes.add(reason);
+        public void closed(CloseReason reason) {
+            closes.add(reason.name());
         }
     }
 
@@ -773,7 +774,7 @@ public class WindowLifecycleTest {
         public Button press = new Button("press-label");      // ctor argument, so we write it
 
         @Override
-        public void layout(String model) {
+        public void build(String model) {
             addChild(power);
             addChild(press);
         }
@@ -791,7 +792,7 @@ public class WindowLifecycleTest {
         final AtomicInteger presses = new AtomicInteger();
 
         @Override
-        public void layout(String model) {
+        public void build(String model) {
             addChild(press);   // orphan forgotten
         }
 
@@ -801,7 +802,7 @@ public class WindowLifecycleTest {
         }
 
         @Override
-        public void bound() {
+        public void bindWidgets() {
             bounds.incrementAndGet();
         }
     }
@@ -815,7 +816,7 @@ public class WindowLifecycleTest {
         final List<String> heard = new ArrayList<>();
 
         @Override
-        public void layout(String model) {
+        public void build(String model) {
             addChild(press);
         }
 
@@ -846,7 +847,7 @@ public class WindowLifecycleTest {
         ClientScope net;
 
         @Override
-        public void layout(String slice) {
+        public void build(String slice) {
             addChild(late);
         }
 
@@ -868,7 +869,7 @@ public class WindowLifecycleTest {
         }
 
         @Override
-        public void bound() {
+        public void bindWidgets() {
             bounds.incrementAndGet();
         }
 
@@ -888,7 +889,7 @@ public class WindowLifecycleTest {
         public SavePanel save;
 
         @Override
-        public void layout(String model) {
+        public void build(String model) {
             addChild(press);
             save = CHILD.build(sliceOf(model));
             addChild(save);   // the field name becomes its id, after layout, by the same rule
@@ -913,7 +914,7 @@ public class WindowLifecycleTest {
         public SavePanel save;
 
         @Override
-        public void layout(String model) {
+        public void build(String model) {
             save = ParentPanel.CHILD.build(model);
             addChild(save);
         }
@@ -934,7 +935,7 @@ public class WindowLifecycleTest {
         public SavePanel save;
 
         @Override
-        public void layout(String model) {
+        public void build(String model) {
             save = ParentPanel.CHILD.build(model);
             addChild(save);
         }
@@ -963,7 +964,7 @@ public class WindowLifecycleTest {
         private ServerScope scope;
 
         @Override
-        public void layout(String model) {
+        public void build(String model) {
             addChild(press);
             addChild(label);
         }
