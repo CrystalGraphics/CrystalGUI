@@ -206,14 +206,43 @@ public final class FurnacePanel extends UIElement implements Networked<FurnaceMo
 }
 ```
 
-Open it:
+### Opening it — where the connection comes from
+
+A networked window needs a **connection to one player**. On 1.7.10 you get it from the player:
 
 ```java
+// Server side — e.g. from a block's onBlockActivated, or a command, or a tick
+ProtocolConnection<Object> connection = CgUiConnections.forPlayer(player);   // EntityPlayer
+if (connection == null) return;                 // that player has no CrystalGUI channel
+
 ServerWindows.of(connection).open(FurnacePanel.TYPE, myFurnace);
+```
+
+```java
+public boolean onBlockActivated(World world, int x, int y, int z, EntityPlayer player, ...) {
+    if (world.isRemote) return true;            // server decides; the client just gets the window
+    ProtocolConnection<Object> connection = CgUiConnections.forPlayer(player);
+    if (connection != null) {
+        ServerWindows.of(connection).open(FurnacePanel.TYPE, furnaceAt(x, y, z));
+    }
+    return true;
+}
 ```
 
 **That is the entire wiring.** No window subclass, no client registration, no id strings. The open
 names the panel class on the wire and the client builds it.
+
+A connection exists **for as long as the player is on the server** — it is created when they join and
+closed when they leave, so `forPlayer` answers `null` before and after. On the client, the mirror of
+this is `CgUiConnections.client()`, which is `null` when you are not in a world.
+
+> **One trap, and it only shows up in single-player.** If you open a `GuiScreen` to host the window,
+> its `doesGuiPauseGame()` must return **`false`**. Pausing stops the integrated server ticking, which
+> stops the connection being pumped — so every call dies at its timeout and the panel simply never
+> fills in, with nothing in the log.
+
+Opening two windows for the same subject is handled by `key(model)`: give the panel a key and a
+second `open` brings the existing window forward instead of building another.
 
 ### What runs where
 
@@ -252,26 +281,96 @@ resolves lazily. A **field** of a client-only type would fail to load the class 
 
 ## 5. Reacting to the user
 
-Hand `io.on` the widget's own event. The payload arrives typed:
+### What `io.on` takes
 
 ```java
-io.on(power,      Switch.TOGGLE,           (ctx, on)     -> model.setRunning(on));
-io.on(rate,       Slider.VALUE_CHANGED,    (ctx, value)  -> model.setRate(value));
-io.on(name,       TextField.TEXT_CHANGED,  (ctx, typed)  -> model.setName(typed));
-io.on(name,       TextField.COMMITTED,     (ctx, typed)  -> model.rename(typed));
-io.on(mode,       Dropdown.SELECTION,      (ctx, index)  -> model.setMode(index));
-io.on(tint,       ColorSelector.CHANGED,   (ctx, colour) -> model.setTint(colour));
-io.onActivate(purge, ctx -> model.purge());
+io.on( widget , Widget.EVENT , (ctx, value) -> … );
+//      ^          ^              ^     ^
+//      |          |              |     the payload, already decoded
+//      |          |              context: the session, the element, the raw payload
+//      |          which interaction — a constant on the widget's own class
+//      the widget you are listening to
 ```
 
-The events a widget offers are `public static final` on that widget — `Slider.VALUE_CHANGED`,
-`Checkbox.TOGGLE`, `Dropdown.SELECTION`, `Tab.CLOSE_REQUESTED`, and so on. Your IDE will list them.
+**`Switch.TOGGLE` is a `public static final` field on `Switch`.** It is an `Event<Switch, Boolean>`,
+meaning *"an event on a Switch that carries a Boolean"* — so the widget itself declares what it can
+report and what it hands you. That is why the second lambda parameter is typed: no
+`payload.getBool("checked", false)`, no key to remember, no default to guess.
 
-**You cannot ask for an event a widget does not have** — it will not compile. And you cannot
-misspell a kind, because there is no string to misspell.
+The two type parameters are the whole story:
 
-`TEXT_CHANGED` fires per keystroke; `COMMITTED` fires on Enter or blur. Use the first for a live
-preview and the second for anything expensive.
+```java
+Event<Slider, Float>            // on a Slider, carries a Float
+Event<Dropdown, Integer>        // on a Dropdown, carries the chosen index
+Event<Button, Void>             // on a Button, carries nothing — the lambda takes just (ctx)
+```
+
+Because the event is typed in its widget, `io.on(slider, TextField.COMMITTED, …)` **does not
+compile**. You cannot subscribe to an event a widget does not have, and there is no string to
+misspell.
+
+For a `Void` event, drop the second parameter:
+
+```java
+io.on(purge, Button.ACTIVATE, ctx -> model.purge());
+io.onActivate(purge,          ctx -> model.purge());   // same thing, shorter
+```
+
+### What `ctx` gives you
+
+`ctx` is a `UiEventContext` — `session()`, `element()` (the widget that reported), and `payload()`
+(the raw `StateMap`, which you rarely want since the value is already decoded). Most handlers ignore
+it entirely.
+
+### Every event, by widget
+
+| Widget | Event | Hands you | Fires when |
+|---|---|---|---|
+| `Button` | `ACTIVATE` | — | pressed (left button; Space/Enter count) |
+| `MenuItem` | `ACTIVATE` | — | chosen |
+| `Checkbox` | `TOGGLE` | `Boolean` | ticked or unticked |
+| `Switch` | `TOGGLE` | `Boolean` | flipped |
+| `Slider` | `VALUE_CHANGED` | `Float` | dragged |
+| `TextField` | `TEXT_CHANGED` | `String` | every keystroke |
+| `TextField` | `COMMITTED` | `String` | Enter, or focus leaves |
+| `SearchField` | `QUERY` | `String` | the query changed |
+| `Dropdown` | `SELECTION` | `Integer` | an option was chosen (its index) |
+| `TabView` | `SELECTION` | `Integer` | a different tab is showing |
+| `Tab` | `CLOSE_REQUESTED` | — | its close button was pressed |
+| `Dialog` | `CLOSE_REQUESTED` | — | its close button was pressed |
+| `ColorSelector` | `CHANGED` | `Integer` | the colour moved (ARGB) |
+| `SplitView` | `RESIZED` | `float[]` | a divider was dragged (the new weights) |
+| every config control | `CHANGED` | its own value type | the value changed |
+
+The config controls follow one shape — `BooleanControl.CHANGED` is `Event<BooleanControl, Boolean>`,
+`ColorControl.CHANGED` is `Event<ColorControl, Integer>`, `TextControl.CHANGED` is
+`Event<TextControl, String>`, and so on:
+
+```java
+io.on(enabled,   BooleanControl.CHANGED, (ctx, on)     -> model.setEnabled(on));
+io.on(threshold, NumberControl.CHANGED,  (ctx, value)  -> model.setThreshold(value));
+io.on(tint,      ColorControl.CHANGED,   (ctx, colour) -> model.setTint(colour));
+```
+
+### Choosing between the pairs
+
+- `TEXT_CHANGED` fires per keystroke, `COMMITTED` on Enter or blur. Use the first for a live preview,
+  the second for anything expensive or destructive.
+- `ACTIVATE` is "I pressed this"; `SELECTION` is "the selection is now that". A `Dropdown` has both;
+  a `TabView` has only the second.
+
+Rate is handled for you: a `Slider` throttles its drag and a `TextField` debounces its typing, and
+each always delivers the value it ended on. You do not write that.
+
+### If you need a kind that has no constant
+
+The string form still exists as an escape hatch, and hands you the raw payload:
+
+```java
+io.on(widget, "myCustomKind", ctx -> … ctx.payload().getInt("x", 0) …);
+```
+
+Prefer the typed form. Reach for this only for a kind you have declared yourself (see §10).
 
 ---
 
@@ -295,7 +394,7 @@ For anything that is not a widget interaction, both sides have a small RPC surfa
 
 ```java
 @Override public void client(ClientScope io) {
-    io.onNotify("flash", payload -> flashTheScreen());
+    io.onNotify("flash", payload -> status.addClass("flashing"));
 
     history.attachListener(() ->
             io.call("history", null, reply -> log.setText(reply.getInt("burns", 0) + " burns")));
@@ -412,22 +511,54 @@ field's text, a selection. It works for any widget with a contract (see below).
 
 ## 10. Writing your own widget
 
-Most of the time you compose existing widgets and there is nothing to do. If you write a real widget
-that carries state or reports interactions, declare a **contract** at the top of the class:
+Most of the time you compose the widgets you have and there is nothing to do here. Read this when you
+write a real widget of your own that either **carries state** or **reports interactions**.
+
+### The idea
+
+A widget declares, once, what it carries and what it can report. That one declaration is read by
+everything: the description codec writes its state, the client attaches its listeners, session
+persistence remembers it, and `io.on` type-checks against it. Without it a widget still *works*
+locally — it just cannot travel, and cannot be remembered.
+
+Three pieces, all `public static final`, all at the top of the class:
+
+```java
+State<W, V>              // one piece of state: a wire name and a getter/setter pair
+Event<W, P>              // one interaction: how to listen, and what it carries
+WidgetContract<W>        // the two lists, registered under the widget's tag
+```
+
+### A worked example
+
+A dial that holds an angle and reports when you turn it:
 
 ```java
 public class Dial extends UIElement {
 
-    public static final State<Dial, Float> ANGLE =
-            State.of("angle", StateTypes.FLOAT, Dial::getAngle, Dial::setAngle, 0f);
+    // ── the contract, first thing in the class ──────────────────────────────
 
-    public static final Event<Dial, Float> TURNED = Event.of(EventKind.VALUE,
-            (dial, sink) -> dial.onTurned.connect(sink::accept),
-            new Event.Payload<Float>() {
-                @Override public <T> void write(StateMap<T> out, Float v) { out.putFloat("value", v); }
-                @Override public <T> Float read(StateMap<T> in) { return in.getFloat("value", 0f); }
+    /** The angle, 0..1. */
+    public static final State<Dial, Float> ANGLE =
+            State.of("angle",              // the name on the wire
+                     StateTypes.FLOAT,     // how it is encoded
+                     Dial::getAngle,       // read it
+                     Dial::setAngle,       // write it
+                     0f);                  // what an absent value means
+
+    /** The dial was turned. */
+    public static final Event<Dial, Float> TURNED = Event.of(
+            EventKind.VALUE,                                     // a well-known kind name
+            (dial, sink) -> dial.onTurned.connect(sink::accept), // HOW A CLIENT LISTENS
+            new Event.Payload<Float>() {                         // how the value crosses
+                @Override public <T> void write(StateMap<T> out, Float v) {
+                    out.putFloat("value", v);
+                }
+                @Override public <T> Float read(StateMap<T> in) {
+                    return in.getFloat("value", 0f);
+                }
             },
-            RatePolicy.DRAGGING);
+            RatePolicy.DRAGGING);                                // throttle the drag
 
     public static final WidgetContract<Dial> CONTRACT = WidgetContracts.register(
             WidgetContract.of(Dial.class, "dial")
@@ -435,30 +566,86 @@ public class Dial extends UIElement {
                     .event(TURNED)
                     .build());
 
+    // ── the widget itself ───────────────────────────────────────────────────
+
     public final Signal.Value<Float> onTurned = new Signal.Value<>();
-    …
+
+    private float angle;
+
+    public float getAngle() { return angle; }
+
+    public Dial setAngle(float value) {
+        if (value == angle) return this;      // idempotent — see below
+        angle = value;
+        notifyStateChanged();
+        return this;
+    }
 }
 ```
 
-Now `io.on(dial, Dial.TURNED, (ctx, angle) -> …)` works, the dial's angle travels in a description,
-and `setSessionPersistent` remembers it — none of which you write any further code for.
-
-Three things to get right:
-
-- **Declaration order is apply order.** If one slot depends on another (a range before a value, a
-  list before an index into it), declare it first.
-- **A slot needs a real getter.** A getter stub makes the state *write-only* — settable and never
-  sent, which looks like it works.
-- **State is what the author set, not what the user is doing.** Never declare a slot for hover,
-  focus, caret or scroll.
-
-If your widget carries nothing over a wire, say so once and you are done:
+That is all. Now this works, with no further code:
 
 ```java
-WidgetContracts.localOnly(MyOverlay.class, "View state: a drag ghost positioned by the input layer.");
+io.on(dial, Dial.TURNED, (ctx, angle) -> model.setAngle(angle));   // typed, over the wire
+dial.setSessionPersistent(true);                                   // remembered across restarts
 ```
 
-A widget that is neither contracted nor marked fails `WidgetContractCoverageTest`, on purpose.
+### The parts, one at a time
+
+**`State.of(name, type, getter, setter, fallback)`** — `name` is the wire key and changing it is a
+format change. `StateTypes` has `STRING` `INT` `FLOAT` `DOUBLE` `BOOL`, plus `enumOf(Class)`,
+`stringListUnder(key)` and `doubleArrayUnder(key)` for collections. Two optional refinements:
+
+```java
+State.of(...).omittedWhen("")             // write nothing when it is the default
+State.of(...).sanitizedBy(v -> clamp(v))  // clean a value arriving from a PEER
+```
+
+`omittedWhen` matters more than it looks — it keeps a default-valued widget's state *absent* rather
+than present-and-default, which is what lets two identical trees hash the same.
+
+**`Event.of(kind, attach, payload, rate)`** — `attach` is the important one: it is how a *client*
+subscribes, `(widget, sink) -> …`, so the widget says how to listen to itself and nothing in the
+networking layer has to know your class. For an event with no value, use `Event.signal`:
+
+```java
+public static final Event<Dial, Void> RESET =
+        Event.signal(EventKind.ACTIVATE, (dial, sink) -> dial.onReset.connect(sink));
+```
+
+`kind` is just a string. `EventKind` holds well-known names so unrelated widgets spell "the user did
+the thing" the same way, but **you may mint your own** — kinds are scoped to their element, so
+`"scrub"` collides with nothing and needs no entry anywhere.
+
+`rate` is `IMMEDIATE`, `TYPING` (debounce 150ms) or `DRAGGING` (throttle 50ms). Both of the latter
+always deliver the value you ended on.
+
+### Three rules worth following
+
+1. **Declaration order is apply order.** If one slot depends on another, declare it first — a range
+   before the value it clamps, a list before an index into it. `Slider` declares `MIN`, `MAX`, `STEP`,
+   then `VALUE` for exactly this reason.
+2. **A slot needs a real getter.** A stub like `d -> 0f` makes the state *write-only*: settable by a
+   server, never actually sent, and it looks completely finished. If your widget has a setter and no
+   reader, add the reader.
+3. **State is what was authored, never what the user is doing.** No hover, focus, caret or scroll.
+   The test: if reloading ought to give it back, it is state.
+
+Also make your setters **idempotent** — return early when the value is unchanged, as `setAngle` does
+above. A server mirrors its model into widgets every tick, so a setter that reports a change
+unconditionally sends a packet per tick forever, carrying a value nobody moved.
+
+### If your widget carries nothing
+
+Say so once, with a reason, and you are done:
+
+```java
+WidgetContracts.localOnly(MyOverlay.class,
+        "View state: a drag ghost positioned by the input layer, with no moment a peer could use it.");
+```
+
+A widget that is neither contracted nor marked fails `WidgetContractCoverageTest` — on purpose, so
+the question gets answered while it is still cheap.
 
 ---
 
