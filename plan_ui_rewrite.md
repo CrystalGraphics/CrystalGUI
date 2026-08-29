@@ -302,6 +302,177 @@ back with its instances; an idle window is silent; the mutation-checked count te
 
 ### M3 — Events, validation, authoring surface · M · after: M2
 
+#### M3.P — Projections: the model→view direction · **SHIPPED 2026-08-30, ahead of the rest of M3**
+
+##### What shipped
+
+| | |
+|---|---|
+| The engine | `ui/projection/` — `Projections` (declare, compare, write; `of`/`each`/`gatedBy`/`run`) and `AutoProjection` (the convention tier and its `Report`) |
+| The surface | `ServerScope.project` / `projectEach` / `projectWhen` / `autoProject` / `bind` |
+| When it runs | after the panel's `tick`, **before** `session.tick()` flushes, skipped while no viewer is watching — and **once before `open()` describes the tree**, which is what lets the seeding `mirror(model)` call be deleted rather than renamed |
+| Contracts | `State.set`, `WidgetContract.primary()` + `Builder.primary(slot)`, declared on the eleven widgets that have one unambiguous meaning |
+| Consumers | `MachinePanel` and `EnginePanel` migrated; both `mirror()` methods, both `tick()` overrides, the `dirty` flag and its model subscription all deleted |
+| Acceptance | `ProjectionTest` (13), `ProjectionOverTheWireTest` (5) |
+
+##### The review pass that followed, and what it changed
+
+Shipped, then reviewed adversarially because it did not read as obvious — ten minutes to understand is
+itself a finding. Six defects and one API mistake came out of that pass:
+
+- **The API was not shaped like the thing it resembles.** `project(name, from, to)` had two invisible
+  rules: name the projection so the automatic pass skips it, and declare it BEFORE that pass. Break
+  either and a widget is written twice a tick by two projections that may disagree, the later winning.
+  It is now `project(widget, State, from)` — **the same three-part shape as `io.on`**, so the pair reads
+  as one idea pointing two ways, collisions are recognised by widget IDENTITY, and the ordering rule is
+  gone. That symmetry is the thing that makes it explicable in a sentence.
+- **`O(n^2)` in the list path** — `wanted.contains(...)` inside the removal loop, a quarter of a million
+  comparisons per tick on a five-hundred-row list. A set.
+- **Duplicate keys were silently destructive**: two items onto one element, so the list comes out
+  shorter than the model and the ordering pass moves that element twice, the second undoing the first.
+  A row vanishes, and it reads as a rendering bug. Refused loudly now.
+- **Every row was re-applied every tick.** Now skipped when the model handed over a value-equal but
+  DIFFERENT instance — and deliberately NOT when it is the same instance, because a mutable row object
+  compares by identity and would answer "equal" for something whose fields just changed. Skipping there
+  would freeze a row silently, which is the failure this whole thing exists to remove.
+- **`bind` leaked the whole window.** It connected a listener to a model property and dropped the
+  `Connection`; the model outlives the window, so the listener retained the widget and through it the
+  tree, for good. Undone on close, with `Projections.close()` beside it.
+- **`projectWhen` gated the wrong scope** — one set per window meant a nested panel's epoch silenced its
+  parent's fields, last caller winning. One set per PANEL now.
+
+##### Three things the build found before that
+
+
+
+- **`autoProject` cannot guess which slot a widget means, and the plan had not said so.** `Slider`
+  declares `MIN`, `MAX`, `STEP` and `VALUE` — all floats — so neither "the first slot" nor type
+  matching disambiguates, and declaration order deliberately puts the range first because a value
+  applied before its range is clamped against the old one. So a contract now **declares** its primary
+  state and a widget without one is reported rather than assumed. Eleven have one; `Dialog`'s title,
+  `SplitView`'s weights and `Popover`'s mode are not "what the widget is" and deliberately do not.
+- **The convention was reading the ELEMENT's own fields.** The level walk ran to `Object`, so
+  `UIElement.parent` and `UIElement.popoverInvoker` came back as unwired UI — the exact hazard
+  `UiType.collect` stops at `Networked` levels to avoid, and the first draft's javadoc claimed walking
+  every level was deliberate. `ServerScope` now passes the same boundary in; `ui.projection` cannot
+  name `Networked` without inverting the dependency. **Found by reading the report**, which is what the
+  report is for.
+- **The report was a wall.** Seventeen lines on a real panel, fifteen of them buttons — honest, useless,
+  and the kind of thing a reader learns to scroll past, taking the two lines that mattered with it. Now
+  split by whether there is anything to act on: a field the model has **no accessor for** was never a
+  candidate and is counted, not explained; a field whose accessor **exists** and still could not be
+  wired is named with its reason. `MachinePanel` went from 17 lines to 1.
+
+##### And one engine gap it exposed
+
+`UIElement.addChildAt` **throws** on a same-parent move (`"Cannot add the same child twice"`), so the
+tree could not express a reorder as a `move` — even though the wire has carried the op since M2 and
+nothing had ever produced one. The guard stays, having caught three real double-parenting bugs
+(`CrystalEditor`, `StatusBarView`, `DockGroup`), so a move is now spelled as one:
+`UIElement.moveDescribedChildTo`, which reports `moved`. Without it a `projectEach` reorder would have
+reached the client as destroy-and-rebuild of the row.
+
+##### The original M3.P design
+
+Every finding in the network audit runs **widget → wire**. Nothing in any of the three plans says how a
+**model reaches a widget**, so it is hand-written: `MachinePanel.mirror(model)` writes every field into
+every widget on every tick, and the panel author is responsible for remembering to. That works, and it
+does not scale — not on cost, which is one `equals` per field, but on the three things below.
+
+##### What actually goes wrong, and it is not performance
+
+1. **A field you forget never updates, and the first value is right.** So it looks correct on open and
+   freezes. This is not hypothetical: it is exactly how `ProgressBar` shipped, and the comment now
+   sitting in `setFraction` is there because of it.
+2. **Nested and composite models are walked by hand**, once per tick, per panel.
+3. **Collections have no answer at all.** `ListView`/`TableView`/`TreeView` are local-only precisely
+   because a collection's contract is its ROWS, and `mirror()` cannot express "these 40 items became
+   41" — it can only re-set what it already has.
+4. **A hidden window pays anyway.** `mirror()` runs from `tick()`, so a window nobody is watching still
+   walks its whole model every tick.
+
+##### The two questions, and only one of them is automatable
+
+- *"Which model fields changed?"* — automatable, by reflection, dirty flags or snapshot diffing.
+- *"Which widget shows which field?"* — **not automatable, by anyone.** React writes
+  `<Slider value={m.throughput}/>`, LiveView writes `<%= @throughput %>`, Blazor writes
+  `@bind-Value`, Unreal writes a `RepNotify` handler. Every production system requires one binding
+  statement per displayed field, because that statement IS the UI design; there is nothing to deduce.
+
+That is what makes this tractable rather than a research project: the mapping has to be stated, it is
+stated ONCE, and it is the same line the author was already writing inside `mirror()`.
+
+##### Three tiers, in the order a panel reaches for them
+
+```java
+// 1. EXPLICIT -- over any getter. The model is not touched: no Property fields, no annotations,
+//    no interface, no rewrite. This is the tier a legacy model uses, and it is the default.
+io.project(model::isRunning,  power::setChecked);
+io.project(model::throughput, throughput::setValue);
+io.project(() -> model.engine().coolant().level(), coolant::setFraction);   // nesting needs no feature
+
+// 2. CONVENTION -- panel field name to model getter, over the reflection UiType.collect already does
+//    (it derives every widget's CSS id from its field name; JavaFX's @FXML is the cited precedent).
+io.autoProject(model);                       // wires what matches
+io.project(model::label, status::setText);   // explicit always wins
+
+// 3. OBSERVABLE -- no polling at all, for a model whose fields are the engine's own Property<T>.
+io.bind(model.power, power, Checkbox.CHECKED);
+
+// COLLECTIONS -- keyed, so add/remove/reorder become tree ops rather than a rebuild.
+io.projectEach(model::items, list, Item::id, ItemRow::new, ItemRow::apply);
+```
+
+Evaluated once per tick by the engine, inside the flush the mirror already runs — and **skipped
+entirely when no viewer is watching**, which is something `mirror()` in `tick()` structurally cannot be.
+
+##### Two rules the tiers must obey
+
+- **Tier 2 must SAY what it wired and what it skipped.** A convention that silently misses a field is
+  the frozen-`ProgressBar` failure in a nicer hat, and the engine already has the rule for this: *live
+  and inert look identical, so a capability that can be silently skipped must say it is on.* The report
+  is at construction, once, naming every panel field with no match and every model getter with no
+  widget.
+- **A projection may not throw the frame.** A null anywhere in a chained getter is "skip", never an
+  exception out of the tick — the same reasoning that made every delta apply per-entry and per-field.
+
+##### For a genuinely large model
+
+`io.projectWhen(model::version, …)` gates a whole projection set on a monotonically increasing epoch,
+so an unchanged model costs ONE comparison rather than one per field. Unreal's `NetUpdateFrequency`
+plus dirty tracking in spirit; free for any model that already has a revision counter, and unavailable
+rather than wrong for one that does not.
+
+##### Prior art, and why the other shapes were not chosen
+
+| Shape | Who | Why not here |
+|---|---|---|
+| Re-render + diff | React, RN **Fabric**, **Blazor Server** | Cleanest authoring model there is, and it needs a tree allocation per tick plus a reconciler — and it fights the "panel IS an element with widget fields" design M1 and the host plan just settled |
+| Compiled change tracking | **Phoenix LiveView** | The best answer of the five (statics sent once, dynamics keyed to the assigns they read) and it needs a template compiler; D7 ruled out codegen — no build step, Java 8 bytecode |
+| Observable fields | **Unreal**, **Unity NGO**, **Godot 4**, JavaFX | Kept as tier 3, not as the default: it is invasive for a legacy model, which is the case that matters. `FFastArraySerializer`'s keyed per-item deltas are what `projectEach` is |
+| Immutable snapshot diff | Elm, Redux+Immer | Needs the model to be persistent data structures. Available for free through tier 1 when it is |
+| CRDT / OT | Yjs, Automerge, Figma | For MULTI-WRITER convergence. Not applicable: the server is the sole writer and clients send intents, so coherence is already structural |
+
+##### Ships, deletes, accepts
+
+**Ships:** a panel states its projection once and never writes a tick loop; a hidden window stops
+walking its model; collections gain the row path `ListView` was held back for.
+**Deletes:** `MachinePanel.mirror`, `EnginePanel`'s equivalent, and the per-tick model polling in both
+`tick()` implementations.
+**Accepts:**
+- a projected field that changes reaches **every** viewer;
+- **an unchanged tick sends nothing** — asserted on `InMemoryTransport.sent()`, never on state, because
+  a traffic-free assertion is the only one that fails against the `setFraction`-notifies-unconditionally
+  bug;
+- a hidden window's projections are **not evaluated** (counted, not inferred);
+- `autoProject`'s report names its misses — asserted directly, since silence is the failure mode;
+- `projectEach`: an inserted row leaves every other row's instance untouched (`assertSame`, the M2
+  assertion one layer up), and a reorder is a `move` rather than a rebuild;
+- a null in a chained projection skips rather than throwing the frame.
+
+#### The original M3 specification
+
+
 Typed events on `ServerScope` (`io.on(el, Slider.VALUE, (viewer, v) -> …)`), rate policy in the
 description, server-side validation by the widget's contract (disabled/inert/kind/payload), viewer
 in every context, per-connection refusal counter with a threshold, per-viewer visibility, `call()`

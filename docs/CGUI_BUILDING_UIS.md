@@ -195,21 +195,27 @@ public final class FurnacePanel extends UIElement implements Networked<FurnaceDa
 
     @Override
     public void serve(FurnaceData model, ServerScope io) {   // SERVER, once — the behaviour
+        // ── the user → the model ────────────────────────────────────────────
         // Switch.TOGGLE is an EVENT: a constant on the Switch class saying "this widget can report
         // being flipped, and it hands you a Boolean". You get `on` already typed. See below.
+        // The user changes the model.
         io.on(power,      Switch.TOGGLE,        (ctx, on)    -> model.setRunning(on));
         io.on(throughput, Slider.VALUE_CHANGED, (ctx, value) -> model.setRate(value));
         io.on(purge, Button.ACTIVATE, ctx -> model.purge());
-    }
 
-    @Override
-    public void tick(FurnaceData model) {          // SERVER, every world tick — mirror the model
-        power.setChecked(model.isRunning());
-        burn.setFraction(model.burnFraction());
-        status.setText(model.isRunning() ? "Running" : "Idle");
+        // ── the model → the screen ──────────────────────────────────────────
+        // The same shape pointing the other way. Stated once; the engine keeps it true.
+        // The model changes the screen.
+        io.project(power, Switch.CHECKED,      model::isRunning);
+        io.project(burn,  ProgressBar.FRACTION, model::burnFraction);
+        io.project(status, () -> model.isRunning() ? "Running" : "Idle", UIText::setText);
     }
 }
 ```
+
+Notice the two halves are the same shape. `io.on` is *the user changes the model*; `io.project` is
+*the model changes the screen*. And there is **no `tick`** — you may still write one for logic of your
+own, but keeping the screen up to date is not your job any more.
 
 ### The model — what the panel is a view of
 
@@ -240,13 +246,152 @@ Open the same panel type with a different model and you get a different window s
 furnace. Open it with the *same* model for two players and both see one furnace — the server holds
 one object and every viewer's window mirrors it.
 
+### Keeping the screen up to date — projections
+
+You already know half of this. Look at the two lines together:
+
+```java
+io.on(power, Switch.TOGGLE,  (ctx, on) -> model.setRunning(on));   // the user changes the model
+io.project(power, Switch.CHECKED, model::isRunning);               // the model changes the screen
+```
+
+Same widget, same shape, opposite direction. `on` says *"when this widget is flipped, do that"*.
+`project` says *"this widget shows that"* — and then the engine keeps it true, forever, without you
+asking again.
+
+That is the whole concept. The rest of this section is detail.
+
+#### Why it exists
+
+The tempting alternative is a method that copies everything, called every tick:
+
+```java
+public void tick(FurnaceData model) {                 // DON'T — this is the old way
+    power.setChecked(model.isRunning());
+    burn.setFraction(model.burnFraction());
+}
+```
+
+It works, and it is a list you have to remember to add to. Add a `fuel` bar to the panel, forget this
+method, and the bar shows whatever it was built with — **which is usually right**. So the panel looks
+correct when it opens and then simply never moves. Nothing throws, nothing logs. That has shipped in
+this codebase more than once.
+
+A projection cannot be forgotten in a loop, because there is no loop.
+
+#### What you get
+
+- **Nothing is written unless it changed.** The engine compares first. An unchanged furnace writes no
+  widget, marks nothing dirty, and puts **zero bytes** on the wire.
+- **The first screen is already right.** Projections run once before the window is described, so the
+  client's opening tree carries your model rather than being corrected a tick later.
+- **A window nobody is looking at costs nothing** — minimised or hidden, projections are not evaluated
+  at all.
+- **Your model is untouched.** `model::isRunning` is a method reference to a getter it already has. No
+  interface, no annotations, no fields to convert, no rewrite. That is the point: the case that matters
+  is a big model you did not write.
+
+#### The two forms
+
+**With a state constant** — the same constants a widget's
+[contract](#10-writing-your-own-widget) declares, so it is checked at compile time
+(`Switch.CHECKED` takes a `Boolean`, so `model::isRunning` fits and `model::label` would not compile):
+
+```java
+io.project(power,      Switch.CHECKED,       model::isRunning);
+io.project(burn,       ProgressBar.FRACTION, model::burnFraction);
+io.project(throughput, Slider.VALUE,         model::rate);
+```
+
+**With a setter** — for a computed value, or a widget with no constant for what you want:
+
+```java
+io.project(status,  () -> model.isRunning() ? "Running" : "Idle", UIText::setText);
+io.project(coolant, () -> model.engine().coolant(), ProgressBar::setFraction);
+```
+
+Nesting needs no special support — it is only a lambda — and a `null` anywhere in the chain means
+"nothing to show yet", never an error.
+
+Both start with the widget. That is not just for symmetry: it is how the engine knows what is already
+covered, so nothing can end up written twice.
+
+#### Lists
+
+A list needs more than "copy a value", because rows come and go:
+
+```java
+io.projectEach(model::slots, slotList,      // where the items come from, and the container
+        Slot::id,                           // each item's stable identity — NOT its index
+        slot -> new SlotRow(),              // build a row the first time an item is seen
+        (row, slot) -> ((SlotRow) row).show(slot));
+```
+
+The key is what makes it cheap: a row that did not change **keeps its element**, so adding one item
+sends one insert instead of rebuilding the list, and moving one sends a move instead of a
+destroy-and-rebuild. Two rules the engine enforces rather than trusting you with: the container is the
+projection's alone (do not add children to it yourself), and **keys must be unique** — a duplicate is
+refused loudly, because quietly collapsing two items onto one row makes a row disappear.
+
+#### The shortcut: `autoProject`
+
+If your panel field is called `throughput` and your model has `throughput()` — or `getThroughput()`,
+or `isThroughput()` — you do not have to say anything:
+
+```java
+io.autoProject(model);
+```
+
+It wires what lines up by name and **logs what it could not**:
+
+```
+auto-projection: 1 wired, 0 skipped, 3 with no matching accessor
+  wired   throughput <- throughput()
+```
+
+Anything you projected yourself is left alone, **in any order** — it recognises the widget, not the
+name, so `autoProject` can come first or last. `power` is absent above because the model calls it
+`isRunning()`, and inventing that mapping is not something a convention should do; you write that one.
+
+It is a shortcut and nothing more. `io.project` covers every case; this covers the subset whose names
+already match. If you find the naming rules more trouble than the typing, ignore it entirely.
+
+**A widget you wrote yourself** joins in by declaring which of its slots it *is* —
+`.primary(ANGLE)` on its contract. See
+[Writing your own widget](#10-writing-your-own-widget); a widget without one is reported by
+`autoProject` rather than guessed at, and is projected by hand like anything else.
+
+#### If the model is enormous
+
+If it can say when it last changed, gate the panel on that and an unchanged tick costs one comparison
+instead of one per field:
+
+```java
+io.projectWhen(model::revision);
+```
+
+Only if the revision moves for **every** change that matters — one that misses a mutation makes the
+panel miss it, silently.
+
+#### One thing it will never do
+
+It will not work out *which widget shows which field*. There is nothing to deduce: `throughput` could
+just as easily be the label's text. Every UI framework makes you say this once per displayed field —
+React writes `<Slider value={m.throughput}/>`, Blazor writes `@bind-Value` — because that statement
+**is** the design of your screen. What is automated is the other question: *which fields changed*.
+
+And it is one line per **widget**, not per model field. A five-hundred-field model behind a
+twelve-control panel needs twelve projections, and you were writing those twelve `setValue` calls
+anyway.
+
 **It lives on the server and nowhere else.** That is why the model is a *parameter* of the
 server-side hooks rather than a field on the panel:
 
 ```java
 void layout(FurnaceData model)              // server — has one
 void serve(FurnaceData model, ServerScope)  // server — has one
-void tick(FurnaceData model)                // server — has one
+void tick(FurnaceData model)                // server — has one (and is usually EMPTY: see
+                                            // projections, above)
 
 void bound()                                // client — no model, and there never was one
 void client(ClientScope io)                 // client — likewise
@@ -338,9 +483,11 @@ second `open` brings the existing window forward instead of building another.
 
 Two rules that save real debugging:
 
-- **`tick` just mirrors.** Write the model into the widgets unconditionally; an unchanged value sends
-  nothing, so there is no dirty flag to maintain. *Every setter is idempotent* — if you write one
-  yourself, make sure yours is too.
+- **Do not copy the model in `tick`.** That is what projections are for, and they are stated once in
+  `serve` — see [Keeping the screen up to date](#keeping-the-screen-up-to-date--projections). `tick` is
+  for logic of your own, and most panels leave it out entirely. (Earlier versions of this guide taught
+  the copy-it-every-tick shape; it works and it is a list you can forget to add a field to, which fails
+  by looking correct.)
 - **Widget listeners go in `bound()`, not `client(io)`.** A re-describe replaces the tree, so
   listeners attached once would be attached to widgets that no longer exist. `bound()` runs again;
   `client(io)` does not.
@@ -647,6 +794,7 @@ public class Dial extends UIElement {
             WidgetContract.of(Dial.class, "dial")
                     .state(ANGLE)
                     .event(TURNED)
+                    .primary(ANGLE)        // "a Dial IS its angle" — see below
                     .build());
 
     // ── the widget itself ───────────────────────────────────────────────────
@@ -687,6 +835,21 @@ State.of(...).sanitizedBy(v -> clamp(v))  // clean a value arriving from a PEER
 `omittedWhen` matters more than it looks — it keeps a default-valued widget's state *absent* rather
 than present-and-default, which is what lets two identical trees hash the same.
 
+**`.primary(slot)`** — optional, and it answers one question: *if somebody has a value and wants this
+widget to show it, which slot do they mean?* A `Dial` is its angle, so `ANGLE`. It is what
+[`io.autoProject`](#the-shortcut-autoproject) writes to, and **only** that: everything else works
+whether you declare it or not.
+
+Leave it off when there is no honest answer. `Slider` carries `MIN`, `MAX`, `STEP` and `VALUE` — all
+four floats — and declares `VALUE`, because that is what a slider *is*. `SplitView` carries its divider
+weights and declares nothing, because "the widget's value" is not a thing a split view has. A widget
+with no primary is **reported** by `autoProject` rather than guessed at, and the fix is to project it
+by hand:
+
+```java
+io.project(divider, model::paneWeights, SplitView::setWeights);   // float[]
+```
+
 **`Event.of(kind, attach, payload, rate)`** — `attach` is the important one: it is how a *client*
 subscribes, `(widget, sink) -> …`, so the widget says how to listen to itself and nothing in the
 networking layer has to know your class. For an event with no value, use `Event.signal`:
@@ -713,10 +876,14 @@ always deliver the value you ended on.
    server, never actually sent, and it looks completely finished. If your widget has a setter and no
    reader, add the reader.
 3. **State is what was authored, never what the user is doing.** No hover, focus, caret or scroll.
+4. **Declare a `primary` only if one slot really is "what the widget is".** Guessing on the user's
+   behalf is worse than making them write one line: a wrong guess writes the wrong slot every tick and
+   looks like the widget misbehaving.
    The test: if reloading ought to give it back, it is state.
 
 Also make your setters **idempotent** — return early when the value is unchanged, as `setAngle` does
-above. A server mirrors its model into widgets every tick, so a setter that reports a change
+above. A projection compares before it writes, but it is the setter that decides whether a write
+counts as a change, so a setter that reports a change
 unconditionally sends a packet per tick forever, carrying a value nobody moved.
 
 ### If your widget carries nothing
@@ -766,6 +933,7 @@ l.flexDirection(FlexDirection.ROW).gapAll(8)     // a row
 |---|---|
 | Nothing is styled | `window.init(w, h)` was never called, or `StyleSheet.DEFAULT` was not added |
 | A panel is zero-high | missing `height(0).flexGrow(1)` — `flex-shrink` is `0` here |
-| The server changes nothing on screen | you mirrored in `serve` instead of `tick` |
+| One widget never updates while the rest do | no projection for it — check `autoProject`'s log, it names what it could not wire |
+| Nothing on screen ever updates | no projections at all, or you wrote a `tick` that copies and expected the engine to call something else |
 | Listeners stop working after an update | they were attached in `client(io)` instead of `bound()` |
 | A widget arrives blank over the wire | it has no contract — see §10 |
