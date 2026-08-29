@@ -223,6 +223,8 @@ public final class SvgDocument {
     private final float height;
     /** {@code minX, minY, maxX, maxY} over every contour — see {@link #boundsOf}. */
     private final float[] bounds;
+    /** Whether any paint in the file is {@code currentColor} — see {@link #usesCurrentColor}. */
+    private final boolean usesCurrentColor;
 
     private SvgDocument(SvgScene scene) {
         this.scene = scene;
@@ -234,6 +236,15 @@ public final class SvgDocument {
         this.width = scene.width();
         this.height = scene.height();
         this.bounds = boundsOf(scene);
+        this.usesCurrentColor = anyCurrentColor(scene);
+    }
+
+    private static boolean anyCurrentColor(SvgScene scene) {
+        for (SvgScene.Node node : scene.nodes()) {
+            if (node.fill() != null && node.fill().paint().currentColor()) return true;
+            if (node.stroke() != null && node.stroke().paint().currentColor()) return true;
+        }
+        return false;
     }
 
     /**
@@ -524,6 +535,16 @@ public final class SvgDocument {
         // a stroked circle -- so this is the first-frame mesh and the fallback, and nothing else.
         document.lods.put(PARSE_STEPS, document);
         return document;
+    }
+
+    /**
+     * The document at a chosen curve resolution and nothing else — no tag retention, no LOD ladder.
+     *
+     * <p>A test seam: judging artwork at tile size means judging it at the tier the engine will draw it
+     * at, and {@link #parse(String)} answers only the coarse first-frame mesh.</p>
+     */
+    static SvgDocument parse(String svg, int steps) {
+        return fromScene(SvgResolver.resolve(SvgScanner.scan(svg), steps));
     }
 
     /**
@@ -974,6 +995,21 @@ public final class SvgDocument {
 
     public float height() {
         return height;
+    }
+
+    /**
+     * Whether any fill or stroke in the file is {@code currentColor}.
+     *
+     * <p><b>This is the line between a CHROME MARK and ARTWORK, and it is readable off the file rather
+     * than declared beside it.</b> A themed icon set (Feather, Lucide) is authored as {@code currentColor}
+     * precisely so the cascade can colour it; a brand mark names every colour it uses and must never be
+     * tinted. {@code WindowIcon} asks this to decide whether an icon needs a tile put under it or IS one
+     * — a filled, coloured rounded square already, which a second square behind would only outline.</p>
+     *
+     * <p>Answered from the scene, like {@link #isEmpty}, so asking does not force the tessellation.</p>
+     */
+    public boolean usesCurrentColor() {
+        return usesCurrentColor;
     }
 
     /**

@@ -13,6 +13,7 @@ import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.Ui;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
+import com.crystalgui.ui.elements.desktop.DesktopPresentation;
 import com.crystalgui.ui.elements.desktop.WindowFrame;
 import com.crystalgui.ui.elements.desktop.WindowPolicy;
 import com.crystalgui.ui.elements.desktop.WindowState;
@@ -226,6 +227,10 @@ public final class CgUiScreen extends GuiScreen {
 
         if (uiWindow != null) {
             // Reopening: the desktop comes back exactly as it was left. Everything below built it once.
+            // exitHudMode first, and it is a no-op unless the screen was closed with something pinned --
+            // it is what puts back the windows the HUD hid, and it has to run BEFORE the resume so the
+            // desktop it restores them onto is the attached one.
+            uiWindow.exitHudMode();
             uiWindow.resumeDesktop();
             bringEditorForward();
             return;
@@ -350,7 +355,7 @@ public final class CgUiScreen extends GuiScreen {
         // and closes the screen.
         editorWindow = uiWindow.openWindow(new WindowFrame("Crystal Editor"));
         editorWindow.setPolicy(WindowPolicy.HIDE_ON_CLOSE).setKey("editor:main");
-        editorWindow.setIcon("crystalgui:code");
+        editorWindow.setIcon("crystalgui:logo");
         // setContent, not content().addChild -- it is what ADOPTS the editor's menu bar into the
         // caption, so the window has one header rather than two stacked on each other.
         editorWindow.setContent(editor);
@@ -434,6 +439,17 @@ public final class CgUiScreen extends GuiScreen {
             // Asking directly is idempotent when it already happened and is the difference between the
             // world coming back and the cursor still floating over an unresponsive game.
             if (mc.theWorld != null && mc.thePlayer != null) mc.setIngameFocus();
+
+            // AND THE LAST FRAME OF THE FLICKER GOES HERE. Moving the decision into
+            // DesktopPresentation removed the disagreement between the two paint hooks, but not this:
+            // Minecraft renders the overlay BEFORE it draws the current screen, so on the frame this
+            // method closes itself the overlay hook has already run and stood down -- and returning here
+            // leaves that frame painted by nobody at all.
+            //
+            // By this point displayGuiScreen has run onGuiClosed (which entered HUD mode) and nulled the
+            // current screen, so the presentation is already HUD and the pinned windows can simply be
+            // painted now, in the frame that would otherwise have dropped them.
+            uiWindow.paint(CgUiHud.presentation(), mc.displayWidth, mc.displayHeight);
             return;
         }
 
@@ -507,7 +523,12 @@ public final class CgUiScreen extends GuiScreen {
         // frames.
         CgGlState.invalidateAllIfPresent();
 
-        uiWindow.paintFrame();
+        // THROUGH THE PRESENTATION, not straight at paintFrame. It resolves to DESKTOP for as long as
+        // this screen is the current one, so nothing about what is drawn changes -- what changes is that
+        // no caller decides for itself whether it is its turn. That is the whole of the close flicker:
+        // this method closes the screen from inside itself, and the overlay hook for the same frame had
+        // already run and stood down, so the frame was painted by nobody. @see DesktopPresentation
+        uiWindow.paint(CgUiHud.presentation(), mc.displayWidth, mc.displayHeight);
         if (TRACE && !tracedFirstPaint) {
             tracedFirstPaint = true;
             // THE ONE THAT NEEDS A CLIENT. Fonts, glyph atlases, icon SVGs and the first layout of the
@@ -637,7 +658,18 @@ public final class CgUiScreen extends GuiScreen {
         // records its session and preferences, each because it went off screen and each knowing what it
         // is responsible for. A host says where the config directory is; it does not say what to put in
         // it. @see Desktop#persistTo and CrystalEditor#saveState
-        if (uiWindow != null) uiWindow.suspendDesktop();
+        if (uiWindow != null) {
+            // PINNED WINDOWS SURVIVE THE SCREEN CLOSING, which is the half of a pin that Win32's
+            // WS_EX_TOPMOST has no way to express -- it has no desktop to close. With something pinned
+            // the compositor goes to the HUD instead of off: every UNPINNED window is hidden (detached,
+            // so it freezes exactly as before) and the pinned ones keep laying out, ticking and painting
+            // over the running game through CgUiHud.
+            //
+            // With nothing pinned this is the suspend it always was, which is strictly cheaper: the
+            // whole compositor leaves the tree in one detach rather than window by window.
+            if (uiWindow.hasPinnedWindows()) uiWindow.enterHudMode();
+            else uiWindow.suspendDesktop();
+        }
     }
 
     /**

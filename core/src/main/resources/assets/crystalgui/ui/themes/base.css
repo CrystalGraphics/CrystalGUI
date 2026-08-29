@@ -627,14 +627,17 @@ theme {
      * editor or a tool panel would have had docked. The CAPTION is raised above it, which is the whole
      * of what makes a title bar read as furniture rather than as the first row of the content.
      *
-     * The border is `--border-strong` rather than `--border-base`: a window's edge is the only thing
-     * separating it from ANOTHER WINDOW of the same colour, which is a harder job than separating a
-     * panel from the chrome around it. It is also what the nothing-drawn-in-the-colour-of-what-it-sits-on
-     * rule is checking here — a window outlined in its own fill is a window you cannot see the edge of,
-     * and this is a compositor, so overlapping is the normal case rather than the exception. */
+     * THERE IS NO `--window-border`, and its absence is the decision rather than an omission. A window
+     * was outlined in `--border-strong`, on the reasoning that a window's edge is the only thing
+     * separating it from ANOTHER WINDOW of the same colour — a harder job than separating a panel from
+     * the chrome around it. That reasoning still holds; it is simply not worth the line it costs, and a
+     * raised caption already tells two overlapping windows apart.
+     *
+     * Left DEFINED but unused it would be worse than either: a theme could set it, see nothing happen,
+     * and have nothing to look at to find out why. A token that does nothing is a promise the sheet does
+     * not keep. */
     --window-bg: var(--surface-panel);
     --window-fg: var(--fg);
-    --window-border: var(--border-strong);
     /* THE INACTIVE CAPTION IS THE BASE, and the active one is the exception -- most windows are
      * inactive most of the time, and every window manager marks the one you are talking to rather
      * than the several you are not. The pair has to differ in BOTH channels: a caption that only
@@ -666,31 +669,50 @@ theme {
     --window-title-active-bg: var(--surface-base);
     --window-title-active-fg: var(--fg);
 
-    /* The taskbar. The island is an OVERLAY surface rather than a panel one: it floats over the
-     * desktop the way a menu floats over a panel, and it has to be separable from whatever the
-     * wallpaper happens to be behind it — in game that is a paused world, which is any colour at all.
+    /* The taskbar: a full-width bar along the bottom, the overlay surface's flat colour wherever it
+     * cannot sample a backdrop. The tint it lays over a backdrop is NOT derived here — it needs an alpha
+     * no system role carries (~88%, where --surface-glass is a 40% veil for a floating panel), so each
+     * theme pins --taskbar-glass-tint beside its other translucent values.
      *
      * The active entry takes the SAME grey as the active caption, on purpose: one colour means one
      * thing across the whole compositor, so the bar and the window agree about which is yours without
-     * anyone having to learn a second signal. A ladder rather than a hue — island, then hover, then
+     * anyone having to learn a second signal. A ladder rather than a hue — bar, then hover, then
      * active, each a step lighter — which is how a Windows taskbar reads and why it never needs an
-     * accent to say which button is engaged. A minimised window's entry is dimmed to the disabled
+     * accent fill to say which button is engaged. A minimised window's entry is dimmed to the disabled
      * foreground: present and quiet, because hiding it is the failure the strip exists to prevent. */
     --taskbar-bg: var(--surface-overlay);
     --taskbar-border: var(--border-base);
-    --taskbar-entry-fg: var(--fg-secondary);
+    /* ONE LABEL COLOUR FOR EVERY ENTRY. Rest, hover, active and minimised all read in --fg: the
+     * state is the PILL's to say (and the fill's, for the active one), and a label that dims with
+     * it said the same thing a second time in a way that made the strip look half switched-off.
+     * Kept as four tokens rather than one so a theme may still split them; the shipped one does not. */
+    --taskbar-entry-fg: var(--fg);
     --taskbar-entry-hover-fg: var(--fg);
     --taskbar-entry-hover-bg: var(--hover-bg);
     --taskbar-entry-active-fg: var(--fg);
-    --taskbar-entry-active-bg: var(--pressed-bg);
-    --taskbar-entry-hidden-fg: var(--fg-disabled);
-    /* ATTENTION IS THE ONE PLACE THE STRIP USES AN ACCENT, and the ladder above is why it can. Active,
-     * hover and hidden are all steps on one grey, so nothing else in the bar competes with a hue — a
-     * window that opened without focus is the only thing here that is asking rather than reporting.
-     * Windows flashes, X11 raises an urgency hint, macOS bounces; a filled entry is the same statement
-     * in a strip that has no room to move. */
-    --taskbar-entry-attention-fg: var(--fg-on-accent);
-    --taskbar-entry-attention-bg: var(--accent);
+    /* THE ACTIVE FILL IS A THEME PIN, and it used to be --pressed-bg. That is one step above hover on
+     * a PANEL, and on the bar -- which is darker than any panel -- it came out twenty units off the
+     * bar's own tint and read as nothing: the pill said which window was active and the fill said
+     * nothing at all. Windows' taskbar puts its active button at #5D5D5D over a #202020 bar, a step of
+     * sixty; that is what the pin gives, in each theme's own cast, and it is exactly the case the
+     * --selection-inactive-bg note already records ("a step ABOVE the surfaces rather than between
+     * them"). Not derived from that token either: the activity bar's highlight and the taskbar's are
+     * independent decisions that happen to agree in dark and would not in light. */
+    --taskbar-entry-hidden-fg: var(--fg);
+    /* THE PILL under every entry — Windows' running indicator. Secondary at rest, the accent for the
+     * active window, and the disabled foreground for a minimised one: it is the one place the strip
+     * says "this one" in colour, which is what lets every entry FILL stay a grey. */
+    --taskbar-indicator: var(--fg-secondary);
+    --taskbar-indicator-active: var(--accent);
+    --taskbar-indicator-hidden: var(--fg-disabled);
+    /* ATTENTION: a SOFT accent fill, with the full accent on the pill. This was the accent itself, and
+     * on a bar whose every other state is a step on one grey a solid accent entry was the loudest thing
+     * on the desktop — it read as an error rather than as a knock. Windows' own flash settles to a tint.
+     * A window that opened without focus is still the only thing here asking rather than reporting;
+     * it now asks in the same voice as everything else. The label takes --fg rather than the on-accent
+     * white, because --accent-soft is pale in the light theme and white would not read on it. */
+    --taskbar-entry-attention-fg: var(--fg);
+    --taskbar-entry-attention-bg: var(--accent-soft);
     /* A count, so it takes the same red every error count in the application takes rather than a colour
      * of its own — the badge/colour split FileDecoration already draws, one level up. */
     --taskbar-entry-badge-fg: var(--fg-on-accent);
@@ -698,6 +720,19 @@ theme {
     /* MUTED, not the accent: progress is reported continuously and behind a label that has to stay
      * readable over it, which is the opposite of what attention wants. */
     --taskbar-entry-progress: var(--accent-soft);
+
+    /* ── The window icon tile ────────────────────────────────────────────────────────────────────
+     * One drawing of a window's icon for the taskbar entry, the hover preview and the switcher tile
+     * (WindowIcon): a filled rounded square with the glyph in the on-accent colour. The six tile HUES
+     * are theme pins, not derivations — no system role is "a pleasant blue for a tile", and deriving
+     * them from --error/--success would make a tile mean something it does not. THE MONOGRAM'S TILE IS A
+     * SEVENTH PIN for the same reason, and it stopped deriving from --border-strong the day that grey
+     * landed three levels from --taskbar-entry-active-bg: a window with no icon disappeared on the one
+     * entry you are looking at. What CAN derive is the glyph and the LETTER, and both now take the
+     * on-accent foreground — the letter sits on a saturated tile in both themes, so the ordinary --fg it
+     * used to take would be black on crimson in the light one. */
+    --window-icon-glyph: var(--fg-on-accent);
+    --window-icon-mono-fg: var(--fg-on-accent);
     /* The snap preview has NO derivation here, and its absence is the point. It is a translucent wash,
      * so the transparency has to live in the colour — `opacity` would dim the border along with the
      * fill, and a border lighter than its fill is the whole shape of the affordance. No system role
@@ -721,13 +756,14 @@ theme {
 
     /* ── Taskbar hover previews ──────────────────────────────────────────────────────────────────
      * The panel a taskbar entry raises on hover: a header and a live picture of the window. It is a
-     * floating surface over everything else, so it takes the RAISED surface rather than the base one,
-     * and its own close takes the same SYSTEM pair the window close does -- the destructive-control
+     * floating surface over everything else, so it takes the OVERLAY surface — the one menus float on
+     * and the one the taskbar falls back to, so bar, preview and switcher are one material — and its
+     * own close takes the same SYSTEM pair the window close does -- the destructive-control
      * convention is about the gesture, not about which widget offers it. Derived from --error rather
      * than from --window-close-hover-bg, because a component token derives from the system vocabulary
      * and never from another component's: chaining them makes one widget's restyle silently move
      * another's. */
-    --preview-bg: var(--surface-raised);
+    --preview-bg: var(--surface-overlay);
     --preview-border: var(--border-base);
     --preview-fg: var(--fg);
     --preview-close-hover-bg: var(--error);
@@ -746,9 +782,14 @@ theme {
      * The picture's backdrop is shared outright (--preview-thumbnail-bg) and that IS deliberate: it is
      * not the preview's token being borrowed, it is the one token for "what a window thumbnail
      * letterboxes against", which both draw. */
-    --switcher-bg: var(--surface-raised);
+    --switcher-bg: var(--surface-overlay);
     --switcher-border: var(--border-base);
     --switcher-fg: var(--fg);
+    /* A tile's fill under the POINTER is a THEME PIN, not --hover-bg: the tile sits on acrylic, and an
+     * opaque grey from the panel ladder is a slab that hides the very backdrop the switcher floats
+     * over. Fluent's fills on a material are translucent white (SubtleFillColorSecondary, #0FFFFFFF),
+     * which lifts the tile and lets the backdrop through -- an alpha no system role carries, so the
+     * themes name it. The selection is a ring with no fill, see below. */
 
     /* TRANSPARENT, not absent: a tile's border must exist unselected so that selecting one changes its
      * COLOUR and never its width. A border that appears on selection re-lays the grid out by two pixels

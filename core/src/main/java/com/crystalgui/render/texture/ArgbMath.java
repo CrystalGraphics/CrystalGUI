@@ -33,6 +33,28 @@ public final class ArgbMath {
         return Math.round(from + (to - from) * t);
     }
 
+    /**
+     * ARGB lerp in PREMULTIPLIED alpha -- the interpolation CSS specifies for gradients, and the right
+     * one for any fade toward {@code transparent}, which is transparent BLACK: a straight lerp toward
+     * it darkens the colour on the way, this one only fades it. Each channel is scaled by its alpha,
+     * interpolated, and divided back out by the interpolated alpha; a result with no alpha is 0.
+     */
+    public static int lerpPremultiplied(int from, int to, float t) {
+        float aFrom = ((from >>> 24) & 0xFF) / 255f;
+        float aTo = ((to >>> 24) & 0xFF) / 255f;
+        float a = aFrom + (aTo - aFrom) * t;
+        if (a <= 0f) return 0;
+        int r = lerpChannelPremultiplied((from >>> 16) & 0xFF, aFrom, (to >>> 16) & 0xFF, aTo, t, a);
+        int g = lerpChannelPremultiplied((from >>> 8) & 0xFF, aFrom, (to >>> 8) & 0xFF, aTo, t, a);
+        int b = lerpChannelPremultiplied(from & 0xFF, aFrom, to & 0xFF, aTo, t, a);
+        return (Math.round(a * 255f) << 24) | (r << 16) | (g << 8) | b;
+    }
+
+    private static int lerpChannelPremultiplied(int from, float aFrom, int to, float aTo, float t, float a) {
+        float premultiplied = from * aFrom + (to * aTo - from * aFrom) * t;
+        return Math.max(0, Math.min(255, Math.round(premultiplied / a)));
+    }
+
     // ── HSV ─────────────────────────────────────────────────────────────────
     //
     // The same conversion `color.glsl` does on the GPU, needed here because a colour picker's
