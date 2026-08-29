@@ -177,6 +177,20 @@ public final class ServerWindows {
             // BEFORE open(), which is what makes the handlers-before-open rule unbreakable from a
             // panel's own code rather than a thing every author has to remember.
             window.binder.accept(new ServerScope(session, window, ""));
+
+            /*
+             * SEEDED BEFORE THE DESCRIPTION IS TAKEN, and this is what makes projections complete
+             * rather than merely convenient.
+             *
+             * open() encodes the tree as it stands. Without this run the first description carries
+             * whatever the panel's constructor happened to build, and every projected field arrives
+             * one state delta later -- a window that opens visibly wrong and corrects itself a tick
+             * afterwards. It is the reason MachinePanel.serve used to end with a hand-written
+             * mirror(model) call, and moving it here is what lets that call be deleted rather than
+             * merely renamed. Covers attached children too: a child declares into the same set.
+             */
+            window.runProjections();
+
             session.onClientClosed(reason -> finish(window, ServerWindow.CloseReason.CLIENT, reason));
             session.open();
         } catch (RuntimeException | Error failed) {
@@ -264,6 +278,23 @@ public final class ServerWindows {
                 window.ticker.run();
                 // Nested panels, each with the slice it was attached with, in attach order.
                 for (ServerWindow.Attached child : window.attached) child.ticker().run();
+
+                /*
+                 * PROJECTIONS RUN HERE: after the panel's own tick, before the session flushes.
+                 *
+                 * After, so a tick that mutates the model is reflected on the same tick rather than the
+                 * next -- otherwise every projected field is one tick stale, which is invisible on a
+                 * slow-moving model and unmissable on a fast one.
+                 *
+                 * Before session.tick(), because that is what drains the dirty set: a projection that
+                 * wrote afterwards would hold its change until the following flush.
+                 *
+                 * And SKIPPED ENTIRELY while nobody is watching, which is the thing a hand-written
+                 * mirror() in tick() structurally could not be -- a minimised window went on walking its
+                 * whole model sixty times a second to write values no one could see.
+                 */
+                ServerUiSession<Object> watching = window.session;
+                if (watching != null && watching.isViewerVisible()) window.runProjections();
             } catch (RuntimeException failed) {
                 // One window's broken tick must not stop every other window on this connection --
                 // the frozen ones would show no error of their own, which is what gets diagnosed as a
@@ -344,6 +375,13 @@ public final class ServerWindows {
                         window.typeId(), failed.getMessage(), failed);
             }
         }
+        // AFTER the callbacks, so a teardown can still read a projected widget, and after the attached
+        // children's, since a nested panel's projections live in the same window. A projection holds
+        // the model, the widget and its last value; a bind() additionally puts a listener ON THE MODEL,
+        // which outlives the window -- so leaving it connected retains the whole tree through it, which
+        // is the ordinary shape of a listener leak.
+        window.releaseProjections();
+
         window.host = null;
         window.attached.clear();
     }

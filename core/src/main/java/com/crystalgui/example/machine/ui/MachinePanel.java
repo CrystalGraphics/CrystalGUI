@@ -145,17 +145,14 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
 
     /**
      * State the SERVER half keeps. Ordinary fields — the framework only ever touches widget ones.
+     *
+     * <p>Two more used to sit here and are gone with {@code mirror()}: a {@code dirty} flag set from a
+     * model subscription, and the {@code Runnable} that undid the subscription on close. Both existed
+     * to answer "has anything changed", which is now the projection's question rather than the panel's.</p>
      */
     private int heartbeats;
-    private boolean dirty = true;
 
-    /**
-     * Undoes the {@code onChanged} subscription {@link #serve} made. The model is <b>shared</b> — it
-     * outlives this window and other players' panels watch it too — so a closed window must not leave
-     * a listener behind.
-     */
-    @Nullable
-    private Runnable unsubscribe;
+
 
     /** The CLIENT half's scope, stored by {@link #client}. Null on the server — which is the tell. */
     @Nullable
@@ -400,8 +397,6 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
          */
         io.sheet(MachineStyles.SHEET, MachineStyles.CSS);
 
-        unsubscribe = model.onChanged(() -> dirty = true);
-
         io.on(power, Switch.TOGGLE, (ctx, on) -> {
             MachineTrace.log(MachineTrace.SERVER, "event: power -> " + on);
             model.setRunning(on);
@@ -527,38 +522,31 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
                 + "not a message: both halves are in this process"));
         io.attach(engine, model.engine());
 
-        // The very first tree the client builds is already correct, rather than correct one state
-        // delta later. Safe here because serve() runs before the description is taken.
-        mirror(model);
-    }
+        /*
+         * THE MODEL, STATED ONCE.
+         *
+         * This used to be a mirror(model) method writing all five widgets, called from tick() behind a
+         * dirty flag the panel kept itself -- three moving parts, of which the flag was the one the
+         * engine's own rule says you should not need, and the method was the one you could forget to
+         * add a field to. A forgotten field is invisible: the widget keeps its opening value, which is
+         * right, and simply never moves again.
+         *
+         * The two explicit ones come FIRST, because autoProject leaves alone anything already named.
+         */
 
-    /**
-     * One world tick — <b>mirror only</b>. The model advanced somewhere else.
-     *
-     * <p>The host flushes after this returns, so there is nothing to send and nothing to remember to
-     * send.</p>
-     */
-    @Override
-    public void tick(MachineModel model) {
-        if (!dirty) return;
-        mirror(model);
-        dirty = false;
-    }
+        // No accessor is called `power` -- the model says isRunning() -- and a convention that reached
+        // for isPower() would be inventing one. Named, so the report does not list it as a gap.
+        io.project(power, Switch.CHECKED, model::isRunning);
 
-    /**
-     * The model is the truth; the widgets are a view of it.
-     *
-     * <p>Every setter here is idempotent — an unchanged value writes no candidate and marks nothing
-     * dirty — so calling this more often than necessary costs a few comparisons, not traffic, and
-     * there is no need to work out which field moved.</p>
-     */
-    private void mirror(MachineModel model) {
-        power.setChecked(model.isRunning());
-        throughput.setValue(model.throughput());
-        progress.setFraction(model.progress());
-        label.setText(model.label());
-        status.setText((model.isRunning() ? "running" : "stopped")
-                + " - " + model.completedCycles() + " cycles");
+        // Composed of two fields and belongs to no single accessor, which is the ordinary case for a
+        // readout. A lambda is the whole mechanism; nesting would work the same way.
+        io.project(status, () -> (model.isRunning() ? "running" : "stopped")
+                + " - " + model.completedCycles() + " cycles", UIText::setText);
+
+        // throughput, label and progress: field name meets accessor name, and each widget's contract
+        // declares which slot it means. Everything it cannot wire -- the buttons, the nested engine
+        // panel -- is logged with the reason, because a silent skip is the failure being removed here.
+        io.autoProject(model);
     }
 
     /**
@@ -747,7 +735,6 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
          * ever handed a scope. Worth knowing before writing anything side-specific in a panel: the
          * hook is not split per side, because most panels genuinely want the same teardown twice.
          */
-        if (unsubscribe != null) unsubscribe.run();
         MachineTrace.log(io == null ? MachineTrace.SERVER : MachineTrace.CLIENT,
                 "window closed: " + reason);
     }

@@ -1,6 +1,10 @@
 package com.crystalgui.net.window;
 
 import java.util.ArrayList;
+import com.crystalgui.core.signal.Connection;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -9,6 +13,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.projection.Projections;
 
 /**
  * <b>One open window on a connection, server side</b> — the handle {@link ServerWindows#open} returns.
@@ -64,6 +69,51 @@ public final class ServerWindow<P extends UIElement> {
 
     @Nullable
     private final String key;
+
+    /**
+     * Every projection declared by this window's panel <b>and its attached children</b>, in one set.
+     *
+     * <p>One set per WINDOW rather than per panel, because they all run at the same moment for the same
+     * reason: a projection has to write before the session flushes, or its change waits a tick. Nesting
+     * does not need its own set -- a child's projections are simply declared into this one, which is
+     * also what makes a child's fields visible to the same {@code gatedBy} epoch when the parent sets
+     * one.</p>
+     */
+    private final Map<Object, Projections> projectionsByScope = new LinkedHashMap<>();
+
+    /** Undone when the window ends. @see ServerScope#bind */
+    final List<Connection> bindings = new ArrayList<>();
+
+    /**
+     * This scope's own set, created on first use.
+     *
+     * <p>One set PER PANEL rather than one per window, so a nested panel's {@code projectWhen} gate
+     * covers its own fields and not its parent's — a child has its own model and its own notion of
+     * having changed, and one shared gate would let either silence the other.</p>
+     */
+    Projections projectionsFor(Object scope) {
+        return projectionsByScope.computeIfAbsent(scope, ignored -> Projections.create());
+    }
+
+    /** Every set, parent first then children in attach order. */
+    Collection<Projections> allProjections() {
+        return projectionsByScope.values();
+    }
+
+    /** Runs them all. @return how many projections wrote something */
+    int runProjections() {
+        int changed = 0;
+        for (Projections set : projectionsByScope.values()) changed += set.run();
+        return changed;
+    }
+
+    /** Drops every projection and undoes every binding. Called when the window ends. */
+    void releaseProjections() {
+        for (Projections set : projectionsByScope.values()) set.close();
+        projectionsByScope.clear();
+        for (Connection binding : bindings) binding.disconnect();
+        bindings.clear();
+    }
 
     /** Nested panels attached through {@link ServerScope#attach}, in attach order. */
     final List<Attached> attached = new ArrayList<>();
