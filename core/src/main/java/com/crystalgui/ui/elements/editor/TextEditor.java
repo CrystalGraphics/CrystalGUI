@@ -314,6 +314,17 @@ public class TextEditor extends ScrollerView implements UndoScope {
     private boolean highlightsDirty = true;
 
     /**
+     * The model rows the pending rebuild is confined to, or null for every realised row.
+     *
+     * <p>Set only by the edit path and cleared by {@link #markHighlightsDirty}, so anything that dirties
+     * the highlights <em>after</em> an edit — a search re-running, occurrences moving — widens it back to
+     * everything on its own. That ordering is the whole safety argument: narrowing is opt-in and every
+     * other producer overrides it by doing what it already did.</p>
+     */
+    @Nullable
+    private int[] highlightRowLimit;
+
+    /**
      * The viewport moved, so {@link #refreshHighlights} must run — but every row it still shows keeps the
      * bands it has. Distinct from {@link #highlightsDirty}, which means the bands themselves are wrong.
      */
@@ -324,9 +335,17 @@ public class TextEditor extends ScrollerView implements UndoScope {
      *
      * <p>For the subsystems that own a range set of their own — find, occurrences — since the flag itself
      * is the editor's and the pass that reads it is too.</p>
+     *
+     * <h3>...and now the only writer of the flag, which is what makes the row limit trustworthy</h3>
+     *
+     * <p>Thirteen places dirtied the highlights by assignment, and one of them — an edit — knows
+     * something the other twelve do not: <b>which rows it touched</b>. Routing every site through here
+     * makes "assume every row" the default a caller has to opt out of, rather than a fact about twelve
+     * scattered assignments that the thirteenth quietly contradicts. @see #highlightRowLimit</p>
      */
     void markHighlightsDirty() {
         highlightsDirty = true;
+        highlightRowLimit = null;
     }
 
     /**
@@ -718,13 +737,20 @@ public class TextEditor extends ScrollerView implements UndoScope {
             long timed = FrameProfile.begin();
             tokenizer.edited(buffer.document(), change);
             FrameProfile.step(timed, "tokenizer.edited");
-            highlightsDirty = true;
+            markHighlightsDirty();
             FrameProfile.leave(changed, "buffer.onChanged head");
             // BEFORE reprojectAfterEdit, which is what advances previousLineCount -- this needs the count
             // as it was in order to tell a same-row edit from one that shifted every row below it.
             long piece = FrameProfile.begin();
             invalidateMeasuredRows(change);
             FrameProfile.step(piece, "ed:invalidateMeasuredRows");
+            // THE VIEW-LINE COUNT AS IT WAS, read here and USED below -- the two have to be separated.
+            //
+            // Written first as `rowsTouchedBy(change, viewLineCount())` at this line, which reads
+            // correctly and is vacuous: the argument and the comparison inside it are evaluated at the
+            // same instant, so the guard compared a number against itself and could never answer
+            // "everything moved". The reprojection between the two is the whole point of the check.
+            int viewLinesBefore = viewLineCount();
             // Same rule, same reason, and it must read previousLineCount while it still says what it said
             // before this edit -- so it belongs beside the call above rather than anywhere later.
             //
@@ -758,8 +784,15 @@ public class TextEditor extends ScrollerView implements UndoScope {
             folds.markDirty();
             FrameProfile.step(piece, "ed:folds.markDirty");
             long rebound = FrameProfile.begin();
-            rebindRealisedLines();
+            int[] touched = rowsTouchedBy(change, viewLinesBefore);
+            rebindRealisedLines(touched);
             FrameProfile.step(rebound, "rebindRealisedLines");
+            // AND THE BANDS ARE CONFINED TO THE SAME ROWS. Set here rather than beside the
+            // markHighlightsDirty() above because this is the first point the answer exists -- and
+            // because anything later in this listener that dirties the highlights for a reason of its
+            // own (find.refreshAfterEdit is the one that does) clears it again, which is the direction
+            // that keeps this safe.
+            highlightRowLimit = touched;
             // A document that shrank can leave a selection pointing past its end, and the caret then
             // indexes a row that is not there. Clamped HERE rather than at the keystroke that caused it,
             // because undo is no longer the only way in: edit.undo from a menu or the palette, a
@@ -1077,7 +1110,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         buffer.breakUndoCoalescing();
         updateBracketMatch();
         updateOccurrences();
-        highlightsDirty = true;
+        markHighlightsDirty();
         viewCursorsPart.restartBlink();
         // These two EAGERLY, ahead of the frame's own pass. A caret that only moved on the next
         // updateWindow would lag every keystroke by a frame, which is the one place in this widget where
@@ -1099,12 +1132,81 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * change set it is one edit, one undo step, and every caret is carried through it by the same mapping
      * that carries an anchor.</p>
      */
+    /**
+     * Pastes, treating <b>whole-line clipboard content as whole lines</b> — what every IDE does.
+     *
+     * <h3>A cut line is a LINE, not the characters that were on it</h3>
+     *
+     * <p>Cut with no selection puts the line and its newline on the clipboard. Inserting that raw at the
+     * caret does two visible wrongs at once, and they were reported as one: the text welds onto the end of
+     * whatever line you are on, and the trailing newline then pushes the caret down to an empty line
+     * below. Neither is what was cut -- a line was, so a line is what comes back.</p>
+     *
+     * <p>Recognised by the trailing newline rather than by remembering the cut. VS Code keeps a flag for
+     * this, which it can because its clipboard is its own; ours is the SYSTEM clipboard, so a flag would
+     * be wrong the moment the text came from anywhere else. The newline is the honest signal, and it is
+     * the one thing a copied line always has and a copied fragment never does.</p>
+     *
+     * <p>Inserted at the START of the caret's line, so the paste lands on a line of its own however far
+     * along the current one the caret happens to be -- a line paste ignores the column, which is the whole
+     * point of it. The caret then goes to the END of what was pasted, so the next thing typed continues
+     * the line that just arrived rather than sitting on a blank one after it.</p>
+     */
+    public void pasteAtCaret(String text) {
+        if (text == null || text.isEmpty()) return;
+        if (hasSelection() || !text.endsWith("\n")) {
+            insertAtCaret(text);
+            return;
+        }
+        int row = buffer.offsetToPoint(getCaret()).row();
+        int lineStart = buffer.document().lineStartOffset(row);
+        applyEdit(new ArrayList<>(List.of(new Change(lineStart, lineStart, text))));
+        // The end of the last line pasted: everything inserted, less the newline that closes it.
+        setCaret(Math.min(buffer.length(), lineStart + text.length() - 1));
+    }
+
     public void insertAtCaret(String text) {
         List<Change> changes = new ArrayList<>(selections.count());
         for (Selection selection : selections.all()) {
             changes.add(new Change(selection.start(), selection.end(), text));
         }
         applyEdit(changes);
+    }
+
+    /**
+     * Applies a rewrite somebody else computed — a whole-document transformation, as minimal edits.
+     *
+     * <h3>Why this rather than {@link #setText}</h3>
+     *
+     * <p>{@code setText} is <b>loading a file</b>: it replaces the rope wholesale, which is not an
+     * undoable edit, resets the caret to the start, and throws away the widest line measured so far along
+     * with every tracked range in the document. That is right for opening a file and wrong for
+     * transforming the one on screen — a rewrite Ctrl+Z cannot take back is a rewrite nobody should press.
+     * Edits map the carets, the diagnostics, the folds and the search marks through {@code ChangeSet} and
+     * record one undo step, which is what makes a transformation ordinary rather than frightening.</p>
+     *
+     * <p><b>Offsets are into the text as it is now.</b> A caller that computed them off the frame thread
+     * has to say so by comparing {@link TextBuffer#version()} against what it snapshotted, exactly as that
+     * method's own contract requires — this cannot check for it, because a stale edit is arithmetically
+     * indistinguishable from a fresh one and would apply cleanly onto the wrong text.</p>
+     *
+     * <p>Coalescing is broken first, so the rewrite is its own undo step rather than being folded into
+     * the keystroke that preceded it. A rewrite of several changes is refused by the merge predicate
+     * anyway — it only ever continues a run of <em>single</em> insertions or deletions — so this matters
+     * for the one-change case, where a rewrite that happens to insert exactly where typing stopped is
+     * indistinguishable from more typing. Undoing it would then take back the word as well.</p>
+     *
+     * @return whether anything was applied — false for a read-only editor and for an empty rewrite, both
+     *         of which are ordinary outcomes rather than failures
+     */
+    public boolean applyChanges(List<Change> changes) {
+        if (readOnly || changes == null || changes.isEmpty()) return false;
+        List<Change> applied = new ArrayList<>(changes);
+        applied.removeIf(Change::isEmpty);
+        if (applied.isEmpty()) return false;
+        buffer.breakUndoCoalescing();
+        applyEdit(applied);
+        return true;
     }
 
     /** Applies a set of per-caret changes as one edit, then carries the carets through it. */
@@ -1884,10 +1986,10 @@ public class TextEditor extends ScrollerView implements UndoScope {
         // highlighting would sit one edit behind until something unrelated repainted.
         this.tokenizer.setInvalidationListener((fromOffset, toOffset) -> {
             invalidateRowSyntax(fromOffset, toOffset);
-            highlightsDirty = true;
+            markHighlightsDirty();
         });
         rowSyntax.clear();
-        highlightsDirty = true;
+        markHighlightsDirty();
         highlightedFrom = -1;
         highlightedTo = -1;
         return this;
@@ -1924,7 +2026,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
         if (services != null) {
             services.semanticTokens().setInvalidationListener((fromOffset, toOffset) -> {
                 invalidateRowSyntax(fromOffset, toOffset);
-                highlightsDirty = true;
+                markHighlightsDirty();
                 // A NEW ANALYSIS LANDED. This is the only signal the editor gets that the engine knows more
                 // than it did, and a completion list opened against the previous one may have been unable
                 // to resolve its receiver at all. Asking again here is what stops an empty popup sitting on
@@ -1939,7 +2041,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
                     announced -> problems.install(services.id(), announced));
         }
         rowSyntax.clear();
-        highlightsDirty = true;
+        markHighlightsDirty();
         highlightedFrom = -1;
         highlightedTo = -1;
         return this;
@@ -2053,6 +2155,25 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     public boolean isHoverDocumentationEnabled() {
         return langFeatures.isHoverEnabled();
+    }
+
+    /**
+     * What a model row is currently coloured with — <b>a diagnostic seam</b>.
+     *
+     * <p>The row cache is what decides a character's colour, and it is the one thing about the
+     * highlighter that cannot be read off the screen: two producers write into it, semantic tokens
+     * replace grammar ones where they overlap, and a stale entry looks exactly like a correct colour on
+     * the wrong word. Reading it is how "the highlight is broken" becomes a claim about a token.</p>
+     *
+     * <p>It is what caught the tree-sitter tree going out of step with the document after a completion
+     * was accepted: the row read {@code [0,1)} over a space and {@code [11,15)} over the tail of a word,
+     * which says "the offsets are wrong" where a screenshot only says "the colour is wrong".</p>
+     *
+     * <p>Empty for a row nothing has tokenised yet, which is not the same as a row with no tokens.</p>
+     */
+    public List<SyntaxToken> rowSyntaxForTest(int modelRow) {
+        List<SyntaxToken> tokens = rowSyntax.get(modelRow);
+        return tokens == null ? List.of() : List.copyOf(tokens);
     }
 
     /** Test seam — @see HoverDocumentation#pointerForTest */
@@ -2319,21 +2440,31 @@ public class TextEditor extends ScrollerView implements UndoScope {
         FrameProfile.end(syntaxTimed, "ed:ensureRowSyntax");
         long bandsTimed = FrameProfile.begin();
         int rebuilt = 0;
+        int unchanged = 0;
         for (Map.Entry<Integer, UIElement> entry : realisedLines.entrySet()) {
             int viewLine = entry.getKey();
             if (viewLine < 0 || viewLine >= viewLineCount()) continue;
+            int modelRow = modelAt(viewLine).row();
             // ALREADY SHOWING THIS VIEW LINE, and nothing about its content changed. @see #bandsShownFor
-            if (!rebuildEveryRow && Integer.valueOf(viewLine).equals(bandsShownFor.get(entry.getValue()))) {
+            //
+            // The second half of the condition is what an EDIT buys. A rebuild triggered by anything else
+            // has to assume every row moved, but a single-character edit is confined to the rows
+            // `rowsTouchedBy` names -- and skipping the rest here skips the BUILD, not merely the
+            // publish. The comparison below already avoided re-publishing identical bands; this avoids
+            // assembling them in the first place, which is the part that was still costing ~1.9ms for
+            // twenty-six rows of which one had changed.
+            boolean untouchedByThisEdit = highlightRowLimit != null
+                    && (modelRow < highlightRowLimit[0] || modelRow > highlightRowLimit[1]);
+            if ((!rebuildEveryRow || untouchedByThisEdit)
+                    && Integer.valueOf(viewLine).equals(bandsShownFor.get(entry.getValue()))) {
                 continue;
             }
-            rebuilt++;
             // Ranges are offsets into the UIText this line owns, and that text is one VIEW line -- so a
             // wrapped row's second half must publish ranges relative to where IT starts. Using the row's
             // start would push every colour on a continuation line left by the width of everything above
             // it, which reads as the highlighter losing sync rather than as a coordinate bug.
             int lineStart = viewLineStartOffset(viewLine);
             int lineEnd = viewLineEndOffset(viewLine);
-            int modelRow = modelAt(viewLine).row();
             int rowStart = buffer.document().lineStartOffset(modelRow);
 
             Map<String, List<TextRange>> byName = new LinkedHashMap<>();
@@ -2447,13 +2578,65 @@ public class TextEditor extends ScrollerView implements UndoScope {
             // `constant` or not depending on scroll history, which is as close to random as makes no
             // difference — and it presented as constants simply never being purple.
             HighlightRegistry highlights = textOf(entry.getValue()).highlights();
+            // ...AND THE ROW MAY ALREADY BE SHOWING EXACTLY THIS, which the clear-then-set below cannot
+            // discover for itself. `set` no-ops on an equal value, deliberately; `clear` cannot, so
+            // clearing first destroys the only evidence that nothing changed and guarantees one
+            // `onChanged` for the clear plus one per name — every one of which re-matches the row.
+            //
+            // That is why an EDIT was expensive out of all proportion to what it changed. A scroll
+            // already rebuilds only the rows that moved (the check at the top of the loop), but any edit
+            // sets `highlightsDirty` for the whole document, and typing one character re-published
+            // identical bands for all 29 realised rows: measured at 5.8-8.3ms per keystroke, the largest
+            // single phase of a frame in which 171 of 171 frames missed the budget. The touched row's
+            // bands really do change; the other twenty-eight are the same ranges over the same text.
+            //
+            // Compared WITHOUT sorting, which is safe in the only direction that matters: `set` stores a
+            // sorted copy, so a producer that emitted out of order compares unequal and is rebuilt — a
+            // lost saving, never a wrong answer. A false "unchanged" is the only dangerous verdict and
+            // cannot be reached this way.
+            if (bandsUnchanged(byName, highlights)) {
+                unchanged++;
+                bandsShownFor.put(entry.getValue(), viewLine);
+                continue;
+            }
+            rebuilt++;
             highlights.clear();
             for (Map.Entry<String, List<TextRange>> named : byName.entrySet()) {
                 highlights.set(named.getKey(), named.getValue());
             }
             bandsShownFor.put(entry.getValue(), viewLine);
         }
-        FrameProfile.end(bandsTimed, "ed:highlightBands " + rebuilt + "/" + realisedLines.size());
+        // SPENT. It described one edit, and a limit left standing would confine the NEXT rebuild -- one
+        // raised by something with no row information at all -- to that edit's rows.
+        highlightRowLimit = null;
+        FrameProfile.end(bandsTimed, "ed:highlightBands " + rebuilt + "/" + realisedLines.size()
+                + " (" + unchanged + " unchanged)");
+    }
+
+    /**
+     * Whether {@code wanted} is exactly what {@code current} already publishes — <b>names, order and
+     * ranges</b>.
+     *
+     * <h3>Order counts, and that is not fussiness</h3>
+     *
+     * <p>A character covered by two names takes the colour of whichever was registered LAST, which is
+     * why the publish clears and rebuilds rather than setting over the top. So two registries holding
+     * the same names in a different order are genuinely different pictures, and treating them as equal
+     * would skip a republish that changes what is on screen.</p>
+     *
+     * <p>{@code Map.equals} is order-independent, so it cannot be used here.</p>
+     */
+    private static boolean bandsUnchanged(Map<String, List<TextRange>> wanted,
+                                          HighlightRegistry current) {
+        Map<String, List<TextRange>> have = current.entries();
+        if (have.size() != wanted.size()) return false;
+        java.util.Iterator<Map.Entry<String, List<TextRange>>> ours = wanted.entrySet().iterator();
+        for (Map.Entry<String, List<TextRange>> theirs : have.entrySet()) {
+            Map.Entry<String, List<TextRange>> mine = ours.next();
+            if (!mine.getKey().equals(theirs.getKey())) return false;
+            if (!mine.getValue().equals(theirs.getValue())) return false;
+        }
+        return true;
     }
 
     /**
@@ -2562,13 +2745,24 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * tier is <b>424µs a keystroke</b>, of which 68µs is the per-row query this skips. The other 356µs is
      * {@code edited()} keeping the tree in sync and cannot be skipped without desynchronising it.</p>
      */
+    /**
+     * Whether a keystroke has landed within the typing settle — "the user is mid-word".
+     *
+     * <p>The one question several parts want and none of them should answer for themselves: an answer
+     * derived from a timestamp of its own would settle at a different moment from the colouring, and two
+     * things that both mean "still typing" disagreeing is worse than either being wrong.</p>
+     */
+    boolean isTyping() {
+        return editing && System.nanoTime() - lastEditNanos < TYPING_SETTLE_NANOS;
+    }
+
     private void settleSyntaxIfIdle() {
         if (!editing) return;
         // Guarded on `editing` rather than on a "long ago" sentinel: nanoTime has an arbitrary origin and
         // may be negative, so a sentinel subtraction can overflow into a SMALL elapsed time.
         if (System.nanoTime() - lastEditNanos < TYPING_SETTLE_NANOS) return;
         editing = false;
-        if (!staleRows.isEmpty()) highlightsDirty = true;
+        if (!staleRows.isEmpty()) markHighlightsDirty();
     }
 
     /**
@@ -2920,7 +3114,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * differently. The rows are marked and re-queried on settle. See {@link #settleSyntaxIfIdle}.</p>
      */
     private void invalidateRowSyntax(int fromOffset, int toOffset) {
-        highlightsDirty = true;
+        markHighlightsDirty();
         if (toOffset >= SyntaxTokenizer.InvalidationListener.EVERYTHING
                 || fromOffset <= 0 && toOffset >= buffer.length()) {
             // OVER WHAT IS CACHED, not over every row in the document: a row nobody has looked at has
@@ -3468,15 +3662,76 @@ public class TextEditor extends ScrollerView implements UndoScope {
         setSelection(start, end);
     }
 
+    /**
+     * What Cut and Copy act on: the selection, or <b>the whole of every line a caret touches</b>.
+     *
+     * <h3>An empty selection is not nothing to cut</h3>
+     *
+     * <p>Both references do this and it is one of the most-used things in either: {@code Ctrl+X} on a line
+     * you have not selected takes the line. Ours required a selection to even ENABLE the command, so the
+     * chord did nothing at all and read as the editor ignoring it.</p>
+     *
+     * <p>The trailing newline is part of what is taken, which is what makes the pair whole: cut a line,
+     * put the caret elsewhere, paste, and you get a LINE back rather than its text welded into the middle
+     * of another one. It is also why this cannot be built from {@code getSelectedText} plus a range — the
+     * newline belongs to the operation, not to the text.</p>
+     */
+    public String selectionOrTouchedLines() {
+        if (hasSelection()) return getSelectedText();
+        StringBuilder out = new StringBuilder();
+        for (int row : touchedRows()) {
+            out.append(buffer.document().line(row)).append('\n');
+        }
+        return out.toString();
+    }
+
     /** Deletes every line any caret touches — {@code Ctrl+Shift+K}. */
     public void deleteLines() {
         applyEdit(new ArrayList<>(LineOperations.delete(buffer.document(), touchedRows())));
     }
 
-    /** Copies every touched line above or below itself — {@code Shift+Alt+Up/Down}. */
+    /** Copies every touched line above or below itself — {@code Shift+Alt+Up/Down}, {@code Mod+D}. */
     public void duplicateLines(int direction) {
+        List<Integer> rows = touchedRows();
         applyEditKeepingSelection(new ArrayList<>(
-                LineOperations.duplicate(buffer.document(), touchedRows(), direction)));
+                LineOperations.duplicate(buffer.document(), rows, direction)));
+        if (direction > 0) moveSelectionsDownRows(rows.size());
+    }
+
+    /**
+     * Puts every caret on the COPY after a downward duplicate.
+     *
+     * <h3>The point of duplicating a line is to edit the new one</h3>
+     *
+     * <p>Both references land the caret on the copy, and leaving it on the original means every use of
+     * the chord is followed by pressing Down -- which is the whole gesture again, by hand. Upward
+     * duplication needs nothing: the copy goes ABOVE, so the original keeps its row and the caret is
+     * already on the text that moved down into it.</p>
+     *
+     * <p>The COLUMN is kept rather than forced to the end. That is the same rule, and it lands at the end
+     * of the copy when the end is where you were -- which is the common case and the one that reads as
+     * "the caret follows the duplicate".</p>
+     *
+     * <p>Done by row rather than by offset because a duplicate inserts whole lines: shifting by a
+     * character count would need the copied text's length, and the row count is what the operation
+     * already knows.</p>
+     */
+    private void moveSelectionsDownRows(int rows) {
+        if (rows <= 0) return;
+        selections.transform(selection -> new Selection(
+                shiftedDownRows(selection.anchor(), rows),
+                shiftedDownRows(selection.head(), rows)));
+        clearGoalColumns();
+        ensureCaretVisible();
+        onSelectionChanged.emit();
+    }
+
+    /** The same column, {@code rows} lines further down — clamped to the document and to that line. */
+    private int shiftedDownRows(int offset, int rows) {
+        TextPoint at = buffer.offsetToPoint(offset);
+        int row = Math.min(buffer.lineCount() - 1, at.row() + rows);
+        int column = Math.min(at.column(), buffer.document().line(row).length());
+        return buffer.pointToOffset(new TextPoint(row, column));
     }
 
     /** Moves every touched line up or down one — {@code Alt+Up/Down}. */
@@ -4220,6 +4475,43 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * <p>Multi-caret edits take the wholesale path. They touch several disjoint rows and the bookkeeping
      * is not worth it, which is the same call {@link #reprojectAfterEdit} makes about the same edits.</p>
      */
+    /**
+     * The model rows an edit could have changed the LOOK of, or null for "assume all of them".
+     *
+     * <h3>Typing one character changes one row, and the editor was re-laying out twenty-six</h3>
+     *
+     * <p>{@link #rebindRealisedLines} re-reads and re-places every realised row after every edit. Its own
+     * note explains why that is safe — the realised map is keyed by row index, so re-reading gives every
+     * element the right content however much the rows shifted — and safe is not the same as free:
+     * measured at <b>415µs a keystroke</b> spent placing twenty-six rows of which one had changed.</p>
+     *
+     * <p>The discrimination is {@link #invalidateMeasuredRows}'s, which needed it first and for the same
+     * reason. Two conditions, and the second is the one that is easy to get wrong:</p>
+     *
+     * <ul>
+     *   <li><b>One change.</b> A multi-cursor edit or a replace-all touches rows all over the document,
+     *       and working out which is more expensive than re-placing them.</li>
+     *   <li><b>The VIEW-line count is unchanged</b> — not the model-line count. With soft wrap on, an
+     *       insertion that pushes its row onto an extra visual line shifts every row below it while
+     *       {@code buffer.lineCount()} says nothing happened, and rows skipped on that frame would be
+     *       left drawn at their old positions. A single change can only alter the wrapping of the row it
+     *       lands on, so the view count staying put is proof that nothing below it moved.</li>
+     * </ul>
+     *
+     * @param viewLinesBefore the view-line count as it was, read before the reprojection
+     * @return {@code {firstRow, lastRow}} inclusive, or null when every row must be re-placed
+     */
+    @Nullable
+    private int[] rowsTouchedBy(ChangeSet change, int viewLinesBefore) {
+        List<Change> changes = change.changes();
+        if (changes.size() != 1 || viewLineCount() != viewLinesBefore) return null;
+        Change edit = changes.get(0);
+        int start = clampToDocument(change.mapPos(edit.from(), -1));
+        int end = clampToDocument(start + edit.insert().length());
+        return new int[] {buffer.document().offsetToPoint(start).row(),
+                buffer.document().offsetToPoint(end).row()};
+    }
+
     private void invalidateMeasuredRows(ChangeSet change) {
         List<Change> changes = change.changes();
         if (changes.size() != 1 || buffer.lineCount() != previousLineCount) {
@@ -5105,6 +5397,15 @@ public class TextEditor extends ScrollerView implements UndoScope {
 
     /** Re-reads the text of every realised line without recycling it, so highlights survive the edit. */
     private void rebindRealisedLines() {
+        rebindRealisedLines(null);
+    }
+
+    /**
+     * The same, restricted to the model rows an edit touched. @see #rowsTouchedBy
+     *
+     * @param modelRows {@code {first, last}} inclusive, or null to re-place every realised row
+     */
+    private void rebindRealisedLines(@Nullable int[] modelRows) {
         // THE PER-LINE SPLIT, because this runs over every realised row on every frame and the two things
         // it does are unrelated: placing a row is style writes that no-op when nothing moved, while
         // re-reading its text is a rope read plus a UIText that may re-shape. A scroll changes both for
@@ -5114,6 +5415,13 @@ public class TextEditor extends ScrollerView implements UndoScope {
         for (Map.Entry<Integer, UIElement> entry : realisedLines.entrySet()) {
             int viewLine = entry.getKey();
             if (viewLine < 0 || viewLine >= viewLineCount()) continue;
+            // OUTSIDE WHAT THE EDIT TOUCHED, so this row shows the same model row it already showed, with
+            // the same text, at the same place -- every write below would land on an equal value and
+            // no-op. Skipping is the same answer arrived at without the work. @see #rowsTouchedBy
+            if (modelRows != null) {
+                int touched = modelAt(viewLine).row();
+                if (touched < modelRows[0] || touched > modelRows[1]) continue;
+            }
             rows++;
             // The FULL layout, not just the text. An edit or a reflow can turn a continuation line into a
             // first line or the reverse, which moves its carried indent and its width -- and after a
@@ -5137,7 +5445,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             //
             // Compared rather than assumed, so the method keeps its contract that a frame which changed
             // nothing writes nothing: setText no-ops on an unchanged string, and so does this.
-            if (!before.equals(textOf(entry.getValue()).getText())) highlightsDirty = true;
+            if (!before.equals(textOf(entry.getValue()).getText())) markHighlightsDirty();
         }
         FrameProfile.report(placed, "ed:rebind.layOutLine x" + rows);
         // NO markTreeDirty() HERE, and its absence is the point.
@@ -5165,7 +5473,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
      * consumed by whichever pass runs first, and the range comparison then holds the stale answer.</p>
      */
     public void invalidateHighlights() {
-        highlightsDirty = true;
+        markHighlightsDirty();
         highlightedFrom = -1;
         highlightedTo = -1;
     }
@@ -5263,7 +5571,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             firstRealised = -1;
             lastRealised = -1;
             rebindRealisedLines();
-            highlightsDirty = true;
+            markHighlightsDirty();
         }
 
         // AFTER reprojection, BEFORE the view line count is read. Folding changes how many view lines
@@ -5282,7 +5590,7 @@ public class TextEditor extends ScrollerView implements UndoScope {
             firstRealised = -1;
             lastRealised = -1;
             rebindRealisedLines();
-            highlightsDirty = true;
+            markHighlightsDirty();
             forgetWidestLine();
         }
 

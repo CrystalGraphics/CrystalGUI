@@ -104,16 +104,39 @@ public final class CommandPalette {
      */
     public static List<QuickPickItem> itemsFor(CommandRegistry registry, @Nullable UIElement source) {
         Map<String, KeyChord> accelerators = Keymap.acceleratorsFrom(source);
-        CommandContext context = CommandContext.of(source);
+        CommandContext here = CommandContext.of(source);
+        // "ANYWHERE" IS THE ROOT, NOT NULL, and the difference is the whole measurement.
+        //
+        // A null source empties the DataContext outright: `fromWindow` returns immediately without one,
+        // so the window's own providers go too -- and those are how Go to File and Reload from Disk find
+        // their subject with nothing focused. Measured against null, every window-scoped command would
+        // report itself unavailable and therefore look contextual, which is the opposite of true.
+        //
+        // The root is the honest baseline: same window, same window-level providers, no focused widget.
+        // It is also exactly what `open` already falls back to when nothing is focused, so "contextual"
+        // and "what the palette would offer you before you clicked anything" are the same question.
+        CommandContext anywhere = CommandContext.of(rootOf(source));
 
         List<QuickPickItem> items = new ArrayList<>();
         for (Command command : registry.all()) {
             KeyChord chord = accelerators.get(command.getId());
-            items.add(new QuickPickItem(command.getId(), command.getLabel(),
-                    categoryOf(command.getId()), chord == null ? null : chord.toString(),
-                    command.isEnabled(context)));
+            boolean enabled = command.isEnabled(here);
+            QuickPickItem item = new QuickPickItem(command.getId(), command.getLabel(),
+                    categoryOf(command.getId()), chord == null ? null : chord.toString(), enabled);
+            // ENABLED HERE AND NOT THERE -- the narrowest true statement, and it is only ever read among
+            // rows that are enabled, since availability outranks it. Short-circuited, so a command that
+            // is unavailable anyway costs one predicate rather than two.
+            items.add(item.withContextual(enabled && !command.isEnabled(anywhere)));
         }
         return items;
+    }
+
+    /** The top of {@code source}'s tree — the same element {@link #open} uses when nothing is focused. */
+    @Nullable
+    private static UIElement rootOf(@Nullable UIElement source) {
+        UIElement root = source;
+        while (root != null && root.getParent() != null) root = root.getParent();
+        return root;
     }
 
     /** {@code dock.splitRight} → {@code "Dock"}. Null when the id carries no namespace, which lists the

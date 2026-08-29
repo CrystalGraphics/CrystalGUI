@@ -319,7 +319,16 @@ public class Workbench extends UIElement {
     private volatile Map<CgPath, String> bufferSnapshot = Map.of();
 
     /** A buffer's CONTENT moved since the snapshot was taken. UI thread only. */
-    private boolean buffersDirty;
+    /**
+     * The open documents whose text has moved since the snapshot was taken — <b>which ones</b>, not
+     * whether any.
+     *
+     * <p>It was a boolean, and the rebuild below is over every open document, so one keystroke re-encoded
+     * every buffer in the workbench. The signal that sets this carries the path that changed and the
+     * boolean threw it away; keeping it means a keystroke re-encodes the document it landed in and reuses
+     * the string already held for the others.</p>
+     */
+    private final java.util.Set<CgPath> dirtyBuffers = new HashSet<>();
 
     /** Which documents the snapshot covers, so opening or closing one is noticed. UI thread only. */
     private final java.util.Set<CgPath> snapshotOver = new java.util.HashSet<>();
@@ -399,12 +408,24 @@ public class Workbench extends UIElement {
         // document whose text cannot be encoded never enters the snapshot at all, so the counts differ
         // for as long as it is open and every frame re-encodes every buffer -- the exact per-frame cost
         // this whole shape exists to avoid.
-        if (!buffersDirty && snapshotOver.size() == open.size() && snapshotOver.containsAll(open)) return;
+        if (dirtyBuffers.isEmpty() && snapshotOver.size() == open.size()
+                && snapshotOver.containsAll(open)) return;
 
         // REBUILT WHOLE, so a closed document's text leaves with it. A stale entry here outranks the file
         // on disk, so a document that was closed and edited elsewhere would resolve to what it used to say.
         Map<CgPath, String> buffers = new HashMap<>();
         for (CgPath path : open) {
+            // ALREADY HELD AND STILL TRUE. `encode()` serialises the whole document, so re-taking it for
+            // a file nobody touched is the per-frame cost this shape exists to avoid, paid per keystroke
+            // instead -- and paid for every open document rather than the one being typed into. The map
+            // is still REBUILT rather than patched, so a closed document's text still leaves with it.
+            if (!dirtyBuffers.contains(path)) {
+                String held = bufferSnapshot.get(path);
+                if (held != null) {
+                    buffers.put(path, held);
+                    continue;
+                }
+            }
             String text;
             try {
                 text = openBufferText(path);
@@ -427,7 +448,7 @@ public class Workbench extends UIElement {
         bufferSnapshot = buffers;
         snapshotOver.clear();
         snapshotOver.addAll(open);
-        buffersDirty = false;
+        dirtyBuffers.clear();
         // The buffer tier moved, so anything that resolved against the old one is stale -- the same
         // announcement a landed read makes, for the same reason.
         projectSourcesMoved = true;
@@ -892,7 +913,7 @@ public class Workbench extends UIElement {
             // AND THE INDEX'S VIEW OF IT. This signal means "content moved", which is exactly when a
             // snapshot of that content stops being true. Marked rather than re-encoded, so a burst of
             // keystrokes costs one encode on the next frame instead of one each.
-            buffersDirty = true;
+            dirtyBuffers.add(path);
         });
         // EVERY FILE FAILURE IS REPORTED FROM ONE PLACE, and this is the whole of the change that made it
         // so. WorkspaceFileService already announced each one through onDidFail, carrying the operation --

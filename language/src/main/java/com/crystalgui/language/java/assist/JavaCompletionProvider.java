@@ -98,6 +98,32 @@ public final class JavaCompletionProvider implements CompletionProvider {
     @Nullable
     private String emptyReason;
 
+    /**
+     * The document as it was when the request arrived — <b>text and version, taken once</b>.
+     *
+     * <h3>Why the buffer is no longer read while the answer is computed</h3>
+     *
+     * <p>Every expensive thing here — the probe re-parse, the type-index query — is a pure function of
+     * the text at an offset, which is precisely the shape {@code AGENTS.md} sends to {@code JobScheduler}
+     * rather than running on the frame thread. It could not go there while the work read a live
+     * {@link TextBuffer}: the rope reference is not volatile and the frame thread rewrites it on every
+     * keystroke, so a worker would be reading a document being edited underneath it.</p>
+     *
+     * <p>Passed as a parameter rather than held in a field, because two requests can be in flight at once
+     * — the session issues a new one per keystroke and drops the superseded answer by serial, but the
+     * JOB behind it may still be running. A field would have the second call rewrite what the first is
+     * reading.</p>
+     *
+     * <p>It also replaces up to three {@code buffer.toString()} calls per request with one.</p>
+     */
+    public record Snapshot(String text, int version) {
+    }
+
+    /** Taken on the caller's thread, before any work is scheduled. @see Snapshot */
+    public Snapshot snapshot() {
+        return new Snapshot(buffer.toString(), buffer.version());
+    }
+
     public JavaCompletionProvider(TextBuffer buffer, Supplier<Analysis> analysis, TypeIndex types,
                            java.util.function.Function<String, Analysis> reanalyse) {
         this.buffer = buffer;
@@ -108,26 +134,38 @@ public final class JavaCompletionProvider implements CompletionProvider {
 
     @Override
     public void complete(Request request, Consumer<Versioned<CompletionList>> answer) {
+        answer.accept(completeFrom(snapshot(), request));
+    }
+
+    /**
+     * The whole answer, from a snapshot — <b>safe to run off the frame thread</b>.
+     *
+     * <p>Separated from {@link #complete} so a caller that owns a scheduler can take the snapshot on the
+     * frame thread and run this on a worker. The provider itself stays synchronous, which keeps every
+     * test that drives it directly working and leaves the threading decision where the scheduler is.</p>
+     */
+    public Versioned<CompletionList> completeFrom(Snapshot snap, Request request) {
         Analysis current = analysis.get();
         if (current == null) {
-            answer.accept(Versioned.of(buffer.version(), CompletionList.EMPTY));
-            return;
+            return Versioned.of(snap.version(), CompletionList.EMPTY);
         }
 
         int wordStart = Math.max(0, request.offset() - request.prefix().length());
         // AN IMPORT IS A QUALIFIED NAME, so it cannot be completed on a simple one. The ordinary list
         // matches `request.prefix()` against simple names, which for `import net.mine` is `mine` and
         // matches nothing -- the popup opened with no rows on every classpath, Minecraft or not.
-        List<CompletionItem> items = importPrefixAt(request.offset()) != null
-                ? importItems(importPrefixAt(request.offset()))
-                : receiverEndingAt(wordStart) >= 0
-                ? memberItems(current, receiverEndingAt(wordStart), request.offset())
-                : openCodeItems(current, request);
+        String importPrefix = importPrefixAt(snap, request.offset());
+        int receiver = receiverEndingAt(snap.text(), wordStart);
+        List<CompletionItem> items = importPrefix != null
+                ? importItems(snap, importPrefix)
+                : receiver >= 0
+                ? memberItems(snap, current, receiver, request.offset())
+                : openCodeItems(snap, current, request);
 
         // SAID OUT LOUD, once per empty member list. @see #emptyReason
         if (items.isEmpty() && emptyReason != null) {
             System.err.println("[crystalgui] no members offered after the dot: " + emptyReason
-                    + " (analysis version " + current.version() + ", document " + buffer.version() + ")");
+                    + " (analysis version " + current.version() + ", document " + snap.version() + ")");
         }
         emptyReason = null;
 
@@ -138,8 +176,8 @@ public final class JavaCompletionProvider implements CompletionProvider {
         boolean partial = truncated || typesSampled || unresolvedReceiver;
         typesSampled = false;
         unresolvedReceiver = false;
-        answer.accept(Versioned.of(current.version(),
-                partial ? CompletionList.partial(items) : CompletionList.complete(items)));
+        return Versioned.of(current.version(),
+                partial ? CompletionList.partial(items) : CompletionList.complete(items));
     }
 
     /**
@@ -149,8 +187,7 @@ public final class JavaCompletionProvider implements CompletionProvider {
      * access and is exactly how a fluent chain is written. A {@code ..} is not — that is a range operator in
      * no Java there is, so it means the text is mid-edit and the honest answer is open code.</p>
      */
-    private int receiverEndingAt(int wordStart) {
-        String text = buffer.toString();
+    private int receiverEndingAt(String text, int wordStart) {
         int at = Math.min(wordStart, text.length()) - 1;
         while (at >= 0 && Character.isWhitespace(text.charAt(at))) at--;
         if (at < 0 || text.charAt(at) != '.') return -1;
@@ -166,9 +203,9 @@ public final class JavaCompletionProvider implements CompletionProvider {
      * through the same path, because {@code resolveAt} lands on the method name and its type is the return
      * type — which is why this needs no expression parser of its own.</p>
      */
-    private List<CompletionItem> memberItems(Analysis current, int dotOffset, int caret) {
+    private List<CompletionItem> memberItems(Snapshot snap, Analysis current, int dotOffset, int caret) {
         int nameEnd = dotOffset;
-        String text = buffer.toString();
+        String text = snap.text();
         while (nameEnd > 0 && Character.isWhitespace(text.charAt(nameEnd - 1))) nameEnd--;
         // Mid-identifier, so resolveAt lands on the receiver's own name rather than between tokens.
         int probe = Math.max(0, nameEnd - 1);
@@ -209,7 +246,7 @@ public final class JavaCompletionProvider implements CompletionProvider {
             //
             // Only on failure, so the ordinary path -- where a prefix has already been typed -- pays nothing
             // for it.
-            return probedMemberItems(caret);
+            return probedMemberItems(snap, caret);
         }
         List<CompletionItem> direct = membersFrom(current, receiver, caret);
         if (direct.isEmpty()) {
@@ -219,7 +256,7 @@ public final class JavaCompletionProvider implements CompletionProvider {
         // resolved from a tree the parser had to recover can be plausible and wrong -- the trailing dot is
         // exactly the state where that happens -- and an empty member list is the one outcome that is never
         // a useful answer. Costs one parse, only when the ordinary path produced nothing.
-        return direct.isEmpty() ? probedMemberItems(caret) : direct;
+        return direct.isEmpty() ? probedMemberItems(snap, caret) : direct;
     }
 
     /**
@@ -232,13 +269,13 @@ public final class JavaCompletionProvider implements CompletionProvider {
      * and keeping it would mean two analyses claiming to be about one file. Its cost is one parse, paid only
      * when the ordinary one could not answer.</p>
      */
-    private List<CompletionItem> probedMemberItems(int caret) {
+    private List<CompletionItem> probedMemberItems(Snapshot snap, int caret) {
         if (reanalyse == null) {
             unresolvedReceiver = true;
             emptyReason = "no probe parser is available";
             return List.of();
         }
-        String text = buffer.toString();
+        String text = snap.text();
         int at = Math.max(0, Math.min(caret, text.length()));
 
         List<CompletionItem> items = probeWith(text, at, COMPLETION_PROBE);
@@ -284,7 +321,7 @@ public final class JavaCompletionProvider implements CompletionProvider {
         Analysis probed = reanalyse.apply(text.substring(0, at) + inserted + text.substring(at));
         if (probed == null) return List.of();
         try {
-            int dot = receiverEndingAt(at);
+            int dot = receiverEndingAt(text, at);
             if (dot < 0) return List.of();
             int nameEnd = dot;
             while (nameEnd > 0 && Character.isWhitespace(text.charAt(nameEnd - 1))) nameEnd--;
@@ -347,7 +384,7 @@ public final class JavaCompletionProvider implements CompletionProvider {
     }
 
     /** Locals, parameters, fields, then keywords, then types that would need an import. */
-    private List<CompletionItem> openCodeItems(Analysis current, Request request) {
+    private List<CompletionItem> openCodeItems(Snapshot snap, Analysis current, Request request) {
         List<CompletionItem> items = new ArrayList<>();
         for (SymbolInfo symbol : current.symbolsInScope(request.offset())) items.add(itemFor(symbol));
 
@@ -364,7 +401,7 @@ public final class JavaCompletionProvider implements CompletionProvider {
         // way, behind a second Ctrl+Space, for the same reason.
         if (!request.prefix().isEmpty()) {
             TypeIndex.Match matched = types.matching(request.prefix());
-            for (TypeIndex.Entry type : matched.entries()) items.add(unimportedTypeItem(type));
+            for (TypeIndex.Entry type : matched.entries()) items.add(unimportedTypeItem(snap, type));
             // ANY index-backed list is a SAMPLE. matching() caps what it returns whether or not it noticed
             // running out, so "it gave me thirty" does not mean thirty is all there is at a narrower query
             // -- the cap is on the ANSWER, not on the question. Reporting complete here let the session
@@ -412,12 +449,17 @@ public final class JavaCompletionProvider implements CompletionProvider {
      * <p>Refuses once a {@code ;} has been passed, so the caret after a finished import is ordinary code
      * again, and refuses a static import, whose tail is a member rather than a type.</p>
      */
-    private String importPrefixAt(int offset) {
-        // The LINE, through the buffer's own row lookup rather than a scan back through the document —
-        // the same answer at a fraction of the cost on a file of any size.
-        TextPoint caret = buffer.offsetToPoint(offset);
-        String row = buffer.line(caret.row());
-        String line = row.substring(0, Math.min(Math.max(caret.column(), 0), row.length()));
+    private String importPrefixAt(Snapshot snap, int offset) {
+        // THE LINE, scanned back to the previous newline rather than asked of the buffer.
+        //
+        // It used `offsetToPoint` plus `line`, which is the cheaper lookup on a large file and reads the
+        // live rope — and this now runs on a worker, where the rope is being replaced underneath it by
+        // every keystroke. The scan is bounded by the length of ONE line, so what it costs is a line's
+        // worth of characters rather than anything proportional to the document.
+        String text = snap.text();
+        int caretAt = Math.max(0, Math.min(offset, text.length()));
+        int rowStart = text.lastIndexOf('\n', caretAt - 1) + 1;
+        String line = text.substring(rowStart, caretAt);
 
         // LEADING whitespace only. `trim()` takes the TRAILING space too, and that space is the whole
         // signal: at `import |` the line trimmed to "import", the tail was empty, and this answered "not
@@ -448,7 +490,7 @@ public final class JavaCompletionProvider implements CompletionProvider {
      * <p>Packages are derived from the entries rather than held separately — a package exists exactly
      * when something is in it, so a second structure could only disagree with the first.</p>
      */
-    private List<CompletionItem> importItems(String typedPrefix) {
+    private List<CompletionItem> importItems(Snapshot snap, String typedPrefix) {
         List<CompletionItem> items = new ArrayList<>();
         // NO EMPTY-PREFIX BAIL. `import ` with nothing typed is the most useful moment there is -- the
         // answer is every package root, which `childrenOf("", "")` gives -- and returning an empty list
@@ -499,8 +541,8 @@ public final class JavaCompletionProvider implements CompletionProvider {
      * accepting it <b>one</b> undo step: the name and its import go together on Ctrl+Z. Two steps for one
      * keystroke is the behaviour every editor that has this feature is criticised for.</p>
      */
-    private CompletionItem unimportedTypeItem(TypeIndex.Entry type) {
-        Change importEdit = importEditFor(type.qualifiedName());
+    private CompletionItem unimportedTypeItem(Snapshot snap, TypeIndex.Entry type) {
+        Change importEdit = importEditFor(snap, type.qualifiedName());
         // WHAT IT IS, read from the class file rather than assumed. Every row used to draw as a class,
         // because the path a type lives at says nothing about whether it is an interface, an enum, an
         // annotation or a throwable -- that is in the access flags.
@@ -525,8 +567,8 @@ public final class JavaCompletionProvider implements CompletionProvider {
      * whole line including its own newline, so the edit is a pure insertion and cannot disturb what is
      * already on either side of it.</p>
      */
-    private Change importEditFor(String qualifiedName) {
-        String text = buffer.toString();
+    private Change importEditFor(Snapshot snap, String qualifiedName) {
+        String text = snap.text();
         String statement = "import " + qualifiedName + ";";
         if (text.contains(statement)) return null;
         // java.lang is imported implicitly, so writing one is noise the compiler will not thank you for.

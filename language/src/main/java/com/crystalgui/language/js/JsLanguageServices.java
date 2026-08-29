@@ -1,5 +1,6 @@
 package com.crystalgui.language.js;
 
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.language.engine.AnalysedLanguageServices;
@@ -121,8 +122,23 @@ public final class JsLanguageServices extends AnalysedLanguageServices {
         start();
     }
 
+    /** How many analyses this process has run, so the FIRST is legible against the rest. */
+    private static final java.util.concurrent.atomic.AtomicInteger ANALYSES =
+            new java.util.concurrent.atomic.AtomicInteger();
+
     @Override
     protected Analysis analyse(String source, long version) {
+        int nth = ANALYSES.incrementAndGet();
+        long timed = FrameProfile.begin();
+        try {
+            return analyseInner(source, version);
+        } finally {
+            FrameProfile.step(timed, "js.analyse #" + nth + " (" + sourceName + ", "
+                    + source.length() + " chars)");
+        }
+    }
+
+    private Analysis analyseInner(String source, long version) {
         // WHAT THE HOST HAS BOUND, read fresh. A contributor can register at any time — a mod loading, a
         // world opening — and the analyser is process-wide, so the alternative to reading it here is an
         // editor that colours `world` as a mistake until it is reopened. The registry is a copy-on-write

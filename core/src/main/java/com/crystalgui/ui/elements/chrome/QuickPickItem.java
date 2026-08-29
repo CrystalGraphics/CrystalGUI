@@ -75,31 +75,53 @@ import javax.annotation.Nullable;
  * together, so half the rows are symbols and half are files — and a list where only half the rows have a
  * picture reads as broken rather than as mixed.</p>
  *
+ * <h3>{@code contextual} is a RANKING signal, and it is not drawn at all</h3>
+ *
+ * <p>"This row is available <em>because of where the picker was opened</em>." A command that resolves an
+ * editor from the focused element is contextual; one that works anywhere — Reload from Disk, Restore
+ * Window Layout — is not. It sorts contextual rows above global ones within a match tier, which is what
+ * makes a palette opened over an editor lead with the editor's own verbs.</p>
+ *
+ * <p>Deliberately invisible. {@code enabled} earns dimming because it changes what Enter does; this only
+ * changes the order, and a row that looked different for being <em>more</em> relevant would read as a
+ * second kind of disabled. Default false, so every picker that is not the command palette is unaffected
+ * — the same arrangement {@code enabled} already has.</p>
+ *
  * @param kind        optional symbol kind; drives the row's glyph, absent for a row that is not a symbol
  * @param isAbstract  refines {@code kind} — an abstract class draws differently, it is not a kind of its own
  * @param iconName    optional {@code "ns:name"} icon for a row that is not a symbol. Ignored when
  *                    {@code kind} is set, so the two can never both draw
+ * @param contextual  whether this row is available because of where the picker was opened. Ranking only
  */
 public record QuickPickItem(String id, String label, @Nullable String description,
                             @Nullable String category, @Nullable String accelerator, boolean enabled,
-                            @Nullable SymbolKind kind, boolean isAbstract, @Nullable String iconName) {
+                            @Nullable SymbolKind kind, boolean isAbstract, @Nullable String iconName,
+                            boolean contextual) {
 
     public QuickPickItem {
         if (id == null) throw new IllegalArgumentException("QuickPickItem id must not be null");
         if (label == null) throw new IllegalArgumentException("QuickPickItem label must not be null");
     }
 
+    /** The shape every caller before {@link #contextual} existed used — never contextual, which is right
+     * for every picker that is not the command palette. */
+    public QuickPickItem(String id, String label, @Nullable String description,
+                         @Nullable String category, @Nullable String accelerator, boolean enabled,
+                         @Nullable SymbolKind kind, boolean isAbstract, @Nullable String iconName) {
+        this(id, label, description, category, accelerator, enabled, kind, isAbstract, iconName, false);
+    }
+
     /** The shape every caller before symbols existed used, unchanged. */
     public QuickPickItem(String id, String label, @Nullable String category,
                          @Nullable String accelerator, boolean enabled) {
-        this(id, label, null, category, accelerator, enabled, null, false, null);
+        this(id, label, null, category, accelerator, enabled, null, false, null, false);
     }
 
     /** Enabled by default — a source that never sets it gets rows that all work, which is the common case
      * for anything that is not a command. */
     public QuickPickItem(String id, String label, @Nullable String category,
                          @Nullable String accelerator) {
-        this(id, label, null, category, accelerator, true, null, false, null);
+        this(id, label, null, category, accelerator, true, null, false, null, false);
     }
 
     public static QuickPickItem of(String id, String label) {
@@ -119,29 +141,35 @@ public record QuickPickItem(String id, String label, @Nullable String descriptio
 
     public QuickPickItem withAccelerator(@Nullable String accelerator) {
         return new QuickPickItem(id, label, description, category, accelerator, enabled, kind, isAbstract,
-                iconName);
+                iconName, contextual);
     }
 
     public QuickPickItem withEnabled(boolean enabled) {
         return new QuickPickItem(id, label, description, category, accelerator, enabled, kind, isAbstract,
-                iconName);
+                iconName, contextual);
     }
 
     public QuickPickItem withDescription(@Nullable String description) {
         return new QuickPickItem(id, label, description, category, accelerator, enabled, kind, isAbstract,
-                iconName);
+                iconName, contextual);
     }
 
     /** @see com.crystalgui.ui.elements.SymbolIcon */
     public QuickPickItem withKind(@Nullable SymbolKind kind, boolean isAbstract) {
         return new QuickPickItem(id, label, description, category, accelerator, enabled, kind, isAbstract,
-                iconName);
+                iconName, contextual);
     }
 
     /** @see #iconName */
     public QuickPickItem withIconName(@Nullable String iconName) {
         return new QuickPickItem(id, label, description, category, accelerator, enabled, kind, isAbstract,
-                iconName);
+                iconName, contextual);
+    }
+
+    /** @see #contextual */
+    public QuickPickItem withContextual(boolean contextual) {
+        return new QuickPickItem(id, label, description, category, accelerator, enabled, kind, isAbstract,
+                iconName, contextual);
     }
 
     /** {@code Category: Label}, or just the label. What a row reads as, and what a test asserts on. */

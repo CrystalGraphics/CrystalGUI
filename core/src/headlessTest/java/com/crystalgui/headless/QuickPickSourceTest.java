@@ -227,4 +227,72 @@ public class QuickPickSourceTest {
         assertEquals(1, batch.entries().size());
         assertTrue("the source said there was more and it was lost", batch.truncated());
     }
+
+    // ── Availability and context ────────────────────────────────────────────────────────────────
+
+    /**
+     * <b>A row you can choose beats one you cannot, when they matched equally well.</b>
+     *
+     * <p>The fixture is the reported case in miniature: {@code Redo} is six characters shorter than
+     * {@code Reset Zoom}, and brevity is part of {@code SearchMatch.score()} — so sorting on the score
+     * alone put an unavailable row above an available one and there was nothing in the ranking able to
+     * say otherwise. Both are prefix hits on the label, so nothing about the <em>match</em> separates
+     * them.</p>
+     */
+    @Test
+    public void anAvailableRowOutranksAnUnavailableOneThatMatchedNoBetter() {
+        QuickPickSource source = sourceOf(
+                new QuickPickItem("redo", "Redo", "Edit", null, false),
+                new QuickPickItem("reset", "Reset Zoom", "Editor", null, true));
+
+        assertEquals("brevity still outranks being usable", List.of("reset", "redo"), idsFor(source, "re"));
+    }
+
+    /**
+     * <b>...and a better match still wins outright, unavailable or not.</b>
+     *
+     * <p>The counter-assertion, and it is not a formality: a ranking written as "every enabled row first"
+     * satisfies the test above and makes searching for a command by its full name stop finding it. An
+     * exact hit sits a whole tier above a prefix one, and a tier is not something availability may
+     * cross.</p>
+     */
+    @Test
+    public void aBetterMatchStillWinsOverAvailability() {
+        QuickPickSource source = sourceOf(
+                new QuickPickItem("exact", "Redo", "Edit", null, false),
+                new QuickPickItem("prefix", "Redo All", "Edit", null, true));
+
+        assertEquals(List.of("exact", "prefix"), idsFor(source, "redo"));
+    }
+
+    /**
+     * <b>Of the rows that work, the ones that work because of where you are come first.</b>
+     *
+     * <p>{@code Reload} is the shorter label, so brevity favours it and the ordering below can only come
+     * from the contextual flag. @see QuickPickItem#contextual</p>
+     */
+    @Test
+    public void aContextualRowOutranksAGlobalOneThatMatchedNoBetter() {
+        QuickPickSource source = sourceOf(
+                new QuickPickItem("global", "Reload", "Explorer", null, true),
+                new QuickPickItem("here", "Reset Zoom", "Editor", null, true).withContextual(true));
+
+        assertEquals(List.of("here", "global"), idsFor(source, "re"));
+    }
+
+    /**
+     * The untouched palette obeys the same rule.
+     *
+     * <p>One ordering rule rather than two: a list whose principle changed the moment you typed a
+     * character would be the harder of the two to learn. Alphabetical remains, as the tiebreak it always
+     * was — {@code Apply} would otherwise lead.</p>
+     */
+    @Test
+    public void anEmptyQueryPutsAvailableRowsFirstToo() {
+        QuickPickSource source = sourceOf(
+                new QuickPickItem("a", "Apply", "File", null, false),
+                new QuickPickItem("z", "Zoom In", "View", null, true));
+
+        assertEquals(List.of("z", "a"), idsFor(source, ""));
+    }
 }

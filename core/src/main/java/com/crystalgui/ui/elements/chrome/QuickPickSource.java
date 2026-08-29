@@ -192,6 +192,31 @@ public interface QuickPickSource {
                 Comparator.comparing((QuickPickItem item) -> item.category() == null ? "" : item.category())
                         .thenComparing(QuickPickItem::label);
 
+        /**
+         * <b>What you can use, and what belongs to where you are</b> — before anything alphabetical.
+         *
+         * <h3>Two signals, in this order, and both are the item's own</h3>
+         *
+         * <p><b>Available first.</b> A row that cannot be chosen is still listed — that is settled, and
+         * for a good reason recorded on {@link QuickPickItem#enabled} — but listing it <em>among</em> the
+         * rows that work makes the whole list read as a lottery: typing {@code re} put Remove, Replace,
+         * Rename and Restore, none of them choosable, above and between the four commands that were. The
+         * dimming says which is which and the eye still has to do the sorting.</p>
+         *
+         * <p><b>Then contextual.</b> Of the rows that do work, the ones that work <em>because of where
+         * the picker was opened</em> come first, so a palette summoned from an editor leads with the
+         * editor's verbs rather than with whatever else happens to be live. @see QuickPickItem#contextual</p>
+         *
+         * <p>Booleans are negated so that {@code true} sorts first — {@code Boolean}'s natural order puts
+         * false before true, and the two things worth having are the true ones.</p>
+         */
+        private static final Comparator<QuickPickItem> PREFERENCE =
+                Comparator.comparing((QuickPickItem item) -> !item.enabled())
+                        .thenComparing(item -> !item.contextual());
+
+        /** {@link #PREFERENCE}, then the alphabet. The whole order for a query that ranks nothing. */
+        private static final Comparator<QuickPickItem> BY_PREFERENCE = PREFERENCE.thenComparing(ALPHABETICAL);
+
         private final List<QuickPickItem> items;
 
         StaticSource(List<QuickPickItem> items) {
@@ -202,7 +227,10 @@ public interface QuickPickSource {
         public void fetch(SearchQuery query, ResultSink sink) {
             if (query.isEmpty()) {
                 List<QuickPickItem> sorted = new ArrayList<>(items);
-                sorted.sort(ALPHABETICAL);
+                // THE SAME PREFERENCE AS A QUERY'S, and one rule rather than two on purpose: an untouched
+                // palette is browsed by the same eye that reads a filtered one, and a list whose ordering
+                // rule changed the moment you typed a character would be the harder thing to learn.
+                sorted.sort(BY_PREFERENCE);
                 for (QuickPickItem item : sorted) {
                     if (!sink.accept(QuickPickEntry.plain(item))) return;
                 }
@@ -228,7 +256,22 @@ public interface QuickPickSource {
             // Ranking is a property of the whole set, so a source that pushed as it matched would emit an
             // order it then wanted to change -- which is precisely the case the sink cannot express.
             // Streaming pays off where the CANDIDATES arrive over time; here they are already in memory.
-            scored.sort(Comparator.comparing((Scored s) -> s.match)
+            // TIER, THEN PREFERENCE, THEN THE SCORE'S OWN TIEBREAKS.
+            //
+            // This used to sort on the whole SearchMatch, which is descending `score` -- and `score` is
+            // the tier PLUS earliness and brevity. Comparing on it leaves no room between "matched
+            // better" and "two characters shorter" for anything a consumer knows, so a disabled row two
+            // characters shorter than an enabled one still won. Splitting the tier out is the same repair
+            // the completion list already made for proximity, and for the same reason: the fine-grained
+            // bonuses exist to order rows that matched EQUALLY well, so they belong below whatever the
+            // consumer has to say and not above it.
+            //
+            // A better tier still wins outright. That is deliberate and is the counter-assertion the
+            // covering test makes: an exact hit on an unavailable row must not sink beneath a scattered
+            // hit on an available one, or searching for a command by its full name stops finding it.
+            scored.sort(Comparator.comparingInt((Scored s) -> -s.match.tier())
+                    .thenComparing(s -> s.item, PREFERENCE)
+                    .thenComparing(s -> s.match)
                     .thenComparing(s -> s.item, ALPHABETICAL));
 
             for (Scored s : scored) {

@@ -754,9 +754,9 @@ public final class TreeSitterTokenizer
         // text, without parsing anything. Cheap, and what keeps highlights attached to the right
         // characters the instant a key lands.
         //
-        // Applied against the offsets of the text the tree currently describes, and in the order the
-        // changes were made, because each edit's coordinates are relative to the document the previous
-        // one left behind.
+        // Applied against the offsets of the text the tree currently describes, LAST CHANGE FIRST --
+        // every Change in a set is expressed against the document the set applies to, so an earlier one
+        // must not be allowed to move a later one's coordinates. @see the note on the loop below.
         long interpolated = FrameProfile.begin();
         // A FULL REPLACEMENT HAS NOTHING TO INTERPOLATE. Phase 1 exists to keep an existing tree
         // describing the text while a reparse catches up -- move every node's coordinates so highlights
@@ -810,9 +810,31 @@ public final class TreeSitterTokenizer
             // shift every node's position.
             long built = 0L;
             long applied = 0L;
-            for (Change one : change.changes()) {
+            // BACK TO FRONT, and this is the whole of what a ChangeSet means.
+            //
+            // Every Change in a set is expressed against the document the set applies TO -- its own
+            // javadoc says so, "never in the document it produces" -- and that is what lets a set be
+            // composed and inverted without carrying a document around. `ChangeSet` enforces that they
+            // are sorted and non-overlapping, so applying the LAST one first leaves every earlier one's
+            // offsets still valid, while applying the first one first moves the tree out from under
+            // every offset behind it.
+            //
+            // Front to back, one edit desynchronised the tree by the length of the one before it, and
+            // tree-sitter has no way to notice: `ts_tree_edit` is told where text changed and believes
+            // it. The parse that follows reuses nodes at coordinates that no longer describe anything,
+            // so every token after the first change comes back at the wrong offsets -- for the rest of
+            // the session, since nothing re-parses from scratch.
+            //
+            // Reached by ACCEPTING A COMPLETION for an unimported type, which is one ChangeSet of two:
+            // the import statement at the top of the file and the name at the caret. The name's own row
+            // then coloured as `[0,1)` over a space and `[11,15)` over the tail of the word -- reported
+            // as the typed prefix staying red while the inserted remainder was correct. Any multi-change
+            // edit reaches it: a multi-caret insert, a replace-all, any quick fix that also writes an
+            // import.
+            List<Change> ordered = change.changes();
+            for (int i = ordered.size() - 1; i >= 0; i--) {
                 long t0 = FrameProfile.begin();
-                TSInputEdit edit = inputEditFor(one);
+                TSInputEdit edit = inputEditFor(ordered.get(i));
                 long t1 = FrameProfile.begin();
                 tree.edit(edit);
                 if (t0 != 0L) {

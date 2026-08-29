@@ -252,11 +252,32 @@ public final class CompletionSession {
             request(caret, CompletionProvider.TriggerKind.RETRIGGER, null);
             return;
         }
-        if (incomplete) {
+        if (incomplete && !prefix().equals(queriedPrefix)) {
             // The provider said it truncated. Narrowing the prefix can reach items it never sent, so the
             // only correct answer is to ask again -- a local filter over a truncated list silently omits
             // exactly the item being typed towards.
+            //
+            // ...BUT ONLY IF IT HAS ACTUALLY NARROWED. This asked unconditionally, and the same prefix
+            // asked twice is the same question: the held list IS the answer for it, so the second call
+            // can only produce what is already on screen. Measured on a `.` in a Java file, which issues
+            // THREE provider requests for one keystroke -- the old session re-anchoring, the new
+            // session's trigger, and then this one immediately after it, each a full ECJ probe re-parse
+            // costing about a third of a 290ms frame. Nothing had changed between the second and the
+            // third: prefix [] queried, prefix [] asked again.
             request(caret, CompletionProvider.TriggerKind.RETRIGGER, null);
+            // ...AND NARROW WHAT IS ALREADY ON SCREEN WHILE THAT ANSWER IS IN FLIGHT.
+            //
+            // This used to return here, which was correct while every provider answered inline: the new
+            // list arrived within the keystroke and replaced this one. It stopped being correct the
+            // moment a provider answered from a worker. Typing faster than the query returns supersedes
+            // every answer before it lands -- by design, `accept` drops them by serial -- so the popup
+            // sat showing the list for a three-letter prefix while sixteen more characters went in.
+            //
+            // The held list is a SUPERSET for a narrowing prefix, so filtering it locally is a correct
+            // interim answer: it can only omit items the truncated fetch never sent, which is exactly
+            // what the authoritative answer arriving behind it will supply. A stale unnarrowed list is
+            // wrong in a way this cannot be.
+            refilter();
             return;
         }
         refilter();

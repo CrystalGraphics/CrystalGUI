@@ -87,6 +87,14 @@ public final class ScriptWorkbench implements Closeable {
     @Nullable
     public static ScriptWorkbench install(CommandRegistry registry, Workbench workbench,
                                           @Nullable Path cacheRoot) {
+        // BEFORE THE RUNTIME CHECK, deliberately. Remapping a file out of the runtime namespace needs the
+        // platform's MAPPING and nothing else -- no engine, no analysis, no way to run anything. A host
+        // whose engine band failed to open still shows the file and still wants it readable, so gating
+        // this on there being a runtime would withdraw it from the one configuration that is already
+        // degraded. It is here rather than in each host for the reason LanguageStack exists: which hosts
+        // get a feature is a fact about this module.
+        MappingCommands.register(registry, workbench);
+
         ScriptRuntimes runtimes = ScriptRuntimes.open(cacheRoot);
         if (runtimes.isEmpty()) return null;
 
@@ -553,6 +561,7 @@ public final class ScriptWorkbench implements Closeable {
     public void close() throws IOException {
         ScriptCommands.unregister(registry);
         ConsoleCommands.unregister(registry);
+        MappingCommands.unregister(registry);
         runtimes.close();
     }
 }
