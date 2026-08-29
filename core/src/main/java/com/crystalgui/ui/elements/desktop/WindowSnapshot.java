@@ -153,6 +153,16 @@ final class WindowSnapshot {
         // THE SCISSOR IS SCREEN-SPACE and this target is not the screen. An enclosing clip -- the
         // desktop's, a scroller's -- would be applied in coordinates that mean nothing here, and would
         // cut the photograph along whatever line happened to be active.
+        //
+        // SET ASIDE, not merely disabled. clearScissorIfNeeded only turns the GL test off, and only
+        // when the stack is empty; an inherited rect stays on the stack and every clip the WINDOW pushes
+        // while it is drawn -- its content box, every overflow: hidden inside it -- is intersected with
+        // that rect, in screen pixels, against a buffer that is the window's size. The photograph then
+        // comes out cut along the ancestor's edge. Resumed below so the caller's clip is exactly what it
+        // was. (The push itself also has to flip against THIS buffer's height rather than the screen's,
+        // which CgUiPaintContext.pushScissor now does; the two halves were found from the same picture,
+        // a minimised editor's preview showing its top half over flat panel colour.)
+        int[] outerClip = ctx.getScissorStack().suspend();
         ctx.getScissorStack().clearScissorIfNeeded();
         ctx.beginLayerFbo(fbo);
         ctx.getPoseStack().pushPose();
@@ -178,7 +188,8 @@ final class WindowSnapshot {
         } finally {
             ctx.getPoseStack().popPose();
             ctx.endLayerFbo();
-            ctx.getScissorStack().applyScissorIfNeeded();
+            ctx.getScissorStack().resume(outerClip);
+            ctx.reapplyScissor();
         }
     }
 

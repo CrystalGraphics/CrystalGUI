@@ -75,6 +75,11 @@ final class TaskbarPreviews {
     private final Taskbar taskbar;
     private final WindowPreview preview = new WindowPreview();
 
+    /** The one panel. */
+    WindowPreview panel() {
+        return preview;
+    }
+
     /** The entry the pointer is currently resting on, and since when. */
     @Nullable
     private WindowFrame hovered;
@@ -321,6 +326,10 @@ final class TaskbarPreviews {
 
     private void show(WindowFrame frame) {
         showing = frame;
+        // A FRESH SHOW HAS NO MORPH IN FLIGHT, so nothing may be holding the picture's size. Belt and
+        // braces beside cancelMotion's hand-back: an entrance that inherited a suppressed thumbnail
+        // placed a panel around a picture of the previous window's shape.
+        preview.setThumbnailSizingSuppressed(false);
         preview.setFrame(frame);
         setPanelShown(true);
         preview.addToTopLayer();
@@ -488,10 +497,21 @@ final class TaskbarPreviews {
         if (thumbMotion != null) {
             thumbMotion.cancel();
             thumbMotion = null;
-            // NEVER LEFT SUPPRESSED. A cancelled morph that did not hand sizing back would leave the
-            // picture stuck at whatever it had reached, for every window the panel showed afterwards.
-            preview.setThumbnailSizingSuppressed(false);
+            // THE BOX IS MID-MORPH AND THE RECORD SAYS OTHERWISE. The animation writes the picture's
+            // INLINE size without going through the thumbnail, so after a cancel the box holds an
+            // intermediate size while the thumbnail's own "last applied" still says the morph's start.
+            // Forgetting it makes the next sync write unconditionally.
+            preview.forgetThumbnailSize();
         }
+        // NEVER LEFT SUPPRESSED -- and UNCONDITIONALLY, which is the half that was missing. Sizing is
+        // switched off the moment a move begins (update, before setFrame) and only ever switched back on
+        // by a morph COMPLETING, or here when one is cancelled. A move abandoned before its morph was
+        // created -- the pointer left, a click dismissed the panel, the destination was still being
+        // measured -- had no thumbMotion to cancel and so left sizing off for good: every later preview
+        // kept whatever box it had, and a wide window was drawn letterboxed in a tall one's. Reported as
+        // "you messed up the sizes of the previews", and it was the first pictureless window in the
+        // strip that made the abandoned move routine.
+        preview.setThumbnailSizingSuppressed(false);
         if (motion == null) return;
         motion.cancel();
         motion = null;

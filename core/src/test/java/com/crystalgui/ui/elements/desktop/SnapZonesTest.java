@@ -18,11 +18,8 @@ public class SnapZonesTest {
     private static final float W = 800f;
     private static final float H = 600f;
 
-    /** A window's caption, which is what the top band is measured in. @see SnapZones#forPoint */
-    private static final float CAPTION = 20f;
-
     private static SnapZones.Zone at(float x, float y) {
-        return SnapZones.forPoint(x, y, W, H, CAPTION);
+        return SnapZones.forPoint(x, y, W, H);
     }
 
     @Test
@@ -105,20 +102,24 @@ public class SnapZonesTest {
     }
 
     /**
-     * <b>The top band is handed in, and it is the caption's height.</b>
+     * <b>The top edge is read from the CURSOR, exactly like the sides.</b>
      *
-     * <p>Not a constant of this class, because the pointer rides inside the caption for the whole of a
-     * drag and the window is clamped so the caption's top never leaves the work area — a band shallower
-     * than the caption is unreachable for every grab but the shallowest. Since the pointer is inside the
-     * caption by construction, "within one caption of the top" and "the window has reached the top" are
-     * the same statement.</p>
+     * <p>It used to take the frame's CAPTION HEIGHT as its band, and the argument for that was that a
+     * shallower band is unreachable: the pointer rides inside the caption for the whole of a drag, and
+     * the window is clamped so the caption's top never leaves the work area, which holds the pointer a
+     * whole caption below the border. True, and it made the top the one edge triggered by the WINDOW
+     * rather than by the cursor — it fires the moment the window's upper lip reaches the border.</p>
+     *
+     * <p>The reachability problem is solved where it arises instead: {@code WindowFrame} lets the caption
+     * rise one caption-height above the work area <em>while a move is live</em>, so any grab can bring
+     * the cursor to the border, and the headroom is withdrawn when the drag ends. Windows does the same —
+     * drag a window up and its title bar goes off the top while the cursor reaches the edge.</p>
      */
     @Test
-    public void theTopBandIsWhateverTheCallerMeasured() {
-        assertEquals(SnapZones.Zone.MAXIMIZE, SnapZones.forPoint(400f, 20f, W, H, 20f));
-        assertNull(SnapZones.forPoint(400f, 21f, W, H, 20f));
-        assertEquals("a deeper caption did not deepen the band",
-                SnapZones.Zone.MAXIMIZE, SnapZones.forPoint(400f, 21f, W, H, 30f));
+    public void theTopEdgeIsReadFromTheCursor() {
+        assertEquals(SnapZones.Zone.MAXIMIZE, at(400f, 0f));
+        assertEquals("the very edge is in", SnapZones.Zone.MAXIMIZE, at(400f, 2f));
+        assertNull("a caption's depth below the border is NOT the top zone", at(400f, 20f));
     }
 
     /**
@@ -129,8 +130,8 @@ public class SnapZonesTest {
      */
     @Test
     public void anUnmeasuredWorkAreaHasNoZones() {
-        assertNull(SnapZones.forPoint(0f, 0f, 0f, 0f, CAPTION));
-        assertNull(SnapZones.forPoint(2f, 2f, W, 0f, CAPTION));
+        assertNull(SnapZones.forPoint(0f, 0f, 0f, 0f));
+        assertNull(SnapZones.forPoint(2f, 2f, W, 0f));
     }
 
     /** A pointer dragged off the bottom of the work area — over the taskbar — is in no zone. */

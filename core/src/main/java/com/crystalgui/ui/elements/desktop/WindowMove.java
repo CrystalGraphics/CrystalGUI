@@ -30,7 +30,7 @@ import javax.annotation.Nullable;
  * distinction has now cost a bug in each direction. {@code screenToLocal} divides out the surface scale
  * and leaves the result comparable to {@code getRuntimeCache().getX()} — which is why
  * {@code isMouseOverElement} tests its argument against {@code rectX}, and why
- * {@link #restoreUnderPointer} can subtract the bar's X to get an offset along the caption. Reading
+ * {@link #beginTearLoose} can subtract the bar's X to get an offset along the caption. Reading
  * "local" as "relative to the source" is what made {@link #snapZoneAt} add that origin back, and the
  * snap zone a drag reported was then displaced by however far along the desktop the window sat.</p>
  *
@@ -55,6 +55,10 @@ final class WindowMove {
     /** The zone the live move drag is currently over. @see #snapZoneAt */
     @Nullable
     private SnapZones.Zone pendingSnap;
+
+    /** Whether this drag tore a MAXIMISED window loose, and where along its caption. @see #beginTearLoose */
+    private boolean tornLoose;
+    private float grabFromLeft, grabFromRight, grabFromTop;
 
     /**
      * Wires both press gestures onto {@code frame}.
@@ -171,7 +175,18 @@ final class WindowMove {
         // DOUBLE-CLICK TOGGLES, and starts no drag. Windows' gesture. Returning here matters: the second
         // press would otherwise begin a move as well, so the smallest tremor after a double-click would
         // drag the window it had just restored.
-        if (detail >= 2) {
+        //
+        // EVERY SECOND CLICK OF A RUN, not every click after the first. `detail` counts UP for as long as
+        // presses keep landing in the same place inside the system's double-click interval -- 1, 2, 3,
+        // 4 -- so `>= 2` toggled on the third press, and the fourth, and the fifth. Clicking about on a
+        // caption at a leisurely pace maximised and restored the window over and over, which reads as the
+        // double-click interval being far too long when it is really every click after the first counting
+        // as a double.
+        //
+        // Even counts only, which is what a browser's `dblclick` does with the same counter: a third
+        // press is a single click again (and falls through to starting a move, as it does on Windows),
+        // and a fourth completes a second pair.
+        if (detail >= 2 && detail % 2 == 0) {
             frame.toggleMaximized();
             return;
         }
@@ -191,6 +206,7 @@ final class WindowMove {
         UIDragController drag = window.getInputHandler().getDragController();
         // Positional drag, zero threshold: a window must track the very first pixel, and a title bar has
         // no competing click interpretation to protect.
+        frame.setMoving(true);
         drag.startDrag(bar, pointerX, pointerY, new UIDragController.DragListener() {
             @Override
             public void onDragUpdate(float mouseX, float mouseY, float startX, float startY,
@@ -205,14 +221,23 @@ final class WindowMove {
                 // it is the movement that tears the window loose.
                 if (frame.isMaximized()) {
                     if (deltaX == 0f && deltaY == 0f) return;
-                    restoreUnderPointer(mouseX, mouseY);
-                    // Re-baselined so the delta already spent is not applied a second time: from
-                    // here the drag continues from wherever the restore put the window.
-                    dragStartLeft = frame.left() - deltaX;
-                    dragStartTop = frame.top() - deltaY;
-                    return;
+                    beginTearLoose(mouseX, mouseY);
+                } else if (tornLoose) {
+                    // RE-ANCHORED EVERY FRAME, against the width the window has RIGHT NOW.
+                    //
+                    // The shrink animates the size while this owns the position, so a position worked
+                    // out once from the FINAL width holds the left edge still and lets the right edge
+                    // converge onto it -- the window collapses leftwards instead of closing in around
+                    // the cursor, and only arrives under the hand when the animation ends.
+                    //
+                    // Asking the current width each frame keeps the grabbed point under the pointer for
+                    // every frame of the shrink, from either edge or the middle. It costs nothing once
+                    // the size settles: a constant width gives a constant offset, which is the same
+                    // thing the delta-based move below computes.
+                    anchorUnderPointer(mouseX, mouseY);
+                } else {
+                    frame.moveTo(dragStartLeft + deltaX, dragStartTop + deltaY);
                 }
-                frame.moveTo(dragStartLeft + deltaX, dragStartTop + deltaY);
                 // SNAP IS DECIDED FROM THE POINTER, never from the window's own edge. Dragging a
                 // wide window leftwards puts its edge at the boundary long before the hand gets
                 // there, so an edge test snaps windows nobody was aiming at an edge with -- and a
@@ -230,6 +255,8 @@ final class WindowMove {
             @Override
             public void onDragEnd(float mouseX, float mouseY) {
                 commitSnap();
+                tornLoose = false;
+                frame.setMoving(false);
             }
 
             @Override
@@ -237,6 +264,8 @@ final class WindowMove {
                 // ESCAPE DURING A MOVE ABANDONS THE SNAP TOO. The preview is the only part of a
                 // cancelled drag that would otherwise stay on screen, with nothing left to take it down.
                 pendingSnap = null;
+                tornLoose = false;
+                frame.setMoving(false);
                 Desktop desktop = frame.desktop();
                 if (desktop != null) desktop.hideSnapPreview();
             }
@@ -252,7 +281,7 @@ final class WindowMove {
      * converts out of <em>surface</em> pixels into the source's local layout space — it does not
      * subtract the source's own origin. {@code isMouseOverElement} is the proof: it compares the
      * coordinate it is handed against {@code runtimeCache.getX()}, so the two are in one space. So is
-     * {@link #restoreUnderPointer}, which takes {@code pointerX - bar.getX()} to get the offset along
+     * {@link #beginTearLoose}, which takes {@code pointerX - bar.getX()} to get the offset along
      * the caption — which only means anything if the pointer is absolute.</p>
      *
      * <p><b>Adding the bar's origin back was therefore counting it twice</b>, and it shipped: the zone a
@@ -273,7 +302,7 @@ final class WindowMove {
         // THE CAPTION'S HEIGHT IS THE TOP BAND -- see SnapZones. The pointer rides inside the caption
         // for the whole drag, so anything smaller is unreachable for all but the shallowest grab.
         return SnapZones.forPoint(mouseX - area.getX(), mouseY - area.getY(),
-                area.getWidth(), area.getHeight(), frame.captionHeight());
+                area.getWidth(), area.getHeight());
     }
 
     /** Applies whatever the drag was hovering when it ended. @see #snapZoneAt */
@@ -314,30 +343,69 @@ final class WindowMove {
      * than a fresh measurement: layout has not run yet at this point, so the box still reports the
      * maximised size.</p>
      */
-    private void restoreUnderPointer(float pointerX, float pointerY) {
-        // ALREADY IN LAYOUT UNITS. UIDragController.tick runs screenToLocal against the drag SOURCE
-        // before it calls the listener -- that conversion is most of why the callback exists -- so a
-        // second one here halves the coordinate and the window comes back at about half the distance
-        // across the caption. The pointer position in a mouse-DOWN listener is the other way round:
-        // that one is raw, which is why the caption guard uses containsScreenPoint.
+    /**
+     * Tears a maximised window loose: captures where along the caption it was grabbed, starts the
+     * shrink, and places it under the pointer for this frame.
+     *
+     * <p>The offsets are taken from the MAXIMISED caption and kept for the rest of the drag, because
+     * they are what the grab meant. {@link #anchorUnderPointer} re-reads the window's current width
+     * every frame and re-derives the placement from them, so the window closes in around the cursor
+     * instead of collapsing toward one edge.</p>
+     *
+     * <p><b>The coordinates are already in layout units.</b> {@code UIDragController.tick} runs
+     * {@code screenToLocal} against the drag SOURCE before calling the listener -- that conversion is
+     * most of why the callback exists -- so a second one here halves them and the window comes back at
+     * about half the distance across the caption. A mouse-DOWN listener's position is the other way
+     * round: that one is raw, which is why the caption guard uses {@code containsScreenPoint}.</p>
+     */
+    private void beginTearLoose(float pointerX, float pointerY) {
+        float barLeft = bar.getRuntimeCache().getX();
         float barWidth = bar.getRuntimeCache().getWidth();
-        float alongCaption = pointerX - bar.getRuntimeCache().getX();
-        float fraction = barWidth > 0f
-                ? Math.max(0f, Math.min(1f, alongCaption / barWidth))
-                : 0.5f;
+        grabFromLeft = pointerX - barLeft;
+        grabFromRight = barLeft + barWidth - pointerX;
+        // The caption's height does not change, so the frame's own top keeps the pointer at the same
+        // place DOWN the bar for the whole gesture.
+        grabFromTop = pointerY - frame.getRuntimeCache().getY();
 
+        tornLoose = true;
+        frame.restoreShrinkingUnderDrag();
+        anchorUnderPointer(pointerX, pointerY);
+    }
+
+    /**
+     * Places the window so the grabbed point sits under the pointer, <b>at the width it has right
+     * now</b>.
+     *
+     * <h3>Anchored to an edge where the caption's content is, and centred where it is not</h3>
+     *
+     * <p>A caption's content does not rescale with the window: a menu bar adopted into it runs from the
+     * LEFT, the window controls sit at the RIGHT, and each keeps its distance from its own edge. So the
+     * cursor stays on what was grabbed only if it is measured from the same edge that thing is measured
+     * from -- the left offset near the left, the right offset near the right. A FRACTION of the caption
+     * preserves neither, and was only ever right at the corners, where the two agree.</p>
+     *
+     * <p>The MIDDLE of a maximised caption is empty, so there is nothing to preserve there -- and the two
+     * edge rules cannot both be honoured anyway, since neither offset fits inside a window a fraction of
+     * the width. Clamping into the window instead put the pointer on whichever edge won and left the
+     * whole window hanging off one side of it.</p>
+     *
+     * <p>Half the current width is each edge's reach, which makes the three cases one CONTINUOUS
+     * function: where an edge rule stops applying it already answers the window's centre, which is
+     * exactly what the middle case answers.</p>
+     */
+    private void anchorUnderPointer(float pointerX, float pointerY) {
         UIElement area = frame.workArea();
         float areaX = area == null ? 0f : area.getRuntimeCache().getX();
         float areaY = area == null ? 0f : area.getRuntimeCache().getY();
-        // The caption stays where it is vertically -- its height does not change, so preserving the
-        // frame's own top keeps the pointer at the same place down the bar.
-        float top = frame.getRuntimeCache().getY() - areaY;
 
-        frame.restore();
+        float width = frame.getRuntimeCache().getWidth();
+        if (width <= 0f) return;
 
-        float width = frame.restoreWidth() > 0f
-                ? frame.restoreWidth()
-                : frame.getRuntimeCache().getWidth();
-        frame.moveTo(pointerX - areaX - fraction * width, top);
+        float reach = width / 2f;
+        float along = grabFromLeft < reach ? grabFromLeft
+                : grabFromRight < reach ? width - grabFromRight
+                : reach;
+        frame.moveTo(pointerX - areaX - along, pointerY - areaY - grabFromTop);
     }
+
 }

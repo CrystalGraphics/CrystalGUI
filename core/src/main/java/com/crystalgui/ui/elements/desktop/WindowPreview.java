@@ -2,7 +2,6 @@ package com.crystalgui.ui.elements.desktop;
 
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.Tooltip;
@@ -42,8 +41,10 @@ public class WindowPreview extends UIElement {
     public static final String CLOSE_CLASS = "__preview-close__";
     public static final String ICON_CLASS = "__pre-icon__";
 
+    /** The bar's accent wash, on the panel too -- one material, one tone. @see Taskbar#GLOW_CLASS */
+    private final UIElement glow = new UIElement();
     private final UIElement header = new UIElement();
-    private final UIElement icon = new UIElement();
+    private final WindowIcon icon = new WindowIcon();
     private final UIText title = new UIText("");
     private final Button close = new Button("");
     private final WindowThumbnail thumbnail = new WindowThumbnail();
@@ -58,8 +59,24 @@ public class WindowPreview extends UIElement {
     /** The window was closed from here, so whoever is showing this should stop. */
     public final Signal.Action onClosed = new Signal.Action();
 
+    /**
+     * The accent wash under the content, for {@link TaskbarDesigner} to retone the whole family at
+     * once. Package-private: a theme retones this through {@code --preview-glow}, and the element
+     * itself is only reachable because the designer writes at IMPORTANT origin while it runs.
+     */
+    UIElement glow() {
+        return glow;
+    }
+
     public WindowPreview() {
         addClass(PREVIEW_CLASS);
+
+        // THE GLOW FIRST, so it paints over the glass and under everything else -- the same wash the
+        // bar carries, from a pin of its own, so the preview reads as a piece of the bar it rose from.
+        // Absolute, unhittable, and it carries the panel's radius so the gradient masks itself.
+        glow.addClass(Taskbar.GLOW_CLASS);
+        glow.setHitTest(false);
+        addInternalChild(glow);
 
         icon.addClass(ICON_CLASS);
         // Unhittable, like every composite part: click-focus targets the exact element hit, so a
@@ -67,6 +84,14 @@ public class WindowPreview extends UIElement {
         icon.setHitTest(false);
         title.addClass(TITLE_CLASS);
         title.setHitTest(false);
+        // SIZED BY ITS BOX, stated rather than left to the auto-detect. The title is `width: 0;
+        // flex-grow: 1` and elides into whatever the header gives it -- but the detect runs on the
+        // first recompute after attach, reads contentBoxWidth() while this panel is still
+        // `display: none`, sees zero, and latches SELF-sizing: the title then pushes its text width at
+        // IMPORTANT for good, cannot shrink, and shoves the close button out past the panel's edge.
+        // Only for a title longer than the picture is wide, which is why it was reported for one
+        // window and not the others. The activity bar's badge paid for the same race. @see UIText#neverSelfSizeWidth
+        title.neverSelfSizeWidth();
 
         close.addClass(CLOSE_CLASS);
         close.attachListener(() -> {
@@ -101,37 +126,39 @@ public class WindowPreview extends UIElement {
     }
 
     /**
-     * Shows or hides the picture according to whether there is one.
+     * Keeps the picture the shape of its window, and the header the width of the picture.
      *
      * <p>Cheap and idempotent, and called per frame while a preview is up: a window can be minimised
-     * <em>while</em> its own preview is open — that is what pressing its entry does — and the panel has
-     * to stop claiming a picture it can no longer draw.</p>
+     * <em>while</em> its own preview is open — that is what pressing its entry does — and a resized
+     * window's preview follows it.</p>
      *
-     * <p>Collapsing rather than showing an empty box, because an empty box reads as a window that
-     * renders nothing rather than as a window that is not there to render.</p>
+     * <p>This used to COLLAPSE the thumbnail for a window with no picture, on the argument that an empty
+     * box reads as a window that renders nothing. It is no longer a special case here at all: the
+     * thumbnail draws the window's icon tile on a card of its own shape instead, which is what Windows
+     * shows for a window it has no bitmap of — and it is what stopped a pictureless window stalling the
+     * panel's placement, since a card has a size where a collapsed box had none. @see WindowThumbnail#placeholder</p>
      *
      * @return whether the panel's geometry changed, so a caller that is about to place it knows the
      *         measurement it is holding is out of date
      */
     public boolean syncThumbnail() {
-        // BEFORE the display decision, so a box about to be shown is already the right shape: it is
-        // measured on the next frame and the panel is PLACED from that measurement.
-        boolean changed = thumbnail.syncSize() | matchHeaderToThumbnail();
-        boolean has = thumbnail.hasPicture();
-        if (has == thumbnailShown) return changed;
-        thumbnailShown = has;
-        StyleGroup.importantPipeline(thumbnail.getStyle().getLayoutGroup(),
-                l -> l.display(has ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
-        return true;
+        return thumbnail.syncSize() | matchHeaderToThumbnail();
     }
 
-    private boolean thumbnailShown = true;
-
-    /** The picture's measured box — what the panel is built around. @see WindowThumbnail#syncSize */
     /** Where the picture is GOING for the window it is currently pointed at, without going there. */
     @Nullable
     float[] fittedThumbnailSize() {
         return thumbnail.fittedSize();
+    }
+
+    /** @see WindowThumbnail#forgetApplied */
+    void forgetThumbnailSize() {
+        thumbnail.forgetApplied();
+    }
+
+    /** Whether the picture is the icon-tile placeholder rather than the window. @see WindowThumbnail#placeholder */
+    public boolean isShowingPlaceholder() {
+        return thumbnail.isShowingPlaceholder();
     }
 
     /** The picture itself, for something that wants to animate its box. @see WindowThumbnail#applySize */
@@ -195,28 +222,11 @@ public class WindowPreview extends UIElement {
         String text = frame == null ? "" : frame.getTitle();
         title.setText(text);
         titleTooltip.setText(text);
-        applyIcon(frame == null ? null : frame.iconName());
+        // THE SAME TILE THE ENTRY BENEATH THIS DRAWS -- one WindowIcon for the strip, the preview and the
+        // switcher, so a window's icon is one picture wherever it is shown. @see WindowIcon
+        icon.show(frame == null ? null : frame.iconName(), text);
         syncThumbnail();
         return this;
-    }
-
-    /**
-     * The window's icon, drawn as this slot's own overlay.
-     *
-     * <p><b>On the slot, not in a child of it.</b> The slot is what the sheet sizes — {@code __pre-icon__}
-     * is 10x10 — and an overlay is painted into its element's box, so a fresh child with no size of its
-     * own is a 0x0 box with an icon in it: nothing appears, and nothing about the tree says why. Exactly
-     * what {@code Taskbar.applyIcon} does for the entry beneath this.</p>
-     *
-     * <p>Through {@link CgUiSvg#ofIcon}, never {@code of(path)}: that is what binds the light/dark
-     * variant at draw time, and the one time a caller reached past it every {@code icon()} in every
-     * stylesheet drew the light file forever.</p>
-     */
-    private void applyIcon(@Nullable String iconName) {
-        CgUiSvg glyph = iconName == null ? null : CgUiSvg.ofIcon(iconName);
-        icon.setDisplayed(glyph != null);
-        if (glyph == null) return;
-        StyleGroup.defaultPipeline(icon.getStyle().getGeneralGroup(), g -> g.overlay(glyph));
     }
 
     @Override

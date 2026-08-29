@@ -1,5 +1,7 @@
 package com.crystalgui.render;
 
+import java.util.Arrays;
+
 import com.crystalgraphics.platform.gl.CgGL;
 
 /**
@@ -32,10 +34,10 @@ public final class ScissorStack {
      * Push a new scissor rect. If a parent scissor is active, the new rect
      * is intersected with the parent. The result is stored on the stack.
      *
-     * @param x left edge in screen pixels
-     * @param y top edge in screen pixels
-     * @param w width in screen pixels
-     * @param h height in screen pixels
+     * @param x left edge in the target's physical pixels, top-left origin
+     * @param y top edge in the target's physical pixels, top-left origin
+     * @param w width in physical pixels
+     * @param h height in physical pixels
      */
     public ScissorStack pushScissor(int x, int y, int w, int h) {
         int ix = x, iy = y, iw = w, ih = h;
@@ -109,13 +111,52 @@ public final class ScissorStack {
         depth = 0;
     }
 
+    /**
+     * Sets the whole stack aside, so a render into a target with its OWN coordinate space starts from
+     * no clip at all; {@link #resume} puts it back exactly as it was.
+     *
+     * <p>{@link #clearScissorIfNeeded} is not this: it only disables the GL test, and only when the
+     * stack is already empty. A rect inherited from an ancestor stays on the stack, and every push made
+     * during the nested render is INTERSECTED with it — in the ancestor's screen pixels, against a
+     * target that is not the screen. A window photographed under any enclosing clip came out cut along
+     * whatever line that clip happened to be. The rects are COPIED out rather than merely hidden behind
+     * {@code depth = 0}, because the nested render's own pushes overwrite the same slots.</p>
+     *
+     * @return the token {@link #resume} takes; opaque to the caller
+     */
+    public int[] suspend() {
+        int[] saved = Arrays.copyOf(stack, depth * 4);
+        depth = 0;
+        return saved;
+    }
 
-    public void applyScissorIfNeeded() {
+    /** Restores what {@link #suspend} set aside. Does not touch GL state — apply or clear afterwards. */
+    public void resume(int[] saved) {
+        System.arraycopy(saved, 0, stack, 0, saved.length);
+        depth = saved.length / 4;
+    }
+
+
+    /**
+     * Applies the current rect to GL, flipped against {@code targetHeight} — the height of the buffer
+     * being drawn into <em>right now</em>.
+     *
+     * <p><b>The stack holds TOP-LEFT rects and the flip happens here, per target</b>, because a GL
+     * scissor rect is bottom-left-origin pixels of a particular buffer and means nothing in a buffer of
+     * another height. It used to hold GL rects, flipped once at push time against the screen, which is
+     * the same thing for as long as every target is the screen's size — every pooled layer is. The first
+     * target that was not, a window's snapshot, showed what that assumption costs: a clip pushed against
+     * the snapshot (a few hundred pixels tall) was inherited by the screen-sized pool layers begun inside
+     * it, where the same numbers describe a band at the BOTTOM of the layer, so every masked or faded
+     * element in the photograph was clipped to nothing and one scrolled one resurfaced displaced. Kept
+     * in the target-independent orientation, a rect can be re-applied to whichever buffer is bound.</p>
+     */
+    public void applyScissorIfNeeded(int targetHeight) {
         if (this.hasScissor()) {
             CgGL.glEnable(CgGL.GL_SCISSOR_TEST);
             CgGL.glScissor(
                     this.currentX(),
-                    this.currentY(),
+                    targetHeight - (this.currentY() + this.currentH()),
                     this.currentW(),
                     this.currentH());
         }

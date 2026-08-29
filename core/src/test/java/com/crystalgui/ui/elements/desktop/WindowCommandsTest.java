@@ -508,6 +508,54 @@ public class WindowCommandsTest extends UiTestBase {
      * only presses cannot see it — which is exactly why the middle-click test's own counter-assertion
      * had to complete the click.</p>
      */
+    /**
+     * <b>A right-click on a taskbar entry opens its jump list.</b>
+     *
+     * <p>The obvious assertion, and it was missing: the entry's right-click was covered only by
+     * {@link #rightClickingAnEntryDoesNotAlsoActivateTheWindow} below, which asserts what must NOT
+     * happen. That passes just as well when the press opens nothing at all, so the whole route could
+     * fall over without a red test — the counter-assertion needs a positive one beside it, the same
+     * pairing the middle-click test already has.</p>
+     *
+     * <p>Through {@code consumeMouseEvent} at a point rather than {@code sendInputEvent}: the listener
+     * is on mouse-DOWN and reads the button, so dispatching straight at the element skips the button
+     * resolution the route is written against.</p>
+     */
+    @Test
+    public void rightClickingAnEntryOpensItsJumpList() {
+        assertFalse(menuIsOpen());
+        Button entry = window.desktop().taskbar().entryFor(first);
+
+        clickEntry(entry, CgMouseCodes.RIGHT_BUTTON);
+
+        assertTrue("right-clicking a taskbar entry opened no menu", menuIsOpen());
+    }
+
+    /**
+     * <b>...and it works on a MINIMISED window, which is the case the route exists for.</b>
+     *
+     * <p>{@code showJumpList} opened into {@code frame.getAttachedWindow()}, and hide is detach — so a
+     * minimised window answered null and the method returned having done nothing. Every visible window
+     * was fine, which is why the route read as correct and why the test above passes without this one:
+     * reported as <em>"right click only works when the window is not minimized"</em>.</p>
+     *
+     * <p>The entry is the reliable end of the pair — the strip is up whenever any of this can be
+     * clicked — so the menu opens into the ANCHOR's window.</p>
+     */
+    @Test
+    public void rightClickingAMinimisedEntryStillOpensItsJumpList() {
+        first.minimize();
+        settle();
+        assertEquals(WindowState.HIDDEN, first.state());
+        assertNull("precondition: a minimised window is out of the tree", first.getAttachedWindow());
+        assertFalse(menuIsOpen());
+
+        clickEntry(window.desktop().taskbar().entryFor(first), CgMouseCodes.RIGHT_BUTTON);
+
+        assertTrue("a minimised window's entry opened no menu — the one case the jump list is for",
+                menuIsOpen());
+    }
+
     @Test
     public void rightClickingAnEntryDoesNotAlsoActivateTheWindow() {
         window.desktop().activate(second);

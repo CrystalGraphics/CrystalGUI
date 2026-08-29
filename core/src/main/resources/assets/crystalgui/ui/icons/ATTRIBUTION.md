@@ -129,15 +129,17 @@ in `core/src/test/resources/` and not here: it is the SVG renderer's torture tes
 
 ## `general/action/` — IntelliJ Platform (Apache 2.0)
 
-`intentionBulb`, `addDirectory`, `addFile`, `copy`, `cut`, `delete`, `edit`, `paste`, `reformatCode`,
-`refresh`, `run`, `rerun`, `save`, `scrollDown`, `softWrap`, `stop` — action icons from the IntelliJ
+`intentionBulb`, `addDirectory`, `addFile`, `copy`, `cut`, `delete`, `edit`, `paste`, `pin`,
+`pinHovered`, `pinSelected`, `reformatCode`, `refresh`, `run`, `rerun`, `save`, `scrollDown`,
+`softWrap`, `stop` — action icons from the IntelliJ
 Platform, © 2000-2023 JetBrains s.r.o. and contributors, used under the Apache License 2.0.
 
 The line this directory is split along is **whether the colour carries meaning**, and it is the same line
 `general/search/` sits on the far side of.
 
 **Unmodified**, shipped with their `*_dark.svg` variants: `intentionBulb`, `addDirectory`, `addFile`,
-`copy`, `cut`, `edit`, `paste`, `reformatCode`, `refresh`, `run`, `rerun`, `save`, `stop`. These carry
+`copy`, `cut`, `edit`, `paste`, `pin`, `pinSelected`, `reformatCode`, `refresh`, `run`, `rerun`,
+`save`, `stop`. These carry
 meaning in their colour — the bulb's amber glass says "there is something to do here", Stop's red says the
 button is live — and recolouring them from CSS would throw away what they are. `icon()` resolves the
 light/dark pair through `CgUiSvg.ofIcon`.
@@ -148,6 +150,22 @@ light/dark pair through `CgUiSvg.ofIcon`.
   `fill="currentColor"`. They are chrome marks in a console's control stripe, not coloured symbols, so
   they have to follow the theme and dim when their action is unavailable. Same change and same reason as
   `general/search/`.
+- `pinHovered` — one fill retuned per variant: the pin head's `#EBECF0` → `#B4B8BF` (light) and
+  `#43454A` → `#5A5D64` (dark). Geometry, outline and the second tone are untouched, and the file is
+  still multi-tone — this is emphatically NOT the `currentColor` treatment two sections down, which
+  works only because those icons are single-tone chrome marks and would flatten this one into a
+  silhouette.
+
+  **Upstream's two values are IntelliJ's own hover BACKGROUND colours**, which is the whole reason the
+  change was needed: the variant exists to keep the pin's head opaque against the cell it sits on, so
+  it is a compositing correction rather than a state cue, and it is invisible in both themes wherever
+  the host's hover colour differs from JetBrains'. Ours is `#35373B`, eight units from `#43454A`, so
+  hovering the caption pin looked identical to not hovering it — reported, reasonably, as the hovered
+  icon never being drawn. It was being drawn the whole time; `WindowFrame`'s three overlay rules and
+  the `_dark` resolution were all correct. The retuned value is a third tone sitting between our cell
+  and the icon's outline, so the head reads as filled. Retune it there if the caption is ever
+  restyled — it is one hex value per file, and `--window-control-hover-bg` is what it answers to.
+
 - `rerunDisabled`, `stopDisabled` — **new files**, the geometry of `rerun` and `stop` recoloured to
   `currentColor`, with the play triangle's pale interior dropped so the glyph reads as one flat tone.
   They exist because the enabled pair's colour is baked in: `currentColor` is bound at draw time and a
