@@ -35,14 +35,15 @@ public record CompoundSelector(List<Part> parts) {
                 PseudoClasses.lookup(identity);
             }
             if (type == SelectorType.PSEUDO_ELEMENT) {
-                if (!identity.equals("highlight")) {
+                if (!identity.equals("highlight") && !identity.equals("part")) {
                     throw new IllegalArgumentException("Unsupported pseudo-element '::" + identity
-                            + "'. The only one this engine implements is ::highlight(name) — structural"
+                            + "'. This engine implements ::highlight(name) and ::part(name) — structural"
                             + " pseudo-elements (::before/::after) have no equivalent here; widgets use"
                             + " internal children with __double-underscore__ classes instead.");
                 }
                 if (argument == null || argument.isEmpty()) {
-                    throw new IllegalArgumentException("::highlight() requires a name, e.g. ::highlight(keyword)");
+                    throw new IllegalArgumentException("::" + identity + "() requires a name, e.g. "
+                            + (identity.equals("part") ? "::part(label)" : "::highlight(keyword)"));
                 }
             }
         }
@@ -54,6 +55,21 @@ public record CompoundSelector(List<Part> parts) {
      * <p>Only ever legal on the rightmost compound of a selector — CSS forbids anything after a
      * pseudo-element, since it is not a real element and so has no descendants to select.</p>
      */
+    /**
+     * Whether this compound's pseudo-element selects a <b>real element</b> in a shadow tree
+     * ({@code ::part}) rather than a paint-time overlay on the originating element
+     * ({@code ::highlight}).
+     *
+     * <p>The distinction decides where the declarations go, and it is the whole reason the two cannot
+     * share a code path: a {@code ::highlight} rule is collected into a side table keyed by name and
+     * never touches any element's cascade, while a {@code ::part} rule is an ordinary cascade
+     * contribution to a different element than the one the compound describes.</p>
+     */
+    public boolean selectsShadowPart() {
+        Part pseudo = pseudoElement();
+        return pseudo != null && pseudo.identity().equals("part");
+    }
+
     @Nullable
     public Part pseudoElement() {
         for (var part : parts) {

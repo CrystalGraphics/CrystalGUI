@@ -5,6 +5,7 @@ import com.crystalgui.style.property.FontRelative;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StyleSlot;
 import com.crystalgui.style.sheet.StyleRule;
+import com.crystalgui.ui.shadow.ShadowRoot;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.style.transition.TransitionEngine;
@@ -444,16 +445,56 @@ public final class StyleEngine {
         // second pass, so the two cannot disagree about which rules matched.
         Map<String, Map<StyleProperty<?>, StyleSlot<?>>> highlightSlots = new HashMap<>();
 
+        // SPIKE S2. Null for an ordinary element, which is every element in the engine today, so the
+        // whole shadow path below costs one map lookup per rematch until something attaches a root.
+        UIElement shadowHost = ShadowRoot.hostOf(element);
+
         for (int sheetIndex = 0; sheetIndex < sheets.size(); sheetIndex++) {
             var sheet = sheets.get(sheetIndex);
-            for (var rule : sheet.candidatesFor(element)) {
+            List<StyleRule> candidates = sheet.candidatesFor(element);
+            if (shadowHost != null) {
+                // A ::part rule is indexed under the HOST's type, id and classes -- `button::part(label)`
+                // lives in the `button` bucket -- so it is unreachable from the element it applies to.
+                // This is the cost S2 set out to measure: styling a shadow descendant means asking the
+                // index twice, once for the element and once for its host.
+                candidates = new ArrayList<>(candidates);
+                candidates.addAll(sheet.candidatesFor(shadowHost));
+            }
+            for (var rule : candidates) {
                 var pseudo = rule.selector().pseudoElement();
                 if (pseudo != null) {
+                    if (rule.selector().selectsShadowPart()) {
+                        // ::part selects a REAL element, unlike ::highlight, so it contributes to this
+                        // element's own cascade rather than to a side table. It applies when this element
+                        // is exposed under that part name AND the compound describes its host.
+                        if (shadowHost != null
+                                && pseudo.argument().equals(ShadowRoot.partOf(element))
+                                && rule.selector().matchesOriginating(shadowHost)) {
+                            int partSpecificity = rule.selector().specificity();
+                            var partDecls = rule.declarations();
+                            for (int i = 0; i < partDecls.size(); i++) {
+                                var decl = partDecls.get(i);
+                                var origin = decl.important() ? StyleOrigin.IMPORTANT : sheet.getOrigin();
+                                long order = (long) sheetIndex * SHEET_ORDER_STRIDE
+                                        + (long) rule.sourceOrder() * DECLARATION_ORDER_MULTIPLIER + i;
+                                if (isFontRelative(decl)) sawFontRelative = true;
+                                var slot = toSlot(decl, origin, partSpecificity, order, fontSize);
+                                if (slot != null) newSlots.add(slot);
+                            }
+                        }
+                        continue;
+                    }
                     if (rule.selector().matchesOriginating(element)) {
                         collectHighlight(highlightSlots, pseudo.argument(), rule, sheet, sheetIndex);
                     }
                     continue;
                 }
+                // ENCAPSULATION. An ordinary rule may not reach into a shadow tree -- that is the whole
+                // proposition, and the reason ::part has to exist at all. Note it is checked HERE and not
+                // by pruning the index: a rule that matches this element by class is a legitimate match
+                // for an element in the LIGHT tree with the same class, so the scope is a property of the
+                // pairing rather than of the rule.
+                if (shadowHost != null) continue;
                 if (!rule.selector().matches(element)) continue;
                 int specificity = rule.selector().specificity();
                 var decls = rule.declarations();

@@ -37,6 +37,16 @@ public record Selector(List<CompoundSelector> compounds, List<Combinator> combin
     }
 
     /**
+     * Whether this selector's pseudo-element selects a real element in a shadow tree
+     * ({@code ::part}) rather than a paint-time overlay ({@code ::highlight}).
+     *
+     * @see CompoundSelector#selectsShadowPart()
+     */
+    public boolean selectsShadowPart() {
+        return compounds.get(compounds.size() - 1).selectsShadowPart();
+    }
+
+    /**
      * Whether this selector applies to {@code element}'s own style.
      *
      * <p>Always false when a pseudo-element is present — those rules style an overlay, not the element,
