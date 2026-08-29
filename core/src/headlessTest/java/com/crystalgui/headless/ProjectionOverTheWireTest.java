@@ -204,6 +204,51 @@ public class ProjectionOverTheWireTest {
         assertTrue("the composed readout is projected too", panel.status.getText().contains("running"));
     }
 
+    /**
+     * <b>Ten players on one model.</b> One of them acts; the rest see it.
+     *
+     * <p>Two separate players means two connections, two windows and two panel instances sharing one
+     * {@code MachineModel} — the shape a mod actually opens. A's event reaches A's session, which
+     * updates the shared model; on the next tick <b>every</b> window's projections read that model, see
+     * a value that differs from what they last wrote, and each sends its own delta to its own viewer.</p>
+     *
+     * <p>Nothing coordinates them, and nothing needs to: a projection compares against what IT last
+     * wrote, so a window that was never told about the change still notices it.</p>
+     */
+    @Test
+    public void oneViewersActionReachesEveryOtherViewer() {
+        InMemoryTransport<Object>[] second = InMemoryTransport.pair();
+        ProtocolConnection<Object> serverB = Protocols.open(second[0], PlainOps.INSTANCE, () -> { }, "other");
+        ProtocolConnection<Object> clientB = Protocols.open(second[1], PlainOps.INSTANCE, () -> { }, null);
+        ClientWindows.of(clientB).setMount(new SilentMount());
+
+        // The SAME model object, opened for two different players.
+        window = ServerWindows.of(serverEnd).open(MachinePanel.TYPE, machine);
+        ServerWindow<MachinePanel> windowB = ServerWindows.of(serverB).open(MachinePanel.TYPE, machine);
+        for (int i = 0; i < 8; i++) {
+            link[0].deliver(); link[1].deliver(); serverEnd.tick(); clientEnd.tick();
+            second[0].deliver(); second[1].deliver(); serverB.tick(); clientB.tick();
+        }
+
+        MachinePanel a = clientPanel();
+        MachinePanel b = (MachinePanel) ClientWindows.of(clientB).windows().get(0).root();
+        assertFalse(a.power.isChecked());
+        assertFalse("both start from the same model", b.power.isChecked());
+
+        // PLAYER A flips their switch, for real: the client's own signal, which is what the reported
+        // event rides on.
+        a.power.setChecked(true);
+        for (int i = 0; i < 8; i++) {
+            link[0].deliver(); link[1].deliver(); serverEnd.tick(); clientEnd.tick();
+            second[0].deliver(); second[1].deliver(); serverB.tick(); clientB.tick();
+        }
+
+        assertTrue("the model must have moved", machine.isRunning());
+        assertTrue("...and player B's screen must follow, with nothing wiring the two windows together",
+                b.power.isChecked());
+        assertTrue(windowB.panel().power.isChecked());
+    }
+
     private static final class SilentMount implements WindowMount {
         @Override
         public MountedWindow mount(ClientWindowContext context) {
