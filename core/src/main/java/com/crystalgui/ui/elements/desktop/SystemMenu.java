@@ -113,7 +113,18 @@ public final class SystemMenu {
      * same two-step the hover previews use for the identical placement.</p>
      */
     public static void showJumpList(WindowFrame frame, UIElement anchor) {
-        UIWindow window = frame.getAttachedWindow();
+        // THE ANCHOR'S WINDOW, NEVER THE FRAME'S -- and this route is the one place the difference is
+        // fatal. HIDE IS DETACH: a minimised window is out of the tree entirely, so `frame` answers null
+        // here for exactly the windows a jump list exists to reach, and the method returned having done
+        // nothing. Reported as "right click only works when the window is not minimized", which is the
+        // symptom stated precisely: every visible window was fine, so the route looked correct.
+        //
+        // The taskbar entry is the reliable end of the pair -- the strip is up whenever any of this can
+        // be clicked -- which is the same reasoning ContextMenu.attach records for presenting from the
+        // attachment site rather than the target. The sibling route above may keep asking the frame: it
+        // is built against the frame and positioned off the title bar's box, so a detached window has no
+        // system menu by that route anyway.
+        UIWindow window = anchor.getAttachedWindow();
         if (window == null) return;
 
         // BUILT AGAINST THE ENTRY, whose DataProvider answers for the window it stands for -- which is

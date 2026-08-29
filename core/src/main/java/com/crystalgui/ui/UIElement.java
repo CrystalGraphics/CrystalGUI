@@ -15,6 +15,7 @@ import com.crystalgui.serialization.StateMap;
 import com.crystalgui.render.texture.CgUiLayerBox;
 import com.crystalgui.render.texture.CgUiQuad;
 import com.crystalgui.render.texture.CgUiRoundedRect;
+import com.crystalgui.render.texture.CornerRadiusAware;
 import com.crystalgui.render.texture.CgUiSprite;
 import com.crystalgui.style.ElementStyle;
 import com.crystalgui.style.StyleEngine;
@@ -2707,6 +2708,25 @@ public class UIElement implements SettingsScope, DataProvider {
         CornerRadii radii = resolveCornerRadii(width, height);
         float borderWidthPx = getTaffyLayout().border().left;
         boolean needsRoundedWrap = !radii.isZero() || borderWidthPx > 0f;
+        // A DRAWABLE THAT CLIPS ITSELF IS NOT WRAPPED. The rounded wrap below rasterises whatever it is
+        // given into a fill inside an SDF box, which is right for a colour, a texture or a sprite and
+        // impossible for a MATERIAL: glass carries its own shader and needs the radii both to mask
+        // itself and to measure the bezel its refraction is computed across. Wrapped, it would silently
+        // become a rounded rectangle full of nothing. @see CornerRadiusAware
+        //
+        // DOCUMENTED GAP, the same shape as the one paintRoundedBackground records below: that method is
+        // also what strokes `border-width`, so a self-clipping background does not get one. `outline` is
+        // unaffected (paintOutline is a separate pass), which is what desktop chrome actually uses. The
+        // day glass wants a real border it has to draw it, because only the material knows where its own
+        // edge ended up once the bezel has bent it.
+        if (background instanceof CornerRadiusAware aware) {
+            aware.setCornerRadii(radii.rxTL(), radii.ryTL(), radii.rxTR(), radii.ryTR(),
+                    radii.rxBR(), radii.ryBR(), radii.rxBL(), radii.ryBL());
+            ctx.setColor(backgroundColor);
+            background.draw(ctx, x, y, width, height);
+            return;
+        }
+
         if (needsRoundedWrap && paintRoundedBackground(ctx, x, y, width, height, radii, borderWidthPx,
                 background, backgroundColor, hasExplicitBackgroundColor)) {
             return;

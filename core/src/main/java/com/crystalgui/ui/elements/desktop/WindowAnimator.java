@@ -410,6 +410,35 @@ final class WindowAnimator {
      * @return whether an animation started. {@code false} means the caller must apply the final rect
      *         itself, which is what keeps the animations-off path synchronous.
      */
+    /**
+     * Plays a window SHRINKING while something else owns its position — a drag tearing a maximised
+     * window loose.
+     *
+     * <p>The position is deliberately not animated and {@code geometryAnimating} is deliberately not
+     * set, because the pointer owns where the window is for the whole of a drag. An ordinary restore
+     * animates all four and blocks {@code applyPosition} for its duration, which is right when it is
+     * travelling to a known rect and fatal here: the window flew to its stored position and ignored the
+     * cursor, so the gesture had to snap instantly instead. Animating the size alone gives the shrink
+     * back without taking the position away.</p>
+     */
+    boolean playShrink(float fromWidth, float fromHeight, float toWidth, float toHeight, Runnable settle) {
+        if (!enabled) return false;
+        if (fromWidth <= 0f || fromHeight <= 0f || toWidth <= 0f || toHeight <= 0f) return false;
+        UIWindow window = frame.getAttachedWindow();
+        if (window == null) return false;
+
+        cancelCurrent();
+        WindowGeometryAnimation animation = new WindowGeometryAnimation(frame, this::frameIsLive,
+                0f, 0f, fromWidth, fromHeight, 0f, 0f, toWidth, toHeight,
+                false, true, SIZE_NANOS, MOVING, () -> {
+                    current = null;
+                    settle.run();
+                });
+        current = animation;
+        window.registerTicker(animation);
+        return true;
+    }
+
     boolean playResize(float fromLeft, float fromTop, float fromWidth, float fromHeight,
                        float toLeft, float toTop, float toWidth, float toHeight, Runnable settle) {
         if (!enabled) return false;

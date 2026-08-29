@@ -37,32 +37,68 @@
  * load-bearing: this engine's flex-shrink defaults to 0, so a grow-only child keeps its content size
  * and overhangs its parent. It has cost a session on the dock, a RegionHost and a ViewContainer.
  *
- * `clip`, NOT `hidden`: both clip, and only `hidden` also makes this a scroll container. A desktop
- * with a scrollTop is a desktop something can silently scroll — and a window dragged half off the
- * right edge (which the clamp deliberately allows) is exactly the content that would make it
- * scrollable. `clip` is CSS's value for "clipped and genuinely not scrollable". */
+ * IT DOES NOT CLIP, and that is what lets a window be dragged UNDER the taskbar.
+ *
+ * The clamp has always allowed the position — `applyPosition` lets a window travel down until only
+ * its caption is left in the work area, which is Windows' rule and the same rule that lets a window
+ * hang off the left and right edges. A clip on this box turned that into the window being CUT OFF at
+ * the strip's top edge instead of sliding beneath it, and the two read completely differently: one is
+ * a window you have pushed out of the way, the other is a window that has been damaged. Reported as
+ * "window frames can't go under the taskbar", which is what it looks like from the outside.
+ *
+ * Nothing is lost by letting it paint out, because there is only one direction with anything in it.
+ * The layer spans the whole desktop, so off the left, right and top is off the SCREEN. Down is the
+ * taskbar, and the taskbar is a LATER SIBLING — so it paints over whatever slides under it and
+ * hit-tests ahead of it, both for free, with no z-index and no special case. @see Desktop's
+ * constructor, which adds the layer first and says so.
+ *
+ * The strip claims its whole row, band and all, even where only the island draws. That is deliberate
+ * and it is Windows': the taskbar's row belongs to the taskbar, so a window slid under it is not
+ * clickable there. Making the band pointer-transparent is NOT available — hit-testing off takes the
+ * whole SUBTREE with it, so it would take the island's own entries down too — and content-sizing the
+ * band is worse than it looks: `taskbar .__entries__` bounds itself with `max-width: 100%`, a
+ * percentage that needs a DEFINITE parent to resolve against, and that bound is the one that stopped
+ * twenty windows making a 1232px island on a 400px desktop.
+ *
+ * It used to be `clip`, NOT `hidden`, and the distinction is worth keeping should this ever clip
+ * again: both clip, and only `hidden` also makes this a scroll container. A desktop with a scrollTop
+ * is a desktop something can silently scroll, and a window dragged half off an edge is exactly the
+ * content that would make it scrollable. `clip` is CSS's value for "clipped and genuinely not
+ * scrollable". */
 desktop .__windows__ {
     width: 100%;
     height: 0;
     flex-grow: 1;
-    overflow: clip;
+    overflow: visible;
 }
 
 /* ── The taskbar ────────────────────────────────────────────────────────────────────────────────
- * BOTTOM, WITH THE ENTRIES CENTRED — the same place, and roughly the same shape, as Minecraft's
- * hotbar. Deliberate: it is where a player's eye already lives, so the compositor's one permanent
- * landmark costs no new habit.
+ * A BAR, NOT AN ISLAND. Full width, flat, nearly opaque, entries centred — Windows 11's taskbar, the
+ * shape every desktop has converged on and the one a player already knows how to read.
  *
- * The band is full width for LAYOUT and paints nothing; only the island in the middle draws. Two
- * things come out of that split. The work area stays trivial — the taskbar is laid out rather than
- * overlaid, so what is left for windows is simply the window layer's box, with no bar-shaped
- * subtraction for maximise, drag-clamping or fullscreen to remember. And the corners stay free for
- * whatever a shell later puts in them.
+ * It used to be a floating glass island the width of the hotbar, and the ISLAND was the defect rather
+ * than any one of its parameters. Glass over a live 3D scene is glass over the hotbar, and the hotbar
+ * is nine bright, bordered squares: blurred, they came through as blotches behind the labels, and no
+ * combination of blur, tint and saturation made a label readable over a blotch without also turning
+ * the glass into a flat grey — at which point it was a flat grey paying for a capture. The Taskbar
+ * Designer exists because of that search, and the search did not find an answer because there was no
+ * answer inside the island.
  *
- * There is no conflict with the real hotbar: this strip exists only on the DESKTOP screen, where the
- * game is paused and the cursor is free. In game there is no taskbar at all — the cursor is grabbed
- * for look control, so nothing there could be clicked. What has to respect the hotbar is W14's
- * pinned windows, which do paint over the running game. */
+ * A full-width bar dissolves the conflict instead of tuning it. IT COVERS THE HOTBAR, and that is
+ * correct rather than a loss: the strip paints only while OUR screen is up (DesktopPresentation — the
+ * HUD and overlay presentations paint pinned windows alone), and with a screen up the hotbar cannot be
+ * used anyway. Minecraft draws the in-game HUD before every screen, so it is behind chat and inventories
+ * too. What the bar lets through is a Mica-style TONE, never a picture: a bar over grass is fractionally
+ * green, over sky fractionally blue, which is exactly how much of the wallpaper Windows 11 admits.
+ *
+ * THE WORK AREA IS STILL FREE. The bar is LAID OUT as the bottom row of the desktop's column, so the
+ * window layer above it is the work area with no bar-shaped subtraction anywhere — maximise, clamp and
+ * fullscreen read the layer's box and it is already right. Windows slide UNDER it (the layer does not
+ * clip) and the bar, being the later sibling, paints over them and hit-tests first.
+ *
+ * The corners are free for whatever a shell later puts in them — a clock, a tray. `justify-content`
+ * centres the entries meanwhile, which keeps them where the hotbar's habit already points the eye and
+ * where the previews and jump lists above them already centre themselves. */
 taskbar {
     width: 100%;
     flex-shrink: 0;
@@ -71,50 +107,114 @@ taskbar {
     align-items: center;
     padding-top: 3px;
     padding-bottom: 3px;
+    padding-left: 8px;
+    padding-right: 8px;
+    /* MICA, NOT ACRYLIC. The backdrop is blurred hard, desaturated, and then almost entirely replaced
+     * by the tint, so what survives is a tone. Every lens term is off — `ior 1` is the documented
+     * off-switch for refraction, `bezel 1` leaves no sharp band, `specular`/`glow`/`edge` at 0 draw
+     * nothing — so the material costs one capture and one blur and nothing else.
+     *
+     * THE TINT IS A THEME PIN, not the system --surface-glass: that token is a 40% veil for a panel
+     * floating over the desktop and a bar wants ~88%. It degrades to `fallback` — the flat
+     * --taskbar-bg — wherever there is no backdrop to sample, which is what the bar is headless.
+     *
+     * THE COST IS THE REGION (plan_glass.md R2): the capture and the blur are sized to what asks for a
+     * backdrop, so a 34px bar on a 1080p surface is about 6% of it. The first glass captured the whole
+     * screen and took a 120fps desktop to 50–70 for one line of CSS. */
+    /* A TEMPERATURE, NEVER A COLOUR -- and the mechanism is the LUMINOSITY blend, not desaturation.
+     * Mica replaces the wallpaper's brightness with the tint's (`luminosity 1`) and keeps its hue, then
+     * lays the tint colour over at 0.8; what survives of a red wallpaper is a warmth at the bar's own
+     * darkness. Saturation stays at 1: the hue is the only thing the backdrop is being asked for, and
+     * the blur has already averaged most of it away. (An earlier comment here blamed `saturation 0.7`
+     * for the bar going maroon and cut it to 0.4; the maroon was the tint pin written alpha-first,
+     * which the CSS parser read as pure red at 13% -- @see crystal-dark.css.) */
+    background: glass(blur 24, tint var(--taskbar-glass-tint, #1C1D21CC),
+                      bezel 1, ior 1, specular 0, noise 0.02, saturation 1, luminosity 1,
+                      glow 0, edge 0, edge-width 1, rim-ambient 1, chromatic 0,
+                      fallback var(--taskbar-bg, #2B2D30));
 }
 
-/* THE ISLAND IS BOUNDED BY THE DESKTOP, and both lines are load-bearing rather than tidiness. The
- * band centres its island, so an unbounded row of entries grows off BOTH ends — twenty windows made
- * a 1232px island on a 400px desktop, putting the entries at each end past the screen edge. That is
- * the worst failure a taskbar has available: an entry is the only way back to a minimised window, so
- * an entry that is off-screen is a window that cannot be recovered at all.
- *
- * `max-width` bounds the box and `overflow` bounds what paints, which are two different questions —
- * children of a max-width box still spill out of it visibly. Entries compress first (they shrink and
- * their labels ellipsize), so clipping only begins once compression has run out, which on a 400px
- * desktop is around thirty windows. THAT is where the deferred overflow affordance — a chevron, or
- * grouping — genuinely starts to be needed, and it is now a documented threshold rather than
- * something that happened from the eighth window onwards. */
+/* The hairline along the top — the one line every OS bar draws, and what separates it from a window
+ * slid underneath. An ELEMENT, because a one-sided border is the documented trap: `border-width-top`
+ * draws nothing here and the left-hand spelling draws all four edges. Absolute, so the row still
+ * centres its entries as if the edge were not there. */
+taskbar .__edge__ {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 1px;
+    background-color: var(--taskbar-border, #393B40);
+}
+
+/* THE GLOW: IntelliJ's New UI header gradient, translated. Theirs washes the project's colour across the
+ * toolbar from one end; a taskbar's centre of gravity is the cluster of entries, so the wash sits under
+ * them — the accent at a whisper in the middle, gone by the third of the width either side — and ties
+ * the accent pills to the strip. Over the glass and under the entries, as paint rather than material:
+ * glass is the surface, this is light on it. The colour is a theme PIN because it needs an alpha no
+ * system role carries. */
+taskbar .__glow__ {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent 18%, var(--taskbar-glow, #3574F033) 50%, transparent 82%);
+}
+
+/* THE ENTRIES ARE BOUNDED BY THE BAR. `max-width` bounds the box and `overflow` bounds what paints —
+ * two different questions, since children of a max-width box still spill out of it visibly. Entries
+ * compress first (they shrink and their labels ellipsize), so clipping only begins once compression
+ * has run out. An entry is the only way back to a minimised window, so the row is never allowed to
+ * grow off the screen: twenty windows once made a 1232px row on a 400px desktop, with the entries at
+ * both ends past the edge and the windows behind them unrecoverable. */
 taskbar .__entries__ {
     flex-direction: row;
     align-items: center;
     gap-all: 2px;
-    padding-all: 2px;
     max-width: 100%;
     overflow: hidden;
-    background: var(--taskbar-bg, #2B2D30);
-    outline: 1px var(--taskbar-border, #393B40);
-    border-radius: var(--radius-panel, 8px);
 }
 
-/* A GLYPH-AND-LABEL row rather than a button face — the same escape from the base `button` rule the
- * window controls make, and for the same reasons: `min-height` is a different property from `height`
- * (so the base rule's 14px floor wins whatever height is written here), and dropping the drawable
- * takes `background: none` before `background-color` means anything. */
+/* ONE ENTRY: a tile, a label, and a pill underneath. NO FACE AT REST — the bar is the face, and an
+ * entry says "hovered", "active" and "running" with a quiet fill and the pill, never with a button
+ * border. That is Fluent's list item, which is what a taskbar button has been since Windows 10.
+ *
+ * The escape from the base `button` rule the window controls also make, and for the same reasons:
+ * `min-height` is a different property from `height` (so the base 14px floor wins whatever height is
+ * written here), and dropping the drawable takes `background: none` before `background-color` means
+ * anything. */
 taskbar .__entry__ {
-    height: 16px;
+    /* 28 plus the bar's 3px above and below is a 34px bar — 68 surface pixels at the default uiScale of
+     * 2, which clears a GUI-scale-3 hotbar (66) outright where the old 60 left two pixels of it showing.
+     * Windows' bar is 48 of 1080; this is 68 of 1080 at scale 2 and reads a touch heavier, which is the
+     * price of a 2x UI over a 1x game. */
+    height: 28px;
     min-height: 0px;
     padding-left: 6px;
-    padding-right: 6px;
+    padding-right: 9px;
     padding-top: 0px;
     padding-bottom: 0px;
-    gap-all: 4px;
+    gap-all: 7px;
     flex-shrink: 1;
     min-width: 0;
-    border-radius: 4px;
+    border-radius: var(--radius-control, 4px);
     background: none;
     background-color: transparent;
     color: var(--taskbar-entry-fg, #9DA0A8);
+    transition: background-color 120ms ease-out, color 120ms ease-out;
+}
+
+/* AN ENTRY MID-RAMP, arriving or leaving. TaskbarEntryMotion narrows it below its own label's width, so
+ * without this the label spills over its neighbour for most of the motion. CLIP, never HIDDEN: hidden
+ * would make a taskbar button a scroll container.
+ *
+ * IN THE SHEET rather than written from Java, and that is load-bearing rather than tidy: nothing else here
+ * sets `overflow` on an entry, so an inline write would be the property's ONLY candidate — and withdrawing
+ * it when the ramp finished left the property with no value at any origin, which resolves to null and is
+ * handed straight to the overflow listener's switch. @see Taskbar#ANIMATING_CLASS */
+taskbar .__entry__.__animating__ {
+    overflow: clip;
 }
 
 taskbar .__entry__:hover {
@@ -123,13 +223,9 @@ taskbar .__entry__:hover {
     background-color: var(--taskbar-entry-hover-bg, #2E3033);
 }
 
-/* THE ACTIVE ENTRY, in the same grey as the active caption — one colour means one thing across the
- * whole compositor, so the bar and the window agree about which is yours without anyone having to
- * learn a second signal.
- *
- * A LADDER, NOT A HUE: island, hover, active, each a step lighter. That is how a Windows taskbar
- * says which button is engaged, and it is why it never needs an accent to do it — an accent fill
- * reads as a selection, and every window you are looking at is one you selected.
+/* THE ACTIVE ENTRY: a step lighter than hover, and never an accent fill — an accent fill reads as a
+ * selection, and every window you are looking at is one you selected. The accent goes on the PILL,
+ * which is where Windows puts it. A LADDER, NOT A HUE: bar, hover, active, each a step lighter.
  *
  * Declared after the hover rule and tying with it on specificity, so an active entry stays looking
  * active while the pointer is over it. */
@@ -140,16 +236,70 @@ taskbar .__entry__.__active__ {
 }
 
 /* A minimised window's entry is DIMMED, not hidden — hiding it is the failure the strip exists to
- * prevent. Dim rather than absent is also what both menu renderers already do with a disabled row:
- * a list whose entries appear and vanish is a list whose entries are never in the same place twice. */
+ * prevent. Only the label dims: the tile keeps its colour, because the window still exists and its
+ * icon is how you find it again. */
 taskbar .__entry__.__hidden__ {
     color: var(--taskbar-entry-hidden-fg, #5A5D63);
 }
 
+/* THE PILL — Windows' running indicator. Every entry has one, since every entry here is a running
+ * window; the active window's is wider and takes the accent, which is the one place the strip says
+ * "this one" in colour.
+ *
+ * Absolute, so the row of tile and label is laid out as if it were not there, and centred by
+ * `left: 50%` plus a translate of half its own width — layout-free, and it needs no auto-margin
+ * support from Taffy. The width and the translate change TOGETHER for the active state or the pill
+ * slides off-centre; neither is transitioned, because an inset does not interpolate and a pill that
+ * grows from one end reads worse than one that switches. */
+taskbar .__entry__ .__indicator__ {
+    position: absolute;
+    left: 50%;
+    bottom: 0px;
+    width: 6px;
+    height: 3px;
+    border-radius: 2px;
+    transform: translate(-3px, 0);
+    background-color: var(--taskbar-indicator, #9DA0A8);
+    transition: background-color 150ms ease-out;
+}
+
+taskbar .__entry__.__hidden__ .__indicator__ {
+    background-color: var(--taskbar-indicator-hidden, #5A5D63);
+}
+
+taskbar .__entry__.__active__ .__indicator__ {
+    width: 16px;
+    transform: translate(-8px, 0);
+    background-color: var(--taskbar-indicator-active, #3574F0);
+}
+
+/* THE TILE, AT THE STRIP'S SIZE. What a tile IS — its fill, its glyph colour, its palette — is on
+ * `.__window-icon__` further down, shared with the preview and the switcher; this rule is only how
+ * big, and how far the glyph sits in from the tile's edge (the padding is what the overlay's
+ * `content-box` origin measures against). */
 taskbar .__entry__ .__icon__ {
-    width: 12px;
-    height: 12px;
-    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    padding-all: 3px;
+    border-radius: 5px;
+}
+
+taskbar .__entry__ .__icon__ .__monogram__ {
+    font-size: 9;
+}
+
+/* THE LABEL BY TAG, because `Button` holds an UNCLASSED `UIText` and `font-size` does not effectively
+ * inherit — `ua/core.css` opens with `* { font-size: 10 }`, which is a candidate at STYLESHEET origin on
+ * the label itself, and inheritance only applies where there is no candidate at any origin. A rule on
+ * the entry would compute on the entry and leave the text at 10.
+ *
+ * `taskbar .__entry__ text` is specificity 12 against the universal rule's 0, and `text` is what
+ * `ElementRegistry` registers `UIText` under. It also matches the tile's monogram, which is why that
+ * one carries its own size at higher specificity above. */
+taskbar .__entry__ text {
+    /* One step above the 10px everything else runs at, and no more: at 12 the taskbar read LOUDER than
+     * the window titles it refers to, which puts the hierarchy exactly backwards. */
+    font-size: 11px;
 }
 
 /* ── Attention, badge, progress ─────────────────────────────────────────────────────────────────
@@ -157,14 +307,24 @@ taskbar .__entry__ .__icon__ {
  * a window nobody knows about. Win32 flashes the button, X11 raises the urgency hint, macOS bounces
  * the icon; here it is a class the entry carries until the window is activated.
  *
+ * A SOFT accent fill with the full accent on the pill, where this used to flood the whole entry in
+ * the accent. The flood was the loudest thing on the desktop, and on a bar whose every other state is
+ * a step on one grey it read as an error rather than as a knock; Windows' own flash settles to a tint.
+ *
  * AFTER the hidden rule and before nothing, because a background-opened window is very often also a
  * hidden one and the attention state is the more urgent thing to say. Same tie-break the disabled/hover
  * pair already pays for: both are one class, so the later rule wins. */
 taskbar .__entry__.__attention__ {
     color: var(--taskbar-entry-attention-fg, #DFE1E5);
     background: none;
-    background-color: var(--taskbar-entry-attention-bg, #3574F0);
+    background-color: var(--taskbar-entry-attention-bg, #2E436E);
     transition: background-color 600ms ease-in-out;
+}
+
+taskbar .__entry__.__attention__ .__indicator__ {
+    width: 16px;
+    transform: translate(-8px, 0);
+    background-color: var(--taskbar-indicator-active, #3574F0);
 }
 
 /* An unsaved count, an error count — the badge/colour split FileDecoration already draws. The window
@@ -172,11 +332,13 @@ taskbar .__entry__.__attention__ {
 taskbar .__entry__ .__badge__ {
     font-size: 8;
     flex-shrink: 0;
-    padding-left: 3px;
-    padding-right: 3px;
+    padding-left: 4px;
+    padding-right: 4px;
+    padding-top: 1px;
+    padding-bottom: 1px;
     color: var(--taskbar-entry-badge-fg, #DFE1E5);
     background-color: var(--taskbar-entry-badge-bg, #C94F4F);
-    border-radius: 5px;
+    border-radius: 6px;
 }
 
 /* Progress fills the entry from the left, BEHIND the label — Windows' taskbar progress exactly.
@@ -184,15 +346,70 @@ taskbar .__entry__ .__badge__ {
  * Absolute, so it takes the entry's box without being a flex item in it: as a sibling of the label it
  * would take a share of the row and shove the text sideways as the job ran. `z-index: -1` puts it
  * under the label rather than over it, which is what makes it a fill rather than a curtain. The WIDTH
- * is written from Java in PERCENT, never pixels — see Taskbar.applyProgress. */
+ * is written from Java in PERCENT, never pixels — see Taskbar.applyProgress. Rounded to the entry's
+ * own radius so a part-filled entry keeps its corners. */
 taskbar .__entry__.__busy__ .__progress__ {
     position: absolute;
     left: 0;
     top: 0;
     height: 100%;
     z-index: -1;
+    border-radius: var(--radius-control, 4px);
     background-color: var(--taskbar-entry-progress, #43536B);
 }
+
+/* ── The window icon tile ───────────────────────────────────────────────────────────────────────
+ * ONE DRAWING OF A WINDOW'S ICON, shared by the taskbar entry, the hover preview and the switcher tile
+ * (WindowIcon): a filled rounded square with the glyph knocked out in the on-accent colour. That is how
+ * every Fluent app icon reads at bar size, and it is what turns a stroked Feather chrome mark into
+ * something that reads as an application rather than as a stray outline — an outline is a mark ON
+ * something, never a thing in its own right, and the tile is the something.
+ *
+ * SIZES ARE THE CONTEXT'S (`taskbar .__entry__ .__icon__` above, the preview's `.__pre-icon__`, the
+ * switcher's `.__icon__`); this rule is the fill, the glyph colour and the palette. The palette is six
+ * hues keyed on the icon NAME by WindowIcon, so every window declaring the same icon wears the same
+ * tile — Windows' "same application" reading — and the hues are THEME PINS, because no system role is
+ * "a pleasant blue for a tile" and deriving them from --error/--success would make a tile mean
+ * something it does not. */
+.__window-icon__ {
+    flex-shrink: 0;
+    justify-content: center;
+    align-items: center;
+    overlay-fit: contain;
+    overlay-origin: content-box;
+    color: var(--window-icon-glyph, #FFFFFF);
+}
+
+/* BRANDED ARTWORK IS ITS OWN TILE. A file that names every colour it uses — no currentColor anywhere in
+ * it, which is how WindowIcon tells a brand mark from a Feather chrome mark — already ships as the
+ * filled rounded square the tile exists to supply. So it wears this class INSTEAD of a palette class
+ * (nothing paints behind it) and draws into the slot's whole box: the context's padding is the inset a
+ * knocked-out glyph needs from the tile's edge, and artwork carries its own. `crystalgui:logo` is the
+ * first of these; a pack that drops in its own gets the same treatment from the file alone. */
+.__window-icon__.__branded__ {
+    overlay-origin: border-box;
+}
+
+/* NO ICON: the title's initial on a tile, which is what every modern shell does for a missing icon
+ * (Android, Teams, GNOME's app grid). A blank slot reads as a window somebody forgot to finish; a
+ * letter reads as a window.
+ *
+ * A COLOURED tile, not a neutral one. It was --border-strong, and the whole of this chrome is greys:
+ * that put the tile within three levels of --taskbar-entry-active-bg, so a window with no icon was
+ * legible everywhere except on the entry that was active. A neutral that clears the bar, the hover
+ * fill, the active fill, the preview's acrylic and the switcher's is a needle no grey threads — the
+ * seventh hue does, and the letter goes on-accent with it. */
+.__window-icon__ .__monogram__ {
+    color: var(--window-icon-mono-fg, #FFFFFF);
+}
+
+.__window-icon__.__tile-mono__ { background-color: var(--window-icon-mono-bg, #DE2A4D); }
+.__window-icon__.__tile-1__ { background-color: var(--window-icon-tile-1, #4A7CE0); }
+.__window-icon__.__tile-2__ { background-color: var(--window-icon-tile-2, #3FA36B); }
+.__window-icon__.__tile-3__ { background-color: var(--window-icon-tile-3, #D98A3A); }
+.__window-icon__.__tile-4__ { background-color: var(--window-icon-tile-4, #8B63D9); }
+.__window-icon__.__tile-5__ { background-color: var(--window-icon-tile-5, #2FA7B8); }
+.__window-icon__.__tile-6__ { background-color: var(--window-icon-tile-6, #D85A7A); }
 
 /* ── A window ───────────────────────────────────────────────────────────────────────────────────
  * `resize: both` is what gives a frame its eight handles — UIResizer builds them from this property,
@@ -218,7 +435,6 @@ window {
     min-height: 48px;
     resize: both;
     background: var(--window-bg, #191A1C);
-    outline: 1px var(--window-border, #5A5D63);
     color: var(--window-fg, #DFE1E5);
 }
 
@@ -248,21 +464,18 @@ window > .__title-bar__ {
     align-items: center;
     flex-shrink: 0;
     padding-left: 6px;
-    /* ONE PIXEL, AND IT IS THE BORDER'S WIDTH -- not a gap, a clearance.
+    /* NO CLEARANCE, because there is no longer a border to clear.
      *
-     * `window`'s `outline` is painted INSET, over the frame's own last pixel. At zero padding the
-     * close block therefore runs underneath it: the block is 20px like its neighbours and renders 19,
-     * so its hover fill is visibly narrower than the other two and the X sits half a pixel right of
-     * the visible middle while minimise and maximise sit dead centre in theirs. Every measurement
-     * says the strip is even -- the three boxes are the same width, the glyph centres are 20px apart,
-     * and the X's centre is exactly the activity rail's -- and it does not LOOK even, because a
-     * pixel of one box is being painted over.
+     * This was `padding-right: 1px`, and it was earned: `window` carried a 1px `outline`, outlines are
+     * painted INSET over the frame's own last pixel, and at zero padding the close block ran underneath
+     * it -- rendering 19px of its 20, so its hover fill was visibly narrower than its neighbours' and the
+     * X sat half a pixel off the visible middle while minimise and maximise sat dead centre. Every
+     * measurement said the strip was even and it did not LOOK even, because a pixel of one box was being
+     * painted over.
      *
-     * Stopping the strip where the border begins is what makes the three fills equal on screen rather
-     * than equal in the layout. It costs the one pixel: the X's centre moves from the rail's centre
-     * line to a pixel inboard of it. That is the smaller error of the two, and it is the direction
-     * that has something to show for it. */
-    padding-right: 1px;
+     * With the border gone the same padding is a plain 1px gap, and it moves the close block off centre
+     * by exactly the pixel it used to put back. A correction outlives its cause silently: nothing fails,
+     * the strip is simply a pixel wrong in the other direction. */
     background: var(--window-title-bg, #26282B);
     color: var(--window-title-fg, #9DA0A8);
 }
@@ -322,11 +535,21 @@ window > .__title-bar__ > .__caption-chrome__ {
  *
  * Named `__title__` rather than `__label__` precisely so this rule cannot reach the close button's
  * own label — see WindowFrame.TITLE_CLASS. */
-/* The window's own icon, beside its title. Hidden until setIcon gives it something to draw — the
- * title bar has no `gap-all`, so a hidden slot occupies nothing at all. */
+/* The window's own icon, beside its title — a WindowIcon, the same drawing the taskbar entry, the hover
+ * preview and the switcher tile show, so one window cannot have two appearances. Hidden until setIcon
+ * gives it something to draw; the title bar has no `gap-all`, so a hidden slot occupies nothing at all.
+ *
+ * THE SIZE IS THIS CONTEXT'S and only the size: what a tile IS lives on `.__window-icon__` above. The
+ * padding is the inset the glyph sits at from the tile's edge (it is what the overlay's `content-box`
+ * origin measures against), and 2 and 3 against a 12px slot are the strip's 3 and 5 against its 18,
+ * scaled — so the caption reads as the same object at caption size. The FOOTPRINT is unchanged at 12px,
+ * which is why the glyph inside it is now 8: a tile needs its inset, and growing the slot instead would
+ * move every title in the application. */
 window > .__title-bar__ > .__icon__ {
     width: 12px;
     height: 12px;
+    padding-all: 2px;
+    border-radius: 3px;
     flex-shrink: 0;
     margin-right: 4px;
 }
@@ -385,6 +608,7 @@ window .__controls__ {
  * `min-height`/`min-width` are cleared because `button` carries `min-height: 14px` in the base sheet,
  * and a minimum is a DIFFERENT PROPERTY from a height: it wins at any specificity without appearing
  * to compete, which is how three rounds of shrinking a height once changed nothing at all. */
+window .__title-bar__ .__pin__,
 window .__title-bar__ .__minimize__,
 window .__title-bar__ .__maximize__,
 window .__title-bar__ .__close__ {
@@ -415,6 +639,38 @@ window .__title-bar__ .__minimize__ { overlay: icon("crystalgui:window-minimize"
 window .__title-bar__ .__maximize__ { overlay: icon("crystalgui:window-maximize"); }
 window .__title-bar__ .__close__    { overlay: icon("crystalgui:x"); }
 
+/* THE PIN, in IntelliJ's three states -- W14. The artwork already draws the difference between "you
+ * could pin this", "you are about to" and "it is pinned", so the rule is three overlays rather than a
+ * tint on one: a pinned window shows a PUSHED pin, not a brighter unpushed one.
+ *
+ * `pinSelected` is keyed off the FRAME's state class rather than off the button, because pinned-ness
+ * belongs to the window -- the button is only where it is toggled. The same class is what a theme
+ * restyles the whole frame from.
+ *
+ * SIZE AND PADDING COME FROM THE TRIPLET'S OWN RULE, which the pin is now listed in rather than
+ * restating. That rule names its subjects one by one, so a fourth control added beside them falls
+ * through to the base `button` sheet instead -- `min-height: 14px`, no `overlay-origin`, no padding
+ * split -- and the glyph came out a quarter of the size with none of the gap. The controls read as one
+ * flow or they read as a mistake. */
+window .__title-bar__ .__pin__          { overlay: icon("crystalgui:general/action/pin"); }
+window .__title-bar__ .__pin__:hover    { overlay: icon("crystalgui:general/action/pinHovered"); }
+window.__pinned__ .__title-bar__ .__pin__ { overlay: icon("crystalgui:general/action/pinSelected"); }
+
+/* THE CONTROLS STAY ON THE HUD, and the first version hid them -- worth recording, because the
+ * argument for hiding them is a good one that does not apply here.
+ *
+ * It runs: in game the cursor is grabbed and the keyboard is the game's, so nothing on the HUD can be
+ * clicked, and a control that cannot be clicked but looks clickable is the lie the disabled-control
+ * rule already forbids. Every clause is true. What it misses is that the rule is about an AFFORDANCE
+ * OFFERED TO A POINTER -- a disabled button lies because you can aim at it and it declines. With the
+ * cursor grabbed there is no pointer to aim, so nothing is being offered and nothing is refused. What
+ * the player actually sees is a window, and a window with its top-right corner cut off does not read
+ * as "these are unavailable", it reads as broken.
+ *
+ * So the HUD paints the frame it would paint on the desktop, which is also the thing that makes a
+ * pinned window pixel-identical on and off the screen -- the property the paint-only entry goes out of
+ * its way to preserve by seeding the same rootTransform. */
+
 /* THE GLYPH SAYS WHAT THE BUTTON WILL DO, not what the window is — so on a maximised window it turns
  * into "restore". Every window manager swaps it; a control whose mark never changes leaves the user
  * guessing which of two states a press will produce. */
@@ -426,6 +682,7 @@ window.__maximized__ .__title-bar__ .__maximize__ {
  * whole button, which is the half that was missing: minimise and maximise had no hover state at all
  * and close had a small rounded one, so two of the three gave no feedback and the third looked like a
  * different kind of control. */
+window .__title-bar__ .__pin__:hover,
 window .__title-bar__ .__minimize__:hover,
 window .__title-bar__ .__maximize__:hover {
     color: var(--window-control-hover-fg, #DFE1E5);
@@ -689,26 +946,49 @@ window.__fullscreen__ {
     border-radius: 0;
 }
 
-/* A taskbar entry's jump list wears the hover preview's surface, because from the strip's point of view
- * they are the same object: a panel belonging to one entry, floating above it. Drawn as a bare menu it
- * read as a context menu that happened to be nearby — the same fill, border and radius is what makes the
- * two gestures feel like one affordance.
+/* ── The floating surfaces: jump list, hover preview, switcher ──────────────────────────────────
+ * ONE SURFACE, three panels. A taskbar entry's jump list, its hover preview and the Mod+Tab switcher
+ * are all "a panel belonging to a window, floating over the desktop", so they take one fill, one border,
+ * one radius and one close button — the same overlay surface the bar itself falls back to, so the whole
+ * shell reads as one material. Drawn three different ways they read as three features that happened to
+ * be nearby; drawn one way they read as one affordance with three doors.
  *
- * The MENU's own rules still supply the row metrics; only the container is restyled, which is why this
- * sets no padding of its own beyond the panel inset. */
+ * The MENU's own rules still supply the jump list's row metrics; only the container is restyled, which
+ * is why it sets no padding of its own beyond the panel inset. */
 menu.__jump-list__ {
-    background: none;
-    background-color: var(--preview-bg, #2B2B2B);
-    border-width: 1px;
-    border-color: var(--preview-border, #3D3D3D);
-    border-radius: var(--radius-panel, 4px);
-    padding-top: 3px;
-    padding-bottom: 3px;
+    /* ACRYLIC, where the bar is Mica: the same recipe with a lighter tint, so a floating panel shows
+     * the windows behind it as shapes and reads as floating rather than as a slab. The bar's own note
+     * says why every lens term is off; the fallback is the flat --preview-bg this used to be. Glass
+     * is one capture region shared by everything that asks, so a panel above the bar widens it by its
+     * own height for exactly as long as it is up. */
+    /* ACRYLIC, by WinUI's effect graph -- blur, saturation 1.25, a luminosity layer, the tint, noise
+     * 0.02 -- at HALF of WinUI's strengths: luminosity 0.48 where Windows runs 0.96, tint 0x13 where
+     * it runs 0.15. At Windows' numbers the panel's brightness was entirely the tint's, and over this
+     * desktop's dark windows it read as an opaque slab; at half, half of what is behind it comes
+     * through as blurred shapes, which is what "floating" looks like here. In this model a panel's
+     * opacity IS the luminosity layer, so "halve the alpha" halves both.
+     * @see docs/CGUI_MODERN_UI_RENDERING_RESEARCH.md §1.2 */
+    background: glass(blur 24, tint var(--preview-glass-tint, #1F202313),
+                      bezel 1, ior 1, specular 0, noise 0.02, saturation 1.25, luminosity 0.48,
+                      glow 0, edge 0, edge-width 1, rim-ambient 1, chromatic 0,
+                      fallback var(--preview-bg, #2B2D30));
+    /* NO background-color BESIDE A GLASS. In this engine background-color is the ambient TINT a
+     * background drawable is multiplied by (UIElement.paintSelf: `ctx.setColor(backgroundColor)` then
+     * `background.draw`) and paints as a fill only when there is no drawable. `background-color:
+     * transparent` beside the glass therefore multiplied the whole panel by #00000000 -- a panel that
+     * drew nothing but its outline, reported as "it became completely transparent". The bar has no
+     * background-color and was fine, which is what made it look like a top-layer capture fault. */
+    /* An OUTLINE, not a border, on a glass panel: the outline is a ring drawn after the drawable, which
+     * is the path the glass island proved, and it takes no layout. */
+    outline: 1px var(--preview-border, #393B40);
+    border-radius: var(--radius-panel, 8px);
+    padding-top: 4px;
+    padding-bottom: 4px;
     /* WIDER THAN ITS ROWS. A menu sized purely by "Minimize" is narrower than the entry it belongs to,
      * which reads as a tooltip rather than as a panel — and it is the same object as the preview, which
      * is always wide enough to hold a thumbnail. A minimum rather than a width, so a contributed row
      * with a long label still grows it. */
-    min-width: 110px;
+    min-width: 120px;
 
     /* THE RESTING VALUES of the rise; __rising__ below carries what it eases FROM. Both ends write the
      * SAME function list — `translate(0, 0)` against `translate(0, 14px)` — because a transform only
@@ -728,15 +1008,41 @@ menu.__jump-list__.__rising__ {
 .__window-preview__ {
     position: absolute;
     flex-direction: column;
-    background-color: var(--preview-bg, #2B2B2B);
-    border-width: 1px;
-    border-color: var(--preview-border, #3D3D3D);
-    border-radius: var(--radius-panel, 4px);
-    padding-left: 3px;
-    padding-right: 3px;
-    padding-top: 2px;
-    padding-bottom: 3px;
+    /* Acrylic -- @see menu.__jump-list__ above, which is the same object, for the whole recipe and why
+     * it runs at half of WinUI's strengths. */
+    background: glass(blur 24, tint var(--preview-glass-tint, #1F202313),
+                      bezel 1, ior 1, specular 0, noise 0.02, saturation 1.25, luminosity 0.48,
+                      glow 0, edge 0, edge-width 1, rim-ambient 1, chromatic 0,
+                      fallback var(--preview-bg, #2B2D30));
+    outline: 1px var(--preview-border, #393B40);
+    border-radius: var(--radius-panel, 8px);
+    padding-all: 6px;
     z-index: 100;
+}
+
+/* THE SAME TONE AS THE BAR, RUN DOWN THE PANEL RATHER THAN ACROSS IT.
+ *
+ * The bar's wash is horizontal because a bar's centre of gravity is the cluster of entries in the middle
+ * of a very wide strip. A panel is neither wide nor centred on anything: it is a header with a picture
+ * under it, and the horizontal version put a blue hotspot in the middle of both — measured at +26 of blue
+ * over the panel's own edges, a ramp seven times steeper than the bar's because a gradient's softness is
+ * its alpha change PER PIXEL and this one spends the bar's 0.2 over ~90px instead of ~640.
+ *
+ * Down the panel it is a HEADER TINT, which is what IntelliJ's New UI gradient — the thing this was
+ * translated from — actually is: strongest along the top edge behind the icon and the title, gone by the
+ * time it reaches the thumbnail, so the picture is never washed. Same accent, same alpha as the bar; only
+ * the axis differs, and the axis is what was wrong.
+ *
+ * The child carries the panel's radius so the gradient masks itself to the corners (CgUiGradient is
+ * CornerRadiusAware); without it the wash squares them off. */
+.__window-preview__ > .__glow__ {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: var(--radius-panel, 8px);
+    background: linear-gradient(180deg, var(--preview-glow, #3574F033), transparent);
 }
 
 /* The header is a ROW that fills the panel's width, and the title is the part that gives. `width: 0`
@@ -745,9 +1051,15 @@ menu.__jump-list__.__rising__ {
 .__window-preview__ > .__preview-header__ {
     flex-direction: row;
     align-items: center;
-    gap-all: 4px;
-    padding-left: 2px;
-    padding-bottom: 3px;
+    gap-all: 6px;
+    padding-left: 1px;
+    /* A FIXED HEIGHT, so the close button coming and going cannot move the picture. The header used to
+     * be as tall as its tallest child, which was the tile until the pointer reached the panel and the
+     * close button after -- and the whole panel below the header shifted by the difference on every
+     * hover. Sized to the close (16) with the tile (14) centred in it; the gap to the picture is a
+     * MARGIN rather than padding so it stays outside this height. */
+    height: 16px;
+    margin-bottom: 6px;
     flex-shrink: 0;
     /* NO WIDTH HERE. WindowPreview writes one, equal to the thumbnail's MEASURED width, so the header can
      * never be the child that sizes the panel -- see matchHeaderToThumbnail for why neither `width: 100%`
@@ -755,10 +1067,16 @@ menu.__jump-list__.__rising__ {
      * takes whatever the header ends up being and elides into it. */
 }
 
+/* The window's tile, at a header's size. @see .__window-icon__ for what a tile is. */
 .__window-preview__ .__pre-icon__ {
-    width: 10px;
-    height: 10px;
-    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    padding-all: 2px;
+    border-radius: 4px;
+}
+
+.__window-preview__ .__pre-icon__ .__monogram__ {
+    font-size: 8;
 }
 
 /* ELIDED, and the font-size is on the TEXT rather than the header -- `font-size` does not effectively
@@ -767,32 +1085,52 @@ menu.__jump-list__.__rising__ {
 .__window-preview__ .__preview-title__ {
     width: 0;
     flex-grow: 1;
+    /* AND IT MAY SHRINK. This engine's flex-shrink defaults to 0, so a title that ever came to carry
+     * its text width as a basis could not give it back and shoved the close button out of the panel.
+     * The Java side states the title is sized by its box (neverSelfSizeWidth); this is the same
+     * belt-and-braces `button text` carries, so the two never disagree. */
+    flex-shrink: 1;
+    min-width: 0;
+    /* One under the 10 the switcher's title and the rest of the shell run at, and ONLY here: the header
+     * is never wider than the picture, so a point of size is a character or two of title before it
+     * elides. The taskbar's own labels stay at 11. */
     font-size: 9;
     color: var(--preview-fg, #DFE1E5);
     white-space: nowrap;
     text-overflow: ellipsis;
 }
 
-/* The close is a GLYPH, not a labelled button, so the base button rule's min-height and padding have to
- * be cleared -- min-height is a different property from height and a base rule's minimum otherwise beats
- * any size written at higher specificity. */
+/* THE CLOSE: a square glyph button with the control radius, the same one on the switcher's tiles. Not
+ * a labelled button, so the base rule's min-height and padding have to be cleared -- min-height is a
+ * different property from height, and a base rule's minimum otherwise beats any size written at higher
+ * specificity.
+ *
+ * HIDDEN UNTIL THE POINTER IS ON THE PANEL, as Windows' is: while you are merely on the taskbar entry
+ * the header is the title alone, so the title gets the button's width back and elides that much later.
+ * The header is matched to the picture's width, so the button appearing re-flows only the title and
+ * never the panel. The same pattern -- and the same reason -- as the switcher tile's close. */
 .__window-preview__ .__preview-close__ {
-    width: 18px;
-    height: 13px;
+    display: none;
+    /* 16 with 3px of padding is a 10px glyph. The overlay draws in the CONTENT box, so the padding is
+     * subtracted from the glyph twice over -- 16 with 4 was an 8px cross, which read as broken. The box
+     * is the header's fixed height exactly, so revealing it moves nothing. */
+    width: 16px;
+    height: 16px;
     min-width: 0px;
     min-height: 0px;
-    padding-left: 0px;
-    padding-right: 0px;
-    padding-top: 0px;
-    padding-bottom: 0px;
+    padding-all: 3px;
     flex-shrink: 0;
-    border-radius: 0px;
+    border-radius: var(--radius-control, 4px);
     background: none;
     background-color: transparent;
     overlay: icon("crystalgui:x");
     overlay-fit: contain;
     overlay-origin: content-box;
     color: var(--preview-fg, #DFE1E5);
+}
+
+.__window-preview__:hover .__preview-close__ {
+    display: flex;
 }
 
 /* WINDOWS' CLOSE RED, and both halves are needed: `background` and `background-color` are separate
@@ -823,7 +1161,26 @@ menu.__jump-list__.__rising__ {
      * that was the wrong shape for a different reason than before. Sizing to itself is what lets the
      * ratio pick the width, and it is then the thumbnail that decides how wide the PANEL is. */
     align-self: center;
-    background-color: var(--preview-thumbnail-bg, #1E1F22);
+    background-color: var(--preview-thumbnail-bg, #26282B);
+    /* Centres the PLACEHOLDER below; the picture itself is painted, not laid out. */
+    justify-content: center;
+    align-items: center;
+}
+
+/* NO PICTURE: the window's icon tile, large, on the letterbox colour — Windows' own icon thumbnail
+ * for a window it has no bitmap of. A window restored HIDDEN at startup has never been painted and so
+ * has no photograph; drawing nothing for it made the panel read as broken, and collapsing the box
+ * for it starved the preview's placement (WindowThumbnail.placeholder). The tile's own drawing is
+ * `.__window-icon__`; this is only its size at a picture's scale. */
+.__window-preview__ > .__thumbnail__ .__placeholder__ {
+    width: 30px;
+    height: 30px;
+    padding-all: 5px;
+    border-radius: 8px;
+}
+
+.__window-preview__ > .__thumbnail__ .__placeholder__ .__monogram__ {
+    font-size: 15;
 }
 
 
@@ -859,36 +1216,71 @@ menu.__jump-list__.__rising__ {
     flex-wrap: wrap;
     justify-content: center;
     align-items: flex-start;
-    gap-all: 6px;
+    gap-all: 8px;
     max-width: 80%;
-    padding-all: 10px;
-    background-color: var(--switcher-bg, #2B2B2B);
-    border-width: 1px;
-    border-color: var(--switcher-border, #3D3D3D);
-    border-radius: var(--radius-panel, 4px);
+    padding-all: 12px;
+    /* ACRYLIC over the whole desktop, as Windows' Alt+Tab is. This is the one glass consumer that can
+     * ask for most of the screen -- the capture region is the union of what asks, and a panel at 80%
+     * of the width is most of it -- and it is affordable for the same reason Windows' is: it exists for
+     * the second or two a modifier is held, never for a settled frame. */
+    /* ACRYLIC -- the preview's recipe at the same half strength, @see .__window-preview__ above. */
+    background: glass(blur 24, tint var(--switcher-glass-tint, #1F202313),
+                      bezel 1, ior 1, specular 0, noise 0.02, saturation 1.25, luminosity 0.48,
+                      glow 0, edge 0, edge-width 1, rim-ambient 1, chromatic 0,
+                      fallback var(--switcher-bg, #2B2D30));
+    outline: 1px var(--switcher-border, #393B40);
+    border-radius: var(--radius-panel, 8px);
+}
+
+/* The bar's tone under the tiles -- @see .__window-preview__ > .__glow__ for why it is the same wash
+ * from a separate pin. */
+.__switcher-panel__ > .__glow__ {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: var(--radius-panel, 8px);
+    background: linear-gradient(180deg, var(--switcher-glow, #3574F033), transparent);
 }
 
 /* One window. A COLUMN -- icon and title above, picture below, which is Windows' arrangement and not the
  * taskbar preview's only by accident: the preview is anchored to a strip along the bottom and reads
- * upward, while a tile in a grid reads top-down like a file. */
+ * upward, while a tile in a grid reads top-down like a file.
+ *
+ * The border is TRANSPARENT RATHER THAN ABSENT, so selecting a tile changes the border's COLOUR and never
+ * its width. A border that appears on selection re-lays the whole grid out by two pixels per tile, and
+ * every tile after the selected one shifts as you cycle. */
 .__switcher-entry__ {
     flex-direction: column;
     flex-shrink: 0;
-    padding-all: 4px;
-    border-width: 1px;
-    /* TRANSPARENT RATHER THAN ABSENT, so selecting a tile changes the border's COLOUR and never its
-     * width. A border that appears on selection re-lays the whole grid out by two pixels per tile, and
-     * every tile after the selected one shifts as you cycle. */
+    padding-all: 6px;
+    border-width: 2px;
     border-color: var(--switcher-entry-border, #00000000);
-    border-radius: var(--radius-panel, 4px);
+    border-radius: var(--radius-panel, 8px);
+    background-color: transparent;
+    transition: background-color 120ms ease-out, border-color 120ms ease-out;
 }
 
- /* A RING, NOT A FILL. Windows marks the selected thumbnail with a pure-white border and leaves the
- * tile's own background alone -- which is the readable choice over a grid of dark pictures, because a
- * darker fill has to compete with whatever the thumbnail itself happens to be showing while a bright
- * outline never does. The border is already there at every tile's transparent width, so this changes a
- * colour and re-lays nothing out. */
+/* Hover gives the tile the same quiet fill a taskbar entry takes, which is what makes the two read as
+ * one family. Selection keeps its RING as well: Windows marks the selected thumbnail with a bright
+ * outline and leaves the picture alone, because a fill has to compete with whatever the thumbnail
+ * happens to be showing while an outline never does.
+ *
+ * TRANSLUCENT WHITE, never the panel ladder's grey: a tile on acrylic that goes opaque under the
+ * pointer hides the very backdrop the switcher floats over. Fluent's subtle fill, at an alpha no
+ * system role carries -- which is why both fills are theme pins. */
+.__switcher-entry__:hover {
+    background-color: var(--switcher-entry-hover-bg, #FFFFFF0F);
+}
+
+/* NO FILL UNDER THE RING: a grey slab behind the selected tile hid the backdrop for the same reason,
+ * and the ring alone is what Windows draws. TRANSPARENT rather than absent, so the hover fill cannot
+ * grey the selected tile either -- the two rules tie on specificity and this one is later. The token
+ * that used to fill it (--switcher-selected-bg) is gone; base.css had said all along that there was
+ * deliberately none. */
 .__switcher-entry__.__selected__ {
+    background-color: transparent;
     border-color: var(--switcher-selected-ring, #FFFFFF);
 }
 
@@ -896,19 +1288,16 @@ menu.__jump-list__.__rising__ {
  *
  * BOTH, and the second is what makes it reachable from the keyboard: shown on hover alone it would not
  * exist for anyone cycling with the chord, and a control that appears only under a pointer is a control
- * half the gesture cannot use. */
+ * half the gesture cannot use. The same glyph button as the preview's. */
 .__switcher-entry__ .__switcher-close__ {
     display: none;
-    width: 18px;
-    height: 13px;
+    width: 16px;
+    height: 16px;
     min-width: 0px;
     min-height: 0px;
-    padding-left: 0px;
-    padding-right: 0px;
-    padding-top: 0px;
-    padding-bottom: 0px;
+    padding-all: 3px;
     flex-shrink: 0;
-    border-radius: 0px;
+    border-radius: var(--radius-control, 4px);
     background: none;
     background-color: transparent;
     overlay: icon("crystalgui:x");
@@ -938,15 +1327,24 @@ menu.__jump-list__.__rising__ {
 .__switcher-entry__ > .__switcher-header__ {
     flex-direction: row;
     align-items: center;
-    gap-all: 4px;
-    padding-bottom: 4px;
+    gap-all: 6px;
+    /* Fixed, so the close appearing on hover or selection cannot shift the picture below it -- the
+     * same rule the preview's header carries, for the same reveal. */
+    height: 16px;
+    margin-bottom: 6px;
     flex-shrink: 0;
 }
 
+/* The window's tile, at a header's size. @see .__window-icon__ for what a tile is. */
 .__switcher-entry__ .__icon__ {
-    width: 12px;
-    height: 12px;
-    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    padding-all: 2px;
+    border-radius: 4px;
+}
+
+.__switcher-entry__ .__icon__ .__monogram__ {
+    font-size: 8;
 }
 
 /* ELIDED, and the font-size is on the TEXT and not the header: `font-size` does not effectively inherit
@@ -955,6 +1353,9 @@ menu.__jump-list__.__rising__ {
 .__switcher-title__ {
     width: 0;
     flex-grow: 1;
+    /* May shrink -- @see .__preview-title__. */
+    flex-shrink: 1;
+    min-width: 0;
     font-size: 10;
     color: var(--switcher-fg, #DFE1E5);
     white-space: nowrap;
@@ -969,5 +1370,96 @@ menu.__jump-list__.__rising__ {
     width: 150px;
     height: 150px;
     align-self: center;
-    background-color: var(--preview-thumbnail-bg, #1E1F22);
+    background-color: var(--preview-thumbnail-bg, #26282B);
+    justify-content: center;
+    align-items: center;
+}
+
+/* No picture: the icon tile at a switcher's scale. @see the preview's placeholder rule. */
+.__switcher-entry__ > .__thumbnail__ .__placeholder__ {
+    width: 44px;
+    height: 44px;
+    padding-all: 8px;
+    border-radius: 11px;
+}
+
+.__switcher-entry__ > .__thumbnail__ .__placeholder__ .__monogram__ {
+    font-size: 22;
+}
+
+/* -- taskbar designer -------------------------------------------------------------------------
+ * A DESIGN TOOL's chrome, not a shipped panel's.
+ *
+ * It reuses the SYSTEM tokens (--fg, --fg-secondary, --surface-panel) rather than declaring a
+ * component vocabulary of its own. Six --designer-* tokens is what the first draft wrote, and
+ * StyleGovernanceTest refused it -- correctly: a token is a promise every theme has to keep, and a
+ * debug tool is not worth widening the vocabulary every theme must then define. */
+.__taskbar-designer__ .__designer__ {
+    /* The fill idiom: a column taking the frame's height, the scroller inside it growing, the
+     * actions and readout keeping their own. `height: 0` is the basis flex-grow divides from --
+     * without it the content's own height wins and the panel overhangs the frame. */
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+    gap-all: 6px;
+    padding-all: 8px;
+}
+
+.__designer-body__ {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+    gap-all: 3px;
+    overflow: auto;
+}
+
+/* Label / control / readout, with the two text columns fixed so the numbers do not reflow as they
+ * change -- a readout that moves while you drag is one you cannot read. */
+.__designer-row__ {
+    flex-direction: row;
+    align-items: center;
+    gap-all: 8px;
+    width: 100%;
+}
+
+.__designer-label__ { width: 110px; }
+/* font-size on the TEXT element, never on a wrapper: `* { font-size: 10 }` is a candidate on every
+ * element, so inheritance never reaches a label through its row. */
+.__designer-label__, .__designer-value__, .__designer-note__, .__designer-heading__ { font-size: 10; }
+.__designer-label__ { color: var(--fg-secondary, #9DA0A8); }
+.__designer-value__ { width: 46px; color: var(--fg-secondary, #9DA0A8); }
+
+.__designer-slider__ {
+    width: 0;
+    flex-grow: 1;
+    /* A control that can shrink to nothing is not a control. */
+    min-width: 90px;
+}
+
+.__designer-heading__ {
+    color: var(--fg, #DFE1E5);
+    padding-top: 6px;
+}
+
+.__designer-note__ {
+    color: var(--fg-secondary, #9DA0A8);
+    white-space: normal;
+    width: 100%;
+}
+
+.__designer-actions__ {
+    flex-direction: row;
+    gap-all: 6px;
+    width: 100%;
+}
+
+/* The paste-ready rule. */
+.__designer-readout__ {
+    width: 100%;
+    font-size: 10;
+    white-space: normal;
+    color: var(--fg-secondary, #9DA0A8);
+    background-color: var(--surface-panel, #191A1C);
+    padding-all: 6px;
+    border-radius: 4px;
 }

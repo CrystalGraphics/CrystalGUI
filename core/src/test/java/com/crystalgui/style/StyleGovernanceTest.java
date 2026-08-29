@@ -127,6 +127,12 @@ public class StyleGovernanceTest {
             // than closed. Every other surface here is a DEPTH, and this one is a PROVENANCE, which is
             // why it could not be derived from one -- "borrowed" is not a distance from the reader.
             "surface-borrowed",
+            // AN EIGHTH, and appended on the same grounds as the seventh: the set was incomplete, not
+            // closed. Every surface above it is a DEPTH and `surface-borrowed` is a PROVENANCE; this one
+            // is a MATERIAL -- the translucent tint a glass backdrop is laid over. It cannot be derived
+            // from a depth because it is not one: it is deliberately not opaque, and an opaque surface
+            // token would discard the backdrop the capture went and fetched.
+            "surface-glass",
             "border-base", "border-strong", "border-field", "divider",
             "fg", "fg-secondary", "fg-hint", "fg-disabled", "fg-on-accent",
             "accent", "accent-hover", "accent-soft",

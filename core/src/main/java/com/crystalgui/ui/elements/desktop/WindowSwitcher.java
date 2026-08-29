@@ -3,7 +3,6 @@ package com.crystalgui.ui.elements.desktop;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
-import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIFrameTicker;
@@ -132,6 +131,9 @@ public class WindowSwitcher extends UIElement {
      */
     private int holdingMask;
 
+    /** The accent wash under the tiles. @see Taskbar#GLOW_CLASS */
+    private final UIElement glow = new UIElement();
+
     private long openedAt;
     private long lastInteraction;
     private boolean shown;
@@ -141,12 +143,27 @@ public class WindowSwitcher extends UIElement {
         this.desktop = desktop;
         addClass(SWITCHER_CLASS);
         panel.addClass(PANEL_CLASS);
+        // THE GLOW under the tiles: the bar's accent wash, so the switcher is the bar's material and
+        // not a second one. An INTERNAL child of the panel, added before any tile, so buildEntries --
+        // which adds and removes tiles by reference -- never sees it and it always paints first.
+        glow.addClass(Taskbar.GLOW_CLASS);
+        glow.setHitTest(false);
+        panel.addInternalChild(glow);
         addInternalChild(panel);
         setPanelShown(false);
 
         // A PRESS ON THE BACKDROP CANCELS. Target-only, so a press on a tile -- which is a descendant --
         // never reaches this and activates instead.
         onMouseDown.attachListener((element, event) -> cancel(), false, false);
+    }
+
+    /**
+     * The accent wash under the tiles, for {@link TaskbarDesigner} to retone the whole family at once.
+     * Package-private: a theme retones this through {@code --switcher-glow}, and the element itself is
+     * only reachable because the designer writes at IMPORTANT origin while it runs.
+     */
+    UIElement glow() {
+        return glow;
     }
 
     /** Whether the switcher is cycling — true for the invisible part of the gesture as well. */
@@ -536,7 +553,7 @@ public class WindowSwitcher extends UIElement {
     private final class Tile extends UIElement {
 
         private final UIElement header = new UIElement();
-        private final UIElement iconSlot = new UIElement();
+        private final WindowIcon iconSlot = new WindowIcon();
         private final UIText title = new UIText("");
         private final Button close = new Button("");
         private final WindowThumbnail thumbnail = new WindowThumbnail();
@@ -546,6 +563,10 @@ public class WindowSwitcher extends UIElement {
             header.addClass(HEADER_CLASS);
             iconSlot.addClass(ICON_CLASS);
             title.addClass(TITLE_CLASS);
+            // Sized by its box, stated: the auto-detect reads this title while the switcher is still
+            // `display: none` and latches it self-sizing, after which a long title cannot shrink and
+            // pushes the tile's close button out of the tile. @see WindowPreview's title
+            title.neverSelfSizeWidth();
             close.addClass(CLOSE_CLASS);
             header.addChild(iconSlot);
             header.addChild(title);
@@ -581,31 +602,14 @@ public class WindowSwitcher extends UIElement {
 
         void show(WindowFrame frame) {
             title.setText(frame.getTitle());
-            applyIcon(frame.iconName());
+            // THE SAME TILE THE TASKBAR AND THE PREVIEW DRAW. @see WindowIcon
+            iconSlot.show(frame.iconName(), frame.getTitle());
             thumbnail.setFrame(frame);
         }
 
         /** @return whether the picture changed size, so a caller knows the tile is not settled yet */
         boolean syncSize() {
             return thumbnail.syncSize();
-        }
-
-        /**
-         * The window's icon, drawn into the slot ITSELF.
-         *
-         * <p>Never onto a fresh child of it: an {@code overlay} paints into its own element's box, and a
-         * new child inside a sized slot is a 0x0 box with an icon in it — nothing drawn, and nothing in
-         * the tree saying why. {@code Taskbar.applyIcon} is the reference spelling.</p>
-         *
-         * <p>{@code ofIcon} rather than {@code of(path)}, which is what binds the light/dark variant at
-         * DRAW time — the one time a caller reached past it, every {@code icon()} in every stylesheet
-         * drew the light file for good.</p>
-         */
-        private void applyIcon(@Nullable String iconName) {
-            CgUiSvg glyph = iconName == null ? null : CgUiSvg.ofIcon(iconName);
-            iconSlot.setDisplayed(glyph != null);
-            if (glyph == null) return;
-            StyleGroup.defaultPipeline(iconSlot.getStyle().getGeneralGroup(), g -> g.overlay(glyph));
         }
     }
 

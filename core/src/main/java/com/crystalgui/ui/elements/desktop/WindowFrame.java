@@ -122,6 +122,30 @@ public class WindowFrame extends UIElement implements Disposable {
     public static final String MINIMIZE_CLASS = "__minimize__";
 
     /**
+     * The pin affordance, and the class the frame itself carries while pinned.
+     *
+     * <p>Two names because they mark different things: the button is a control in the caption, and
+     * {@link #PINNED_CLASS} is state on the window — which is what a theme keys off to restyle the
+     * whole frame, and what {@code :checked} would be if a frame were a checkbox.</p>
+     */
+    public static final String PIN_CLASS = "__pin__";
+    /** @see #isPinned() */
+    public static final String PINNED_CLASS = "__pinned__";
+
+    /**
+     * On a frame while it is painting on the HUD rather than on the desktop.
+     *
+     * <p>What it turns off is the caption controls, and that is a rule rather than a preference: in
+     * game the cursor is grabbed and the keyboard is the game's, so nothing on the HUD can be clicked.
+     * A control that cannot be clicked but still looks clickable is exactly the lie the disabled-control
+     * rule already forbids. Pinning, unpinning, moving and sizing all happen from the desktop.</p>
+     */
+    public static final String HUD_CLASS = "__hud__";
+
+    public static final String PIN_TOOLTIP = "Pin";
+    public static final String UNPIN_TOOLTIP = "Unpin";
+
+    /**
      * What the caption buttons say when the pointer rests on them.
      *
      * <p>Windows' own wording, including the one that reads like a slip: a maximised window's button
@@ -328,7 +352,7 @@ public class WindowFrame extends UIElement implements Disposable {
     private final UIElement captionChrome;
     private final UIElement overlays;
     private final UIText titleLabel;
-    private final UIElement icon;
+    private final WindowIcon icon;
     private final Button closeButton;
     private final Button minimizeButton;
     private final Button maximizeButton;
@@ -346,6 +370,13 @@ public class WindowFrame extends UIElement implements Disposable {
 
     /** This window's place in the stack, as last assigned. @see Desktop#raise */
     private int stackOrder;
+    /** @see #isPinned() */
+    private boolean pinned;
+
+    /** Package-private for {@code WindowPinTest}, which asserts the three-state overlay. */
+    final Button pinButton;
+    /** Retained: its text follows the state, and Tooltip.attach ADDS a pair rather than replacing one. */
+    private final Tooltip pinTooltip;
 
     private WindowState state = WindowState.VISIBLE;
     private WindowPolicy policy = WindowPolicy.DESTROY_ON_CLOSE;
@@ -408,7 +439,16 @@ public class WindowFrame extends UIElement implements Disposable {
         controls = new UIElement();
         controls.addClass(CONTROLS_CLASS);
 
-        // MINIMISE FIRST, so the strip reads minimise-then-close left to right as every window manager
+        // PIN FIRST, left of minimise. It is the only control here that is not about this window's
+        // presence on the desktop, so it sits outside the minimise/maximise/close triplet every window
+        // manager draws as a unit -- the same reason a tool window's Dock button sits there.
+        pinButton = new Button("");
+        pinButton.addClass(PIN_CLASS);
+        pinButton.attachListener(() -> setPinned(!isPinned()));
+        pinTooltip = Tooltip.attach(pinButton, PIN_TOOLTIP);
+        controls.addChild(pinButton);
+
+        // MINIMISE, so the strip reads minimise-then-close left to right as every window manager
         // draws it, and so the destructive control is the one furthest from the rest.
         minimizeButton = new Button("");
         minimizeButton.addClass(MINIMIZE_CLASS);
@@ -437,9 +477,15 @@ public class WindowFrame extends UIElement implements Disposable {
         // BUILT NOW AND HIDDEN, rather than created when an icon arrives. Creating an element from a
         // setter means creating it possibly mid-gesture, and the title bar has no `gap-all` for a hidden
         // child to occupy — the one cost that would have made the lazy version worth it.
-        icon = new UIElement();
+        // THE SAME DRAWING THE STRIP USES. It was a bare element with the glyph as an overlay, which
+        // predates WindowIcon and meant a caption showed an uncoloured mark while the entry, the hover
+        // preview and the switcher tile all showed the same window as a coloured tile — one window with
+        // two appearances, differing only in which of them had been written first. WindowIcon carries
+        // the tile, the palette keyed on the icon NAME (so the caption and the entry cannot disagree
+        // about the hue) and the branded-artwork case; the SIZE stays the context's, which for a caption
+        // is `window > .__title-bar__ > .__icon__`.
+        icon = new WindowIcon();
         icon.addClass(ICON_CLASS);
-        icon.setHitTest(false);
         icon.setDisplayed(false);
 
         // AFTER the icon and BEFORE the title, which is where IntelliJ's New UI and VS Code's custom
@@ -654,6 +700,14 @@ public class WindowFrame extends UIElement implements Disposable {
         return maximizeButton;
     }
 
+    /**
+     * The caption's tile — the same {@link WindowIcon} the strip, the preview and the switcher draw.
+     * Package-private: it exists so a test can read the hue, which nothing else can observe.
+     */
+    WindowIcon icon() {
+        return icon;
+    }
+
     /** The icon this window declares, or null. @see #setIcon */
     @Nullable
     public String iconName() {
@@ -677,10 +731,13 @@ public class WindowFrame extends UIElement implements Disposable {
             icon.setDisplayed(false);
             return this;
         }
-        CgUiSvg glyph = CgUiSvg.ofIcon(namespacedIcon);
-        if (glyph == null) return this;
+        if (CgUiSvg.ofIcon(namespacedIcon) == null) return this;
+        // SHOWN ONLY WHEN THERE IS AN ICON, which is where the caption still differs from the strip on
+        // purpose: WindowIcon's other consumers fall back to a monogram tile, and a caption that grew one
+        // would put a filled square on every dialog and tool window that has never declared an icon. The
+        // title is passed anyway so the fallback is one argument away if that is wanted.
+        icon.show(namespacedIcon, getTitle());
         icon.setDisplayed(true);
-        StyleGroup.defaultPipeline(icon.getStyle().getGeneralGroup(), g -> g.overlay(glyph));
         Desktop desktop = owner;
         if (desktop != null) desktop.registry().changed();
         return this;
@@ -1134,6 +1191,40 @@ public class WindowFrame extends UIElement implements Disposable {
      * compositor would silently stop stacking. Everything else about a window's appearance stays in the
      * sheet; this one number is the engine's.</p>
      */
+    /**
+     * Whether this window sits in the always-on-top band and survives the desktop closing.
+     *
+     * <p>One toggle, two effects — Win32's {@code WS_EX_TOPMOST} and EWMH's
+     * {@code _NET_WM_STATE_ABOVE}, plus the thing those cannot express because they have no desktop to
+     * close: a pinned window keeps rendering on the HUD after the screen is put away. @see
+     * UIWindow#enterHudMode</p>
+     *
+     * <p>The band itself is one line in {@link Desktop#raise} — an offset on the same monotonic
+     * counter — which is exactly what the band model predicted when always-on-top was refused for
+     * having no consumer.</p>
+     */
+    public boolean isPinned() {
+        return pinned;
+    }
+
+    /**
+     * Pins or unpins, moving the frame between bands.
+     *
+     * <p><b>Re-raises through the desktop rather than writing z itself.</b> The band is an offset on
+     * the raise counter, so the only thing that can put a frame in the right place is the thing that
+     * hands out stacking order — and re-raising also keeps the owner group together, which a bare
+     * z-write would silently break.</p>
+     */
+    public WindowFrame setPinned(boolean pinned) {
+        if (this.pinned == pinned) return this;
+        this.pinned = pinned;
+        if (pinned) addClass(PINNED_CLASS); else removeClass(PINNED_CLASS);
+        pinTooltip.setText(pinned ? UNPIN_TOOLTIP : PIN_TOOLTIP);
+        Desktop desktop = desktop();
+        if (desktop != null) desktop.raise(this);
+        return this;
+    }
+
     void setStackOrder(int order) {
         this.stackOrder = order;
         StyleGroup.importantPipeline(getStyle().getGeneralGroup(), g -> g.zIndex(order));
@@ -1370,6 +1461,25 @@ public class WindowFrame extends UIElement implements Disposable {
         // AFTER this window is back, so they stack above it rather than being raised against a window
         // that is not on the layer yet. @see #hiddenWithOwner
         showOwnedToolWindows();
+
+        // SHOWN WHILE THE DESKTOP IS OFF SCREEN MEANS PINNED. The switcher is the path that found this:
+        // Ctrl+Tab reaches a pinned window's keyboard, and the registry keeps HIDDEN windows, so cycling
+        // could show a window the HUD had put away. It then painted -- the overlay draws the whole window
+        // layer -- while every click fell through it, because a window that is merely visible was never
+        // what the overlay accepted input for.
+        //
+        // Auto-pinning is the honest reading rather than a patch: with no desktop on screen, "bring this
+        // window to the front" and "put this window over the game" are the same request, and pinning is
+        // what that means here. It also keeps the state truthful -- the caption's pin shows pressed, the
+        // band puts it above, and it can be unpinned like anything else.
+        //
+        // exitHudMode clears hudMode BEFORE it restores what it hid, so a restore never lands here.
+        UIWindow attached = getAttachedWindow();
+        if (attached != null && attached.isHudMode() && !isPinned()) {
+            setPinned(true);
+            addClass(HUD_CLASS);
+        }
+
         onShown.emit(persisted);
     }
 
@@ -1679,6 +1789,38 @@ public class WindowFrame extends UIElement implements Disposable {
             return;
         }
         applyRestoredRect();
+    }
+
+    /**
+     * Un-maximises with the SIZE animating and the POSITION left to the caller — a drag tearing a
+     * maximised window loose.
+     *
+     * <p>The window shrinks toward the cursor over {@code SIZE_NANOS} while the drag goes on placing it
+     * every frame, which is what tearing one loose looks like everywhere else. An ordinary
+     * {@link #restore()} cannot be used: it animates the position too and blocks {@link #applyPosition}
+     * while it runs, so the window travelled to its stored rect and ignored the pointer.</p>
+     *
+     * <p>The settle writes the resting SIZE and nothing else. Writing the stored position there would
+     * yank the window out from under the hand at the end of the shrink, which is the same bug arriving
+     * one animation later.</p>
+     */
+    void restoreShrinkingUnderDrag() {
+        if (!maximized) return;
+        maximized = false;
+        removeClass(MAXIMIZED_CLASS);
+        maximizeTooltip.setText(MAXIMIZE_TOOLTIP);
+
+        var self = getRuntimeCache();
+        if (!animator.playShrink(self.getWidth(), self.getHeight(), restoreWidth, restoreHeight,
+                this::applyRestoredSize)) {
+            applyRestoredSize();
+        }
+    }
+
+    /** The resting SIZE, without touching the position. @see #restoreShrinkingUnderDrag */
+    private void applyRestoredSize() {
+        StyleGroup.inlinePipeline(getStyle().getLayoutGroup(),
+                l -> l.width(restoreWidth).height(restoreHeight));
     }
 
     /** Where a restored window rests. @see #restore */
@@ -2112,6 +2254,21 @@ public class WindowFrame extends UIElement implements Disposable {
     }
 
     /** Records the intent, then writes it clamped. */
+    /** Whether a move drag is live — see the top clamp in {@link #applyPosition}. */
+    private boolean moving;
+
+    /** @see #moving */
+    void setMoving(boolean moving) {
+        if (this.moving == moving) return;
+        this.moving = moving;
+        // WITHDRAWING THE HEADROOM HAS TO BRING THE WINDOW BACK DOWN, and nothing else will: reclamp()
+        // deliberately declines while a drag is live, so a window released with its caption above the
+        // work area would simply stay there, unreachable -- the exact thing the resting clamp exists to
+        // prevent. A snap commits before this runs and a maximised window is exempt, so neither is
+        // disturbed.
+        if (!moving && placed) applyPosition(wantedLeft, wantedTop);
+    }
+
     private void applyPosition(float left, float top) {
         wantedLeft = left;
         wantedTop = top;
@@ -2135,7 +2292,21 @@ public class WindowFrame extends UIElement implements Disposable {
         // would strand a window here on the one frame that matters, its first.
         if (areaWidth > 0f && areaHeight > 0f && frameWidth > 0f && caption > 0f) {
             clampedLeft = clamp(left, caption - frameWidth, areaWidth - caption);
-            clampedTop = clamp(top, 0f, areaHeight - caption);
+            // THE CAPTION MAY RISE ABOVE THE WORK AREA WHILE BEING DRAGGED, and only while.
+            //
+            // The resting rule is that a title bar stays reachable, so a window cannot park above the
+            // top. During a MOVE that rule makes the top snap zone unreachable: the pointer rides at a
+            // fixed offset INSIDE the caption, so a window clamped at top 0 leaves the pointer that same
+            // offset below the border -- and a zone read from the pointer can then only be entered by
+            // someone who happened to grab the caption's topmost pixels. It is why the band used to be a
+            // whole caption deep, which made the top the one edge triggered by the WINDOW rather than by
+            // the cursor.
+            //
+            // One caption of headroom is exactly enough for any grab to bring the cursor to the border,
+            // and no more. Windows does the same -- drag a window up and its title bar goes off the top
+            // while the cursor reaches the edge. reclamp() on drag end brings back anything that did not
+            // snap. @see WindowMove
+            clampedTop = clamp(top, moving ? -caption : 0f, areaHeight - caption);
         }
 
         placedLeft = clampedLeft;

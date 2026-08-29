@@ -200,8 +200,16 @@ public class StylePropertyRegistry {
     // own content. Without this listener `overflow: hidden` was purely cosmetic and oversized content
     // still forced every ancestor wider, leaving callers to write `min-width: 0` by hand.
     public static final StyleProperty<Overflow> OVERFLOW = create("overflow", Overflow.class, Overflow.VISIBLE)
-            .addListener((elem, prop, oldVal, newVal) ->
-                    elem.getStyle().taffyBridge.setOverflow(toTaffyOverflow(newVal)));
+            // NULL IS A LEGAL RESOLVED VALUE and means "no candidate at any origin" -- notifyListeners
+            // declares newVal @Nullable, LayoutProperties.createSetter falls back to initialValue for
+            // exactly this, and this listener was the one place in the engine that did not. It is reached
+            // by REMOVING A CLASS that was the property's only source: the rematch withdraws the sheet's
+            // candidate, nothing else answers, and the raw null went straight into toTaffyOverflow's
+            // switch -- NullPointerException out of resolveTouched, from inside calculateStyle, so it
+            // takes the frame loop down rather than the element. Found when a taskbar entry stopped being
+            // `__animating__` and no other rule mentioned overflow.
+            .addListener((elem, prop, oldVal, newVal) -> elem.getStyle().taffyBridge
+                    .setOverflow(toTaffyOverflow(newVal == null ? prop.initialValue : newVal)));
 
     /** Our CSS-facing set onto Taffy's smaller layout-facing one — the entire cost of keeping our own
      * enum. {@code AUTO} collapses to {@code HIDDEN} rather than {@code SCROLL} because Taffy reserves

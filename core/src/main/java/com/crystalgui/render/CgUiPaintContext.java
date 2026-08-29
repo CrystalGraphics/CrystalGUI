@@ -18,6 +18,7 @@ import com.crystalgraphics.gl.render.CgQuadRenderer;
 import com.crystalgraphics.gl.texture.CgFallbackTextures;
 import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.gl.texture.CgTextureManager;
+import com.crystalgraphics.platform.gl.CgCapabilities;
 import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.text.render.CgTextRenderer;
 import com.crystalgraphics.util.io.CgIO;
@@ -36,6 +37,7 @@ import com.crystalgui.ui.UIWindow;
 import lombok.Getter;
 import lombok.Setter;
 import org.joml.Matrix4f;
+import org.jspecify.annotations.Nullable;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -170,14 +172,24 @@ public final class CgUiPaintContext {
      * {@link #boxModelMaterial}'s straight-alpha blend (which is correct for its other, much more
      * common use: painting straight-alpha colors directly onto an already-opaque destination).
      */
-    private final CgMaterial layerBlitMaterial;
+    /** Package-private: {@link CgUiBackdrop} composites the capture with it. */
+    final CgMaterial layerBlitMaterial;
+
+    /** The backdrop primitive — capture, blur, and the region logic that keeps it affordable. */
+    private final CgUiBackdrop backdrop;
+
+    /** One axis of the separable blur per bind. @see #backdropFor */
+    /** Package-private: {@link CgUiBackdrop} owns every use of it. */
+    final CgMaterial blurMaterial;
+    /** The box prefilter that reduces the capture before it is blurred. Package-private, as above. */
+    final CgMaterial downsampleMaterial;
 
     /** 1×1 fully opaque white ({@code RGBA = 255, 255, 255, 255}). */
     @Getter
     private final CgTexture2D whitePixel;
 
     @Getter
-    private final PoseStack poseStack;
+    final PoseStack poseStack;
 
     /**
      * Basic wrapper over {@link com.crystalgraphics.gl.render.CgQuadRenderer}.
@@ -209,15 +221,15 @@ public final class CgUiPaintContext {
     // Screen-sized, not element-sized: draws inside a layer use the same absolute screen
     // coordinates (runtimeCache.getX()/getY()) as the normal path, so nothing needs translating —
     // matches LDLib2's own "off-target spans the full window" approach for the same reason.
-    private int screenWidth, screenHeight;
-    private long frameId;
+    int screenWidth, screenHeight;
+    long frameId;
     private final List<CgFrameBuffer> layerFboPool = new ArrayList<>();
     /** One saved frame per nested {@link #beginLayerFbo}/{@link #endLayerFbo} pair. */
-    private final Deque<LayerFrame> layerStack = new ArrayDeque<>();
-    private static final CgFrameBufferFormat LAYER_FORMAT =
+    final Deque<LayerFrame> layerStack = new ArrayDeque<>();
+    static final CgFrameBufferFormat LAYER_FORMAT =
             CgFrameBufferFormat.builder("cgui_layer").color(0, CgTextureType.RGBA8).build();
 
-    private record LayerFrame(CgFrameBuffer fbo, CgGlScope glScope, Matrix4f savedProjMatrix,
+    record LayerFrame(CgFrameBuffer fbo, CgGlScope glScope, Matrix4f savedProjMatrix,
                                int savedViewportW, int savedViewportH) {
     }
 
@@ -252,12 +264,12 @@ public final class CgUiPaintContext {
     /** Built once, in the constructor — real dimensions aren't known that early (no frame has run
      * yet), so this starts 1x1 and {@link #beginFrame} resizes it in place, the same way every other
      * screen-sized FBO in this file already tracks the window. */
-    private final CgFrameBuffer msaaFbo = CgFrameBuffer.createOwned("cgui_msaa", 1, 1, MSAA_FORMAT);
+    final CgFrameBuffer msaaFbo = CgFrameBuffer.createOwned("cgui_msaa", 1, 1, MSAA_FORMAT);
     /** What {@link #msaaFbo} resolves into — same shape as {@link #LAYER_FORMAT}, and what {@link
      * #blitLayer} reads from to composite. Kept separate from {@link #layerFboPool}: that pool is
      * indexed by per-element nesting depth, which has nothing to do with this FBO's role as a single
      * fixed whole-frame resolve target. */
-    private final CgFrameBuffer msaaResolveFbo = CgFrameBuffer.createOwned("cgui_msaa_resolve", 1, 1, LAYER_FORMAT);
+    final CgFrameBuffer msaaResolveFbo = CgFrameBuffer.createOwned("cgui_msaa_resolve", 1, 1, LAYER_FORMAT);
 
     // ── Scissor ─────────────────────────────────────────────────────────────
     @Getter
@@ -267,7 +279,7 @@ public final class CgUiPaintContext {
     @Getter
     private CgTexture2D currentTexture;
     @Getter
-    private boolean frameActive;
+    boolean frameActive;
 
     // ── Material switching ──────────────────────────────────────────────────
     @Getter
@@ -321,6 +333,10 @@ public final class CgUiPaintContext {
         this.boxModelMaterial = CgMaterial.load("crystalgui:shaders/gui_quad.shader");
         this.curveMaterial = CgMaterial.load("crystalgui:shaders/gui_curve.shader");
         this.layerBlitMaterial = CgMaterial.load("crystalgui:shaders/gui_layer_blit.shader");
+        this.blurMaterial = CgMaterial.load("crystalgui:shaders/gui_blur.shader");
+        this.downsampleMaterial = CgMaterial.load("crystalgui:shaders/gui_downsample.shader");
+        // AFTER the materials: it holds them, and a field initialiser would run before they exist.
+        this.backdrop = new CgUiBackdrop(this);
         this.whitePixel = (CgTexture2D) CgFallbackTextures.WHITE_1x1;
         this.textRenderer = CgTextRenderer.createManualSized().poseStack(this.poseStack)
                                           .restoreStateWith(() -> {
@@ -546,7 +562,13 @@ public final class CgUiPaintContext {
         // glScope.close() (see its own note) is what puts the real target back before compositing.
         glScope = CgGlState.save(
                 CgGlSlot.FBO, CgGlSlot.PROGRAM, CgGlSlot.TEXTURES, CgGlSlot.BLEND,
-                CgGlSlot.DEPTH, CgGlSlot.CULL, CgGlSlot.VIEWPORT);
+                CgGlSlot.DEPTH, CgGlSlot.CULL, CgGlSlot.VIEWPORT, CgGlSlot.ALPHA_TEST);
+        // ALPHA_TEST is saved above only so the host gets it back; this is what turns it off, before
+        // anything of ours draws. @see #disableFixedFunctionAlphaTest
+        disableFixedFunctionAlphaTest();
+
+        // BEFORE the redirect, because the redirect is what hides it. @see #sceneFboId
+        backdrop.captureSceneTarget();
 
         // Whole-frame MSAA redirect — see the class doc above msaaFbo for why this exists and why it
         // has to be the whole tree rather than one material.
@@ -612,6 +634,58 @@ public final class CgUiPaintContext {
             warmUp();
             warmedUp = true;
         }
+        // AFTER frameActive, with the pool's own warm-up, because warming a target SUBMITS A QUAD and
+        // quads are refused outside a frame. Built here rather than on demand: an FBO created mid-draw,
+        // with our own bindings in flight, came back incomplete. @see #blurLevel
+        backdrop.prepareFrame();
+    }
+
+    /**
+     * Turns off the host's fixed-function alpha test for the duration of a UI pass.
+     *
+     * <p><b>Minecraft 1.7.10 enables {@code GL_ALPHA_TEST} with {@code glAlphaFunc(GL_GREATER, 0.1)} in
+     * {@code Minecraft.startGame()} and leaves it on through GUI rendering</b>, and a compatibility
+     * profile applies that test to programmable-pipeline draws exactly as it does to fixed-function
+     * ones. Nothing on our side models alpha testing — {@code CgRenderState} carries blend, depth, cull
+     * and stencil and no alpha — so a material's {@code RenderState} neither sets it nor clears it, and
+     * whatever the host left on is what every quad, glyph, gradient and glass surface is drawn under.
+     * The result is that <b>every fragment the UI draws at 10% alpha or less is discarded</b>: not
+     * dimmed, not faded — cut, with a hard edge exactly where the alpha crosses the reference.</p>
+     *
+     * <p>Measured on the taskbar's accent glow, which is
+     * {@code linear-gradient(90deg, transparent 18%, #3574F033 50%, transparent 82%)} across a
+     * 1999px bar. It should be a wash covering the middle two thirds; in a client it was a hard-edged
+     * band from x=642 to x=1347 — the ramp <em>inside</em> the band exactly the right one, both ends
+     * cut where the gradient's alpha passed 0.105. So the geometry, the axis, the stop positions and
+     * the premultiplied interpolation were all correct and the picture was still wrong, which is why
+     * six of the seven things one would check first are the gradient's.</p>
+     *
+     * <p><b>The harness cannot see any of this, by construction.</b> It runs an LWJGL3 context with no
+     * fixed-function alpha test to leave on, so the identical CSS is correct there and there is no
+     * scene, no probe and no readback that can be written to reproduce it. It is the loader-seam class
+     * of defect, one layer below the ones {@code serverSmoke} exists for.</p>
+     *
+     * <p><b>What it reaches is decided by a fragment's OUTPUT alpha, not by any alpha in the CSS.</b>
+     * A {@code glass()} tint at 7.5% is an input to a mix inside the shader and the surface still
+     * writes its coverage, so the acrylic panels were never affected — the ones that are: a
+     * {@code background-color} at or under 10% (Fluent's subtle fills, 6% and 3.5%, were discarded
+     * whole), the transparent shoulder of any gradient, the outermost sliver of every anti-aliased SDF
+     * edge, and the opening frames of any layer composited at a low opacity. All of those read as "the
+     * translucent parts are missing" or "the soft edges are hard", never as one GL flag.</p>
+     *
+     * <p><b>Called twice per frame</b>, because {@link #endFrame} closes the frame's own scope early —
+     * before the composite that puts the finished picture on the host's target — so the host's alpha
+     * test is live again for that one draw. That draw clips by the picture's <em>accumulated</em>
+     * alpha, which would take a 7% panel away whole rather than merely cutting its shoulders.</p>
+     *
+     * <p>Guarded on the profile rather than left to the state manager's deduplication: on a core
+     * profile {@code glDisable(GL_ALPHA_TEST)} is {@code GL_INVALID_ENUM}, and while
+     * {@code CgGlGetProvider.readAlpha} already reports the slot as disabled there — so the call would
+     * be eliminated today — that is a property of when the shadow was last trusted, not a guarantee.</p>
+     */
+    private static void disableFixedFunctionAlphaTest() {
+        if (CgCapabilities.detect().isCoreProfile()) return;
+        CgGL.glDisable(CgGL.GL_ALPHA_TEST);
     }
 
     private boolean warmedUp = false;
@@ -700,9 +774,17 @@ public final class CgUiPaintContext {
         // with depthTest on, depthWriteMask false and blend on — a world drawn with no depth
         // arbitration, so terrain stops occluding its own caves. Listed as the full set CgRenderState
         // can write, so the next material to declare Stencil or ColorMask does not start it again.
+        //
+        // ALPHA_TEST IS IN THE LIST AND IS DISABLED AGAIN INSIDE, because glScope.close() six lines up
+        // has just handed the host's alpha test back and this is a real draw of the whole finished
+        // picture. Where the frame's own disable protects each element's fragments, this one protects
+        // the COMPOSITE, which is clipped by the accumulated alpha instead — so a panel drawn correctly
+        // at 7% would arrive complete in the layer and then be discarded whole on the way to the
+        // screen. @see #disableFixedFunctionAlphaTest
         try (CgGlScope blitScope = CgGlState.save(CgGlSlot.PROGRAM, CgGlSlot.TEXTURES,
                 CgGlSlot.BLEND, CgGlSlot.DEPTH, CgGlSlot.CULL,
-                CgGlSlot.STENCIL, CgGlSlot.COLOR_MASK)) {
+                CgGlSlot.STENCIL, CgGlSlot.COLOR_MASK, CgGlSlot.ALPHA_TEST)) {
+            disableFixedFunctionAlphaTest();
             blitLayer(msaaResolveFbo, 1f);
         }
 
@@ -1138,16 +1220,39 @@ public final class CgUiPaintContext {
             maxY = Math.max(maxY, py);
         }
 
-        float clipX0 = 0f, clipY0 = 0f, clipX1 = screenWidth, clipY1 = screenHeight;
+        float clipX0 = 0f, clipY0 = 0f, clipX1 = targetWidth(), clipY1 = targetHeight();
         if (scissorStack.hasScissor()) {
-            // ScissorStack holds GL's bottom-left-origin pixels; flip back to the top-left-origin space
-            // the pose just produced. Getting this backwards culls exactly the rows that ARE visible.
+            // ScissorStack holds TOP-LEFT rects in the target's pixels -- the same space the pose just
+            // produced, so no flip. @see ScissorStack#applyScissorIfNeeded
             clipX0 = scissorStack.currentX();
             clipX1 = clipX0 + scissorStack.currentW();
-            clipY1 = screenHeight - scissorStack.currentY();
-            clipY0 = clipY1 - scissorStack.currentH();
+            clipY0 = scissorStack.currentY();
+            clipY1 = clipY0 + scissorStack.currentH();
         }
         return maxX >= clipX0 && minX <= clipX1 && maxY >= clipY0 && minY <= clipY1;
+    }
+
+    /**
+     * The width of whatever is being drawn into right now — the screen, or the innermost layer FBO.
+     *
+     * <p><b>A scissor rect and a cull bound are in the TARGET's pixels, and the target is not always the
+     * screen.</b> Every pooled layer is screen-sized, so flipping against {@code screenHeight} was right
+     * for all of them and nothing said otherwise. A window's snapshot is the first target sized to
+     * something else — the window — and inside it the flip landed every clip {@code screen - window}
+     * pixels too high: the editor's own {@code > .__content__} clip then scissored the bottom of the
+     * photograph away, so a minimised window's preview showed its top half over flat panel colour while
+     * the live preview of the same window, drawn straight to the screen, was whole. Invisible while the
+     * photographed window was near screen height, which a maximised editor is; a floating one is not.
+     * The standing scissor rule covers the INHERITED rect, which the snapshot already clears — this is
+     * the rect pushed during the render, which has to be flipped against the buffer it lands in.</p>
+     */
+    private int targetWidth() {
+        return layerStack.isEmpty() ? screenWidth : layerStack.peek().fbo().getWidth();
+    }
+
+    /** @see #targetWidth() */
+    private int targetHeight() {
+        return layerStack.isEmpty() ? screenHeight : layerStack.peek().fbo().getHeight();
     }
 
     /**
@@ -1179,10 +1284,20 @@ public final class CgUiPaintContext {
         int physY = (int) Math.floor(Math.min(physY0, physY1));
         int physW = (int) Math.ceil(Math.max(physX0, physX1)) - physX;
         int physH = (int) Math.ceil(Math.max(physY0, physY1)) - physY;
-        // Top-left-origin logical space -> GL's bottom-left-origin glScissor space.
-        int glY = screenHeight - (physY + physH);
-        scissorStack.pushScissor(physX, glY, Math.max(0, physW), Math.max(0, physH));
-        scissorStack.applyScissorIfNeeded();
+        // Stored TOP-LEFT, in the target's physical pixels; the flip to GL's bottom-left happens when the
+        // rect is APPLIED, against whichever buffer is bound at that moment. @see ScissorStack#applyScissorIfNeeded
+        scissorStack.pushScissor(physX, physY, Math.max(0, physW), Math.max(0, physH));
+        scissorStack.applyScissorIfNeeded(targetHeight());
+    }
+
+    /**
+     * Re-applies the current clip to whatever buffer is bound now. For a caller that has changed the
+     * target or the stack itself and needs GL to agree with it — a window snapshot restoring the clip it
+     * set aside, for instance.
+     */
+    public void reapplyScissor() {
+        if (scissorStack.hasScissor()) scissorStack.applyScissorIfNeeded(targetHeight());
+        else scissorStack.clearScissorIfNeeded();
     }
 
     /**
@@ -1193,7 +1308,7 @@ public final class CgUiPaintContext {
         flush();
         scissorStack.popScissor();
         if (scissorStack.hasScissor()) {
-            scissorStack.applyScissorIfNeeded();
+            scissorStack.applyScissorIfNeeded(targetHeight());
         } else {
             scissorStack.clearScissorIfNeeded();
         }
@@ -1382,6 +1497,21 @@ public final class CgUiPaintContext {
      * whoever made it has to say when it dies.</p>
      */
     public CgFrameBuffer beginLayerFbo(CgFrameBuffer fbo) {
+        return beginLayerFbo(fbo, true);
+    }
+
+    /**
+     * As {@link #beginLayerFbo(CgFrameBuffer)}, but able to KEEP what the target already holds.
+     *
+     * <p>Every other caller wants the clear: a layer starts empty and the initial transparent clear is
+     * what makes {@link #blitLayer} safe to run full-screen. The backdrop capture is the one that does
+     * not, because it seeds its target with a framebuffer blit of the scene BEFORE drawing the UI over
+     * it -- and the clear silently threw that blit away. In game that meant the world never reached the
+     * backdrop at all, so a pane of glass over terrain was compositing against transparent black; the
+     * capture then looked plausible everywhere the UI happened to be opaque, which is everywhere anyone
+     * had been testing it.</p>
+     */
+    public CgFrameBuffer beginLayerFbo(CgFrameBuffer fbo, boolean clear) {
         flush();
         CgFrameData fd = CgRenderPipeline.getInstance().getFrameData();
         layerStack.push(new LayerFrame(fbo, CgGlState.save(CgGlSlot.FBO, CgGlSlot.VIEWPORT),
@@ -1389,12 +1519,26 @@ public final class CgUiPaintContext {
 
         fbo.bind();
         CgGL.glViewport(0, 0, fbo.getWidth(), fbo.getHeight());
-        fbo.clearColor(0f, 0f, 0f, 0f);
+        // THE INHERITED CLIP, RE-EXPRESSED FOR THIS BUFFER. A GL scissor rect is bottom-left pixels of
+        // one particular target; the rect the enclosing element pushed is kept top-left and flipped
+        // against whatever is bound, so a layer of another height than its parent -- a pool layer
+        // inside a window's snapshot -- clips the same region rather than a band at its bottom. The
+        // clear below honours the scissor too, which is what makes doing this BEFORE it matter.
+        if (scissorStack.hasScissor()) scissorStack.applyScissorIfNeeded(fbo.getHeight());
+        if (clear) fbo.clearColor(0f, 0f, 0f, 0f);
 
         fd.projMatrix.identity().ortho(0, fbo.getWidth(), fbo.getHeight(), 0, -1, 1);
         fd.viewportW = fbo.getWidth();
         fd.viewportH = fbo.getHeight();
         CgRenderPipeline.getInstance().prepareFrame();
+        // TEXT HAS ITS OWN PROJECTION, and it has to follow the target too. CgTextRenderer does not
+        // read cg_ProjMatrix; it carries a matrix of its own that beginFrame sets for the screen. Every
+        // pooled layer is screen-sized, so the two agreed for as long as those were the only layers --
+        // and inside a window's snapshot, sized to the window, glyphs were placed through a screen
+        // ortho into a window-sized viewport: every string in a photograph drawn at a third of its size
+        // in the top-left corner. updateOrtho is a no-op when the size is unchanged, so this costs a
+        // pool layer nothing.
+        textRenderer.context().updateOrtho(fbo.getWidth(), fbo.getHeight());
         currentTexture = null;
         return fbo;
     }
@@ -1411,7 +1555,12 @@ public final class CgUiPaintContext {
         fd.viewportW = frame.savedViewportW();
         fd.viewportH = frame.savedViewportH();
         CgRenderPipeline.getInstance().prepareFrame();
+        // Back to the enclosing target's size for text as well -- @see beginLayerFbo.
+        textRenderer.context().updateOrtho(frame.savedViewportW(), frame.savedViewportH());
         frame.glScope().close();
+        // And the clip, against the enclosing target's height -- the scope above restores the FBO and
+        // the viewport but not the scissor rect, which was last applied for the layer just ended.
+        reapplyScissor();
         currentTexture = null;
     }
 
@@ -1472,6 +1621,32 @@ public final class CgUiPaintContext {
         });
     }
 
+    // ── Backdrop capture, for glass ─────────────────────────────────────────
+
+    /**
+     * A rect's backdrop, cropped to it: the sharp crop and the blurred one.
+     *
+     * <p>Both are the size of the element's own rect, so a consumer samples them at plain {@code uv}.</p>
+     */
+    public record Backdrop(CgTexture2D sharp, CgTexture2D blurred,
+                           float u0, float v0, float u1, float v1) {}
+
+    /**
+     * Captures what is behind {@code (x, y, w, h)} and blurs it — the primitive under {@code glass()}.
+     *
+     * <p>The work lives in {@link CgUiBackdrop}; this is the seam a drawable calls, kept here because
+     * everything else a drawable needs is on the paint context too.</p>
+     *
+     * @param blurRadiusPx how far the blur reaches, in surface pixels. Zero hands back the capture
+     *                     itself, so {@code blur 0} costs nothing beyond the grab every consumer shares
+     * @return the two textures, or {@code null} when there is nothing to capture — a caller must fall
+     *         back to a solid colour rather than draw nothing
+     */
+    @Nullable
+    public Backdrop backdropFor(float x, float y, float width, float height, float blurRadiusPx) {
+        return backdrop.forRect(x, y, width, height, blurRadiusPx);
+    }
+
     public void blitLayer(CgFrameBuffer fbo, float opacity) {
         CgTexture2D colorTex = (CgTexture2D) fbo.getColorTexture(0);
         withMaterial(layerBlitMaterial, () -> withLayerOpacity(opacity, () -> {
@@ -1499,20 +1674,47 @@ public final class CgUiPaintContext {
         try (CgGlScope scope = CgGlState.save(CgGlSlot.FBO, CgGlSlot.VIEWPORT, CgGlSlot.BLEND)) {
             subtreeFbo.bind();
             CgGL.glViewport(0, 0, subtreeFbo.getWidth(), subtreeFbo.getHeight());
-            CgTexture2D maskTex = (CgTexture2D) maskFbo.getColorTexture(0);
-            bindTexture(maskTex);
-            CgBlendState.MASK_ALPHA_MULTIPLY.apply();
-            // Same v-flip as blitLayer — maskTex is another FBO color attachment, same OpenGL
-            // bottom-left-origin storage vs. our top-left screen-space convention. Same
-            // identity-pose bypass as blitLayer too — this quad is already physical-pixel-sized.
-            poseStack.pushPose();
-            poseStack.setIdentity();
-            quad().at(0, 0).size(subtreeFbo.getWidth(), subtreeFbo.getHeight())
-                  .uv(0f, 1f, 1f, 0f)   // V flipped, same reason as blitLayer
-                  .color(0xFFFFFFFF).submit();
-            flush();
-            poseStack.popPose();
+            // The clip, for THIS buffer's height -- @see beginLayerFbo. Restored in the finally below.
+            if (scissorStack.hasScissor()) scissorStack.applyScissorIfNeeded(subtreeFbo.getHeight());
+            // AND THE PROJECTION, which the viewport alone does not cover. This runs after the
+            // subtree's layer has been ended, so the frame's ortho is the ENCLOSING target's -- and
+            // that is only the same size as the layer when the enclosing target is the screen. Inside a
+            // window's snapshot it is the window's size, so a mask quad the size of the (screen-sized)
+            // layer was drawn into a window-sized ortho: stretched by screen/window on each axis and
+            // shifted with it. The multiply then zeroed the subtree everywhere the DISPLACED mask did
+            // not reach, and the window's lighter base surface showed through the hole -- a minimised
+            // editor's photograph with a pale block across its islands and a strip of content
+            // surviving inside it. Same shape as the scissor flip, found from the same picture.
+            CgFrameData fd = CgRenderPipeline.getInstance().getFrameData();
+            Matrix4f enclosingProj = new Matrix4f(fd.projMatrix);
+            int enclosingW = fd.viewportW, enclosingH = fd.viewportH;
+            fd.projMatrix.identity().ortho(0, subtreeFbo.getWidth(), subtreeFbo.getHeight(), 0, -1, 1);
+            fd.viewportW = subtreeFbo.getWidth();
+            fd.viewportH = subtreeFbo.getHeight();
+            CgRenderPipeline.getInstance().prepareFrame();
+            try {
+                CgTexture2D maskTex = (CgTexture2D) maskFbo.getColorTexture(0);
+                bindTexture(maskTex);
+                CgBlendState.MASK_ALPHA_MULTIPLY.apply();
+                // Same v-flip as blitLayer — maskTex is another FBO color attachment, same OpenGL
+                // bottom-left-origin storage vs. our top-left screen-space convention. Same
+                // identity-pose bypass as blitLayer too — this quad is already physical-pixel-sized.
+                poseStack.pushPose();
+                poseStack.setIdentity();
+                quad().at(0, 0).size(subtreeFbo.getWidth(), subtreeFbo.getHeight())
+                      .uv(0f, 1f, 1f, 0f)   // V flipped, same reason as blitLayer
+                      .color(0xFFFFFFFF).submit();
+                flush();
+                poseStack.popPose();
+            } finally {
+                fd.projMatrix.set(enclosingProj);
+                fd.viewportW = enclosingW;
+                fd.viewportH = enclosingH;
+                CgRenderPipeline.getInstance().prepareFrame();
+            }
         }
+        // The scope put the enclosing target back; the clip has to follow it.
+        reapplyScissor();
         currentTexture = null;
     }
 
@@ -1567,6 +1769,9 @@ public final class CgUiPaintContext {
         // with fresh FBOs is what the next getInstance() builds anyway.
         msaaFbo.delete();
         msaaResolveFbo.delete();
+
+        // createOwned, so no registry sweeps these — the same reason the layer pool is freed here.
+        backdrop.delete();
 
         renderer.delete();
         textRenderer.delete();

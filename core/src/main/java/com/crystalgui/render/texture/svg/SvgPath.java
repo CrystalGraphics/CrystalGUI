@@ -41,7 +41,8 @@ public final class SvgPath {
     }
 
     /**
-     * @param steps segments per curve or arc. {@link #STEPS} is the resolution a large draw needs; a
+     * @param steps segments per cubic, and per QUARTER TURN of an arc — so a corner and a full circle
+     *              are sampled at the same density. {@link #STEPS} is the resolution a large draw needs; a
      *              caller that knows the artwork will be small can ask for fewer and get a proportionally
      *              smaller mesh, since every flattened vertex becomes a band cut downstream
      */
@@ -278,8 +279,14 @@ public final class SvgPath {
         if (!sweep && sweepAngle > 0) sweepAngle -= 2 * Math.PI;
         if (sweep && sweepAngle < 0) sweepAngle += 2 * Math.PI;
 
-        for (int i = 1; i <= steps; i++) {
-            double t = startAngle + sweepAngle * i / steps;
+        // STEPS ARE PER QUARTER TURN, not per command. A rounded corner is one arc and a whole circle is
+        // one arc, and they cannot both be `steps` segments: at the 8-step tier a C drawn as a single
+        // 276-degree arc was a rough octagon while the tile's corners beside it were smooth. Normalising
+        // on the quarter keeps every rounded rect exactly as it was (a quarter is `steps`, rounded rather
+        // than ceiled so float error cannot add a segment) and gives a long arc what its length needs.
+        int segments = Math.max(1, (int) Math.round(steps * Math.abs(sweepAngle) / (Math.PI / 2)));
+        for (int i = 1; i <= segments; i++) {
+            double t = startAngle + sweepAngle * i / segments;
             double px = cos * rx * Math.cos(t) - sin * ry * Math.sin(t) + cx;
             double py = sin * rx * Math.cos(t) + cos * ry * Math.sin(t) + cy;
             out.add(new float[]{(float) px, (float) py});

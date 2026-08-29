@@ -54,19 +54,64 @@ public class WindowThumbnail extends UIElement {
     @Nullable
     private WindowFrame frame;
 
+    /** On the icon tile drawn in place of a picture. @see #placeholder */
+    public static final String PLACEHOLDER_CLASS = "__placeholder__";
+
+    /**
+     * What is drawn when there is NO picture — the window's icon tile, large, centred on the letterbox
+     * colour. Windows' own answer for a window it has no bitmap of.
+     *
+     * <p>The preview used to COLLAPSE its thumbnail for this case, on the argument that an empty box
+     * reads as a window that renders nothing. It cost two things. A header-only panel read as broken
+     * ("minimised windows have no previews"), because a window restored HIDDEN at startup has never been
+     * painted and so has no photograph, and that is now the ordinary way a session opens. And the
+     * collapse made {@link #fittedSize} answer null for such a window, which the preview's placement
+     * treats as "not measured yet" — so a panel moved onto that entry deferred its placement every frame
+     * for good, and the hover logic behind that wait never ran again. A pictureless window now has a
+     * SHAPE like any other, so nothing downstream needs a special case for it.</p>
+     *
+     * <p>Built in the constructor and shown or hidden, never added later — the taffyChildIndex rule.</p>
+     */
+    private final WindowIcon placeholder = new WindowIcon();
+    private boolean placeholderShown;
+
+    /** The card a pictureless window fits to, as a ratio: landscape, like most windows. */
+    private static final float PLACEHOLDER_ASPECT_W = 5f;
+    private static final float PLACEHOLDER_ASPECT_H = 3f;
+
     public WindowThumbnail() {
         addClass(THUMBNAIL_CLASS);
         // NOTHING IN HERE IS INTERACTIVE. The picture is a picture: a click belongs to the preview panel
         // around it, which activates the window. Leaving it hittable would also mean the MIRRORED subtree
         // competed for hits, which is the other half of what `mirrored` exists to prevent.
         setHitTest(false);
+        placeholder.addClass(PLACEHOLDER_CLASS);
+        placeholder.setDisplayed(false);
+        addInternalChild(placeholder);
     }
 
     /** The window this shows, or null for none. */
     public WindowThumbnail setFrame(@Nullable WindowFrame frame) {
         this.frame = frame;
+        placeholder.show(frame == null ? null : frame.iconName(), frame == null ? null : frame.getTitle());
         syncSize();
         return this;
+    }
+
+    /** Whether the placeholder tile is what is on show — for a test, which cannot see the paint. */
+    public boolean isShowingPlaceholder() {
+        return placeholderShown;
+    }
+
+    /**
+     * Shows the tile exactly when there is no picture. Per frame, from {@link #syncSize}: a window can
+     * be minimised while its own preview is up, and a photograph can arrive on the next paint.
+     */
+    private void syncPlaceholder() {
+        boolean show = frame != null && !hasPicture();
+        if (show == placeholderShown) return;
+        placeholderShown = show;
+        placeholder.setDisplayed(show);
     }
 
     /** The size currently written, so an unchanged one writes nothing. */
@@ -114,6 +159,9 @@ public class WindowThumbnail extends UIElement {
      * @return whether the size changed, so a caller placing the panel knows to measure it again
      */
     public boolean syncSize() {
+        // Display, not sizing, so it is not held off with the size: a morph that is holding the box at
+        // the old window's shape must still stop drawing a picture the new window does not have.
+        syncPlaceholder();
         if (sizingSuppressed) return false;
         float[] fitted = fittedSize();
         if (fitted == null) return false;
@@ -139,6 +187,19 @@ public class WindowThumbnail extends UIElement {
 
     private boolean sizingSuppressed;
 
+    /**
+     * Forgets what was last written, so the next {@link #syncSize} writes whatever it fits to.
+     *
+     * <p>For a morph CANCELLED part-way: the animation writes the same INLINE slot as {@link #applySize}
+     * without telling this class, so after a cancel the box holds an intermediate size while the record
+     * here still says the morph's start. A later window that happens to fit to that recorded size would
+     * then be skipped as "unchanged" and drawn in a box of the wrong shape.</p>
+     */
+    public void forgetApplied() {
+        appliedWidth = Float.NaN;
+        appliedHeight = Float.NaN;
+    }
+
     /** Writes the box, at INLINE so a transition writing the same slot can take over from it. */
     public void applySize(float width, float height) {
         appliedWidth = width;
@@ -163,6 +224,11 @@ public class WindowThumbnail extends UIElement {
         } else if (frame != null && frame.snapshot().isValid()) {
             sourceWidth = frame.snapshot().capturedWidth();
             sourceHeight = frame.snapshot().capturedHeight();
+        } else if (frame != null) {
+            // NO PICTURE STILL HAS A SHAPE: the placeholder card. Answering null here is what made a
+            // pictureless window stall the preview's placement for good. @see #placeholder
+            sourceWidth = PLACEHOLDER_ASPECT_W;
+            sourceHeight = PLACEHOLDER_ASPECT_H;
         } else {
             return null;
         }
