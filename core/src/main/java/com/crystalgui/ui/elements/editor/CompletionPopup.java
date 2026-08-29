@@ -403,6 +403,7 @@ public final class CompletionPopup extends Popover {
 
     public void detach() {
         session = null;
+        showingRows = false;
         rows.clear();
         // BEFORE HIDING, while this is still in the tree: `hide()` is what takes it out, and
         // `unregisterElement` pops both stacks on the way. Doing it here as well makes a detach that does
@@ -542,8 +543,25 @@ public final class CompletionPopup extends Popover {
         menu.showAt(options.getWindowX(), options.getWindowY() + HINT_HEIGHT, options);
     }
 
+    /**
+     * Whether the box is on screen <b>with rows in it</b> — the only state a user can see.
+     *
+     * <p>Not derivable from {@link #visibleRows()}: {@link #refresh} hides an empty list by writing
+     * {@code display: none} and deliberately leaves the previous rows in place, so the list can hold ten
+     * rows while showing nothing. A diagnostic that read the row count alone could not tell "stale rows on
+     * screen" from "stale rows behind a hidden box", which are a bug and a non-event respectively.</p>
+     */
+    public boolean isShowingRows() {
+        return showingRows;
+    }
+
+    private boolean showingRows;
+
     private void refresh() {
-        if (session == null) return;
+        if (session == null) {
+            showingRows = false;
+            return;
+        }
         // A LIST WITH NOTHING IN IT IS NOT A LIST. An empty answer that is still flagged incomplete keeps
         // the session ALIVE on purpose -- narrowing may reach rows the provider never sent -- but there is
         // nothing to put on screen meanwhile, and what showed was a bare hint strip floating over the line
@@ -553,6 +571,7 @@ public final class CompletionPopup extends Popover {
                 session.visibleRows().isEmpty()
                         ? dev.vfyjxf.taffy.style.TaffyDisplay.NONE
                         : dev.vfyjxf.taffy.style.TaffyDisplay.FLEX));
+        showingRows = !session.visibleRows().isEmpty();
         if (session.visibleRows().isEmpty()) return;
         rows.clear();
         for (CompletionSession.Row row : session.visibleRows()) rows.add(row);
