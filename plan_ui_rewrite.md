@@ -1,6 +1,6 @@
 # The UI rewrite — one plan over both audits
 
-**Status: plan, 2026-08-28. Nothing implemented.** This knits `plan_ui_network_audit.md` (the wire,
+**Status: M0 shipped 2026-08-29. M1 is next.** This knits `plan_ui_network_audit.md` (the wire,
 sessions, contracts, presentation) and `plan_engine_core_audit.md` (the three-tree engine) into one
 ordered set of milestones. Each audit stays the reference for *why*; this document is the reference
 for *what, in which order, gated by what*. Where the two audits' step lists disagreed on order, this
@@ -59,7 +59,84 @@ D3 remains contingent on spike S1 by its own terms. The table is kept as the rec
 
 Dependencies are listed as `after:`. Sizes are relative (S/M/L/XL), not dates.
 
-### M0 — Spikes and the seam contract · S · after: D1–D7
+### M0 — Spikes and the seam contract · ~~S~~ M · after: D1–D7 · **SHIPPED 2026-08-29**
+
+> **Sized S, delivered M, and the overrun was findings rather than scope creep.** Both spikes turned
+> up something the plan did not know, and the seam could not be added *beside* the engine: deleting
+> `networkId` forces both sessions onto the source, which is what proves the seam carries load instead
+> of sitting decoratively next to it. Read §2.0 below before M1.
+
+#### 2.0 What M0 actually found
+
+**S1 — the Taffy fix is real, and the defect was twice as large as recorded.** The invariant row said
+a measured leaf wraps at the wrong width under `flex-wrap: wrap`. True, and measured: on a 200px row
+of two `flex-grow: 1` text leaves, `nowrap` tells the measure function **100** and `wrap` told it
+**200**, so the leaf reports a height for a width it was never given — its *width* stays correct, so
+the symptom is clipped text and nothing that looks like a layout fault.
+
+The second half was not known. The `isWrap ? NaN` branch was added **for** aspect-ratio items, and it
+was destroying them: four of five AR shapes in a wrapping row came out **zero-high** where `nowrap`
+gave the right answer. A narrowing fix ("suppress only for AR items") was written first and rejected
+on that measurement. **Deleting the branch** is what three independent things agree on — CSS Flexbox
+§9.4 step 7 measures with the *used* main size, upstream Rust Taffy passes it unconditionally, and
+after deletion every single-line shape matches `nowrap` while the genuinely two-line one is unchanged.
+
+**D3 is therefore settled: vendor and fix.** `taffy/` is a module, MIT, with `MODIFICATIONS.md` as the
+statement of changes. The package stays `dev.vfyjxf.taffy` because `mc1710` already relocates it —
+which is also what makes owning a fork safe, since a stock copy in another mod lands in a different
+package instead of silently winning and taking the fix away. 165 call sites needed no edit.
+
+Two things worth knowing before M5 plans around this engine: the mod jar is **half fastutil** (12,808
+relocated entries, ~22MB of 48MB, for seven types) which is now a cheap win available at any time; and
+`UIText`'s post-layout recompute is now a *choice* rather than a workaround — its javadoc said the
+defect was "not something fixable without forking a third-party Maven dependency", and that is no
+longer true. Retiring the recompute belongs with the box tree, not beside a layout fix.
+
+**S2 — the Shadow-DOM shape holds, and the cost is one extra index lookup.** `::part(name)` is now a
+real pseudo-element in the selector engine, and a shadow scope genuinely holds outer rules out: `* { }`,
+`text { }` and `shadowbutton text { }` all fail to reach a shadow descendant while reaching straight
+into a stock `Button`. The measured cost is that a `::part` rule is indexed under the **host's** type
+and classes, so cascading a shadow descendant asks the rule index twice.
+
+One finding changes how M6 ports the UA sheet: **inherited properties still cross the boundary**, as
+they do on the web. So anything a widget wants to inherit needs no `part` at all, and only what must
+be addressed *independently of the host* does — which is a much smaller set than the current
+`__double-underscore__` census suggests. Focus retargeting composes through nesting and is what keeps
+a `DataContext` walk from starting inside a widget's internals.
+
+#### 2.0.1 The ledger, corrected
+
+The M0 row of §4 was written before the work and got two of its four entries wrong. What was actually
+deleted, and what was not:
+
+| Planned | Actual | Why |
+|---|---|---|
+| `UIElement.networkId` | **deleted** | The number lives in `ElementTreeSource`'s table. Both sessions now address elements through a source they own |
+| `UIElement.observer` | **the `UITreeObserver` interface deleted**; the field retyped to `TreeObserver<UIElement>` | The *state* could not leave the node: a mutation has to reach an observer without anything walking the tree, and the propagated-field pattern is what makes a grafted subtree report itself. What did change is that the field is the seam's and the stream is an **edit script** — insert-with-index, and a reparent is a `moved` |
+| `UIElement.reportedEvents` | **not deleted** — surfaced through `NodeContract` | They are still per-*instance*: `ServerUiSession.on` adds them to individual elements and the client reads them back off the wire per element. Making them a per-**kind** declaration is exactly M1's contract work, and doing it here would have been M1 in M0's commit |
+| `UIElement.describedChildren*` | **not deleted** — surfaced through `TreeSource.childrenOf` / `NodeContract` | Same shape: the *position* moved and the implementation delegates, so M1 changes one file rather than re-plumbing every consumer |
+
+Deleted anyway, unplanned: `UITreeObserver` (the whole interface), `UITreeObserverTest` (ported to
+`TreeObserverBehaviourTest`), and `NetworkIds.find`'s linear tree walk — now a map lookup.
+
+#### 2.0.2 What shipped
+
+| Artefact | Where |
+|---|---|
+| The vendored layout engine + its fix | `taffy/` — a **git submodule**, [`CrystalGraphics/taffy-java`](https://github.com/CrystalGraphics/taffy-java), whose history is deliberately two commits: pristine 1.1.4, then our change, so `git log -p` IS the diff against upstream. Plus `MODIFICATIONS.md` and `TaffyWrapMeasureTest` |
+| The fix proven through the whole stack | `core/src/test/.../MeasureFuncUnderFlexWrapTest` — a real `MeasureFunc`, real font shaping, real window |
+| `::part` in the cascade | `style/selector/CompoundSelector`, `style/StyleEngine` |
+| The shadow prototype + its measurements | `ui/shadow/`, `ShadowEncapsulationTest`, harness scene `cgui-shadow-parts` |
+| **The seam** | `ui/dom/` — `TreeSource`, `TreeObserver`, `NodeContract`, `ElementTreeSource` |
+| The seam's acceptance suite | `TreeSourceContractTest` (headless, seam-pure — **repoint `sourceOver` at M5 and change nothing else**) |
+| The thread assertion | `UiThread.require(what, treeOwner)`, `FrameThreadOwnershipTest` |
+
+**Verified:** 1127 core tests + the full headless suite green (two failures pre-date this work and
+reproduce against the original published Taffy artifact); `:mc1710:compileJava`; `:mc1710:shadowJar`
+with the fork relocated and no unrelocated `dev/vfyjxf`; `:mc1710:serverSmoke` — all seven assertions,
+including the headless description round-trip through the rewired sessions.
+
+#### 2.0.3 The original M0 specification
 
 Two throwaway probes and one interface.
 
@@ -80,6 +157,8 @@ Two throwaway probes and one interface.
 **Ships:** nothing user-visible. **Deletes:** the three networking fields on `UIElement`.
 **Accepts:** S1 and S2 measured in the harness; the seam has a headless test suite that the old
 engine passes and the new one (M5) must pass unchanged.
+
+*(Kept verbatim as written on 2026-08-28. §2.0.1 records where it was wrong.)*
 
 ### M1 — Contracts on the widgets · M · after: M0
 
@@ -226,7 +305,7 @@ names it.
 
 | Milestone | Deleted |
 |---|---|
-| M0 | `UIElement.networkId`, `reportedEvents`, `observer`, `describedChildren*` (moved to the seam adapter) |
+| M0 | **Done, with corrections — see §2.0.1.** `UIElement.networkId` (deleted), the `UITreeObserver` interface (deleted), `NetworkIds.find`'s tree walk (now a map lookup). `reportedEvents` and `describedChildren*` were **surfaced through the seam rather than deleted**, because both are still per-instance and making them per-kind IS M1 |
 | M1 | hand-written `writeState`/`readState` ×12, `addReportedEvent`/`getReportedEvents` |
 | M2 | positional `NetworkIds`, `ui/treeDelta`, `dirtyIdentity`, global count check, `wireReportedEvents`' switch, `ServerUiSession`/`ClientUiSession` internals |
 | M3 | `UiEventKinds`, string-kind `on`, viewer-less `UiEventContext`, `bound()`, `layout(M)` |
