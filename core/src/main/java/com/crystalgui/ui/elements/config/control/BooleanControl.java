@@ -3,6 +3,7 @@ package com.crystalgui.ui.elements.config.control;
 import com.crystalgui.ui.elements.config.ConfigControlContracts;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.ui.elements.Checkbox;
 import com.crystalgui.ui.elements.config.ConfigDescriptor;
@@ -24,8 +25,11 @@ import javax.annotation.Nullable;
 public class BooleanControl extends ValueControl<Boolean> {
 
     /** A checkbox: discrete, so every flip travels. */
+    public static final Event<BooleanControl, Boolean> CHANGED =
+            ConfigControlContracts.changed(StateTypes.BOOL, Boolean.FALSE, RatePolicy.IMMEDIATE);
+
     public static final WidgetContract<BooleanControl> CONTRACT = ConfigControlContracts.register(
-            BooleanControl.class, "booleancontrol", StateTypes.BOOL, Boolean.FALSE, RatePolicy.IMMEDIATE);
+            BooleanControl.class, "booleancontrol", StateTypes.BOOL, Boolean.FALSE, CHANGED);
 
 
     private final Checkbox checkbox = new Checkbox("");

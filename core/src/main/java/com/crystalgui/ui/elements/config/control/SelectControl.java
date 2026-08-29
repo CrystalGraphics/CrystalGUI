@@ -3,6 +3,7 @@ package com.crystalgui.ui.elements.config.control;
 import com.crystalgui.ui.elements.config.ConfigControlContracts;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.ui.elements.Dropdown;
 import com.crystalgui.ui.elements.config.ConfigDescriptor;
@@ -27,8 +28,11 @@ import java.util.List;
 public class SelectControl extends ValueControl<String> {
 
     /** A discrete choice from a list. */
+    public static final Event<SelectControl, String> CHANGED =
+            ConfigControlContracts.changed(StateTypes.STRING, "", RatePolicy.IMMEDIATE);
+
     public static final WidgetContract<SelectControl> CONTRACT = ConfigControlContracts.register(
-            SelectControl.class, "selectcontrol", StateTypes.STRING, "", RatePolicy.IMMEDIATE);
+            SelectControl.class, "selectcontrol", StateTypes.STRING, "", CHANGED);
 
 
     private final Dropdown dropdown = new Dropdown("");

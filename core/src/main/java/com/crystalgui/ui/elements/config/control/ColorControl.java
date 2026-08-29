@@ -3,6 +3,7 @@ package com.crystalgui.ui.elements.config.control;
 import com.crystalgui.ui.elements.config.ConfigControlContracts;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.render.texture.CgUiQuad;
@@ -35,8 +36,11 @@ import javax.annotation.Nullable;
 public class ColorControl extends ValueControl<Integer> {
 
     /** A colour wheel has a drag behind it, so it is throttled and the released colour always travels. */
+    public static final Event<ColorControl, Integer> CHANGED =
+            ConfigControlContracts.changed(StateTypes.INT, 0xFFFFFFFF, RatePolicy.DRAGGING);
+
     public static final WidgetContract<ColorControl> CONTRACT = ConfigControlContracts.register(
-            ColorControl.class, "colorcontrol", StateTypes.INT, 0xFFFFFFFF, RatePolicy.DRAGGING);
+            ColorControl.class, "colorcontrol", StateTypes.INT, 0xFFFFFFFF, CHANGED);
 
 
     public static final String SWATCH_CLASS = "__swatch__";
