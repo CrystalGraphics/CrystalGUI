@@ -19,6 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -127,6 +128,74 @@ public class MultiViewerTest {
      * <p>The half that makes late joining work at all: without it, a second player opening a shared
      * window would wait for the next mutation to discover it exists — and on a quiet window, forever.</p>
      */
+    /**
+     * <b>One viewer looking away does not silence the others.</b> Network audit finding S7.
+     *
+     * <p>Visibility was a single session-wide flag, so a window shown to ten players was at the mercy
+     * of whichever of them minimised — everyone's deltas stopped. Worse once projections were gated on
+     * the same flag, since then the work stopped being done at all.</p>
+     */
+    @Test
+    public void oneViewerLookingAwayDoesNotSilenceTheOthers() {
+        server.addViewer(serverB);
+        server.open();
+        settle();
+
+        assertTrue("bob is a known viewer", server.setViewerVisible("bob", false));
+        assertTrue("somebody is still watching", server.anyViewerVisible());
+        assertFalse("...but not everybody", server.isViewerVisible());
+
+        slider.setValue(7f);
+        settle();
+
+        assertEquals("alice is still watching and must still be told", 7f,
+                ((Slider) viewerA.root().getChildren().get(1)).getValue(), 0.001f);
+        assertEquals("bob looked away, so bob is not told", 0f,
+                ((Slider) viewerB.root().getChildren().get(1)).getValue(), 0.001f);
+    }
+
+    /**
+     * A viewer coming back gets the CURRENT state, not the next change.
+     *
+     * <p>A delta only says what moved, so replaying nothing leaves a returning viewer showing whatever
+     * was true when it looked away — correct-looking and stale. It is re-described instead, which is
+     * the late-viewer path and right for the same reason: a live description carries the ids the server
+     * is already using, so nothing renumbers.</p>
+     */
+    @Test
+    public void aViewerComingBackIsBroughtUpToDate() {
+        server.addViewer(serverB);
+        server.open();
+        settle();
+
+        server.setViewerVisible("bob", false);
+        slider.setValue(7f);
+        settle();
+        assertEquals(0f, ((Slider) viewerB.root().getChildren().get(1)).getValue(), 0.001f);
+
+        server.setViewerVisible("bob", true);
+        settle();
+
+        assertEquals("everything missed, not merely everything since", 7f,
+                ((Slider) viewerB.root().getChildren().get(1)).getValue(), 0.001f);
+    }
+
+    /** Nobody watching at all: the older rule, still true. */
+    @Test
+    public void nobodyWatchingMeansNothingIsDrained() {
+        server.addViewer(serverB);
+        server.open();
+        settle();
+        server.setViewerVisible("alice", false);
+        server.setViewerVisible("bob", false);
+        assertFalse(server.anyViewerVisible());
+
+        linkA[0].clearSent();
+        slider.setValue(7f);
+        settle();
+        assertEquals("a window nobody is looking at sends nothing", 0, linkA[0].sent().size());
+    }
+
     @Test
     public void aLateViewerIsToldImmediately() {
         server.open();

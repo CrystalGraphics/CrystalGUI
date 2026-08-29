@@ -294,7 +294,7 @@ public final class ServerWindows {
                  * whole model sixty times a second to write values no one could see.
                  */
                 ServerUiSession<Object> watching = window.session;
-                if (watching != null && watching.isViewerVisible()) window.runProjections();
+                if (watching != null && watching.anyViewerVisible()) window.runProjections();
             } catch (RuntimeException failed) {
                 // One window's broken tick must not stop every other window on this connection --
                 // the frozen ones would show no error of their own, which is what gets diagnosed as a

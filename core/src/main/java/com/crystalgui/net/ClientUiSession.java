@@ -7,6 +7,8 @@ import com.crystalgui.net.mirror.NodeMirror;
 import com.crystalgui.net.protocol.*;
 import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.serialization.StateMap;
+import com.crystalgui.ui.contract.RatePolicy;
+import java.util.LinkedHashMap;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.WidgetContract;
@@ -136,6 +138,9 @@ public final class ClientUiSession<T> {
     public ClientUiSession(ProtocolConnection<T> connection) {
         this.ops = connection.ops();
         this.nodes = new ElementNodeMirror<>(this.ops);
+        // A held report must still leave when nothing else is happening, and this session
+        // does not own the tick that would otherwise do it. @see #flushRates
+        connection.onTick(this::flushRates);
         this.ownsConnection = false;
         this.router = connection.router();
         registerUiMethods();
@@ -153,6 +158,9 @@ public final class ClientUiSession<T> {
     ClientUiSession(ProtocolConnection<T> connection, int windowId) {
         this.ops = connection.ops();
         this.nodes = new ElementNodeMirror<>(this.ops);
+        // A held report must still leave when nothing else is happening, and this session
+        // does not own the tick that would otherwise do it. @see #flushRates
+        connection.onTick(this::flushRates);
         this.ownsConnection = false;
         this.router = connection.router();
         this.mux = UiWindowMux.of(connection);
@@ -236,6 +244,9 @@ public final class ClientUiSession<T> {
     /** Processes everything that arrived. Called on the thread that owns the tree — never from the
      * transport's own thread, since elements are single-threaded by contract. */
     public void tick() {
+        // BEFORE the guard below: a rate-limited report is held on THIS side, so it must still leave
+        // when the session is riding somebody else's connection -- which is every real client.
+        flushRates();
         // Riding a connection means somebody else drains and expires; there is nothing left to do here.
         if (!ownsConnection) return;
         List<T> batch;
@@ -361,6 +372,7 @@ public final class ClientUiSession<T> {
             StateMap<T> in = read(payload);
             if (in.getInt(UiMethods.WINDOW, windowId) != windowId) return;
             String reason = in.getString("reason", "");
+            commitRates();
             root = null;
             ids = null;
             mirror = null;
@@ -623,10 +635,107 @@ public final class ClientUiSession<T> {
                             element.tagName(), kind);
                     continue;
                 }
-                event.attach(element, payload -> report(element, kind, event.encode(ops, payload)));
+                event.attach(element, payload ->
+                        reportRated(element, kind, event.rate(), event.encode(ops, payload)));
             }
         }
         for (UIElement child : element.getChildren()) wireReportedEvents(child);
+    }
+
+    /**
+     * A report waiting for its policy to let it go.
+     *
+     * @param at   when the value arrived, for a debounce
+     * @param sent when this (element, kind) last actually went, for a throttle
+     */
+    private static final class Pending<T> {
+        @Nullable StateMap<T> payload;
+        long at;
+        long sent;
+        RatePolicy policy = RatePolicy.IMMEDIATE;
+    }
+
+    private final Map<UIElement, Map<String, Pending<T>>> pending = new LinkedHashMap<>();
+
+    /**
+     * Where "now" comes from, for the rate policies.
+     *
+     * <p>Wall clock, because this is rate limiting rather than animation — a held report leaving a few
+     * milliseconds late is invisible, and nothing here interpolates. Replaceable so a test can step it
+     * rather than sleep, and so a host that already has a tick clock can hand it over.</p>
+     */
+    private java.util.function.LongSupplier clock = System::currentTimeMillis;
+
+    /** @see #clock */
+    public ClientUiSession<T> setClock(java.util.function.LongSupplier clock) {
+        this.clock = java.util.Objects.requireNonNull(clock, "clock");
+        return this;
+    }
+
+    /**
+     * Applies the event's own {@link RatePolicy} on the way out.
+     *
+     * <p>The rate belongs to the WIDGET rather than to the handler, because the right answer is a
+     * property of the interaction: a text field fires per keystroke and a slider per pixel of drag, so
+     * a server-side panel that simply forwarded them would send a packet per keystroke — and the
+     * handler's author has no way to know that without reading the widget. Phoenix LiveView puts
+     * {@code phx-debounce}/{@code phx-throttle} in the markup for the same reason.</p>
+     *
+     * <p><b>Dropping intermediate values is fine; dropping the LAST one is data loss.</b> So a held
+     * value is never discarded — it is always eventually sent, which is what makes a slider released
+     * between ticks report where it actually ended up rather than where it was passing through.</p>
+     */
+    private void reportRated(UIElement element, String kind, RatePolicy policy,
+                             @Nullable StateMap<T> payload) {
+        if (applyingDelta) return;
+        if (policy == null || policy.isImmediate()) {
+            report(element, kind, payload);
+            return;
+        }
+        Pending<T> slot = pending.computeIfAbsent(element, e -> new LinkedHashMap<>())
+                .computeIfAbsent(kind, k -> new Pending<>());
+        slot.payload = payload;
+        slot.at = clock.getAsLong();
+        slot.policy = policy;
+        flushRates();
+    }
+
+    /**
+     * Sends whatever has waited long enough. Driven by the connection's tick, so a value held by a
+     * debounce still leaves even when nothing else happens.
+     */
+    void flushRates() {
+        if (pending.isEmpty()) return;
+        long now = clock.getAsLong();
+        for (Map.Entry<UIElement, Map<String, Pending<T>>> byElement : pending.entrySet()) {
+            for (Map.Entry<String, Pending<T>> entry : byElement.getValue().entrySet()) {
+                Pending<T> slot = entry.getValue();
+                if (slot.payload == null && slot.at == 0L) continue;
+                RatePolicy policy = slot.policy;
+                boolean due = policy.debounceMillis() > 0
+                        ? now - slot.at >= policy.debounceMillis()
+                        : now - slot.sent >= policy.throttleMillis();
+                if (!due) continue;
+                report(byElement.getKey(), entry.getKey(), slot.payload);
+                slot.payload = null;
+                slot.at = 0L;
+                slot.sent = now;
+            }
+        }
+    }
+
+    /** Sends everything held, whatever its policy says. What a close does, so nothing is lost. */
+    private void commitRates() {
+        for (Map.Entry<UIElement, Map<String, Pending<T>>> byElement : pending.entrySet()) {
+            for (Map.Entry<String, Pending<T>> entry : byElement.getValue().entrySet()) {
+                Pending<T> slot = entry.getValue();
+                if (slot.payload == null && slot.at == 0L) continue;
+                report(byElement.getKey(), entry.getKey(), slot.payload);
+                slot.payload = null;
+                slot.at = 0L;
+            }
+        }
+        pending.clear();
     }
 
     private void report(UIElement element, String kind, @Nullable StateMap<T> payload) {

@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements;
 
+import javax.annotation.Nullable;
 import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.WidgetContracts;
@@ -104,7 +105,7 @@ public class TextField extends UIElement implements UIFrameTicker {
                     .omittedWhen("");
 
     /** Every keystroke, debounced. @see RatePolicy#TYPING */
-    public static final Event<TextField, String> TEXT_CHANGED = Event.of("text",
+    public static final Event<TextField, String> TEXT_CHANGED = Event.<TextField, String>of("text",
             (field, sink) -> field.attachListener(sink::accept),
             new Event.Payload<String>() {
                 @Override public <T> void write(StateMap<T> out, String value) {
@@ -113,7 +114,8 @@ public class TextField extends UIElement implements UIFrameTicker {
                 @Override public <T> String read(StateMap<T> in) {
                     return in.getString("text", "");
                 }
-            }, RatePolicy.TYPING);
+            }, RatePolicy.TYPING)
+            .sanitizedBy((field, text) -> field.truncateToMaxLength(text));
 
     /**
      * The edit was MEANT -- Enter, or focus leaving the field.
@@ -122,7 +124,7 @@ public class TextField extends UIElement implements UIFrameTicker {
      * and an expensive one only when the user commits. {@code UpdateMode} has drawn this distinction
      * locally since it existed and had no way to say it over a wire.</p>
      */
-    public static final Event<TextField, String> COMMITTED = Event.of("commit",
+    public static final Event<TextField, String> COMMITTED = Event.<TextField, String>of("commit",
             (field, sink) -> field.onSubmit.connect(sink::accept),
             new Event.Payload<String>() {
                 @Override public <T> void write(StateMap<T> out, String value) {
@@ -131,7 +133,8 @@ public class TextField extends UIElement implements UIFrameTicker {
                 @Override public <T> String read(StateMap<T> in) {
                     return in.getString("text", "");
                 }
-            }, RatePolicy.IMMEDIATE);
+            }, RatePolicy.IMMEDIATE)
+            .sanitizedBy((field, text) -> field.truncateToMaxLength(text));
 
     /** Mode first: it decides how the text is parsed, so text applied before it is parsed by the old one. */
     public static final WidgetContract<TextField> CONTRACT = WidgetContracts.register(
@@ -502,6 +505,18 @@ public class TextField extends UIElement implements UIFrameTicker {
      * <p>Applied at {@link #insert}, which is the single point both typing and pasting funnel through,
      * so a paste is truncated to fit rather than refused whole — the same as every browser.</p>
      */
+    /**
+     * Cuts an arriving string to what this field would have let a user type.
+     *
+     * <p>A client cannot type past {@code maxLength}, so a longer string did not come from typing. Cut
+     * rather than refused: the truncation is a value the user COULD have produced, so the handler runs
+     * and the model stays sane.</p>
+     */
+    String truncateToMaxLength(@Nullable String text) {
+        if (text == null) return "";
+        return maxLength >= 0 && text.length() > maxLength ? text.substring(0, maxLength) : text;
+    }
+
     public TextField setMaxLength(int maxLength) {
         this.maxLength = maxLength;
         return this;

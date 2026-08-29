@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements;
 
+import javax.annotation.Nullable;
 import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.WidgetContracts;
@@ -68,7 +69,7 @@ public class Dropdown extends Button {
      * before this, which is the sharpest of the E-series findings: the one widget whose entire purpose
      * is to answer a question had no way to give the answer.
      */
-    public static final Event<Dropdown, Integer> SELECTION = Event.of("select",
+    public static final Event<Dropdown, Integer> SELECTION = Event.<Dropdown, Integer>of("select",
             (dropdown, sink) -> dropdown.onSelectionChanged.connect(sink::accept),
             new Event.Payload<Integer>() {
                 @Override public <T> void write(StateMap<T> out, Integer value) {
@@ -77,9 +78,17 @@ public class Dropdown extends Button {
                 @Override public <T> Integer read(StateMap<T> in) {
                     return in.getInt("index", -1);
                 }
-            }, RatePolicy.IMMEDIATE);
+            }, RatePolicy.IMMEDIATE)
+            .sanitizedBy((dropdown, index) -> dropdown.clampIndex(index));
 
     /** Options before the index, or the index is one into a list that is not there yet. */
+    /** An index no legal gesture could have produced is pulled back to one that could. */
+    int clampIndex(@Nullable Integer index) {
+        int count = getOptions().size();
+        if (index == null || count == 0) return -1;
+        return index < 0 ? -1 : Math.min(index, count - 1);
+    }
+
     public static final WidgetContract<Dropdown> CONTRACT = WidgetContracts.register(
             WidgetContract.of(Dropdown.class, "dropdown")
                     .state(OPTIONS)
