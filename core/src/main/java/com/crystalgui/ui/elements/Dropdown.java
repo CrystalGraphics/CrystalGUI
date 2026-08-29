@@ -1,7 +1,6 @@
 package com.crystalgui.ui.elements;
 
 import com.crystalgui.ui.contract.RatePolicy;
-import com.crystalgui.ui.contract.EventKind;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.contract.WidgetContract;
@@ -49,7 +48,7 @@ public class Dropdown extends Button {
      * every description holding a dropdown.</p>
      */
     public static final State<Dropdown, java.util.List<String>> OPTIONS =
-            State.of("options", StateTypes.stringListUnder(EventKind.PAYLOAD_LABEL),
+            State.of("options", StateTypes.stringListUnder("label"),
                     Dropdown::getOptions,
                     // Cleared and refilled, and GUARDED ON NON-EMPTY exactly as the hand-written
                     // readState was: an absent options list means "leave what is there" rather than
@@ -69,14 +68,14 @@ public class Dropdown extends Button {
      * before this, which is the sharpest of the E-series findings: the one widget whose entire purpose
      * is to answer a question had no way to give the answer.
      */
-    public static final Event<Dropdown, Integer> SELECTION = Event.of(EventKind.SELECT,
+    public static final Event<Dropdown, Integer> SELECTION = Event.of("select",
             (dropdown, sink) -> dropdown.onSelectionChanged.connect(sink::accept),
             new Event.Payload<Integer>() {
                 @Override public <T> void write(StateMap<T> out, Integer value) {
-                    out.putInt(EventKind.PAYLOAD_INDEX, value);
+                    out.putInt("index", value);
                 }
                 @Override public <T> Integer read(StateMap<T> in) {
-                    return in.getInt(EventKind.PAYLOAD_INDEX, -1);
+                    return in.getInt("index", -1);
                 }
             }, RatePolicy.IMMEDIATE);
 

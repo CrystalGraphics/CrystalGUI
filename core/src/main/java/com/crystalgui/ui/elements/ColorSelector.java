@@ -1,7 +1,6 @@
 package com.crystalgui.ui.elements;
 
 import com.crystalgui.ui.contract.RatePolicy;
-import com.crystalgui.ui.contract.EventKind;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.contract.WidgetContract;
@@ -67,14 +66,14 @@ public class ColorSelector extends UIElement {
      * on every intermediate hue is doing work nobody asked for. Throttled for the drag, and the
      * released colour always travels.</p>
      */
-    public static final Event<ColorSelector, Integer> CHANGED = Event.of(EventKind.CHANGE,
+    public static final Event<ColorSelector, Integer> CHANGED = Event.of("change",
             (selector, sink) -> selector.onColorChanged.connect(sink::accept),
             new Event.Payload<Integer>() {
                 @Override public <T> void write(StateMap<T> out, Integer value) {
-                    out.putInt(EventKind.PAYLOAD_COLOR, value);
+                    out.putInt("color", value);
                 }
                 @Override public <T> Integer read(StateMap<T> in) {
-                    return in.getInt(EventKind.PAYLOAD_COLOR, 0xFFFFFFFF);
+                    return in.getInt("color", 0xFFFFFFFF);
                 }
             }, RatePolicy.DRAGGING);
 

@@ -2,7 +2,6 @@ package com.crystalgui.ui.elements;
 
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.contract.RatePolicy;
-import com.crystalgui.ui.contract.EventKind;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.contract.WidgetContract;
@@ -60,7 +59,7 @@ public class MenuItem extends Button {
                     .omittedWhen(false);
 
     public static final Event<MenuItem, Void> ACTIVATE =
-            Event.signal(EventKind.ACTIVATE, (item, sink) -> item.attachListener(sink));
+            Event.signal("activate", (item, sink) -> item.attachListener(sink));
 
     /** CHECKABLE before SELECTED: an item that is not checkable has nothing to select. */
     public static final WidgetContract<MenuItem> CONTRACT = WidgetContracts.register(

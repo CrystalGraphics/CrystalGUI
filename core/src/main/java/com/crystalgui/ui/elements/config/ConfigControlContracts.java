@@ -2,7 +2,6 @@ package com.crystalgui.ui.elements.config;
 
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.EventKind;
 import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.ui.contract.StateType;
@@ -55,14 +54,14 @@ public final class ConfigControlContracts {
     @SuppressWarnings("unchecked")
     public static <C extends ConfigControl, V> Event<C, V> changed(
             StateType<V> valueType, V fallback, RatePolicy rate) {
-        return Event.of(EventKind.CHANGE,
+        return Event.of("change",
                 (control, sink) -> control.changed.connect(raw -> sink.accept((V) raw)),
                 new Event.Payload<V>() {
                     @Override public <T> void write(StateMap<T> out, V raw) {
-                        valueType.put(out, EventKind.PAYLOAD_VALUE, raw);
+                        valueType.put(out, "value", raw);
                     }
                     @Override public <T> V read(StateMap<T> in) {
-                        return valueType.get(in, EventKind.PAYLOAD_VALUE, fallback);
+                        return valueType.get(in, "value", fallback);
                     }
                 }, rate);
     }

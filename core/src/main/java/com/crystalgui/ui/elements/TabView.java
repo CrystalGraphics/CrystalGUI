@@ -1,7 +1,6 @@
 package com.crystalgui.ui.elements;
 
 import com.crystalgui.ui.contract.RatePolicy;
-import com.crystalgui.ui.contract.EventKind;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.contract.WidgetContract;
@@ -62,14 +61,14 @@ public class TabView extends UIElement {
             State.of("selected", StateTypes.INT, TabView::getSelectedIndex, TabView::selectIndex, -1);
 
     /** Which tab is showing. M1: a TabView could not say, so a server could not follow a user's page. */
-    public static final Event<TabView, Integer> SELECTION = Event.of(EventKind.SELECT,
+    public static final Event<TabView, Integer> SELECTION = Event.of("select",
             (view, sink) -> view.onTabSelected.connect(tab -> sink.accept(view.getSelectedIndex())),
             new Event.Payload<Integer>() {
                 @Override public <T> void write(StateMap<T> out, Integer value) {
-                    out.putInt(EventKind.PAYLOAD_INDEX, value);
+                    out.putInt("index", value);
                 }
                 @Override public <T> Integer read(StateMap<T> in) {
-                    return in.getInt(EventKind.PAYLOAD_INDEX, -1);
+                    return in.getInt("index", -1);
                 }
             }, RatePolicy.IMMEDIATE);
 

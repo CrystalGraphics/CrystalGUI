@@ -179,7 +179,7 @@ public final class CgUiSessionProbe {
         root.addChild(dropdown);
 
         ServerUiSession<Object> session = new ServerUiSession<>(WINDOW_ID, root, connection);
-        session.onActivate(button, ctx -> pass("5 event"));
+        session.on(button, Button.ACTIVATE, ctx -> pass("5 event"));
         session.open();
         server = session;
         CrystalGuiCore.LOGGER.info("[session-probe] server session opened on the real connection, "

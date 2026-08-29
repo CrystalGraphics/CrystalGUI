@@ -199,7 +199,7 @@ public final class FurnacePanel extends UIElement implements Networked<FurnaceDa
         // being flipped, and it hands you a Boolean". You get `on` already typed. See below.
         io.on(power,      Switch.TOGGLE,        (ctx, on)    -> model.setRunning(on));
         io.on(throughput, Slider.VALUE_CHANGED, (ctx, value) -> model.setRate(value));
-        io.onActivate(purge, ctx -> model.purge());
+        io.on(purge, Button.ACTIVATE, ctx -> model.purge());
     }
 
     @Override
@@ -397,7 +397,6 @@ For a `Void` event, drop the second parameter:
 
 ```java
 io.on(purge, Button.ACTIVATE, ctx -> model.purge());
-io.onActivate(purge,          ctx -> model.purge());   // same thing, shorter
 ```
 
 ### What `ctx` gives you
@@ -632,7 +631,7 @@ public class Dial extends UIElement {
 
     /** The dial was turned. */
     public static final Event<Dial, Float> TURNED = Event.of(
-            EventKind.VALUE,                                     // a well-known kind name
+            "value",                                             // the kind, on the wire
             (dial, sink) -> dial.onTurned.connect(sink::accept), // HOW A CLIENT LISTENS
             new Event.Payload<Float>() {                         // how the value crosses
                 @Override public <T> void write(StateMap<T> out, Float v) {
@@ -694,12 +693,13 @@ networking layer has to know your class. For an event with no value, use `Event.
 
 ```java
 public static final Event<Dial, Void> RESET =
-        Event.signal(EventKind.ACTIVATE, (dial, sink) -> dial.onReset.connect(sink));
+        Event.signal("reset", (dial, sink) -> dial.onReset.connect(sink));
 ```
 
-`kind` is just a string. `EventKind` holds well-known names so unrelated widgets spell "the user did
-the thing" the same way, but **you may mint your own** — kinds are scoped to their element, so
-`"scrub"` collides with nothing and needs no entry anywhere.
+`kind` is the name that travels on the wire, and it is **yours to choose**. It only has to be unique
+within one widget's own contract — nothing central lists them, so `"scrub"` or `"reorder"` collides
+with nothing and needs no entry anywhere. Reusing a familiar name where it fits (`"activate"`,
+`"value"`, `"change"`) is a courtesy to anyone reading a packet, not a requirement.
 
 `rate` is `IMMEDIATE`, `TYPING` (debounce 150ms) or `DRAGGING` (throttle 50ms). Both of the latter
 always deliver the value you ended on.

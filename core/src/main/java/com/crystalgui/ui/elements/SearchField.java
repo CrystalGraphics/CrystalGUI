@@ -2,7 +2,6 @@ package com.crystalgui.ui.elements;
 
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.contract.RatePolicy;
-import com.crystalgui.ui.contract.EventKind;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.contract.WidgetContract;
@@ -54,15 +53,15 @@ public class SearchField extends UIElement {
                     .omittedWhen(false);
 
     /** Every keystroke, debounced -- a search box is the archetype the policy was written for. */
-    public static final Event<SearchField, String> QUERY = Event.of(EventKind.TEXT,
+    public static final Event<SearchField, String> QUERY = Event.of("text",
             // onQueryChanged is a bare Action, so the text is read at emit time rather than carried.
             (field, sink) -> field.onQueryChanged.connect(() -> sink.accept(field.getText())),
             new Event.Payload<String>() {
                 @Override public <T> void write(StateMap<T> out, String value) {
-                    out.putString(EventKind.PAYLOAD_TEXT, value == null ? "" : value);
+                    out.putString("text", value == null ? "" : value);
                 }
                 @Override public <T> String read(StateMap<T> in) {
-                    return in.getString(EventKind.PAYLOAD_TEXT, "");
+                    return in.getString("text", "");
                 }
             }, RatePolicy.TYPING);
 

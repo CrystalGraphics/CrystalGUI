@@ -1,6 +1,5 @@
 package com.crystalgui.ui.elements;
 
-import com.crystalgui.ui.contract.EventKind;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.contract.WidgetContract;
@@ -50,7 +49,7 @@ public class Button extends UIElement {
 
     /** A press. The left button only, and Space/Enter synthesize the same pair. */
     public static final Event<Button, Void> ACTIVATE =
-            Event.signal(EventKind.ACTIVATE, (button, sink) -> button.attachListener(sink));
+            Event.signal("activate", (button, sink) -> button.attachListener(sink));
 
     public static final WidgetContract<Button> CONTRACT = WidgetContracts.register(
             WidgetContract.of(Button.class, "button")

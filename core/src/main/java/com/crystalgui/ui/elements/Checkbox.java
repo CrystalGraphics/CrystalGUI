@@ -1,7 +1,6 @@
 package com.crystalgui.ui.elements;
 
 import com.crystalgui.ui.contract.RatePolicy;
-import com.crystalgui.ui.contract.EventKind;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.contract.WidgetContract;
@@ -45,14 +44,14 @@ public class Checkbox extends UIElement {
                             Checkbox::getLabel, Checkbox::setLabel, "")
                     .omittedWhen("");
 
-    public static final Event<Checkbox, Boolean> TOGGLE = Event.of(EventKind.TOGGLE,
+    public static final Event<Checkbox, Boolean> TOGGLE = Event.of("toggle",
             (checkbox, sink) -> checkbox.attachListener(sink::accept),
             new Event.Payload<Boolean>() {
                 @Override public <T> void write(StateMap<T> out, Boolean value) {
-                    out.putBool(EventKind.PAYLOAD_CHECKED, value);
+                    out.putBool("checked", value);
                 }
                 @Override public <T> Boolean read(StateMap<T> in) {
-                    return in.getBool(EventKind.PAYLOAD_CHECKED, false);
+                    return in.getBool("checked", false);
                 }
             }, RatePolicy.IMMEDIATE);
 

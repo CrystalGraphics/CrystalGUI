@@ -14,7 +14,6 @@ import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.EventKind;
 
 /**
  * What a panel's {@link Networked#serve} is handed — <b>its registration surface, namespaced to its
@@ -99,11 +98,6 @@ public final class ServerScope {
             W element, Event<W, Void> event, Consumer<ServerUiSession.UiEventContext<Object>> handler) {
         session.on(element, event, handler);
         return this;
-    }
-
-    /** A press, a toggle, or a commit — whatever the widget considers "the user did the thing". */
-    public ServerScope onActivate(UIElement element, Consumer<ServerUiSession.UiEventContext<Object>> handler) {
-        return on(element, EventKind.ACTIVATE, handler);
     }
 
     // ── Wire methods ────────────────────────────────────────────────────────

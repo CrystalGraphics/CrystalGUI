@@ -292,7 +292,8 @@ closest host.
 - `Detached`, `Detachment`, `DetachedWindow`, the logical splice.
 - Global sheet application in `CgUiWindowMount.sheetSupply`.
 - `ServerUiSession`/`ClientUiSession` as they stand — replaced by the mirror below. Their public
-  method names can stay where they are right (`on`, `onActivate`, `onCall`, `call`, `notify`).
+  method names can stay where they are right (`on`, `onCall`, `call`, `notify` — `onActivate` was
+  dropped at M1, when a widget's own `Event` constant made a per-kind convenience method redundant).
 
 ### 4.3 The document mirror — L2
 

@@ -1,7 +1,6 @@
 package com.crystalgui.ui.elements;
 
 import com.crystalgui.ui.contract.RatePolicy;
-import com.crystalgui.ui.contract.EventKind;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.contract.WidgetContract;
@@ -74,14 +73,14 @@ public class Slider extends UIElement {
                     .sanitizedBy(v -> v == null || Float.isNaN(v) ? 0f : v);
 
     /** A drag. Throttled, and the released value always travels. @see RatePolicy */
-    public static final Event<Slider, Float> VALUE_CHANGED = Event.of(EventKind.VALUE,
+    public static final Event<Slider, Float> VALUE_CHANGED = Event.of("value",
             (slider, sink) -> slider.attachListener(sink::accept),
             new Event.Payload<Float>() {
                 @Override public <T> void write(StateMap<T> out, Float value) {
-                    out.putFloat(EventKind.PAYLOAD_VALUE, value);
+                    out.putFloat("value", value);
                 }
                 @Override public <T> Float read(StateMap<T> in) {
-                    return in.getFloat(EventKind.PAYLOAD_VALUE, 0f);
+                    return in.getFloat("value", 0f);
                 }
             }, RatePolicy.DRAGGING);
 

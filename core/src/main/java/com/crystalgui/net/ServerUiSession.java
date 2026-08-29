@@ -12,7 +12,6 @@ import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.serialization.UIDescriptionCodec;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.EventKind;
 import com.crystalgui.ui.dom.ElementTreeSource;
 import com.crystalgui.ui.dom.TreeObserver;
 
@@ -694,11 +693,6 @@ public final class ServerUiSession<T> implements TreeObserver<UIElement> {
     public <W extends UIElement> ServerUiSession<T> on(
             W element, Event<W, Void> event, Consumer<UiEventContext<T>> handler) {
         return on(element, event.kind(), handler);
-    }
-
-    /** A press, a toggle, or a commit — whatever the widget considers "the user did the thing". */
-    public ServerUiSession<T> onActivate(UIElement element, Consumer<UiEventContext<T>> handler) {
-        return on(element, EventKind.ACTIVATE, handler);
     }
 
     /** What a handler is given. Carries no coordinates — see {@link UiMethods#EVENT}. */

@@ -13,7 +13,6 @@ import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.EventKind;
 import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.elements.Button;
@@ -212,7 +211,7 @@ public class WidgetContractRoundTripTest {
         slider.setRange(0f, 10f);
         AtomicReference<Float> heard = new AtomicReference<>();
 
-        Event<Slider, Float> event = (Event<Slider, Float>) Slider.CONTRACT.event(EventKind.VALUE);
+        Event<Slider, Float> event = (Event<Slider, Float>) Slider.CONTRACT.event("value");
         event.attach(slider, heard::set);
         slider.setValue(7f);
 
@@ -227,12 +226,12 @@ public class WidgetContractRoundTripTest {
         // plan_ui_rewrite.md M1. Before contracts these five had no kind at all: the client's wiring was
         // a switch over four kinds with an instanceof chain in each arm, and a widget outside it hit a
         // default that logged and carried on.
-        assertTrue(Dropdown.CONTRACT.eventKinds().contains(EventKind.SELECT));
-        assertTrue(TabView.CONTRACT.eventKinds().contains(EventKind.SELECT));
-        assertTrue(ColorSelector.CONTRACT.eventKinds().contains(EventKind.CHANGE));
-        assertTrue(SplitView.CONTRACT.eventKinds().contains(EventKind.VALUE));
+        assertTrue(Dropdown.CONTRACT.eventKinds().contains("select"));
+        assertTrue(TabView.CONTRACT.eventKinds().contains("select"));
+        assertTrue(ColorSelector.CONTRACT.eventKinds().contains("change"));
+        assertTrue(SplitView.CONTRACT.eventKinds().contains("value"));
         assertTrue(com.crystalgui.ui.elements.Tab.CONTRACT.eventKinds()
-                .contains(EventKind.CLOSE_REQUESTED));
+                .contains("closeRequested"));
     }
 
     @Test
@@ -241,7 +240,7 @@ public class WidgetContractRoundTripTest {
         dropdown.addOptions("alpha", "beta");
         AtomicInteger heard = new AtomicInteger(-99);
 
-        Event<Dropdown, Integer> event = (Event<Dropdown, Integer>) Dropdown.CONTRACT.event(EventKind.SELECT);
+        Event<Dropdown, Integer> event = (Event<Dropdown, Integer>) Dropdown.CONTRACT.event("select");
         event.attach(dropdown, heard::set);
         dropdown.select(1);
 
@@ -254,12 +253,12 @@ public class WidgetContractRoundTripTest {
     public void aWidgetDeclaresItsOwnTempo() {
         // The right answer is a property of the interaction, not of the application: a handler author
         // has no way to know a TextField fires per keystroke without reading the widget.
-        assertEquals(RatePolicy.TYPING, TextField.CONTRACT.event(EventKind.TEXT).rate());
-        assertEquals(RatePolicy.DRAGGING, Slider.CONTRACT.event(EventKind.VALUE).rate());
-        assertEquals(RatePolicy.IMMEDIATE, Button.CONTRACT.event(EventKind.ACTIVATE).rate());
+        assertEquals(RatePolicy.TYPING, TextField.CONTRACT.event("text").rate());
+        assertEquals(RatePolicy.DRAGGING, Slider.CONTRACT.event("value").rate());
+        assertEquals(RatePolicy.IMMEDIATE, Button.CONTRACT.event("activate").rate());
 
         assertTrue("a throttled event must always deliver its FINAL value -- dropping intermediates is "
                         + "fine, dropping the last one is data loss",
-                Slider.CONTRACT.event(EventKind.VALUE).rate().commitOnRelease());
+                Slider.CONTRACT.event("value").rate().commitOnRelease());
     }
 }

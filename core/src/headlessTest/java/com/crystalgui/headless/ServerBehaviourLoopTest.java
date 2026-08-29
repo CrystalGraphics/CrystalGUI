@@ -85,7 +85,7 @@ public class ServerBehaviourLoopTest {
     @Test
     public void aClientPressRunsAServerLambdaAndTheResultComesBack() {
         AtomicInteger presses = new AtomicInteger();
-        server.onActivate(button, ctx -> {
+        server.on(button, Button.ACTIVATE, ctx -> {
             int count = presses.incrementAndGet();
             // A closure over server-side state, mutating the server's own tree. None of this exists
             // on the client.

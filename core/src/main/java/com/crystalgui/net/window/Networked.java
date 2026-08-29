@@ -1,5 +1,6 @@
 package com.crystalgui.net.window;
 
+import com.crystalgui.ui.elements.Button;
 import javax.annotation.Nullable;
 
 import com.crystalgui.ui.UIElement;
@@ -23,7 +24,7 @@ import com.crystalgui.ui.UIElement;
  *     }
  *
  *     @Override public void serve(MachineModel m, ServerScope io) {   // SERVER
- *         io.onActivate(purge, ctx -> m.purge());
+ *         io.on(purge, Button.ACTIVATE, ctx -> m.purge());
  *     }
  *
  *     @Override public void tick(MachineModel m) {                    // SERVER, per world tick
