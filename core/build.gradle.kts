@@ -82,8 +82,8 @@ dependencies {
     testCompileOnly("org.jspecify:jspecify:1.0.0")
 
     // Taffy layout engine + JOML (consumed from CG at runtime; needed here for compile)
-    compileOnly("dev.vfyjxf:taffy:${rootProject.properties["taffy_version"]}")
-    testImplementation("dev.vfyjxf:taffy:${rootProject.properties["taffy_version"]}")
+    compileOnly(project(":taffy"))
+    testImplementation(project(":taffy"))
     compileOnly("org.joml:joml:${rootProject.properties["jomlVersion"]}")
     testImplementation("org.joml:joml:${rootProject.properties["jomlVersion"]}")
 
@@ -179,7 +179,7 @@ dependencies {
     "headlessTestImplementation"("com.crystalgraphics:platform:1.0.0")
     "headlessTestImplementation"("org.apache.logging.log4j:log4j-core:2.26.1")
     "headlessTestImplementation"("com.google.code.gson:gson:2.11.0")
-    "headlessTestImplementation"("dev.vfyjxf:taffy:${rootProject.properties["taffy_version"]}")
+    "headlessTestImplementation"(project(":taffy"))
     "headlessTestImplementation"("org.joml:joml:${rootProject.properties["jomlVersion"]}")
     "headlessTestCompileOnly"("com.google.code.findbugs:jsr305:3.0.2")
     "headlessTestCompileOnly"("org.projectlombok:lombok:1.18.44")

@@ -78,12 +78,25 @@ import java.util.Set;
  *
  * <h3>Sizing: no Taffy {@code MeasureFunc} — a post-layout recompute instead</h3>
  * <p>An earlier design reported intrinsic size via a Taffy {@code MeasureFunc} (see
- * {@code UIElement#measureFunc()}). That hits a real bug in Taffy 1.1.4's flex-wrap cross-size
- * algorithm: {@code FlexboxComputer.java:1469} passes {@code NaN} instead of an item's resolved
- * column width when determining its auto cross-size specifically under {@code flex-wrap: wrap} (the
- * {@code nowrap} path correctly passes the resolved width) — so a measured leaf wraps at the wrong
- * width and reports a wrong height whenever its ancestor chain has wrapping enabled. Not something
- * fixable without forking a third-party Maven dependency.
+ * {@code UIElement#measureFunc()}). That hit a real bug in Taffy 1.1.4's flex-wrap cross-size
+ * algorithm: {@code FlexboxComputer.determineHypotheticalCrossSize} passed {@code NaN} instead of an
+ * item's resolved main size when determining its auto cross-size specifically under
+ * {@code flex-wrap: wrap} (the {@code nowrap} path correctly passed the resolved width) — so a
+ * measured leaf wrapped at the wrong width and reported a wrong height whenever its ancestor chain
+ * had wrapping enabled.
+ *
+ * <p><b>That is fixed.</b> This paragraph used to end "not something fixable without forking a
+ * third-party Maven dependency", and the fork is now {@code taffy/} — the branch is deleted, upstream
+ * Rust Taffy and CSS Flexbox §9.4 step 7 both agree it should never have been there, and it was
+ * additionally collapsing every aspect-ratio item in a wrapping row to zero height. See
+ * {@code taffy/MODIFICATIONS.md} #1; {@code MeasureFuncUnderFlexWrapTest} pins a real measure
+ * function with real font shaping under a wrapping ancestor, and fails if the defect returns.
+ *
+ * <p>The recompute below is <b>retained deliberately</b> rather than left standing on a reason that
+ * has expired: swapping this element onto the measure protocol changes when text is measured (during
+ * the layout algorithm rather than after it), which is a real behavioural change to the widget every
+ * label in the application is, and it belongs with the box tree rather than beside a layout-engine
+ * fix. What has changed is that it is now a choice with a date on it instead of a workaround.
  *
  * <p>Following the pattern LDLib2's own {@code TextElement} uses: this element is an ordinary
  * (non-measured) Taffy leaf. {@link #onLayoutChanged()} fires after every settled layout pass;

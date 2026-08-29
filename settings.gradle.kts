@@ -31,6 +31,15 @@ pluginManagement {
 
 rootProject.name = "CrystalGUI"
 
+// The layout engine, VENDORED as a fork rather than consumed as `dev.vfyjxf:taffy:1.1.4`.
+//
+// Its leaf-measure path is wrong under `flex-wrap: wrap` -- a measured leaf is sized against the
+// CONTAINER's inner main size rather than its own flex-resolved one, so it reports a height for a
+// width it was never given and the last line is clipped. One line inside the flexbox algorithm, so
+// it is only fixable here. MIT, so forking is permitted; taffy/MODIFICATIONS.md is the statement of
+// changes MIT requires, and plan_ui_rewrite.md D3 is the decision.
+include("taffy")
+
 include("core")
 include("gl-debug-harness")
 
