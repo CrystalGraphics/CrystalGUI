@@ -3,6 +3,7 @@ package com.crystalgui.ui.elements.config.control;
 import com.crystalgui.ui.elements.config.ConfigControlContracts;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
@@ -42,12 +43,11 @@ import java.util.Set;
 public class MaskControl extends ValueControl<Set<String>> {
 
     /**
-     * A set of flag names. Carried as a LIST because a wire format has no set, and re-read into one --
-     * so two descriptions of the same mask hash the same only if the control iterates deterministically,
-     * which is why it keeps a {@code LinkedHashSet}.
+     * The wire form of a mask is a LIST, because a wire format has no set -- and it re-reads into one,
+     * so two descriptions of the same mask hash the same only if the control iterates deterministically.
+     * That is why it keeps a {@code LinkedHashSet}.
      */
-    public static final WidgetContract<MaskControl> CONTRACT = ConfigControlContracts.register(
-            MaskControl.class, "maskcontrol",
+    private static final com.crystalgui.ui.contract.StateType<java.util.Set<String>> FLAGS =
             new com.crystalgui.ui.contract.StateType<java.util.Set<String>>() {
                 @Override public <T> void put(com.crystalgui.serialization.StateMap<T> out, String key,
                                               java.util.Set<String> value) {
@@ -60,8 +60,14 @@ public class MaskControl extends ValueControl<Set<String>> {
                             StateTypes.stringListUnder("f").get(in, key, java.util.List.of());
                     return read.isEmpty() ? fallback : new java.util.LinkedHashSet<>(read);
                 }
-            },
-            java.util.Set.of(), RatePolicy.IMMEDIATE);
+            };
+
+    /** A discrete set of flags: every change travels. */
+    public static final Event<MaskControl, java.util.Set<String>> CHANGED =
+            ConfigControlContracts.changed(FLAGS, java.util.Set.of(), RatePolicy.IMMEDIATE);
+
+    public static final WidgetContract<MaskControl> CONTRACT = ConfigControlContracts.register(
+            MaskControl.class, "maskcontrol", FLAGS, java.util.Set.of(), CHANGED);
 
 
     public static final String TOGGLE_CLASS = "__toggle__";

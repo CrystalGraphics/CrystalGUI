@@ -39,22 +39,23 @@ public final class ConfigControlContracts {
     }
 
     /**
-     * A contract for one control kind: its value, and the fact that the value changed.
+     * The "this control's value changed" event, as a constant the control can expose.
+     *
+     * <p>Declared by the control rather than built inside {@link #register} so that
+     * {@code io.on(control, NumberControl.CHANGED, (ctx, value) -> ...)} is spellable. An event that
+     * exists only inside a contract can be dispatched but not <b>named</b>, which leaves the typed
+     * subscription unusable for the one family of widgets a served settings panel is entirely made
+     * of.</p>
      *
      * @param rate {@link RatePolicy#DRAGGING} for anything with a drag behind it (a slider, a colour
-     *             wheel), {@link RatePolicy#TYPING} for a text field, {@link RatePolicy#IMMEDIATE} for
-     *             a discrete choice. The control knows its own tempo; a handler cannot.
+     *             wheel), {@link RatePolicy#TYPING} for something typed into,
+     *             {@link RatePolicy#IMMEDIATE} for a discrete choice. The control knows its own tempo;
+     *             a handler cannot.
      */
     @SuppressWarnings("unchecked")
-    public static <C extends ConfigControl, V> WidgetContract<C> register(
-            Class<C> type, String name, StateType<V> valueType, V fallback, RatePolicy rate) {
-
-        State<C, V> value = State.of("value", valueType,
-                control -> (V) control.getValueObject(),
-                (control, next) -> control.setValueObject(next),
-                fallback);
-
-        Event<C, V> changed = Event.of(EventKind.CHANGE,
+    public static <C extends ConfigControl, V> Event<C, V> changed(
+            StateType<V> valueType, V fallback, RatePolicy rate) {
+        return Event.of(EventKind.CHANGE,
                 (control, sink) -> control.changed.connect(raw -> sink.accept((V) raw)),
                 new Event.Payload<V>() {
                     @Override public <T> void write(StateMap<T> out, V raw) {
@@ -64,6 +65,26 @@ public final class ConfigControlContracts {
                         return valueType.get(in, EventKind.PAYLOAD_VALUE, fallback);
                     }
                 }, rate);
+    }
+
+    /**
+     * A contract for one control kind: its value, and the fact that the value changed.
+     *
+     * <p>{@link ConfigControl} already gives every control a uniform surface -- {@code getValueObject},
+     * {@code setValueObject}, and a {@code changed} signal -- because the Inspector binds them
+     * generically. So the only thing that differs between a {@code NumberControl} and a
+     * {@code ColorControl} is how its value crosses a {@link StateMap}, which is what a
+     * {@link StateType} is. Writing the same declaration thirteen times would be thirteen places to
+     * get the event wiring subtly different.</p>
+     */
+    @SuppressWarnings("unchecked")
+    public static <C extends ConfigControl, V> WidgetContract<C> register(
+            Class<C> type, String name, StateType<V> valueType, V fallback, Event<C, V> changed) {
+
+        State<C, V> value = State.of("value", valueType,
+                control -> (V) control.getValueObject(),
+                (control, next) -> control.setValueObject(next),
+                fallback);
 
         return WidgetContracts.register(WidgetContract.of(type, name)
                 .state(value)
