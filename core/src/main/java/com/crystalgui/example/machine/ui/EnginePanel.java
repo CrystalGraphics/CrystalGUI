@@ -196,31 +196,20 @@ public final class EnginePanel extends UIElement implements Networked<EngineMode
         // the two lines must read the same thing.
         serverWire.setText(io.qualify("tune"));
 
-        mirror(engine);
-    }
-
-    /**
-     * One world tick. <b>No dirty flag</b>, unlike {@link MachinePanel} — and the difference is worth
-     * a sentence, because it looks like an inconsistency.
-     *
-     * <p>The parent subscribes to the model so it can skip mirroring entirely on a quiet tick. This
-     * panel has three setters to run and all of them are idempotent — an unchanged value writes no
-     * candidate and marks nothing dirty — so the subscription would buy a handful of float
-     * comparisons. <b>Both are correct; neither generates traffic.</b> Reach for the flag when the
-     * mirroring itself is expensive, not by default.</p>
-     */
-    @Override
-    public void tick(EngineModel engine) {
-        mirror(engine);
-    }
-
-    private void mirror(EngineModel engine) {
-        load.setValue(engine.load());
-        heat.setFraction(engine.temperature());
-        reading.setText(engine.isStalled()
+        /*
+         * Stated once, and the two halves of the split are worth reading together.
+         *
+         * `load` wires itself: the field is called load and so is the accessor. `heat` does not -- the
+         * model calls it temperature() -- and `reading` is a sentence composed from three accessors.
+         * That is the ordinary shape: a convention covers the fields that were named alike and REPORTS
+         * the rest rather than guessing, and the rest are one line each.
+         */
+        io.project(heat, ProgressBar.FRACTION, engine::temperature);
+        io.project(reading, () -> engine.isStalled()
                 ? String.format("STALLED at %.0f%% heat - press Restart", engine.temperature() * 100f)
                 : String.format("%.0f%% load, %.0f%% heat",
-                        engine.load() * 100f, engine.temperature() * 100f));
+                        engine.load() * 100f, engine.temperature() * 100f), UIText::setText);
+        io.autoProject(engine);
     }
 
     // ── The CLIENT half ─────────────────────────────────────────────────────
