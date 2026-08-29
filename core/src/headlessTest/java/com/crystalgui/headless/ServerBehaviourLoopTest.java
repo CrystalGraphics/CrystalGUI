@@ -12,6 +12,7 @@ import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.serialization.UIDescriptionCodec;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.dom.ElementTreeSource;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.Checkbox;
 import com.crystalgui.ui.elements.Slider;
@@ -187,11 +188,20 @@ public class ServerBehaviourLoopTest {
         server.open();
         settle();
 
-        assertEquals(root.getNetworkId(), client.root().getNetworkId());
+        // Asserted through a source of our own rather than off the elements: the numbering left the
+        // element at M0 and lives in an ElementTreeSource each session owns, so what is being checked
+        // here is that the WALK is the same on both sides -- which is the actual claim -- rather than
+        // that one shared field happens to hold one value.
+        ElementTreeSource serverIds = new ElementTreeSource(root);
+        ElementTreeSource clientIds = new ElementTreeSource(client.root());
+        NetworkIds.assign(serverIds, root);
+        NetworkIds.assign(clientIds, client.root());
+
+        assertEquals(serverIds.peekId(root), clientIds.peekId(client.root()));
         for (int i = 0; i < root.getChildren().size(); i++) {
             assertEquals("child " + i + " must have the same id on both sides",
-                    root.getChildren().get(i).getNetworkId(),
-                    client.root().getChildren().get(i).getNetworkId());
+                    serverIds.peekId(root.getChildren().get(i)),
+                    clientIds.peekId(client.root().getChildren().get(i)));
         }
         // Internals are numbered too — a Button's label exists identically on both sides.
         assertTrue("composites contribute internals to the numbering",

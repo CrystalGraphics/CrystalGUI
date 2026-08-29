@@ -37,7 +37,7 @@ public final class FileDecorations {
      *
      * <p>Carries no payload. VS Code's carries the changed URIs and uses them to invalidate precisely;
      * a tree here realises a dozen rows and rebinding all of them is cheaper than the bookkeeping — the
-     * same reasoning {@code UITreeObserver.onStateDirty} already applies to widget state.</p>
+     * same reasoning {@code TreeObserver.stateChanged} already applies to widget state.</p>
      */
     public final Signal.Action onChanged = new Signal.Action();
 
